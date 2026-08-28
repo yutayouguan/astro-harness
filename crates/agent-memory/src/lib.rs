@@ -4,6 +4,7 @@
 //! 完整工作区引导仍由 [`ensure_workspace`] 编排（`home` 脚手架 + 会话库 + 技能播种）。
 
 pub mod agent;
+pub mod citation;
 pub mod config;
 pub mod decision_log;
 pub mod dreaming;

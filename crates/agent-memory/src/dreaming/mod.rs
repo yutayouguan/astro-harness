@@ -18,6 +18,8 @@ use chrono::Utc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use sha2::{Digest, Sha256};
+
 use crate::config::load_memory_config;
 use crate::{parse_memory_entries, MemoryStore};
 use home::{
@@ -78,6 +80,12 @@ pub struct AgentDreamStats {
     /// 该 Agent 最近一次错误
     #[serde(default)]
     pub last_error: Option<String>,
+    /// 上次入梦后 MEMORY.md 的 SHA256（前 16 位），用于检测外部修改。
+    #[serde(default)]
+    pub memory_hash: Option<String>,
+    /// MEMORY.md 被外部修改（hash 不一致），需下次入梦时重新对齐。
+    #[serde(default)]
+    pub polluted: bool,
 }
 
 /// 单个 Agent 的一次入梦任务载荷（含提示词与待处理日记）
@@ -182,6 +190,93 @@ pub fn set_dreaming_enabled(base: &Path, enabled: bool) -> anyhow::Result<Dreami
 /// 读取文本文件，失败返回空串
 fn read_text(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_default()
+}
+
+fn compute_memory_hash(content: &str) -> String {
+    let digest = Sha256::digest(content.as_bytes());
+    format!("{:x}", digest).chars().take(16).collect()
+}
+
+const MAX_BASELINES: usize = 5;
+
+fn baselines_dir(workspace: &Path) -> PathBuf {
+    workspace.join("memory").join("baselines")
+}
+
+fn save_baseline(workspace: &Path, before: &str, after: &str) {
+    let dir = baselines_dir(workspace);
+    if fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let ts = Utc::now().format("%Y-%m-%dT%H-%M-%S").to_string();
+    let _ = fs::write(dir.join(format!("{ts}.md")), before);
+    let diff = simple_unified_diff(before, after);
+    if !diff.is_empty() {
+        let _ = fs::write(dir.join(format!("{ts}.diff")), &diff);
+    }
+    rotate_baselines(&dir);
+}
+
+fn rotate_baselines(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut files: Vec<_> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .map(|ext| ext == "md")
+                .unwrap_or(false)
+        })
+        .collect();
+    files.sort_by_key(|e| std::cmp::Reverse(e.file_name()));
+    for old in files.into_iter().skip(MAX_BASELINES) {
+        let md = old.path();
+        let diff = md.with_extension("diff");
+        let _ = fs::remove_file(&md);
+        let _ = fs::remove_file(&diff);
+    }
+}
+
+fn simple_unified_diff(before: &str, after: &str) -> String {
+    let before_lines: Vec<&str> = before.lines().collect();
+    let after_lines: Vec<&str> = after.lines().collect();
+    let mut out = String::new();
+    out.push_str("--- MEMORY.md (before dreaming)\n");
+    out.push_str("+++ MEMORY.md (after dreaming)\n");
+    let max = before_lines.len().max(after_lines.len());
+    let mut has_diff = false;
+    for i in 0..max {
+        let b = before_lines.get(i).copied().unwrap_or("");
+        let a = after_lines.get(i).copied().unwrap_or("");
+        if b != a {
+            has_diff = true;
+            if !b.is_empty() {
+                out.push_str(&format!("-{b}\n"));
+            }
+            if !a.is_empty() {
+                out.push_str(&format!("+{a}\n"));
+            }
+        }
+    }
+    if has_diff { out } else { String::new() }
+}
+
+/// 检测 MEMORY.md 是否被外部修改（hash 不一致），更新 polluted 标记。
+pub fn detect_pollution(workspace: &Path, stats: &mut AgentDreamStats) -> bool {
+    let Some(saved_hash) = &stats.memory_hash else {
+        return false;
+    };
+    let memory_path = workspace.join("MEMORY.md");
+    let current = read_text(&memory_path);
+    let current_hash = compute_memory_hash(&current);
+    if &current_hash != saved_hash {
+        stats.polluted = true;
+        true
+    } else {
+        false
+    }
 }
 
 /// 选出尚未入梦的日记（新→旧，受数量与字符上限约束）
@@ -394,6 +489,8 @@ fn finalize_dream_job_with_memory(
     let cfg = load_memory_config(&base);
     let memory_path = job.workspace.join("MEMORY.md");
 
+    save_baseline(&job.workspace, &job.memory_before, cleaned);
+
     if cfg.write_approval {
         // 超限也要在 finalize 失败（与直写路径一致）；扫描在 enqueue 内完成
         let used = entries
@@ -431,6 +528,8 @@ fn finalize_dream_job_with_memory(
     let points = estimate_points(input_chars, cleaned.len());
 
     let entry = state.agents.entry(job.agent_id.clone()).or_default();
+    entry.memory_hash = Some(compute_memory_hash(cleaned));
+    entry.polluted = false;
     for d in &job.diaries {
         if !entry.dreamed_dates.iter().any(|x| x == &d.date) {
             entry.dreamed_dates.push(d.date.clone());
