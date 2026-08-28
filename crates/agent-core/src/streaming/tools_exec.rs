@@ -11,7 +11,7 @@ use crate::runtime::{
     AgentLoop, StepContext, ToolCallRuntime, ToolExecutionGrants, ToolInvocation, TurnContext,
 };
 
-use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
+use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl, ConfirmPresentation};
 use super::lifecycle::emit_async_agent_message;
 
 use crate::control::smart_approval::{SmartApprovalContext, TurnSummary};
@@ -439,8 +439,7 @@ async fn review_once_permission(
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
     hook_detail: &str,
-    title: &str,
-    body: &str,
+    presentation: ConfirmPresentation<'_>,
 ) -> Option<PermissionPreflight> {
     let request = &audit.request;
     let review_started = std::time::Instant::now();
@@ -588,8 +587,7 @@ async fn review_once_permission(
         session.as_ref(),
         turn_context,
         &request.tool_call_id,
-        title,
-        body,
+        presentation,
         false,
         None,
     )
@@ -776,8 +774,10 @@ async fn preflight_read_only_write(
         turn_context,
         hitl_gate,
         "surface=permission reason=read_only_mutation",
-        "批准本次写入",
-        &body,
+        ConfirmPresentation::Text {
+            title: "批准本次写入",
+            body: &body,
+        },
     )
     .await
 }
@@ -860,8 +860,10 @@ async fn preflight_mcp_tool_approval(
             "surface=mcp reason=tool_policy mode={}",
             approval.mode.as_str()
         ),
-        "批准 MCP 工具调用",
-        &body,
+        ConfirmPresentation::Text {
+            title: "批准 MCP 工具调用",
+            body: &body,
+        },
     )
     .await
 }
@@ -916,9 +918,6 @@ async fn review_sandbox_denial(
         .chars()
         .take(800)
         .collect::<String>();
-    let body = format!(
-        "The sandbox denied this tool attempt:\n\n```text\n{denial_detail}\n```\n\nRetry this exact call once with full local filesystem access? Network permissions are unchanged, and the grant will not persist."
-    );
     let audit = PermissionAuditReceipt::new(
         session.memory_dir().to_path_buf(),
         &settings,
@@ -933,8 +932,9 @@ async fn review_sandbox_denial(
         turn_context,
         hitl_gate,
         "surface=permission reason=sandbox_denied",
-        "Retry outside sandbox",
-        &body,
+        ConfirmPresentation::SandboxRetry {
+            denial_detail: &denial_detail,
+        },
     )
     .await
 }
@@ -1297,8 +1297,7 @@ async fn execute_tools_serial_inner(
                                     session.as_ref(),
                                     turn_context,
                                     &call.id,
-                                    title,
-                                    &body,
+                                    ConfirmPresentation::Text { title, body: &body },
                                     true,
                                     command_type_rule
                                         .as_ref()
@@ -1954,8 +1953,10 @@ mod tests {
             &allow_context,
             None,
             "hook allow",
-            "title",
-            "body",
+            ConfirmPresentation::Text {
+                title: "title",
+                body: "body",
+            },
         )
         .await;
         assert!(matches!(allowed, Some(PermissionPreflight::Granted(_))));
@@ -1988,8 +1989,10 @@ mod tests {
             &deny_context,
             None,
             "hook deny",
-            "title",
-            "body",
+            ConfirmPresentation::Text {
+                title: "title",
+                body: "body",
+            },
         )
         .await;
         assert!(matches!(

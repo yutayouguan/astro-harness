@@ -142,6 +142,30 @@ fn confirm_template_can_expose_a_scoped_command_type_rule() {
 }
 
 #[test]
+fn sandbox_retry_template_uses_semantic_metadata_without_user_facing_copy() {
+    let ops = a2ui::templates::build_sandbox_retry_surface(
+        "surf-sandbox-retry",
+        "sh: /tmp/demo.md: Operation not permitted",
+    );
+    let wizard = ops
+        .iter()
+        .find_map(|op| {
+            op.pointer("/updateComponents/components")
+                .and_then(Value::as_array)
+        })
+        .and_then(|components| components.iter().find(|c| c["id"] == "wizard"))
+        .expect("sandbox retry wizard");
+    assert_eq!(wizard["approvalKind"], "sandbox_retry");
+    assert_eq!(
+        wizard["approvalDetail"],
+        "sh: /tmp/demo.md: Operation not permitted"
+    );
+    assert!(wizard.get("title").is_none());
+    assert!(wizard.get("body").is_none());
+    validate_operations(&ops).unwrap();
+}
+
+#[test]
 fn clarify_single_step_uses_wizard() {
     let steps = [ClarifyStep {
         id: "env".into(),

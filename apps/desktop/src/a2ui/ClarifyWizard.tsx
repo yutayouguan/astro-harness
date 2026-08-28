@@ -27,6 +27,8 @@ type Props = {
   variant?: "default" | "approval";
   approvalTitle?: string;
   approvalBody?: string;
+  approvalKind?: string;
+  approvalDetail?: string;
   allowAlways?: boolean;
   approvalTypeLabel?: string;
   disabled?: boolean;
@@ -41,6 +43,8 @@ export default function ClarifyWizard({
   variant = "default",
   approvalTitle,
   approvalBody,
+  approvalKind,
+  approvalDetail,
   allowAlways = false,
   approvalTypeLabel,
   disabled = false,
@@ -303,7 +307,19 @@ export default function ClarifyWizard({
   const dirClass = `is-${direction}`;
 
   if (variant === "approval") {
-    const content = parseApprovalContent(approvalBody ?? step.question);
+    const isSandboxRetry = approvalKind === "sandbox_retry";
+    const content = isSandboxRetry
+      ? {
+          description: t("chat.a2ui.sandboxRetryDescription"),
+          command: approvalDetail ?? "",
+        }
+      : parseApprovalContent(approvalBody ?? step.question);
+    const renderedTitle = isSandboxRetry
+      ? t("chat.a2ui.sandboxRetryTitle")
+      : approvalTitle || step.question;
+    const commandLabel = isSandboxRetry
+      ? t("chat.a2ui.sandboxRetryDetail")
+      : t("chat.a2ui.approvalCommand");
     const submitApproval = (choice: "approve" | "approve_always" | "approve_type" | "deny") => {
       if (disabled) return;
       setApprovalChoice(choice);
@@ -325,7 +341,7 @@ export default function ClarifyWizard({
               {t("chat.a2ui.approvalRequired")}
             </span>
             <h3 id={approvalTitleId} className="a2ui-approval-title">
-              {approvalTitle || step.question}
+              {renderedTitle}
             </h3>
           </div>
         </div>
@@ -338,7 +354,7 @@ export default function ClarifyWizard({
           <div className="a2ui-approval-command">
             <div className="a2ui-approval-command-label">
               <TerminalSquare size={14} aria-hidden />
-              <span>{t("chat.a2ui.approvalCommand")}</span>
+              <span>{commandLabel}</span>
             </div>
             <pre><code>{content.command}</code></pre>
           </div>

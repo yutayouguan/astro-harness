@@ -57,6 +57,11 @@ pub(crate) struct ConfirmOutcome {
     pub command_type: bool,
 }
 
+pub(crate) enum ConfirmPresentation<'a> {
+    Text { title: &'a str, body: &'a str },
+    SandboxRetry { denial_detail: &'a str },
+}
+
 /// 弹出 confirm 型 HITL surface，等待用户批准/拒绝。
 ///
 /// `allow_always` 为 true 时额外提供「批准并永久放行」按钮，其结果 `ConfirmOutcome::always`。
@@ -65,19 +70,27 @@ pub(crate) async fn park_confirm(
     session: &Session,
     turn_context: &TurnContext,
     tool_call_id: &str,
-    title: &str,
-    body: &str,
+    presentation: ConfirmPresentation<'_>,
     allow_always: bool,
     command_family: Option<&str>,
 ) -> Option<ConfirmOutcome> {
     let surface_id = format!("confirm-{}", uuid::Uuid::new_v4());
-    let operations = a2ui::templates::build_confirm_surface_with_rule(
-        &surface_id,
-        title,
-        body,
-        allow_always,
-        command_family,
-    );
+    let (message, operations) = match presentation {
+        ConfirmPresentation::Text { title, body } => (
+            title,
+            a2ui::templates::build_confirm_surface_with_rule(
+                &surface_id,
+                title,
+                body,
+                allow_always,
+                command_family,
+            ),
+        ),
+        ConfirmPresentation::SandboxRetry { denial_detail } => (
+            "sandbox_retry",
+            a2ui::templates::build_sandbox_retry_surface(&surface_id, denial_detail),
+        ),
+    };
     let ops_value = serde_json::Value::Array(operations);
     let resolution = park_astro_hitl_resolution(
         gate,
@@ -86,7 +99,7 @@ pub(crate) async fn park_confirm(
         tool_call_id,
         AstroHitlPayload {
             reason: "confirmation".into(),
-            message: title.into(),
+            message: message.into(),
             operations: ops_value,
             response_schema: serde_json::json!({
                 "type": "object",

@@ -388,6 +388,8 @@ function CatalogNode({
           variant={node.variant === "approval" ? "approval" : "default"}
           approvalTitle={typeof node.title === "string" ? node.title : undefined}
           approvalBody={typeof node.body === "string" ? node.body : undefined}
+          approvalKind={typeof node.approvalKind === "string" ? node.approvalKind : undefined}
+          approvalDetail={typeof node.approvalDetail === "string" ? node.approvalDetail : undefined}
           allowAlways={node.allowAlways === true}
           approvalTypeLabel={typeof node.approvalTypeLabel === "string" ? node.approvalTypeLabel : undefined}
           disabled={ctx.disabled}

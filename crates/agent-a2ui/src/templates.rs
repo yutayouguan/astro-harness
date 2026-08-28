@@ -71,6 +71,42 @@ pub fn build_confirm_surface_with_rule(
     ]
 }
 
+/// Sandbox retry approval surface. User-facing copy is resolved by the frontend locale;
+/// the backend only sends the semantic kind and the original denial detail.
+pub fn build_sandbox_retry_surface(surface_id: &str, denial_detail: &str) -> Vec<Value> {
+    let components = vec![
+        json!({ "id": "root", "component": "Card", "child": "col" }),
+        json!({
+            "id": "col",
+            "component": "Column",
+            "children": ["wizard"]
+        }),
+        json!({
+            "id": "wizard",
+            "component": "ClarifyWizard",
+            "variant": "approval",
+            "approvalKind": "sandbox_retry",
+            "approvalDetail": denial_detail,
+            "steps": [{
+                "id": "confirm",
+                "question": "sandbox_retry",
+                "options": ["approve", "deny"],
+            }]
+        }),
+    ];
+
+    vec![
+        json!({
+            "version": "v0.9",
+            "createSurface": { "surfaceId": surface_id, "catalogId": ASTRO_CATALOG_ID }
+        }),
+        json!({
+            "version": "v0.9",
+            "updateComponents": { "surfaceId": surface_id, "components": components }
+        }),
+    ]
+}
+
 /// One step in a clarify wizard.
 #[derive(Debug, Clone)]
 pub struct ClarifyStep {
