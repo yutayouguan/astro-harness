@@ -162,7 +162,7 @@ export type SkillsPanelProps = {
 type PluginsPrimaryTab = "skills" | "mcp";
 type PluginScope = "global" | "builtin" | "project";
 type McpScopeTab = "personal" | "public";
-type PersonalSkillsTab = "installed" | "machine" | "online";
+type PersonalSkillsTab = "installed" | "machine" | "online" | "updates";
 type SkillsDrawer = "updates";
 type SkillInstallTarget = "global" | "project";
 /** 内容布局：画廊 / 列表 / 详情 */
@@ -2917,15 +2917,11 @@ export default function SkillsPanel({
                 key={item}
                 type="button"
                 role="tab"
-                aria-selected={item === "updates" ? drawer === "updates" : personalTab === item}
-                className={`plugins-personal-tab--underline ${(item === "updates" ? drawer === "updates" : personalTab === item) ? "is-active" : ""}`}
+                aria-selected={personalTab === item}
+                className={`plugins-personal-tab--underline ${personalTab === item ? "is-active" : ""}`}
                 onClick={() => {
-                  if (item === "updates") {
-                    setDrawer((d) => (d === "updates" ? null : "updates"));
-                  } else {
-                    setPersonalTab(item);
-                    if (drawer === "updates") setDrawer(null);
-                  }
+                  setPersonalTab(item);
+                  setDrawer(item === "updates" ? "updates" : null);
                 }}
               >
                 {t(item === "updates" ? "plugins.action.updates" : `plugins.personalTab.${item}` as MessageKey)}
@@ -3076,8 +3072,8 @@ export default function SkillsPanel({
         </section>
       )}
 
-      {drawer === "updates" && (
-        <section className="skills-pane plugins-drawer" role="dialog" aria-modal="true">
+      {primaryTab === "skills" && personalTab === "updates" && (
+        <section className="skills-pane" role="tabpanel">
           <header className="skills-pane-head">
             <div>
               <h2>{t("skills.updatesTitle")}</h2>
@@ -3095,7 +3091,7 @@ export default function SkillsPanel({
                 <CloudDownload size={14} />
                 {t("skills.updateAll")}
               </button>
-            <button type="button" className="skills-icon-btn" onClick={() => setDrawer(null)} aria-label={t("common.close")}>
+            <button type="button" className="skills-icon-btn" onClick={() => { setDrawer(null); setPersonalTab("installed"); }} aria-label={t("common.close")}>
               <X size={16} />
             </button>
             </div>
