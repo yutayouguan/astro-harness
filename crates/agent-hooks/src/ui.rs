@@ -247,7 +247,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(detail_from_payload(&tool), "terminal {\"command\":\"pwd\"}");
+        assert_eq!(detail_from_payload(&tool), "exec_command {\"command\":\"pwd\"}");
         assert_eq!(detail_from_payload(&prompt), "canonical prompt");
         assert_eq!(detail_from_payload(&assistant), "canonical response");
     }
