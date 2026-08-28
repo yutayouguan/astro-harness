@@ -28,7 +28,7 @@ import {
   type ScheduleDraft,
 } from "../../lib/cron/cronSchedule";
 import { useI18n } from "../../i18n/LocaleContext";
-import type { CronJobDto } from "./CronPanel";
+import type { CronJobDto } from "./CronRunDetailDrawer";
 
 /** 创建任务对话框可选的供应商简项 */
 export type ProviderOpt = {

@@ -2,7 +2,9 @@ import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   CronRunFloatingCard,
+  CronTaskDetailDrawer,
   CronRunDetailDrawer,
+  type CronJobDto,
   type CronRunDto,
 } from "../components/schedule/CronRunDetailDrawer";
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
@@ -28,6 +30,21 @@ const run: CronRunDto = {
   trigger: "due",
 };
 
+const job: CronJobDto = {
+  id: "daily-ai-news",
+  schedule: "0 8 * * *",
+  task: "请搜索并汇总今天 AI 领域最重要的 3-5 条新闻，包括大模型发布、重要论文、行业动态等。",
+  title: "每日 AI 新闻推送",
+  agent_id: "workspace",
+  provider_id: "openai",
+  model: "gpt-5.2",
+  enabled: true,
+  created_at: "2026-08-21T09:00:00+08:00",
+  last_run_at: run.fired_at,
+  next_run_at: "2026-08-29T08:00:00+08:00",
+  show_in_chat: true,
+};
+
 const messages: ChatMessage[] = [
   { id: "user", role: "user", content: run.task },
   {
@@ -39,7 +56,8 @@ const messages: ChatMessage[] = [
 ];
 
 function CronRunChatPreview() {
-  const [open, setOpen] = useState(false);
+  const [taskOpen, setTaskOpen] = useState(false);
+  const [runOpen, setRunOpen] = useState(false);
   const confirm = useConfirm();
 
   return (
@@ -53,7 +71,7 @@ function CronRunChatPreview() {
       }}
     >
       <aside className="chat-cron-run-float">
-        <CronRunFloatingCard run={run} onOpen={() => setOpen(true)} />
+        <CronRunFloatingCard run={run} onOpen={() => setTaskOpen(true)} />
       </aside>
       <div className="message-list-wrap">
         <div className="message-list">
@@ -86,11 +104,23 @@ function CronRunChatPreview() {
           outline: "none",
         }}
       />
-      {open ? (
+      {taskOpen ? (
+        <CronTaskDetailDrawer
+          job={job}
+          runs={[run]}
+          nonModal
+          onClose={() => setTaskOpen(false)}
+          onEdit={() => {}}
+          onToggleEnabled={() => {}}
+          onRunNow={() => {}}
+          onOpenRun={() => setRunOpen(true)}
+        />
+      ) : null}
+      {runOpen ? (
         <CronRunDetailDrawer
           run={run}
           messages={messages}
-          onClose={() => setOpen(false)}
+          onClose={() => setRunOpen(false)}
           onDelete={() => {
             void confirm({
               title: "删除运行记录",

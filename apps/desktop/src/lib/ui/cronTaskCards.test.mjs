@@ -46,12 +46,12 @@ test("scheduled task cards expose a dedicated detail affordance", () => {
 });
 
 test("task drawer combines configuration, actions, and recent runs", () => {
-  assert.match(panel, /className="cron-job-drawer"/);
-  assert.match(panel, /className="cron-job-overview-card"/);
-  assert.match(panel, /className="cron-job-drawer-actions"/);
-  assert.match(panel, /drawerJobRuns\.slice\(0, 30\)/);
-  assert.match(panel, /onClick=\{\(\) => openRunDrawer\(run\)\}/);
-  assert.match(panel, /backdropFilter: "none"/);
+  assert.match(runDetail, /className="cron-job-drawer"/);
+  assert.match(runDetail, /className="cron-job-overview-card"/);
+  assert.match(runDetail, /className="cron-job-drawer-actions"/);
+  assert.match(runDetail, /runs\.slice\(0, 30\)/);
+  assert.match(runDetail, /onClick=\{\(\) => onOpenRun\(run\)\}/);
+  assert.match(runDetail, /backdropFilter: "none"/);
   assert.match(drawer, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
@@ -81,10 +81,15 @@ test("cron sessions keep the answer and expose a separate floating task card", (
   assert.match(chat, /invoke<CronRunDto \| null>\("get_cron_run_by_session"/);
   assert.match(chat, /className="chat-cron-run-float"/);
   assert.match(chat, /<CronRunFloatingCard/);
+  assert.match(chat, /onOpen=\{\(\) => setCronTaskOpen\(true\)\}/);
   assert.doesNotMatch(chat, /cronRun && m\.id === cronResultMessageId/);
   assert.match(chat, /<ChatMarkdown\s+content=\{m\.content\}/);
+  assert.match(chat, /<CronTaskDetailDrawer/);
+  assert.match(chat, /onOpenRun=\{setSelectedCronRun\}/);
+  assert.match(chat, /\{selectedCronRun \? \(\s*<CronRunDetailDrawer/);
   assert.match(chat, /<CronRunDetailDrawer/);
   assert.match(runDetail, /export function CronRunFloatingCard/);
+  assert.match(runDetail, /export function CronTaskDetailDrawer/);
   assert.match(runDetail, /export function CronRunDetailDrawer/);
   assert.match(runDetail, /modal=\{false\}/);
   assert.match(runDetail, /pointerEvents: "none"/);

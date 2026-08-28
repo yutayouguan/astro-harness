@@ -87,6 +87,7 @@ import type {
   ChatAttachment,
   ChatAttachmentKind,
   ChatEmptyMode,
+  ChatHistoryDto,
   ChatMessage,
   InstalledSkill,
   MessageTokenUsage,
@@ -133,11 +134,18 @@ import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
 import {
   CronRunFloatingCard,
+  CronTaskDetailDrawer,
   CronRunDetailDrawer,
   cronRunStatusKind,
+  type CronJobDto,
   type CronRunDto,
 } from "../schedule/CronRunDetailDrawer";
+import {
+  CreateCronDialog,
+  type ProviderOpt,
+} from "../schedule/CreateCronDialog";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
+import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
 import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
 import {
   groupConsecutiveActivities,
@@ -310,6 +318,9 @@ type Props = {
   agentId?: string | null;
   /** 当前聊天模型 id：助手无自定义头像时用作品牌图标 */
   modelId?: string | null;
+  /** 定时任务编辑器使用的供应商列表。 */
+  cronProviders?: ProviderOpt[];
+  cronActiveProviderId?: string | null;
   /** 当前模型输入能力（附件门禁） */
   modelCapabilities?: ModelCapabilities | null;
   /** 当前模型单价（估费预览） */
@@ -725,6 +736,8 @@ export default function ChatView({
   onPickWelcomePrompt,
   agentId = null,
   modelId = null,
+  cronProviders = [],
+  cronActiveProviderId = null,
   modelCapabilities = null,
   modelPricing = null,
   onOpenMcpSettings,
@@ -788,7 +801,15 @@ export default function ChatView({
     useState<ComposerPreviewTarget | null>(null);
   const [mediaBaseDir, setMediaBaseDir] = useState<string | null>(null);
   const [cronRun, setCronRun] = useState<CronRunDto | null>(null);
-  const [cronRunOpen, setCronRunOpen] = useState(false);
+  const [cronJob, setCronJob] = useState<CronJobDto | null>(null);
+  const [cronJobRuns, setCronJobRuns] = useState<CronRunDto[]>([]);
+  const [cronJobRunsLoading, setCronJobRunsLoading] = useState(false);
+  const [cronTaskOpen, setCronTaskOpen] = useState(false);
+  const [cronEditOpen, setCronEditOpen] = useState(false);
+  const [cronBusy, setCronBusy] = useState(false);
+  const [selectedCronRun, setSelectedCronRun] = useState<CronRunDto | null>(null);
+  const [selectedCronMessages, setSelectedCronMessages] = useState<ChatMessage[]>([]);
+  const [selectedCronTraceLoading, setSelectedCronTraceLoading] = useState(false);
   /** 创建 Agent：发送校验失败时高亮的必填槽 index */
   const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
   const { servers: mcpServers } = useMcpTools(agentId);
@@ -819,11 +840,34 @@ export default function ChatView({
     setPreviewTarget(null);
   }, [sessionId]);
 
+  const loadCronTask = useCallback(async (jobId: string) => {
+    setCronJobRunsLoading(true);
+    try {
+      const [jobs, runs] = await Promise.all([
+        invoke<CronJobDto[]>("list_cron_jobs"),
+        invoke<CronRunDto[]>("list_cron_job_runs", { id: jobId }),
+      ]);
+      setCronJob(jobs.find((job) => job.id === jobId) ?? null);
+      setCronJobRuns(runs);
+    } catch (error) {
+      setCronJob(null);
+      setCronJobRuns([]);
+      showToast(String(error));
+    } finally {
+      setCronJobRunsLoading(false);
+    }
+  }, [showToast]);
+
   useEffect(() => {
     let cancelled = false;
     let timer: number | null = null;
     setCronRun(null);
-    setCronRunOpen(false);
+    setCronJob(null);
+    setCronJobRuns([]);
+    setCronTaskOpen(false);
+    setCronEditOpen(false);
+    setSelectedCronRun(null);
+    setSelectedCronMessages([]);
     if (!sessionId) return;
 
     const refresh = async () => {
@@ -833,6 +877,12 @@ export default function ChatView({
         });
         if (cancelled) return;
         setCronRun(run);
+        if (run) {
+          setCronJobRuns((current) => {
+            const next = current.filter((item) => item.id !== run.id);
+            return [run, ...next];
+          });
+        }
         if (run && cronRunStatusKind(run.status) === "running") {
           timer = window.setTimeout(() => void refresh(), 1500);
         }
@@ -848,8 +898,58 @@ export default function ChatView({
     };
   }, [sessionId]);
 
-  const deleteCronRun = useCallback(async () => {
-    if (!cronRun) return;
+  useEffect(() => {
+    if (!cronRun?.job_id) return;
+    void loadCronTask(cronRun.job_id);
+  }, [cronRun?.job_id, loadCronTask]);
+
+  useEffect(() => {
+    if (!selectedCronRun) return;
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const refresh = async () => {
+      try {
+        const latest = await invoke<CronRunDto | null>("get_cron_run", {
+          id: selectedCronRun.id,
+        });
+        if (cancelled) return;
+        const resolved = latest ?? selectedCronRun;
+        setSelectedCronRun(resolved);
+        setCronJobRuns((current) =>
+          current.map((run) => (run.id === resolved.id ? resolved : run)),
+        );
+
+        if (resolved.session_id && resolved.session_id !== sessionId) {
+          setSelectedCronTraceLoading(true);
+          const history = await invoke<ChatHistoryDto>("get_chat_history", {
+            sessionId: resolved.session_id,
+            limit: 200,
+          });
+          if (cancelled) return;
+          setSelectedCronMessages(mapHistoryMessages(history.messages ?? []));
+        }
+
+        if (cronRunStatusKind(resolved.status) === "running") {
+          timer = window.setTimeout(() => void refresh(), 1500);
+        }
+      } catch (error) {
+        if (!cancelled) showToast(String(error));
+      } finally {
+        if (!cancelled) setSelectedCronTraceLoading(false);
+      }
+    };
+
+    setSelectedCronMessages([]);
+    void refresh();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [selectedCronRun?.id, sessionId, showToast]);
+
+  const deleteSelectedCronRun = useCallback(async () => {
+    if (!selectedCronRun) return;
     const approved = await confirm({
       title: t("dialog.deleteTitle"),
       message: t("cron.history.deleteRunConfirm"),
@@ -858,13 +958,55 @@ export default function ChatView({
     });
     if (!approved) return;
     try {
-      await invoke("delete_cron_run", { id: cronRun.id });
-      setCronRunOpen(false);
-      setCronRun(null);
+      await invoke("delete_cron_run", { id: selectedCronRun.id });
+      setCronJobRuns((current) =>
+        current.filter((run) => run.id !== selectedCronRun.id),
+      );
+      setSelectedCronRun(null);
+      setSelectedCronMessages([]);
     } catch (error) {
       showToast(String(error));
     }
-  }, [confirm, cronRun, showToast, t]);
+  }, [confirm, selectedCronRun, showToast, t]);
+
+  const toggleCronJob = useCallback(async () => {
+    if (!cronJob || cronBusy) return;
+    const previous = cronJob;
+    const next = { ...cronJob, enabled: !cronJob.enabled };
+    setCronJob(next);
+    setCronBusy(true);
+    try {
+      const updated = await invoke<boolean>("set_cron_job_enabled", {
+        id: cronJob.id,
+        enabled: next.enabled,
+      });
+      if (!updated) throw new Error(t("cron.error"));
+    } catch (error) {
+      setCronJob(previous);
+      showToast(String(error));
+    } finally {
+      setCronBusy(false);
+    }
+  }, [cronBusy, cronJob, showToast, t]);
+
+  const runCronJobNow = useCallback(async () => {
+    if (!cronJob || cronBusy) return;
+    setCronBusy(true);
+    try {
+      const run = await invoke<CronRunDto>("run_cron_job_now", {
+        id: cronJob.id,
+      });
+      setCronJobRuns((current) => [
+        run,
+        ...current.filter((item) => item.id !== run.id),
+      ]);
+      await loadCronTask(cronJob.id);
+    } catch (error) {
+      showToast(String(error));
+    } finally {
+      setCronBusy(false);
+    }
+  }, [cronBusy, cronJob, loadCronTask, showToast]);
 
   const cancelContextPopoverClose = useCallback(() => {
     if (contextCloseTimerRef.current == null) return;
@@ -1953,7 +2095,7 @@ export default function ChatView({
         <aside className="chat-cron-run-float">
           <CronRunFloatingCard
             run={cronRun}
-            onOpen={() => setCronRunOpen(true)}
+            onOpen={() => setCronTaskOpen(true)}
           />
         </aside>
       ) : null}
@@ -3123,14 +3265,43 @@ export default function ChatView({
           onClose={() => setPreviewTarget(null)}
         />
       </section>
-      {cronRun && cronRunOpen ? (
-        <CronRunDetailDrawer
-          run={cronRun}
-          messages={messages}
-          onClose={() => setCronRunOpen(false)}
-          onDelete={() => void deleteCronRun()}
+      {cronJob && cronTaskOpen ? (
+        <CronTaskDetailDrawer
+          job={cronJob}
+          runs={cronJobRuns}
+          runsLoading={cronJobRunsLoading}
+          busy={cronBusy}
+          nonModal
+          onClose={() => setCronTaskOpen(false)}
+          onEdit={() => setCronEditOpen(true)}
+          onToggleEnabled={() => void toggleCronJob()}
+          onRunNow={() => void runCronJobNow()}
+          onOpenRun={setSelectedCronRun}
         />
       ) : null}
+      {selectedCronRun ? (
+        <CronRunDetailDrawer
+          run={selectedCronRun}
+          messages={
+            selectedCronRun.session_id === sessionId
+              ? messages
+              : selectedCronMessages
+          }
+          traceLoading={selectedCronTraceLoading}
+          onClose={() => setSelectedCronRun(null)}
+          onDelete={() => void deleteSelectedCronRun()}
+        />
+      ) : null}
+      <CreateCronDialog
+        open={Boolean(cronJob && cronEditOpen)}
+        editingJob={cronJob}
+        onClose={() => setCronEditOpen(false)}
+        onCreated={() => {
+          if (cronJob) void loadCronTask(cronJob.id);
+        }}
+        providers={cronProviders}
+        activeProviderId={cronActiveProviderId}
+      />
     </ChatMediaAttachProvider>
   );
 }

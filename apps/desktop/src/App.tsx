@@ -1648,6 +1648,13 @@ export default function App() {
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
                       modelId={activeProvider?.model ?? null}
+                      cronProviders={providers.map((provider) => ({
+                        id: provider.id,
+                        name: provider.display_name,
+                        model: provider.model,
+                        kind: provider.kind,
+                      }))}
+                      cronActiveProviderId={activeProvider?.id ?? null}
                       modelCapabilities={activeModelCapabilities}
                       modelPricing={activeModelPricing}
                       contextUsagePercent={

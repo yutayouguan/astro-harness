@@ -193,6 +193,13 @@ export default function SideChatPanel({
           contextUsage={chat.contextUsage}
           contextWindow={contextWindow}
           modelId={provider.model}
+          cronProviders={providers.map((item) => ({
+            id: item.id,
+            name: item.display_name,
+            model: item.model,
+            kind: item.kind,
+          }))}
+          cronActiveProviderId={provider.id}
           modelCapabilities={modelCapabilities}
           modelPricing={modelPricing}
           contextUsagePercent={
