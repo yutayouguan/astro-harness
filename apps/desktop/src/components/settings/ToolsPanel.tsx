@@ -35,10 +35,12 @@ type ToolTab = "builtin" | "approvals";
 /** 危险命令审批设置（Tauri camelCase） */
 type PermissionPreset = "ask_for_approval" | "approve_for_me" | "full_access";
 type CommandTypeRule = { commandFamily: string; risk: string };
+type BrowserApprovalRule = { origin: string; actionClass: string };
 type ApprovalSettings = {
   preset: string;
   commandAllowlist: string[];
   commandTypeAllowlist: CommandTypeRule[];
+  browserApprovalRules: BrowserApprovalRule[];
 };
 
 const APPROVAL_MODES: PermissionPreset[] = ["ask_for_approval", "approve_for_me", "full_access"];
@@ -124,6 +126,17 @@ function ApprovalsSection({ active }: { active: boolean }) {
     }
   };
 
+  const removeBrowserRule = async (rule: BrowserApprovalRule) => {
+    try {
+      setSettings(await invoke<ApprovalSettings>("remove_browser_approval_rule", {
+        origin: rule.origin,
+        actionClass: rule.actionClass,
+      }));
+    } catch (cause) {
+      setError(String(cause));
+    }
+  };
+
   if (!settings) {
     return <p className="agent-tools-empty">{t("approvals.loading")}</p>;
   }
@@ -160,6 +173,37 @@ function ApprovalsSection({ active }: { active: boolean }) {
           {t(`chat.approval.desc.${modeHintKey}` as MessageKey)}
         </p>
         {error ? <p className="tools-detail-body is-error">{error}</p> : null}
+      </section>
+
+      <section className="tools-detail-section">
+        <h4 className="tools-detail-label">
+          <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
+          {t("approvals.browser.label")}
+        </h4>
+        <p className="tools-detail-body">{t("approvals.browser.hint")}</p>
+        {settings.browserApprovalRules.length === 0 ? (
+          <p className="tools-detail-empty-params">{t("approvals.browser.empty")}</p>
+        ) : (
+          <ul className="approvals-allow-list">
+            {settings.browserApprovalRules.map((rule) => (
+              <li key={`${rule.origin}:${rule.actionClass}`} className="mcp-tool-row">
+                <span className="approvals-rule-copy">
+                  <code className="mcp-tool-name">{rule.origin}</code>
+                  <small className="tools-detail-body">{rule.actionClass}</small>
+                </span>
+                <button
+                  type="button"
+                  className="mcp-btn-ghost"
+                  onClick={() => void removeBrowserRule(rule)}
+                  aria-label={t("approvals.allowlist.remove")}
+                >
+                  <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+                  {t("approvals.allowlist.remove")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="tools-detail-section">

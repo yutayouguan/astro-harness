@@ -15,6 +15,7 @@ pub const TOOL_GUIDANCE: &str = "\
 加载 Skill 时工具名必须是 skills，arguments.skill_id 填 Skill 名称；可用 action=list|curate|load|manage。\n\
 复杂可复用流程：skills manage create；纠错后的正确步骤：manage_action=patch（old_string 须唯一）。\n\
 长期偏好/环境事实：用 memory；跨会话原文：context_search（scope=session 或 all）。闲置技能：action=curate（只建议，确认后再 delete）。\n\
+用户明确要求查看、测试或操作网页时使用 browser_open；启动本地开发服务器并获得 loopback URL 后，自动 browser_open，再用 browser_snapshot/click/type 验证修改。仅为读取链接内容时优先 web_fetch，不要无故弹出网页预览。浏览器表单提交、发布、删除、登录、权限或购买操作必须声明 state_changing/sensitive intent。\n\
 需求含糊、有多种理解或缺关键信息时，别猜别硬做：用 ask_user（mode=question，questions）向用户提问；敏感/不可逆操作前用 ask_user（mode=confirm，title+body）；本地天气/附近定位用 ask_user（mode=location）。Agent↔Plan 切换只用 switch_mode（勿与 ask_user 混用）。\n\
 Agent Thread 只使用六个 V2 工具：spawn_agent(task_name,message,agent_type?,model?,reasoning_effort?,fork_turns?)；list_agents(path_prefix?)；send_message(target,message) 仅排队；followup_task(target,message) 排队并触发下一轮；wait_agent(timeout_ms?)；interrupt_agent(target)。新建可切换的长期助手才用 persona_create。\n\
 向用户展示本工作区媒体/网页时，在回复正文写 ![audio](path) / ![video](path) / ![image](path) / ![html](path)；path 用工具返回的工作区相对路径（如 generated/audio/…、generated/html/…），HTML 文件请写入 generated/html/ 目录；不要写绝对路径，也不要用「文件：`路径`」这类纯文本，更不要用 present / A2UI 挂媒体卡。\n\

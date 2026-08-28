@@ -1,6 +1,7 @@
 //! 系统能力：文件、终端、代码执行、HTTP 抓取、检索、工具搜索、上下文管理。
 
 pub mod apply_patch;
+pub mod browser;
 pub mod code_exec;
 pub mod context_remaining;
 pub mod exec_command;

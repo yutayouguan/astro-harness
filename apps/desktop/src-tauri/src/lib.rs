@@ -345,6 +345,7 @@ pub fn run() {
             commands::memory::add_command_allowlist,
             commands::memory::remove_command_allowlist,
             commands::memory::remove_command_type_allowlist,
+            commands::memory::remove_browser_approval_rule,
             // — loops —
             commands::loops::list_loops,
             commands::loops::get_loop,

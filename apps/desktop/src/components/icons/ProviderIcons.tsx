@@ -12,6 +12,7 @@ import Gemini from "@lobehub/icons/es/Gemini/components/Mono";
 import Google from "@lobehub/icons/es/Google/components/Mono";
 import Groq from "@lobehub/icons/es/Groq/components/Mono";
 import HuggingFace from "@lobehub/icons/es/HuggingFace/components/Mono";
+import Hunyuan from "@lobehub/icons/es/Hunyuan/components/Mono";
 import InternLM from "@lobehub/icons/es/InternLM/components/Mono";
 import Kimi from "@lobehub/icons/es/Kimi/components/Mono";
 import Meta from "@lobehub/icons/es/Meta/components/Mono";
@@ -71,6 +72,7 @@ type BrandKey =
   | "stepfun"
   | "internlm"
   | "yi"
+  | "hunyuan"
   | "bytedance"
   | "xiaomi";
 
@@ -103,6 +105,7 @@ const BRAND_ICONS: Record<BrandKey, LobeMonoIcon> = {
   stepfun: Stepfun,
   internlm: InternLM,
   yi: Yi,
+  hunyuan: Hunyuan,
   bytedance: ByteDance,
   xiaomi: XiaomiMiMo,
 };
@@ -143,6 +146,7 @@ function resolveProviderBrand(kind?: string): BrandKey | null {
   if (key.includes("volcengine") || key.includes("volc")) return "volcengine";
   if (key.includes("doubao")) return "doubao";
   if (key.includes("minimax") || key.includes("minmax")) return "minimax";
+  if (key.includes("hunyuan") || key.includes("tencent")) return "hunyuan";
   if (key.includes("openai") || key.includes("gpt")) return "openai";
   if (key.includes("google") || key.includes("gemini")) return "google";
   if (key.includes("deepseek")) return "deepseek";
@@ -207,6 +211,7 @@ function resolveModelBrand(modelId: string): BrandKey | null {
   if (id.includes("moonshot")) return "moonshot";
   if (id.includes("doubao")) return "doubao";
   if (id.includes("bytedance") || id.includes("seedance") || id.includes("seedream")) return "bytedance";
+  if (id.includes("hunyuan") || id.includes("tencent")) return "hunyuan";
   if (id.includes("mimo") || id.includes("xiaomi")) return "xiaomi";
   if (id.includes("volc") || id.includes("ep-")) return "volcengine";
   if (id.includes("minimax") || id.includes("minmax") || id.includes("abab")) {

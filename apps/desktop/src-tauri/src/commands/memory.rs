@@ -240,6 +240,7 @@ pub struct ApprovalSettingsDto {
     pub preset: String,
     pub command_allowlist: Vec<String>,
     pub command_type_allowlist: Vec<CommandTypeRuleDto>,
+    pub browser_approval_rules: Vec<BrowserApprovalRuleDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -247,6 +248,13 @@ pub struct ApprovalSettingsDto {
 pub struct CommandTypeRuleDto {
     pub command_family: String,
     pub risk: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserApprovalRuleDto {
+    pub origin: String,
+    pub action_class: String,
 }
 
 fn approval_settings_dto() -> ApprovalSettingsDto {
@@ -271,6 +279,13 @@ fn approval_settings_dto() -> ApprovalSettingsDto {
             .map(|rule| CommandTypeRuleDto {
                 command_family: rule.command_family,
                 risk: rule.risk,
+            })
+            .collect(),
+        browser_approval_rules: tools::browser::load_approval_rules(&root)
+            .into_iter()
+            .map(|rule| BrowserApprovalRuleDto {
+                origin: rule.origin,
+                action_class: rule.action_class,
             })
             .collect(),
     }
@@ -767,6 +782,18 @@ pub async fn remove_command_type_allowlist(
     Ok(approval_settings_dto())
 }
 
+/// 移除按站点与动作类别记忆的网页操作授权。
+#[tauri::command]
+pub async fn remove_browser_approval_rule(
+    origin: String,
+    action_class: String,
+) -> Result<ApprovalSettingsDto, String> {
+    let root = home::default_memory_dir();
+    tools::browser::remove_approval_rule(&root, &origin, &action_class)
+        .map_err(|error| error.to_string())?;
+    Ok(approval_settings_dto())
+}
+
 /// 批准全部 pending；逐条 emit（末条角标为准）。
 #[tauri::command]
 pub async fn approve_all_pending_memory_writes(app: AppHandle) -> Result<String, String> {
@@ -874,6 +901,7 @@ mod security_audit_tests {
                 kind: "file_write".into(),
                 targets: vec!["/secret/project/file.txt".into()],
             }],
+            reasoning: None,
             created_at: "2026-08-17T00:00:01+00:00".into(),
         };
         memory::append_permission_audit(dir.path(), &permission).unwrap();

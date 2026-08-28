@@ -16,6 +16,7 @@ use crate::{
 /// 与前端 `AGENT_TOOLS` id 对齐的已知工具集标识列表。
 pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "web_search",
+    "browser",
     "exec_command",
     "apply_patch",
     "code_exec",
@@ -197,6 +198,8 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "exec_command" | "write_stdin" | "request_permissions" => "exec_command",
         "apply_patch" => "apply_patch",
         "web_search" | "web_fetch" | "web_extract" | "http_fetch" => "web_search",
+        "browser_open" | "browser_snapshot" | "browser_click" | "browser_type"
+        | "browser_scroll" | "browser_wait" | "browser_screenshot" | "browser_close" => "browser",
         "code_exec" => "code_exec",
         "image_analyze" | "image_understand" => "image_analyze",
         "robotics" => "robotics",

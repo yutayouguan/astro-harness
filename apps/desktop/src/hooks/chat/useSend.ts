@@ -43,6 +43,7 @@ import type {
 } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import type { GeneratingPreviewApi } from "./useGeneratingPreview";
+import type { BrowserPreviewApi } from "./useBrowserPreview";
 import { isCodePath } from "../../lib/media/parseGeneratedMedia";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
 import type { ShowToastOptions } from "../ui/useTransientToast";
@@ -98,6 +99,8 @@ export interface UseSendDeps {
   settleMessageUsage: (messageId: string, endedAt?: number) => void;
   /** 生成中文件实时预览 */
   generatingPreviewApi: GeneratingPreviewApi;
+  /** 任务绑定浏览器悬浮预览 */
+  browserPreviewApi: BrowserPreviewApi;
   // stream buffer refs
   streamGenRef: MutableRefObject<number>;
   currentRunIdRef: MutableRefObject<string | null>;
@@ -183,6 +186,7 @@ export function useSend(deps: UseSendDeps) {
         flushStreamTokens,
         flushToolDeltas,
         generatingPreviewApi,
+        browserPreviewApi,
         streamGenRef,
         currentRunIdRef,
         activeAssistantIdRef,
@@ -641,6 +645,12 @@ export function useSend(deps: UseSendDeps) {
               name: payload.name,
               arguments_json: payload.arguments_json,
               result: payload.result,
+            });
+            browserPreviewApi.onToolCall({
+              name: payload.name,
+              arguments_json: payload.arguments_json,
+              result: payload.result,
+              phase: payload.phase,
             });
             if (!pendingModeSwitch && payload.result) {
               const sw = parseModeSwitchResult(payload.result);

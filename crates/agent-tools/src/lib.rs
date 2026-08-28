@@ -26,6 +26,7 @@ pub use interaction_mode::{
 };
 
 pub use builtin::hitl::send_user_message_async::parse_async_user_message;
+pub use builtin::shell::browser;
 pub use builtin::shell::jobs::{
     shutdown_all_jobs as shutdown_background_jobs,
     shutdown_jobs_for_session as shutdown_background_jobs_for_session,

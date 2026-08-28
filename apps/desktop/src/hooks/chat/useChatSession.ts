@@ -61,6 +61,7 @@ import type { MessageKey } from "../../i18n/messages";
 import type { ChatRightTab } from "../../components/chat/ChatRightPanel";
 import { useChatStreamBuffers } from "./useChatStreamBuffers";
 import { useGeneratingPreview } from "./useGeneratingPreview";
+import { useBrowserPreview } from "./useBrowserPreview";
 import { useParallelTasks } from "./useParallelTasks";
 import { useSend, type SendOpts } from "./useSend";
 import { useConfirm } from "../ui/DialogContext";
@@ -229,6 +230,11 @@ export function useChatSession({
   // ── 生成中文件实时预览 ──────────────────────────────────────────────────────
   const { preview: generatingPreview, api: generatingPreviewApi } =
     useGeneratingPreview({});
+  const {
+    preview: browserPreview,
+    api: browserPreviewApi,
+    dismiss: dismissBrowserPreview,
+  } = useBrowserPreview(sessionId);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const unlistenRef = useRef<(() => void) | null>(null);
@@ -325,6 +331,7 @@ export function useChatSession({
     flushToolDeltas,
     settleMessageUsage,
     generatingPreviewApi,
+    browserPreviewApi,
     streamGenRef,
     currentRunIdRef,
     activeAssistantIdRef,
@@ -1850,6 +1857,7 @@ export function useChatSession({
     chatRightOpen,
     chatRightTab,
     generatingPreview,
+    browserPreview,
     // setters needed by App
     setInput,
     setAttachments,
@@ -1858,6 +1866,7 @@ export function useChatSession({
     setChatRightTab,
     setFocusMessageId,
     setStatusDetail,
+    dismissBrowserPreview,
     // callbacks
     send,
     approveModeSwitch,

@@ -33,6 +33,7 @@ urlencoding = "2"
 regex = "1"
 futures = "0.3"
 bm25 = "2"
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "handshake"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

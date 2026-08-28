@@ -30,6 +30,7 @@ const IS_TAURI =
 
 export type AgentToolId =
   | "web_search"
+  | "browser"
   | "exec_command"
   | "apply_patch"
   | "code_exec"
@@ -119,6 +120,19 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "url", type: "string", optional: true },
       { name: "urls", type: "string", optional: true },
       { name: "max_chars", type: "number", optional: true },
+    ],
+  },
+  {
+    id: "browser",
+    titleKey: "agentTools.browser.title",
+    descKey: "agentTools.browser.desc",
+    Icon: IconWebSearch,
+    tone: "cyan",
+    params: [
+      { name: "url", type: "string", optional: true },
+      { name: "selector", type: "string", optional: true },
+      { name: "text", type: "string", optional: true },
+      { name: "intent", type: "string", optional: true },
     ],
   },
   {

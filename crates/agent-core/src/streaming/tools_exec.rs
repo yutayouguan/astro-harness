@@ -943,8 +943,265 @@ pub(crate) fn tool_may_require_permission(name: &str, args: &serde_json::Value) 
     match name {
         // 权限 profile 和命令规则都可能要求 park；统一走串行 preflight。
         "exec_command" | "code_exec" => true,
-        _ => tools::tool_requires_in_process_write(name, args),
+        _ => {
+            tools::browser::approval_class(name, args).is_some()
+                || tools::tool_requires_in_process_write(name, args)
+        }
     }
+}
+
+async fn preflight_browser_action(
+    session: &Arc<AgentLoop>,
+    call: &types::ParsedToolCall,
+    turn_context: &TurnContext,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Option<PermissionPreflight> {
+    let Some(class) = tools::browser::approval_class(&call.name, &call.arguments) else {
+        return Some(PermissionPreflight::NotRequired);
+    };
+    let origin = tools::browser::current_origin(session.session_id())
+        .await
+        .unwrap_or_else(|| "current page".to_string());
+    if class == tools::browser::BrowserApprovalClass::StateChanging
+        && tools::browser::approval_rule_matches(session.memory_dir(), &origin, class)
+    {
+        return Some(PermissionPreflight::NotRequired);
+    }
+
+    let (session_id, turn_id, profile_id, memory_dir, settings) = {
+        let agent = session.as_ref();
+        let settings = memory::load_permission_settings(agent.memory_dir());
+        let profile_id = agent
+            .permission_profile()
+            .unwrap_or_else(|| settings.selection.profile_id.clone());
+        (
+            agent.session_id().to_string(),
+            agent.current_turn_id().await,
+            profile_id,
+            agent.memory_dir().to_path_buf(),
+            settings,
+        )
+    };
+    let selection = settings.selection.clone();
+    if selection.approval_policy == types::ApprovalPolicy::Never {
+        return Some(PermissionPreflight::NotRequired);
+    }
+    let target = call
+        .arguments
+        .get("selector")
+        .or_else(|| call.arguments.get("text"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("page element");
+    let request = types::PermissionRequest {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        session_id,
+        turn_id,
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        summary: format!(
+            "Allow browser {} on {} ({})",
+            call.name,
+            origin,
+            class.as_str()
+        ),
+        capabilities: vec![types::PermissionCapability::ExternalSideEffect {
+            category: format!("browser_{}", class.as_str()),
+            target: origin.clone(),
+        }],
+        reason: types::PermissionReason::RulePrompt,
+        requested_scope: types::GrantScope::Once,
+        command_preview: None,
+        affected_paths: Vec::new(),
+        network_hosts: vec![origin.clone()],
+    };
+    let audit = PermissionAuditReceipt::new(
+        memory_dir.clone(),
+        &settings,
+        profile_id,
+        request,
+        session.config.thread_memory_mode,
+    );
+    let started = std::time::Instant::now();
+    audit.record(
+        memory::PermissionAuditKind::Evaluated,
+        None,
+        Some("browser_action_approval_required"),
+        None,
+    );
+    audit.record(
+        memory::PermissionAuditKind::Requested,
+        Some(selection.approvals_reviewer),
+        None,
+        None,
+    );
+    let permission_hook = session.fire_permission_request_hook(hooks::HookPayload {
+        session_id: audit.request.session_id.clone(),
+        turn_id: audit.request.turn_id.clone(),
+        tool_name: Some(call.name.clone()),
+        tool_input: Some(call.arguments.clone()),
+        detail: format!("surface=browser origin={origin} class={}", class.as_str()),
+        ..Default::default()
+    });
+    if let hooks::PermissionRequestDecision::Deny(reason) = permission_hook {
+        fire_post_permission_response(
+            session,
+            &audit.request.session_id,
+            audit.request.turn_id.as_deref(),
+            &audit.request,
+            "deny",
+        )
+        .await;
+        audit.record_review(
+            selection.approvals_reviewer,
+            "hook_denied",
+            false,
+            started.elapsed().as_millis() as u64,
+        );
+        return Some(PermissionPreflight::Denied(format!(
+            "Browser action denied by hook: {reason}"
+        )));
+    }
+    if permission_hook == hooks::PermissionRequestDecision::Allow {
+        fire_post_permission_response(
+            session,
+            &audit.request.session_id,
+            audit.request.turn_id.as_deref(),
+            &audit.request,
+            "allow",
+        )
+        .await;
+        audit.record_review(
+            selection.approvals_reviewer,
+            "hook_allowed",
+            true,
+            started.elapsed().as_millis() as u64,
+        );
+        return Some(PermissionPreflight::Granted(Box::new(audit)));
+    }
+    if class == tools::browser::BrowserApprovalClass::StateChanging
+        && selection.approvals_reviewer == types::ApprovalsReviewer::AutoReview
+    {
+        let targets = session
+            .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
+            .iter()
+            .map(crate::control::smart_approval::ApprovalTarget::from)
+            .collect::<Vec<_>>();
+        let smart_ctx = build_smart_approval_context(session).await;
+        if crate::control::smart_approval::maybe_smart_downgrade_ask(
+            &audit.request,
+            &targets,
+            smart_ctx.as_ref(),
+        )
+        .await
+            == types::ApprovalAction::Auto
+        {
+            fire_post_permission_response(
+                session,
+                &audit.request.session_id,
+                audit.request.turn_id.as_deref(),
+                &audit.request,
+                "auto",
+            )
+            .await;
+            audit.record_review(
+                selection.approvals_reviewer,
+                "auto_approved",
+                true,
+                started.elapsed().as_millis() as u64,
+            );
+            return Some(PermissionPreflight::Granted(Box::new(audit)));
+        }
+    }
+
+    let Some(gate) = hitl_gate else {
+        fire_post_permission_response(
+            session,
+            &audit.request.session_id,
+            audit.request.turn_id.as_deref(),
+            &audit.request,
+            "unavailable",
+        )
+        .await;
+        audit.record_review(
+            selection.approvals_reviewer,
+            "reviewer_unavailable",
+            false,
+            started.elapsed().as_millis() as u64,
+        );
+        return Some(PermissionPreflight::Denied(
+            "Browser action blocked: user approval is unavailable".to_string(),
+        ));
+    };
+    let title = if class == tools::browser::BrowserApprovalClass::Sensitive {
+        "批准敏感网页操作"
+    } else {
+        "批准网页操作"
+    };
+    let body = format!(
+        "Agent 请求在 `{origin}` 执行 `{}`。\n\n目标：`{target}`\n风险级别：`{}`\n\n敏感操作不会提供永久放行。",
+        call.name,
+        class.as_str()
+    );
+    let allow_always = class == tools::browser::BrowserApprovalClass::StateChanging;
+    let Some(confirm) = park_confirm(
+        gate,
+        session.as_ref(),
+        turn_context,
+        &call.id,
+        ConfirmPresentation::Text { title, body: &body },
+        allow_always,
+        None,
+    )
+    .await
+    else {
+        fire_post_permission_response(
+            session,
+            &audit.request.session_id,
+            audit.request.turn_id.as_deref(),
+            &audit.request,
+            "cancelled",
+        )
+        .await;
+        audit.record_review(
+            selection.approvals_reviewer,
+            "cancelled",
+            false,
+            started.elapsed().as_millis() as u64,
+        );
+        return None;
+    };
+    let choice = if !confirm.approved {
+        "deny"
+    } else if confirm.always && allow_always {
+        "allow_always"
+    } else {
+        "allow_once"
+    };
+    fire_post_permission_response(
+        session,
+        &audit.request.session_id,
+        audit.request.turn_id.as_deref(),
+        &audit.request,
+        choice,
+    )
+    .await;
+    audit.record_review(
+        selection.approvals_reviewer,
+        choice,
+        confirm.approved,
+        started.elapsed().as_millis() as u64,
+    );
+    if !confirm.approved {
+        return Some(PermissionPreflight::Denied(
+            "Browser action denied by user".to_string(),
+        ));
+    }
+    if confirm.always && allow_always {
+        if let Err(error) = tools::browser::add_approval_rule(&memory_dir, &origin, class) {
+            tracing::warn!(%error, %origin, "failed to persist browser approval rule");
+        }
+    }
+    Some(PermissionPreflight::Granted(Box::new(audit)))
 }
 
 /// 串行执行；`None` 表示已处理 cancel/断开，调用方应直接 return。
@@ -989,6 +1246,14 @@ async fn execute_tools_serial_inner(
         let mut workspace_write_grant = false;
         let mut permission_audits = Vec::new();
         if !call.args_parse_error {
+            match preflight_browser_action(session, call, turn_context, hitl_gate).await? {
+                PermissionPreflight::NotRequired => {}
+                PermissionPreflight::Granted(audit) => permission_audits.push(*audit),
+                PermissionPreflight::Denied(message) => {
+                    out.push(format!("{message}. Do not retry the same action without explicit authorization.").into());
+                    continue;
+                }
+            }
             match preflight_mcp_tool_approval(session, &step_context, call, turn_context, hitl_gate)
                 .await?
             {
@@ -1829,16 +2094,35 @@ mod tests {
     fn approval_modes_and_allowlist_route_correctly() {
         let ask = "rm -rf /tmp/project";
         let none: Vec<String> = Vec::new();
+        let no_types: Vec<memory::CommandTypeRule> = Vec::new();
         assert_eq!(
-            approval_route(ask, &types::SessionPermissions::approve_for_me(), &none),
+            approval_route(
+                ask,
+                "high",
+                &types::SessionPermissions::approve_for_me(),
+                &none,
+                &no_types,
+            ),
             ApprovalRoute::Smart
         );
         assert_eq!(
-            approval_route(ask, &types::SessionPermissions::ask_for_approval(), &none),
+            approval_route(
+                ask,
+                "high",
+                &types::SessionPermissions::ask_for_approval(),
+                &none,
+                &no_types,
+            ),
             ApprovalRoute::Manual
         );
         assert_eq!(
-            approval_route(ask, &types::SessionPermissions::full_access(), &none),
+            approval_route(
+                ask,
+                "high",
+                &types::SessionPermissions::full_access(),
+                &none,
+                &no_types,
+            ),
             ApprovalRoute::Off
         );
 
@@ -1846,10 +2130,27 @@ mod tests {
         assert_eq!(
             approval_route(
                 ask,
+                "high",
                 &types::SessionPermissions::ask_for_approval(),
-                &allowlist
+                &allowlist,
+                &no_types,
             ),
             ApprovalRoute::Allowlist
+        );
+
+        let type_allowlist = vec![memory::CommandTypeRule {
+            command_family: "curl".to_string(),
+            risk: "dynamic shell expansion".to_string(),
+        }];
+        assert_eq!(
+            approval_route(
+                "curl https://example.com",
+                "dynamic shell expansion",
+                &types::SessionPermissions::ask_for_approval(),
+                &none,
+                &type_allowlist,
+            ),
+            ApprovalRoute::TypeAllowlist
         );
     }
 
@@ -1860,8 +2161,10 @@ mod tests {
         assert_eq!(
             approval_route(
                 command,
+                "critical",
                 &types::SessionPermissions::full_access(),
-                &allowlist
+                &allowlist,
+                &[],
             ),
             ApprovalRoute::Deny
         );

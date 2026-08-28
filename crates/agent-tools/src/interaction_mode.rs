@@ -9,6 +9,12 @@ pub use types::InteractionMode;
 const READONLY_ALLOW: &[&str] = &[
     "web_search",
     "web_fetch",
+    "browser_open",
+    "browser_snapshot",
+    "browser_scroll",
+    "browser_wait",
+    "browser_screenshot",
+    "browser_close",
     "context_search",
     "skills", // action 级仅 list/load/view/curate
     "ask_user",
