@@ -478,6 +478,22 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
                 "deepseek", key, base, model,
             ),
         "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
+        "azure" if responses => {
+            let responses_base = base.map(|b| {
+                let b = b.trim_end_matches('/');
+                if b.ends_with("/v1") || b.ends_with("/openai") {
+                    b.to_string()
+                } else {
+                    format!("{b}/openai/v1")
+                }
+            });
+            reg.register_openai_compat_responses::<crate::impls::azure::Azure>(
+                "azure",
+                key,
+                responses_base.as_deref().or(base),
+                model,
+            )
+        }
         "azure" => register_compat::<crate::impls::azure::Azure>(reg, key, base, model),
         "zhipu" => register_media::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
         "moonshot" => register_compat::<crate::impls::moonshot::Moonshot>(reg, key, base, model),
@@ -497,6 +513,10 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
             reg.register_alias("minimax-anthropic", "anthropic");
         }
         "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
+        "mimo" if responses => reg
+            .register_openai_compat_responses::<crate::impls::mimo::Mimo>(
+                "mimo", key, base, model,
+            ),
         "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
         "gemini-native" => reg.register_gemini_native(key, base, model),
         other => {
@@ -614,13 +634,13 @@ mod tests {
     #[test]
     fn responses_default_for_supported_providers() {
         let config = ProviderConfig::default();
-        for id in ["openai", "deepseek", "minimax"] {
+        for id in ["openai", "deepseek", "minimax", "azure", "mimo"] {
             assert!(
                 use_responses(id, &config),
                 "{id} should default to Responses API"
             );
         }
-        for id in ["anthropic", "google", "ollama", "azure", "zhipu"] {
+        for id in ["anthropic", "google", "ollama", "zhipu"] {
             assert!(
                 !use_responses(id, &config),
                 "{id} should NOT default to Responses API"
@@ -648,7 +668,7 @@ mod tests {
     #[test]
     fn responses_providers_register_correctly() {
         let config = ProviderConfig::default();
-        for id in ["openai", "deepseek", "minimax"] {
+        for id in ["openai", "deepseek", "minimax", "mimo"] {
             let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(

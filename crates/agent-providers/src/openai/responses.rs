@@ -48,7 +48,6 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
             Message::Assistant { content } => {
                 let had_any_tool_call =
                     content.iter().any(|c| matches!(c, AssistantContent::ToolCall(_)));
-                let mut emitted_tool_calls = false;
                 for part in content {
                     if let AssistantContent::ToolCall(ToolCall {
                         id,
@@ -60,7 +59,6 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                         if !result_ids.contains(id.trim()) {
                             continue;
                         }
-                        emitted_tool_calls = true;
                         let args = match arguments {
                             Value::String(s) => s.clone(),
                             other => other.to_string(),

@@ -226,7 +226,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
+        supports_responses: true,
     },
     ProviderProfile {
         id: "zhipu",
@@ -424,7 +424,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         auth: AuthKind::Bearer,
         env_keys: &["MIMO_API_KEY"],
         azure_deployment_style: false,
-        default_model: "mimo-v2-flash",
+        default_model: "mimo-v2.5",
         supports_image_gen: false,
         supports_embedding: false,
         image_mode: None,
@@ -436,7 +436,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
+        supports_responses: true,
     },
     ProviderProfile {
         id: "gemini-native",
@@ -733,6 +733,7 @@ mod tests {
         assert!(resolve("openai").unwrap().supports_responses);
         assert!(resolve("deepseek").unwrap().supports_responses);
         assert!(resolve("minimax").unwrap().supports_responses);
+        assert!(resolve("azure").unwrap().supports_responses);
         assert!(!resolve("claude").unwrap().supports_responses);
         assert!(!resolve("google").unwrap().supports_responses);
     }
