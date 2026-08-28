@@ -49,12 +49,6 @@ html[data-theme="dark"] .settings-sidebar {
 
 .settings-sidebar-item:hover {
   background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
-  transform: translateX(3px);
-}
-
-.settings-sidebar-item:active {
-  transform: scale(0.97);
-  transition-duration: 0.06s;
 }
 
 .settings-sidebar-item:hover svg {
