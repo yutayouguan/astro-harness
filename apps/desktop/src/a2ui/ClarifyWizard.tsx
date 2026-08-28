@@ -28,6 +28,7 @@ type Props = {
   approvalTitle?: string;
   approvalBody?: string;
   allowAlways?: boolean;
+  approvalTypeLabel?: string;
   disabled?: boolean;
   onAction: (name: string, context: Record<string, unknown>) => void;
 };
@@ -41,6 +42,7 @@ export default function ClarifyWizard({
   approvalTitle,
   approvalBody,
   allowAlways = false,
+  approvalTypeLabel,
   disabled = false,
   onAction,
 }: Props) {
@@ -53,7 +55,7 @@ export default function ClarifyWizard({
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [approvalChoice, setApprovalChoice] = useState<
-    "approve" | "approve_always" | "deny" | null
+    "approve" | "approve_always" | "approve_type" | "deny" | null
   >(null);
   const approvalTitleId = useId();
   const customInputRef = useRef<HTMLInputElement>(null);
@@ -207,6 +209,8 @@ export default function ClarifyWizard({
     const label =
       approvalChoice === "approve_always"
         ? t("chat.a2ui.approvalAlwaysApproved")
+        : approvalChoice === "approve_type"
+          ? t("chat.a2ui.approvalTypeApproved", { type: approvalTypeLabel ?? "" })
         : approved
           ? t("chat.a2ui.approvalApproved")
           : t("chat.a2ui.approvalDenied");
@@ -300,7 +304,7 @@ export default function ClarifyWizard({
 
   if (variant === "approval") {
     const content = parseApprovalContent(approvalBody ?? step.question);
-    const submitApproval = (choice: "approve" | "approve_always" | "deny") => {
+    const submitApproval = (choice: "approve" | "approve_always" | "approve_type" | "deny") => {
       if (disabled) return;
       setApprovalChoice(choice);
       setCollapsed(true);
@@ -368,19 +372,36 @@ export default function ClarifyWizard({
         </div>
 
         {allowAlways ? (
-          <button
-            type="button"
-            className="a2ui-approval-always"
-            disabled={disabled}
-            onClick={() => submitApproval("approve_always")}
-          >
-            <ShieldCheck size={17} strokeWidth={2} aria-hidden />
-            <span className="a2ui-approval-action-copy">
-              <strong>{t("chat.a2ui.approvalAlways")}</strong>
-              <small>{t("chat.a2ui.approvalAlwaysHint")}</small>
-            </span>
-            <ArrowRight className="a2ui-approval-always-arrow" size={16} aria-hidden />
-          </button>
+          <div className="a2ui-approval-persistent-actions">
+            <button
+              type="button"
+              className="a2ui-approval-always"
+              disabled={disabled}
+              onClick={() => submitApproval("approve_always")}
+            >
+              <ShieldCheck size={17} strokeWidth={2} aria-hidden />
+              <span className="a2ui-approval-action-copy">
+                <strong>{t("chat.a2ui.approvalAlways")}</strong>
+                <small>{t("chat.a2ui.approvalAlwaysHint")}</small>
+              </span>
+              <ArrowRight className="a2ui-approval-always-arrow" size={16} aria-hidden />
+            </button>
+            {approvalTypeLabel ? (
+              <button
+                type="button"
+                className="a2ui-approval-always is-type"
+                disabled={disabled}
+                onClick={() => submitApproval("approve_type")}
+              >
+                <TerminalSquare size={17} strokeWidth={2} aria-hidden />
+                <span className="a2ui-approval-action-copy">
+                  <strong>{t("chat.a2ui.approvalType", { type: approvalTypeLabel })}</strong>
+                  <small>{t("chat.a2ui.approvalTypeHint")}</small>
+                </span>
+                <ArrowRight className="a2ui-approval-always-arrow" size={16} aria-hidden />
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </section>
     );

@@ -343,6 +343,7 @@ pub fn run() {
             commands::memory::set_permission_preset,
             commands::memory::add_command_allowlist,
             commands::memory::remove_command_allowlist,
+            commands::memory::remove_command_type_allowlist,
             // — loops —
             commands::loops::list_loops,
             commands::loops::get_loop,

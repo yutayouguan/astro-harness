@@ -237,16 +237,42 @@ pub async fn set_background_review_enabled(enabled: bool) -> Result<MemorySettin
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalSettingsDto {
-    pub mode: String,
+    pub preset: String,
     pub command_allowlist: Vec<String>,
+    pub command_type_allowlist: Vec<CommandTypeRuleDto>,
 }
 
-impl From<memory::ApprovalsConfig> for ApprovalSettingsDto {
-    fn from(c: memory::ApprovalsConfig) -> Self {
-        Self {
-            mode: c.mode,
-            command_allowlist: c.command_allowlist,
-        }
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandTypeRuleDto {
+    pub command_family: String,
+    pub risk: String,
+}
+
+fn approval_settings_dto() -> ApprovalSettingsDto {
+    let root = home::default_memory_dir();
+    let approvals = memory::load_approvals_config(&root);
+    let permissions = memory::load_permission_settings(&root);
+    let preset = types::PermissionPreset::from_selection(&permissions.selection)
+        .map(|value| match value {
+            types::PermissionPreset::AskForApproval => "ask_for_approval",
+            types::PermissionPreset::ApproveForMe => "approve_for_me",
+            types::PermissionPreset::ReadOnly => "read_only",
+            types::PermissionPreset::FullAccess => "full_access",
+        })
+        .unwrap_or("ask_for_approval")
+        .to_string();
+    ApprovalSettingsDto {
+        preset,
+        command_allowlist: approvals.command_allowlist,
+        command_type_allowlist: approvals
+            .command_type_allowlist
+            .into_iter()
+            .map(|rule| CommandTypeRuleDto {
+                command_family: rule.command_family,
+                risk: rule.risk,
+            })
+            .collect(),
     }
 }
 
@@ -637,8 +663,7 @@ pub async fn clear_security_audits() -> Result<SecurityAuditClearResultDto, Stri
 /// 读取危险命令审批设置。
 #[tauri::command]
 pub async fn get_approval_settings() -> Result<ApprovalSettingsDto, String> {
-    let root = home::default_memory_dir();
-    Ok(memory::load_approvals_config(&root).into())
+    Ok(approval_settings_dto())
 }
 
 /// 设置审批模式（`smart` | `manual` | `off`）。
@@ -649,9 +674,8 @@ pub async fn set_approval_mode(mode: String) -> Result<ApprovalSettingsDto, Stri
         other => return Err(format!("无效的审批模式: {other}（应为 smart|manual|off）")),
     };
     let root = home::default_memory_dir();
-    Ok(memory::set_approval_mode(&root, &normalized)
-        .map_err(|e| e.to_string())?
-        .into())
+    memory::set_approval_mode(&root, &normalized).map_err(|e| e.to_string())?;
+    Ok(approval_settings_dto())
 }
 
 /// 新权限系统的当前组合与平台沙箱健康状态。
@@ -713,18 +737,34 @@ pub async fn add_command_allowlist(entry: String) -> Result<ApprovalSettingsDto,
         return Err("白名单条目不能为空".to_string());
     }
     let root = home::default_memory_dir();
-    Ok(memory::add_command_to_allowlist(&root, entry)
-        .map_err(|e| e.to_string())?
-        .into())
+    memory::add_command_to_allowlist(&root, entry).map_err(|e| e.to_string())?;
+    Ok(approval_settings_dto())
 }
 
 /// 从命令白名单移除一条。
 #[tauri::command]
 pub async fn remove_command_allowlist(entry: String) -> Result<ApprovalSettingsDto, String> {
     let root = home::default_memory_dir();
-    Ok(memory::remove_command_from_allowlist(&root, &entry)
-        .map_err(|e| e.to_string())?
-        .into())
+    memory::remove_command_from_allowlist(&root, &entry).map_err(|e| e.to_string())?;
+    Ok(approval_settings_dto())
+}
+
+/// 从低风险命令类型白名单移除一条规则。
+#[tauri::command]
+pub async fn remove_command_type_allowlist(
+    command_family: String,
+    risk: String,
+) -> Result<ApprovalSettingsDto, String> {
+    let root = home::default_memory_dir();
+    memory::remove_command_type_from_allowlist(
+        &root,
+        &memory::CommandTypeRule {
+            command_family,
+            risk,
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(approval_settings_dto())
 }
 
 /// 批准全部 pending；逐条 emit（末条角标为准）。

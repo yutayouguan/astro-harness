@@ -47,6 +47,7 @@ async fn build_smart_approval_context(session: &Arc<AgentLoop>) -> Option<SmartA
 enum ApprovalRoute {
     Deny,
     Allowlist,
+    TypeAllowlist,
     Off,
     Smart,
     Manual,
@@ -277,13 +278,17 @@ fn sandbox_policy_for_call(
 
 fn approval_route(
     command: &str,
+    risk: &str,
     selection: &types::SessionPermissions,
     allowlist: &[String],
+    type_allowlist: &[memory::CommandTypeRule],
 ) -> ApprovalRoute {
     if tools::is_hardline_blocked(command).is_some() {
         ApprovalRoute::Deny
     } else if tools::matches_allowlist(command, allowlist) {
         ApprovalRoute::Allowlist
+    } else if tools::matches_command_type_allowlist(command, risk, type_allowlist) {
+        ApprovalRoute::TypeAllowlist
     } else {
         match (selection.approval_policy, selection.approvals_reviewer) {
             (types::ApprovalPolicy::Never, _) => ApprovalRoute::Off,
@@ -586,6 +591,7 @@ async fn review_once_permission(
         title,
         body,
         false,
+        None,
     )
     .await
     else {
@@ -1043,6 +1049,7 @@ async fn execute_tools_serial_inner(
                             approval_turn_id,
                             permissions,
                             allowlist,
+                            type_allowlist,
                             memory_dir,
                             active_profile_id,
                             permission_settings,
@@ -1060,13 +1067,20 @@ async fn execute_tools_serial_inner(
                                 approval_turn_id,
                                 permissions.selection.clone(),
                                 permissions.legacy_command_allowlist.clone(),
+                                permissions.command_type_allowlist.clone(),
                                 base,
                                 active_profile_id,
                                 permissions,
                             )
                         };
 
-                        let mut route = approval_route(&cmd, &permissions, &allowlist);
+                        let mut route = approval_route(
+                            &cmd,
+                            decision.description,
+                            &permissions,
+                            &allowlist,
+                            &type_allowlist,
+                        );
                         if matches!(route, ApprovalRoute::Smart | ApprovalRoute::Manual) {
                             let cache_key = crate::control::approval_cache::ApprovalCacheKey::new(
                                 &call.name, &cmd,
@@ -1114,6 +1128,7 @@ async fn execute_tools_serial_inner(
                             Some(match route {
                                 ApprovalRoute::Deny => "hardline_denied",
                                 ApprovalRoute::Allowlist => "allowlist",
+                                ApprovalRoute::TypeAllowlist => "command_type_allowlist",
                                 ApprovalRoute::Off => "approval_disabled",
                                 ApprovalRoute::Smart => "auto_review_required",
                                 ApprovalRoute::Manual => "user_review_required",
@@ -1187,19 +1202,27 @@ async fn execute_tools_serial_inner(
                                 approval_started.elapsed().as_millis() as u64,
                             );
                             permission_audits.push(approval_audit);
-                        } else if route == ApprovalRoute::Allowlist {
+                        } else if matches!(
+                            route,
+                            ApprovalRoute::Allowlist | ApprovalRoute::TypeAllowlist
+                        ) {
+                            let rule_source = if route == ApprovalRoute::TypeAllowlist {
+                                "command_type_allowlist"
+                            } else {
+                                "allowlist"
+                            };
                             fire_post_approval_response(
                                 session,
                                 &approval_session_id,
                                 approval_turn_id.as_deref(),
                                 &cmd,
-                                "allowlist",
+                                rule_source,
                             )
                             .await;
                             approval_audit.record(
                                 memory::PermissionAuditKind::Granted,
                                 None,
-                                Some("allowlist"),
+                                Some(rule_source),
                                 Some(approval_started.elapsed().as_millis() as u64),
                             );
                             permission_audits.push(approval_audit);
@@ -1267,6 +1290,8 @@ async fn execute_tools_serial_inner(
                                     "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
                                     decision.description
                                 );
+                                let command_type_rule =
+                                    tools::command_type_rule_candidate(&cmd, decision.description);
                                 let confirm = park_confirm(
                                     gate,
                                     session.as_ref(),
@@ -1275,6 +1300,9 @@ async fn execute_tools_serial_inner(
                                     title,
                                     &body,
                                     true,
+                                    command_type_rule
+                                        .as_ref()
+                                        .map(|rule| rule.command_family.as_str()),
                                 )
                                 .await?;
                                 let choice = match confirm.status.as_str() {
@@ -1302,8 +1330,25 @@ async fn execute_tools_serial_inner(
                                     );
                                     continue;
                                 }
-                                // 「批准并永久放行」→ 写入用户白名单，后续同命令自动放行
-                                if confirm.always {
+                                // 永久许可按用户选择写入精确命令或受限的命令类型规则。
+                                if confirm.command_type {
+                                    if let Some(rule) = command_type_rule.as_ref() {
+                                        if let Err(e) =
+                                            memory::config::add_command_type_to_allowlist(
+                                                &memory_dir,
+                                                rule,
+                                            )
+                                        {
+                                            tracing::warn!(error = %e, "failed to persist command type allowlist");
+                                        } else {
+                                            tracing::info!(
+                                                command_family = %rule.command_family,
+                                                risk = %rule.risk,
+                                                "added command type to approval allowlist"
+                                            );
+                                        }
+                                    }
+                                } else if confirm.always {
                                     if let Err(e) =
                                         memory::config::add_command_to_allowlist(&memory_dir, &cmd)
                                     {

@@ -53,6 +53,8 @@ pub(crate) struct ConfirmOutcome {
     pub status: String,
     /// 用户点了「批准并永久放行」时为 `true`（`allow_always` 场景）。
     pub always: bool,
+    /// 用户选择了低风险“同类命令”永久规则。
+    pub command_type: bool,
 }
 
 /// 弹出 confirm 型 HITL surface，等待用户批准/拒绝。
@@ -66,10 +68,16 @@ pub(crate) async fn park_confirm(
     title: &str,
     body: &str,
     allow_always: bool,
+    command_family: Option<&str>,
 ) -> Option<ConfirmOutcome> {
     let surface_id = format!("confirm-{}", uuid::Uuid::new_v4());
-    let operations =
-        a2ui::templates::build_confirm_surface_ex(&surface_id, title, body, allow_always);
+    let operations = a2ui::templates::build_confirm_surface_with_rule(
+        &surface_id,
+        title,
+        body,
+        allow_always,
+        command_family,
+    );
     let ops_value = serde_json::Value::Array(operations);
     let resolution = park_astro_hitl_resolution(
         gate,
@@ -88,7 +96,7 @@ pub(crate) async fn park_confirm(
         },
     )
     .await?;
-    let (approved, always) = if resolution.status == "resolved" {
+    let (approved, always, command_type) = if resolution.status == "resolved" {
         let v = serde_json::from_str::<serde_json::Value>(&resolution.payload_json).ok();
         let approved = v
             .as_ref()
@@ -98,14 +106,19 @@ pub(crate) async fn park_confirm(
             .as_ref()
             .and_then(|v| v.get("always").and_then(|x| x.as_bool()))
             .unwrap_or(false);
-        (approved, always)
+        let command_type = v
+            .as_ref()
+            .and_then(|v| v.get("scope").and_then(|x| x.as_str()))
+            == Some("type");
+        (approved, always, command_type)
     } else {
-        (false, false)
+        (false, false, false)
     };
     Some(ConfirmOutcome {
         approved,
         status: resolution.status,
         always: always && approved,
+        command_type: command_type && approved,
     })
 }
 

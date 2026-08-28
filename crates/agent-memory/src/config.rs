@@ -127,6 +127,14 @@ fn default_approval_mode() -> String {
 }
 
 /// 危险命令审批配置（`config.yaml` 的 `approvals:` 段）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CommandTypeRule {
+    /// 可执行程序族，例如 `curl`。不包含参数，匹配时忽略大小写。
+    pub command_family: String,
+    /// 仅对同一风险分类生效，避免把某个程序的高风险用法一并放行。
+    pub risk: String,
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct ApprovalsConfig {
     /// 审批模式：`smart`（默认）| `manual` | `off`。仅作用于 Ask 级；hardline 永远拦。
@@ -135,6 +143,9 @@ pub struct ApprovalsConfig {
     /// 用户永久放行的命令白名单（精确或 glob，含 `* ? [`）。
     #[serde(default)]
     pub command_allowlist: Vec<String>,
+    /// 用户永久放行的低风险命令类型；同时匹配程序族与风险分类。
+    #[serde(default)]
+    pub command_type_allowlist: Vec<CommandTypeRule>,
 }
 
 impl Default for ApprovalsConfig {
@@ -142,6 +153,7 @@ impl Default for ApprovalsConfig {
         Self {
             mode: default_approval_mode(),
             command_allowlist: Vec::new(),
+            command_type_allowlist: Vec::new(),
         }
     }
 }
@@ -201,6 +213,7 @@ pub struct LoadedPermissionSettings {
     pub selection: SessionPermissions,
     pub network_proxy_enabled: bool,
     pub legacy_command_allowlist: Vec<String>,
+    pub command_type_allowlist: Vec<CommandTypeRule>,
     pub source: PermissionConfigSource,
     pub diagnostics: Vec<PermissionConfigDiagnostic>,
 }
@@ -212,6 +225,7 @@ impl Default for LoadedPermissionSettings {
             selection: SessionPermissions::ask_for_approval(),
             network_proxy_enabled: false,
             legacy_command_allowlist: Vec::new(),
+            command_type_allowlist: Vec::new(),
             source: PermissionConfigSource::Default,
             diagnostics: Vec::new(),
         }
@@ -998,15 +1012,16 @@ fn load_explicit_permissions(
             .or(terminal_reviewer)
             .unwrap_or_default(),
     };
-    let legacy_command_allowlist = file
+    let (legacy_command_allowlist, command_type_allowlist) = file
         .approvals
-        .map(|legacy| legacy.command_allowlist)
+        .map(|legacy| (legacy.command_allowlist, legacy.command_type_allowlist))
         .unwrap_or_default();
     LoadedPermissionSettings {
         permissions,
         selection,
         network_proxy_enabled,
         legacy_command_allowlist,
+        command_type_allowlist,
         source: PermissionConfigSource::ExplicitProfiles,
         diagnostics,
     }
@@ -1047,6 +1062,7 @@ fn migrate_legacy_approvals(legacy: ApprovalsConfig) -> LoadedPermissionSettings
     LoadedPermissionSettings {
         selection,
         legacy_command_allowlist: legacy.command_allowlist,
+        command_type_allowlist: legacy.command_type_allowlist,
         source: PermissionConfigSource::LegacyApprovals,
         diagnostics,
         ..LoadedPermissionSettings::default()
@@ -1294,6 +1310,64 @@ pub fn remove_command_from_allowlist(base: &Path, entry: &str) -> anyhow::Result
     if let Some(list) = map.get_mut(&key).and_then(|v| v.as_sequence_mut()) {
         let before = list.len();
         list.retain(|v| v.as_str().map(|s| s != entry).unwrap_or(true));
+        if list.len() != before {
+            save_yaml_root(base, &root)?;
+        }
+    }
+    Ok(load_approvals_config(base))
+}
+
+/// 向 `approvals.command_type_allowlist` 追加一条低风险命令类型规则。
+pub fn add_command_type_to_allowlist(
+    base: &Path,
+    rule: &CommandTypeRule,
+) -> anyhow::Result<ApprovalsConfig> {
+    let family = rule.command_family.trim().to_ascii_lowercase();
+    let risk = rule.risk.trim();
+    if family.is_empty() || risk.is_empty() {
+        return Ok(load_approvals_config(base));
+    }
+    let normalized = CommandTypeRule {
+        command_family: family,
+        risk: risk.to_string(),
+    };
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, &["approvals"])?;
+    let key = serde_yaml::Value::String("command_type_allowlist".to_string());
+    let list = match map.get_mut(&key).and_then(|value| value.as_sequence_mut()) {
+        Some(sequence) => sequence,
+        None => {
+            map.insert(key.clone(), serde_yaml::Value::Sequence(Vec::new()));
+            map.get_mut(&key).unwrap().as_sequence_mut().unwrap()
+        }
+    };
+    let value = serde_yaml::to_value(&normalized)?;
+    if !list.contains(&value) {
+        list.push(value);
+        save_yaml_root(base, &root)?;
+    }
+    Ok(load_approvals_config(base))
+}
+
+/// 从 `approvals.command_type_allowlist` 移除一条规则。
+pub fn remove_command_type_from_allowlist(
+    base: &Path,
+    rule: &CommandTypeRule,
+) -> anyhow::Result<ApprovalsConfig> {
+    let family = rule.command_family.trim();
+    let risk = rule.risk.trim();
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, &["approvals"])?;
+    let key = serde_yaml::Value::String("command_type_allowlist".to_string());
+    if let Some(list) = map.get_mut(&key).and_then(|value| value.as_sequence_mut()) {
+        let before = list.len();
+        list.retain(|value| {
+            serde_yaml::from_value::<CommandTypeRule>(value.clone())
+                .map(|stored| {
+                    !stored.command_family.eq_ignore_ascii_case(family) || stored.risk != risk
+                })
+                .unwrap_or(true)
+        });
         if list.len() != before {
             save_yaml_root(base, &root)?;
         }
@@ -1996,6 +2070,25 @@ auxiliary:
         let cfg = load_approvals_config(dir.path());
         assert_eq!(cfg.mode, "smart");
         assert!(cfg.command_allowlist.is_empty());
+        assert!(cfg.command_type_allowlist.is_empty());
+    }
+
+    #[test]
+    fn command_type_allowlist_roundtrips_and_can_be_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let rule = CommandTypeRule {
+            command_family: "CURL".to_string(),
+            risk: "dynamic shell expansion".to_string(),
+        };
+        let cfg = add_command_type_to_allowlist(dir.path(), &rule).unwrap();
+        assert_eq!(cfg.command_type_allowlist.len(), 1);
+        assert_eq!(cfg.command_type_allowlist[0].command_family, "curl");
+
+        let loaded = load_permission_settings(dir.path());
+        assert_eq!(loaded.command_type_allowlist, cfg.command_type_allowlist);
+
+        let cfg = remove_command_type_from_allowlist(dir.path(), &rule).unwrap();
+        assert!(cfg.command_type_allowlist.is_empty());
     }
 
     #[test]

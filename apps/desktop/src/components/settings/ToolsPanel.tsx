@@ -21,6 +21,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAgentTools } from "../../hooks/providers/useAgentTools";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useI18n } from "../../i18n/LocaleContext";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import type { MessageKey } from "../../i18n/messages";
 import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
@@ -32,33 +33,57 @@ import SecurityAuditSection from "./SecurityAuditSection";
 type ToolTab = "builtin" | "approvals";
 
 /** 危险命令审批设置（Tauri camelCase） */
-type ApprovalSettings = { mode: string; commandAllowlist: string[] };
+type PermissionPreset = "ask_for_approval" | "approve_for_me" | "full_access";
+type CommandTypeRule = { commandFamily: string; risk: string };
+type ApprovalSettings = {
+  preset: string;
+  commandAllowlist: string[];
+  commandTypeAllowlist: CommandTypeRule[];
+};
 
-const APPROVAL_MODES = ["smart", "manual", "off"] as const;
+const APPROVAL_MODES: PermissionPreset[] = ["ask_for_approval", "approve_for_me", "full_access"];
 
 /** 危险命令审批设置区（全局，非按 Agent） */
 function ApprovalsSection({ active }: { active: boolean }) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [settings, setSettings] = useState<ApprovalSettings | null>(null);
   const [newEntry, setNewEntry] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!active || !isTauri()) return;
     void (async () => {
       try {
         setSettings(await invoke<ApprovalSettings>("get_approval_settings"));
-      } catch {
-        /* ignore */
+      } catch (cause) {
+        setError(String(cause));
       }
     })();
   }, [active]);
 
-  const setMode = async (mode: string) => {
+  const setMode = async (preset: string) => {
+    if (!APPROVAL_MODES.includes(preset as PermissionPreset) || busy) return;
+    let confirmed = false;
+    if (preset === "full_access") {
+      confirmed = await confirm({
+        title: t("chat.approval.fullAccessConfirmTitle"),
+        message: t("chat.approval.fullAccessConfirmMessage"),
+        confirmLabel: t("chat.approval.enableFullAccess"),
+        variant: "danger",
+      });
+      if (!confirmed) return;
+    }
+    setBusy(true);
+    setError("");
     try {
-      setSettings(await invoke<ApprovalSettings>("set_approval_mode", { mode }));
-    } catch {
-      /* ignore */
+      await invoke("set_permission_preset", { preset, confirmed });
+      setSettings(await invoke<ApprovalSettings>("get_approval_settings"));
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -71,8 +96,8 @@ function ApprovalsSection({ active }: { active: boolean }) {
         await invoke<ApprovalSettings>("add_command_allowlist", { entry }),
       );
       setNewEntry("");
-    } catch {
-      /* ignore */
+    } catch (cause) {
+      setError(String(cause));
     } finally {
       setBusy(false);
     }
@@ -83,8 +108,19 @@ function ApprovalsSection({ active }: { active: boolean }) {
       setSettings(
         await invoke<ApprovalSettings>("remove_command_allowlist", { entry }),
       );
-    } catch {
-      /* ignore */
+    } catch (cause) {
+      setError(String(cause));
+    }
+  };
+
+  const removeTypeRule = async (rule: CommandTypeRule) => {
+    try {
+      setSettings(await invoke<ApprovalSettings>("remove_command_type_allowlist", {
+        commandFamily: rule.commandFamily,
+        risk: rule.risk,
+      }));
+    } catch (cause) {
+      setError(String(cause));
     }
   };
 
@@ -94,8 +130,16 @@ function ApprovalsSection({ active }: { active: boolean }) {
 
   const modeOptions = APPROVAL_MODES.map((m) => ({
     value: m,
-    label: t(`approvals.mode.${m}` as MessageKey),
+    label: t(`chat.approval.${m === "ask_for_approval" ? "askForApproval" : m === "approve_for_me" ? "approveForMe" : "fullAccess"}` as MessageKey),
   }));
+  const activePreset = APPROVAL_MODES.includes(settings.preset as PermissionPreset)
+    ? settings.preset
+    : "ask_for_approval";
+  const modeHintKey = activePreset === "ask_for_approval"
+    ? "askForApproval"
+    : activePreset === "approve_for_me"
+      ? "approveForMe"
+      : "fullAccess";
 
   return (
     <div className="approvals-section">
@@ -106,14 +150,51 @@ function ApprovalsSection({ active }: { active: boolean }) {
         </h4>
         <SelectMenu
           className="approvals-mode-select"
-          value={settings.mode}
+          value={activePreset}
           onChange={(v) => void setMode(v)}
           options={modeOptions}
+          disabled={busy}
           aria-label={t("approvals.mode.label")}
         />
         <p className="tools-detail-body">
-          {t(`approvals.mode.hint.${settings.mode}` as MessageKey)}
+          {t(`chat.approval.desc.${modeHintKey}` as MessageKey)}
         </p>
+        {error ? <p className="tools-detail-body is-error">{error}</p> : null}
+      </section>
+
+      <section className="tools-detail-section">
+        <h4 className="tools-detail-label">
+          <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
+          {t("approvals.typeAllowlist.label")}
+        </h4>
+        <p className="tools-detail-body">{t("approvals.typeAllowlist.hint")}</p>
+        {settings.commandTypeAllowlist.length === 0 ? (
+          <p className="tools-detail-empty-params">{t("approvals.typeAllowlist.empty")}</p>
+        ) : (
+          <ul className="approvals-allow-list">
+            {settings.commandTypeAllowlist.map((rule) => (
+              <li key={`${rule.commandFamily}:${rule.risk}`} className="mcp-tool-row">
+                <span className="approvals-rule-copy">
+                  <code className="mcp-tool-name">{rule.commandFamily}</code>
+                  <small className="tools-detail-body">
+                    {rule.risk === "dynamic shell expansion"
+                      ? t("approvals.typeAllowlist.dynamic")
+                      : rule.risk}
+                  </small>
+                </span>
+                <button
+                  type="button"
+                  className="mcp-btn-ghost"
+                  onClick={() => void removeTypeRule(rule)}
+                  aria-label={t("approvals.allowlist.remove")}
+                >
+                  <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+                  {t("approvals.allowlist.remove")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="tools-detail-section">

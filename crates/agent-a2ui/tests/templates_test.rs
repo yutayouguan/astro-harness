@@ -113,6 +113,35 @@ fn confirm_template_exposes_persistent_approval_without_ui_copy_in_protocol() {
 }
 
 #[test]
+fn confirm_template_can_expose_a_scoped_command_type_rule() {
+    let ops = a2ui::templates::build_confirm_surface_with_rule(
+        "surf-confirm-type",
+        "批准危险命令",
+        "dynamic shell expansion",
+        true,
+        Some("curl"),
+    );
+    let wizard = ops
+        .iter()
+        .find_map(|op| {
+            op.pointer("/updateComponents/components")
+                .and_then(Value::as_array)
+        })
+        .and_then(|components| components.iter().find(|c| c["id"] == "wizard"))
+        .expect("confirm wizard");
+    assert_eq!(wizard["approvalTypeLabel"], "curl");
+    assert_eq!(
+        wizard.pointer("/steps/0/options"),
+        Some(&serde_json::json!([
+            "approve",
+            "deny",
+            "approve_always",
+            "approve_type"
+        ]))
+    );
+}
+
+#[test]
 fn clarify_single_step_uses_wizard() {
     let steps = [ClarifyStep {
         id: "env".into(),

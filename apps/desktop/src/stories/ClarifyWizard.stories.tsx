@@ -76,11 +76,12 @@ const approvalSurface: UiSurface = {
             title: "批准危险命令",
             body: '检测到潜在危险操作（dynamic shell expansion）：\n\n```sh\nUA="aihot-skill/0.3.6 (+https://aihot.virxact.com/aihot-skill/)" curl -sS --max-time 20 -H "User-Agent: $UA" "https://aihot.virxact.com/api/public/items?mode=selected&take=10"\n```',
             allowAlways: true,
+            approvalTypeLabel: "curl",
             steps: [
               {
                 id: "confirm",
                 question: "批准危险命令",
-                options: ["approve", "deny", "approve_always"],
+                options: ["approve", "deny", "approve_always", "approve_type"],
               },
             ],
           },

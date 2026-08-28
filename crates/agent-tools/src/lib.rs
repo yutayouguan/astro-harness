@@ -14,8 +14,9 @@ pub mod engine;
 pub mod interaction_mode;
 
 pub use approval::{
-    classify_dangerous_command, is_hardline_blocked, matches_allowlist, resolve_command_action,
-    ApprovalAction, ApprovalMode,
+    classify_dangerous_command, command_type_rule_candidate, is_hardline_blocked,
+    matches_allowlist, matches_command_type_allowlist, resolve_command_action, ApprovalAction,
+    ApprovalMode,
 };
 pub use builtin::context_tools::render_pinned_for_prompt;
 pub(crate) use engine::path_safe;

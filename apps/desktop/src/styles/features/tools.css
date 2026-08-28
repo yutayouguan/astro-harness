@@ -2001,6 +2001,23 @@ html[data-theme="dark"] .approvals-add-row input {
   overflow-wrap: anywhere;
 }
 
+.approvals-rule-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.approvals-rule-copy .tools-detail-body {
+  color: var(--ink-mute);
+  font-size: 11px;
+}
+
+.approvals-section .tools-detail-body.is-error {
+  color: var(--danger);
+}
+
 /* hardline：危险色描边，强调不可越过 */
 .approvals-hardline .tools-detail-body {
   border-color: color-mix(in srgb, var(--danger) 34%, transparent);

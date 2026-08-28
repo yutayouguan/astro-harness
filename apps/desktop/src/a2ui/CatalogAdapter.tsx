@@ -389,6 +389,7 @@ function CatalogNode({
           approvalTitle={typeof node.title === "string" ? node.title : undefined}
           approvalBody={typeof node.body === "string" ? node.body : undefined}
           allowAlways={node.allowAlways === true}
+          approvalTypeLabel={typeof node.approvalTypeLabel === "string" ? node.approvalTypeLabel : undefined}
           disabled={ctx.disabled}
           onAction={ctx.onAction}
         />

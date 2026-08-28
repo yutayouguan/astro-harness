@@ -1619,7 +1619,9 @@ export function useChatSession({
       } else if (name === "approve") {
         payload = { approved: true };
       } else if (name === "approve_always") {
-        payload = { approved: true, always: true };
+        payload = { approved: true, always: true, scope: "exact" };
+      } else if (name === "approve_type") {
+        payload = { approved: true, always: true, scope: "type" };
       } else if (name === "allow_once") {
         payload = { scope: "allow_once" };
       } else if (name === "allow_session") {

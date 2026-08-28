@@ -16,9 +16,23 @@ pub fn build_confirm_surface_ex(
     body: &str,
     allow_always: bool,
 ) -> Vec<Value> {
+    build_confirm_surface_with_rule(surface_id, title, body, allow_always, None)
+}
+
+/// Approval confirm surface with an optional low-risk command-family rule.
+pub fn build_confirm_surface_with_rule(
+    surface_id: &str,
+    title: &str,
+    body: &str,
+    allow_always: bool,
+    command_family: Option<&str>,
+) -> Vec<Value> {
     let mut options = vec![json!("approve"), json!("deny")];
     if allow_always {
         options.push(json!("approve_always"));
+    }
+    if command_family.is_some() {
+        options.push(json!("approve_type"));
     }
     let question = if title.is_empty() { body } else { title };
 
@@ -36,6 +50,7 @@ pub fn build_confirm_surface_ex(
             "title": title,
             "body": body,
             "allowAlways": allow_always,
+            "approvalTypeLabel": command_family,
             "steps": [{
                 "id": "confirm",
                 "question": question,
