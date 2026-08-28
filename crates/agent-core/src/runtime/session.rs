@@ -4,11 +4,11 @@ use ::session::ConversationStore;
 use types::message::Message;
 
 /// 从会话存储冷启动重建 `SessionState.history`（权威以 DB 为准）。
-pub fn hydrate_history(
+pub async fn hydrate_history(
     sessions: &dyn ConversationStore,
     session_id: &str,
 ) -> anyhow::Result<Vec<Message>> {
-    let stored = sessions.get_messages(session_id)?;
+    let stored = sessions.get_messages(session_id).await?;
     let mut out = Vec::with_capacity(stored.len());
     for m in stored {
         if let Some(msg) = stored_message_to_runtime(m)? {

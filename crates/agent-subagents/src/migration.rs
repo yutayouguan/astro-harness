@@ -1,7 +1,6 @@
-//! 子 Agent 图数据库 schema 迁移：v1 归档、v2→v4 增量升级。
-
 use anyhow::{bail, Context};
-use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
+use agent_db::sqlx::{self, Row};
+use agent_db::SqlitePool;
 use serde::{Deserialize, Serialize};
 
 pub(crate) const SCHEMA_VERSION: i32 = 4;
@@ -85,7 +84,6 @@ CREATE TABLE IF NOT EXISTS agent_runtime_descriptors (
 );
 "#;
 
-/// 从 v1 归档的历史线程记录（只读）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HistoricalAgentThread {
     pub id: String,
@@ -105,7 +103,6 @@ pub struct HistoricalAgentThread {
     pub closed_at: Option<String>,
 }
 
-/// 从 v1 归档的历史消息记录（只读）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HistoricalAgentMessage {
     pub id: i64,
@@ -115,32 +112,29 @@ pub struct HistoricalAgentMessage {
     pub created_at: String,
 }
 
-/// 执行 schema 迁移：检测当前版本并逐步升级到 v4。
-pub(crate) fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let existing_version = read_schema_version(&tx)?;
+pub(crate) async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
+    let existing_version = read_schema_version(pool).await?;
     match existing_version {
-        Some(SCHEMA_VERSION) => {
-            tx.commit()?;
-            return Ok(());
-        }
+        Some(SCHEMA_VERSION) => return Ok(()),
         Some(3) => {
-            ensure_runtime_descriptor_recovery_state(&tx)?;
-            tx.execute(
-                "UPDATE schema_meta SET value = ?1 WHERE key = 'schema_version'",
-                [SCHEMA_VERSION.to_string()],
-            )?;
-            tx.commit()?;
+            let mut tx = pool.begin().await?;
+            ensure_runtime_descriptor_recovery_state(&mut tx).await?;
+            sqlx::query("UPDATE schema_meta SET value = ?1 WHERE key = 'schema_version'")
+                .bind(SCHEMA_VERSION.to_string())
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
             return Ok(());
         }
         Some(2) => {
-            tx.execute_batch(V4_DDL)?;
-            ensure_runtime_descriptor_recovery_state(&tx)?;
-            tx.execute(
-                "UPDATE schema_meta SET value = ?1 WHERE key = 'schema_version'",
-                [SCHEMA_VERSION.to_string()],
-            )?;
-            tx.commit()?;
+            let mut tx = pool.begin().await?;
+            sqlx::query(V4_DDL).execute(&mut *tx).await?;
+            ensure_runtime_descriptor_recovery_state(&mut tx).await?;
+            sqlx::query("UPDATE schema_meta SET value = ?1 WHERE key = 'schema_version'")
+                .bind(SCHEMA_VERSION.to_string())
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
             return Ok(());
         }
         Some(version) => {
@@ -149,148 +143,159 @@ pub(crate) fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
         None => {}
     }
 
-    archive_legacy_v1_tables(&tx)?;
-    tx.execute_batch(
+    let mut tx = pool.begin().await?;
+    archive_legacy_v1_tables(&mut tx).await?;
+    sqlx::query(
         "CREATE TABLE IF NOT EXISTS schema_meta (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
-        );",
-    )?;
-    tx.execute_batch(V2_DDL)?;
-    tx.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', ?1)",
-        [SCHEMA_VERSION.to_string()],
-    )?;
-    tx.commit()?;
+        )",
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(V2_DDL).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO schema_meta(key, value) VALUES ('schema_version', ?1)")
+        .bind(SCHEMA_VERSION.to_string())
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
     Ok(())
 }
 
-pub(crate) fn schema_version(conn: &Connection) -> anyhow::Result<i32> {
-    read_schema_version(conn)?.context("subagent graph schema_version is missing")
+pub(crate) async fn schema_version(pool: &SqlitePool) -> anyhow::Result<i32> {
+    read_schema_version(pool).await?.context("subagent graph schema_version is missing")
 }
 
-/// 查询 v1 归档的所有历史线程。
-pub(crate) fn list_historical_threads(
-    conn: &Connection,
+pub(crate) async fn list_historical_threads(
+    pool: &SqlitePool,
 ) -> anyhow::Result<Vec<HistoricalAgentThread>> {
-    if !table_exists(conn, "historical_agent_threads_v1")? {
+    if !table_exists_on(pool, "historical_agent_threads_v1").await? {
         return Ok(Vec::new());
     }
-    let mut stmt = conn.prepare(
+    let rows = sqlx::query(
         "SELECT id, parent_session_id, parent_agent_id, agent_name, task, status,
                 summary, error, model, model_reasoning_effort, sandbox_mode,
                 created_at, updated_at, finished_at, closed_at
          FROM historical_agent_threads_v1
          ORDER BY created_at, id",
-    )?;
-    let threads = stmt
-        .query_map([], |row| {
-            Ok(HistoricalAgentThread {
-                id: row.get(0)?,
-                parent_session_id: row.get(1)?,
-                parent_agent_id: row.get(2)?,
-                agent_name: row.get(3)?,
-                task: row.get(4)?,
-                status: row.get(5)?,
-                summary: row.get(6)?,
-                error: row.get(7)?,
-                model: row.get(8)?,
-                model_reasoning_effort: row.get(9)?,
-                sandbox_mode: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
-                finished_at: row.get(13)?,
-                closed_at: row.get(14)?,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(threads)
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .iter()
+        .map(|row| HistoricalAgentThread {
+            id: row.get("id"),
+            parent_session_id: row.get("parent_session_id"),
+            parent_agent_id: row.get("parent_agent_id"),
+            agent_name: row.get("agent_name"),
+            task: row.get("task"),
+            status: row.get("status"),
+            summary: row.get("summary"),
+            error: row.get("error"),
+            model: row.get("model"),
+            model_reasoning_effort: row.get("model_reasoning_effort"),
+            sandbox_mode: row.get("sandbox_mode"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+            finished_at: row.get("finished_at"),
+            closed_at: row.get("closed_at"),
+        })
+        .collect())
 }
 
-/// 查询指定 v1 历史线程的所有消息。
-pub(crate) fn list_historical_messages(
-    conn: &Connection,
+pub(crate) async fn list_historical_messages(
+    pool: &SqlitePool,
     legacy_thread_id: &str,
 ) -> anyhow::Result<Vec<HistoricalAgentMessage>> {
-    if !table_exists(conn, "historical_agent_messages_v1")? {
+    if !table_exists_on(pool, "historical_agent_messages_v1").await? {
         return Ok(Vec::new());
     }
-    let mut stmt = conn.prepare(
+    let rows = sqlx::query(
         "SELECT id, thread_id, role, content, created_at
          FROM historical_agent_messages_v1
          WHERE thread_id = ?1
          ORDER BY id",
-    )?;
-    let messages = stmt
-        .query_map([legacy_thread_id], |row| {
-            Ok(HistoricalAgentMessage {
-                id: row.get(0)?,
-                thread_id: row.get(1)?,
-                role: row.get(2)?,
-                content: row.get(3)?,
-                created_at: row.get(4)?,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(messages)
+    )
+    .bind(legacy_thread_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .iter()
+        .map(|row| HistoricalAgentMessage {
+            id: row.get("id"),
+            thread_id: row.get("thread_id"),
+            role: row.get("role"),
+            content: row.get("content"),
+            created_at: row.get("created_at"),
+        })
+        .collect())
 }
 
-fn archive_legacy_v1_tables(tx: &Transaction<'_>) -> anyhow::Result<()> {
-    let had_legacy_threads = table_exists(tx, "agent_threads")?;
+async fn archive_legacy_v1_tables(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> anyhow::Result<()> {
+    let had_legacy_threads = table_exists(&mut **tx, "agent_threads").await?;
     if had_legacy_threads {
-        if !column_exists(tx, "agent_threads", "id")?
-            || column_exists(tx, "agent_threads", "thread_id")?
+        if !column_exists(&mut **tx, "agent_threads", "id").await?
+            || column_exists(&mut **tx, "agent_threads", "thread_id").await?
         {
             bail!("agent_threads exists without a V1 marker; refusing destructive migration");
         }
-        if table_exists(tx, "historical_agent_threads_v1")? {
+        if table_exists(&mut **tx, "historical_agent_threads_v1").await? {
             bail!("historical_agent_threads_v1 already exists; refusing to overwrite archive");
         }
-        tx.execute_batch("ALTER TABLE agent_threads RENAME TO historical_agent_threads_v1;")?;
+        sqlx::query("ALTER TABLE agent_threads RENAME TO historical_agent_threads_v1")
+            .execute(&mut **tx)
+            .await?;
     }
 
-    if table_exists(tx, "agent_thread_messages")? {
-        if table_exists(tx, "historical_agent_messages_v1")? {
+    if table_exists(&mut **tx, "agent_thread_messages").await? {
+        if table_exists(&mut **tx, "historical_agent_messages_v1").await? {
             bail!("historical_agent_messages_v1 already exists; refusing to overwrite archive");
         }
         if had_legacy_threads {
-            tx.execute_batch(
-                "ALTER TABLE agent_thread_messages RENAME TO historical_agent_messages_v1;",
-            )?;
+            sqlx::query(
+                "ALTER TABLE agent_thread_messages RENAME TO historical_agent_messages_v1",
+            )
+            .execute(&mut **tx)
+            .await?;
         } else {
-            // With no legacy parent table, renaming would leave the archived
-            // foreign key pointing at the new V2 `agent_threads`. Rebuild the
-            // read-only archive without that unsafe cross-schema constraint.
-            tx.execute_batch(
+            sqlx::query(
                 "CREATE TABLE historical_agent_messages_v1 (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     thread_id TEXT NOT NULL,
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
                     created_at TEXT NOT NULL
-                );
-                INSERT INTO historical_agent_messages_v1(id, thread_id, role, content, created_at)
+                )",
+            )
+            .execute(&mut **tx)
+            .await?;
+            sqlx::query(
+                "INSERT INTO historical_agent_messages_v1(id, thread_id, role, content, created_at)
                     SELECT id, thread_id, role, content, created_at
-                    FROM agent_thread_messages;
-                DROP TABLE agent_thread_messages;",
-            )?;
+                    FROM agent_thread_messages",
+            )
+            .execute(&mut **tx)
+            .await?;
+            sqlx::query("DROP TABLE agent_thread_messages")
+                .execute(&mut **tx)
+                .await?;
         }
     }
     Ok(())
 }
 
-fn read_schema_version(conn: &Connection) -> anyhow::Result<Option<i32>> {
-    if !table_exists(conn, "schema_meta")? {
+async fn read_schema_version(pool: &SqlitePool) -> anyhow::Result<Option<i32>> {
+    if !table_exists_on(pool, "schema_meta").await? {
         return Ok(None);
     }
-    let raw = conn
-        .query_row(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?;
-    raw.map(|value| {
+    let raw: Option<(String,)> = sqlx::query_as(
+        "SELECT value FROM schema_meta WHERE key = 'schema_version'",
+    )
+    .fetch_optional(pool)
+    .await?;
+    raw.map(|(value,)| {
         value
             .parse::<i32>()
             .with_context(|| format!("invalid subagent graph schema version {value:?}"))
@@ -298,48 +303,73 @@ fn read_schema_version(conn: &Connection) -> anyhow::Result<Option<i32>> {
     .transpose()
 }
 
-fn table_exists(conn: &Connection, table: &str) -> rusqlite::Result<bool> {
-    conn.query_row(
-        "SELECT EXISTS(
-            SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1
-        )",
-        [table],
-        |row| row.get(0),
+async fn table_exists_on(pool: &SqlitePool, table: &str) -> anyhow::Result<bool> {
+    let (exists,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
     )
+    .bind(table)
+    .fetch_one(pool)
+    .await?;
+    Ok(exists)
 }
 
-fn column_exists(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
-    let columns = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(columns.iter().any(|candidate| candidate == column))
+async fn table_exists(
+    conn: &mut sqlx::SqliteConnection,
+    table: &str,
+) -> anyhow::Result<bool> {
+    let (exists,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+    )
+    .bind(table)
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(exists)
 }
 
-fn ensure_runtime_descriptor_recovery_state(conn: &Connection) -> anyhow::Result<()> {
-    if !column_exists(conn, "agent_runtime_descriptors", "recovery_state")? {
-        conn.execute(
+async fn column_exists(
+    conn: &mut sqlx::SqliteConnection,
+    table: &str,
+    column: &str,
+) -> anyhow::Result<bool> {
+    let sql = format!("PRAGMA table_info({table})");
+    let rows = sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
+        .fetch_all(&mut *conn)
+        .await?;
+    Ok(rows.iter().any(|row| {
+        let name: String = row.get(1);
+        name == column
+    }))
+}
+
+async fn ensure_runtime_descriptor_recovery_state(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> anyhow::Result<()> {
+    if !column_exists(&mut **tx, "agent_runtime_descriptors", "recovery_state").await? {
+        sqlx::query(
             "ALTER TABLE agent_runtime_descriptors
              ADD COLUMN recovery_state TEXT NOT NULL DEFAULT 'available'
              CHECK(recovery_state IN ('available', 'legacy_unavailable'))",
-            [],
-        )?;
+        )
+        .execute(&mut **tx)
+        .await?;
     }
-    conn.execute(
+    sqlx::query(
         "INSERT OR IGNORE INTO agent_runtime_descriptors (
              thread_id, model, reasoning_effort, recovery_state
          )
          SELECT thread_id, NULL, NULL, 'legacy_unavailable'
          FROM agent_threads
          WHERE parent_thread_id IS NOT NULL",
-        [],
-    )?;
+    )
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::{params, Connection};
+    use agent_db::sqlx::{self, Row};
+    use agent_db::SqlitePool;
 
     use crate::AgentGraphStore;
 
@@ -371,105 +401,124 @@ mod tests {
         );
     "#;
 
-    fn create_v1_fixture(path: &std::path::Path, include_messages_table: bool) {
-        let conn = Connection::open(path).unwrap();
+    async fn open_fixture_pool(path: &std::path::Path) -> SqlitePool {
+        use agent_db::sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+        use agent_db::sqlx::ConnectOptions;
+        let opts = SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
+            .log_statements(tracing::log::LevelFilter::Debug);
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await
+            .unwrap()
+    }
+
+    async fn create_v1_fixture(path: &std::path::Path, include_messages_table: bool) {
+        let pool = open_fixture_pool(path).await;
         if include_messages_table {
-            conn.execute_batch(LEGACY_DDL).unwrap();
+            sqlx::query(LEGACY_DDL).execute(&pool).await.unwrap();
         } else {
-            conn.execute_batch(
+            sqlx::query(
                 LEGACY_DDL
                     .split("CREATE TABLE agent_thread_messages")
                     .next()
                     .unwrap(),
             )
+            .execute(&pool)
+            .await
             .unwrap();
         }
-        conn.execute(
+        sqlx::query(
             "INSERT INTO agent_threads (
                 id, parent_session_id, parent_agent_id, agent_name, task, status,
                 summary, error, model, model_reasoning_effort, sandbox_mode,
                 created_at, updated_at, finished_at, closed_at
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10, ?11, ?12, ?13, NULL)",
-            params![
-                "legacy-thread",
-                "legacy-session",
-                "astro",
-                "explorer",
-                "inspect history",
-                "completed",
-                "found it",
-                "gpt-5",
-                "high",
-                "read-only",
-                "2026-08-17T00:00:00Z",
-                "2026-08-17T00:01:00Z",
-                "2026-08-17T00:01:00Z",
-            ],
         )
+        .bind("legacy-thread")
+        .bind("legacy-session")
+        .bind("astro")
+        .bind("explorer")
+        .bind("inspect history")
+        .bind("completed")
+        .bind("found it")
+        .bind("gpt-5")
+        .bind("high")
+        .bind("read-only")
+        .bind("2026-08-17T00:00:00Z")
+        .bind("2026-08-17T00:01:00Z")
+        .bind("2026-08-17T00:01:00Z")
+        .execute(&pool)
+        .await
         .unwrap();
         if include_messages_table {
-            conn.execute(
+            sqlx::query(
                 "INSERT INTO agent_thread_messages(thread_id, role, content, created_at)
                  VALUES (?1, ?2, ?3, ?4)",
-                params![
-                    "legacy-thread",
-                    "assistant",
-                    "historical answer",
-                    "2026-08-17T00:01:00Z"
-                ],
             )
+            .bind("legacy-thread")
+            .bind("assistant")
+            .bind("historical answer")
+            .bind("2026-08-17T00:01:00Z")
+            .execute(&pool)
+            .await
             .unwrap();
         }
+        pool.close().await;
     }
 
-    #[test]
-    fn migrates_v1_rows_to_read_only_archive_once() {
+    #[tokio::test]
+    async fn migrates_v1_rows_to_read_only_archive_once() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("subagents.db");
-        create_v1_fixture(&path, true);
+        create_v1_fixture(&path, true).await;
 
-        let store = AgentGraphStore::open(path.clone()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 4);
-        let historical_threads = store.list_historical_threads().unwrap();
+        let store = AgentGraphStore::open(path.clone()).await.unwrap();
+        assert_eq!(store.schema_version().await.unwrap(), 4);
+        let historical_threads = store.list_historical_threads().await.unwrap();
         assert_eq!(historical_threads.len(), 1);
         assert_eq!(historical_threads[0].id, "legacy-thread");
-        let historical_messages = store.list_historical_messages("legacy-thread").unwrap();
+        let historical_messages = store.list_historical_messages("legacy-thread").await.unwrap();
         assert_eq!(historical_messages.len(), 1);
         assert_eq!(historical_messages[0].content, "historical answer");
-        assert!(store.get_thread("legacy-thread").unwrap().is_none());
-        assert!(store.snapshot("legacy-thread").unwrap().threads.is_empty());
+        assert!(store.get_thread("legacy-thread").await.unwrap().is_none());
+        assert!(store.snapshot("legacy-thread").await.unwrap().threads.is_empty());
         drop(store);
 
-        let reopened = AgentGraphStore::open(path).unwrap();
-        assert_eq!(reopened.list_historical_threads().unwrap().len(), 1);
+        let reopened = AgentGraphStore::open(path).await.unwrap();
+        assert_eq!(reopened.list_historical_threads().await.unwrap().len(), 1);
         assert_eq!(
             reopened
                 .list_historical_messages("legacy-thread")
+                .await
                 .unwrap()
                 .len(),
             1
         );
     }
 
-    #[test]
-    fn fresh_database_has_v4_schema_without_history() {
+    #[tokio::test]
+    async fn fresh_database_has_v4_schema_without_history() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents.db")).await.unwrap();
 
-        assert_eq!(store.schema_version().unwrap(), 4);
-        assert!(store.list_historical_threads().unwrap().is_empty());
+        assert_eq!(store.schema_version().await.unwrap(), 4);
+        assert!(store.list_historical_threads().await.unwrap().is_empty());
         assert!(store
             .list_historical_messages("missing")
+            .await
             .unwrap()
             .is_empty());
     }
 
-    #[test]
-    fn migrates_v2_schema_additively_and_preserves_threads() {
+    #[tokio::test]
+    async fn migrates_v2_schema_additively_and_preserves_threads() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("subagents-v2.db");
-        let conn = Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let pool = open_fixture_pool(&path).await;
+        sqlx::query(
             "PRAGMA foreign_keys=ON;
              CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
              INSERT INTO schema_meta(key, value) VALUES ('schema_version', '2');
@@ -499,41 +548,41 @@ mod tests {
                  '2026-08-19T00:00:00Z', '2026-08-19T00:00:00Z'
              );",
         )
+        .execute(&pool)
+        .await
         .unwrap();
-        drop(conn);
+        pool.close().await;
 
-        let store = AgentGraphStore::open(path.clone()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 4);
-        assert!(store.get_thread("root").unwrap().is_some());
+        let store = AgentGraphStore::open(path.clone()).await.unwrap();
+        assert_eq!(store.schema_version().await.unwrap(), 4);
+        assert!(store.get_thread("root").await.unwrap().is_some());
         drop(store);
 
-        let conn = Connection::open(path).unwrap();
-        let descriptor_table: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master
-                 WHERE type = 'table' AND name = 'agent_runtime_descriptors'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
+        let pool = open_fixture_pool(&path).await;
+        let (descriptor_table,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name = 'agent_runtime_descriptors'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         assert_eq!(descriptor_table, 1);
-        let legacy_markers: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM agent_runtime_descriptors
-                 WHERE recovery_state = 'legacy_unavailable'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
+        let (legacy_markers,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_runtime_descriptors
+             WHERE recovery_state = 'legacy_unavailable'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         assert_eq!(legacy_markers, 1);
     }
 
-    #[test]
-    fn self_heals_early_v3_descriptor_table_and_marks_missing_children() {
+    #[tokio::test]
+    async fn self_heals_early_v3_descriptor_table_and_marks_missing_children() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("subagents-v2.db");
-        let conn = Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let pool = open_fixture_pool(&path).await;
+        sqlx::query(
             "PRAGMA foreign_keys=ON;
              CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
              INSERT INTO schema_meta(key, value) VALUES ('schema_version', '3');
@@ -577,31 +626,28 @@ mod tests {
                  'child', 'openai:trusted-v3-model', 'high'
              );",
         )
+        .execute(&pool)
+        .await
         .unwrap();
-        drop(conn);
+        pool.close().await;
 
-        let store = AgentGraphStore::open(path.clone()).unwrap();
-        let descriptor = store.runtime_descriptor("child").unwrap().unwrap();
+        let store = AgentGraphStore::open(path.clone()).await.unwrap();
+        let descriptor = store.runtime_descriptor("child").await.unwrap().unwrap();
         assert_eq!(descriptor.model.as_deref(), Some("openai:trusted-v3-model"));
         assert_eq!(descriptor.reasoning_effort.as_deref(), Some("high"));
-        let error = store.runtime_descriptor("missing").unwrap_err();
+        let error = store.runtime_descriptor("missing").await.unwrap_err();
         assert!(error
             .downcast_ref::<crate::LegacyRuntimeDescriptorUnavailable>()
             .is_some());
         drop(store);
-        let conn = Connection::open(path).unwrap();
-        let states = conn
-            .prepare(
-                "SELECT thread_id, recovery_state FROM agent_runtime_descriptors
-                 ORDER BY thread_id",
-            )
+        let pool = open_fixture_pool(&path).await;
+        let states = sqlx::query("SELECT thread_id, recovery_state FROM agent_runtime_descriptors ORDER BY thread_id")
+            .fetch_all(&pool)
+            .await
             .unwrap()
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .unwrap()
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .unwrap();
+            .iter()
+            .map(|row| (row.get::<String, _>("thread_id"), row.get::<String, _>("recovery_state")))
+            .collect::<Vec<_>>();
         assert_eq!(
             states,
             vec![
@@ -611,26 +657,27 @@ mod tests {
         );
     }
 
-    #[test]
-    fn migration_tolerates_missing_legacy_messages_table() {
+    #[tokio::test]
+    async fn migration_tolerates_missing_legacy_messages_table() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("subagents.db");
-        create_v1_fixture(&path, false);
+        create_v1_fixture(&path, false).await;
 
-        let store = AgentGraphStore::open(path).unwrap();
-        assert_eq!(store.list_historical_threads().unwrap().len(), 1);
+        let store = AgentGraphStore::open(path).await.unwrap();
+        assert_eq!(store.list_historical_threads().await.unwrap().len(), 1);
         assert!(store
             .list_historical_messages("legacy-thread")
+            .await
             .unwrap()
             .is_empty());
     }
 
-    #[test]
-    fn migration_archives_orphaned_legacy_messages_table() {
+    #[tokio::test]
+    async fn migration_archives_orphaned_legacy_messages_table() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("subagents.db");
-        let conn = Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let pool = open_fixture_pool(&path).await;
+        sqlx::query(
             "PRAGMA foreign_keys=OFF;
             CREATE TABLE agent_thread_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -643,27 +690,39 @@ mod tests {
             INSERT INTO agent_thread_messages(thread_id, role, content, created_at)
             VALUES ('orphan-thread', 'assistant', 'preserve me', '2026-08-18T00:00:00Z');",
         )
+        .execute(&pool)
+        .await
         .unwrap();
-        drop(conn);
+        pool.close().await;
 
-        let store = AgentGraphStore::open(path.clone()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 4);
-        let archived = store.list_historical_messages("orphan-thread").unwrap();
+        let store = AgentGraphStore::open(path.clone()).await.unwrap();
+        assert_eq!(store.schema_version().await.unwrap(), 4);
+        let archived = store.list_historical_messages("orphan-thread").await.unwrap();
         assert_eq!(archived.len(), 1);
         assert_eq!(archived[0].content, "preserve me");
 
-        let conn = Connection::open(path).unwrap();
-        assert!(!super::table_exists(&conn, "agent_thread_messages").unwrap());
-        assert!(super::table_exists(&conn, "historical_agent_messages_v1").unwrap());
-        let foreign_key_targets = conn
-            .prepare("PRAGMA foreign_key_list(historical_agent_messages_v1)")
-            .unwrap()
-            .query_map([], |row| row.get::<_, String>(2))
-            .unwrap()
-            .collect::<rusqlite::Result<Vec<_>>>()
+        let pool = open_fixture_pool(&path).await;
+        let (has_old,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'agent_thread_messages')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(!has_old);
+        let (has_archive,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'historical_agent_messages_v1')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(has_archive);
+        let fk_rows = sqlx::query("PRAGMA foreign_key_list(historical_agent_messages_v1)")
+            .fetch_all(&pool)
+            .await
             .unwrap();
-        assert!(!foreign_key_targets
-            .iter()
-            .any(|table| table == "agent_threads"));
+        assert!(!fk_rows.iter().any(|row| {
+            let table: String = row.get(2);
+            table == "agent_threads"
+        }));
     }
 }

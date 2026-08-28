@@ -5,16 +5,10 @@ use tauri::AppHandle;
 use uuid::Uuid;
 
 use super::common::open_sessions;
-use crate::infra::thread_events::{session_status_snapshot, SessionStatusChangedDto};
 
 // ---------------------------------------------------------------------------
 // DTOs
 // ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub fn list_session_statuses() -> Vec<SessionStatusChangedDto> {
-    session_status_snapshot()
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -112,12 +106,6 @@ pub struct ChatHistoryDto {
     pub end_reason: Option<String>,
     /// 结束时间（epoch 秒）；未结束为 `None`
     pub ended_at: Option<f64>,
-    /// Codex-style 临时 Side 会话；离开时应丢弃。
-    pub ephemeral: bool,
-    /// Side 会话返回父会话，供 UI 显示“返回主线”。
-    pub parent_session_id: Option<String>,
-    /// 因 `excludeTurns` 在 UI 隐藏、但仍提供给模型的继承 turn 数。
-    pub excluded_turn_count: i64,
 }
 
 // ---------------------------------------------------------------------------
@@ -177,12 +165,12 @@ pub async fn get_chat_history(
     session_id: Option<String>,
     limit: Option<i32>,
 ) -> Result<ChatHistoryDto, String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     let limit = limit.unwrap_or(200).clamp(1, 500) as usize;
 
     let sid = match session_id.filter(|s| !s.is_empty()) {
         Some(s) => s,
-        None => match store.latest_session_id().map_err(|e| e.to_string())? {
+        None => match store.latest_session_id().await.map_err(|e| e.to_string())? {
             Some(s) => s,
             None => {
                 return Ok(ChatHistoryDto {
@@ -190,185 +178,73 @@ pub async fn get_chat_history(
                     messages: vec![],
                     end_reason: None,
                     ended_at: None,
-                    ephemeral: false,
-                    parent_session_id: None,
-                    excluded_turn_count: 0,
                 });
             }
         },
     };
 
-    let meta = store.get_session(&sid).map_err(|e| e.to_string())?;
+    let meta = store.get_session(&sid).await.map_err(|e| e.to_string())?;
     let end_reason = meta.as_ref().and_then(|s| s.end_reason.clone());
     let ended_at = meta.as_ref().and_then(|s| s.ended_at);
-    let ephemeral = meta
-        .as_ref()
-        .is_some_and(|session| session.branch_kind.as_deref() == Some("side"));
-    let parent_session_id = ephemeral
-        .then(|| {
-            meta.as_ref()
-                .and_then(|session| session.parent_session_id.clone())
-        })
-        .flatten();
-    let excluded_turn_count = if ephemeral {
-        meta.as_ref()
-            .and_then(|session| session.branch_inherited_turn_count)
-            .unwrap_or(0)
-            .max(0)
-    } else {
-        0
-    };
-    let visible_start_id = if excluded_turn_count > 0 {
-        store
-            .get_messages(&sid)
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .filter(|message| message.role == "user")
-            .nth(excluded_turn_count as usize)
-            .map(|message| message.id)
-    } else {
-        None
-    };
 
-    let history = store
+    let messages = store
         .build_chat_history(&sid, limit)
-        .map_err(|e| e.to_string())?;
-    // excludeTurns 只影响 UI hydration：模型仍从完整 SQLite/rollout 历史恢复。
-    let messages = if ephemeral && excluded_turn_count > 0 && visible_start_id.is_none() {
-        Vec::new()
-    } else {
-        history
-            .into_iter()
-            .filter(|message| {
-                visible_start_id.is_none_or(|start| {
-                    message
-                        .id
-                        .parse::<i64>()
-                        .is_ok_and(|message_id| message_id >= start)
+        .await.map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|m| ChatHistoryMessageDto {
+            id: format!("db-{}", m.id),
+            role: m.role,
+            content: m.content,
+            reasoning: m.reasoning,
+            activities: m
+                .activities
+                .into_iter()
+                .map(|a| ChatHistoryActivityDto {
+                    id: a.id,
+                    kind: a.kind,
+                    title: a.title,
+                    input: a.input,
+                    output: a.output,
+                    status: a.status,
+                    media: history_media_from_json(a.media.as_ref()),
                 })
-            })
-            .map(|m| ChatHistoryMessageDto {
-                id: format!("db-{}", m.id),
-                role: m.role,
-                content: m.content,
-                reasoning: m.reasoning,
-                activities: m
-                    .activities
-                    .into_iter()
-                    .map(|a| ChatHistoryActivityDto {
-                        id: a.id,
-                        kind: a.kind,
-                        title: a.title,
-                        input: a.input,
-                        output: a.output,
-                        status: a.status,
-                        media: history_media_from_json(a.media.as_ref()),
-                    })
-                    .collect(),
-                segments: m.segments,
-                ui_surfaces: m.ui_surfaces,
-            })
-            .collect()
-    };
+                .collect(),
+            segments: m.segments,
+            ui_surfaces: m.ui_surfaces,
+        })
+        .collect();
 
     Ok(ChatHistoryDto {
         session_id: Some(sid),
         messages,
         end_reason,
         ended_at,
-        ephemeral,
-        parent_session_id,
-        excluded_turn_count,
     })
 }
 
-/// 从当前会话分支。
-///
-/// `source_message_id` 指定锚点 user 消息时按 Turn 边界分叉，`boundary` 取
-/// `through_turn`（含该轮，需已完成）或 `before_turn`（该轮不进新分支）；
-/// 否则退回按 `keep_chat_bubbles` 条聊天气泡复制。`ephemeral + exclude_turns`
-/// 对应 Codex `/side`：模型继承历史，但新会话 UI 从空白边界开始。SQLite 投影与
-/// rollout 一起分叉。
+/// 从当前会话分支：复制截止到第 `keep_chat_bubbles` 条聊天气泡的消息到新会话。
 #[tauri::command]
 pub async fn fork_chat_session(
     source_session_id: String,
-    keep_chat_bubbles: Option<i32>,
-    source_message_id: Option<i64>,
-    boundary: Option<String>,
-    ephemeral: Option<bool>,
-    exclude_turns: Option<bool>,
+    keep_chat_bubbles: i32,
     new_session_id: Option<String>,
 ) -> Result<String, String> {
     let source = source_session_id.trim();
     if source.is_empty() {
         return Err("source_session_id 不能为空".into());
     }
-    let keep = keep_chat_bubbles.unwrap_or_default().max(0) as usize;
+    let keep = keep_chat_bubbles.max(0) as usize;
     let new_id = new_session_id
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
     if new_id == source {
         return Err("新会话 id 不能与源会话相同".into());
     }
-    let boundary = match boundary.as_deref().map(str::trim) {
-        None | Some("") | Some("through_turn") => session::ForkBoundary::ThroughTurn,
-        Some("before_turn") => session::ForkBoundary::BeforeTurn,
-        Some(other) => return Err(format!("未知的分叉边界: {other}")),
-    };
-    let ephemeral = ephemeral.unwrap_or(false);
-    let exclude_turns = exclude_turns.unwrap_or(false);
 
-    let copied_user_turns = {
-        let store = open_sessions()?;
-        let copied_user_turns = match source_message_id {
-            Some(source_message_id) => {
-                let forked = match boundary {
-                    session::ForkBoundary::ThroughTurn => {
-                        store.fork_session_at_user_message(source, &new_id, source_message_id)
-                    }
-                    session::ForkBoundary::BeforeTurn => {
-                        store.fork_session_before_user_message(source, &new_id, source_message_id)
-                    }
-                }
-                .map_err(|e| e.to_string())?;
-                forked.copied_user_turns.max(0) as usize
-            }
-            None => {
-                store
-                    .fork_session(source, &new_id, keep)
-                    .map_err(|e| e.to_string())?;
-                store
-                    .get_messages(&new_id)
-                    .map_err(|e| e.to_string())?
-                    .iter()
-                    .filter(|message| message.role == "user")
-                    .count()
-            }
-        };
-        if ephemeral {
-            if let Err(error) = store.mark_session_as_side(&new_id) {
-                let _ = store.delete_session_permanently(&new_id);
-                return Err(error.to_string());
-            }
-        }
-        copied_user_turns
-    };
-
-    // rollout 是权威历史；复制失败只记日志，SQLite 分支已经可用。
-    let rollout_root = home::default_memory_dir().join("sessions").join("rollouts");
-    if let Err(error) = agent_rollout::fork_rollout(
-        &rollout_root,
-        source,
-        &new_id,
-        copied_user_turns,
-        ephemeral,
-        exclude_turns,
-        chrono::Utc::now(),
-    )
-    .await
-    {
-        tracing::warn!(%error, source, new_id = %new_id, "failed to fork rollout history");
-    }
+    let store = open_sessions().await?;
+    store
+        .fork_session(source, &new_id, keep)
+        .await.map_err(|e| e.to_string())?;
     Ok(new_id)
 }
 
@@ -384,10 +260,10 @@ pub async fn remove_chat_bubbles(session_id: String, start: i32, end: i32) -> Re
     if start >= end {
         return Ok(());
     }
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     store
         .remove_chat_bubbles(sid, start, end)
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 /// 按 active / archived 筛选会话供侧栏展示。
@@ -400,16 +276,16 @@ pub async fn list_sessions(
     project_id: Option<String>,
 ) -> Result<Vec<RecentSessionDto>, String> {
     let filter = parse_session_filter(&filter)?;
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
     let sessions = if let Some(pid) = project_id.filter(|s| !s.is_empty()) {
         store
             .list_sessions_by_project(filter, limit, &pid)
-            .map_err(|e| e.to_string())?
+            .await.map_err(|e| e.to_string())?
     } else {
         store
             .list_sessions_filtered(filter, limit, project_root.as_deref())
-            .map_err(|e| e.to_string())?
+            .await.map_err(|e| e.to_string())?
     };
     Ok(sessions.into_iter().map(recent_session_dto).collect())
 }
@@ -426,27 +302,27 @@ pub async fn set_session_project_root(
     session_id: String,
     project_root: Option<String>,
 ) -> Result<(), String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     // 兼容：尝试按 root 路径查找 project 并关联
     if let Some(root) = project_root.as_deref().filter(|r| !r.is_empty()) {
-        if let Ok(Some(proj)) = store.find_project_by_root(root) {
+        if let Ok(Some(proj)) = store.find_project_by_root(root).await {
             return store
                 .assign_session_to_project(&session_id, &proj.id)
-                .map_err(|e| e.to_string());
+                .await.map_err(|e| e.to_string());
         }
     }
     store
         .set_session_project_root(&session_id, project_root.as_deref())
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 /// 重命名会话。
 #[tauri::command]
 pub async fn rename_session(session_id: String, title: String) -> Result<(), String> {
     let title = validate_session_title(&title)?;
-    open_sessions()?
+    open_sessions().await?
         .set_session_title(&session_id, &title)
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 /// 强制重新生成会话标题（覆盖现有标题）。
@@ -468,14 +344,14 @@ pub async fn regenerate_session_title(
     }
 
     let (user, assistant) = {
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         store
             .first_turn_text(&sid)
-            .map_err(|e| e.to_string())?
+            .await.map_err(|e| e.to_string())?
             .ok_or_else(|| "会话尚无完整首轮对话，无法生成标题".to_string())?
     };
 
-    let primary = primary_chat_target_for_session(&sid)?;
+    let primary = primary_chat_target_for_session(&sid).await?;
     let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::TitleGeneration, &primary)?;
     let chain: Vec<&ResolvedTarget> = std::iter::once(&targets.preferred)
         .chain(targets.fallback.as_ref())
@@ -556,9 +432,9 @@ pub async fn regenerate_session_title(
         return Err("模型未返回可用标题".into());
     }
 
-    open_sessions()?
+    open_sessions().await?
         .set_session_title(&sid, &title)
-        .map_err(|e| e.to_string())?;
+        .await.map_err(|e| e.to_string())?;
 
     emit_session_event(
         &app,
@@ -582,33 +458,33 @@ pub async fn regenerate_session_title(
 /// 归档会话。
 #[tauri::command]
 pub async fn archive_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions().await?
         .archive_session(&session_id)
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 /// 取消归档会话。
 #[tauri::command]
 pub async fn unarchive_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions().await?
         .unarchive_session(&session_id)
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 /// 置顶会话。
 #[tauri::command]
 pub async fn pin_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions().await?
         .pin_session(&session_id)
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 /// 取消置顶。
 #[tauri::command]
 pub async fn unpin_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions().await?
         .unpin_session(&session_id)
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 /// 先尽量释放运行时会话，再永久删除数据库记录。
@@ -626,56 +502,9 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
             "release_session before delete failed; deleting DB anyway"
         );
     }
-    open_sessions()?
+    open_sessions().await?
         .delete_session_permanently(&session_id)
-        .map_err(|e| e.to_string())
-}
-
-fn remove_session_rollout(session_id: &str) {
-    let root = home::default_memory_dir().join("sessions").join("rollouts");
-    match agent_rollout::find_rollout(&root, session_id) {
-        Ok(Some(path)) => {
-            if let Err(error) = std::fs::remove_file(&path) {
-                tracing::warn!(%error, path = %path.display(), "failed to remove side rollout");
-            }
-        }
-        Ok(None) => {}
-        Err(error) => tracing::warn!(%error, session_id, "failed to locate side rollout"),
-    }
-}
-
-/// 离开 Codex-style Side 会话时释放运行时并丢弃临时 SQLite/rollout 状态。
-#[tauri::command]
-pub async fn discard_side_session(app: AppHandle, session_id: String) -> Result<(), String> {
-    let session_id = session_id.trim().to_string();
-    if session_id.is_empty() {
-        return Err("session_id 不能为空".into());
-    }
-    if let Err(error) =
-        super::chat::chat_control(app, session_id.clone(), "release_session".into()).await
-    {
-        tracing::warn!(%error, session_id, "release_session before side discard failed");
-    }
-    open_sessions()?
-        .delete_side_session(&session_id)
-        .map_err(|error| error.to_string())?;
-    remove_session_rollout(&session_id);
-    Ok(())
-}
-
-/// 应用启动时清理异常退出遗留的 Side 会话；普通分支不受影响。
-pub fn cleanup_stale_side_sessions() -> Result<usize, String> {
-    let store = open_sessions()?;
-    let ids = store
-        .list_side_session_ids()
-        .map_err(|error| error.to_string())?;
-    for id in &ids {
-        store
-            .delete_side_session(id)
-            .map_err(|error| error.to_string())?;
-        remove_session_rollout(id);
-    }
-    Ok(ids.len())
+        .await.map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -708,50 +537,26 @@ fn project_to_dto(p: session::Project) -> ProjectDto {
 
 #[tauri::command]
 pub async fn list_projects() -> Result<Vec<ProjectDto>, String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     Ok(store
         .list_projects()
-        .map_err(|e| e.to_string())?
+        .await.map_err(|e| e.to_string())?
         .into_iter()
         .map(project_to_dto)
         .collect())
 }
 
 #[tauri::command]
-pub async fn ensure_default_project() -> Result<ProjectDto, String> {
-    let store = open_sessions()?;
-    let ws_path = super::common::workspace_dir();
-    std::fs::create_dir_all(&ws_path).map_err(|e| e.to_string())?;
-    let proj = store
-        .ensure_default_project(std::path::Path::new(&ws_path))
-        .map_err(|e| e.to_string())?;
-    Ok(project_to_dto(proj))
-}
-
-#[tauri::command]
-pub async fn create_project(
-    name: String,
-    roots: Vec<String>,
-    icon: Option<String>,
-) -> Result<ProjectDto, String> {
+pub async fn create_project(name: String, roots: Vec<String>) -> Result<ProjectDto, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("project name cannot be empty".into());
     }
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     let root_refs: Vec<&str> = roots.iter().map(|s| s.as_str()).collect();
-    let mut proj = store
+    let proj = store
         .create_project(name, &root_refs)
-        .map_err(|e| e.to_string())?;
-    if let Some(icon) = icon
-        .as_deref()
-        .map(str::trim)
-        .filter(|icon| !icon.is_empty())
-    {
-        proj = store
-            .update_project(&proj.id, None, Some(Some(icon)), None)
-            .map_err(|e| e.to_string())?;
-    }
+        .await.map_err(|e| e.to_string())?;
     Ok(project_to_dto(proj))
 }
 
@@ -759,36 +564,33 @@ pub async fn create_project(
 pub async fn update_project(
     project_id: String,
     name: Option<String>,
-    icon: Option<String>,
+    icon: Option<Option<String>>,
     roots: Option<Vec<String>>,
 ) -> Result<ProjectDto, String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     let root_strs: Option<Vec<&str>> = roots
         .as_ref()
         .map(|v| v.iter().map(|s| s.as_str()).collect());
-    let icon_update: Option<Option<&str>> = icon.as_ref().map(|s| {
-        let s = s.trim();
-        if s.is_empty() {
-            None
-        } else {
-            Some(s)
-        }
-    });
+    let icon_ref: Option<Option<&str>> = icon
+        .as_ref()
+        .map(|opt| opt.as_deref());
     let proj = store
         .update_project(
             &project_id,
             name.as_deref(),
-            icon_update,
+            icon_ref,
             root_strs.as_deref(),
         )
-        .map_err(|e| e.to_string())?;
+        .await.map_err(|e| e.to_string())?;
     Ok(project_to_dto(proj))
 }
 
 #[tauri::command]
 pub async fn delete_project(project_id: String) -> Result<Vec<String>, String> {
-    let store = open_sessions()?;
-    store.delete_project(&project_id).map_err(|e| e.to_string())
+    let store = open_sessions().await?;
+    store
+        .delete_project(&project_id)
+        .await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -796,10 +598,10 @@ pub async fn move_project(
     project_id: String,
     before_project_id: Option<String>,
 ) -> Result<(), String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     store
         .move_project(&project_id, before_project_id.as_deref())
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -807,22 +609,10 @@ pub async fn assign_session_to_project(
     session_id: String,
     project_id: String,
 ) -> Result<(), String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     store
         .assign_session_to_project(&session_id, &project_id)
-        .map_err(|e| e.to_string())
-}
-
-/// 新会话自动归属项目；已有项目归属的会话不会被当前项目覆盖。
-#[tauri::command]
-pub async fn assign_session_to_project_if_unassigned(
-    session_id: String,
-    project_id: String,
-) -> Result<(), String> {
-    let store = open_sessions()?;
-    store
-        .assign_session_to_project_if_unassigned(&session_id, &project_id)
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------

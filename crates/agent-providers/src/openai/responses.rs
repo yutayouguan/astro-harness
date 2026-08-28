@@ -14,6 +14,18 @@ use crate::types::stream::StreamChunk;
 
 /// 将 [`Message`] 转为 Responses API `input` 数组。
 pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
+    use std::collections::HashSet;
+
+    let mut result_ids = HashSet::new();
+    for m in messages {
+        if let Message::Tool { tool_call_id, .. } = m {
+            let id = tool_call_id.trim();
+            if !id.is_empty() {
+                result_ids.insert(id.to_string());
+            }
+        }
+    }
+
     let mut input = Vec::with_capacity(messages.len());
     for m in messages {
         match m {
@@ -22,11 +34,10 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                 content,
                 ..
             } => {
-                let call_id = if tool_call_id.trim().is_empty() {
-                    ""
-                } else {
-                    tool_call_id.as_str()
-                };
+                let call_id = tool_call_id.trim();
+                if call_id.is_empty() {
+                    continue;
+                }
                 input.push(json!({
                     "type": "function_call_output",
                     "call_id": call_id,
@@ -35,7 +46,9 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
             }
 
             Message::Assistant { content } => {
-                let mut has_tool_calls = false;
+                let had_any_tool_call =
+                    content.iter().any(|c| matches!(c, AssistantContent::ToolCall(_)));
+                let mut emitted_tool_calls = false;
                 for part in content {
                     if let AssistantContent::ToolCall(ToolCall {
                         id,
@@ -44,7 +57,10 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                         ..
                     }) = part
                     {
-                        has_tool_calls = true;
+                        if !result_ids.contains(id.trim()) {
+                            continue;
+                        }
+                        emitted_tool_calls = true;
                         let args = match arguments {
                             Value::String(s) => s.clone(),
                             other => other.to_string(),
@@ -59,7 +75,7 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                     }
                 }
                 let text = m.text_content();
-                if has_tool_calls && text.is_empty() {
+                if had_any_tool_call && text.is_empty() {
                     continue;
                 }
                 input.push(json!({
@@ -337,19 +353,35 @@ mod tests {
 
     #[test]
     fn to_responses_input_assistant_tool_calls() {
-        let msgs = vec![Message::assistant(vec![AssistantContent::ToolCall(
-            ToolCall {
+        let msgs = vec![
+            Message::assistant(vec![AssistantContent::ToolCall(ToolCall {
                 id: "call_123".into(),
                 name: "get_weather".into(),
                 arguments: json!({"location": "Paris"}),
                 signature: None,
-            },
-        )])];
+            })]),
+            Message::tool_result("call_123", r#"{"temp": 22}"#, false),
+        ];
         let input = to_responses_input(&msgs);
-        assert_eq!(input.len(), 1);
+        assert_eq!(input.len(), 2);
         assert_eq!(input[0]["type"], "function_call");
         assert_eq!(input[0]["name"], "get_weather");
         assert_eq!(input[0]["call_id"], "call_123");
+        assert_eq!(input[1]["type"], "function_call_output");
+    }
+
+    #[test]
+    fn to_responses_input_drops_orphan_tool_calls() {
+        let msgs = vec![Message::assistant(vec![AssistantContent::ToolCall(
+            ToolCall {
+                id: "call_orphan".into(),
+                name: "dangling".into(),
+                arguments: json!({}),
+                signature: None,
+            },
+        )])];
+        let input = to_responses_input(&msgs);
+        assert!(input.is_empty(), "orphan tool_call should be dropped");
     }
 
     // ── 内容构建 ──

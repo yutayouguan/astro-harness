@@ -18,17 +18,17 @@ pub struct ScrolledMessage {
 /// 构建会话上下文：先取最近 `recent_turns` 条，再按 FTS 关键词各召回最多 3 个锚点及其窗口。
 ///
 /// 合并后按 `id` 排序并去重。`fts_keywords` 为 `None` 时仅返回最近消息。
-pub fn build_conversation_context(
-    store: &dyn ConversationStore,
+pub async fn build_conversation_context(
+    store: &(impl ConversationStore + Sync),
     session_id: &str,
     recent_turns: usize,
     fts_keywords: Option<&str>,
 ) -> anyhow::Result<Vec<ScrolledMessage>> {
-    let mut context = store.recent_messages(session_id, recent_turns)?;
+    let mut context = store.recent_messages(session_id, recent_turns).await?;
 
     if let Some(keywords) = fts_keywords {
-        for anchor_id in store.recall_message_ids(session_id, keywords, 3)? {
-            let window = store.scroll_context_window(session_id, anchor_id, 5)?;
+        for anchor_id in store.recall_message_ids(session_id, keywords, 3).await? {
+            let window = store.scroll_context_window(session_id, anchor_id, 5).await?;
             context.extend(window);
         }
         context.sort_by_key(|m| m.id);

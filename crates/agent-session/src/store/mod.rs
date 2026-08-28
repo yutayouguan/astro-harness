@@ -1,6 +1,5 @@
-//! 单库会话存储（schema v17）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
+//! 单库会话存储（schema v19）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
-mod branches;
 mod messages;
 pub mod projects;
 mod rollout_projection;
@@ -8,13 +7,14 @@ mod schema;
 mod search;
 mod sessions;
 
+use agent_db::sqlx::{self, Row};
+use agent_db::{AstroDb, DbSpec, SqlitePool};
 use anyhow::{anyhow, Context, Result};
-use rusqlite::{Connection, OptionalExtension};
-use serde::Serialize;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use types::SqliteStore;
+
+const DB_SPEC: DbSpec = DbSpec::new("session", "state.db");
 
 pub use rollout_projection::rebuild_messages_from_rollout;
 pub use schema::SCHEMA_VERSION;
@@ -73,8 +73,8 @@ pub struct NewMessage<'a> {
     pub reasoning: Option<&'a str>,
     pub reasoning_content: Option<&'a str>,
     pub reasoning_details: Option<Value>,
-    pub reasoning_items: Option<Value>,
-    pub message_items: Option<Value>,
+    pub codex_reasoning_items: Option<Value>,
+    pub codex_message_items: Option<Value>,
     /// 结构化媒体 JSON 数组（`MediaAsset[]`）；空则不写列。
     pub media_json: Option<&'a str>,
 }
@@ -95,8 +95,8 @@ impl<'a> NewMessage<'a> {
             reasoning: None,
             reasoning_content: None,
             reasoning_details: None,
-            reasoning_items: None,
-            message_items: None,
+            codex_reasoning_items: None,
+            codex_message_items: None,
             media_json: None,
         }
     }
@@ -119,8 +119,8 @@ pub struct StoredMessage {
     pub reasoning: Option<String>,
     pub reasoning_content: Option<String>,
     pub reasoning_details: Option<Value>,
-    pub reasoning_items: Option<Value>,
-    pub message_items: Option<Value>,
+    pub codex_reasoning_items: Option<Value>,
+    pub codex_message_items: Option<Value>,
     /// 结构化媒体 JSON 数组字符串。
     pub media_json: Option<String>,
 }
@@ -140,99 +140,6 @@ pub struct StoredSession {
     pub tool_call_count: i64,
     pub archived_at: Option<f64>,
     pub pinned_at: Option<f64>,
-    /// 源会话中作为分叉点的 user 消息行 id；旧分支可为空。
-    pub branch_parent_message_id: Option<i64>,
-    /// 分叉点在父会话中的 user turn 序号（从 1 开始）。
-    pub branch_parent_turn_index: Option<i64>,
-    /// 子会话创建时继承的完整 user turn 数。
-    pub branch_inherited_turn_count: Option<i64>,
-    /// 分支创建时间；普通会话与旧分支可为空。
-    pub branch_created_at: Option<f64>,
-    /// 分支来源；普通会话与旧分支为空。
-    pub branch_kind: Option<String>,
-}
-
-/// 子会话的来源类别。
-///
-/// 对应 `forked_from_id`（聊天分叉）与 `parent_thread_id`（子 Agent 派生）
-/// 的区分：两者都写 `parent_session_id`，但只有 `Fork` 属于聊天分支谱系。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BranchKind {
-    Fork,
-    Agent,
-    /// 临时旁路会话：继承模型历史，但 UI 从分叉边界后开始显示。
-    Side,
-}
-
-impl BranchKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Fork => "fork",
-            Self::Agent => "agent",
-            Self::Side => "side",
-        }
-    }
-}
-
-/// 分叉边界：包含锚点 turn，或停在锚点 turn 之前。
-///
-/// 分叉边界：`last_turn_id` / `before_turn_id`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ForkBoundary {
-    /// 复制到锚点 turn 结束（要求该 turn 已完成）。
-    ThroughTurn,
-    /// 复制到锚点 turn 之前，锚点本身不进入新分支。
-    BeforeTurn,
-}
-
-/// 从父会话的某个 user turn 边界创建分支后的结果。
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct ForkedSession {
-    pub session_id: String,
-    pub parent_session_id: String,
-    /// 新分支挂靠的父会话 user 消息行 id；`BeforeTurn` 分叉到首轮之前时为空。
-    pub parent_message_id: Option<i64>,
-    pub parent_turn_index: Option<i64>,
-    pub inherited_turn_count: i64,
-    pub copied_message_count: i64,
-    /// 复制进新分支的 user 消息数，用于对齐 rollout 前缀。
-    pub copied_user_turns: i64,
-    pub created_at: f64,
-}
-
-/// 会话图中的一个 user turn。
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct SessionTurnNode {
-    pub turn_index: i64,
-    pub user_message_id: i64,
-    pub content: Option<String>,
-    pub completed: bool,
-    /// 在此 turn 分叉出的直接子会话。
-    pub child_session_ids: Vec<String>,
-}
-
-/// 会话谱系图中的会话节点。
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct SessionLineageNode {
-    pub session_id: String,
-    pub parent_session_id: Option<String>,
-    pub parent_message_id: Option<i64>,
-    pub parent_turn_index: Option<i64>,
-    pub inherited_turn_count: i64,
-    pub branch_created_at: Option<f64>,
-    pub legacy_metadata: bool,
-    pub orphaned: bool,
-    pub turns: Vec<SessionTurnNode>,
-}
-
-/// 以可达根会话为起点的递归谱系图，适合直接序列化给 Tauri。
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct SessionLineageGraph {
-    pub requested_session_id: String,
-    pub root_session_id: String,
-    pub nodes: Vec<SessionLineageNode>,
-    pub cycle_detected: bool,
-    pub orphaned_parent_ids: Vec<String>,
 }
 
 /// FTS 搜索命中。
@@ -318,16 +225,15 @@ pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
 
 /// 单库会话存储：元数据、富消息行与消息级 FTS。
 pub struct SessionStore {
-    pub(crate) conn: Connection,
+    pub(crate) pool: SqlitePool,
     path: PathBuf,
 }
 
 impl SessionStore {
     /// 打开或创建 `state.db`。schema 低于 [`SCHEMA_VERSION`] 时进行增量迁移。
-    pub fn open(path: &Path) -> Result<Self> {
+    pub async fn open(path: &Path) -> Result<Self> {
         if path.exists() {
-            let version = peek_schema_version(path).unwrap_or(0);
-            // v13→v17 为 additive（ALTER / 数据清洗），可就地升级，不必丢历史。
+            let version = peek_schema_version(path).await.unwrap_or(0);
             let additive_only = (13..SCHEMA_VERSION).contains(&version);
             if version < SCHEMA_VERSION && !additive_only {
                 tracing::warn!(
@@ -340,28 +246,28 @@ impl SessionStore {
                 tracing::debug!(version, target = SCHEMA_VERSION, "session state.db opened");
             }
         }
-        let conn = types::open_wal(path)
+        let parent = path.parent().unwrap_or(Path::new("."));
+        let db = AstroDb::new(parent);
+        let pool = db.open_pool(&DB_SPEC).await
             .with_context(|| format!("open session store at {}", path.display()))?;
-        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
         let store = Self {
-            conn,
+            pool,
             path: path.to_path_buf(),
         };
-        store.migrate_schema()?;
-        // FTS 触发器自愈。
-        store.repair_messages_fts_if_needed()?;
-        // 补齐「有 messages、无 sessions 行」的孤儿会话。
-        store.backfill_sessions_from_messages()?;
+        store.migrate_schema().await?;
+        store.repair_messages_fts_if_needed().await?;
+        store.backfill_sessions_from_messages().await?;
         Ok(store)
     }
 
     /// 打开 `sessions_dir/state.db`；若存在旁路旧 `sessions.db` 则删除（不导入）。
-    pub fn open_sessions_dir(sessions_dir: &Path) -> Result<Self> {
+    pub async fn open_sessions_dir(sessions_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(sessions_dir)
             .with_context(|| format!("create sessions dir {}", sessions_dir.display()))?;
         discard_sidecar_sessions_db(sessions_dir);
-        let store = Self::open(&sessions_dir.join("state.db"))?;
-        store.backfill_sessions_from_messages()?;
+        let store = Self::open(&sessions_dir.join("state.db")).await?;
+        store.backfill_sessions_from_messages().await?;
         Ok(store)
     }
 
@@ -371,108 +277,119 @@ impl SessionStore {
     }
 
     /// 读取当前 `schema_version` 表中的版本号。
-    pub fn schema_version(&self) -> Result<i32> {
-        let version: Option<i32> = self
-            .conn
-            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
-                row.get(0)
-            })
-            .optional()?;
-        version.ok_or_else(|| anyhow!("schema_version table is empty"))
+    pub async fn schema_version(&self) -> Result<i32> {
+        let row = sqlx::query("SELECT version FROM schema_version LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => Ok(r.get::<i32, _>(0)),
+            None => Err(anyhow!("schema_version table is empty")),
+        }
     }
 }
 
+#[async_trait::async_trait]
 impl crate::ConversationStore for SessionStore {
-    fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
-        SessionStore::append_message(self, msg)
+    #[allow(refining_impl_trait)]
+    async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
+        SessionStore::append_message(self, msg).await
     }
 
-    fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
-        SessionStore::get_messages(self, session_id)
+    #[allow(refining_impl_trait)]
+    async fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
+        SessionStore::get_messages(self, session_id).await
     }
 
-    fn update_message_compressed_content(
+    #[allow(refining_impl_trait)]
+    async fn update_message_compressed_content(
         &self,
         message_id: i64,
         compressed: Option<&str>,
     ) -> Result<()> {
-        SessionStore::update_message_compressed_content(self, message_id, compressed)
+        SessionStore::update_message_compressed_content(self, message_id, compressed).await
     }
 
-    fn patch_last_assistant_reasoning_details(
+    #[allow(refining_impl_trait)]
+    async fn patch_last_assistant_reasoning_details(
         &self,
         session_id: &str,
         details: &Value,
     ) -> Result<()> {
-        SessionStore::patch_last_assistant_reasoning_details(self, session_id, details)
+        SessionStore::patch_last_assistant_reasoning_details(self, session_id, details).await
     }
 
-    fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
-        SessionStore::ensure_session(self, id, source)
+    #[allow(refining_impl_trait)]
+    async fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
+        SessionStore::ensure_session(self, id, source).await
     }
 
-    fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
-        SessionStore::update_session_billing(self, id, d)
+    #[allow(refining_impl_trait)]
+    async fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
+        SessionStore::update_session_billing(self, id, d).await
     }
 
-    fn recent_messages(
+    #[allow(refining_impl_trait)]
+    async fn recent_messages(
         &self,
         session_id: &str,
         limit: usize,
     ) -> Result<Vec<crate::ScrolledMessage>> {
-        SessionStore::recent_messages(self, session_id, limit)
+        SessionStore::recent_messages(self, session_id, limit).await
     }
 
-    fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
-        SessionStore::recall_message_ids(self, session_id, query, limit)
+    #[allow(refining_impl_trait)]
+    async fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
+        SessionStore::recall_message_ids(self, session_id, query, limit).await
     }
 
-    fn scroll_context_window(
+    #[allow(refining_impl_trait)]
+    async fn scroll_context_window(
         &self,
         session_id: &str,
         around_message_id: i64,
         window_size: i64,
     ) -> Result<Vec<crate::ScrolledMessage>> {
-        SessionStore::scroll_context_window(self, session_id, around_message_id, window_size)
+        SessionStore::scroll_context_window(self, session_id, around_message_id, window_size).await
     }
 
-    fn search_messages(
+    #[allow(refining_impl_trait)]
+    async fn search_messages(
         &self,
         query: &str,
         source_filter: Option<&str>,
         role_filter: Option<&str>,
         limit: i64,
     ) -> Result<Vec<SearchHit>> {
-        SessionStore::search_messages(self, query, source_filter, role_filter, limit)
+        SessionStore::search_messages(self, query, source_filter, role_filter, limit).await
     }
 }
 
-impl SqliteStore for SessionStore {
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn migrate(&self) -> anyhow::Result<()> {
-        self.migrate_schema()
+impl types::SqliteStore for SessionStore {
+    fn pool(&self) -> &types::SqlitePool {
+        &self.pool
     }
 }
 
 /// 读取已有库的 schema 版本；无法读取时视为 0。
-fn peek_schema_version(path: &Path) -> Result<i32> {
-    let conn = Connection::open(path)?;
-    let has: bool = conn.query_row(
+async fn peek_schema_version(path: &Path) -> Result<i32> {
+    let url = format!("sqlite:{}?mode=ro", path.display());
+    let pool = SqlitePool::connect(&url).await?;
+    let has: bool = sqlx::query(
         "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_version'",
-        [],
-        |row| row.get(0),
-    )?;
+    )
+    .fetch_one(&pool)
+    .await
+    .map(|r| r.get::<bool, _>(0))
+    .unwrap_or(false);
     if !has {
+        pool.close().await;
         return Ok(0);
     }
-    let version: Option<i32> = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
-            row.get(0)
-        })
-        .optional()?;
+    let version: Option<i32> = sqlx::query("SELECT version FROM schema_version LIMIT 1")
+        .fetch_optional(&pool)
+        .await?
+        .map(|r| r.get::<i32, _>(0));
+    pool.close().await;
     Ok(version.unwrap_or(0))
 }
 
@@ -482,11 +399,11 @@ fn discard_sidecar_sessions_db(sessions_dir: &Path) {
     types::delete_sqlite_files(&base);
 }
 
-pub(crate) fn is_unique_constraint(err: &rusqlite::Error) -> bool {
+pub(crate) fn is_unique_constraint(err: &sqlx::Error) -> bool {
     match err {
-        rusqlite::Error::SqliteFailure(e, _) => {
-            e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
-        }
+        sqlx::Error::Database(e) => e
+            .code()
+            .map_or(false, |c| c == "2067"),
         _ => false,
     }
 }
@@ -513,7 +430,6 @@ pub(crate) fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<Chat
             if id.is_empty() {
                 return None;
             }
-            // OpenAI 形状可能是 name 在顶层，或 function.name
             let title = tc
                 .get("name")
                 .and_then(|v| v.as_str())
@@ -649,7 +565,6 @@ pub(crate) fn attach_tool_output(
             return;
         }
     }
-    // 无匹配 skeleton：按顺序挂到第一个尚无 output 的 activity，或追加。
     if let Some(act) = assistant.activities.iter_mut().find(|a| a.output.is_none()) {
         if let Some(cid) = call_id {
             act.id = cid.to_string();

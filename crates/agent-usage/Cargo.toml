@@ -10,7 +10,8 @@ types = { path = "../agent-types" }
 home = { path = "../agent-home" }
 session = { path = "../agent-session" }
 chrono = { version = "0.4", features = ["clock", "serde"] }
-rusqlite = { version = "0.31", features = ["bundled"] }
+agent-db = { path = "../agent-db" }
+tokio = { version = "1", features = ["sync"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

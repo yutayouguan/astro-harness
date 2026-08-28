@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
-use rusqlite::Connection;
+use anyhow::Result;
+use agent_db::sqlx::{self, Row};
+use agent_db::{AstroDb, DbSpec, SqlitePool};
 
 const DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS workflow_runs (
@@ -36,7 +37,8 @@ CREATE TABLE IF NOT EXISTS workflow_step_logs (
 CREATE INDEX IF NOT EXISTS idx_wf_steps_run ON workflow_step_logs(run_id, node_id);
 "#;
 
-/// 工作流运行记录行
+const DB_SPEC: DbSpec = DbSpec::new("workflow", "workflow.db");
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WorkflowRunRow {
     pub id: String,
@@ -51,7 +53,6 @@ pub struct WorkflowRunRow {
     pub output: Option<String>,
 }
 
-/// 工作流步骤日志行
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WorkflowStepLogRow {
     pub id: String,
@@ -68,28 +69,56 @@ pub struct WorkflowStepLogRow {
 }
 
 pub struct WorkflowRunDb {
-    conn: Connection,
+    pool: SqlitePool,
+}
+
+fn row_to_run(r: &sqlx::sqlite::SqliteRow) -> WorkflowRunRow {
+    WorkflowRunRow {
+        id: r.get("id"),
+        workflow_id: r.get("workflow_id"),
+        workflow_name: r.get("workflow_name"),
+        trigger_type: r.get("trigger_type"),
+        started_at: r.get("started_at"),
+        finished_at: r.get("finished_at"),
+        status: r.get("status"),
+        error: r.get("error"),
+        node_count: r.get("node_count"),
+        output: r.get("output"),
+    }
+}
+
+fn row_to_step(r: &sqlx::sqlite::SqliteRow) -> WorkflowStepLogRow {
+    WorkflowStepLogRow {
+        id: r.get("id"),
+        run_id: r.get("run_id"),
+        node_id: r.get("node_id"),
+        node_type: r.get("node_type"),
+        node_label: r.get("node_label"),
+        started_at: r.get("started_at"),
+        finished_at: r.get("finished_at"),
+        status: r.get("status"),
+        input: r.get("input"),
+        output: r.get("output"),
+        error: r.get("error"),
+    }
 }
 
 impl WorkflowRunDb {
-    pub fn new(path: PathBuf) -> Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let conn = Connection::open(&path).context("打开 workflow.db 失败")?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA wal_autocheckpoint=100;")?;
-        conn.execute_batch(DDL).context("workflow.db DDL 失败")?;
-        Ok(Self { conn })
+    pub async fn new(path: PathBuf) -> Result<Self> {
+        let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
+        let pool = db.open_pool(&DB_SPEC).await?;
+        sqlx::query(DDL).execute(&pool).await?;
+        Ok(Self { pool })
     }
 
-    pub fn open_default() -> Result<Self> {
+    pub async fn open_default() -> Result<Self> {
         let path = home::default_memory_dir()
             .join("workflows")
             .join("workflow.db");
-        Self::new(path)
+        Self::new(path).await
     }
 
-    pub fn insert_run(
+    pub async fn insert_run(
         &self,
         id: &str,
         workflow_id: &str,
@@ -97,14 +126,20 @@ impl WorkflowRunDb {
         trigger_type: &str,
         started_at: &str,
     ) -> Result<()> {
-        self.conn.execute(
+        sqlx::query(
             "INSERT INTO workflow_runs (id, workflow_id, workflow_name, trigger_type, started_at, status) VALUES (?1,?2,?3,?4,?5,'running')",
-            rusqlite::params![id, workflow_id, workflow_name, trigger_type, started_at],
-        )?;
+        )
+        .bind(id)
+        .bind(workflow_id)
+        .bind(workflow_name)
+        .bind(trigger_type)
+        .bind(started_at)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    pub fn finish_run(
+    pub async fn finish_run(
         &self,
         id: &str,
         status: &str,
@@ -113,84 +148,60 @@ impl WorkflowRunDb {
         output: Option<&str>,
         node_count: i64,
     ) -> Result<()> {
-        self.conn.execute(
+        sqlx::query(
             "UPDATE workflow_runs SET status=?2, finished_at=?3, error=?4, output=?5, node_count=?6 WHERE id=?1",
-            rusqlite::params![id, status, finished_at, error, output, node_count],
-        )?;
+        )
+        .bind(id)
+        .bind(status)
+        .bind(finished_at)
+        .bind(error)
+        .bind(output)
+        .bind(node_count)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    pub fn get_run(&self, id: &str) -> Result<Option<WorkflowRunRow>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, workflow_id, workflow_name, trigger_type, started_at, finished_at, status, error, node_count, output FROM workflow_runs WHERE id=?1",
-        )?;
-        let mut rows = stmt.query_map(rusqlite::params![id], |row| {
-            Ok(WorkflowRunRow {
-                id: row.get(0)?,
-                workflow_id: row.get(1)?,
-                workflow_name: row.get(2)?,
-                trigger_type: row.get(3)?,
-                started_at: row.get(4)?,
-                finished_at: row.get(5)?,
-                status: row.get(6)?,
-                error: row.get(7)?,
-                node_count: row.get(8)?,
-                output: row.get(9)?,
-            })
-        })?;
-        Ok(rows.next().transpose()?)
+    pub async fn get_run(&self, id: &str) -> Result<Option<WorkflowRunRow>> {
+        let row = sqlx::query("SELECT * FROM workflow_runs WHERE id=?1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|r| row_to_run(&r));
+        Ok(row)
     }
 
-    pub fn list_runs(&self, workflow_id: Option<&str>, limit: i64) -> Result<Vec<WorkflowRunRow>> {
-        let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(wid) =
-            workflow_id
-        {
-            (
-                "SELECT id, workflow_id, workflow_name, trigger_type, started_at, finished_at, status, error, node_count, output FROM workflow_runs WHERE workflow_id=?1 ORDER BY started_at DESC LIMIT ?2",
-                vec![Box::new(wid.to_string()), Box::new(limit)],
-            )
-        } else {
-            (
-                "SELECT id, workflow_id, workflow_name, trigger_type, started_at, finished_at, status, error, node_count, output FROM workflow_runs ORDER BY started_at DESC LIMIT ?1",
-                vec![Box::new(limit)],
-            )
-        };
-        let mut stmt = self.conn.prepare(sql)?;
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-            params.iter().map(|p| p.as_ref()).collect();
-        let rows = stmt.query_map(params_ref.as_slice(), |row| {
-            Ok(WorkflowRunRow {
-                id: row.get(0)?,
-                workflow_id: row.get(1)?,
-                workflow_name: row.get(2)?,
-                trigger_type: row.get(3)?,
-                started_at: row.get(4)?,
-                finished_at: row.get(5)?,
-                status: row.get(6)?,
-                error: row.get(7)?,
-                node_count: row.get(8)?,
-                output: row.get(9)?,
-            })
-        })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+    pub async fn list_runs(&self, workflow_id: Option<&str>, limit: i64) -> Result<Vec<WorkflowRunRow>> {
+        let rows = sqlx::query(
+            "SELECT * FROM workflow_runs
+             WHERE (?1 IS NULL OR workflow_id = ?1)
+             ORDER BY started_at DESC LIMIT ?2",
+        )
+        .bind(workflow_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?
+        .iter()
+        .map(row_to_run)
+        .collect();
+        Ok(rows)
     }
 
-    pub fn delete_run(&self, id: &str) -> Result<bool> {
-        self.conn.execute_batch("BEGIN")?;
-        self.conn.execute(
-            "DELETE FROM workflow_step_logs WHERE run_id=?1",
-            rusqlite::params![id],
-        )?;
-        let n = self.conn.execute(
-            "DELETE FROM workflow_runs WHERE id=?1",
-            rusqlite::params![id],
-        )?;
-        self.conn.execute_batch("COMMIT")?;
-        Ok(n > 0)
+    pub async fn delete_run(&self, id: &str) -> Result<bool> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM workflow_step_logs WHERE run_id=?1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        let result = sqlx::query("DELETE FROM workflow_runs WHERE id=?1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(result.rows_affected() > 0)
     }
 
-    pub fn insert_step_log(
+    pub async fn insert_step_log(
         &self,
         id: &str,
         run_id: &str,
@@ -199,14 +210,21 @@ impl WorkflowRunDb {
         node_label: &str,
         started_at: &str,
     ) -> Result<()> {
-        self.conn.execute(
+        sqlx::query(
             "INSERT INTO workflow_step_logs (id, run_id, node_id, node_type, node_label, started_at, status) VALUES (?1,?2,?3,?4,?5,?6,'running')",
-            rusqlite::params![id, run_id, node_id, node_type, node_label, started_at],
-        )?;
+        )
+        .bind(id)
+        .bind(run_id)
+        .bind(node_id)
+        .bind(node_type)
+        .bind(node_label)
+        .bind(started_at)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    pub fn finish_step_log(
+    pub async fn finish_step_log(
         &self,
         id: &str,
         status: &str,
@@ -214,56 +232,55 @@ impl WorkflowRunDb {
         output: Option<&str>,
         error: Option<&str>,
     ) -> Result<()> {
-        self.conn.execute(
+        sqlx::query(
             "UPDATE workflow_step_logs SET status=?2, finished_at=?3, output=?4, error=?5 WHERE id=?1",
-            rusqlite::params![id, status, finished_at, output, error],
-        )?;
+        )
+        .bind(id)
+        .bind(status)
+        .bind(finished_at)
+        .bind(output)
+        .bind(error)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    pub fn list_step_logs(&self, run_id: &str) -> Result<Vec<WorkflowStepLogRow>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, run_id, node_id, node_type, node_label, started_at, finished_at, status, input, output, error FROM workflow_step_logs WHERE run_id=?1 ORDER BY started_at",
-        )?;
-        let rows = stmt.query_map(rusqlite::params![run_id], |row| {
-            Ok(WorkflowStepLogRow {
-                id: row.get(0)?,
-                run_id: row.get(1)?,
-                node_id: row.get(2)?,
-                node_type: row.get(3)?,
-                node_label: row.get(4)?,
-                started_at: row.get(5)?,
-                finished_at: row.get(6)?,
-                status: row.get(7)?,
-                input: row.get(8)?,
-                output: row.get(9)?,
-                error: row.get(10)?,
-            })
-        })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+    pub async fn list_step_logs(&self, run_id: &str) -> Result<Vec<WorkflowStepLogRow>> {
+        let rows = sqlx::query(
+            "SELECT * FROM workflow_step_logs WHERE run_id=?1 ORDER BY started_at",
+        )
+        .bind(run_id)
+        .fetch_all(&self.pool)
+        .await?
+        .iter()
+        .map(row_to_step)
+        .collect();
+        Ok(rows)
     }
 
-    /// 清理旧运行记录，保留最近 max_keep 条
-    pub fn prune_old_runs(&self, max_keep: i64) -> Result<usize> {
-        let count: i64 = self
-            .conn
-            .query_row("SELECT COUNT(*) FROM workflow_runs", [], |r| r.get(0))?;
+    pub async fn prune_old_runs(&self, max_keep: i64) -> Result<usize> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM workflow_runs")
+            .fetch_one(&self.pool)
+            .await?;
         if count <= max_keep {
             return Ok(0);
         }
         let to_delete = count - max_keep;
-        self.conn.execute_batch("BEGIN")?;
-        self.conn.execute(
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
             "DELETE FROM workflow_step_logs WHERE run_id IN (SELECT id FROM workflow_runs ORDER BY started_at ASC LIMIT ?1)",
-            rusqlite::params![to_delete],
-        )?;
-        let n = self.conn.execute(
+        )
+        .bind(to_delete)
+        .execute(&mut *tx)
+        .await?;
+        let result = sqlx::query(
             "DELETE FROM workflow_runs WHERE id IN (SELECT id FROM workflow_runs ORDER BY started_at ASC LIMIT ?1)",
-            rusqlite::params![to_delete],
-        )?;
-        self.conn.execute_batch("COMMIT")?;
-        Ok(n)
+        )
+        .bind(to_delete)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(result.rows_affected() as usize)
     }
 }
 
@@ -271,10 +288,10 @@ impl WorkflowRunDb {
 mod tests {
     use super::*;
 
-    #[test]
-    fn run_lifecycle() {
+    #[tokio::test]
+    async fn run_lifecycle() {
         let dir = tempfile::tempdir().unwrap();
-        let db = WorkflowRunDb::new(dir.path().join("workflow.db")).unwrap();
+        let db = WorkflowRunDb::new(dir.path().join("workflow.db")).await.unwrap();
 
         db.insert_run(
             "r1",
@@ -283,8 +300,9 @@ mod tests {
             "manual",
             "2026-01-01T00:00:00+08:00",
         )
+        .await
         .unwrap();
-        let run = db.get_run("r1").unwrap().unwrap();
+        let run = db.get_run("r1").await.unwrap().unwrap();
         assert_eq!(run.status, "running");
 
         db.finish_run(
@@ -295,15 +313,16 @@ mod tests {
             Some("ok"),
             3,
         )
+        .await
         .unwrap();
-        let run = db.get_run("r1").unwrap().unwrap();
+        let run = db.get_run("r1").await.unwrap().unwrap();
         assert_eq!(run.status, "success");
         assert_eq!(run.node_count, 3);
 
-        let list = db.list_runs(Some("wf1"), 100).unwrap();
+        let list = db.list_runs(Some("wf1"), 100).await.unwrap();
         assert_eq!(list.len(), 1);
 
-        db.delete_run("r1").unwrap();
-        assert!(db.get_run("r1").unwrap().is_none());
+        db.delete_run("r1").await.unwrap();
+        assert!(db.get_run("r1").await.unwrap().is_none());
     }
 }

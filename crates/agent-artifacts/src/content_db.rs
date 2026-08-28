@@ -1,8 +1,5 @@
-//! Knowledge Content DB：文档登记 + FTS5 正文检索（不做 embedding）。
-//!
-//! 库路径：`{sessions_dir}/knowledge.db`（与 artifacts.db 并列）。
-
-use rusqlite::{params, Connection, OptionalExtension};
+use agent_db::sqlx::{self, Row};
+use agent_db::{AstroDb, DbSpec, SqlitePool};
 use std::path::{Path, PathBuf};
 use types::SqliteStore;
 use uuid::Uuid;
@@ -26,7 +23,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS contents_fts USING fts5(
 );
 "#;
 
-/// 内容处理状态。
+const DB_SPEC: DbSpec = DbSpec::new("knowledge", "knowledge.db");
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContentRow {
     pub id: String,
@@ -36,44 +34,62 @@ pub struct ContentRow {
     pub created_at: String,
 }
 
-/// Knowledge Content 库。
 pub struct KnowledgeDb {
-    conn: Connection,
+    pool: SqlitePool,
     path: PathBuf,
 }
 
+fn row_to_content(r: &sqlx::sqlite::SqliteRow) -> ContentRow {
+    ContentRow {
+        id: r.get("id"),
+        title: r.get("title"),
+        path: r.get("path"),
+        status: r.get("status"),
+        created_at: r.get("created_at"),
+    }
+}
+
 impl KnowledgeDb {
-    pub fn open(path: impl Into<PathBuf>) -> anyhow::Result<Self> {
+    pub async fn open(path: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let path = path.into();
-        let conn = types::open_wal(&path)?;
-        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
-        let db = Self { conn, path };
-        db.migrate()?;
-        Ok(db)
+        let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
+        let pool = db.open_pool(&DB_SPEC).await?;
+        sqlx::query("PRAGMA foreign_keys=ON")
+            .execute(&pool)
+            .await?;
+        let kdb = Self { pool, path };
+        kdb.apply_migrate().await?;
+        Ok(kdb)
     }
 
-    pub fn open_default() -> anyhow::Result<Self> {
-        let path = home::default_memory_dir().join("data").join("knowledge.db");
-        Self::open(path)
+    pub async fn open_default() -> anyhow::Result<Self> {
+        let path = home::default_memory_dir()
+            .join("sessions")
+            .join("knowledge.db");
+        Self::open(path).await
     }
 
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    fn apply_migrate(conn: &Connection) -> anyhow::Result<()> {
-        let ver: i32 = conn
-            .query_row("PRAGMA user_version", [], |r| r.get(0))
-            .unwrap_or(0);
+    async fn apply_migrate(&self) -> anyhow::Result<()> {
+        let (ver,): (i32,) = sqlx::query_as("PRAGMA user_version")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or((0,));
         if ver < SCHEMA_VERSION {
-            conn.execute_batch(DDL)?;
-            conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
+            sqlx::query(DDL).execute(&self.pool).await?;
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "PRAGMA user_version = {SCHEMA_VERSION}"
+            )))
+            .execute(&self.pool)
+            .await?;
         }
         Ok(())
     }
 
-    /// 登记文档并写入 FTS 正文；同 path 则更新。
-    pub fn register(
+    pub async fn register(
         &self,
         title: &str,
         path: &str,
@@ -91,160 +107,149 @@ impl KnowledgeDb {
             status.trim()
         };
 
-        let existing: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT id FROM contents WHERE path = ?1",
-                params![path],
-                |r| r.get(0),
-            )
-            .optional()?;
+        let existing: Option<(String,)> = sqlx::query_as(
+            "SELECT id FROM contents WHERE path = ?1",
+        )
+        .bind(path)
+        .fetch_optional(&self.pool)
+        .await?;
 
-        let id = if let Some(id) = existing {
-            self.conn.execute(
+        let id = if let Some((id,)) = existing {
+            sqlx::query(
                 "UPDATE contents SET title = ?1, status = ?2, updated_at = datetime('now') WHERE id = ?3",
-                params![title, status, id],
-            )?;
-            self.conn.execute(
-                "DELETE FROM contents_fts WHERE content_id = ?1",
-                params![id],
-            )?;
-            self.conn.execute(
+            )
+            .bind(title)
+            .bind(status)
+            .bind(&id)
+            .execute(&self.pool)
+            .await?;
+            sqlx::query("DELETE FROM contents_fts WHERE content_id = ?1")
+                .bind(&id)
+                .execute(&self.pool)
+                .await?;
+            sqlx::query(
                 "INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)",
-                params![title, body, id],
-            )?;
+            )
+            .bind(title)
+            .bind(body)
+            .bind(&id)
+            .execute(&self.pool)
+            .await?;
             id
         } else {
             let id = Uuid::new_v4().to_string();
-            self.conn.execute(
+            sqlx::query(
                 "INSERT INTO contents(id, title, path, status) VALUES (?1, ?2, ?3, ?4)",
-                params![id, title, path, status],
-            )?;
-            self.conn.execute(
+            )
+            .bind(&id)
+            .bind(title)
+            .bind(path)
+            .bind(status)
+            .execute(&self.pool)
+            .await?;
+            sqlx::query(
                 "INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)",
-                params![title, body, id],
-            )?;
+            )
+            .bind(title)
+            .bind(body)
+            .bind(&id)
+            .execute(&self.pool)
+            .await?;
             id
         };
 
-        self.get(&id)?
+        self.get(&id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("register 后读回失败"))
     }
 
-    pub fn get(&self, id: &str) -> anyhow::Result<Option<ContentRow>> {
-        self.conn
-            .query_row(
-                "SELECT id, title, path, status, created_at FROM contents WHERE id = ?1",
-                params![id],
-                |r| {
-                    Ok(ContentRow {
-                        id: r.get(0)?,
-                        title: r.get(1)?,
-                        path: r.get(2)?,
-                        status: r.get(3)?,
-                        created_at: r.get(4)?,
-                    })
-                },
-            )
-            .optional()
-            .map_err(Into::into)
+    pub async fn get(&self, id: &str) -> anyhow::Result<Option<ContentRow>> {
+        let row = sqlx::query(
+            "SELECT id, title, path, status, created_at FROM contents WHERE id = ?1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|r| row_to_content(&r));
+        Ok(row)
     }
 
-    pub fn list(&self, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
-        let mut stmt = self.conn.prepare(
+    pub async fn list(&self, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
+        let rows = sqlx::query(
             "SELECT id, title, path, status, created_at FROM contents
              ORDER BY created_at DESC LIMIT ?1",
-        )?;
-        let rows = stmt
-            .query_map(params![limit as i64], |r| {
-                Ok(ContentRow {
-                    id: r.get(0)?,
-                    title: r.get(1)?,
-                    path: r.get(2)?,
-                    status: r.get(3)?,
-                    created_at: r.get(4)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?
+        .iter()
+        .map(row_to_content)
+        .collect();
         Ok(rows)
     }
 
-    /// FTS 检索；返回匹配的内容元数据（citation 用 path/title）。
-    ///
-    /// `MATCH` 失败（特殊字符等）时回退为 title/path `LIKE` 子串搜索。
-    pub fn search(&self, query: &str, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
+    pub async fn search(&self, query: &str, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
         let q = query.trim();
         if q.is_empty() {
-            return self.list(limit);
+            return self.list(limit).await;
         }
-        let fts = (|| -> anyhow::Result<Vec<ContentRow>> {
-            let mut stmt = self.conn.prepare(
+        let fts = async {
+            let rows = sqlx::query(
                 "SELECT c.id, c.title, c.path, c.status, c.created_at
                  FROM contents_fts f
                  JOIN contents c ON c.id = f.content_id
                  WHERE contents_fts MATCH ?1
                  LIMIT ?2",
-            )?;
-            let rows = stmt
-                .query_map(params![q, limit as i64], |r| {
-                    Ok(ContentRow {
-                        id: r.get(0)?,
-                        title: r.get(1)?,
-                        path: r.get(2)?,
-                        status: r.get(3)?,
-                        created_at: r.get(4)?,
-                    })
-                })?
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
-        })();
+            )
+            .bind(q)
+            .bind(limit as i64)
+            .fetch_all(&self.pool)
+            .await?
+            .iter()
+            .map(row_to_content)
+            .collect();
+            Ok::<Vec<ContentRow>, anyhow::Error>(rows)
+        }
+        .await;
         match fts {
             Ok(rows) => Ok(rows),
-            Err(_) => self.search_like(q, limit),
+            Err(_) => self.search_like(q, limit).await,
         }
     }
 
-    fn search_like(&self, query: &str, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
+    async fn search_like(&self, query: &str, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
         let pattern = format!("%{query}%");
-        let mut stmt = self.conn.prepare(
+        let rows = sqlx::query(
             "SELECT id, title, path, status, created_at FROM contents
              WHERE title LIKE ?1 OR path LIKE ?1
              ORDER BY created_at DESC LIMIT ?2",
-        )?;
-        let rows = stmt
-            .query_map(params![pattern, limit as i64], |r| {
-                Ok(ContentRow {
-                    id: r.get(0)?,
-                    title: r.get(1)?,
-                    path: r.get(2)?,
-                    status: r.get(3)?,
-                    created_at: r.get(4)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        )
+        .bind(&pattern)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?
+        .iter()
+        .map(row_to_content)
+        .collect();
         Ok(rows)
     }
 
-    /// 删除登记与 FTS 行。
-    pub fn delete(&self, id: &str) -> anyhow::Result<bool> {
-        self.conn.execute(
-            "DELETE FROM contents_fts WHERE content_id = ?1",
-            params![id],
-        )?;
-        let n = self
-            .conn
-            .execute("DELETE FROM contents WHERE id = ?1", params![id])?;
-        Ok(n > 0)
+    pub async fn delete(&self, id: &str) -> anyhow::Result<bool> {
+        sqlx::query("DELETE FROM contents_fts WHERE content_id = ?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        let result = sqlx::query("DELETE FROM contents WHERE id = ?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
     }
 }
 
 impl SqliteStore for KnowledgeDb {
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn migrate(&self) -> anyhow::Result<()> {
-        Self::apply_migrate(&self.conn)
+    fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 }
 
@@ -253,10 +258,12 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[test]
-    fn register_search_delete() {
+    #[tokio::test]
+    async fn register_search_delete() {
         let dir = TempDir::new().unwrap();
-        let db = KnowledgeDb::open(dir.path().join("knowledge.db")).unwrap();
+        let db = KnowledgeDb::open(dir.path().join("knowledge.db"))
+            .await
+            .unwrap();
         let row = db
             .register(
                 "Rust Guide",
@@ -264,38 +271,40 @@ mod tests {
                 "Rust ownership and borrowing are core.",
                 "ready",
             )
+            .await
             .unwrap();
         assert_eq!(row.title, "Rust Guide");
-        let hits = db.search("ownership", 10).unwrap();
+        let hits = db.search("ownership", 10).await.unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].path, "/docs/rust.md");
-        assert!(db.delete(&row.id).unwrap());
-        assert!(db.search("ownership", 10).unwrap().is_empty());
-        assert!(db.list(10).unwrap().is_empty());
+        assert!(db.delete(&row.id).await.unwrap());
+        assert!(db.search("ownership", 10).await.unwrap().is_empty());
+        assert!(db.list(10).await.unwrap().is_empty());
     }
 
-    #[test]
-    fn search_falls_back_on_bad_fts_query() {
+    #[tokio::test]
+    async fn search_falls_back_on_bad_fts_query() {
         let dir = TempDir::new().unwrap();
-        let db = KnowledgeDb::open(dir.path().join("knowledge.db")).unwrap();
-        db.register("Guide", "/docs/a.md", "plain body text", "ready")
+        let db = KnowledgeDb::open(dir.path().join("knowledge.db"))
+            .await
             .unwrap();
-        // FTS 特殊字符常导致 MATCH 语法错误；应回退 LIKE（可能空结果但不 panic）
-        let _ = db.search("a AND OR \"", 10).unwrap();
-        let hits = db.search("Guide", 10).unwrap();
+        db.register("Guide", "/docs/a.md", "plain body text", "ready")
+            .await
+            .unwrap();
+        let _ = db.search("a AND OR \"", 10).await.unwrap();
+        let hits = db.search("Guide", 10).await.unwrap();
         assert_eq!(hits.len(), 1);
     }
 
-    #[test]
-    fn knowledge_db_impls_sqlite_store() {
+    #[tokio::test]
+    async fn knowledge_db_impls_sqlite_store() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("knowledge.db");
-        let db = KnowledgeDb::open(&path).unwrap();
-        assert_eq!(SqliteStore::path(&db), path.as_path());
-        db.migrate().unwrap();
-        let ver: i32 = db
-            .conn
-            .query_row("PRAGMA user_version", [], |r| r.get(0))
+        let db = KnowledgeDb::open(&path).await.unwrap();
+        let _pool: &SqlitePool = SqliteStore::pool(&db);
+        let (ver,): (i32,) = sqlx::query_as("PRAGMA user_version")
+            .fetch_one(&db.pool)
+            .await
             .unwrap();
         assert_eq!(ver, SCHEMA_VERSION);
     }

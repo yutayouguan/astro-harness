@@ -1,44 +1,41 @@
-use session::store::{
-    BillingDelta, BranchKind, NewMessage, SessionListFilter, SessionStore, SCHEMA_VERSION,
-};
+use session::store::{BillingDelta, NewMessage, SessionListFilter, SessionStore, SCHEMA_VERSION};
 use tempfile::TempDir;
 
-fn test_store() -> (TempDir, SessionStore) {
+async fn test_store() -> (TempDir, SessionStore) {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     (dir, store)
 }
 
-#[test]
-fn opens_fresh_db_at_current_schema() {
+#[tokio::test]
+async fn opens_fresh_db_at_current_schema() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
-    let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+    let store = SessionStore::open(&path).await.unwrap();
+    assert_eq!(store.schema_version().await.unwrap(), SCHEMA_VERSION);
     store
         .create_session("s1", "test", None, None, None)
-        .unwrap();
+        .await.unwrap();
     assert!(path.is_file());
 }
 
-#[test]
-fn session_store_impls_sqlite_store() {
+#[tokio::test]
+async fn session_store_impls_sqlite_store() {
     use types::SqliteStore;
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
-    let store = SessionStore::open(&path).unwrap();
-    assert_eq!(SqliteStore::path(&store), path.as_path());
-    store.migrate().unwrap();
-    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+    let store = SessionStore::open(&path).await.unwrap();
+    let _pool = SqliteStore::pool(&store);
+    assert_eq!(store.schema_version().await.unwrap(), SCHEMA_VERSION);
 }
 
-#[test]
-fn append_and_reload_tool_calls_and_reasoning() {
+#[tokio::test]
+async fn append_and_reload_tool_calls_and_reasoning() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "test", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(session::store::NewMessage {
             session_id: "s1",
@@ -57,11 +54,11 @@ fn append_and_reload_tool_calls_and_reasoning() {
             reasoning: Some("think"),
             reasoning_content: None,
             reasoning_details: None,
-            reasoning_items: None,
-            message_items: None,
+            codex_reasoning_items: None,
+            codex_message_items: None,
             media_json: None,
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(session::store::NewMessage {
             session_id: "s1",
@@ -76,31 +73,31 @@ fn append_and_reload_tool_calls_and_reasoning() {
             reasoning: None,
             reasoning_content: None,
             reasoning_details: None,
-            reasoning_items: None,
-            message_items: None,
+            codex_reasoning_items: None,
+            codex_message_items: None,
             media_json: None,
         })
-        .unwrap();
+        .await.unwrap();
 
-    let msgs = store.get_messages("s1").unwrap();
+    let msgs = store.get_messages("s1").await.unwrap();
     assert_eq!(msgs.len(), 2);
     assert_eq!(msgs[0].reasoning.as_deref(), Some("think"));
     assert!(msgs[0].tool_calls.is_some());
     assert_eq!(msgs[1].tool_call_id.as_deref(), Some("c1"));
 
-    let conv = store.get_messages_as_conversation("s1").unwrap();
+    let conv = store.get_messages_as_conversation("s1").await.unwrap();
     assert_eq!(conv[0]["role"], "assistant");
     assert!(conv[0].get("tool_calls").is_some());
     assert_eq!(conv[0]["reasoning"], "think");
     assert_eq!(conv[1]["role"], "tool");
 }
 
-#[test]
-fn append_message_persists_compressed_content_in_the_initial_insert() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn append_message_persists_compressed_content_in_the_initial_insert() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("mailbox", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     let marker = "agent-mailbox-through:7";
 
     store
@@ -110,22 +107,22 @@ fn append_message_persists_compressed_content_in_the_initial_insert() {
             compressed_content: Some(marker),
             ..NewMessage::empty("mailbox", "user")
         })
-        .unwrap();
+        .await.unwrap();
 
-    let messages = store.get_messages("mailbox").unwrap();
+    let messages = store.get_messages("mailbox").await.unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].content.as_deref(), Some("atomic mailbox input"));
     assert_eq!(messages[0].finish_reason.as_deref(), Some(marker));
     assert_eq!(messages[0].compressed_content.as_deref(), Some(marker));
 }
 
-#[test]
-fn search_messages_hits_tool_name_and_cjk() {
+#[tokio::test]
+async fn search_messages_hits_tool_name_and_cjk() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -135,20 +132,20 @@ fn search_messages_hits_tool_name_and_cjk() {
             tool_call_id: Some("c1"),
             ..NewMessage::empty("s1", "tool")
         })
-        .unwrap();
-    let hits = store.search_messages("memory", None, None, 10).unwrap();
+        .await.unwrap();
+    let hits = store.search_messages("memory", None, None, 10).await.unwrap();
     assert!(!hits.is_empty());
-    let hits2 = store.search_messages("长期记忆", None, None, 10).unwrap();
+    let hits2 = store.search_messages("长期记忆", None, None, 10).await.unwrap();
     assert!(!hits2.is_empty());
 }
 
-#[test]
-fn build_chat_history_folds_tools_into_activities() {
+#[tokio::test]
+async fn build_chat_history_folds_tools_into_activities() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -156,7 +153,7 @@ fn build_chat_history_folds_tools_into_activities() {
             content: Some("hi"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -169,7 +166,7 @@ fn build_chat_history_folds_tools_into_activities() {
             }])),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -179,7 +176,7 @@ fn build_chat_history_folds_tools_into_activities() {
             tool_name: Some("memory"),
             ..NewMessage::empty("s1", "tool")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -187,9 +184,9 @@ fn build_chat_history_folds_tools_into_activities() {
             content: Some("done"),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
 
-    let ui = store.build_chat_history("s1", 200).unwrap();
+    let ui = store.build_chat_history("s1", 200).await.unwrap();
     assert_eq!(ui.len(), 2); // user + coalesced assistant(activity + final text)
     assert_eq!(ui[1].reasoning.as_deref(), Some("plan"));
     assert_eq!(ui[1].content, "done");
@@ -198,13 +195,13 @@ fn build_chat_history_folds_tools_into_activities() {
     assert_eq!(ui[1].activities[0].output.as_deref(), Some("ok"));
 }
 
-#[test]
-fn build_chat_history_restores_tool_media_json() {
+#[tokio::test]
+async fn build_chat_history_restores_tool_media_json() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -212,7 +209,7 @@ fn build_chat_history_restores_tool_media_json() {
             content: Some("画一只猫"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -224,7 +221,7 @@ fn build_chat_history_restores_tool_media_json() {
             }])),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     let media = r#"[{"kind":"image","mime_type":"image/jpeg","reference":{"workspace_path":"generated/images/img-1.jpg"},"label":"图片已生成"}]"#;
     store
         .append_message(NewMessage {
@@ -236,9 +233,9 @@ fn build_chat_history_restores_tool_media_json() {
             media_json: Some(media),
             ..NewMessage::empty("s1", "tool")
         })
-        .unwrap();
+        .await.unwrap();
 
-    let ui = store.build_chat_history("s1", 200).unwrap();
+    let ui = store.build_chat_history("s1", 200).await.unwrap();
     assert_eq!(ui.len(), 2);
     assert_eq!(ui[1].activities.len(), 1);
     let media_val = ui[1].activities[0].media.as_ref().expect("media");
@@ -248,13 +245,13 @@ fn build_chat_history_restores_tool_media_json() {
     assert_eq!(path, "generated/images/img-1.jpg");
 }
 
-#[test]
-fn build_chat_history_restores_timeline() {
+#[tokio::test]
+async fn build_chat_history_restores_timeline() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -262,7 +259,7 @@ fn build_chat_history_restores_timeline() {
             content: Some("hi"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     let details = serde_json::json!({
         "astro_timeline_v1": [
             {"type": "reasoning", "id": "r1", "text": "think", "at": 1},
@@ -288,7 +285,7 @@ fn build_chat_history_restores_timeline() {
             reasoning_details: Some(details),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -298,9 +295,9 @@ fn build_chat_history_restores_timeline() {
             tool_name: Some("present"),
             ..NewMessage::empty("s1", "tool")
         })
-        .unwrap();
+        .await.unwrap();
 
-    let ui = store.build_chat_history("s1", 200).unwrap();
+    let ui = store.build_chat_history("s1", 200).await.unwrap();
     assert_eq!(ui.len(), 2);
     let segs = ui[1].segments.as_ref().unwrap().as_array().unwrap();
     assert_eq!(segs.len(), 3);
@@ -318,13 +315,13 @@ fn build_chat_history_restores_timeline() {
     );
 }
 
-#[test]
-fn build_chat_history_coalesces_consecutive_assistants() {
+#[tokio::test]
+async fn build_chat_history_coalesces_consecutive_assistants() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -332,7 +329,7 @@ fn build_chat_history_coalesces_consecutive_assistants() {
             content: Some("做首歌"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -349,7 +346,7 @@ fn build_chat_history_coalesces_consecutive_assistants() {
             })),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -359,7 +356,7 @@ fn build_chat_history_coalesces_consecutive_assistants() {
             tool_name: Some("music_gen"),
             ..NewMessage::empty("s1", "tool")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -384,7 +381,7 @@ fn build_chat_history_coalesces_consecutive_assistants() {
             })),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -394,7 +391,7 @@ fn build_chat_history_coalesces_consecutive_assistants() {
             tool_name: Some("present"),
             ..NewMessage::empty("s1", "tool")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -402,9 +399,9 @@ fn build_chat_history_coalesces_consecutive_assistants() {
             content: Some("搞定"),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
 
-    let ui = store.build_chat_history("s1", 200).unwrap();
+    let ui = store.build_chat_history("s1", 200).await.unwrap();
     assert_eq!(ui.len(), 2);
     assert_eq!(ui[0].role, "user");
     assert_eq!(ui[1].role, "assistant");
@@ -416,13 +413,13 @@ fn build_chat_history_coalesces_consecutive_assistants() {
     assert_eq!(surfaces.len(), 1);
 }
 
-#[test]
-fn patch_last_assistant_reasoning_details_merges_surfaces() {
+#[tokio::test]
+async fn patch_last_assistant_reasoning_details_merges_surfaces() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -434,7 +431,7 @@ fn patch_last_assistant_reasoning_details_merges_surfaces() {
             })),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .patch_last_assistant_reasoning_details(
             "s1",
@@ -446,23 +443,23 @@ fn patch_last_assistant_reasoning_details_merges_surfaces() {
                 "astro_surfaces_v1": [{"messageId": "surf"}]
             }),
         )
-        .unwrap();
-    let msgs = store.get_messages("s1").unwrap();
+        .await.unwrap();
+    let msgs = store.get_messages("s1").await.unwrap();
     let details = msgs[0].reasoning_details.as_ref().unwrap();
     assert_eq!(details["google_thought_signature"], "sig");
     assert_eq!(details["astro_surfaces_v1"][0]["messageId"], "surf");
     assert_eq!(details["astro_timeline_v1"].as_array().unwrap().len(), 2);
 }
 
-#[test]
-fn patch_last_assistant_reasoning_details_handles_null_column() {
+#[tokio::test]
+async fn patch_last_assistant_reasoning_details_handles_null_column() {
     // 既有 assistant 行的 reasoning_details 为 NULL 时，patch 不应报
     // "Invalid column type Null"，而应正常写入。
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -471,7 +468,7 @@ fn patch_last_assistant_reasoning_details_handles_null_column() {
             reasoning_details: None,
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .patch_last_assistant_reasoning_details(
             "s1",
@@ -479,22 +476,22 @@ fn patch_last_assistant_reasoning_details_handles_null_column() {
                 "astro_surfaces_v1": [{"messageId": "surf"}]
             }),
         )
-        .unwrap();
-    let msgs = store.get_messages("s1").unwrap();
+        .await.unwrap();
+    let msgs = store.get_messages("s1").await.unwrap();
     let details = msgs[0].reasoning_details.as_ref().unwrap();
     assert_eq!(details["astro_surfaces_v1"][0]["messageId"], "surf");
 }
 
-#[test]
-fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
+#[tokio::test]
+async fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
     let dir = TempDir::new().unwrap();
-    let sessions_dir = dir.path().join("data");
+    let sessions_dir = dir.path().join("sessions");
     std::fs::create_dir_all(&sessions_dir).unwrap();
 
     // 旧 state.db：v13 但无 archived_at
     {
-        let conn = rusqlite::Connection::open(sessions_dir.join("state.db")).unwrap();
-        conn.execute_batch(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", sessions_dir.join("state.db").display())).await.unwrap();
+        agent_db::sqlx::raw_sql(
             "CREATE TABLE schema_version (version INTEGER NOT NULL);
              CREATE TABLE sessions (
                 id TEXT PRIMARY KEY,
@@ -539,8 +536,8 @@ fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                reasoning_items TEXT,
-                message_items TEXT
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (13);
              INSERT INTO sessions (
@@ -557,13 +554,13 @@ fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
                 session_id, role, content, timestamp
              ) VALUES ('old', 'user', 'hello', 1.0);",
         )
-        .unwrap();
+        .execute(&pool).await.unwrap();
     }
     // 旧 sessions.db
     let legacy_path = sessions_dir.join("sessions.db");
     {
-        let conn = rusqlite::Connection::open(&legacy_path).unwrap();
-        conn.execute_batch(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &legacy_path.display())).await.unwrap();
+        agent_db::sqlx::raw_sql(
             "CREATE TABLE sessions (
                 session_id TEXT PRIMARY KEY,
                 summary TEXT NOT NULL,
@@ -572,24 +569,24 @@ fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
              );
              INSERT INTO sessions(session_id, summary) VALUES ('old','hello summary');",
         )
-        .unwrap();
+        .execute(&pool).await.unwrap();
     }
 
-    let store = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
-    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+    let store = SessionStore::open_sessions_dir(&sessions_dir).await.unwrap();
+    assert_eq!(store.schema_version().await.unwrap(), SCHEMA_VERSION);
     assert!(
         !legacy_path.exists(),
         "legacy sessions.db must be deleted, not imported"
     );
     assert!(
-        !store.get_messages("old").unwrap().is_empty(),
+        !store.get_messages("old").await.unwrap().is_empty(),
         "state.db history must be preserved"
     );
-    assert_eq!(store.get_session("old").unwrap().unwrap().archived_at, None);
+    assert_eq!(store.get_session("old").await.unwrap().unwrap().archived_at, None);
 
     store
         .create_session("fresh", "test", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "fresh",
@@ -602,24 +599,24 @@ fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
             }])),
             ..NewMessage::empty("fresh", "assistant")
         })
-        .unwrap();
-    let msgs = store.get_messages("fresh").unwrap();
+        .await.unwrap();
+    let msgs = store.get_messages("fresh").await.unwrap();
     assert!(msgs.last().unwrap().content.is_none());
 
-    let _ = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
-    assert_eq!(store.get_messages("fresh").unwrap().len(), 1);
+    let _ = SessionStore::open_sessions_dir(&sessions_dir).await.unwrap();
+    assert_eq!(store.get_messages("fresh").await.unwrap().len(), 1);
 }
 
-#[test]
-fn discards_legacy_sessions_db_without_importing_titles() {
+#[tokio::test]
+async fn discards_legacy_sessions_db_without_importing_titles() {
     let dir = TempDir::new().unwrap();
-    let sessions_dir = dir.path().join("data");
+    let sessions_dir = dir.path().join("sessions");
     std::fs::create_dir_all(&sessions_dir).unwrap();
 
     let legacy_path = sessions_dir.join("sessions.db");
     {
-        let conn = rusqlite::Connection::open(&legacy_path).unwrap();
-        conn.execute_batch(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &legacy_path.display())).await.unwrap();
+        agent_db::sqlx::raw_sql(
             "CREATE TABLE sessions (
                 session_id TEXT PRIMARY KEY,
                 summary TEXT NOT NULL,
@@ -630,35 +627,35 @@ fn discards_legacy_sessions_db_without_importing_titles() {
                ('dup-a', 'shared summary'),
                ('dup-b', 'shared summary');",
         )
-        .unwrap();
+        .execute(&pool).await.unwrap();
     }
 
-    let store = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
+    let store = SessionStore::open_sessions_dir(&sessions_dir).await.unwrap();
     assert!(!legacy_path.exists());
-    assert!(store.get_session("dup-a").unwrap().is_none());
-    assert!(store.get_session("dup-b").unwrap().is_none());
+    assert!(store.get_session("dup-a").await.unwrap().is_none());
+    assert!(store.get_session("dup-b").await.unwrap().is_none());
 }
 
-#[test]
-fn open_repairs_legacy_fts_triggers_on_v11_db() {
+#[tokio::test]
+async fn open_repairs_legacy_fts_triggers_on_v11_db() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     {
-        let store = SessionStore::open(&path).unwrap();
+        let store = SessionStore::open(&path).await.unwrap();
         store
             .create_session("s1", "test", None, None, None)
-            .unwrap();
+            .await.unwrap();
         store
             .append_message(NewMessage {
                 content: Some("hello"),
                 ..NewMessage::empty("s1", "user")
             })
-            .unwrap();
+            .await.unwrap();
     }
     // 模拟失效 FTS 触发器被重新挂上。
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::raw_sql(
             r#"
             CREATE TRIGGER sync_messages_to_fts AFTER INSERT ON messages
             BEGIN
@@ -674,39 +671,39 @@ fn open_repairs_legacy_fts_triggers_on_v11_db() {
             END;
             "#,
         )
-        .unwrap();
+        .execute(&pool).await.unwrap();
     }
 
-    let store = SessionStore::open(&path).unwrap();
+    let store = SessionStore::open(&path).await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("world"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
-    assert_eq!(store.get_messages("s1").unwrap().len(), 2);
+        .await.unwrap();
+    assert_eq!(store.get_messages("s1").await.unwrap().len(), 2);
 }
 
-#[test]
-fn open_repairs_broken_fts_delete_command_triggers() {
+#[tokio::test]
+async fn open_repairs_broken_fts_delete_command_triggers() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     {
-        let store = SessionStore::open(&path).unwrap();
+        let store = SessionStore::open(&path).await.unwrap();
         store
             .create_session("s1", "test", None, None, None)
-            .unwrap();
+            .await.unwrap();
         store
             .append_message(NewMessage {
                 content: Some("keep"),
                 ..NewMessage::empty("s1", "user")
             })
-            .unwrap();
+            .await.unwrap();
     }
     // 模拟旧 v11 DDL：contentful FTS 上使用 VALUES('delete', …)。
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::raw_sql(
             r#"
             DROP TRIGGER IF EXISTS messages_fts_delete;
             DROP TRIGGER IF EXISTS messages_fts_update;
@@ -724,76 +721,81 @@ fn open_repairs_broken_fts_delete_command_triggers() {
             END;
             "#,
         )
-        .unwrap();
+        .execute(&pool).await.unwrap();
     }
 
     let id = {
-        let store = SessionStore::open(&path).unwrap();
+        let store = SessionStore::open(&path).await.unwrap();
         store
             .append_message(NewMessage {
                 content: Some("temp"),
                 ..NewMessage::empty("s1", "user")
             })
-            .unwrap()
+            .await.unwrap()
     };
     // 打开后应已换成 DELETE FROM fts，消息可删。
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute("DELETE FROM messages WHERE id = ?1", rusqlite::params![id])
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::query("DELETE FROM messages WHERE id = ?1")
+            .bind(&id)
+            .execute(&pool)
+            .await
             .unwrap();
     }
-    let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.get_messages("s1").unwrap().len(), 1);
+    let store = SessionStore::open(&path).await.unwrap();
+    assert_eq!(store.get_messages("s1").await.unwrap().len(), 1);
 }
 
-#[test]
-fn ensure_session_is_idempotent() {
+#[tokio::test]
+async fn ensure_session_is_idempotent() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
-    let store = SessionStore::open(&path).unwrap();
-    store.ensure_session("s1", "test").unwrap();
-    store.ensure_session("s1", "other").unwrap();
-    let s = store.get_session("s1").unwrap().unwrap();
+    let store = SessionStore::open(&path).await.unwrap();
+    store.ensure_session("s1", "test").await.unwrap();
+    store.ensure_session("s1", "other").await.unwrap();
+    let s = store.get_session("s1").await.unwrap().unwrap();
     assert_eq!(s.source, "test"); // 冲突时不覆盖
 }
 
-#[test]
-fn open_backfills_sessions_from_orphan_messages() {
+#[tokio::test]
+async fn open_backfills_sessions_from_orphan_messages() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     {
-        let _ = SessionStore::open(&path).unwrap();
+        let _ = SessionStore::open(&path).await.unwrap();
     }
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
-        conn.execute(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::raw_sql("PRAGMA foreign_keys=OFF;").execute(&pool).await.unwrap();
+        agent_db::sqlx::query(
             "INSERT INTO messages (session_id, role, content, timestamp)
              VALUES ('orphan', 'user', 'hello orphan', 100.0)",
-            [],
         )
+        .execute(&pool)
+        .await
         .unwrap();
-        conn.execute(
+        agent_db::sqlx::query(
             "INSERT INTO messages (session_id, role, content, timestamp)
              VALUES ('orphan', 'assistant', 'hi', 101.0)",
-            [],
         )
+        .execute(&pool)
+        .await
         .unwrap();
     }
-    let store = SessionStore::open(&path).unwrap();
-    let s = store.get_session("orphan").unwrap().expect("backfilled");
+    let store = SessionStore::open(&path).await.unwrap();
+    let s = store.get_session("orphan").await.unwrap().expect("backfilled");
     assert_eq!(s.source, "tauri");
     assert_eq!(s.message_count, 2);
     assert_eq!(s.started_at, 100.0);
 }
 
-#[test]
-fn update_session_billing_accumulates_and_unknown_skips_cost() {
+#[tokio::test]
+async fn update_session_billing_accumulates_and_unknown_skips_cost() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "test", Some("gpt"), None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .update_session_billing(
             "s1",
@@ -814,7 +816,7 @@ fn update_session_billing_accumulates_and_unknown_skips_cost() {
                 model: Some("gpt".into()),
             },
         )
-        .unwrap();
+        .await.unwrap();
     store
         .update_session_billing(
             "s1",
@@ -835,24 +837,24 @@ fn update_session_billing_accumulates_and_unknown_skips_cost() {
                 model: None,
             },
         )
-        .unwrap();
-    let row = store.get_session_billing("s1").unwrap().unwrap();
+        .await.unwrap();
+    let row = store.get_session_billing("s1").await.unwrap().unwrap();
     assert_eq!(row.input_tokens, 11);
     assert!((row.estimated_cost_usd - 0.01).abs() < 1e-9);
     assert_eq!(row.cost_status.as_deref(), Some("unknown"));
     assert_eq!(row.api_call_count, 2);
 }
 
-#[test]
-fn v13_schema_migrates_to_v14_without_data_loss() {
+#[tokio::test]
+async fn v13_schema_migrates_to_v14_without_data_loss() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
 
     {
-        let store = SessionStore::open(&path).unwrap();
+        let store = SessionStore::open(&path).await.unwrap();
         store
             .create_session("legacy", "test", Some("gpt"), None, None)
-            .unwrap();
+            .await.unwrap();
         store
             .append_message(NewMessage {
                 session_id: "legacy",
@@ -860,7 +862,7 @@ fn v13_schema_migrates_to_v14_without_data_loss() {
                 content: Some("old chat migrationftsneedle"),
                 ..NewMessage::empty("legacy", "user")
             })
-            .unwrap();
+            .await.unwrap();
         store
             .update_session_billing(
                 "legacy",
@@ -872,14 +874,14 @@ fn v13_schema_migrates_to_v14_without_data_loss() {
                     ..BillingDelta::default()
                 },
             )
-            .unwrap();
-        let before = store.get_session("legacy").unwrap().unwrap();
+            .await.unwrap();
+        let before = store.get_session("legacy").await.unwrap().unwrap();
         assert!(before.archived_at.is_none());
     }
 
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::raw_sql(
             "DROP TABLE IF EXISTS messages;
              DROP TABLE IF EXISTS sessions;
              DROP TABLE IF EXISTS schema_version;
@@ -927,8 +929,8 @@ fn v13_schema_migrates_to_v14_without_data_loss() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                reasoning_items TEXT,
-                message_items TEXT
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (13);
              INSERT INTO sessions (
@@ -947,40 +949,40 @@ fn v13_schema_migrates_to_v14_without_data_loss() {
                 'legacy', 'user', 'old chat migrationftsneedle', NULL, NULL, NULL, 1.0
              );",
         )
-        .unwrap();
+        .execute(&pool).await.unwrap();
     }
 
-    let reopened = SessionStore::open(&path).unwrap();
-    assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
-    assert_eq!(reopened.get_messages("legacy").unwrap().len(), 1);
+    let reopened = SessionStore::open(&path).await.unwrap();
+    assert_eq!(reopened.schema_version().await.unwrap(), SCHEMA_VERSION);
+    assert_eq!(reopened.get_messages("legacy").await.unwrap().len(), 1);
     assert_eq!(
         reopened
             .get_session_billing("legacy")
-            .unwrap()
+            .await.unwrap()
             .unwrap()
             .input_tokens,
         7
     );
     assert_eq!(
-        reopened.get_session("legacy").unwrap().unwrap().archived_at,
+        reopened.get_session("legacy").await.unwrap().unwrap().archived_at,
         None
     );
     let hits = reopened
         .search_messages("migrationftsneedle", None, None, 10)
-        .unwrap();
+        .await.unwrap();
     assert!(
         hits.iter().any(|hit| hit.session_id == "legacy"),
         "v13 to v14 migration must preserve searchable FTS data"
     );
 }
 
-#[test]
-fn schema_v13_to_v14_preserves_chat_and_adds_compressed_content() {
+#[tokio::test]
+async fn schema_v13_to_v14_preserves_chat_and_adds_compressed_content() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::raw_sql(
             "CREATE TABLE schema_version (version INTEGER NOT NULL);
              CREATE TABLE sessions (
                 id TEXT PRIMARY KEY,
@@ -1003,8 +1005,8 @@ fn schema_v13_to_v14_preserves_chat_and_adds_compressed_content() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                reasoning_items TEXT,
-                message_items TEXT
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (13);
              INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
@@ -1013,20 +1015,20 @@ fn schema_v13_to_v14_preserves_chat_and_adds_compressed_content() {
                 session_id, role, content, tool_call_id, tool_name, timestamp
              ) VALUES ('s1', 'tool', 'original tool output', 'c1', 'search', 1.0);",
         )
-        .unwrap();
+        .execute(&pool).await.unwrap();
     }
 
-    let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
-    let msgs = store.get_messages("s1").unwrap();
+    let store = SessionStore::open(&path).await.unwrap();
+    assert_eq!(store.schema_version().await.unwrap(), SCHEMA_VERSION);
+    let msgs = store.get_messages("s1").await.unwrap();
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].content.as_deref(), Some("original tool output"));
     assert!(msgs[0].compressed_content.is_none());
 
     store
         .update_message_compressed_content(msgs[0].id, Some("compressed view"))
-        .unwrap();
-    let msgs = store.get_messages("s1").unwrap();
+        .await.unwrap();
+    let msgs = store.get_messages("s1").await.unwrap();
     assert_eq!(msgs[0].content.as_deref(), Some("original tool output"));
     assert_eq!(
         msgs[0].compressed_content.as_deref(),
@@ -1035,13 +1037,13 @@ fn schema_v13_to_v14_preserves_chat_and_adds_compressed_content() {
 }
 
 /// 半迁移库：schema_version 已是 14，但 messages 缺 compressed_content（合并分支 stamp 竞态）。
-#[test]
-fn stamped_v14_without_compressed_content_self_heals() {
+#[tokio::test]
+async fn stamped_v14_without_compressed_content_self_heals() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::raw_sql(
             "CREATE TABLE schema_version (version INTEGER NOT NULL);
              CREATE TABLE sessions (
                 id TEXT PRIMARY KEY,
@@ -1065,8 +1067,8 @@ fn stamped_v14_without_compressed_content_self_heals() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                reasoning_items TEXT,
-                message_items TEXT
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (14);
              INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
@@ -1074,38 +1076,38 @@ fn stamped_v14_without_compressed_content_self_heals() {
              INSERT INTO messages (session_id, role, content, timestamp)
              VALUES ('s1', 'user', 'hello half-migrated', 1.0);",
         )
-        .unwrap();
+        .execute(&pool).await.unwrap();
     }
 
-    let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
-    let msgs = store.get_messages("s1").unwrap();
+    let store = SessionStore::open(&path).await.unwrap();
+    assert_eq!(store.schema_version().await.unwrap(), SCHEMA_VERSION);
+    let msgs = store.get_messages("s1").await.unwrap();
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].content.as_deref(), Some("hello half-migrated"));
     assert!(msgs[0].compressed_content.is_none());
 }
 
-#[test]
-fn fork_session_copies_bubbles_and_trailing_tools() {
+#[tokio::test]
+async fn fork_session_copies_bubbles_and_trailing_tools() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("src", "test", Some("gpt"), None, None)
-        .unwrap();
-    store.set_session_title("src", "hello").unwrap();
+        .await.unwrap();
+    store.set_session_title("src", "hello").await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("u1"),
             ..NewMessage::empty("src", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("a1"),
             tool_calls: Some(serde_json::json!([{ "id": "c1", "name": "x", "arguments": {} }])),
             ..NewMessage::empty("src", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("tool-out"),
@@ -1113,41 +1115,41 @@ fn fork_session_copies_bubbles_and_trailing_tools() {
             tool_name: Some("x"),
             ..NewMessage::empty("src", "tool")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("a1b"),
             ..NewMessage::empty("src", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("u2"),
             ..NewMessage::empty("src", "user")
         })
-        .unwrap();
+        .await.unwrap();
 
     // keep 2 bubbles = user + assistant(+trailing tools until next non-tool)
     // After first assistant with tools, we include tool rows then stop before next assistant?
     // Looking at impl: when bubble count hits keep, it includes following tool rows only.
     // So keep=2: u1, a1(+tool). Not a1b.
-    store.fork_session("src", "dst", 2).unwrap();
-    let dst = store.get_messages("dst").unwrap();
+    store.fork_session("src", "dst", 2).await.unwrap();
+    let dst = store.get_messages("dst").await.unwrap();
     assert_eq!(dst.len(), 3);
     assert_eq!(dst[0].content.as_deref(), Some("u1"));
     assert_eq!(dst[1].role, "assistant");
     assert_eq!(dst[2].role, "tool");
-    let meta = store.get_session("dst").unwrap().unwrap();
+    let meta = store.get_session("dst").await.unwrap().unwrap();
     assert_eq!(meta.parent_session_id.as_deref(), Some("src"));
     assert!(meta.title.as_deref().unwrap_or("").contains("branch"));
 }
 
-#[test]
-fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("source", "tauri", Some("model-a"), None, None)
-        .unwrap();
+        .await.unwrap();
 
     store
         .append_message(NewMessage {
@@ -1159,7 +1161,7 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
             ),
             ..NewMessage::empty("source", "user")
         })
-        .unwrap();
+        .await.unwrap();
     let assistant_id = store
         .append_message(NewMessage {
             session_id: "source",
@@ -1175,14 +1177,14 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
             reasoning: Some("visible reasoning"),
             reasoning_content: Some("provider reasoning"),
             reasoning_details: Some(serde_json::json!({"detail": true})),
-            reasoning_items: Some(serde_json::json!([{"type": "reasoning"}])),
-            message_items: Some(serde_json::json!([{"type": "message"}])),
+            codex_reasoning_items: Some(serde_json::json!([{"type": "reasoning"}])),
+            codex_message_items: Some(serde_json::json!([{"type": "message"}])),
             ..NewMessage::empty("source", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .update_message_compressed_content(assistant_id, Some("compressed assistant"))
-        .unwrap();
+        .await.unwrap();
     let tool_id = store
         .append_message(NewMessage {
             session_id: "source",
@@ -1195,10 +1197,10 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
             ),
             ..NewMessage::empty("source", "tool")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .update_message_compressed_content(tool_id, Some("compressed tool"))
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "source",
@@ -1206,7 +1208,7 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
             content: Some("first answer"),
             ..NewMessage::empty("source", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "source",
@@ -1214,7 +1216,7 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
             content: Some("second question"),
             ..NewMessage::empty("source", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             session_id: "source",
@@ -1222,23 +1224,23 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
             content: Some("second answer"),
             ..NewMessage::empty("source", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
 
     store
-        .fork_session_recent_turns("source", "all", None, BranchKind::Agent)
-        .unwrap();
+        .fork_session_recent_turns("source", "all", None)
+        .await.unwrap();
     store
-        .fork_session_recent_turns("source", "none", Some(0), BranchKind::Agent)
-        .unwrap();
+        .fork_session_recent_turns("source", "none", Some(0))
+        .await.unwrap();
     store
-        .fork_session_recent_turns("source", "last", Some(1), BranchKind::Agent)
-        .unwrap();
+        .fork_session_recent_turns("source", "last", Some(1))
+        .await.unwrap();
     store
-        .fork_session_recent_turns("source", "last-two", Some(2), BranchKind::Agent)
-        .unwrap();
+        .fork_session_recent_turns("source", "last-two", Some(2))
+        .await.unwrap();
 
-    let source = store.get_messages("source").unwrap();
-    let all = store.get_messages("all").unwrap();
+    let source = store.get_messages("source").await.unwrap();
+    let all = store.get_messages("all").await.unwrap();
     assert_eq!(all.len(), source.len());
     for (expected, actual) in source.iter().zip(&all) {
         assert_eq!(actual.role, expected.role);
@@ -1253,15 +1255,15 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
         assert_eq!(actual.reasoning, expected.reasoning);
         assert_eq!(actual.reasoning_content, expected.reasoning_content);
         assert_eq!(actual.reasoning_details, expected.reasoning_details);
-        assert_eq!(actual.reasoning_items, expected.reasoning_items);
-        assert_eq!(actual.message_items, expected.message_items);
+        assert_eq!(actual.codex_reasoning_items, expected.codex_reasoning_items);
+        assert_eq!(actual.codex_message_items, expected.codex_message_items);
         assert_eq!(actual.media_json, expected.media_json);
     }
-    assert!(store.get_messages("none").unwrap().is_empty());
+    assert!(store.get_messages("none").await.unwrap().is_empty());
     assert_eq!(
         store
             .get_messages("last")
-            .unwrap()
+            .await.unwrap()
             .iter()
             .map(|message| (message.role.as_str(), message.content.as_deref()))
             .collect::<Vec<_>>(),
@@ -1270,47 +1272,47 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
             ("assistant", Some("second answer")),
         ]
     );
-    assert_eq!(store.get_messages("last-two").unwrap().len(), source.len());
+    assert_eq!(store.get_messages("last-two").await.unwrap().len(), source.len());
 
     for fork_id in ["all", "none", "last", "last-two"] {
-        let fork = store.get_session(fork_id).unwrap().unwrap();
+        let fork = store.get_session(fork_id).await.unwrap().unwrap();
         assert_eq!(fork.parent_session_id.as_deref(), Some("source"));
         assert_eq!(fork.model.as_deref(), Some("model-a"));
     }
 }
 
-#[test]
-fn fork_recent_turns_rejects_missing_source_without_creating_target() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn fork_recent_turns_rejects_missing_source_without_creating_target() {
+    let (_dir, store) = test_store().await;
 
     let error = store
-        .fork_session_recent_turns("missing", "target", None, BranchKind::Agent)
-        .unwrap_err();
+        .fork_session_recent_turns("missing", "target", None)
+        .await.unwrap_err();
 
     assert!(error.to_string().contains("source session not found"));
-    assert!(store.get_session("target").unwrap().is_none());
+    assert!(store.get_session("target").await.unwrap().is_none());
 }
 
-#[test]
-fn fork_recent_turns_rolls_back_target_and_retries_after_insert_failure() {
-    let (dir, store) = test_store();
+#[tokio::test]
+async fn fork_recent_turns_rolls_back_target_and_retries_after_insert_failure() {
+    let (dir, store) = test_store().await;
     store
         .create_session("source", "tauri", Some("model-a"), None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("question"),
             ..NewMessage::empty("source", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("answer"),
             ..NewMessage::empty("source", "assistant")
         })
-        .unwrap();
-    let raw = rusqlite::Connection::open(dir.path().join("state.db")).unwrap();
-    raw.execute_batch(
+        .await.unwrap();
+    let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", dir.path().join("state.db").display())).await.unwrap();
+    agent_db::sqlx::raw_sql(
         "CREATE TRIGGER fail_recent_fork
          BEFORE INSERT ON messages
          WHEN NEW.session_id = 'target'
@@ -1318,50 +1320,52 @@ fn fork_recent_turns_rolls_back_target_and_retries_after_insert_failure() {
            SELECT RAISE(ABORT, 'injected fork insert failure');
          END;",
     )
+    .execute(&pool)
+    .await
     .unwrap();
 
     let error = store
-        .fork_session_recent_turns("source", "target", None, BranchKind::Agent)
-        .unwrap_err();
+        .fork_session_recent_turns("source", "target", None)
+        .await.unwrap_err();
     assert!(error.to_string().contains("injected fork insert failure"));
-    assert!(store.get_session("target").unwrap().is_none());
-    assert!(store.get_messages("target").unwrap().is_empty());
+    assert!(store.get_session("target").await.unwrap().is_none());
+    assert!(store.get_messages("target").await.unwrap().is_empty());
 
-    raw.execute_batch("DROP TRIGGER fail_recent_fork;").unwrap();
+    agent_db::sqlx::raw_sql("DROP TRIGGER fail_recent_fork;").execute(&pool).await.unwrap();
     store
-        .fork_session_recent_turns("source", "target", None, BranchKind::Agent)
-        .unwrap();
-    let target = store.get_session("target").unwrap().unwrap();
+        .fork_session_recent_turns("source", "target", None)
+        .await.unwrap();
+    let target = store.get_session("target").await.unwrap().unwrap();
     assert_eq!(target.parent_session_id.as_deref(), Some("source"));
     assert_eq!(target.message_count, 2);
-    assert_eq!(store.get_messages("target").unwrap().len(), 2);
+    assert_eq!(store.get_messages("target").await.unwrap().len(), 2);
     assert!(store
         .search_messages("question", None, None, 10)
-        .unwrap()
+        .await.unwrap()
         .iter()
         .any(|hit| hit.session_id == "target"));
 }
 
-#[test]
-fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
+#[tokio::test]
+async fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "test", Some("gpt"), None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("u1"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("a1"),
             tool_calls: Some(serde_json::json!([{ "id": "c1", "name": "x", "arguments": {} }])),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("tool-out"),
@@ -1369,26 +1373,26 @@ fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
             tool_name: Some("x"),
             ..NewMessage::empty("s1", "tool")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("u2"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("a2"),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
 
     // keep 1 bubble = only first user；后续 assistant/tool/u2/a2 全删
-    store.truncate_session_to_bubbles("s1", 1).unwrap();
-    let left = store.get_messages("s1").unwrap();
+    store.truncate_session_to_bubbles("s1", 1).await.unwrap();
+    let left = store.get_messages("s1").await.unwrap();
     assert_eq!(left.len(), 1);
     assert_eq!(left[0].content.as_deref(), Some("u1"));
-    let meta = store.get_session("s1").unwrap().unwrap();
+    let meta = store.get_session("s1").await.unwrap().unwrap();
     assert_eq!(meta.message_count, 1);
     assert_eq!(meta.tool_call_count, 0);
 
@@ -1398,34 +1402,34 @@ fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
             content: Some("again"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
-    store.truncate_session_to_bubbles("s1", 0).unwrap();
-    assert!(store.get_messages("s1").unwrap().is_empty());
-    let meta = store.get_session("s1").unwrap().unwrap();
+        .await.unwrap();
+    store.truncate_session_to_bubbles("s1", 0).await.unwrap();
+    assert!(store.get_messages("s1").await.unwrap().is_empty());
+    let meta = store.get_session("s1").await.unwrap().unwrap();
     assert_eq!(meta.message_count, 0);
 }
 
-#[test]
-fn remove_chat_bubbles_splices_middle_user_and_tools() {
+#[tokio::test]
+async fn remove_chat_bubbles_splices_middle_user_and_tools() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "test", Some("gpt"), None, None)
-        .unwrap();
+        .await.unwrap();
     // u0 a0(tool) u1 a1 u2
     store
         .append_message(NewMessage {
             content: Some("u0"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("a0"),
             tool_calls: Some(serde_json::json!([{ "id": "c0", "name": "x", "arguments": {} }])),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("tool0"),
@@ -1433,80 +1437,80 @@ fn remove_chat_bubbles_splices_middle_user_and_tools() {
             tool_name: Some("x"),
             ..NewMessage::empty("s1", "tool")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("u1"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("a1"),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("u2"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
 
     // 删除气泡 [2,4) = u1 + a1（0=u0,1=a0），保留 u0/a0/tool0 + u2
-    store.remove_chat_bubbles("s1", 2, 4).unwrap();
-    let left = store.get_messages("s1").unwrap();
+    store.remove_chat_bubbles("s1", 2, 4).await.unwrap();
+    let left = store.get_messages("s1").await.unwrap();
     assert_eq!(left.len(), 4);
     assert_eq!(left[0].content.as_deref(), Some("u0"));
     assert_eq!(left[1].role, "assistant");
     assert_eq!(left[2].role, "tool");
     assert_eq!(left[3].content.as_deref(), Some("u2"));
-    let meta = store.get_session("s1").unwrap().unwrap();
+    let meta = store.get_session("s1").await.unwrap().unwrap();
     assert_eq!(meta.message_count, 4);
     assert_eq!(meta.tool_call_count, 1);
 }
 
-#[test]
-fn end_session_sets_ended_at_and_reason() {
+#[tokio::test]
+async fn end_session_sets_ended_at_and_reason() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "test", Some("gpt"), None, None)
-        .unwrap();
-    store.end_session("s1", "compacted").unwrap();
-    let row = store.get_session("s1").unwrap().unwrap();
+        .await.unwrap();
+    store.end_session("s1", "compacted").await.unwrap();
+    let row = store.get_session("s1").await.unwrap().unwrap();
     assert!(row.ended_at.is_some());
     assert_eq!(row.end_reason.as_deref(), Some("compacted"));
 }
 
-#[test]
-fn append_message_rejects_ended_session() {
+#[tokio::test]
+async fn append_message_rejects_ended_session() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("s1", "test", None, None, None)
-        .unwrap();
-    store.end_session("s1", "compacted").unwrap();
+        .await.unwrap();
+    store.end_session("s1", "compacted").await.unwrap();
     let err = store
         .append_message(NewMessage {
             content: Some("x"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap_err();
+        .await.unwrap_err();
     assert!(
         err.to_string().contains("ended") || err.to_string().contains("writable"),
         "{err}"
     );
 }
 
-#[test]
-fn compact_and_split_ends_old_and_seeds_new_with_summary_and_tail() {
+#[tokio::test]
+async fn compact_and_split_ends_old_and_seeds_new_with_summary_and_tail() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("old", "test", Some("gpt"), None, None)
-        .unwrap();
-    store.set_session_title("old", "topic").unwrap();
+        .await.unwrap();
+    store.set_session_title("old", "topic").await.unwrap();
     for (role, text) in [
         ("user", "u1"),
         ("assistant", "a1"),
@@ -1520,7 +1524,7 @@ fn compact_and_split_ends_old_and_seeds_new_with_summary_and_tail() {
                 content: Some(text),
                 ..NewMessage::empty("old", role)
             })
-            .unwrap();
+            .await.unwrap();
     }
     // 给最后一条 assistant 挂 tool
     store
@@ -1530,7 +1534,7 @@ fn compact_and_split_ends_old_and_seeds_new_with_summary_and_tail() {
             tool_name: Some("x"),
             ..NewMessage::empty("old", "tool")
         })
-        .unwrap();
+        .await.unwrap();
 
     store
         .compact_and_split(
@@ -1539,21 +1543,21 @@ fn compact_and_split_ends_old_and_seeds_new_with_summary_and_tail() {
             "[CONTEXT COMPACTION]\nsummary body",
             2, // 保留 u3 + a3(+tool)
         )
-        .unwrap();
+        .await.unwrap();
 
-    let old = store.get_session("old").unwrap().unwrap();
+    let old = store.get_session("old").await.unwrap().unwrap();
     assert!(old.ended_at.is_some());
     assert_eq!(old.end_reason.as_deref(), Some("compacted"));
     // 旧全文仍在
-    assert!(store.get_messages("old").unwrap().len() >= 6);
+    assert!(store.get_messages("old").await.unwrap().len() >= 6);
 
-    let neu = store.get_session("new").unwrap().unwrap();
+    let neu = store.get_session("new").await.unwrap().unwrap();
     assert_eq!(neu.parent_session_id.as_deref(), Some("old"));
     assert_eq!(neu.model.as_deref(), Some("gpt"));
     assert!(neu.ended_at.is_none());
     assert!(neu.title.as_deref().unwrap_or("").contains("continued"));
 
-    let msgs = store.get_messages("new").unwrap();
+    let msgs = store.get_messages("new").await.unwrap();
     assert_eq!(msgs[0].role, "user");
     assert!(msgs[0]
         .content
@@ -1567,45 +1571,45 @@ fn compact_and_split_ends_old_and_seeds_new_with_summary_and_tail() {
     assert_eq!(msgs[3].role, "tool");
 }
 
-#[test]
-fn compact_and_split_keep_zero_is_summary_only() {
+#[tokio::test]
+async fn compact_and_split_keep_zero_is_summary_only() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("old", "test", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("u1"),
             ..NewMessage::empty("old", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .compact_and_split("old", "new", "[CONTEXT COMPACTION]\nx", 0)
-        .unwrap();
-    let msgs = store.get_messages("new").unwrap();
+        .await.unwrap();
+    let msgs = store.get_messages("new").await.unwrap();
     assert_eq!(msgs.len(), 1);
 }
 
-#[test]
-fn compact_and_split_rejects_changed_source_without_partial_state() {
+#[tokio::test]
+async fn compact_and_split_rejects_changed_source_without_partial_state() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     store
         .create_session("old", "test", None, None, None)
-        .unwrap();
+        .await.unwrap();
     let snapshot_id = store
         .append_message(NewMessage {
             content: Some("before summary"),
             ..NewMessage::empty("old", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("arrived while summarizing"),
             ..NewMessage::empty("old", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
 
     let err = store
         .compact_and_split_if_unchanged(
@@ -1615,60 +1619,60 @@ fn compact_and_split_rejects_changed_source_without_partial_state() {
             0,
             Some(snapshot_id),
         )
-        .unwrap_err();
+        .await.unwrap_err();
 
     assert!(err.to_string().contains("changed while summarizing"));
     assert!(store
         .get_session("old")
-        .unwrap()
+        .await.unwrap()
         .unwrap()
         .ended_at
         .is_none());
-    assert!(store.get_session("new").unwrap().is_none());
+    assert!(store.get_session("new").await.unwrap().is_none());
 }
 
-#[test]
-fn archive_filters_and_restores_session() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn archive_filters_and_restores_session() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .create_session("s2", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
 
-    store.archive_session("s1").unwrap();
+    store.archive_session("s1").await.unwrap();
 
-    let active = store.list_sessions(SessionListFilter::Active, 10).unwrap();
+    let active = store.list_sessions(SessionListFilter::Active, 10).await.unwrap();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].id, "s2");
 
     let archived = store
         .list_sessions(SessionListFilter::Archived, 10)
-        .unwrap();
+        .await.unwrap();
     assert_eq!(archived.len(), 1);
     assert_eq!(archived[0].id, "s1");
 
-    store.unarchive_session("s1").unwrap();
+    store.unarchive_session("s1").await.unwrap();
     assert_eq!(
         store
             .list_sessions(SessionListFilter::Archived, 10)
-            .unwrap()
+            .await.unwrap()
             .len(),
         0
     );
 }
 
-#[test]
-fn v15_schema_migrates_to_v16_without_data_loss() {
+#[tokio::test]
+async fn v15_schema_migrates_to_v16_without_data_loss() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
 
     {
-        let store = SessionStore::open(&path).unwrap();
+        let store = SessionStore::open(&path).await.unwrap();
         store
             .create_session("keep", "tauri", None, None, None)
-            .unwrap();
+            .await.unwrap();
         store
             .append_message(NewMessage {
                 session_id: "keep",
@@ -1676,41 +1680,43 @@ fn v15_schema_migrates_to_v16_without_data_loss() {
                 content: Some("keep me after v16"),
                 ..NewMessage::empty("keep", "user")
             })
-            .unwrap();
-        store.set_session_title("keep", "History").unwrap();
+            .await.unwrap();
+        store.set_session_title("keep", "History").await.unwrap();
     }
 
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute("UPDATE schema_version SET version = 15", [])
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::query("UPDATE schema_version SET version = 15")
+            .execute(&pool)
+            .await
             .unwrap();
     }
 
-    let reopened = SessionStore::open(&path).unwrap();
-    assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
+    let reopened = SessionStore::open(&path).await.unwrap();
+    assert_eq!(reopened.schema_version().await.unwrap(), SCHEMA_VERSION);
 
     let sessions = reopened
         .list_sessions(SessionListFilter::Active, 10)
-        .unwrap();
+        .await.unwrap();
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].id, "keep");
     assert_eq!(sessions[0].title.as_deref(), Some("History"));
 
-    let msgs = reopened.get_messages("keep").unwrap();
+    let msgs = reopened.get_messages("keep").await.unwrap();
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].content.as_deref(), Some("keep me after v16"));
 }
 
-#[test]
-fn v16_to_v17_strips_legacy_chat_mode_hint() {
+#[tokio::test]
+async fn v16_to_v17_strips_legacy_chat_mode_hint() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
 
     {
-        let store = SessionStore::open(&path).unwrap();
+        let store = SessionStore::open(&path).await.unwrap();
         store
             .create_session("s1", "tauri", None, None, None)
-            .unwrap();
+            .await.unwrap();
         store
             .append_message(NewMessage {
                 session_id: "s1",
@@ -1720,7 +1726,7 @@ fn v16_to_v17_strips_legacy_chat_mode_hint() {
                 ),
                 ..NewMessage::empty("s1", "user")
             })
-            .unwrap();
+            .await.unwrap();
         store
             .append_message(NewMessage {
                 session_id: "s1",
@@ -1728,7 +1734,7 @@ fn v16_to_v17_strips_legacy_chat_mode_hint() {
                 content: Some("干净消息，无 Mode 后缀"),
                 ..NewMessage::empty("s1", "user")
             })
-            .unwrap();
+            .await.unwrap();
         store
             .append_message(NewMessage {
                 session_id: "s1",
@@ -1736,19 +1742,21 @@ fn v16_to_v17_strips_legacy_chat_mode_hint() {
                 content: Some("ok\n\n---\n[Mode: Agent] should stay on assistant"),
                 ..NewMessage::empty("s1", "assistant")
             })
-            .unwrap();
+            .await.unwrap();
     }
 
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute("UPDATE schema_version SET version = 16", [])
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::query("UPDATE schema_version SET version = 16")
+            .execute(&pool)
+            .await
             .unwrap();
     }
 
-    let reopened = SessionStore::open(&path).unwrap();
-    assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
+    let reopened = SessionStore::open(&path).await.unwrap();
+    assert_eq!(reopened.schema_version().await.unwrap(), SCHEMA_VERSION);
 
-    let msgs = reopened.get_messages("s1").unwrap();
+    let msgs = reopened.get_messages("s1").await.unwrap();
     assert_eq!(msgs.len(), 3);
     assert_eq!(msgs[0].content.as_deref(), Some("帮我写个脚本"));
     assert_eq!(msgs[1].content.as_deref(), Some("干净消息，无 Mode 后缀"));
@@ -1758,70 +1766,70 @@ fn v16_to_v17_strips_legacy_chat_mode_hint() {
     );
 }
 
-#[test]
-fn pin_session_sorts_before_unpinned() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn pin_session_sorts_before_unpinned() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("older", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     std::thread::sleep(std::time::Duration::from_millis(20));
     store
         .create_session("newer", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
 
-    let before = store.list_sessions(SessionListFilter::Active, 10).unwrap();
+    let before = store.list_sessions(SessionListFilter::Active, 10).await.unwrap();
     assert_eq!(before[0].id, "newer");
 
-    store.pin_session("older").unwrap();
-    let pinned = store.list_sessions(SessionListFilter::Active, 10).unwrap();
+    store.pin_session("older").await.unwrap();
+    let pinned = store.list_sessions(SessionListFilter::Active, 10).await.unwrap();
     assert_eq!(pinned[0].id, "older");
     assert!(pinned[0].pinned_at.is_some());
     assert!(pinned[1].pinned_at.is_none());
 
-    store.unpin_session("older").unwrap();
-    let after = store.list_sessions(SessionListFilter::Active, 10).unwrap();
+    store.unpin_session("older").await.unwrap();
+    let after = store.list_sessions(SessionListFilter::Active, 10).await.unwrap();
     assert_eq!(after[0].id, "newer");
     assert!(after.iter().all(|s| s.pinned_at.is_none()));
 }
 
-#[test]
-fn title_if_empty_never_overwrites_manual_title() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn title_if_empty_never_overwrites_manual_title() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
 
-    assert!(store.set_session_title_if_empty("s1", "Auto").unwrap());
-    store.set_session_title("s1", "Manual").unwrap();
+    assert!(store.set_session_title_if_empty("s1", "Auto").await.unwrap());
+    store.set_session_title("s1", "Manual").await.unwrap();
 
-    assert!(!store.set_session_title_if_empty("s1", "Late").unwrap());
+    assert!(!store.set_session_title_if_empty("s1", "Late").await.unwrap());
     assert_eq!(
-        store.get_session("s1").unwrap().unwrap().title.as_deref(),
+        store.get_session("s1").await.unwrap().unwrap().title.as_deref(),
         Some("Manual")
     );
 }
 
-#[test]
-fn title_if_empty_suffixes_duplicate_generated_title() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn title_if_empty_suffixes_duplicate_generated_title() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("session-alpha", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .create_session("session-beta", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
 
     assert!(store
         .set_session_title_if_empty("session-alpha", "Shared title")
-        .unwrap());
+        .await.unwrap());
     assert!(store
         .set_session_title_if_empty("session-beta", "Shared title")
-        .unwrap());
+        .await.unwrap());
 
     assert_eq!(
         store
             .get_session("session-alpha")
-            .unwrap()
+            .await.unwrap()
             .unwrap()
             .title
             .as_deref(),
@@ -1830,7 +1838,7 @@ fn title_if_empty_suffixes_duplicate_generated_title() {
     assert_eq!(
         store
             .get_session("session-beta")
-            .unwrap()
+            .await.unwrap()
             .unwrap()
             .title
             .as_deref(),
@@ -1838,93 +1846,93 @@ fn title_if_empty_suffixes_duplicate_generated_title() {
     );
 }
 
-#[test]
-fn permanent_delete_removes_messages_and_fts() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn permanent_delete_removes_messages_and_fts() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("unique-delete-token"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
 
-    store.delete_session_permanently("s1").unwrap();
+    store.delete_session_permanently("s1").await.unwrap();
 
-    assert!(store.get_session("s1").unwrap().is_none());
+    assert!(store.get_session("s1").await.unwrap().is_none());
     assert!(store
         .search_messages("unique-delete-token", None, None, 10)
-        .unwrap()
+        .await.unwrap()
         .is_empty());
 }
 
-#[test]
-fn permanent_delete_detaches_child_branches_before_removing_parent() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn permanent_delete_detaches_child_branches_before_removing_parent() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("parent", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .create_session("child", "tauri", None, None, Some("parent"))
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("keep-child"),
             ..NewMessage::empty("child", "user")
         })
-        .unwrap();
+        .await.unwrap();
 
-    store.delete_session_permanently("parent").unwrap();
+    store.delete_session_permanently("parent").await.unwrap();
 
-    assert!(store.get_session("parent").unwrap().is_none());
-    let child = store.get_session("child").unwrap().unwrap();
+    assert!(store.get_session("parent").await.unwrap().is_none());
+    let child = store.get_session("child").await.unwrap().unwrap();
     assert!(child.parent_session_id.is_none());
     assert_eq!(
-        store.get_messages("child").unwrap()[0].content.as_deref(),
+        store.get_messages("child").await.unwrap()[0].content.as_deref(),
         Some("keep-child")
     );
 }
 
-#[test]
-fn first_turn_text_returns_first_non_empty_user_and_assistant() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn first_turn_text_returns_first_non_empty_user_and_assistant() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("   "),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("tool noise"),
             ..NewMessage::empty("s1", "tool")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("hello"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some(""),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("world"),
             ..NewMessage::empty("s1", "assistant")
         })
-        .unwrap();
+        .await.unwrap();
 
-    let first = store.first_turn_text("s1").unwrap();
+    let first = store.first_turn_text("s1").await.unwrap();
     assert_eq!(
         first
             .as_ref()
@@ -1933,12 +1941,12 @@ fn first_turn_text_returns_first_non_empty_user_and_assistant() {
     );
 }
 
-#[test]
-fn first_turn_text_returns_earliest_completed_user_assistant_pair() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn first_turn_text_returns_earliest_completed_user_assistant_pair() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     for (role, content) in [
         ("assistant", "orphan assistant"),
         ("user", "superseded user"),
@@ -1950,10 +1958,10 @@ fn first_turn_text_returns_earliest_completed_user_assistant_pair() {
                 content: Some(content),
                 ..NewMessage::empty("s1", role)
             })
-            .unwrap();
+            .await.unwrap();
     }
 
-    let first = store.first_turn_text("s1").unwrap();
+    let first = store.first_turn_text("s1").await.unwrap();
     assert_eq!(
         first
             .as_ref()
@@ -1962,28 +1970,28 @@ fn first_turn_text_returns_earliest_completed_user_assistant_pair() {
     );
 }
 
-#[test]
-fn first_turn_text_returns_none_without_assistant() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn first_turn_text_returns_none_without_assistant() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("s1", "tauri", None, None, None)
-        .unwrap();
+        .await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("user only"),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
+        .await.unwrap();
 
-    assert!(store.first_turn_text("s1").unwrap().is_none());
+    assert!(store.first_turn_text("s1").await.unwrap().is_none());
 }
 
-#[test]
-fn append_and_reload_media_json() {
-    let (_dir, store) = test_store();
+#[tokio::test]
+async fn append_and_reload_media_json() {
+    let (_dir, store) = test_store().await;
     store
         .create_session("s1", "test", None, None, None)
-        .unwrap();
+        .await.unwrap();
     let media = r#"[{"kind":"image","mime_type":"image/png","reference":{"data_url":"data:image/png;base64,abc"}}]"#;
     store
         .append_message(NewMessage {
@@ -1991,19 +1999,19 @@ fn append_and_reload_media_json() {
             media_json: Some(media),
             ..NewMessage::empty("s1", "user")
         })
-        .unwrap();
-    let msgs = store.get_messages("s1").unwrap();
+        .await.unwrap();
+    let msgs = store.get_messages("s1").await.unwrap();
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].media_json.as_deref(), Some(media));
 }
 
-#[test]
-fn v14_to_v15_adds_media_json_without_data_loss() {
+#[tokio::test]
+async fn v14_to_v15_adds_media_json_without_data_loss() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", &path.display())).await.unwrap();
+        agent_db::sqlx::raw_sql(
             "CREATE TABLE schema_version (version INTEGER NOT NULL);
              CREATE TABLE sessions (
                 id TEXT PRIMARY KEY,
@@ -2028,8 +2036,8 @@ fn v14_to_v15_adds_media_json_without_data_loss() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                reasoning_items TEXT,
-                message_items TEXT
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (14);
              INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
@@ -2037,405 +2045,12 @@ fn v14_to_v15_adds_media_json_without_data_loss() {
              INSERT INTO messages (session_id, role, content, timestamp)
              VALUES ('s1', 'user', 'hello v14', 1.0);",
         )
-        .unwrap();
+        .execute(&pool).await.unwrap();
     }
-    let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
-    let msgs = store.get_messages("s1").unwrap();
+    let store = SessionStore::open(&path).await.unwrap();
+    assert_eq!(store.schema_version().await.unwrap(), SCHEMA_VERSION);
+    let msgs = store.get_messages("s1").await.unwrap();
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].content.as_deref(), Some("hello v14"));
     assert!(msgs[0].media_json.is_none());
-}
-
-#[test]
-fn v20_schema_migrates_to_current_branch_metadata_without_data_loss() {
-    let dir = TempDir::new().unwrap();
-    let path = dir.path().join("state.db");
-    let store = SessionStore::open(&path).unwrap();
-    store
-        .create_session("keep", "tauri", None, None, None)
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("keep-v20"),
-            ..NewMessage::empty("keep", "user")
-        })
-        .unwrap();
-    drop(store);
-
-    let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch(
-        "ALTER TABLE sessions DROP COLUMN branch_parent_message_id;
-         ALTER TABLE sessions DROP COLUMN branch_parent_turn_index;
-         ALTER TABLE sessions DROP COLUMN branch_inherited_turn_count;
-         ALTER TABLE sessions DROP COLUMN branch_created_at;
-         ALTER TABLE sessions DROP COLUMN branch_kind;
-         UPDATE schema_version SET version = 20;",
-    )
-    .unwrap();
-    drop(conn);
-
-    let reopened = SessionStore::open(&path).unwrap();
-    assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
-    assert_eq!(
-        reopened.get_messages("keep").unwrap()[0].content.as_deref(),
-        Some("keep-v20")
-    );
-    let session = reopened.get_session("keep").unwrap().unwrap();
-    assert!(session.branch_parent_message_id.is_none());
-    assert!(session.branch_parent_turn_index.is_none());
-    assert!(session.branch_inherited_turn_count.is_none());
-    assert!(session.branch_created_at.is_none());
-    assert!(session.branch_kind.is_none());
-}
-
-#[test]
-fn fork_at_completed_user_turn_copies_tool_chain_with_new_ids_and_keeps_source() {
-    let (_dir, store) = test_store();
-    store
-        .create_session("source", "tauri", Some("model-a"), None, None)
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("abandoned"),
-            ..NewMessage::empty("source", "user")
-        })
-        .unwrap();
-    let first_user = store
-        .append_message(NewMessage {
-            content: Some("first"),
-            ..NewMessage::empty("source", "user")
-        })
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("calling"),
-            tool_calls: Some(serde_json::json!([{
-                "id": "call-1",
-                "name": "inspect",
-                "arguments": {"path": "src"}
-            }])),
-            ..NewMessage::empty("source", "assistant")
-        })
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("tool-result"),
-            tool_call_id: Some("call-1"),
-            tool_name: Some("inspect"),
-            ..NewMessage::empty("source", "tool")
-        })
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("done"),
-            ..NewMessage::empty("source", "assistant")
-        })
-        .unwrap();
-    let incomplete_user = store
-        .append_message(NewMessage {
-            content: Some("second"),
-            ..NewMessage::empty("source", "user")
-        })
-        .unwrap();
-    let source_before = store.get_messages("source").unwrap();
-
-    let fork = store
-        .fork_session_at_user_message("source", "branch", first_user)
-        .unwrap();
-    let source_after = store.get_messages("source").unwrap();
-    let branch = store.get_messages("branch").unwrap();
-
-    assert_eq!(
-        source_before.iter().map(|row| row.id).collect::<Vec<_>>(),
-        source_after.iter().map(|row| row.id).collect::<Vec<_>>()
-    );
-    assert_eq!(branch.len(), 5);
-    assert_eq!(
-        branch
-            .iter()
-            .map(|row| row.role.as_str())
-            .collect::<Vec<_>>(),
-        vec!["user", "user", "assistant", "tool", "assistant"]
-    );
-    assert!(branch
-        .iter()
-        .zip(&source_before)
-        .all(|(copied, source)| copied.id != source.id && copied.content == source.content));
-    assert_eq!(fork.parent_message_id, Some(first_user));
-    assert_eq!(fork.parent_turn_index, Some(2));
-    assert_eq!(fork.inherited_turn_count, 1);
-    assert_eq!(fork.copied_message_count, 5);
-    assert_eq!(fork.copied_user_turns, 2);
-    let metadata = store.get_session("branch").unwrap().unwrap();
-    assert_eq!(metadata.parent_session_id.as_deref(), Some("source"));
-    assert_eq!(metadata.branch_parent_message_id, Some(first_user));
-    assert_eq!(metadata.branch_parent_turn_index, Some(2));
-    assert_eq!(metadata.branch_inherited_turn_count, Some(1));
-    assert!(metadata.branch_created_at.is_some());
-
-    let error = store
-        .fork_session_at_user_message("source", "bad-branch", incomplete_user)
-        .unwrap_err();
-    assert!(error.to_string().contains("not completed"));
-    assert!(store.get_session("bad-branch").unwrap().is_none());
-}
-
-#[test]
-fn fork_before_turn_excludes_the_anchor_and_accepts_incomplete_turns() {
-    let (_dir, store) = test_store();
-    store
-        .create_session("source", "tauri", Some("model-a"), None, None)
-        .unwrap();
-    let first_user = store
-        .append_message(NewMessage {
-            content: Some("first"),
-            ..NewMessage::empty("source", "user")
-        })
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("first answer"),
-            ..NewMessage::empty("source", "assistant")
-        })
-        .unwrap();
-    let second_user = store
-        .append_message(NewMessage {
-            content: Some("second"),
-            ..NewMessage::empty("source", "user")
-        })
-        .unwrap();
-    let source_before = store.get_messages("source").unwrap();
-
-    // 锚点这一轮还没有 assistant 回复，through 语义会拒绝，before 语义应当照常分叉。
-    let fork = store
-        .fork_session_before_user_message("source", "branch", second_user)
-        .unwrap();
-
-    assert_eq!(
-        source_before.iter().map(|row| row.id).collect::<Vec<_>>(),
-        store
-            .get_messages("source")
-            .unwrap()
-            .iter()
-            .map(|row| row.id)
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(
-        store
-            .get_messages("branch")
-            .unwrap()
-            .iter()
-            .map(|row| (row.role.as_str(), row.content.as_deref()))
-            .collect::<Vec<_>>(),
-        vec![("user", Some("first")), ("assistant", Some("first answer"))]
-    );
-    assert_eq!(fork.parent_message_id, Some(first_user));
-    assert_eq!(fork.parent_turn_index, Some(1));
-    assert_eq!(fork.inherited_turn_count, 1);
-    assert_eq!(fork.copied_user_turns, 1);
-
-    // 首轮之前分叉留下空分支，仍然记录父会话但没有挂靠 turn。
-    let head = store
-        .fork_session_before_user_message("source", "head", first_user)
-        .unwrap();
-    assert_eq!(head.parent_message_id, None);
-    assert_eq!(head.copied_user_turns, 0);
-    assert!(store.get_messages("head").unwrap().is_empty());
-    assert_eq!(
-        store
-            .get_session("head")
-            .unwrap()
-            .unwrap()
-            .parent_session_id
-            .as_deref(),
-        Some("source")
-    );
-}
-
-#[test]
-fn lineage_graph_keeps_agent_derived_sessions_out_of_the_chat_branch_tree() {
-    let (_dir, store) = test_store();
-    store
-        .create_session("root", "tauri", None, None, None)
-        .unwrap();
-    let root_user = store
-        .append_message(NewMessage {
-            content: Some("root question"),
-            ..NewMessage::empty("root", "user")
-        })
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("root answer"),
-            ..NewMessage::empty("root", "assistant")
-        })
-        .unwrap();
-    store
-        .fork_session_at_user_message("root", "chat-branch", root_user)
-        .unwrap();
-    store
-        .fork_session_recent_turns("root", "agent-session", None, BranchKind::Agent)
-        .unwrap();
-    store
-        .fork_session_recent_turns("agent-session", "nested-agent", None, BranchKind::Agent)
-        .unwrap();
-
-    let graph = store.session_lineage_graph("root").unwrap();
-    assert_eq!(
-        graph
-            .nodes
-            .iter()
-            .map(|node| node.session_id.as_str())
-            .collect::<Vec<_>>(),
-        vec!["root", "chat-branch"]
-    );
-    assert_eq!(
-        graph.nodes[0].turns[0].child_session_ids,
-        vec!["chat-branch"]
-    );
-
-    // 直接打开某个子 Agent 会话时，它自己那条链仍要可见。
-    let agent_graph = store.session_lineage_graph("agent-session").unwrap();
-    assert!(agent_graph
-        .nodes
-        .iter()
-        .any(|node| node.session_id == "agent-session"));
-    assert!(!agent_graph
-        .nodes
-        .iter()
-        .any(|node| node.session_id == "nested-agent"));
-}
-
-#[test]
-fn lineage_graph_finds_root_descendants_and_turn_anchors() {
-    let (_dir, store) = test_store();
-    store
-        .create_session("root", "tauri", None, None, None)
-        .unwrap();
-    let root_user = store
-        .append_message(NewMessage {
-            content: Some("root question"),
-            ..NewMessage::empty("root", "user")
-        })
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("root answer"),
-            ..NewMessage::empty("root", "assistant")
-        })
-        .unwrap();
-    store
-        .fork_session_at_user_message("root", "child", root_user)
-        .unwrap();
-    let child_user = store
-        .append_message(NewMessage {
-            content: Some("child question"),
-            ..NewMessage::empty("child", "user")
-        })
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("child answer"),
-            ..NewMessage::empty("child", "assistant")
-        })
-        .unwrap();
-    store
-        .fork_session_at_user_message("child", "grandchild", child_user)
-        .unwrap();
-
-    let graph = store.session_lineage_graph("grandchild").unwrap();
-    assert_eq!(graph.root_session_id, "root");
-    assert_eq!(
-        graph
-            .nodes
-            .iter()
-            .map(|node| node.session_id.as_str())
-            .collect::<Vec<_>>(),
-        vec!["root", "child", "grandchild"]
-    );
-    assert!(!graph.cycle_detected);
-    assert!(graph.orphaned_parent_ids.is_empty());
-    let root = graph
-        .nodes
-        .iter()
-        .find(|node| node.session_id == "root")
-        .unwrap();
-    assert_eq!(root.turns[0].child_session_ids, vec!["child"]);
-    let child = graph
-        .nodes
-        .iter()
-        .find(|node| node.session_id == "child")
-        .unwrap();
-    assert_eq!(child.turns[1].child_session_ids, vec!["grandchild"]);
-    assert_eq!(child.parent_message_id, Some(root_user));
-    assert_eq!(child.inherited_turn_count, 1);
-}
-
-#[test]
-fn lineage_graph_infers_legacy_metadata_and_protects_orphans_and_cycles() {
-    let (dir, store) = test_store();
-    store
-        .create_session("root", "tauri", None, None, None)
-        .unwrap();
-    let root_user = store
-        .append_message(NewMessage {
-            content: Some("legacy question"),
-            ..NewMessage::empty("root", "user")
-        })
-        .unwrap();
-    store
-        .append_message(NewMessage {
-            content: Some("legacy answer"),
-            ..NewMessage::empty("root", "assistant")
-        })
-        .unwrap();
-    store.fork_session("root", "legacy", 2).unwrap();
-
-    let raw = rusqlite::Connection::open(dir.path().join("state.db")).unwrap();
-    raw.execute(
-        "UPDATE sessions SET
-            branch_parent_message_id = NULL,
-            branch_parent_turn_index = NULL,
-            branch_inherited_turn_count = NULL,
-            branch_created_at = NULL
-         WHERE id = 'legacy'",
-        [],
-    )
-    .unwrap();
-    let legacy_graph = store.session_lineage_graph("legacy").unwrap();
-    let legacy = legacy_graph
-        .nodes
-        .iter()
-        .find(|node| node.session_id == "legacy")
-        .unwrap();
-    assert!(legacy.legacy_metadata);
-    assert_eq!(legacy.parent_message_id, Some(root_user));
-    assert_eq!(legacy.parent_turn_index, Some(1));
-    assert_eq!(legacy.inherited_turn_count, 1);
-
-    raw.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
-    raw.execute(
-        "UPDATE sessions SET parent_session_id = 'missing-parent' WHERE id = 'legacy'",
-        [],
-    )
-    .unwrap();
-    let orphan_graph = store.session_lineage_graph("legacy").unwrap();
-    assert_eq!(orphan_graph.root_session_id, "legacy");
-    assert_eq!(orphan_graph.orphaned_parent_ids, vec!["missing-parent"]);
-    assert!(orphan_graph.nodes[0].orphaned);
-
-    raw.execute(
-        "UPDATE sessions SET parent_session_id = 'root' WHERE id = 'legacy'",
-        [],
-    )
-    .unwrap();
-    raw.execute(
-        "UPDATE sessions SET parent_session_id = 'legacy' WHERE id = 'root'",
-        [],
-    )
-    .unwrap();
-    let cycle_graph = store.session_lineage_graph("legacy").unwrap();
-    assert!(cycle_graph.cycle_detected);
-    assert_eq!(cycle_graph.nodes.len(), 2);
 }

@@ -103,7 +103,7 @@ pub async fn serve(
     }
 
     // 后台 cron ticker：独立 current_thread 运行时。
-    // AgentLoop / SessionStore（rusqlite RefCell）不是 Send，不能进多线程 tokio::spawn。
+    // AgentLoop / SessionStore 不是 Send，不能进多线程 tokio::spawn。
     std::thread::Builder::new()
         .name("astro-cron".into())
         .spawn(|| {
@@ -119,7 +119,7 @@ pub async fn serve(
             };
             rt.block_on(async move {
                 // 启动时回收上次进程残留的 running 记录。
-                if let Err(err) = agent::exec::cron::reconcile_orphaned_runs() {
+                if let Err(err) = agent::exec::cron::reconcile_orphaned_runs().await {
                     tracing::warn!(error = %err, "cron: reconcile orphaned runs failed");
                 }
                 let mut interval = tokio::time::interval(Duration::from_secs(30));

@@ -20,10 +20,10 @@ fn keep_tail_default() -> usize {
     memory::load_compression_config(&home::default_memory_dir()).keep_tail_bubbles
 }
 
-fn open_sessions() -> Result<session::SessionStore, String> {
+async fn open_sessions() -> Result<session::SessionStore, String> {
     let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&root.join("sessions")).map_err(|e| e.to_string())
+    session::SessionStore::open_sessions_dir(&root.join("sessions")).await.map_err(|e| e.to_string())
 }
 
 fn fire_manual_pre_compact(
@@ -179,7 +179,7 @@ async fn summarize_with_targets(
 
 /// 用辅助模型路由生成压实交接摘要（primary 取自会话账单/模型）。
 async fn summarize_with_llm(session_id: &str, transcript: &str) -> Result<String, String> {
-    let primary = primary_chat_target_for_session(session_id)?;
+    let primary = primary_chat_target_for_session(session_id).await?;
     let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::Compaction, &primary)?;
     summarize_with_targets(targets, transcript).await
 }
@@ -202,18 +202,18 @@ pub async fn compact_chat_session(
     let live_session = agent::exec::dispatch::active_root_session_for_hooks(&memory_dir, sid)
         .map_err(|error| error.to_string())?;
 
-    // SessionStore（rusqlite）非 Send：先读出元数据/消息并 drop，再 await LLM。
+    // 先读出元数据/消息并 drop store，再 await LLM。
     let (messages, expected_last_message_id, transcript) = {
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         let meta = store
             .get_session(sid)
-            .map_err(|e| e.to_string())?
+            .await.map_err(|e| e.to_string())?
             .ok_or_else(|| "会话不存在".to_string())?;
         if meta.ended_at.is_some() {
             return Err("会话已结束，无法压实".into());
         }
 
-        let messages = store.get_messages(sid).map_err(|e| e.to_string())?;
+        let messages = store.get_messages(sid).await.map_err(|e| e.to_string())?;
         let bubble_count = messages
             .iter()
             .filter(|m| m.role == "user" || m.role == "assistant")
@@ -256,10 +256,10 @@ pub async fn compact_chat_session(
 
     let new_id = Uuid::new_v4().to_string();
     {
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         store
             .compact_and_split_if_unchanged(sid, &new_id, &summary, keep, expected_last_message_id)
-            .map_err(|e| e.to_string())?;
+            .await.map_err(|e| e.to_string())?;
     }
 
     fire_manual_post_compact(live_session.as_deref(), sid, &new_id);

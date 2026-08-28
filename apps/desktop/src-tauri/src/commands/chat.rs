@@ -15,8 +15,8 @@ use super::providers::{
 };
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use crate::infra::thread_events::{
-    accepted_turn_id, emit_chat_events, emit_session_status, managed_bridge,
-    submission_failure_events, ThreadEventsBridge, THREAD_EVENTS_READY_TIMEOUT,
+    accepted_turn_id, emit_chat_events, managed_bridge, submission_failure_events,
+    ThreadEventsBridge, THREAD_EVENTS_READY_TIMEOUT,
 };
 
 // ---------------------------------------------------------------------------
@@ -57,10 +57,6 @@ pub enum ChatStreamEvent {
     Token {
         content: String,
     },
-    AsyncMessage {
-        id: String,
-        content: String,
-    },
     TextReconcile {
         content: String,
     },
@@ -84,11 +80,6 @@ pub enum ChatStreamEvent {
         id: String,
         name: String,
         arguments: String,
-    },
-    /// 命令执行过程中的输出增量，`id` 对齐同一工具调用的 item id。
-    ToolOutputDelta {
-        id: String,
-        delta: String,
     },
     MemoryUpdate {
         operation: String,
@@ -323,52 +314,6 @@ fn decode_base64_approx(input: &str) -> Option<String> {
     String::from_utf8(buffer).ok()
 }
 
-/// 确定本次提交归属的项目，其首个 root 即工具执行目录。
-///
-/// `ensure_default_project` 会把所有未归属会话批量并入默认项目，因此本会话
-/// 此前的真实归属必须在它之前读出，否则新会话会被误判成「已在默认项目」，
-/// 侧栏选中的项目也就永远传不到工具执行目录。
-fn resolve_session_project(
-    store: &session::SessionStore,
-    session_id: &str,
-    requested_project_id: &str,
-    workspace: &str,
-) -> Result<session::Project, String> {
-    let prior_project_id = store
-        .project_for_session(session_id)
-        .map_err(|e| e.to_string())?
-        .map(|project| project.id);
-    let default_project = store
-        .ensure_default_project(std::path::Path::new(workspace))
-        .map_err(|e| e.to_string())?;
-    let target_id = if requested_project_id.trim().is_empty() {
-        default_project.id.as_str()
-    } else {
-        requested_project_id.trim()
-    };
-    let requested_project = store
-        .get_project(target_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("项目不存在：{target_id}"))?;
-    // 已经归属到某个具体项目的历史会话保持原归属；新会话或仍停留在默认项目的
-    // 会话跟随本次请求选中的项目。
-    let sticky = prior_project_id
-        .as_deref()
-        .filter(|id| *id != session::DEFAULT_PROJECT_ID && *id != target_id);
-    match sticky {
-        Some(existing) => Ok(store
-            .get_project(existing)
-            .map_err(|e| e.to_string())?
-            .unwrap_or(requested_project)),
-        None => {
-            store
-                .assign_session_to_project(session_id, target_id)
-                .map_err(|e| e.to_string())?;
-            Ok(requested_project)
-        }
-    }
-}
-
 /// `start_chat` 前端入参（camelCase，与 invoke 字段对齐）。
 ///
 /// 调用形态固定为 `invoke("start_chat", { request: { … } })`，**不**接受扁平顶层字段。
@@ -387,8 +332,6 @@ pub struct StartChatRequest {
     pub resume_json: Option<String>,
     pub keep_chat_bubbles: Option<i32>,
     pub interaction_mode: Option<String>,
-    pub project_id: Option<String>,
-    /// Legacy compatibility; project_id now resolves the authoritative cwd.
     pub project_root: Option<String>,
 }
 
@@ -422,7 +365,6 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         resume_json,
         keep_chat_bubbles,
         interaction_mode,
-        project_id,
         project_root,
     } = request;
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -452,17 +394,13 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         "plan" | "ask" => interaction_mode,
         _ => "agent".to_string(),
     };
-    let requested_project_id = project_id.unwrap_or_default().trim().to_string();
-    let legacy_project_root = project_root.unwrap_or_default().trim().to_string();
+    let project_root = project_root.unwrap_or_default().trim().to_string();
 
-    // 会话的项目归属与执行 roots 在提交前一次性确定，避免 UI effect 与首轮工具竞态。
-    let (project_id, project_root, workspace_roots) = {
+    // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
+    {
         bootstrap_workspace()?;
-        let store = open_sessions()?;
-        store
-            .ensure_session(&sid, "tauri")
-            .map_err(|e| e.to_string())?;
-        if let Ok(Some(meta)) = store.get_session(&sid) {
+        let store = open_sessions().await?;
+        if let Ok(Some(meta)) = store.get_session(&sid).await {
             if meta.ended_at.is_some() {
                 let reason = meta.end_reason.as_deref().unwrap_or("ended");
                 return Err(if reason == "compacted" {
@@ -472,27 +410,17 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
                 });
             }
         }
-        let workspace = super::common::workspace_dir();
-        std::fs::create_dir_all(&workspace).map_err(|e| e.to_string())?;
-        let project = resolve_session_project(&store, &sid, &requested_project_id, &workspace)?;
-        let mut roots = project.roots;
-        // 仅为旧客户端保留：没有可用项目 root 时才接受旧 projectRoot。
-        if roots.is_empty() && !legacy_project_root.is_empty() {
-            roots.push(legacy_project_root);
-        }
-        let cwd = roots.first().cloned().unwrap_or(workspace);
-        (project.id, cwd, roots)
-    };
+    }
 
     if let Some(keep) = keep_chat_bubbles {
         bootstrap_workspace()?;
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         store
             .ensure_session(&sid, "tauri")
-            .map_err(|e| e.to_string())?;
+            .await.map_err(|e| e.to_string())?;
         store
             .truncate_session_to_bubbles(&sid, keep.max(0) as usize)
-            .map_err(|e| e.to_string())?;
+            .await.map_err(|e| e.to_string())?;
     }
 
     // 从 providers.json + keyring 解析 primary 与聊天后备链
@@ -658,14 +586,11 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         // Initial submissions are not queued steer messages and therefore do
         // not participate in client-side optimistic delivery reconciliation.
         client_message_id: String::new(),
-        project_id,
-        workspace_roots,
     };
 
     let bridge = managed_bridge(&app).inner().clone();
     let sid2 = sid.clone();
     let activation = bridge.activate(sid2.clone()).await;
-    emit_session_status(&app, &sid, "active", Vec::new(), None);
     let app2 = app.clone();
     let event_name2 = event_name.clone();
 
@@ -700,15 +625,6 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
 
         if let Err(err) = result {
             let is_current = bridge.fail_activation(&sid2, activation).await;
-            if is_current {
-                emit_session_status(
-                    &app2,
-                    &sid2,
-                    "systemError",
-                    Vec::new(),
-                    Some(friendly_error(&err)),
-                );
-            }
             for event in submission_failure_events(is_current, friendly_error(&err)) {
                 let _ = app2.emit(&event_name2, event);
             }
@@ -833,11 +749,7 @@ pub async fn chat_control(
 
 /// 提交 interrupt resume（HITL 阻塞闸门）；同回合续跑，无需再调 start_chat。
 #[tauri::command]
-pub async fn interrupt_resume(
-    app: AppHandle,
-    session_id: String,
-    resume_json: String,
-) -> Result<(), String> {
+pub async fn interrupt_resume(session_id: String, resume_json: String) -> Result<(), String> {
     let items: Vec<serde_json::Value> =
         serde_json::from_str(&resume_json).map_err(|e| format!("resume_json 无效: {e}"))?;
     let resume: Vec<proto::InterruptResumeItem> = items
@@ -868,13 +780,9 @@ pub async fn interrupt_resume(
         .await
         .map_err(|e| e.to_string())?;
     client
-        .interrupt_resume(proto::InterruptResumeRequest {
-            session_id: session_id.clone(),
-            resume,
-        })
+        .interrupt_resume(proto::InterruptResumeRequest { session_id, resume })
         .await
         .map_err(|e| e.to_string())?;
-    emit_session_status(&app, session_id, "active", Vec::new(), None);
     Ok(())
 }
 
@@ -1063,44 +971,9 @@ pub async fn count_tokens(model: String) -> Result<u32, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{chat_control_with_lifecycle, parse_chat_control_action, resolve_session_project};
+    use super::{chat_control_with_lifecycle, parse_chat_control_action};
     use crate::infra::thread_events::ThreadEventsBridge;
     use proto::ChatControlAction;
-
-    #[test]
-    fn requested_project_wins_over_the_default_project_backfill() {
-        let dir = tempfile::tempdir().unwrap();
-        let workspace = dir.path().join("workspace");
-        let project_root = dir.path().join("八股文");
-        std::fs::create_dir_all(&workspace).unwrap();
-        std::fs::create_dir_all(&project_root).unwrap();
-        let workspace = workspace.to_string_lossy().into_owned();
-        let store = session::SessionStore::open(&dir.path().join("state.db")).unwrap();
-        store
-            .ensure_default_project(std::path::Path::new(&workspace))
-            .unwrap();
-        let project = store
-            .create_project("八股文", &[project_root.to_string_lossy().as_ref()])
-            .unwrap();
-
-        store.ensure_session("s1", "test").unwrap();
-        let resolved = resolve_session_project(&store, "s1", &project.id, &workspace).unwrap();
-        assert_eq!(resolved.id, project.id);
-        assert_eq!(resolved.roots, project.roots);
-        assert_eq!(
-            store.project_for_session("s1").unwrap().map(|p| p.id),
-            Some(project.id.clone())
-        );
-
-        // 已归属具体项目的历史会话不会被后续请求改判。
-        let resolved = resolve_session_project(&store, "s1", "default", &workspace).unwrap();
-        assert_eq!(resolved.id, project.id);
-
-        // 未指定项目的新会话仍落到默认项目。
-        store.ensure_session("s2", "test").unwrap();
-        let resolved = resolve_session_project(&store, "s2", "", &workspace).unwrap();
-        assert_eq!(resolved.id, session::DEFAULT_PROJECT_ID);
-    }
 
     #[test]
     fn explicit_session_lifecycle_actions_forget_thread_recovery_targets() {

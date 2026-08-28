@@ -93,7 +93,7 @@ pub struct Config {
     pub context_budget_chars: usize,
     /// 可选的静态上下文覆盖，用于测试或自定义 prompt。
     pub static_override: Option<StaticContext>,
-    /// Per-session memory write policy (thread memory mode).
+    /// Per-session memory write policy (Codex-style thread memory mode).
     pub thread_memory_mode: types::ThreadMemoryMode,
     /// Controls how the compact token limit is measured (total vs body-after-prefix).
     pub compact_scope: types::CompactTokenLimitScope,
@@ -143,7 +143,7 @@ pub struct Session {
     pub(crate) workspace_dir: PathBuf,
 
     // ── 提取的子结构体 ──────────────────────────────────────
-    /// Session-wide mutable runtime state.
+    /// Codex-style session-wide mutable runtime state.
     pub(crate) state: StdMutex<session_state::SessionState>,
     /// Serializes persisted conversation writes with their in-memory history mirror.
     pub(crate) conversation_write_lock: TokioMutex<()>,
@@ -157,7 +157,7 @@ pub struct Session {
     // ── 注入的依赖 ─────────────────────────────────────────
     /// Shared Plugin/Gateway/Shell hook runtime.
     hook_runtime: StdMutex<Arc<::hooks::HookRuntime>>,
-    /// Child-thread identity used to route subagent lifecycle hooks.
+    /// Child-thread identity used to route Codex subagent lifecycle hooks.
     subagent_hook_context: StdMutex<Option<SubagentHookContext>>,
     subagent_stop_turns: StdMutex<HashSet<String>>,
     /// First-class subagent thread dispatcher.
@@ -168,7 +168,7 @@ pub struct Session {
     /// Long-lived controls reused by actor-submitted turns and exposed to adapters.
     thread_controls: StdMutex<Option<ThreadControls>>,
     thread_provider_options: StdMutex<ThreadProviderOptions>,
-    /// Single-active-task registry for this session.
+    /// Codex-style single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
     /// Serializes abort-old -> install -> bind -> start admission for session tasks.
     pub(crate) task_admission: TokioMutex<()>,
@@ -209,7 +209,6 @@ struct RuntimeIoBindings {
 struct ThreadControls {
     pause: Arc<providers::PauseControl>,
     hitl_gate: Arc<crate::HitlGate>,
-    approval_cache: Arc<crate::control::approval_cache::SessionApprovalCache>,
 }
 
 #[derive(Clone)]
@@ -247,31 +246,31 @@ pub enum RuntimeIoBindError {
 
 impl Session {
     /// 以随机 UUID 作为 session_id 创建 Agent 实例。
-    pub fn new(config: Config) -> anyhow::Result<Self> {
-        Self::with_session_id(config, Uuid::new_v4().to_string())
+    pub async fn new(config: Config) -> anyhow::Result<Self> {
+        Self::with_session_id(config, Uuid::new_v4().to_string()).await
     }
 
     /// 以指定 session_id 创建 Agent 实例，并注册全部内置工具。
     ///
     /// 初始化时 `tool_rounds` 与 `current_turn` 均为 0。
     /// 记忆侧使用当前活跃 Agent（[`MemoryManager::new`]）。
-    pub fn with_session_id(config: Config, session_id: String) -> anyhow::Result<Self> {
+    pub async fn with_session_id(config: Config, session_id: String) -> anyhow::Result<Self> {
         let memory = MemoryManager::new(config.memory_dir.clone())?;
-        Self::from_memory(config, session_id, memory)
+        Self::from_memory(config, session_id, memory).await
     }
 
     /// 以指定 `agent_id` 与 session_id 创建 Agent 实例（不依赖全局活跃 Agent）。
-    pub fn with_session_id_for_agent(
+    pub async fn with_session_id_for_agent(
         config: Config,
         session_id: String,
         agent_id: &str,
     ) -> anyhow::Result<Self> {
         let memory = MemoryManager::for_agent(config.memory_dir.clone(), agent_id)?;
-        Self::from_memory(config, session_id, memory)
+        Self::from_memory(config, session_id, memory).await
     }
 
     /// Construct a child agent runtime sharing the root Agent Graph control plane.
-    pub fn with_session_id_for_agent_thread(
+    pub async fn with_session_id_for_agent_thread(
         config: Config,
         session_id: String,
         agent_id: &str,
@@ -279,27 +278,27 @@ impl Session {
         agent_path: subagents::AgentPath,
     ) -> anyhow::Result<Self> {
         let memory = MemoryManager::for_agent(config.memory_dir.clone(), agent_id)?;
-        Self::from_memory_with_agent_control(config, session_id, memory, agent_control, agent_path)
+        Self::from_memory_with_agent_control(config, session_id, memory, agent_control, agent_path).await
     }
 
-    fn from_memory(
+    async fn from_memory(
         config: Config,
         session_id: String,
         memory: MemoryManager,
     ) -> anyhow::Result<Self> {
         let graph_db_path = config.memory_dir.join("subagents-v2.db");
         let agent_control = crate::exec::agent_control_directory::AgentControlDirectory::global()
-            .open_root_at(&session_id, &graph_db_path)?;
+            .open_root_at(&session_id, &graph_db_path).await?;
         Self::from_memory_with_agent_control(
             config,
             session_id,
             memory,
             agent_control,
             subagents::AgentPath::root(),
-        )
+        ).await
     }
 
-    fn from_memory_with_agent_control(
+    async fn from_memory_with_agent_control(
         config: Config,
         session_id: String,
         mut memory: MemoryManager,
@@ -310,9 +309,9 @@ impl Session {
         memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
         let sessions: Box<dyn ConversationStore> = Box::new(SessionStore::open_sessions_dir(
-            &config.memory_dir.join("data"),
-        )?);
-        let history = hydrate_history(&*sessions, &session_id)?;
+            &config.memory_dir.join("sessions"),
+        ).await?);
+        let history = hydrate_history(&*sessions, &session_id).await?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -389,129 +388,17 @@ impl Session {
             .map_err(|_| RuntimeIoBindError::AlreadyBound)
     }
 
-    /// Restore the latest role-bearing prompt-context baseline from durable rollout state.
-    ///
-    /// This state is intentionally independent from user/assistant conversation history.
-    pub fn restore_prompt_context_from_rollout(&self, items: &[RolloutItem]) {
-        let restored = crate::prompt::context_state::restore(items);
-        let mut state = self.lock_state();
-        state.prompt_context_snapshot = restored.snapshot;
-        state.prompt_context_history = restored.history;
-    }
-
-    pub(crate) async fn persist_prompt_context_if_changed(
-        &self,
-        prompt: &crate::prompt::PromptContract,
-    ) {
-        let snapshot = match crate::prompt::context_state::snapshot(prompt) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                tracing::warn!(%error, "failed to serialize prompt context world state");
-                return;
-            }
-        };
-        let _dispatch = self.event_dispatch.lock().await;
-        let (previous, before_user) = {
-            let state = self.lock_state();
-            let before_user = state
-                .history
-                .iter()
-                .filter(|message| message.role == types::message::Role::User)
-                .count()
-                .saturating_sub(1);
-            (state.prompt_context_snapshot.clone(), before_user)
-        };
-        let Some(item) =
-            crate::prompt::context_state::rollout_update(previous.as_ref(), &snapshot, before_user)
-        else {
-            return;
-        };
-        let updates = crate::prompt::context_state::model_updates(previous.as_ref(), &snapshot);
-        let event = crate::prompt::context_state::PromptContextEvent::new(before_user, updates);
-
-        let Some(bindings) = self.runtime_io.get() else {
-            let mut state = self.lock_state();
-            state.prompt_context_snapshot = Some(snapshot);
-            if !event.messages.is_empty() {
-                state.prompt_context_history.push(event);
-            }
-            return;
-        };
-        if let Err(error) = bindings.rollout.record(vec![item]).await {
-            tracing::warn!(%error, "failed to persist prompt context world state");
-            return;
-        }
-        let mut state = self.lock_state();
-        state.prompt_context_snapshot = Some(snapshot);
-        if !event.messages.is_empty() {
-            state.prompt_context_history.push(event);
-        }
-    }
-
-    pub(crate) fn prompt_context_history(
-        &self,
-    ) -> Vec<crate::prompt::context_state::PromptContextEvent> {
-        self.lock_state().prompt_context_history.clone()
-    }
-
-    /// Rebase provider-only context after compaction and persist a fresh full baseline.
-    pub(crate) async fn rebase_prompt_context_after_compaction(&self, summary: &str) {
-        let snapshot = self.lock_state().prompt_context_snapshot.clone();
-        let history = snapshot
-            .as_ref()
-            .map(|snapshot| {
-                crate::prompt::context_state::PromptContextEvent::new(
-                    0,
-                    crate::prompt::context_state::model_updates(None, snapshot),
-                )
-            })
-            .filter(|event| !event.messages.is_empty())
-            .into_iter()
-            .collect();
-        let mut items = vec![RolloutItem::Compacted(serde_json::json!({
-            "kind": "mid_run_summary",
-            "summary": summary,
-        }))];
-        if let Some(snapshot) = snapshot.as_ref() {
-            if let Some(full) = crate::prompt::context_state::rollout_update(None, snapshot, 0) {
-                items.push(full);
-            }
-        }
-
-        let _dispatch = self.event_dispatch.lock().await;
-        if let Some(bindings) = self.runtime_io.get() {
-            if let Err(error) = bindings.rollout.record(items).await {
-                tracing::warn!(%error, "failed to persist compacted prompt context baseline");
-            }
-        }
-        self.lock_state().prompt_context_history = history;
-    }
-
-    /// Returns the stable pause, HITL, and approval-cache controls used by actor-submitted turns.
-    pub fn ensure_thread_controls(
-        &self,
-    ) -> (
-        Arc<providers::PauseControl>,
-        Arc<crate::HitlGate>,
-        Arc<crate::control::approval_cache::SessionApprovalCache>,
-    ) {
+    /// Returns the stable pause and HITL controls used by actor-submitted turns.
+    pub fn ensure_thread_controls(&self) -> (Arc<providers::PauseControl>, Arc<crate::HitlGate>) {
         let mut controls = self
             .thread_controls
             .lock()
             .expect("thread controls mutex poisoned");
-        let controls = controls.get_or_insert_with(|| {
-            let sid = self.session_id.clone();
-            ThreadControls {
-                pause: providers::PauseControl::new(),
-                hitl_gate: crate::HitlGate::new(sid.clone()),
-                approval_cache: crate::control::approval_cache::SessionApprovalCache::new(sid),
-            }
+        let controls = controls.get_or_insert_with(|| ThreadControls {
+            pause: providers::PauseControl::new(),
+            hitl_gate: crate::HitlGate::new(self.session_id.clone()),
         });
-        (
-            Arc::clone(&controls.pause),
-            Arc::clone(&controls.hitl_gate),
-            Arc::clone(&controls.approval_cache),
-        )
+        (Arc::clone(&controls.pause), Arc::clone(&controls.hitl_gate))
     }
 
     pub fn set_thread_provider_options(&self, options: ThreadProviderOptions) {
@@ -727,13 +614,12 @@ impl Session {
     pub async fn set_current_turn_id(&self, turn_id: impl Into<String>) {
         let sub_id = turn_id.into();
         let mut state = self.lock_state();
-        let turn_context = Arc::new(TurnContext::new_with_roots(
+        let turn_context = Arc::new(TurnContext::new(
             sub_id,
             state.turn.current_turn(),
             state.interaction_mode,
             state.permission_profile.clone(),
             state.project_root.clone(),
-            state.workspace_roots.clone(),
         ));
         state
             .turn
@@ -744,13 +630,12 @@ impl Session {
     #[doc(hidden)]
     pub async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
         let state = self.lock_state();
-        Arc::new(TurnContext::new_with_roots(
+        Arc::new(TurnContext::new(
             sub_id,
             state.turn.current_turn().saturating_add(1),
             state.interaction_mode,
             state.permission_profile.clone(),
             state.project_root.clone(),
-            state.workspace_roots.clone(),
         ))
     }
 
@@ -1069,7 +954,7 @@ impl Session {
         self.lock_state().compression.take_recommend_compact()
     }
 
-    /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `apply_patch` 等写类操作）。
+    /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
     pub async fn turn_wrote_disk(&self) -> bool {
         self.lock_state().turn.turn_wrote_disk()
     }
@@ -1186,20 +1071,7 @@ impl Session {
 
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
     pub fn set_project_root(&self, root: Option<PathBuf>) {
-        let mut state = self.lock_state();
-        state.workspace_roots = root.iter().cloned().collect();
-        state.project_root = root;
-    }
-
-    /// 设置主 cwd 与全部项目工作目录；主 cwd 始终位于 roots 首位。
-    pub fn set_project_context(&self, root: Option<PathBuf>, mut workspace_roots: Vec<PathBuf>) {
-        if let Some(primary) = root.as_ref() {
-            workspace_roots.retain(|candidate| candidate != primary);
-            workspace_roots.insert(0, primary.clone());
-        }
-        let mut state = self.lock_state();
-        state.project_root = root;
-        state.workspace_roots = workspace_roots;
+        self.lock_state().project_root = root;
     }
 
     /// 当前代码/项目根（若有）。
@@ -1209,10 +1081,6 @@ impl Session {
 
     pub async fn project_root_snapshot(&self) -> Option<PathBuf> {
         self.lock_state().project_root.clone()
-    }
-
-    pub fn workspace_roots(&self) -> Vec<PathBuf> {
-        self.lock_state().workspace_roots.clone()
     }
 
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / Agent Thread 共用）。
@@ -1353,11 +1221,10 @@ impl Session {
     /// 无论是否存在 required 失败，已成功连接的工具都会同步到 `MCP_TOOLSET`。
     pub async fn reload_mcp(&self) -> anyhow::Result<()> {
         let agent_id = self.agent_id.clone();
-        let (project_root, workspace_roots, permission_profile, mcp_config_override) = {
+        let (project_root, permission_profile, mcp_config_override) = {
             let state = self.lock_state();
             (
                 state.project_root.clone(),
-                state.workspace_roots.clone(),
                 state.permission_profile.clone(),
                 state.mcp_config_override.clone(),
             )
@@ -1374,10 +1241,9 @@ impl Session {
             "mcp",
             profile_id,
         );
-        let execution_context = tools::context::build_command_sandbox_policy_with_roots(
+        let execution_context = tools::context::build_command_sandbox_policy(
             &self.config.memory_dir,
             &execution_root,
-            &workspace_roots,
             permission_profile.as_deref(),
             false,
             None,
@@ -1608,10 +1474,6 @@ impl Session {
         self.lock_state().clone_history()
     }
 
-    pub fn tail_history(&self, n: usize) -> Vec<Message> {
-        self.lock_state().tail_history(n)
-    }
-
     /// Replace the current conversation history with an owned snapshot.
     pub async fn replace_history(&self, history: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
@@ -1663,7 +1525,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let rollout_path = dir.path().join("ordered-events.jsonl");
         let rollout = RolloutRecorder::open(rollout_path.clone()).await.unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
         let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
         let first_persisted = Arc::new(tokio::sync::Barrier::new(2));
         let release_first = Arc::new(tokio::sync::Barrier::new(2));
@@ -1733,10 +1595,10 @@ mod tests {
         assert_eq!(turns, ["turn-a", "turn-b"]);
     }
 
-    #[test]
-    fn auxiliary_targets_falls_back_to_chat_credentials_when_nothing_set() {
+    #[tokio::test]
+    async fn auxiliary_targets_falls_back_to_chat_credentials_when_nothing_set() {
         let dir = TempDir::new().unwrap();
-        let agent = AgentLoop::new(test_config(&dir)).unwrap();
+        let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
         agent.set_chat_credentials("openai", "gpt-5.6", "key-1", "https://api.openai.com/v1");
 
         let targets = agent.auxiliary_targets(types::AuxiliaryTask::Dreaming);
@@ -1746,20 +1608,20 @@ mod tests {
         assert_eq!(targets[0].api_key, "key-1");
     }
 
-    #[test]
-    fn auxiliary_targets_falls_back_to_primary_chat_target_when_nothing_set() {
+    #[tokio::test]
+    async fn auxiliary_targets_falls_back_to_primary_chat_target_when_nothing_set() {
         let dir = TempDir::new().unwrap();
-        let agent = AgentLoop::new(test_config(&dir)).unwrap();
+        let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
         agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
 
         let targets = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
         assert_eq!(targets, vec![t("p0", "openai", "gpt-5.6")]);
     }
 
-    #[test]
-    fn auxiliary_targets_returns_configured_chain_for_matching_task() {
+    #[tokio::test]
+    async fn auxiliary_targets_returns_configured_chain_for_matching_task() {
         let dir = TempDir::new().unwrap();
-        let agent = AgentLoop::new(test_config(&dir)).unwrap();
+        let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
         agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
 
         let mut map = std::collections::HashMap::new();
@@ -1795,7 +1657,7 @@ mod tests {
     #[tokio::test]
     async fn new_task_context_snapshots_the_next_turn_ordinal() {
         let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
 
         let first = session.create_turn_context("turn-1".into()).await;
         assert_eq!(first.turn(), 1);
@@ -1808,7 +1670,7 @@ mod tests {
     #[tokio::test]
     async fn session_groups_mutable_runtime_state_behind_its_internal_lock() {
         let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
         let state = session.lock_state();
 
         assert_eq!(state.turn.current_turn(), 0);
@@ -1837,7 +1699,7 @@ mod tests {
         use std::sync::atomic::{AtomicBool, Ordering};
 
         let dir = TempDir::new().unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
         let barrier = Arc::new(tokio::sync::Barrier::new(3));
         let write_complete = Arc::new(AtomicBool::new(false));
         let writer = {
@@ -1883,7 +1745,7 @@ mod tests {
     #[tokio::test]
     async fn session_returns_owned_runtime_snapshots() {
         let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
         let project_root = dir.path().join("project");
         session.set_chat_credentials("openai", "gpt-5.6", "key", "https://example.test");
         session.set_project_root(Some(project_root.clone()));
@@ -1901,7 +1763,7 @@ mod tests {
     #[tokio::test]
     async fn session_dispatches_registered_non_mcp_dynamic_handler() {
         let dir = TempDir::new().unwrap();
-        let mut session = Session::new(test_config(&dir)).unwrap();
+        let mut session = Session::new(test_config(&dir)).await.unwrap();
         session.tool_registry_mut().register_dynamic(
             ToolEntry {
                 name: "custom_dynamic".to_string(),
@@ -1982,7 +1844,7 @@ mod tests {
     #[tokio::test]
     async fn clone_history_returns_an_owned_snapshot_through_arc() {
         let dir = TempDir::new().unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
         session.record_items(vec![Message::user("original")]).await;
 
         let mut snapshot = session.clone_history().await;
@@ -1996,7 +1858,7 @@ mod tests {
     #[tokio::test]
     async fn replace_history_replaces_the_session_state_snapshot() {
         let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
         session.record_items(vec![Message::user("discarded")]).await;
 
         session
@@ -2011,7 +1873,7 @@ mod tests {
     #[tokio::test]
     async fn conversation_write_lock_serializes_persistence_and_history() {
         let dir = TempDir::new().unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
         let write_guard = session.conversation_write_lock.lock().await;
         let writer = {
             let session = Arc::clone(&session);
@@ -2023,6 +1885,7 @@ mod tests {
             .services
             .sessions
             .get_messages(session.session_id())
+            .await
             .unwrap()
             .is_empty());
         assert!(session.clone_history().await.is_empty());
@@ -2034,6 +1897,7 @@ mod tests {
                 .services
                 .sessions
                 .get_messages(session.session_id())
+                .await
                 .unwrap()
                 .len(),
             1
@@ -2060,7 +1924,8 @@ mod tests {
 
 /// 判断一次工具调用是否可能写入磁盘（供 `turn_wrote_disk` 标记使用）。
 ///
-/// `terminal` 命令不受限，保守视为总是可能写盘。
+/// `terminal` 命令不受限，保守视为总是可能写盘；`file_ops` 仅在写类
+/// `operation`（`write`/`append`/`delete`/`mkdir`）时视为写盘，`read`/`list` 不算。
 /// 启发式判断用户消息是否像「纠正上一轮」（中英常见提示语）。
 ///
 /// 仅作学习信号，宁缺毋滥；命中即记 DecisionLog，不改变对话流程。
@@ -2104,7 +1969,14 @@ fn looks_like_user_correction(msg: &str) -> bool {
 
 fn tool_writes_disk(name: &str, args: &Value) -> bool {
     match name {
-        "exec_command" => true,
+        "terminal" => true,
+        "file_ops" => matches!(
+            args.get("operation")
+                .and_then(|v| v.as_str())
+                .map(str::to_lowercase)
+                .as_deref(),
+            Some("write") | Some("append") | Some("delete") | Some("mkdir") | Some("patch")
+        ),
         "skills" => {
             let action = args
                 .get("action")
@@ -2120,12 +1992,8 @@ fn tool_writes_disk(name: &str, args: &Value) -> bool {
 /// 单轮 `run_turn` 或上层编排的可能结果。
 #[derive(Debug)]
 pub enum TurnResult {
-    /// 准备就绪：`prompt` 是采样事实源，`system_prompt` 仅供旧调用方诊断展示。
-    Continue {
-        turn: usize,
-        system_prompt: String,
-        prompt: crate::prompt::PromptContract,
-    },
+    /// 准备就绪，携带轮次编号与 system prompt，等待 LLM 响应。
+    Continue { turn: usize, system_prompt: String },
     /// Input was queued into the currently active regular task.
     Steered { turn_id: String },
     /// 模型请求的工具名称列表（由 streaming 层填充）。

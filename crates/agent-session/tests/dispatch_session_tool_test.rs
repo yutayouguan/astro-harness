@@ -25,16 +25,17 @@ fn format_recalled_marks_anchors() {
     assert_eq!(s, "[1] user: hi\n[2] assistant: yo [anchor]");
 }
 
-#[test]
-fn dispatch_session_search_and_record_message() {
+#[tokio::test]
+async fn dispatch_session_search_and_record_message() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open_sessions_dir(&dir.path().join("data")).unwrap();
-    store.ensure_session("s1", "test").unwrap();
+    let store = SessionStore::open_sessions_dir(&dir.path().join("sessions")).await.unwrap();
+    store.ensure_session("s1", "test").await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("alpha fact"),
             ..NewMessage::empty("s1", "user")
         })
+        .await
         .unwrap();
 
     let out = dispatch_session_tool(
@@ -42,10 +43,11 @@ fn dispatch_session_search_and_record_message() {
         "session_search",
         &json!({"query": "alpha", "limit": 5}),
     )
+    .await
     .unwrap();
     assert!(out.contains("相关历史消息"));
     assert!(out.contains("alpha"));
 
-    let id = record_message(&store, "s1", "assistant", "reply").unwrap();
+    let id = record_message(&store, "s1", "assistant", "reply").await.unwrap();
     assert!(id > 0);
 }

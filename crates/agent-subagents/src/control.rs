@@ -79,18 +79,19 @@ impl<'a> AgentSpawnReservation<'a> {
             .thread()
     }
 
-    pub fn abort(mut self) -> anyhow::Result<()> {
-        let result = self.inner.take().expect("active spawn reservation").abort();
+    pub async fn abort(mut self) -> anyhow::Result<()> {
+        let result = self.inner.take().expect("active spawn reservation").abort().await;
         self.release_lease();
         result
     }
 
-    pub fn commit(mut self) -> anyhow::Result<()> {
+    pub async fn commit(mut self) -> anyhow::Result<()> {
         let result = self
             .inner
             .take()
             .expect("active spawn reservation")
-            .commit();
+            .commit()
+            .await;
         self.release_lease();
         result
     }
@@ -211,13 +212,13 @@ pub struct AgentControl {
 
 impl AgentControl {
     /// 打开控制器：确保根线程、清理残留预留、构建注册表。
-    pub fn open(
+    pub async fn open(
         root_thread_id: String,
         store: AgentGraphStore,
         limits: Limits,
     ) -> anyhow::Result<Arc<Self>> {
-        store.ensure_root_thread(&root_thread_id)?;
-        let snapshot = store.snapshot(&root_thread_id)?;
+        store.ensure_root_thread(&root_thread_id).await?;
+        let snapshot = store.snapshot(&root_thread_id).await?;
         if snapshot.threads.iter().any(|thread| {
             thread.canonical_path != AgentPath::root()
                 && thread.status == crate::AgentStatusV2::PendingInit
@@ -248,56 +249,61 @@ impl AgentControl {
         self.store.path()
     }
 
-    pub fn record_runtime_descriptor(
+    pub async fn record_runtime_descriptor(
         &self,
         descriptor: &crate::AgentRuntimeDescriptorV2,
     ) -> anyhow::Result<()> {
-        self.store.record_runtime_descriptor(descriptor)
+        self.store.record_runtime_descriptor(descriptor).await
     }
 
-    pub fn runtime_descriptor(
+    pub async fn runtime_descriptor(
         &self,
         thread_id: &str,
     ) -> anyhow::Result<Option<crate::AgentRuntimeDescriptorV2>> {
-        self.store.runtime_descriptor(thread_id)
+        self.store.runtime_descriptor(thread_id).await
     }
 
     /// 预留子线程派生（默认类型），同时检查关闭前缀冲突。
-    pub fn reserve_spawn<'a>(
+    pub async fn reserve_spawn<'a>(
         &'a self,
         parent: &AgentPath,
         task_name: &str,
     ) -> anyhow::Result<AgentSpawnReservation<'a>> {
-        self.reserve_spawn_typed(parent, task_name, "default")
+        self.reserve_spawn_typed(parent, task_name, "default").await
     }
 
     /// 预留指定类型的子线程派生，校验父线程状态和关闭前缀。
-    pub fn reserve_spawn_typed<'a>(
+    pub async fn reserve_spawn_typed<'a>(
         &'a self,
         parent: &AgentPath,
         task_name: &str,
         agent_type: &str,
     ) -> anyhow::Result<AgentSpawnReservation<'a>> {
-        let mut lifecycle = self.lock_runtime_lifecycle()?;
-        let parent_thread = self.require_path(parent, "parent agent")?;
+        let parent_thread = self.require_path(parent, "parent agent").await?;
         if parent_thread.status == AgentStatusV2::Shutdown {
             anyhow::bail!("cannot spawn under a Shutdown agent: {parent}");
         }
         let child_path = parent.child(task_name).map_err(anyhow::Error::msg)?;
-        if lifecycle
-            .closing_prefixes
-            .iter()
-            .any(|prefix| child_path.starts_with(prefix))
-        {
-            anyhow::bail!("cannot spawn inside a closing agent subtree: {child_path}");
-        }
         let thread_id = Uuid::new_v4().to_string();
+        {
+            let lifecycle = self.lock_runtime_lifecycle()?;
+            if lifecycle
+                .closing_prefixes
+                .iter()
+                .any(|prefix| child_path.starts_with(prefix))
+            {
+                anyhow::bail!("cannot spawn inside a closing agent subtree: {child_path}");
+            }
+        }
         let mut reservation = self
             .registry
             .reserve_spawn_typed(parent, task_name, agent_type, &thread_id)?;
-        lifecycle
-            .inflight_spawns
-            .insert(thread_id.clone(), child_path);
+        {
+            let mut lifecycle = self.lock_runtime_lifecycle()?;
+            lifecycle
+                .inflight_spawns
+                .insert(thread_id.clone(), child_path);
+        }
         let identity = reservation.thread();
         let persisted = match self.store.reserve_thread(&ThreadReservation {
             thread_id: identity.thread_id.clone(),
@@ -307,17 +313,17 @@ impl AgentControl {
             task_name: identity.task_name.clone(),
             agent_type: identity.agent_type.clone(),
             session_id: identity.session_id.clone(),
-        }) {
+        }).await {
             Ok(persisted) => persisted,
             Err(error) => {
-                lifecycle.inflight_spawns.remove(&thread_id);
-                drop(lifecycle);
+                if let Ok(mut lifecycle) = self.lock_runtime_lifecycle() {
+                    lifecycle.inflight_spawns.remove(&thread_id);
+                }
                 self.lifecycle_notify.notify_waiters();
                 return Err(error);
             }
         };
         reservation.attach_persisted(&self.store, &self.activity, persisted);
-        drop(lifecycle);
         Ok(AgentSpawnReservation {
             inner: Some(reservation),
             control: self,
@@ -325,17 +331,17 @@ impl AgentControl {
         })
     }
 
-    pub fn resolve_target(
+    pub async fn resolve_target(
         &self,
         current: &AgentPath,
         target: &str,
     ) -> anyhow::Result<AgentThreadV2> {
-        self.require_path(current, "current agent")?;
+        self.require_path(current, "current agent").await?;
         let target = target.trim();
         if Uuid::parse_str(target).is_ok() {
             let thread = self
                 .store
-                .get_thread(target)?
+                .get_thread(target).await?
                 .ok_or_else(|| anyhow::anyhow!("unknown agent target thread {target:?}"))?;
             anyhow::ensure!(
                 thread.root_thread_id == self.root_thread_id,
@@ -348,20 +354,20 @@ impl AgentControl {
             return Ok(thread);
         }
         let resolved = current.resolve(target).map_err(anyhow::Error::msg)?;
-        self.require_path(&resolved, "agent target")
+        self.require_path(&resolved, "agent target").await
     }
 
-    pub fn list_agents(
+    pub async fn list_agents(
         &self,
         current: &AgentPath,
         prefix: Option<&str>,
     ) -> anyhow::Result<Vec<AgentThreadV2>> {
-        self.require_path(current, "current agent")?;
+        self.require_path(current, "current agent").await?;
         let prefix = match prefix {
             Some(prefix) => current.resolve(prefix.trim()).map_err(anyhow::Error::msg)?,
             None => AgentPath::root(),
         };
-        let snapshot = self.store.snapshot(&self.root_thread_id)?;
+        let snapshot = self.store.snapshot(&self.root_thread_id).await?;
         let mut threads = Vec::new();
         for thread in snapshot.threads {
             if thread.status != AgentStatusV2::Shutdown
@@ -374,48 +380,48 @@ impl AgentControl {
         Ok(threads)
     }
 
-    pub fn enqueue_message(
+    pub async fn enqueue_message(
         &self,
         sender: &AgentPath,
         request: MessageAgentV2Request,
         trigger_turn: bool,
     ) -> anyhow::Result<MailboxMessage> {
-        let lifecycle = self.lock_runtime_lifecycle()?;
-        self.enqueue_message_locked(&lifecycle, sender, request, trigger_turn)
+        self.enqueue_message_locked(sender, request, trigger_turn).await
     }
 
-    fn enqueue_message_locked(
+    async fn enqueue_message_locked(
         &self,
-        lifecycle: &RuntimeLifecycleState,
         sender: &AgentPath,
         request: MessageAgentV2Request,
         trigger_turn: bool,
     ) -> anyhow::Result<MailboxMessage> {
-        self.enqueue_message_locked_with_publish(lifecycle, sender, request, trigger_turn, true)
+        self.enqueue_message_locked_with_publish(sender, request, trigger_turn, true).await
     }
 
-    fn enqueue_message_locked_with_publish(
+    async fn enqueue_message_locked_with_publish(
         &self,
-        lifecycle: &RuntimeLifecycleState,
         sender: &AgentPath,
         request: MessageAgentV2Request,
         trigger_turn: bool,
         publish: bool,
     ) -> anyhow::Result<MailboxMessage> {
-        let sender_thread = self.require_path(sender, "message sender")?;
-        let target = self.resolve_target(sender, &request.target)?;
+        let sender_thread = self.require_path(sender, "message sender").await?;
+        let target = self.resolve_target(sender, &request.target).await?;
         if target.status == AgentStatusV2::Shutdown {
             anyhow::bail!("cannot message a Shutdown agent: {}", target.canonical_path);
         }
-        if lifecycle
-            .closing_prefixes
-            .iter()
-            .any(|prefix| target.canonical_path.starts_with(prefix))
         {
-            anyhow::bail!(
-                "cannot message an agent in a closing subtree: {}",
-                target.canonical_path
-            );
+            let lifecycle = self.lock_runtime_lifecycle()?;
+            if lifecycle
+                .closing_prefixes
+                .iter()
+                .any(|prefix| target.canonical_path.starts_with(prefix))
+            {
+                anyhow::bail!(
+                    "cannot message an agent in a closing subtree: {}",
+                    target.canonical_path
+                );
+            }
         }
         let message = request.message.trim();
         if message.is_empty() {
@@ -434,7 +440,7 @@ impl AgentControl {
             },
             payload: message.to_string(),
             trigger_turn,
-        })?;
+        }).await?;
         if publish {
             self.publish_mailbox_activity(&target);
         }
@@ -451,14 +457,13 @@ impl AgentControl {
     }
 
     /// 在生命周期锁下线性化 follow-up：Shutdown 检查 → 持久入队 → 运行时准入。
-    pub fn enqueue_followup_with_admission<T>(
+    pub async fn enqueue_followup_with_admission<T>(
         &self,
         sender: &AgentPath,
         request: MessageAgentV2Request,
         admission: impl FnOnce(&AgentThreadV2) -> anyhow::Result<T>,
     ) -> anyhow::Result<(MailboxMessage, T)> {
-        let lifecycle = self.lock_runtime_lifecycle()?;
-        let target = self.resolve_target(sender, &request.target)?;
+        let target = self.resolve_target(sender, &request.target).await?;
         if target.status == crate::AgentStatusV2::Shutdown {
             anyhow::bail!(
                 "cannot follow up a Shutdown agent: {}",
@@ -466,13 +471,14 @@ impl AgentControl {
             );
         }
         let message =
-            self.enqueue_message_locked_with_publish(&lifecycle, sender, request, true, false)?;
+            self.enqueue_message_locked_with_publish(sender, request, true, false).await?;
         let admitted = match admission(&target) {
             Ok(admitted) => admitted,
             Err(error) => {
                 return match self
                     .store
                     .delete_pending_mailbox_message(&message.message_id)
+                    .await
                 {
                     Ok(()) => Err(error),
                     Err(rollback) => Err(anyhow::anyhow!(
@@ -486,22 +492,22 @@ impl AgentControl {
     }
 
     /// 持久化转向到主/根 turn 的输入（调用方在写入成功后发布 MainSteer）。
-    pub fn persist_main_steer(
+    pub async fn persist_main_steer(
         &self,
         path: &AgentPath,
         payload: String,
     ) -> anyhow::Result<MailboxMessage> {
-        self.persist_main_steer_with_id(path, Uuid::new_v4().to_string(), payload)
+        self.persist_main_steer_with_id(path, Uuid::new_v4().to_string(), payload).await
     }
 
     /// 使用调用方预留的邮箱 ID 持久化主转向（运行 turn 用同一 ID 确认投递）。
-    pub fn persist_main_steer_with_id(
+    pub async fn persist_main_steer_with_id(
         &self,
         path: &AgentPath,
         message_id: String,
         payload: String,
     ) -> anyhow::Result<MailboxMessage> {
-        let thread = self.require_path(path, "main steer recipient")?;
+        let thread = self.require_path(path, "main steer recipient").await?;
         if payload.trim().is_empty() {
             anyhow::bail!("main steer payload must not be empty");
         }
@@ -513,34 +519,36 @@ impl AgentControl {
             kind: MailboxKind::Steer,
             payload,
             trigger_turn: true,
-        })
+        }).await
     }
 
-    pub fn drain_mailbox(&self, path: &AgentPath) -> anyhow::Result<Vec<MailboxMessage>> {
-        let thread = self.require_path(path, "mailbox recipient")?;
-        self.store.pending_for(&thread.thread_id, 0)
+    pub async fn drain_mailbox(&self, path: &AgentPath) -> anyhow::Result<Vec<MailboxMessage>> {
+        let thread = self.require_path(path, "mailbox recipient").await?;
+        self.store.pending_for(&thread.thread_id, 0).await
     }
 
-    pub fn ack_mailbox(&self, path: &AgentPath, through_sequence: i64) -> anyhow::Result<()> {
-        let thread = self.require_path(path, "mailbox recipient")?;
+    pub async fn ack_mailbox(&self, path: &AgentPath, through_sequence: i64) -> anyhow::Result<()> {
+        let thread = self.require_path(path, "mailbox recipient").await?;
         self.store
-            .mark_delivered(&thread.thread_id, through_sequence)
+            .mark_delivered(&thread.thread_id, through_sequence).await
     }
 
-    pub fn status_events(&self, thread_id: &str) -> anyhow::Result<Vec<crate::StoredStatusEvent>> {
-        self.store.status_events(thread_id)
+    pub async fn status_events(&self, thread_id: &str) -> anyhow::Result<Vec<crate::StoredStatusEvent>> {
+        self.store.status_events(thread_id).await
     }
 
-    pub fn record_runner_event(
+    pub async fn record_runner_event(
         &self,
         thread_id: &str,
         event: RunnerEvent,
     ) -> anyhow::Result<AgentThreadV2> {
         let terminated = matches!(&event, RunnerEvent::RuntimeTerminated);
-        let _lifecycle = self.lock_runtime_lifecycle()?;
+        {
+            let _lifecycle = self.lock_runtime_lifecycle()?;
+        }
         let existing = self
             .store
-            .get_thread(thread_id)?
+            .get_thread(thread_id).await?
             .ok_or_else(|| anyhow::anyhow!("unknown agent thread {thread_id:?}"))?;
         if existing.root_thread_id != self.root_thread_id {
             anyhow::bail!("agent thread {thread_id:?} belongs to a different root");
@@ -558,7 +566,7 @@ impl AgentControl {
                 existing.canonical_path
             );
         }
-        let thread = self.store.apply_status_event(thread_id, event)?;
+        let thread = self.store.apply_status_event(thread_id, event).await?;
         if terminated {
             self.runtimes.remove(thread_id)?;
         }
@@ -616,8 +624,8 @@ impl AgentControl {
         })
     }
 
-    fn pending_model_activity(&self, caller_thread_id: &str) -> anyhow::Result<DurableModelState> {
-        let pending = self.store.pending_for(caller_thread_id, 0)?;
+    async fn pending_model_activity(&self, caller_thread_id: &str) -> anyhow::Result<DurableModelState> {
+        let pending = self.store.pending_for(caller_thread_id, 0).await?;
         let mut state = DurableModelState {
             has_mailbox: !pending.is_empty(),
             ..DurableModelState::default()
@@ -664,31 +672,27 @@ impl AgentControl {
         self.registry.active_execution_count()
     }
 
-    pub fn snapshot(&self) -> anyhow::Result<AgentTreeSnapshotV2> {
-        self.snapshot_with_after_cursor(|| {})
+    pub async fn snapshot(&self) -> anyhow::Result<AgentTreeSnapshotV2> {
+        self.snapshot_with_after_cursor(|| {}).await
     }
 
-    fn snapshot_with_after_cursor<F>(&self, after_cursor: F) -> anyhow::Result<AgentTreeSnapshotV2>
+    async fn snapshot_with_after_cursor<F>(&self, after_cursor: F) -> anyhow::Result<AgentTreeSnapshotV2>
     where
         F: FnOnce(),
     {
-        // Capture the observer-generation cursor before reading durable state.
-        // A concurrent mutation can therefore be present in both the snapshot
-        // and a later event (an idempotent duplicate), but can never be skipped
-        // because the snapshot advertised a cursor newer than its contents.
         let activity_sequence = self.activity.cursor().0;
         after_cursor();
-        let mut snapshot = self.store.snapshot(&self.root_thread_id)?;
+        let mut snapshot = self.store.snapshot(&self.root_thread_id).await?;
         snapshot.activity_sequence = activity_sequence;
         Ok(snapshot)
     }
 
     /// 从根命名空间解析桌面目标（允许 `/root`，关闭语义为「仅关后代」）。
-    pub fn resolve_desktop_target(&self, target: &str) -> anyhow::Result<AgentThreadV2> {
+    pub async fn resolve_desktop_target(&self, target: &str) -> anyhow::Result<AgentThreadV2> {
         let path = AgentPath::root()
             .resolve(target.trim())
             .map_err(anyhow::Error::msg)?;
-        self.require_path(&path, "desktop agent target")
+        self.require_path(&path, "desktop agent target").await
     }
 
     pub fn begin_close(self: &Arc<Self>, prefix: AgentPath) -> anyhow::Result<CloseAdmissionGuard> {
@@ -718,21 +722,21 @@ impl AgentControl {
     }
 
     /// 回滚仅提交到持久层但未注册运行时的 PendingInit 派生。
-    pub fn abort_committed_pending_spawn(&self, thread: &AgentThreadV2) -> anyhow::Result<()> {
+    pub async fn abort_committed_pending_spawn(&self, thread: &AgentThreadV2) -> anyhow::Result<()> {
         if thread.root_thread_id != self.root_thread_id {
             anyhow::bail!("agent thread belongs to a different root");
         }
         if self.runtimes.get(&thread.thread_id)?.is_some() {
             anyhow::bail!("cannot abort a spawn with a registered runtime");
         }
-        self.store.rollback_pending_thread(&thread.thread_id)?;
+        self.store.rollback_pending_thread(&thread.thread_id).await?;
         self.registry
             .rollback_committed_spawn(&thread.canonical_path, &thread.thread_id)
     }
 
     /// 运行时启动任务拥有的幂等最终清理（释放路径和执行槽位）。
     /// exact matching in-memory identity after execution has ended.
-    pub fn finalize_unaccepted_spawn(
+    pub async fn finalize_unaccepted_spawn(
         &self,
         thread: &AgentThreadV2,
         turn_id: Option<&str>,
@@ -743,21 +747,21 @@ impl AgentControl {
         if self.runtimes.get(&thread.thread_id)?.is_some() {
             anyhow::bail!("cannot finalize an unaccepted spawn with a registered runtime");
         }
-        if let Some(current) = self.store.get_thread(&thread.thread_id)? {
+        if let Some(current) = self.store.get_thread(&thread.thread_id).await? {
             anyhow::ensure!(
                 current.canonical_path == thread.canonical_path,
                 "refusing to clean a replacement agent thread"
             );
             match current.status {
                 AgentStatusV2::PendingInit => {
-                    self.store.rollback_pending_thread(&thread.thread_id)?;
+                    self.store.rollback_pending_thread(&thread.thread_id).await?;
                 }
                 AgentStatusV2::Running => {
                     let turn_id = turn_id.ok_or_else(|| {
                         anyhow::anyhow!("running unaccepted spawn is missing its generation token")
                     })?;
                     self.store
-                        .rollback_unaccepted_started_thread(&thread.thread_id, turn_id)?;
+                        .rollback_unaccepted_started_thread(&thread.thread_id, turn_id).await?;
                 }
                 _ => anyhow::bail!(
                     "refusing to clean unaccepted spawn after its durable generation advanced"
@@ -769,12 +773,11 @@ impl AgentControl {
         Ok(())
     }
 
-    pub fn register_runtime(
+    pub async fn register_runtime(
         &self,
         thread_id: &str,
         handle: AgentRuntimeHandle,
     ) -> anyhow::Result<()> {
-        let _lifecycle = self.lock_runtime_lifecycle()?;
         let path = self
             .registry
             .committed_path_for_thread(thread_id)?
@@ -784,10 +787,11 @@ impl AgentControl {
         if path == AgentPath::root() {
             anyhow::bail!("cannot register a child runtime handle for the root agent");
         }
-        let thread = self.require_path(&path, "runtime agent")?;
+        let thread = self.require_path(&path, "runtime agent").await?;
         if thread.status == crate::AgentStatusV2::Shutdown {
             anyhow::bail!("cannot register a runtime handle for Shutdown agent {thread_id:?}");
         }
+        let _lifecycle = self.lock_runtime_lifecycle()?;
         #[cfg(test)]
         if let Some(hook) = self
             .before_runtime_insert_hook
@@ -868,10 +872,10 @@ impl AgentControl {
         self.lifecycle_notify.notify_waiters();
     }
 
-    fn require_path(&self, path: &AgentPath, label: &str) -> anyhow::Result<AgentThreadV2> {
+    async fn require_path(&self, path: &AgentPath, label: &str) -> anyhow::Result<AgentThreadV2> {
         let thread = self
             .store
-            .get_by_path(&self.root_thread_id, path)?
+            .get_by_path(&self.root_thread_id, path).await?
             .ok_or_else(|| anyhow::anyhow!("unknown {label} path {path}"))?;
         if !self.is_committed_thread(&thread)? {
             anyhow::bail!("{label} path {path} is not committed");
@@ -1323,14 +1327,14 @@ mod tests {
 
         drop(reservation);
         assert!(store.get_thread(&thread_id).unwrap().is_none());
-        let edge_count: i64 = rusqlite::Connection::open(store.path())
-            .unwrap()
-            .query_row(
-                "SELECT COUNT(*) FROM agent_spawn_edges WHERE child_thread_id = ?1",
-                [&thread_id],
-                |row| row.get(0),
-            )
-            .unwrap();
+        let edge_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_spawn_edges WHERE child_thread_id = ?1",
+        )
+        .bind(&thread_id)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        let edge_count = edge_count.0;
         assert_eq!(edge_count, 0);
 
         let committed = control.reserve_spawn(&root, "worker").unwrap();

@@ -51,7 +51,7 @@ pub fn spawn_title_generation_after_turn(
                 }
             }
             Ok(None) => {}
-            Err(e) => warn!(error = format!("{e:#}"), "session title generation failed"),
+            Err(e) => warn!(error = %e, "session title generation failed"),
         }
     });
 }
@@ -103,9 +103,9 @@ where
 pub async fn maybe_generate_session_title(
     job: TitleGenerationJob,
 ) -> anyhow::Result<Option<TitleChangedNotify>> {
-    let store = open_store(&job.memory_dir)?;
+    let store = open_store(&job.memory_dir).await?;
     let meta = store
-        .get_session(&job.session_id)?
+        .get_session(&job.session_id).await?
         .ok_or_else(|| anyhow::anyhow!("session not found"))?;
     if meta
         .title
@@ -117,7 +117,7 @@ pub async fn maybe_generate_session_title(
         return Ok(None);
     }
 
-    let Some((user, assistant)) = store.first_turn_text(&job.session_id)? else {
+    let Some((user, assistant)) = store.first_turn_text(&job.session_id).await? else {
         return Ok(None);
     };
     drop(store);
@@ -134,9 +134,7 @@ pub async fn maybe_generate_session_title(
         async move {
             complete_title_chat(&target, &prompt)
                 .await
-                // `{e}` 只会留下最外层 context（一个裸 URL），HTTP 状态与服务端
-                // 报错都在 source 链里。
-                .map_err(|e| format!("{e:#}"))
+                .map_err(|e| e.to_string())
         }
     })
     .await
@@ -148,8 +146,8 @@ pub async fn maybe_generate_session_title(
         return Ok(None);
     }
 
-    let store = open_store(&job.memory_dir)?;
-    let wrote = store.set_session_title_if_empty(&job.session_id, &title)?;
+    let store = open_store(&job.memory_dir).await?;
+    let wrote = store.set_session_title_if_empty(&job.session_id, &title).await?;
     if !wrote {
         info!(
             session = %job.session_id,
@@ -165,9 +163,9 @@ pub async fn maybe_generate_session_title(
     }))
 }
 
-fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionStore> {
+async fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionStore> {
     memory::ensure_workspace(memory_dir)?;
-    session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).await
 }
 
 async fn complete_title_chat(target: &types::ChatTarget, prompt: &str) -> anyhow::Result<String> {

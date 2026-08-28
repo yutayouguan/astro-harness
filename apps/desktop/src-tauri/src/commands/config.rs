@@ -558,13 +558,13 @@ pub async fn get_usage_insights(args: UsageInsightsArgs) -> Result<usage::UsageI
         other => return Err(format!("invalid period: {other}")),
     };
     let agent_id = normalize_agent_id(args.agent_id);
-    let db = usage::UsageDb::open_default().map_err(|e| e.to_string())?;
+    let db = usage::UsageDb::open_default().await.map_err(|e| e.to_string())?;
     db.query_insights(usage::UsageInsightsQuery {
         period,
         as_of: args.as_of,
         agent_id,
     })
-    .map_err(|e| e.to_string())
+    .await.map_err(|e| e.to_string())
 }
 
 /// `get_trace_insights` 请求参数。
@@ -593,7 +593,7 @@ pub async fn get_trace_insights(args: TraceInsightsArgs) -> Result<usage::TraceI
         as_of: args.as_of,
         agent_id,
     })
-    .map_err(|e| e.to_string())
+    .await.map_err(|e| e.to_string())
 }
 
 /// `query_agent_logs` 请求参数。

@@ -53,5 +53,5 @@ pub enum StoreError {
     ValidationFailed(String),
 
     #[error(transparent)]
-    Db(#[from] rusqlite::Error),
+    Db(#[from] agent_db::sqlx::Error),
 }

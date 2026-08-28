@@ -1,0 +1,15 @@
+[package]
+name = "agent-db"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sqlx = { version = "0.9", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+    "sqlite-bundled",
+    "migrate",
+] }
+tokio = { version = "1", features = ["sync"] }
+tracing = "0.1"
+thiserror = "2"

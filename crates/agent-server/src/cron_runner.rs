@@ -1,6 +1,6 @@
 //! 后台 cron ticker：认领到期任务并调用 `agent::exec::cron`。
 //!
-//! 注意：`rusqlite::Connection` 不可跨 `.await`，故先同步 `claim_due` 再异步执行。
+//! 凭据解析后异步认领到期任务并执行。
 //!
 //! 凭据解析：读 `providers.json` + **仅环境变量** API Key（无 keyring；GUI 手动跑走 Tauri）。
 
@@ -168,7 +168,7 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
 
 /// 认领到期任务并逐个执行；打开 store / claim 失败时提前返回。
 pub async fn tick_and_execute() {
-    if let Err(err) = cron_exec::reconcile_orphaned_runs() {
+    if let Err(err) = cron_exec::reconcile_orphaned_runs().await {
         tracing::warn!(error = %err, "cron tick: reconcile orphaned runs failed");
     }
 

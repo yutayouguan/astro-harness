@@ -1,22 +1,10 @@
-//! 文件空间（Artifact）索引：SQLite 登记 uploads 与工作区产出文件。
-//!
-//! 职责：
-//! - 在 `~/.astro/sessions/artifacts.db` 按路径唯一索引文件元数据
-//! - 按扩展名归类、过滤系统垃圾文件、支持按 Agent / 会话查询
-//! - `reconcile` 扫描磁盘与索引对齐（补登记、标记 missing）
-//!
-//! 不变量：
-//! - `path` 为唯一键；同路径重复 `register` 走 UPSERT 并清除 `missing`
-//! - 系统垃圾文件（`.DS_Store`、`._*` 等）不入库且在列表中排除
-//! - Agent 工作区内的核心模板 md 与 `SKILL.md` 不参与 reconcile 登记
-
 use anyhow::Context;
-use rusqlite::{params, Connection, OptionalExtension};
+use agent_db::sqlx::{self, Row};
+use agent_db::{AstroDb, DbSpec, SqlitePool};
 use std::path::{Path, PathBuf};
 use types::SqliteStore;
 use uuid::Uuid;
 
-/// 建表 DDL（`artifacts` 及 session/category/name/agent 索引）
 const DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS artifacts (
     id TEXT PRIMARY KEY,
@@ -39,7 +27,8 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_name ON artifacts(name);
 CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON artifacts(agent_id, created_at DESC);
 "#;
 
-/// Agent 工作区内不参与 reconcile 的核心模板文件名
+const DB_SPEC: DbSpec = DbSpec::new("artifacts", "artifacts.db");
+
 const MEMORY_TEMPLATES: &[&str] = &[
     "IDENTITY.md",
     "USER.md",
@@ -49,19 +38,14 @@ const MEMORY_TEMPLATES: &[&str] = &[
     "MEMORY.md",
 ];
 
-/// 文件登记来源
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArtifactSource {
-    /// Agent 工具写入
     AgentWrite,
-    /// 用户上传
     UserUpload,
-    /// 磁盘 reconcile 扫描发现
     Reconcile,
 }
 
 impl ArtifactSource {
-    /// 持久化用的 source 字符串
     pub fn as_str(self) -> &'static str {
         match self {
             Self::AgentWrite => "agent_write",
@@ -71,72 +55,62 @@ impl ArtifactSource {
     }
 }
 
-/// 索引表中的一行文件记录
 #[derive(Debug, Clone)]
 pub struct ArtifactRow {
     pub id: String,
-    /// 规范化后的绝对路径（唯一键）
     pub path: String,
     pub name: String,
-    /// 扩展名推断的分类：`doc` / `image` / `code` 等
     pub category: String,
     pub mime: Option<String>,
     pub size: i64,
-    /// 来源字符串（见 [`ArtifactSource::as_str`]）
     pub source: String,
     pub session_id: Option<String>,
     pub message_id: Option<String>,
     pub agent_id: String,
     pub created_at: String,
     pub updated_at: String,
-    /// 磁盘上已不存在时为 true
     pub missing: bool,
 }
 
-/// `reconcile` 扫描结果统计
 #[derive(Debug, Clone, Default)]
 pub struct ReconcileReport {
-    /// 新登记的文件数
     pub added: u32,
-    /// 标记为 missing 的文件数
     pub marked_missing: u32,
 }
 
-/// Artifact SQLite 访问层
 pub struct ArtifactDb {
-    conn: Connection,
+    pool: SqlitePool,
     path: PathBuf,
 }
 
-/// 默认数据库路径：`{memory_dir}/data/artifacts.db`
 pub fn artifacts_db_path(memory_dir: &Path) -> PathBuf {
-    memory_dir.join("data").join("artifacts.db")
+    memory_dir.join("sessions").join("artifacts.db")
 }
 
-fn db_has_agent_id_column(path: &Path) -> anyhow::Result<bool> {
-    let conn = Connection::open(path)?;
-    let has_table: bool = conn.query_row(
-        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='artifacts'",
-        [],
-        |row| row.get(0),
-    )?;
-    if !has_table {
+async fn db_has_agent_id_column(path: &Path) -> anyhow::Result<bool> {
+    let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
+    let pool = db.open_pool(&DB_SPEC).await?;
+    let (has_table,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='artifacts'",
+    )
+    .fetch_one(&pool)
+    .await?;
+    if has_table == 0 {
+        pool.close().await;
         return Ok(true);
     }
-    let has_col = conn
-        .prepare("PRAGMA table_info(artifacts)")?
-        .query_map([], |r| r.get::<_, String>(1))?
-        .filter_map(|c| c.ok())
-        .any(|name| name == "agent_id");
-    Ok(has_col)
+    let rows: Vec<(String,)> =
+        sqlx::query_as("SELECT name FROM pragma_table_info('artifacts')")
+            .fetch_all(&pool)
+            .await?;
+    pool.close().await;
+    Ok(rows.iter().any(|(name,)| name == "agent_id"))
 }
 
-/// 打开默认 artifacts 数据库
-pub fn open_default(memory_dir: &Path) -> anyhow::Result<ArtifactDb> {
-    ArtifactDb::new(artifacts_db_path(memory_dir))
+pub async fn open_default(memory_dir: &Path) -> anyhow::Result<ArtifactDb> {
+    ArtifactDb::new(artifacts_db_path(memory_dir)).await
 }
 
-/// 路径存在时 canonicalize；否则转为绝对路径（相对路径基于当前工作目录）
 pub fn normalize_artifact_path(path: &Path) -> PathBuf {
     if path.exists() {
         path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
@@ -149,7 +123,6 @@ pub fn normalize_artifact_path(path: &Path) -> PathBuf {
     }
 }
 
-/// 按文件名扩展名推断 UI 分类
 pub fn category_from_name(name: &str) -> &'static str {
     let ext = Path::new(name)
         .extension()
@@ -168,10 +141,9 @@ pub fn category_from_name(name: &str) -> &'static str {
     }
 }
 
-/// 系统/资源管理器垃圾文件，不进入文件空间索引。
 pub fn is_junk_artifact_name(name: &str) -> bool {
     if name.starts_with("._") {
-        return true; // AppleDouble
+        return true;
     }
     matches!(
         name.to_ascii_lowercase().as_str(),
@@ -188,31 +160,45 @@ pub fn is_junk_artifact_name(name: &str) -> bool {
     )
 }
 
-/// 列表查询时排除系统垃圾文件的 SQL 片段
 const JUNK_NAME_SQL: &str = " AND lower(name) NOT IN (
     '.ds_store','thumbs.db','ehthumbs.db','desktop.ini','.localized',
     '.spotlight-v100','.trashes','.fseventsd','.temporaryitems','.volumeicon.icns'
 ) AND name NOT LIKE '._%'";
 
+fn row_to_artifact(r: &sqlx::sqlite::SqliteRow) -> ArtifactRow {
+    ArtifactRow {
+        id: r.get("id"),
+        path: r.get("path"),
+        name: r.get("name"),
+        category: r.get("category"),
+        mime: r.get("mime"),
+        size: r.get("size"),
+        source: r.get("source"),
+        session_id: r.get("session_id"),
+        message_id: r.get("message_id"),
+        agent_id: r.get("agent_id"),
+        created_at: r.get("created_at"),
+        updated_at: r.get("updated_at"),
+        missing: r.get::<i64, _>("missing") != 0,
+    }
+}
+
 impl ArtifactDb {
-    /// 打开或创建数据库并执行 DDL；缺 `agent_id` 的旧库直接丢弃重建。
-    pub fn new(path: PathBuf) -> anyhow::Result<Self> {
-        if path.exists() && !db_has_agent_id_column(&path)? {
+    pub async fn new(path: PathBuf) -> anyhow::Result<Self> {
+        if path.exists() && !db_has_agent_id_column(&path).await? {
             types::delete_sqlite_files(&path);
         }
-        let conn = types::open_wal(&path)?;
-        let db = Self { conn, path };
-        db.migrate()?;
-        Ok(db)
+        let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
+        let pool = db.open_pool(&DB_SPEC).await?;
+        sqlx::query(DDL).execute(&pool).await?;
+        Ok(Self { pool, path })
     }
 
-    /// 数据库文件路径
     pub fn db_path(&self) -> &Path {
         &self.path
     }
 
-    /// 登记或更新文件索引；垃圾文件名会拒绝；同 path UPSERT
-    pub fn register(
+    pub async fn register(
         &self,
         path: &str,
         source: ArtifactSource,
@@ -238,7 +224,7 @@ impl ArtifactDb {
             agent_id = default_agent_id.to_string();
         }
 
-        let sql = format!(
+        sqlx::query(
             "INSERT INTO artifacts (id, path, name, category, size, source, session_id, message_id, agent_id, missing)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)
              ON CONFLICT(path) DO UPDATE SET
@@ -252,111 +238,89 @@ impl ArtifactDb {
                  session_id = COALESCE(excluded.session_id, artifacts.session_id),
                  message_id = COALESCE(excluded.message_id, artifacts.message_id),
                  agent_id = CASE
-                     WHEN excluded.agent_id != '{default_agent_id}' THEN excluded.agent_id
+                     WHEN excluded.agent_id != ?10 THEN excluded.agent_id
                      ELSE artifacts.agent_id
                  END,
                  missing = 0,
-                 updated_at = datetime('now')"
-        );
+                 updated_at = datetime('now')",
+        )
+        .bind(&id)
+        .bind(path)
+        .bind(&name)
+        .bind(&category)
+        .bind(size)
+        .bind(source.as_str())
+        .bind(session_id)
+        .bind(message_id)
+        .bind(&agent_id)
+        .bind(default_agent_id)
+        .execute(&self.pool)
+        .await?;
 
-        self.conn.execute(
-            &sql,
-            params![
-                id,
-                path,
-                name,
-                category,
-                size,
-                source.as_str(),
-                session_id,
-                message_id,
-                agent_id,
-            ],
-        )?;
-
-        self.get_by_path(path)?
+        self.get_by_path(path)
+            .await?
             .with_context(|| format!("artifact missing after register: {path}"))
     }
 
-    /// 按规范化 path 查询单条记录
-    pub fn get_by_path(&self, path: &str) -> anyhow::Result<Option<ArtifactRow>> {
-        let mut stmt = self.conn.prepare(
+    pub async fn get_by_path(&self, path: &str) -> anyhow::Result<Option<ArtifactRow>> {
+        let row = sqlx::query(
             "SELECT id, path, name, category, mime, size, source, session_id, message_id,
                     agent_id, created_at, updated_at, missing
              FROM artifacts WHERE path = ?1",
-        )?;
-        let row = stmt
-            .query_row(params![path], |r| {
-                Ok(ArtifactRow {
-                    id: r.get(0)?,
-                    path: r.get(1)?,
-                    name: r.get(2)?,
-                    category: r.get(3)?,
-                    mime: r.get(4)?,
-                    size: r.get(5)?,
-                    source: r.get(6)?,
-                    session_id: r.get(7)?,
-                    message_id: r.get(8)?,
-                    agent_id: r.get(9)?,
-                    created_at: r.get(10)?,
-                    updated_at: r.get(11)?,
-                    missing: r.get::<_, i64>(12)? != 0,
-                })
-            })
-            .optional()?;
+        )
+        .bind(path)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|r| row_to_artifact(&r));
         Ok(row)
     }
 
-    /// 列出所有未关联会话（session_id 为空）且未 missing 的产物绝对路径。
-    ///
-    /// 供回填：把这些文件按历史会话消息里的媒体路径重新关联。
-    pub fn unlinked_paths(&self) -> anyhow::Result<Vec<String>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT path FROM artifacts WHERE session_id IS NULL AND missing = 0")?;
-        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-        let mut out = Vec::new();
-        for row in rows {
-            out.push(row?);
-        }
-        Ok(out)
+    pub async fn unlinked_paths(&self) -> anyhow::Result<Vec<String>> {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT path FROM artifacts WHERE session_id IS NULL AND missing = 0",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|(p,)| p).collect())
     }
 
-    /// 为「尚未关联」的产物回填 session/message；已关联的行不覆盖。返回是否更新。
-    pub fn link_session_by_path(
+    pub async fn link_session_by_path(
         &self,
         path: &str,
         session_id: &str,
         message_id: Option<&str>,
     ) -> anyhow::Result<bool> {
-        let changed = self.conn.execute(
+        let result = sqlx::query(
             "UPDATE artifacts
              SET session_id = ?2,
                  message_id = COALESCE(?3, message_id),
                  updated_at = datetime('now')
              WHERE path = ?1 AND session_id IS NULL",
-            params![path, session_id, message_id],
-        )?;
-        Ok(changed > 0)
+        )
+        .bind(path)
+        .bind(session_id)
+        .bind(message_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 
-    /// 按路径批量删除索引行，返回删除条数
-    pub fn remove_by_paths(&self, paths: &[String]) -> anyhow::Result<usize> {
+    pub async fn remove_by_paths(&self, paths: &[String]) -> anyhow::Result<usize> {
         if paths.is_empty() {
             return Ok(0);
         }
         let mut n = 0usize;
         for path in paths {
-            let changed = self
-                .conn
-                .execute("DELETE FROM artifacts WHERE path = ?1", [path])?;
-            n += changed;
+            let result = sqlx::query("DELETE FROM artifacts WHERE path = ?1")
+                .bind(path)
+                .execute(&self.pool)
+                .await?;
+            n += result.rows_affected() as usize;
         }
         Ok(n)
     }
 
-    /// 按分类、关键词、时间、Agent 过滤列表（默认排除 missing 与垃圾文件）
-    pub fn list(
+    pub async fn list(
         &self,
         category: Option<&str>,
         query: Option<&str>,
@@ -365,101 +329,85 @@ impl ArtifactDb {
         include_missing: bool,
         agent_id: Option<&str>,
     ) -> anyhow::Result<Vec<ArtifactRow>> {
-        let mut sql = String::from(
+        let mut qb = sqlx::QueryBuilder::new(
             "SELECT id, path, name, category, mime, size, source, session_id, message_id,
                     agent_id, created_at, updated_at, missing
              FROM artifacts WHERE 1=1",
         );
-        let mut binds: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
         if !include_missing {
-            sql.push_str(" AND missing = 0");
+            qb.push(" AND missing = 0");
         }
         if let Some(cat) = category.filter(|c| !c.is_empty() && *c != "all") {
-            sql.push_str(" AND category = ?");
-            binds.push(Box::new(cat.to_string()));
+            qb.push(" AND category = ");
+            qb.push_bind(cat.to_string());
         }
         if let Some(q) = query.map(str::trim).filter(|q| !q.is_empty()) {
-            sql.push_str(" AND name LIKE ?");
-            binds.push(Box::new(format!("%{q}%")));
+            qb.push(" AND name LIKE ");
+            qb.push_bind(format!("%{q}%"));
         }
         if recent_only {
-            sql.push_str(" AND created_at >= datetime('now', '-7 days')");
+            qb.push(" AND created_at >= datetime('now', '-7 days')");
         }
         if let Some(id) = agent_id.filter(|a| !a.is_empty()) {
-            sql.push_str(" AND agent_id = ?");
-            binds.push(Box::new(id.to_string()));
+            qb.push(" AND agent_id = ");
+            qb.push_bind(id.to_string());
         }
-        sql.push_str(JUNK_NAME_SQL);
-        sql.push_str(" ORDER BY created_at DESC LIMIT ?");
-        binds.push(Box::new(limit as i64));
+        qb.push(JUNK_NAME_SQL);
+        qb.push(" ORDER BY created_at DESC LIMIT ");
+        qb.push_bind(limit as i64);
 
-        let mut stmt = self.conn.prepare(&sql)?;
-        let params_ref: Vec<&dyn rusqlite::ToSql> = binds.iter().map(|b| b.as_ref()).collect();
-        let rows = stmt
-            .query_map(params_ref.as_slice(), |r| {
-                Ok(ArtifactRow {
-                    id: r.get(0)?,
-                    path: r.get(1)?,
-                    name: r.get(2)?,
-                    category: r.get(3)?,
-                    mime: r.get(4)?,
-                    size: r.get(5)?,
-                    source: r.get(6)?,
-                    session_id: r.get(7)?,
-                    message_id: r.get(8)?,
-                    agent_id: r.get(9)?,
-                    created_at: r.get(10)?,
-                    updated_at: r.get(11)?,
-                    missing: r.get::<_, i64>(12)? != 0,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        let rows = qb
+            .build()
+            .fetch_all(&self.pool)
+            .await?
+            .iter()
+            .map(row_to_artifact)
+            .collect();
         Ok(rows)
     }
 
-    /// 按分类统计数量（可选包含 missing、按 Agent 过滤）
-    pub fn category_counts(
+    pub async fn category_counts(
         &self,
         include_missing: bool,
         agent_id: Option<&str>,
     ) -> anyhow::Result<Vec<(String, i64)>> {
-        let mut sql = String::from("SELECT category, COUNT(*) FROM artifacts WHERE 1=1");
-        let mut binds: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-
+        let mut qb = sqlx::QueryBuilder::new(
+            "SELECT category, COUNT(*) FROM artifacts WHERE 1=1",
+        );
         if !include_missing {
-            sql.push_str(" AND missing = 0");
+            qb.push(" AND missing = 0");
         }
-        sql.push_str(JUNK_NAME_SQL);
+        qb.push(JUNK_NAME_SQL);
         if let Some(id) = agent_id.filter(|a| !a.is_empty()) {
-            sql.push_str(" AND agent_id = ?");
-            binds.push(Box::new(id.to_string()));
+            qb.push(" AND agent_id = ");
+            qb.push_bind(id.to_string());
         }
-        sql.push_str(" GROUP BY category");
+        qb.push(" GROUP BY category");
 
-        let mut stmt = self.conn.prepare(&sql)?;
-        let params_ref: Vec<&dyn rusqlite::ToSql> = binds.iter().map(|b| b.as_ref()).collect();
-        let rows = stmt
-            .query_map(params_ref.as_slice(), |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        let rows = qb
+            .build()
+            .fetch_all(&self.pool)
+            .await?
+            .iter()
+            .map(|r| (r.get::<String, _>(0), r.get::<i64, _>(1)))
+            .collect();
         Ok(rows)
     }
 
-    /// 扫描 `uploads` 与各 Agent 工作区，与索引对齐并标记已删文件
-    pub fn reconcile(&self, memory_root: &Path) -> anyhow::Result<ReconcileReport> {
+    pub async fn reconcile(&self, memory_root: &Path) -> anyhow::Result<ReconcileReport> {
         let mut report = ReconcileReport::default();
-        // 清掉历史上已入库的系统垃圾文件
-        self.conn.execute(
+        sqlx::query(
             "DELETE FROM artifacts WHERE lower(name) IN (
                 '.ds_store','thumbs.db','ehthumbs.db','desktop.ini','.localized',
                 '.spotlight-v100','.trashes','.fseventsd','.temporaryitems','.volumeicon.icns'
              ) OR name LIKE '._%'",
-            [],
-        )?;
-        let mut roots: Vec<(PathBuf, Option<String>)> = vec![(memory_root.join("uploads"), None)];
-        // 所有 Agent 工作区：workspace + workspace-*
+        )
+        .execute(&self.pool)
+        .await?;
+
+        let mut roots: Vec<(PathBuf, Option<String>)> =
+            vec![(memory_root.join("uploads"), None)];
         if let Ok(entries) = std::fs::read_dir(memory_root) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
@@ -492,42 +440,45 @@ impl ArtifactDb {
                 } else {
                     None
                 };
-                if self.get_by_path(&path_str)?.is_none() {
+                if self.get_by_path(&path_str).await?.is_none() {
                     self.register(
                         &path_str,
                         ArtifactSource::Reconcile,
                         None,
                         None,
                         reconcile_agent,
-                    )?;
+                    )
+                    .await?;
                     report.added += 1;
                 } else {
-                    self.conn.execute(
+                    sqlx::query(
                         "UPDATE artifacts SET missing = 0, size = ?2, updated_at = datetime('now')
                          WHERE path = ?1",
-                        params![
-                            path_str,
-                            std::fs::metadata(&entry)
-                                .map(|m| m.len() as i64)
-                                .unwrap_or(0)
-                        ],
-                    )?;
+                    )
+                    .bind(&path_str)
+                    .bind(
+                        std::fs::metadata(&entry)
+                            .map(|m| m.len() as i64)
+                            .unwrap_or(0),
+                    )
+                    .execute(&self.pool)
+                    .await?;
                 }
             }
         }
 
-        let mut stmt = self
-            .conn
-            .prepare("SELECT path FROM artifacts WHERE missing = 0")?;
-        let paths: Vec<String> = stmt
-            .query_map([], |r| r.get(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        for path in paths {
+        let paths: Vec<(String,)> =
+            sqlx::query_as("SELECT path FROM artifacts WHERE missing = 0")
+                .fetch_all(&self.pool)
+                .await?;
+        for (path,) in paths {
             if !Path::new(&path).exists() {
-                self.conn.execute(
+                sqlx::query(
                     "UPDATE artifacts SET missing = 1, updated_at = datetime('now') WHERE path = ?1",
-                    params![path],
-                )?;
+                )
+                .bind(&path)
+                .execute(&self.pool)
+                .await?;
                 report.marked_missing += 1;
             }
         }
@@ -536,24 +487,17 @@ impl ArtifactDb {
 }
 
 impl SqliteStore for ArtifactDb {
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn migrate(&self) -> anyhow::Result<()> {
-        self.conn.execute_batch(DDL)?;
-        Ok(())
+    fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 }
 
-/// 递归收集目录下所有普通文件（跳过 `__MACOSX` 与垃圾文件名）
 fn walkdir_files(root: &Path) -> anyhow::Result<Vec<PathBuf>> {
     let mut out = Vec::new();
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> anyhow::Result<()> {
         for e in std::fs::read_dir(dir)? {
             let e = e?;
             let name = e.file_name().to_string_lossy().to_string();
-            // 跳过系统目录与垃圾文件名
             if name == "__MACOSX" || is_junk_artifact_name(&name) {
                 continue;
             }
@@ -576,19 +520,18 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    #[test]
-    fn discards_db_without_agent_id_column() {
+    #[tokio::test]
+    async fn discards_db_without_agent_id_column() {
         let root = TempDir::new().unwrap();
-        let sessions = root.path().join("data");
+        let sessions = root.path().join("sessions");
         fs::create_dir_all(&sessions).unwrap();
         let db_path = artifacts_db_path(root.path());
 
-        // 模拟旧库：无 agent_id 列
         {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
-            conn.execute_batch(
-                r#"
-                CREATE TABLE artifacts (
+            let old_db = AstroDb::new(&sessions);
+            let pool = old_db.open_pool(&DB_SPEC).await.unwrap();
+            sqlx::query(
+                "CREATE TABLE artifacts (
                     id TEXT PRIMARY KEY,
                     path TEXT UNIQUE NOT NULL,
                     name TEXT NOT NULL,
@@ -601,16 +544,23 @@ mod tests {
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
                     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                     missing INTEGER NOT NULL DEFAULT 0
-                );
-                INSERT INTO artifacts (id, path, name, category, size, source)
-                VALUES ('old', '/tmp/old.txt', 'old.txt', 'doc', 1, 'reconcile');
-                "#,
+                )",
             )
+            .execute(&pool)
+            .await
             .unwrap();
+            sqlx::query(
+                "INSERT INTO artifacts (id, path, name, category, size, source)
+                 VALUES ('old', '/tmp/old.txt', 'old.txt', 'doc', 1, 'reconcile')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            pool.close().await;
         }
 
-        let db = ArtifactDb::new(db_path).unwrap();
-        assert!(db.get_by_path("/tmp/old.txt").unwrap().is_none());
+        let db = ArtifactDb::new(db_path).await.unwrap();
+        assert!(db.get_by_path("/tmp/old.txt").await.unwrap().is_none());
         let uploads = root.path().join("uploads");
         fs::create_dir_all(&uploads).unwrap();
         let file = uploads.join("a.txt");
@@ -623,21 +573,22 @@ mod tests {
                 None,
                 None,
             )
+            .await
             .unwrap();
         assert_eq!(row.agent_id, "default");
     }
 
-    #[test]
-    fn register_reconcile_and_list_by_category() {
+    #[tokio::test]
+    async fn register_reconcile_and_list_by_category() {
         let root = TempDir::new().unwrap();
         let uploads = root.path().join("uploads");
         fs::create_dir_all(&uploads).unwrap();
-        fs::create_dir_all(root.path().join("data")).unwrap();
+        fs::create_dir_all(root.path().join("sessions")).unwrap();
 
         let upload_path = uploads.join("photo.png");
         fs::write(&upload_path, b"fake-png").unwrap();
 
-        let db = ArtifactDb::new(artifacts_db_path(root.path())).unwrap();
+        let db = ArtifactDb::new(artifacts_db_path(root.path())).await.unwrap();
         let registered = db
             .register(
                 upload_path.to_str().unwrap(),
@@ -646,41 +597,44 @@ mod tests {
                 None,
                 None,
             )
+            .await
             .unwrap();
         assert_eq!(registered.category, "image");
         assert_eq!(registered.source, "user_upload");
         assert!(!registered.missing);
 
-        // Untracked file under uploads — reconcile should pick it up.
         let extra = uploads.join("notes.md");
         fs::write(&extra, b"# notes").unwrap();
-        let report = db.reconcile(root.path()).unwrap();
+        let report = db.reconcile(root.path()).await.unwrap();
         assert_eq!(report.added, 1);
         assert_eq!(report.marked_missing, 0);
 
         let images = db
             .list(Some("image"), None, false, 50, false, None)
+            .await
             .unwrap();
         assert_eq!(images.len(), 1);
         assert_eq!(images[0].name, "photo.png");
 
-        let docs = db.list(Some("doc"), None, false, 50, false, None).unwrap();
+        let docs = db
+            .list(Some("doc"), None, false, 50, false, None)
+            .await
+            .unwrap();
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0].name, "notes.md");
         assert_eq!(docs[0].source, "reconcile");
 
-        let counts = db.category_counts(false, None).unwrap();
+        let counts = db.category_counts(false, None).await.unwrap();
         assert!(counts.iter().any(|(c, n)| c == "image" && *n == 1));
         assert!(counts.iter().any(|(c, n)| c == "doc" && *n == 1));
     }
 
-    #[test]
-    fn artifact_db_impls_sqlite_store() {
+    #[tokio::test]
+    async fn artifact_db_impls_sqlite_store() {
         let root = TempDir::new().unwrap();
-        fs::create_dir_all(root.path().join("data")).unwrap();
+        fs::create_dir_all(root.path().join("sessions")).unwrap();
         let path = artifacts_db_path(root.path());
-        let db = ArtifactDb::new(path.clone()).unwrap();
-        assert_eq!(SqliteStore::path(&db), path.as_path());
-        db.migrate().unwrap();
+        let db = ArtifactDb::new(path).await.unwrap();
+        let _pool: &SqlitePool = SqliteStore::pool(&db);
     }
 }

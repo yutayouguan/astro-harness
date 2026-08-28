@@ -178,14 +178,14 @@ pub async fn run_loop(id: String) -> Result<WorkflowRunResult, String> {
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("workflow {} 不存在", id))?;
 
-    // WorkflowRunDb 含 rusqlite Connection（非 Send），需在 spawn_blocking + current_thread runtime 中执行
+    // WorkflowRunDb 在 spawn_blocking + current_thread runtime 中执行
     tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
         rt.block_on(async {
-            let run_db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
+            let run_db = WorkflowRunDb::open_default().await.map_err(|e| e.to_string())?;
             workflow::engine::execute_workflow(&wf, serde_json::json!({}), "manual", &run_db)
                 .await
                 .map_err(|e| e.to_string())
@@ -200,27 +200,27 @@ pub async fn list_loop_runs(
     workflow_id: Option<String>,
     limit: Option<i64>,
 ) -> Result<Vec<WorkflowRunRow>, String> {
-    let db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
+    let db = WorkflowRunDb::open_default().await.map_err(|e| e.to_string())?;
     db.list_runs(workflow_id.as_deref(), limit.unwrap_or(100))
-        .map_err(|e| e.to_string())
+        .await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn get_loop_run(run_id: String) -> Result<Option<WorkflowRunRow>, String> {
-    let db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
-    db.get_run(&run_id).map_err(|e| e.to_string())
+    let db = WorkflowRunDb::open_default().await.map_err(|e| e.to_string())?;
+    db.get_run(&run_id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn delete_loop_run(run_id: String) -> Result<bool, String> {
-    let db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
-    db.delete_run(&run_id).map_err(|e| e.to_string())
+    let db = WorkflowRunDb::open_default().await.map_err(|e| e.to_string())?;
+    db.delete_run(&run_id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn list_loop_step_logs(run_id: String) -> Result<Vec<WorkflowStepLogRow>, String> {
-    let db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
-    db.list_step_logs(&run_id).map_err(|e| e.to_string())
+    let db = WorkflowRunDb::open_default().await.map_err(|e| e.to_string())?;
+    db.list_step_logs(&run_id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

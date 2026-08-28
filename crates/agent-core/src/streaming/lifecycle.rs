@@ -592,7 +592,7 @@ pub(super) async fn record_llm_usage(
         },
         None,
         Some(agent.sessions()),
-    );
+    ).await;
 }
 
 pub(crate) async fn emit_usage(

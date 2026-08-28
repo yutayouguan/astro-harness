@@ -1,11 +1,11 @@
 //! Schema 版本、DDL、增量迁移与 FTS 自愈。
 
+use agent_db::sqlx;
 use anyhow::{Context, Result};
-use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 23;
+pub const SCHEMA_VERSION: i32 = 19;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -41,11 +41,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     title TEXT,
     archived_at REAL,
     pinned_at REAL,
-    branch_parent_message_id INTEGER,
-    branch_parent_turn_index INTEGER,
-    branch_inherited_turn_count INTEGER,
-    branch_created_at REAL,
-    branch_kind TEXT,
     api_call_count INTEGER DEFAULT 0,
     project_root TEXT,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
@@ -73,8 +68,8 @@ CREATE TABLE IF NOT EXISTS messages (
     reasoning TEXT,
     reasoning_content TEXT,
     reasoning_details TEXT,
-    reasoning_items TEXT,
-    message_items TEXT
+    codex_reasoning_items TEXT,
+    codex_message_items TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
@@ -124,118 +119,44 @@ impl SessionStore {
     ///
     /// 即便 `schema_version` 已到目标，仍幂等补齐缺列：合并分支可能先 stamp
     /// 了 v14（如 `archived_at`）却未加 `compressed_content`。
-    pub(crate) fn migrate_schema(&self) -> Result<()> {
-        let current = self.read_schema_version_or_zero()?;
-        let tx = self.conn.unchecked_transaction()?;
-        if current < SCHEMA_VERSION && !self.table_exists("messages")? {
-            self.conn.execute_batch(SCHEMA_V11_DDL)?;
-            self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
+    pub(crate) async fn migrate_schema(&self) -> Result<()> {
+        let current = self.read_schema_version_or_zero().await?;
+        if current < SCHEMA_VERSION && !self.table_exists("messages").await? {
+            sqlx::raw_sql(SCHEMA_V11_DDL).execute(&self.pool).await?;
+            sqlx::raw_sql(MESSAGES_FTS_V11_DDL).execute(&self.pool).await?;
         }
 
-        // 必须先补齐列，再执行引用这些列的数据清洗；版本已到也要自愈半迁移库。
-        if self.table_exists("messages")? {
-            self.ensure_messages_compressed_content_column()?;
-            self.ensure_messages_media_json_column()?;
+        if self.table_exists("messages").await? {
+            self.ensure_messages_compressed_content_column().await?;
+            self.ensure_messages_media_json_column().await?;
         }
-        if self.table_exists("sessions")? && !self.column_exists("sessions", "archived_at")? {
-            self.conn
-                .execute("ALTER TABLE sessions ADD COLUMN archived_at REAL", [])?;
+        if self.table_exists("sessions").await? && !self.column_exists("sessions", "archived_at").await? {
+            sqlx::query("ALTER TABLE sessions ADD COLUMN archived_at REAL")
+                .execute(&self.pool)
+                .await?;
         }
-        if self.table_exists("sessions")? && !self.column_exists("sessions", "pinned_at")? {
-            self.conn
-                .execute("ALTER TABLE sessions ADD COLUMN pinned_at REAL", [])?;
-        }
-        if self.table_exists("sessions")?
-            && !self.column_exists("sessions", "branch_parent_message_id")?
-        {
-            self.conn.execute(
-                "ALTER TABLE sessions ADD COLUMN branch_parent_message_id INTEGER",
-                [],
-            )?;
-        }
-        if self.table_exists("sessions")?
-            && !self.column_exists("sessions", "branch_parent_turn_index")?
-        {
-            self.conn.execute(
-                "ALTER TABLE sessions ADD COLUMN branch_parent_turn_index INTEGER",
-                [],
-            )?;
-        }
-        if self.table_exists("sessions")?
-            && !self.column_exists("sessions", "branch_inherited_turn_count")?
-        {
-            self.conn.execute(
-                "ALTER TABLE sessions ADD COLUMN branch_inherited_turn_count INTEGER",
-                [],
-            )?;
-        }
-        if self.table_exists("sessions")? && !self.column_exists("sessions", "branch_created_at")? {
-            self.conn
-                .execute("ALTER TABLE sessions ADD COLUMN branch_created_at REAL", [])?;
-        }
-        if self.table_exists("sessions")? && !self.column_exists("sessions", "branch_kind")? {
-            self.conn
-                .execute("ALTER TABLE sessions ADD COLUMN branch_kind TEXT", [])?;
-        }
-        if self.table_exists("projects")? && !self.column_exists("projects", "icon")? {
-            self.conn
-                .execute("ALTER TABLE projects ADD COLUMN icon TEXT", [])?;
-        }
-        if self.table_exists("project_roots")?
-            && !self.column_exists("project_roots", "root_position")?
-        {
-            self.conn.execute(
-                "ALTER TABLE project_roots ADD COLUMN root_position INTEGER NOT NULL DEFAULT 0",
-                [],
-            )?;
-            // v19 按 path 读取 roots；迁移时沿用该稳定顺序，之后由用户显式排序。
-            self.conn.execute_batch(
-                "WITH ranked AS (
-                    SELECT project_id, path,
-                           ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY path) - 1 AS pos
-                    FROM project_roots
-                 )
-                 UPDATE project_roots
-                 SET root_position = (
-                    SELECT pos FROM ranked
-                    WHERE ranked.project_id = project_roots.project_id
-                      AND ranked.path = project_roots.path
-                 );",
-            )?;
-        }
-        if self.table_exists("project_roots")? {
-            self.conn.execute_batch(
-                "CREATE INDEX IF NOT EXISTS idx_project_roots_path
-                    ON project_roots(path);
-                 CREATE INDEX IF NOT EXISTS idx_project_roots_project_position
-                    ON project_roots(project_id, root_position);",
-            )?;
-        }
-        if self.table_exists("sessions")? && self.column_exists("sessions", "project_id")? {
-            self.conn.execute_batch(
-                "CREATE INDEX IF NOT EXISTS idx_sessions_project_id
-                    ON sessions(project_id);",
-            )?;
+        if self.table_exists("sessions").await? && !self.column_exists("sessions", "pinned_at").await? {
+            sqlx::query("ALTER TABLE sessions ADD COLUMN pinned_at REAL")
+                .execute(&self.pool)
+                .await?;
         }
 
         if current < SCHEMA_VERSION {
-            // v16→v17：删除历史用户消息末尾的 `chatModeHint`。
-            if (1..17).contains(&current) && self.table_exists("messages")? {
+            if (1..17).contains(&current) && self.table_exists("messages").await? {
                 self.strip_legacy_chat_mode_hints()
+                    .await
                     .context("strip legacy chatModeHint from user messages")?;
             }
-            // v17→v18：sessions 表加 project_root 列，用于按项目过滤会话。
-            if self.table_exists("sessions")? && !self.column_exists("sessions", "project_root")? {
-                self.conn
-                    .execute("ALTER TABLE sessions ADD COLUMN project_root TEXT", [])?;
+            if self.table_exists("sessions").await? && !self.column_exists("sessions", "project_root").await? {
+                sqlx::query("ALTER TABLE sessions ADD COLUMN project_root TEXT")
+                    .execute(&self.pool)
+                    .await?;
             }
-            // v18→v19：引入 projects / project_roots 实体表，替代 sessions.project_root 字符串。
-            if !self.table_exists("projects")? {
-                self.conn.execute_batch(
+            if !self.table_exists("projects").await? {
+                sqlx::raw_sql(
                     "CREATE TABLE IF NOT EXISTS projects (
                         id TEXT PRIMARY KEY,
                         name TEXT NOT NULL,
-                        icon TEXT,
                         position INTEGER NOT NULL DEFAULT 0,
                         created_at TEXT NOT NULL DEFAULT (datetime('now')),
                         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -243,57 +164,48 @@ impl SessionStore {
                     CREATE TABLE IF NOT EXISTS project_roots (
                         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
                         path TEXT NOT NULL,
-                        root_position INTEGER NOT NULL DEFAULT 0,
                         PRIMARY KEY (project_id, path)
                     );",
-                )?;
+                )
+                .execute(&self.pool)
+                .await?;
             }
-            if self.table_exists("sessions")? && !self.column_exists("sessions", "project_id")? {
-                self.conn.execute(
+            if self.table_exists("projects").await?
+                && !self.column_exists("projects", "icon").await?
+            {
+                sqlx::query("ALTER TABLE projects ADD COLUMN icon TEXT")
+                    .execute(&self.pool)
+                    .await?;
+            }
+            if self.table_exists("sessions").await?
+                && !self.column_exists("sessions", "project_id").await?
+            {
+                sqlx::query(
                     "ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id)",
-                    [],
-                )?;
-                // 迁移已有 project_root → projects 实体
-                self.migrate_project_root_to_projects()?;
+                )
+                .execute(&self.pool)
+                .await?;
+                self.migrate_project_root_to_projects().await?;
             }
-            // v22→v23：rename codex_reasoning_items / codex_message_items → reasoning_items / message_items。
-            if current >= 11 && current < 23 && self.table_exists("messages")? {
-                if self.column_exists("messages", "codex_reasoning_items")? {
-                    self.conn.execute_batch(
-                        "ALTER TABLE messages RENAME COLUMN codex_reasoning_items TO reasoning_items;
-                         ALTER TABLE messages RENAME COLUMN codex_message_items TO message_items;",
-                    )?;
-                }
-            }
-            // v19→v22 的列与索引由上方幂等自愈分支补齐。
-            self.stamp_schema_version()?;
+            self.stamp_schema_version().await?;
         }
-        tx.commit()?;
         Ok(())
     }
 
     /// 剥离用户消息末尾遗留的 `\n\n---\n[Mode: …]`（旧 `chatModeHint`）。
     ///
     /// UPDATE 会触发 FTS 同步；仅改写带该后缀的 user 行。
-    pub(crate) fn strip_legacy_chat_mode_hints(&self) -> Result<()> {
-        let mut stmt = self.conn.prepare(
+    pub(crate) async fn strip_legacy_chat_mode_hints(&self) -> Result<()> {
+        let rows: Vec<(i64, Option<String>, Option<String>)> = sqlx::query_as(
             "SELECT id, content, compressed_content FROM messages
              WHERE role = 'user'
                AND (
                  content LIKE '%' || char(10) || char(10) || '---' || char(10) || '[Mode: %'
                  OR compressed_content LIKE '%' || char(10) || char(10) || '---' || char(10) || '[Mode: %'
                )",
-        )?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        drop(stmt);
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         let mut updated = 0usize;
         for (id, content, compressed) in rows {
@@ -308,10 +220,14 @@ impl SessionStore {
             if new_content == content && new_compressed == compressed {
                 continue;
             }
-            self.conn.execute(
+            sqlx::query(
                 "UPDATE messages SET content = ?1, compressed_content = ?2 WHERE id = ?3",
-                params![new_content, new_compressed, id],
-            )?;
+            )
+            .bind(&new_content)
+            .bind(&new_compressed)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
             updated += 1;
         }
         if updated > 0 {
@@ -323,67 +239,61 @@ impl SessionStore {
         Ok(())
     }
 
-    pub(crate) fn ensure_messages_compressed_content_column(&self) -> Result<()> {
-        let exists: bool = self.conn.query_row(
-            "SELECT COUNT(*) > 0 FROM pragma_table_info('messages') WHERE name = 'compressed_content'",
-            [],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            self.conn.execute(
-                "ALTER TABLE messages ADD COLUMN compressed_content TEXT",
-                [],
-            )?;
+    pub(crate) async fn ensure_messages_compressed_content_column(&self) -> Result<()> {
+        if !self.column_exists("messages", "compressed_content").await? {
+            sqlx::query("ALTER TABLE messages ADD COLUMN compressed_content TEXT")
+                .execute(&self.pool)
+                .await?;
         }
         Ok(())
     }
 
-    pub(crate) fn ensure_messages_media_json_column(&self) -> Result<()> {
-        let exists: bool = self.conn.query_row(
-            "SELECT COUNT(*) > 0 FROM pragma_table_info('messages') WHERE name = 'media_json'",
-            [],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            self.conn
-                .execute("ALTER TABLE messages ADD COLUMN media_json TEXT", [])?;
+    pub(crate) async fn ensure_messages_media_json_column(&self) -> Result<()> {
+        if !self.column_exists("messages", "media_json").await? {
+            sqlx::query("ALTER TABLE messages ADD COLUMN media_json TEXT")
+                .execute(&self.pool)
+                .await?;
         }
         Ok(())
     }
 
     /// v18→v19 数据迁移：将 `sessions.project_root` 去重后创建 `projects` 实体，
     /// 并将 `sessions.project_id` 指向对应 project。
-    pub(crate) fn migrate_project_root_to_projects(&self) -> Result<()> {
-        let mut stmt = self.conn.prepare(
+    pub(crate) async fn migrate_project_root_to_projects(&self) -> Result<()> {
+        let roots: Vec<(String,)> = sqlx::query_as(
             "SELECT DISTINCT project_root FROM sessions
              WHERE project_root IS NOT NULL AND TRIM(project_root) != ''",
-        )?;
-        let roots: Vec<String> = stmt
-            .query_map([], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        drop(stmt);
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
-        for root in &roots {
+        for (root,) in &roots {
             let id = uuid::Uuid::new_v4().simple().to_string();
-            let name = root.rsplit('/').find(|s| !s.is_empty()).unwrap_or(root);
-            // 取当前最大 position + 1
-            let next_pos: i64 = self.conn.query_row(
+            let name = root
+                .rsplit('/')
+                .find(|s| !s.is_empty())
+                .unwrap_or(root);
+            let (next_pos,): (i64,) = sqlx::query_as(
                 "SELECT COALESCE(MAX(position), -1) + 1 FROM projects",
-                [],
-                |row| row.get(0),
-            )?;
-            self.conn.execute(
-                "INSERT INTO projects (id, name, position) VALUES (?1, ?2, ?3)",
-                params![id, name, next_pos],
-            )?;
-            self.conn.execute(
-                "INSERT INTO project_roots (project_id, path) VALUES (?1, ?2)",
-                params![id, root],
-            )?;
-            self.conn.execute(
-                "UPDATE sessions SET project_id = ?1 WHERE project_root = ?2",
-                params![id, root],
-            )?;
+            )
+            .fetch_one(&self.pool)
+            .await?;
+            sqlx::query("INSERT INTO projects (id, name, position) VALUES (?1, ?2, ?3)")
+                .bind(&id)
+                .bind(name)
+                .bind(next_pos)
+                .execute(&self.pool)
+                .await?;
+            sqlx::query("INSERT INTO project_roots (project_id, path) VALUES (?1, ?2)")
+                .bind(&id)
+                .bind(root)
+                .execute(&self.pool)
+                .await?;
+            sqlx::query("UPDATE sessions SET project_id = ?1 WHERE project_root = ?2")
+                .bind(&id)
+                .bind(root)
+                .execute(&self.pool)
+                .await?;
         }
         if !roots.is_empty() {
             tracing::info!(
@@ -394,35 +304,37 @@ impl SessionStore {
         Ok(())
     }
 
-    pub(crate) fn stamp_schema_version(&self) -> Result<()> {
-        self.conn.execute("DELETE FROM schema_version", [])?;
-        self.conn.execute(
-            "INSERT INTO schema_version (version) VALUES (?1)",
-            params![SCHEMA_VERSION],
-        )?;
+    pub(crate) async fn stamp_schema_version(&self) -> Result<()> {
+        sqlx::query("DELETE FROM schema_version")
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("INSERT INTO schema_version (version) VALUES (?1)")
+            .bind(SCHEMA_VERSION)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    pub(crate) fn table_exists(&self, name: &str) -> Result<bool> {
-        let exists: bool = self.conn.query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
-            params![name],
-            |row| row.get(0),
-        )?;
-        Ok(exists)
+    pub(crate) async fn table_exists(&self, name: &str) -> Result<bool> {
+        let (count,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+        )
+        .bind(name)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count > 0)
     }
 
-    pub(crate) fn column_exists(&self, table: &str, column: &str) -> Result<bool> {
-        let sql = format!("PRAGMA table_info({table})");
-        let mut stmt = self.conn.prepare(&sql)?;
-        let names = stmt
-            .query_map([], |row| row.get::<_, String>(1))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(names.iter().any(|name| name == column))
+    pub(crate) async fn column_exists(&self, table: &str, column: &str) -> Result<bool> {
+        let sql = format!("SELECT name FROM pragma_table_info('{table}')");
+        let rows: Vec<(String,)> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows.iter().any(|(name,)| name == column))
     }
 
-    pub(crate) fn drop_messages_fts_objects(&self) -> Result<()> {
-        self.conn.execute_batch(
+    pub(crate) async fn drop_messages_fts_objects(&self) -> Result<()> {
+        sqlx::raw_sql(
             "DROP TRIGGER IF EXISTS sync_messages_to_fts;
              DROP TRIGGER IF EXISTS sync_messages_fts_update;
              DROP TRIGGER IF EXISTS sync_messages_fts_delete;
@@ -431,25 +343,31 @@ impl SessionStore {
              DROP TRIGGER IF EXISTS messages_fts_update;
              DROP TABLE IF EXISTS messages_fts;
              DROP TABLE IF EXISTS messages_fts_trigram;",
-        )?;
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    pub(crate) fn rebuild_messages_fts_v11(&self) -> Result<()> {
-        self.drop_messages_fts_objects()?;
-        self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
-        self.conn.execute_batch(
+    pub(crate) async fn rebuild_messages_fts_v11(&self) -> Result<()> {
+        self.drop_messages_fts_objects().await?;
+        sqlx::raw_sql(MESSAGES_FTS_V11_DDL)
+            .execute(&self.pool)
+            .await?;
+        sqlx::raw_sql(
             "INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
              SELECT id, content, tool_name, tool_calls FROM messages;
              INSERT INTO messages_fts_trigram(rowid, content, tool_name, tool_calls)
              SELECT id, content, tool_name, tool_calls FROM messages;",
-        )?;
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
     /// 为仅存在于 `messages` 的 `session_id` 补齐 `sessions` 行（幂等）。
-    pub(crate) fn backfill_sessions_from_messages(&self) -> Result<()> {
-        self.conn.execute(
+    pub(crate) async fn backfill_sessions_from_messages(&self) -> Result<()> {
+        sqlx::query(
             "INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
              SELECT
                  m.session_id,
@@ -460,23 +378,25 @@ impl SessionStore {
              FROM messages m
              WHERE NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = m.session_id)
              GROUP BY m.session_id",
-            [],
-        )?;
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
     /// 检测并重建失效的 `messages_fts` 触发器（坏触发器 / 错误 delete 语法）。
-    pub(crate) fn repair_messages_fts_if_needed(&self) -> Result<()> {
-        if !self.needs_messages_fts_repair()? {
+    pub(crate) async fn repair_messages_fts_if_needed(&self) -> Result<()> {
+        if !self.needs_messages_fts_repair().await? {
             return Ok(());
         }
         self.rebuild_messages_fts_v11()
+            .await
             .context("repair messages_fts triggers")?;
         Ok(())
     }
 
-    pub(crate) fn needs_messages_fts_repair(&self) -> Result<bool> {
-        let broken: i64 = self.conn.query_row(
+    pub(crate) async fn needs_messages_fts_repair(&self) -> Result<bool> {
+        let (broken,): (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM sqlite_master
              WHERE type = 'trigger'
                AND name IN (
@@ -484,43 +404,37 @@ impl SessionStore {
                  'sync_messages_fts_update',
                  'sync_messages_fts_delete'
                )",
-            [],
-            |row| row.get(0),
-        )?;
+        )
+        .fetch_one(&self.pool)
+        .await?;
         if broken > 0 {
             return Ok(true);
         }
 
-        let delete_sql: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT sql FROM sqlite_master
-                 WHERE type = 'trigger' AND name = 'messages_fts_delete'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()?;
+        let delete_sql: Option<(String,)> = sqlx::query_as(
+            "SELECT sql FROM sqlite_master
+             WHERE type = 'trigger' AND name = 'messages_fts_delete'",
+        )
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(delete_sql
-            .as_deref()
-            .is_some_and(|sql| sql.contains("'delete'")))
+            .as_ref()
+            .is_some_and(|(sql,)| sql.contains("'delete'")))
     }
 
-    pub(crate) fn read_schema_version_or_zero(&self) -> Result<i32> {
-        let exists: bool = self.conn.query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_version'",
-            [],
-            |row| row.get(0),
-        )?;
-        if !exists {
+    pub(crate) async fn read_schema_version_or_zero(&self) -> Result<i32> {
+        let (exists,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_version'",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        if exists == 0 {
             return Ok(0);
         }
-        let version: Option<i32> = self
-            .conn
-            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
-                row.get(0)
-            })
-            .optional()?;
-        Ok(version.unwrap_or(0))
+        let version: Option<(i32,)> = sqlx::query_as("SELECT version FROM schema_version LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(version.map(|(v,)| v).unwrap_or(0))
     }
 }
 

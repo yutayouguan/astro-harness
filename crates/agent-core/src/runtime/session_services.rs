@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex, RwLock};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde_json::Value;
 use session::{
     BillingDelta, ConversationStore, NewMessage, ScrolledMessage, SearchHit, StoredMessage,
@@ -54,89 +54,76 @@ impl SessionServices {
     }
 }
 
-/// 线程安全的 ConversationStore 包装，通过 Mutex 保证同步访问。
 pub(crate) struct SharedConversationStore {
-    inner: Mutex<Box<dyn ConversationStore>>,
+    inner: Arc<dyn ConversationStore>,
 }
 
 impl SharedConversationStore {
     fn new(store: Box<dyn ConversationStore>) -> Self {
         Self {
-            inner: Mutex::new(store),
+            inner: Arc::from(store),
         }
-    }
-
-    fn with_store<T>(
-        &self,
-        operation: impl FnOnce(&dyn ConversationStore) -> Result<T>,
-    ) -> Result<T> {
-        let store = self
-            .inner
-            .lock()
-            .map_err(|_| anyhow!("conversation store mutex poisoned"))?;
-        operation(store.as_ref())
     }
 }
 
+#[async_trait::async_trait]
 impl ConversationStore for SharedConversationStore {
-    fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
-        self.with_store(|store| store.append_message(msg))
+    async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
+        self.inner.append_message(msg).await
     }
 
-    fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
-        self.with_store(|store| store.get_messages(session_id))
+    async fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
+        self.inner.get_messages(session_id).await
     }
 
-    fn update_message_compressed_content(
+    async fn update_message_compressed_content(
         &self,
         message_id: i64,
         compressed: Option<&str>,
     ) -> Result<()> {
-        self.with_store(|store| store.update_message_compressed_content(message_id, compressed))
+        self.inner.update_message_compressed_content(message_id, compressed).await
     }
 
-    fn patch_last_assistant_reasoning_details(
+    async fn patch_last_assistant_reasoning_details(
         &self,
         session_id: &str,
         details: &Value,
     ) -> Result<()> {
-        self.with_store(|store| store.patch_last_assistant_reasoning_details(session_id, details))
+        self.inner.patch_last_assistant_reasoning_details(session_id, details).await
     }
 
-    fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
-        self.with_store(|store| store.ensure_session(id, source))
+    async fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
+        self.inner.ensure_session(id, source).await
     }
 
-    fn update_session_billing(&self, id: &str, delta: BillingDelta) -> Result<()> {
-        self.with_store(|store| store.update_session_billing(id, delta))
+    async fn update_session_billing(&self, id: &str, delta: BillingDelta) -> Result<()> {
+        self.inner.update_session_billing(id, delta).await
     }
 
-    fn recent_messages(&self, session_id: &str, limit: usize) -> Result<Vec<ScrolledMessage>> {
-        self.with_store(|store| store.recent_messages(session_id, limit))
+    async fn recent_messages(&self, session_id: &str, limit: usize) -> Result<Vec<ScrolledMessage>> {
+        self.inner.recent_messages(session_id, limit).await
     }
 
-    fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
-        self.with_store(|store| store.recall_message_ids(session_id, query, limit))
+    async fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
+        self.inner.recall_message_ids(session_id, query, limit).await
     }
 
-    fn scroll_context_window(
+    async fn scroll_context_window(
         &self,
         session_id: &str,
         around_message_id: i64,
         window_size: i64,
     ) -> Result<Vec<ScrolledMessage>> {
-        self.with_store(|store| {
-            store.scroll_context_window(session_id, around_message_id, window_size)
-        })
+        self.inner.scroll_context_window(session_id, around_message_id, window_size).await
     }
 
-    fn search_messages(
+    async fn search_messages(
         &self,
         query: &str,
         source_filter: Option<&str>,
         role_filter: Option<&str>,
         limit: i64,
     ) -> Result<Vec<SearchHit>> {
-        self.with_store(|store| store.search_messages(query, source_filter, role_filter, limit))
+        self.inner.search_messages(query, source_filter, role_filter, limit).await
     }
 }

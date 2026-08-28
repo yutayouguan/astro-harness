@@ -36,9 +36,11 @@ use crate::{
     ThreadState, ThreadStateManager, WORKSPACE_EVENT_THREAD_ID,
 };
 
-fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
+async fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&memory_dir.join("data")).map_err(|e| e.to_string())
+    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
@@ -1038,7 +1040,6 @@ impl AstroServiceImpl {
         let rollout = agent_rollout::RolloutRecorder::open(rollout_path)
             .await
             .map_err(|error| Status::internal(error.to_string()))?;
-        session.restore_prompt_context_from_rollout(&existing_items);
         let runtime = agent::AstroThread::spawn(Arc::clone(&session), rollout)
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
 
@@ -1159,7 +1160,7 @@ impl AstroServiceImpl {
         }));
         let session = thread.session();
         session.set_hook_runtime(Arc::clone(&self.hook_runtime));
-        let (_, hitl_gate, _) = session.ensure_thread_controls();
+        let (_, hitl_gate) = session.ensure_thread_controls();
         if !self
             .hitl_registry
             .get(session.session_id())
@@ -1210,32 +1211,9 @@ impl AstroServiceImpl {
         session
             .set_interaction_mode(types::InteractionMode::parse(&req.interaction_mode))
             .await;
-        let project_root =
-            (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim()));
-        let mut workspace_roots = Vec::new();
-        for raw in &req.workspace_roots {
-            let root = PathBuf::from(raw.trim());
-            if !root.is_absolute() || !root.is_dir() {
-                return Err(Status::invalid_argument(format!(
-                    "workspace root must be an existing absolute directory: {}",
-                    raw
-                )));
-            }
-            let root = std::fs::canonicalize(&root).map_err(|error| {
-                Status::invalid_argument(format!("invalid workspace root {raw}: {error}"))
-            })?;
-            if !workspace_roots.contains(&root) {
-                workspace_roots.push(root);
-            }
-        }
-        if let Some(primary) = project_root.as_ref() {
-            let primary = std::fs::canonicalize(primary).map_err(|error| {
-                Status::invalid_argument(format!("invalid project root: {error}"))
-            })?;
-            session.set_project_context(Some(primary), workspace_roots);
-        } else {
-            session.set_project_context(None, workspace_roots);
-        }
+        session.set_project_root(
+            (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim())),
+        );
         if let Some(temperature) = req.temperature {
             if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
                 return Err(Status::invalid_argument(
@@ -1511,17 +1489,10 @@ impl AstroServiceImpl {
         }
         let (agent, _) = builder
             .build_with_session_id(session_id.to_string())
+            .await
             .map_err(|e| Status::internal(e.to_string()))?;
         let handle = Arc::new(agent);
         handle.set_hook_runtime(Arc::clone(&self.hook_runtime));
-        if let Ok(store) =
-            session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))
-        {
-            if let Ok(Some(project)) = store.project_for_session(session_id) {
-                let roots: Vec<PathBuf> = project.roots.into_iter().map(PathBuf::from).collect();
-                handle.set_project_context(roots.first().cloned(), roots);
-            }
-        }
         let mut sessions = self.sessions.write().await;
         if let Some(existing) = sessions.get(session_id) {
             return Ok(existing.clone());
@@ -2160,7 +2131,7 @@ impl AstroService for AstroServiceImpl {
 
         if matches!(action, ChatControlAction::ChatControlCancel) {
             if let Some(managed) = self.threads.get(&req.session_id).await {
-                let (_, gate, _) = managed.runtime.session().ensure_thread_controls();
+                let (_, gate) = managed.runtime.session().ensure_thread_controls();
                 gate.cancel_all().await;
                 managed
                     .runtime
@@ -2183,7 +2154,7 @@ impl AstroService for AstroServiceImpl {
         }
 
         if let Some(managed) = self.threads.get(&req.session_id).await {
-            let (pause, _, _) = managed.runtime.session().ensure_thread_controls();
+            let (pause, _) = managed.runtime.session().ensure_thread_controls();
             match action {
                 ChatControlAction::ChatControlPause => pause.pause(),
                 ChatControlAction::ChatControlResume
@@ -2632,10 +2603,11 @@ impl AstroService for AstroServiceImpl {
             .map_err(|e| Status::internal(e.to_string()))?;
         let (memory_content, user_content) = memory.prompt_content();
         let sessions =
-            open_sessions(&self.memory_dir).map_err(|e| Status::internal(e.to_string()))?;
+            open_sessions(&self.memory_dir).await.map_err(|e| Status::internal(e.to_string()))?;
 
         let sessions = sessions
             .search_messages(&query.query, None, None, query.limit.max(1) as i64)
+            .await
             .map_err(|e| Status::internal(e.to_string()))?
             .into_iter()
             .map(|hit| {
