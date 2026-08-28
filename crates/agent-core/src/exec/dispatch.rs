@@ -1505,7 +1505,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use subagents::{AgentGraphStore, AgentStatusV2, Limits, RunnerEvent};
 
-    use agent_db::sqlx::{self, Row};
+    use agent_db::sqlx;
 
     fn dispatch(dir: &tempfile::TempDir) -> DefaultAgentThreadDispatch {
         dispatch_for_root(
@@ -2191,7 +2191,7 @@ mod tests {
         let pool = agent_db::sqlx::SqlitePool::connect(
             &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
         ).await.unwrap();
-        sqlx::raw_sql(&format!(
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "CREATE TRIGGER fail_parent_shutdown
              BEFORE UPDATE OF status_kind ON agent_threads
              WHEN NEW.thread_id = '{}' AND NEW.status_kind = 'shutdown'
@@ -2199,7 +2199,7 @@ mod tests {
                SELECT RAISE(ABORT, 'injected parent shutdown failure');
              END;",
             parent.thread_id
-        ))
+        )))
         .execute(&pool).await.unwrap();
         let desktop = desktop_control(&dispatch, &memory_dir);
 
@@ -4944,6 +4944,7 @@ mod tests {
                 max_running: 2,
             },
         )
+        .await
         .unwrap();
         let mut recovered = DefaultAgentThreadDispatch::for_test(
             control,

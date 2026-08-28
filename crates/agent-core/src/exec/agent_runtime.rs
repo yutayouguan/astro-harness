@@ -1721,7 +1721,7 @@ mod tests {
 
     use tokio::sync::watch;
 
-    use agent_db::sqlx::{self, Row};
+    use agent_db::sqlx;
 
     use crate::streaming::ChatOverride;
 
