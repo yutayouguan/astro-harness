@@ -1786,6 +1786,8 @@ export default function SkillsPanel({
       role="listitem"
       className={`tool-card skill-card ${skill.enabled ? "is-enabled" : "is-disabled"}`}
       data-skill-tone={skillTone(skill.id)}
+      data-state={skill.editable === false ? "readonly" : skill.enabled ? "enabled" : "disabled"}
+      aria-busy={loadingPreview === skill.id || loadingPreview === skill.name}
     >
       <header className="skill-card-top">
         <div className="tool-icon skill-card-icon" aria-hidden>
@@ -1838,6 +1840,7 @@ export default function SkillsPanel({
           type="button"
           className="skills-action-btn primary skill-card-primary"
           disabled={loadingPreview === skill.id || loadingPreview === skill.name}
+          aria-busy={loadingPreview === skill.id || loadingPreview === skill.name}
           onClick={() => void viewSkill(skill)}
           title={
             loadingPreview === skill.id || loadingPreview === skill.name
@@ -1856,7 +1859,7 @@ export default function SkillsPanel({
               : t("skills.view")}
           </span>
         </button>
-        <div className="skill-card-action-icons">
+        <div className="skill-card-action-icons" role="group" aria-label={skill.name}>
           {renderSkillUpdateButton(skill)}
           <button
             type="button"
@@ -1895,6 +1898,12 @@ export default function SkillsPanel({
       role="listitem"
       className={`tool-card skill-card ${skill.linked ? "is-enabled" : "is-disabled"}`}
       data-skill-tone={skillTone(skill.id)}
+      data-state={skill.linked ? "linked" : "unlinked"}
+      aria-busy={
+        linkingId === skill.id ||
+        loadingPreview === skill.id ||
+        loadingPreview === skill.name
+      }
     >
       <header className="skill-card-top">
         <div className="tool-icon skill-card-icon" aria-hidden>
@@ -1926,6 +1935,7 @@ export default function SkillsPanel({
           type="button"
           className={`skills-action-btn skill-card-primary ${skill.linked ? "" : "primary"}`}
           disabled={linkingId === skill.id}
+          aria-busy={linkingId === skill.id}
           onClick={() => void toggleMachineLink(skill)}
           title={
             skill.linked
@@ -1944,7 +1954,7 @@ export default function SkillsPanel({
             {skill.linked ? t("skills.unlink") : t("skills.link")}
           </span>
         </button>
-        <div className="skill-card-action-icons">
+        <div className="skill-card-action-icons" role="group" aria-label={skill.name}>
           {renderSkillUpdateButton(skill)}
           <button
             type="button"
@@ -2011,6 +2021,8 @@ export default function SkillsPanel({
         role="listitem"
         className={`tool-card skill-card ${canUpdate ? "is-enabled" : "is-disabled"}`}
         data-skill-tone={skillTone(skill.id)}
+        data-state={origin ? row.status : "no-origin"}
+        aria-busy={isUpdating}
       >
         <header className="skill-card-top">
           <div className="tool-icon skill-card-icon" aria-hidden>
@@ -2068,6 +2080,7 @@ export default function SkillsPanel({
             type="button"
             className="skills-action-btn primary skill-card-primary"
             disabled={!canUpdate || isUpdating || updatingAll}
+            aria-busy={isUpdating}
             onClick={() => void updateSkillRow(row)}
             title={canUpdate ? t("skills.update") : t("skills.noOriginHint")}
           >
@@ -2091,6 +2104,8 @@ export default function SkillsPanel({
         role="listitem"
         className={`tool-card skill-card ${already ? "is-installed" : ""}`}
         data-skill-tone={skillTone(skill.id)}
+        data-state={already ? "installed" : "available"}
+        aria-busy={installingId === skill.id}
       >
         <header className="skill-card-top">
           <div className="tool-icon skill-card-icon" aria-hidden>
@@ -2133,6 +2148,7 @@ export default function SkillsPanel({
               type="button"
               className="skills-action-btn primary skill-card-primary"
               disabled={installingId === skill.id}
+              aria-busy={installingId === skill.id}
               onClick={() => beginInstallSkill(skill)}
             >
               {installingId === skill.id ? (
@@ -2152,7 +2168,7 @@ export default function SkillsPanel({
               </span>
             </button>
           )}
-          <div className="skill-card-action-icons">
+          <div className="skill-card-action-icons" role="group" aria-label={skill.name}>
             {!already ? (
               <button
                 type="button"

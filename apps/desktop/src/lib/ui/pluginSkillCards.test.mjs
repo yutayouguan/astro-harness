@@ -14,6 +14,10 @@ const detail = await readFile(
   new URL("../../styles/features/skills/detail.css", import.meta.url),
   "utf8",
 );
+const core = await readFile(
+  new URL("../../styles/features/skills/core.css", import.meta.url),
+  "utf8",
+);
 
 test("Skill cards keep per-item color on the icon rather than the whole card", () => {
   assert.equal(panel.match(/data-skill-tone=\{skillTone\(skill\.id\)\}/g)?.length, 4);
@@ -41,4 +45,29 @@ test("Skill cards expose one text primary action and grouped secondary icons", (
     detail,
     /\.skill-card-actions \.skills-action-btn:not\(\.primary, \.is-installed\)/,
   );
+});
+
+test("Skill cards adapt to their pane instead of the whole application window", () => {
+  assert.match(core, /container-name:\s*skills-pane;/);
+  assert.match(core, /minmax\(min\(100%, 248px\), 1fr\)/);
+  assert.match(detail, /@container skills-pane \(max-width: 560px\)/);
+  assert.doesNotMatch(
+    detail,
+    /@media \(max-width: 1100px\)\s*\{\s*\.skills-gallery:not\(\.is-list\)/,
+  );
+});
+
+test("Skill states use stable semantics and expose async progress", () => {
+  assert.equal(panel.match(/data-state=/g)?.length, 4);
+  assert.match(panel, /aria-busy=\{installingId === skill\.id\}/);
+  assert.match(panel, /role="group" aria-label=\{skill\.name\}/);
+  assert.match(core, /\.skill-card-link-badge\.is-current[\s\S]*?--tone-green/);
+  assert.match(detail, /data-state="error"[\s\S]*?var\(--danger/);
+});
+
+test("Skill actions provide keyboard focus and reduced-motion feedback", () => {
+  assert.match(detail, /\.skills-action-btn:focus-visible/);
+  assert.match(detail, /\.skill-card-toggle:has\(input:focus-visible\)/);
+  assert.match(detail, /prefers-contrast:\s*more/);
+  assert.match(detail, /prefers-reduced-motion:\s*reduce[\s\S]*?\.skills-action-btn \.is-spin/);
 });
