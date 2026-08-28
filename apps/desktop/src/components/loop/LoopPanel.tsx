@@ -558,6 +558,24 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
     <div className="loop-panel">
       {/* ── Toolbar ── */}
       <div className="loop-toolbar">
+        <div className="loop-toolbar-start">
+          <h1 className="loop-toolbar-title">{t("page.loop.title")}</h1>
+          <div className="loop-create-group">
+            <button className="loop-btn loop-btn--primary" onClick={handleCreate}>
+              <Plus size={14} />
+              <span>{t("loop.create")}</span>
+            </button>
+            <button
+              className="loop-btn loop-btn--primary loop-btn--template"
+              onClick={() => setShowTemplates((v) => !v)}
+              title={t("loop.templateTitle")}
+              aria-expanded={showTemplates}
+            >
+              <LOOP_ICON_MAP.LayoutTemplate size={14} />
+              <span>{t("loop.templateTitle")}</span>
+            </button>
+          </div>
+        </div>
         <div className="loop-toolbar-end">
           <ExpandableSearch
             value={search}
@@ -583,19 +601,6 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
             <Upload size={14} />
             <span>{t("loop.import")}</span>
           </button>
-          <div className="loop-create-group">
-            <button className="loop-btn loop-btn--primary" onClick={handleCreate}>
-              <Plus size={14} />
-              <span>{t("loop.create")}</span>
-            </button>
-            <button
-              className="loop-btn loop-btn--primary loop-btn--template"
-              onClick={() => setShowTemplates((v) => !v)}
-              title={t("loop.templateTitle")}
-            >
-              <LOOP_ICON_MAP.LayoutTemplate size={14} />
-            </button>
-          </div>
         </div>
       </div>
 

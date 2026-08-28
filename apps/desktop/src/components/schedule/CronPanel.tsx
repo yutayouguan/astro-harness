@@ -20,6 +20,7 @@ import {
   Heart,
   History,
   Languages,
+  LayoutTemplate,
   ListTodo,
   ListTree,
   LoaderCircle,
@@ -28,6 +29,7 @@ import {
   Phone,
   Server,
   Stethoscope,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
@@ -400,6 +402,7 @@ export default function CronPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJobDto | null>(null);
   const [prefill, setPrefill] = useState<CronPrefill | null>(null);
   const [menuJobId, setMenuJobId] = useState<string | null>(null);
@@ -1256,31 +1259,98 @@ export default function CronPanel({
     );
   };
 
+  const openCreate = () => {
+    setShowTemplates(false);
+    setPrefill(null);
+    setEditingJob(null);
+    setShowCreate(true);
+  };
+
+  const openFromTemplate = (template: CronTemplate) => {
+    setShowTemplates(false);
+    setPrefill({
+      title: t(template.titleKey),
+      task: t(template.taskKey),
+      schedule: template.schedule,
+    });
+    setEditingJob(null);
+    setShowCreate(true);
+  };
+
+  const renderTemplateGrid = () => (
+    <div className="cron-templates-grid">
+      {CRON_TEMPLATES.map((template) => {
+        const Icon = template.icon;
+        return (
+          <button
+            key={template.id}
+            type="button"
+            className="cron-template-card"
+            onClick={() => openFromTemplate(template)}
+          >
+            <span className="cron-template-icon" aria-hidden>
+              <Icon size={20} strokeWidth={1.6} />
+            </span>
+            <span className="cron-template-text">
+              <strong>{t(template.titleKey)}</strong>
+              <span>{t(template.descKey)}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="cron-page" data-tone={tone ?? "teal"} ref={pageRef}>
       <section className="cron-pane">
         <div className="cron-toolbar">
-          <nav className="cron-tabs" aria-label={t("page.cron.title")}>
-            <button
-              type="button"
-              className={`cron-tab ${activeTab === "jobs" ? "is-active" : ""}`}
-              onClick={() => setActiveTab("jobs")}
-            >
-              <ListTodo size={15} strokeWidth={2.25} aria-hidden />
-              {t("cron.tab.jobs")}
-            </button>
-            <button
-              type="button"
-              className={`cron-tab ${activeTab === "history" ? "is-active" : ""}`}
-              onClick={() => setActiveTab("history")}
-            >
-              <History size={15} strokeWidth={2.25} aria-hidden />
-              {t("cron.tab.history")}
-            </button>
-          </nav>
+          <div className="cron-toolbar-start">
+            <h1 className="cron-toolbar-title">{t("page.cron.title")}</h1>
+            <div className="cron-create-group">
+              <button
+                type="button"
+                className="cron-toolbar-action cron-toolbar-action--primary"
+                onClick={openCreate}
+              >
+                <CalendarPlus size={15} strokeWidth={2.2} aria-hidden />
+                <span>{t("cron.create")}</span>
+              </button>
+              <button
+                type="button"
+                className="cron-toolbar-action cron-toolbar-action--primary cron-toolbar-action--template"
+                onClick={() => {
+                  setActiveTab("jobs");
+                  setShowTemplates((value) => !value);
+                }}
+                aria-expanded={showTemplates}
+              >
+                <LayoutTemplate size={15} strokeWidth={2.2} aria-hidden />
+                <span>{t("cron.createFromTemplate")}</span>
+              </button>
+            </div>
+          </div>
 
           {activeTab === "jobs" && (
             <div className="cron-toolbar-end">
+              <nav className="cron-tabs" aria-label={t("page.cron.title")}>
+                <button
+                  type="button"
+                  className={`cron-tab ${activeTab === "jobs" ? "is-active" : ""}`}
+                  onClick={() => setActiveTab("jobs")}
+                >
+                  <ListTodo size={15} strokeWidth={2.25} aria-hidden />
+                  {t("cron.tab.jobs")}
+                </button>
+                <button
+                  type="button"
+                  className={`cron-tab ${activeTab === "history" ? "is-active" : ""}`}
+                  onClick={() => setActiveTab("history")}
+                >
+                  <History size={15} strokeWidth={2.25} aria-hidden />
+                  {t("cron.tab.history")}
+                </button>
+              </nav>
               <ExpandableSearch
                 value={search}
                 onChange={setSearch}
@@ -1311,23 +1381,29 @@ export default function CronPanel({
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                className="skills-icon-btn"
-                onClick={() => {
-                  setEditingJob(null);
-                  setShowCreate(true);
-                }}
-                title={t("cron.create")}
-                aria-label={t("cron.create")}
-              >
-                <CalendarPlus size={17} strokeWidth={2.2} aria-hidden />
-              </button>
             </div>
           )}
 
           {activeTab === "history" && (
             <div className="cron-toolbar-end cron-history-filters">
+              <nav className="cron-tabs" aria-label={t("page.cron.title")}>
+                <button
+                  type="button"
+                  className={`cron-tab ${activeTab === "jobs" ? "is-active" : ""}`}
+                  onClick={() => setActiveTab("jobs")}
+                >
+                  <ListTodo size={15} strokeWidth={2.25} aria-hidden />
+                  {t("cron.tab.jobs")}
+                </button>
+                <button
+                  type="button"
+                  className={`cron-tab ${activeTab === "history" ? "is-active" : ""}`}
+                  onClick={() => setActiveTab("history")}
+                >
+                  <History size={15} strokeWidth={2.25} aria-hidden />
+                  {t("cron.tab.history")}
+                </button>
+              </nav>
               <SelectMenu
                 value={filterJobId}
                 onChange={setFilterJobId}
@@ -1356,6 +1432,23 @@ export default function CronPanel({
           )}
         </div>
 
+        {activeTab === "jobs" && showTemplates && (
+          <section className="cron-template-picker">
+            <div className="cron-template-picker-header">
+              <span>{t("cron.createFromTemplate")}</span>
+              <button
+                type="button"
+                className="cron-template-picker-close"
+                onClick={() => setShowTemplates(false)}
+                aria-label={t("common.close")}
+              >
+                <X size={15} strokeWidth={2.2} aria-hidden />
+              </button>
+            </div>
+            {renderTemplateGrid()}
+          </section>
+        )}
+
         <MotionSwitch switchKey={activeTab} className="anim-switch--fill">
         {activeTab === "jobs" && loading && filteredJobs.length === 0 && (
           <p className="cron-loading">{t("workspace.loading")}</p>
@@ -1371,51 +1464,15 @@ export default function CronPanel({
               title={t("cron.empty")}
               hint={t("cron.emptyHint")}
             >
-              <button
-                type="button"
-                className="cron-btn-primary cron-empty-cta"
-                onClick={() => {
-                  setPrefill(null);
-                  setEditingJob(null);
-                  setShowCreate(true);
-                }}
-              >
+              <button type="button" className="cron-btn-primary cron-empty-cta" onClick={openCreate}>
                 <CalendarPlus size={15} strokeWidth={2.2} aria-hidden />
                 {t("cron.create")}
               </button>
             </EmptyIllustration>
-            <section className="cron-templates">
+            {!showTemplates && <section className="cron-templates">
               <h3 className="cron-templates-title">{t("cron.templates.title")}</h3>
-              <div className="cron-templates-grid">
-                {CRON_TEMPLATES.map((tpl) => {
-                  const Icon = tpl.icon;
-                  return (
-                    <button
-                      key={tpl.id}
-                      type="button"
-                      className="cron-template-card"
-                      onClick={() => {
-                        setPrefill({
-                          title: t(tpl.titleKey),
-                          task: t(tpl.taskKey),
-                          schedule: tpl.schedule,
-                        });
-                        setEditingJob(null);
-                        setShowCreate(true);
-                      }}
-                    >
-                      <span className="cron-template-icon" aria-hidden>
-                        <Icon size={20} strokeWidth={1.6} />
-                      </span>
-                      <span className="cron-template-text">
-                        <strong>{t(tpl.titleKey)}</strong>
-                        <span>{t(tpl.descKey)}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+              {renderTemplateGrid()}
+            </section>}
           </div>
         )}
 
