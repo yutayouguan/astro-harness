@@ -575,11 +575,12 @@ impl Session {
                     return Err(error);
                 }
             };
-        if let Err(error) = self.services.agent_control.persist_main_steer_with_id(
-            &self.services.agent_path,
-            message_id.clone(),
-            payload,
-        ).await {
+        if let Err(error) = self
+            .services
+            .agent_control
+            .persist_main_steer_with_id(&self.services.agent_path, message_id.clone(), payload)
+            .await
+        {
             running.1.retract_input(&message_id);
             return Err(error);
         }
@@ -722,8 +723,15 @@ impl Session {
         }
     }
 
-    pub(crate) async fn ensure_durable_turn_input_marker(&self, marker: &str) -> anyhow::Result<bool> {
-        let messages = self.services.sessions.get_messages(&self.session_id).await?;
+    pub(crate) async fn ensure_durable_turn_input_marker(
+        &self,
+        marker: &str,
+    ) -> anyhow::Result<bool> {
+        let messages = self
+            .services
+            .sessions
+            .get_messages(&self.session_id)
+            .await?;
         let Some(message) = messages.iter().find(|message| {
             message.role == "user"
                 && (message.finish_reason.as_deref() == Some(marker)

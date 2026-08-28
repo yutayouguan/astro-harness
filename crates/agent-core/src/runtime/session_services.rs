@@ -81,7 +81,9 @@ impl ConversationStore for SharedConversationStore {
         message_id: i64,
         compressed: Option<&str>,
     ) -> Result<()> {
-        self.inner.update_message_compressed_content(message_id, compressed).await
+        self.inner
+            .update_message_compressed_content(message_id, compressed)
+            .await
     }
 
     async fn patch_last_assistant_reasoning_details(
@@ -89,7 +91,9 @@ impl ConversationStore for SharedConversationStore {
         session_id: &str,
         details: &Value,
     ) -> Result<()> {
-        self.inner.patch_last_assistant_reasoning_details(session_id, details).await
+        self.inner
+            .patch_last_assistant_reasoning_details(session_id, details)
+            .await
     }
 
     async fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
@@ -100,12 +104,23 @@ impl ConversationStore for SharedConversationStore {
         self.inner.update_session_billing(id, delta).await
     }
 
-    async fn recent_messages(&self, session_id: &str, limit: usize) -> Result<Vec<ScrolledMessage>> {
+    async fn recent_messages(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<ScrolledMessage>> {
         self.inner.recent_messages(session_id, limit).await
     }
 
-    async fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
-        self.inner.recall_message_ids(session_id, query, limit).await
+    async fn recall_message_ids(
+        &self,
+        session_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<i64>> {
+        self.inner
+            .recall_message_ids(session_id, query, limit)
+            .await
     }
 
     async fn scroll_context_window(
@@ -114,7 +129,9 @@ impl ConversationStore for SharedConversationStore {
         around_message_id: i64,
         window_size: i64,
     ) -> Result<Vec<ScrolledMessage>> {
-        self.inner.scroll_context_window(session_id, around_message_id, window_size).await
+        self.inner
+            .scroll_context_window(session_id, around_message_id, window_size)
+            .await
     }
 
     async fn search_messages(
@@ -124,6 +141,8 @@ impl ConversationStore for SharedConversationStore {
         role_filter: Option<&str>,
         limit: i64,
     ) -> Result<Vec<SearchHit>> {
-        self.inner.search_messages(query, source_filter, role_filter, limit).await
+        self.inner
+            .search_messages(query, source_filter, role_filter, limit)
+            .await
     }
 }

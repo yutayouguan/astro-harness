@@ -25,19 +25,24 @@ impl AgentLoop {
     ) -> anyhow::Result<()> {
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri").await?;
+            .ensure_session(&self.session_id, "tauri")
+            .await?;
         if self
             .services
             .sessions
-            .get_messages(&self.session_id).await?
+            .get_messages(&self.session_id)
+            .await?
             .last()
             .is_some_and(|message| message.role == "user")
         {
-            self.services.sessions.append_message(NewMessage {
-                content: Some(content),
-                finish_reason: Some(finish_reason),
-                ..NewMessage::empty(&self.session_id, "assistant")
-            }).await?;
+            self.services
+                .sessions
+                .append_message(NewMessage {
+                    content: Some(content),
+                    finish_reason: Some(finish_reason),
+                    ..NewMessage::empty(&self.session_id, "assistant")
+                })
+                .await?;
         }
         if self
             .clone_history()
@@ -54,7 +59,8 @@ impl AgentLoop {
     pub async fn ensure_session(&self, source: &str) -> anyhow::Result<()> {
         self.services
             .sessions
-            .ensure_session(&self.session_id, source).await
+            .ensure_session(&self.session_id, source)
+            .await
     }
 
     /// 将 assistant 纯文本回复写入记忆与会话镜像。
@@ -84,14 +90,18 @@ impl AgentLoop {
             types::message::google_thought_signature_from_details(&reasoning_details);
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri").await?;
-        self.services.sessions.append_message(NewMessage {
-            content: Some(content),
-            tool_calls: tool_calls_json,
-            reasoning,
-            reasoning_details: reasoning_details.clone(),
-            ..NewMessage::empty(&self.session_id, "assistant")
-        }).await?;
+            .ensure_session(&self.session_id, "tauri")
+            .await?;
+        self.services
+            .sessions
+            .append_message(NewMessage {
+                content: Some(content),
+                tool_calls: tool_calls_json,
+                reasoning,
+                reasoning_details: reasoning_details.clone(),
+                ..NewMessage::empty(&self.session_id, "assistant")
+            })
+            .await?;
         let msg = match tool_calls {
             Some(calls) if !calls.is_empty() => Message::assistant_with_tools(content, calls),
             _ => Message::assistant(content),
@@ -139,7 +149,8 @@ impl AgentLoop {
     ) -> anyhow::Result<()> {
         self.services
             .sessions
-            .patch_last_assistant_reasoning_details(&self.session_id, &reasoning_details).await
+            .patch_last_assistant_reasoning_details(&self.session_id, &reasoning_details)
+            .await
     }
 
     /// 将 user 角色消息写入记忆与会话镜像。
@@ -151,11 +162,15 @@ impl AgentLoop {
         let _write_guard = self.conversation_write_lock.lock().await;
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri").await?;
-        self.services.sessions.append_message(NewMessage {
-            content: Some(content),
-            ..NewMessage::empty(&self.session_id, "user")
-        }).await?;
+            .ensure_session(&self.session_id, "tauri")
+            .await?;
+        self.services
+            .sessions
+            .append_message(NewMessage {
+                content: Some(content),
+                ..NewMessage::empty(&self.session_id, "user")
+            })
+            .await?;
         self.record_items_unlocked(vec![Message::user(content)]);
         Ok(())
     }
@@ -192,13 +207,16 @@ impl AgentLoop {
             let Some(path) = abs.to_str() else {
                 continue;
             };
-            if let Err(e) = db.register(
-                path,
-                artifacts::ArtifactSource::AgentWrite,
-                Some(&session_id),
-                Some(&message_id),
-                Some(&agent_id),
-            ).await {
+            if let Err(e) = db
+                .register(
+                    path,
+                    artifacts::ArtifactSource::AgentWrite,
+                    Some(&session_id),
+                    Some(&message_id),
+                    Some(&agent_id),
+                )
+                .await
+            {
                 tracing::debug!(error = %e, path, "register media artifact failed");
             }
         }
@@ -220,14 +238,19 @@ impl AgentLoop {
         };
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri").await?;
-        let msg_id = self.services.sessions.append_message(NewMessage {
-            content: Some(content),
-            tool_call_id,
-            tool_name,
-            media_json: media_owned.as_deref(),
-            ..NewMessage::empty(&self.session_id, "tool")
-        }).await?;
+            .ensure_session(&self.session_id, "tauri")
+            .await?;
+        let msg_id = self
+            .services
+            .sessions
+            .append_message(NewMessage {
+                content: Some(content),
+                tool_call_id,
+                tool_name,
+                media_json: media_owned.as_deref(),
+                ..NewMessage::empty(&self.session_id, "tool")
+            })
+            .await?;
 
         self.register_media_artifacts(&media, msg_id).await;
 

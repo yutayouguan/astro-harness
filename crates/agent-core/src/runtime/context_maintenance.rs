@@ -53,7 +53,11 @@ impl AgentLoop {
             state.clone_history()
         };
 
-        let stored = self.services.sessions.get_messages(&self.session_id).await?;
+        let stored = self
+            .services
+            .sessions
+            .get_messages(&self.session_id)
+            .await?;
         let protect_last_n = self.compression_config().protect_last_n.max(1);
 
         let plan = self
@@ -150,7 +154,11 @@ impl AgentLoop {
                     .unwrap_or_else(|| job.content.clone())
             };
 
-            let stored_again = self.services.sessions.get_messages(&self.session_id).await?;
+            let stored_again = self
+                .services
+                .sessions
+                .get_messages(&self.session_id)
+                .await?;
             let Some(stored_msg) = stored_again.iter().find(|m| m.id == job.message_id) else {
                 continue;
             };
@@ -208,7 +216,8 @@ impl AgentLoop {
     ) -> anyhow::Result<()> {
         self.services
             .sessions
-            .update_message_compressed_content(stored_msg.id, Some(view)).await?;
+            .update_message_compressed_content(stored_msg.id, Some(view))
+            .await?;
         let mut state = self.lock_state();
         if let Some(runtime_msg) = state.history.iter_mut().find(|m| {
             m.role == Role::Tool

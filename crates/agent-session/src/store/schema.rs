@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 19;
+pub const SCHEMA_VERSION: i32 = 20;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -186,6 +186,28 @@ impl SessionStore {
                 .execute(&self.pool)
                 .await?;
                 self.migrate_project_root_to_projects().await?;
+            }
+            if self.table_exists("sessions").await? {
+                if !self.column_exists("sessions", "branch_kind").await? {
+                    sqlx::query("ALTER TABLE sessions ADD COLUMN branch_kind TEXT")
+                        .execute(&self.pool).await?;
+                }
+                if !self.column_exists("sessions", "branch_parent_message_id").await? {
+                    sqlx::query("ALTER TABLE sessions ADD COLUMN branch_parent_message_id INTEGER")
+                        .execute(&self.pool).await?;
+                }
+                if !self.column_exists("sessions", "branch_parent_turn_index").await? {
+                    sqlx::query("ALTER TABLE sessions ADD COLUMN branch_parent_turn_index INTEGER")
+                        .execute(&self.pool).await?;
+                }
+                if !self.column_exists("sessions", "branch_inherited_turn_count").await? {
+                    sqlx::query("ALTER TABLE sessions ADD COLUMN branch_inherited_turn_count INTEGER")
+                        .execute(&self.pool).await?;
+                }
+                if !self.column_exists("sessions", "branch_created_at").await? {
+                    sqlx::query("ALTER TABLE sessions ADD COLUMN branch_created_at REAL")
+                        .execute(&self.pool).await?;
+                }
             }
             self.stamp_schema_version().await?;
         }

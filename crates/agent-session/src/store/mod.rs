@@ -1,5 +1,6 @@
 //! 单库会话存储（schema v19）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
+mod branches;
 mod messages;
 pub mod projects;
 mod rollout_projection;
@@ -144,6 +145,9 @@ pub struct StoredSession {
     pub branch_kind: Option<String>,
     /// The message id in the parent session where this branch forked from.
     pub branch_parent_message_id: Option<i64>,
+    pub branch_parent_turn_index: Option<i64>,
+    pub branch_inherited_turn_count: Option<i64>,
+    pub branch_created_at: Option<f64>,
 }
 
 /// FTS 搜索命中。
@@ -228,8 +232,41 @@ pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
 }
 
 // ---------------------------------------------------------------------------
-// Branch / lineage types (stub — full implementation pending sqlx migration)
+// Branch / lineage types
 // ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BranchKind {
+    Fork,
+    Agent,
+}
+
+impl BranchKind {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            BranchKind::Fork => "fork",
+            BranchKind::Agent => "agent",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ForkBoundary {
+    ThroughTurn,
+    BeforeTurn,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForkedSession {
+    pub session_id: String,
+    pub parent_session_id: String,
+    pub parent_message_id: Option<i64>,
+    pub parent_turn_index: Option<i64>,
+    pub inherited_turn_count: i64,
+    pub copied_message_count: i64,
+    pub copied_user_turns: i64,
+    pub created_at: f64,
+}
 
 /// A single user-turn anchor within a session lineage node.
 #[derive(Debug, Clone)]
@@ -238,6 +275,7 @@ pub struct SessionTurnNode {
     pub turn_index: i64,
     pub content: Option<String>,
     pub completed: bool,
+    pub child_session_ids: Vec<String>,
 }
 
 /// One session in the lineage graph.
@@ -246,17 +284,22 @@ pub struct SessionLineageNode {
     pub session_id: String,
     pub parent_session_id: Option<String>,
     pub parent_message_id: Option<i64>,
+    pub parent_turn_index: Option<i64>,
     pub inherited_turn_count: i64,
     pub legacy_metadata: bool,
     pub branch_created_at: Option<f64>,
+    pub orphaned: bool,
     pub turns: Vec<SessionTurnNode>,
 }
 
 /// The complete lineage graph for a session tree.
 #[derive(Debug, Clone)]
 pub struct SessionLineageGraph {
+    pub requested_session_id: String,
     pub root_session_id: String,
     pub nodes: Vec<SessionLineageNode>,
+    pub cycle_detected: bool,
+    pub orphaned_parent_ids: Vec<String>,
 }
 
 /// 单库会话存储：元数据、富消息行与消息级 FTS。
@@ -323,47 +366,6 @@ impl SessionStore {
         }
     }
 
-    /// Build the lineage graph for a session.
-    ///
-    /// Stub implementation: returns only the requested session as a single node.
-    /// Full branch traversal pending sqlx migration of the branches module.
-    pub async fn session_lineage_graph(&self, session_id: &str) -> Result<SessionLineageGraph> {
-        let session = self
-            .get_session(session_id)
-            .await?
-            .ok_or_else(|| anyhow!("session_lineage_graph: session not found"))?;
-        let messages = self.get_messages(session_id).await?;
-        let mut turns = Vec::new();
-        let mut turn_index = 0i64;
-        for msg in &messages {
-            if msg.role == "user" {
-                let completed = messages
-                    .iter()
-                    .skip_while(|m| m.id != msg.id)
-                    .skip(1)
-                    .any(|m| m.role == "assistant");
-                turns.push(SessionTurnNode {
-                    user_message_id: msg.id,
-                    turn_index,
-                    content: msg.content.clone(),
-                    completed,
-                });
-                turn_index += 1;
-            }
-        }
-        Ok(SessionLineageGraph {
-            root_session_id: session.id.clone(),
-            nodes: vec![SessionLineageNode {
-                session_id: session.id,
-                parent_session_id: session.parent_session_id,
-                parent_message_id: session.branch_parent_message_id,
-                inherited_turn_count: 0,
-                legacy_metadata: false,
-                branch_created_at: Some(session.started_at),
-                turns,
-            }],
-        })
-    }
 }
 
 #[async_trait::async_trait]

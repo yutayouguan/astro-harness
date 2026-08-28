@@ -14,7 +14,10 @@ impl SessionStore {
         let row = sqlx::query(
             "SELECT id, source, title, started_at, ended_at, end_reason,
                     model, parent_session_id, message_count, tool_call_count,
-                    archived_at, pinned_at
+                    archived_at, pinned_at,
+                    branch_kind, branch_parent_message_id,
+                    branch_parent_turn_index, branch_inherited_turn_count,
+                    branch_created_at
              FROM sessions WHERE id = ?1",
         )
         .bind(id)
@@ -33,8 +36,11 @@ impl SessionStore {
             tool_call_count: r.get(9),
             archived_at: r.get(10),
             pinned_at: r.get(11),
-            branch_kind: None,
-            branch_parent_message_id: None,
+            branch_kind: r.get(12),
+            branch_parent_message_id: r.get(13),
+            branch_parent_turn_index: r.get(14),
+            branch_inherited_turn_count: r.get(15),
+            branch_created_at: r.get(16),
         }))
     }
 

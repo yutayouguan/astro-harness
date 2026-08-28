@@ -2,8 +2,8 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use agent_db::sqlx::{self, Row};
 use anyhow::{anyhow, Result};
-use rusqlite::{params, OptionalExtension, Transaction};
 
 use super::{
     is_unique_constraint, now_epoch_secs, truncate_chars, BranchKind, ForkBoundary, ForkedSession,
@@ -26,7 +26,7 @@ impl SessionStore {
     ///
     /// `parent_user_message_id` 必须属于 `source_id`，且该 turn 在下一条 user 消息前
     /// 至少有一条 assistant 消息。复制范围从会话开头到该 turn 末尾，消息使用新行 id。
-    pub fn fork_session_at_user_message(
+    pub async fn fork_session_at_user_message(
         &self,
         source_id: &str,
         new_id: &str,
@@ -38,13 +38,14 @@ impl SessionStore {
             parent_user_message_id,
             ForkBoundary::ThroughTurn,
         )
+        .await
     }
 
     /// 分叉到某个 user turn 之前（`before_turn_id` 语义）。
     ///
     /// 锚点 turn 本身不进入新分支，因此未完成的 turn 也可作为锚点——这正是
     /// 「改写上一条消息重开一条路径」需要的边界。
-    pub fn fork_session_before_user_message(
+    pub async fn fork_session_before_user_message(
         &self,
         source_id: &str,
         new_id: &str,
@@ -56,9 +57,10 @@ impl SessionStore {
             parent_user_message_id,
             ForkBoundary::BeforeTurn,
         )
+        .await
     }
 
-    fn fork_session_at_boundary(
+    async fn fork_session_at_boundary(
         &self,
         source_id: &str,
         new_id: &str,
@@ -69,62 +71,60 @@ impl SessionStore {
             source_id != new_id,
             "fork_session: source and target session ids must differ"
         );
-        let tx = self.conn.unchecked_transaction()?;
-        let (source, model, title) = tx
-            .query_row(
-                "SELECT source, model, title FROM sessions WHERE id = ?1",
-                params![source_id],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                    ))
-                },
-            )
-            .optional()?
-            .ok_or_else(|| anyhow!("fork_session: source session not found: {source_id:?}"))?;
-        let target_exists = tx.query_row(
+        let mut tx = self.pool.begin().await?;
+        let row = sqlx::query(
+            "SELECT source, model, title FROM sessions WHERE id = ?1",
+        )
+        .bind(source_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| anyhow!("fork_session: source session not found: {source_id:?}"))?;
+        let source: String = row.get(0);
+        let model: Option<String> = row.get(1);
+        let title: Option<String> = row.get(2);
+
+        let target_exists: bool = sqlx::query(
             "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
-            params![new_id],
-            |row| row.get::<_, bool>(0),
-        )?;
+        )
+        .bind(new_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .get(0);
         anyhow::ensure!(
             !target_exists,
             "fork_session: target session already exists"
         );
 
-        let (anchor_timestamp, anchor_id, role) = tx
-            .query_row(
-                "SELECT timestamp, id, role FROM messages
-                 WHERE id = ?1 AND session_id = ?2",
-                params![parent_user_message_id, source_id],
-                |row| {
-                    Ok((
-                        row.get::<_, f64>(0)?,
-                        row.get::<_, i64>(1)?,
-                        row.get::<_, String>(2)?,
-                    ))
-                },
-            )
-            .optional()?
-            .ok_or_else(|| anyhow!("fork_session: anchor message not found in source session"))?;
+        let anchor_row = sqlx::query(
+            "SELECT timestamp, id, role FROM messages
+             WHERE id = ?1 AND session_id = ?2",
+        )
+        .bind(parent_user_message_id)
+        .bind(source_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| anyhow!("fork_session: anchor message not found in source session"))?;
+        let anchor_timestamp: f64 = anchor_row.get(0);
+        let anchor_id: i64 = anchor_row.get(1);
+        let role: String = anchor_row.get(2);
         anyhow::ensure!(
             role == "user",
             "fork_session: anchor message must have role=user"
         );
 
-        let next_user = tx
-            .query_row(
-                "SELECT timestamp, id FROM messages
-                 WHERE session_id = ?1 AND role = 'user'
-                   AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
-                 ORDER BY timestamp ASC, id ASC LIMIT 1",
-                params![source_id, anchor_timestamp, anchor_id],
-                |row| Ok((row.get::<_, f64>(0)?, row.get::<_, i64>(1)?)),
-            )
-            .optional()?;
-        // 复制上界：through 停在下一条 user 之前，before 停在锚点自身之前。
+        let next_user = sqlx::query(
+            "SELECT timestamp, id FROM messages
+             WHERE session_id = ?1 AND role = 'user'
+               AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
+             ORDER BY timestamp ASC, id ASC LIMIT 1",
+        )
+        .bind(source_id)
+        .bind(anchor_timestamp)
+        .bind(anchor_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .map(|r| (r.get::<f64, _>(0), r.get::<i64, _>(1)));
+
         let copy_boundary = match boundary {
             ForkBoundary::ThroughTurn => next_user,
             ForkBoundary::BeforeTurn => Some((anchor_timestamp, anchor_id)),
@@ -132,50 +132,60 @@ impl SessionStore {
 
         if boundary == ForkBoundary::ThroughTurn {
             let completed = match next_user {
-                Some((next_timestamp, next_id)) => tx.query_row(
-                    "SELECT EXISTS(
-                        SELECT 1 FROM messages
-                        WHERE session_id = ?1 AND role = 'assistant'
-                          AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
-                          AND (timestamp < ?4 OR (timestamp = ?4 AND id < ?5))
-                     )",
-                    params![
-                        source_id,
-                        anchor_timestamp,
-                        anchor_id,
-                        next_timestamp,
-                        next_id
-                    ],
-                    |row| row.get::<_, bool>(0),
-                )?,
-                None => tx.query_row(
-                    "SELECT EXISTS(
-                        SELECT 1 FROM messages
-                        WHERE session_id = ?1 AND role = 'assistant'
-                          AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
-                     )",
-                    params![source_id, anchor_timestamp, anchor_id],
-                    |row| row.get::<_, bool>(0),
-                )?,
+                Some((next_timestamp, next_id)) => {
+                    sqlx::query(
+                        "SELECT EXISTS(
+                            SELECT 1 FROM messages
+                            WHERE session_id = ?1 AND role = 'assistant'
+                              AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
+                              AND (timestamp < ?4 OR (timestamp = ?4 AND id < ?5))
+                         )",
+                    )
+                    .bind(source_id)
+                    .bind(anchor_timestamp)
+                    .bind(anchor_id)
+                    .bind(next_timestamp)
+                    .bind(next_id)
+                    .fetch_one(&mut *tx)
+                    .await?
+                    .get::<bool, _>(0)
+                }
+                None => {
+                    sqlx::query(
+                        "SELECT EXISTS(
+                            SELECT 1 FROM messages
+                            WHERE session_id = ?1 AND role = 'assistant'
+                              AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
+                         )",
+                    )
+                    .bind(source_id)
+                    .bind(anchor_timestamp)
+                    .bind(anchor_id)
+                    .fetch_one(&mut *tx)
+                    .await?
+                    .get::<bool, _>(0)
+                }
             };
             anyhow::ensure!(completed, "fork_session: user turn is not completed");
         }
 
-        // 挂靠点取复制前缀里最后一个完整 turn：through 就是锚点本身，
-        // before 则回退到上一轮，首轮之前分叉时为空。
         let anchor = match boundary {
             ForkBoundary::ThroughTurn => {
-                let turn_index = tx.query_row(
+                let turn_index: i64 = sqlx::query(
                     "SELECT COUNT(*) FROM messages
                      WHERE session_id = ?1 AND role = 'user'
                        AND (timestamp < ?2 OR (timestamp = ?2 AND id <= ?3))",
-                    params![source_id, anchor_timestamp, anchor_id],
-                    |row| row.get::<_, i64>(0),
-                )?;
+                )
+                .bind(source_id)
+                .bind(anchor_timestamp)
+                .bind(anchor_id)
+                .fetch_one(&mut *tx)
+                .await?
+                .get(0);
                 Some((parent_user_message_id, turn_index))
             }
-            ForkBoundary::BeforeTurn => tx
-                .query_row(
+            ForkBoundary::BeforeTurn => {
+                sqlx::query(
                     "SELECT id, (
                         SELECT COUNT(*) FROM messages inner_m
                         WHERE inner_m.session_id = outer_m.session_id AND inner_m.role = 'user'
@@ -186,53 +196,61 @@ impl SessionStore {
                      WHERE outer_m.session_id = ?1 AND outer_m.role = 'user'
                        AND (outer_m.timestamp < ?2 OR (outer_m.timestamp = ?2 AND outer_m.id < ?3))
                      ORDER BY outer_m.timestamp DESC, outer_m.id DESC LIMIT 1",
-                    params![source_id, anchor_timestamp, anchor_id],
-                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
                 )
-                .optional()?,
+                .bind(source_id)
+                .bind(anchor_timestamp)
+                .bind(anchor_id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .map(|r| (r.get::<i64, _>(0), r.get::<i64, _>(1)))
+            }
         };
 
         let inherited_turn_count =
-            completed_turn_count_before_boundary(&tx, source_id, copy_boundary)?;
+            completed_turn_count_before_boundary(&mut tx, source_id, copy_boundary).await?;
         let created_at = now_epoch_secs()?;
-        tx.execute(
+        sqlx::query(
             "INSERT INTO sessions (
                 id, source, model, parent_session_id, started_at,
                 branch_parent_message_id, branch_parent_turn_index,
                 branch_inherited_turn_count, branch_created_at, branch_kind
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?5, ?9)",
-            params![
-                new_id,
-                source,
-                model,
-                source_id,
-                created_at,
-                anchor.map(|(message_id, _)| message_id),
-                anchor.map(|(_, turn_index)| turn_index),
-                inherited_turn_count,
-                BranchKind::Fork.as_str()
-            ],
-        )?;
+        )
+        .bind(new_id)
+        .bind(&source)
+        .bind(&model)
+        .bind(source_id)
+        .bind(created_at)
+        .bind(anchor.map(|(message_id, _)| message_id))
+        .bind(anchor.map(|(_, turn_index)| turn_index))
+        .bind(inherited_turn_count)
+        .bind(BranchKind::Fork.as_str())
+        .execute(&mut *tx)
+        .await?;
 
-        let copied_message_count = copy_prefix_through_turn(&tx, source_id, new_id, copy_boundary)?;
-        let (tool_call_count, copied_user_turns) = tx.query_row(
+        let copied_message_count =
+            copy_prefix_through_turn(&mut tx, source_id, new_id, copy_boundary).await?;
+        let counts_row = sqlx::query(
             "SELECT SUM(CASE WHEN role = 'tool' THEN 1 ELSE 0 END),
                     SUM(CASE WHEN role = 'user' THEN 1 ELSE 0 END)
              FROM messages WHERE session_id = ?1",
-            params![new_id],
-            |row| {
-                Ok((
-                    row.get::<_, Option<i64>>(0)?.unwrap_or(0),
-                    row.get::<_, Option<i64>>(1)?.unwrap_or(0),
-                ))
-            },
-        )?;
-        tx.execute(
+        )
+        .bind(new_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let tool_call_count: i64 = counts_row.get::<Option<i64>, _>(0).unwrap_or(0);
+        let copied_user_turns: i64 = counts_row.get::<Option<i64>, _>(1).unwrap_or(0);
+
+        sqlx::query(
             "UPDATE sessions SET message_count = ?1, tool_call_count = ?2 WHERE id = ?3",
-            params![copied_message_count, tool_call_count, new_id],
-        )?;
-        set_branch_title(&tx, new_id, title)?;
-        tx.commit()?;
+        )
+        .bind(copied_message_count)
+        .bind(tool_call_count)
+        .bind(new_id)
+        .execute(&mut *tx)
+        .await?;
+        set_branch_title(&mut tx, new_id, title).await?;
+        tx.commit().await?;
 
         Ok(ForkedSession {
             session_id: new_id.to_string(),
@@ -252,8 +270,11 @@ impl SessionStore {
     /// `parent_session_id` 但不属于聊天分支；仅当请求会话本身在这条链上时才保留。
     /// v21 及更早创建的分支会通过父/子消息前缀推断锚点；损坏的父引用与循环不会死循环，
     /// 而是分别写入 `orphaned_parent_ids` / `cycle_detected`。
-    pub fn session_lineage_graph(&self, session_id: &str) -> Result<SessionLineageGraph> {
-        let sessions = self.load_all_sessions()?;
+    pub async fn session_lineage_graph(
+        &self,
+        session_id: &str,
+    ) -> Result<SessionLineageGraph> {
+        let sessions = self.load_all_sessions().await?;
         anyhow::ensure!(
             sessions.contains_key(session_id),
             "session_lineage_graph: session not found"
@@ -324,14 +345,14 @@ impl SessionStore {
             let session = &sessions[id];
             resolved.insert(
                 id.clone(),
-                self.resolve_branch_metadata(session, &sessions)?,
+                self.resolve_branch_metadata(session, &sessions).await?,
             );
         }
 
         let mut nodes = Vec::with_capacity(included.len());
         for id in included {
             let session = &sessions[&id];
-            let mut turns = turn_spans(&self.get_messages(&id)?)
+            let mut turns = turn_spans(&self.get_messages(&id).await?)
                 .into_iter()
                 .map(|turn| SessionTurnNode {
                     turn_index: turn.index,
@@ -388,7 +409,7 @@ impl SessionStore {
         })
     }
 
-    pub(crate) fn write_legacy_fork_metadata(
+    pub(crate) async fn write_legacy_fork_metadata(
         &self,
         source_id: &str,
         target_id: &str,
@@ -412,29 +433,31 @@ impl SessionStore {
                 legacy: false,
             },
         )
+        .await
     }
 
-    pub(crate) fn infer_and_write_fork_metadata(
+    pub(crate) async fn infer_and_write_fork_metadata(
         &self,
         source_id: &str,
         target_id: &str,
         kind: BranchKind,
     ) -> Result<()> {
         let inferred = infer_legacy_metadata(
-            &self.get_messages(source_id)?,
-            &self.get_messages(target_id)?,
+            &self.get_messages(source_id).await?,
+            &self.get_messages(target_id).await?,
         );
         self.write_branch_metadata(source_id, target_id, kind, &inferred)
+            .await
     }
 
-    fn write_branch_metadata(
+    async fn write_branch_metadata(
         &self,
         source_id: &str,
         target_id: &str,
         kind: BranchKind,
         metadata: &ResolvedBranchMetadata,
     ) -> Result<()> {
-        self.conn.execute(
+        sqlx::query(
             "UPDATE sessions SET
                 branch_parent_message_id = ?1,
                 branch_parent_turn_index = ?2,
@@ -442,37 +465,34 @@ impl SessionStore {
                 branch_created_at = COALESCE(branch_created_at, ?4),
                 branch_kind = ?5
              WHERE id = ?6 AND parent_session_id = ?7",
-            params![
-                metadata.parent_message_id,
-                metadata.parent_turn_index,
-                metadata.inherited_turn_count,
-                now_epoch_secs()?,
-                kind.as_str(),
-                target_id,
-                source_id
-            ],
-        )?;
+        )
+        .bind(metadata.parent_message_id)
+        .bind(metadata.parent_turn_index)
+        .bind(metadata.inherited_turn_count)
+        .bind(now_epoch_secs()?)
+        .bind(kind.as_str())
+        .bind(target_id)
+        .bind(source_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    fn load_all_sessions(&self) -> Result<HashMap<String, StoredSession>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM sessions ORDER BY started_at, id")?;
-        let ids = stmt
-            .query_map([], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        drop(stmt);
+    async fn load_all_sessions(&self) -> Result<HashMap<String, StoredSession>> {
+        let ids: Vec<(String,)> =
+            sqlx::query_as("SELECT id FROM sessions ORDER BY started_at, id")
+                .fetch_all(&self.pool)
+                .await?;
         let mut sessions = HashMap::with_capacity(ids.len());
-        for id in ids {
-            if let Some(session) = self.get_session(&id)? {
+        for (id,) in ids {
+            if let Some(session) = self.get_session(&id).await? {
                 sessions.insert(id, session);
             }
         }
         Ok(sessions)
     }
 
-    fn resolve_branch_metadata(
+    async fn resolve_branch_metadata(
         &self,
         session: &StoredSession,
         sessions: &HashMap<String, StoredSession>,
@@ -501,8 +521,8 @@ impl SessionStore {
                 ..ResolvedBranchMetadata::default()
             });
         };
-        let parent_messages = self.get_messages(parent_id)?;
-        let child_messages = self.get_messages(&session.id)?;
+        let parent_messages = self.get_messages(parent_id).await?;
+        let child_messages = self.get_messages(&session.id).await?;
         Ok(infer_legacy_metadata(&parent_messages, &child_messages))
     }
 }
@@ -515,73 +535,91 @@ struct ResolvedBranchMetadata {
     legacy: bool,
 }
 
-fn copy_prefix_through_turn(
-    tx: &Transaction<'_>,
+async fn copy_prefix_through_turn(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     source_id: &str,
     new_id: &str,
     next_user: Option<(f64, i64)>,
 ) -> Result<i64> {
-    let base = "INSERT INTO messages (
-            session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-            timestamp, token_count, finish_reason, reasoning, reasoning_content, reasoning_details,
-            reasoning_items, message_items, media_json
-         )
-         SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                timestamp, token_count, finish_reason, reasoning, reasoning_content,
-                reasoning_details, reasoning_items, message_items, media_json
-         FROM messages WHERE session_id = ?2";
     let copied = match next_user {
-        Some((timestamp, id)) => tx.execute(
-            &format!(
-                "{base}
+        Some((timestamp, id)) => {
+            sqlx::query(
+                "INSERT INTO messages (
+                    session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                    timestamp, token_count, finish_reason, reasoning, reasoning_content, reasoning_details,
+                    reasoning_items, message_items, media_json
+                 )
+                 SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                        timestamp, token_count, finish_reason, reasoning, reasoning_content,
+                        reasoning_details, reasoning_items, message_items, media_json
+                 FROM messages WHERE session_id = ?2
                  AND (timestamp < ?3 OR (timestamp = ?3 AND id < ?4))
-                 ORDER BY timestamp ASC, id ASC"
-            ),
-            params![new_id, source_id, timestamp, id],
-        )?,
-        None => tx.execute(
-            &format!("{base} ORDER BY timestamp ASC, id ASC"),
-            params![new_id, source_id],
-        )?,
+                 ORDER BY timestamp ASC, id ASC",
+            )
+            .bind(new_id)
+            .bind(source_id)
+            .bind(timestamp)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?
+            .rows_affected()
+        }
+        None => {
+            sqlx::query(
+                "INSERT INTO messages (
+                    session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                    timestamp, token_count, finish_reason, reasoning, reasoning_content, reasoning_details,
+                    reasoning_items, message_items, media_json
+                 )
+                 SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                        timestamp, token_count, finish_reason, reasoning, reasoning_content,
+                        reasoning_details, reasoning_items, message_items, media_json
+                 FROM messages WHERE session_id = ?2
+                 ORDER BY timestamp ASC, id ASC",
+            )
+            .bind(new_id)
+            .bind(source_id)
+            .execute(&mut **tx)
+            .await?
+            .rows_affected()
+        }
     };
     Ok(i64::try_from(copied).unwrap_or(i64::MAX))
 }
 
-fn completed_turn_count_before_boundary(
-    tx: &Transaction<'_>,
+async fn completed_turn_count_before_boundary(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     source_id: &str,
     boundary: Option<(f64, i64)>,
 ) -> Result<i64> {
-    let roles = match boundary {
+    let roles: Vec<(String,)> = match boundary {
         Some((timestamp, id)) => {
-            let mut stmt = tx.prepare(
+            sqlx::query_as(
                 "SELECT role FROM messages
                  WHERE session_id = ?1
                    AND (timestamp < ?2 OR (timestamp = ?2 AND id < ?3))
                  ORDER BY timestamp ASC, id ASC",
-            )?;
-            let rows = stmt
-                .query_map(params![source_id, timestamp, id], |row| {
-                    row.get::<_, String>(0)
-                })?
-                .collect::<Result<Vec<_>, _>>()?;
-            rows
+            )
+            .bind(source_id)
+            .bind(timestamp)
+            .bind(id)
+            .fetch_all(&mut **tx)
+            .await?
         }
         None => {
-            let mut stmt = tx.prepare(
+            sqlx::query_as(
                 "SELECT role FROM messages WHERE session_id = ?1
                  ORDER BY timestamp ASC, id ASC",
-            )?;
-            let rows = stmt
-                .query_map(params![source_id], |row| row.get::<_, String>(0))?
-                .collect::<Result<Vec<_>, _>>()?;
-            rows
+            )
+            .bind(source_id)
+            .fetch_all(&mut **tx)
+            .await?
         }
     };
     let mut count = 0i64;
     let mut in_turn = false;
     let mut current_completed = false;
-    for role in roles {
+    for (role,) in roles {
         if role == "user" {
             if in_turn && current_completed {
                 count += 1;
@@ -598,24 +636,32 @@ fn completed_turn_count_before_boundary(
     Ok(count)
 }
 
-fn set_branch_title(tx: &Transaction<'_>, new_id: &str, title: Option<String>) -> Result<()> {
+async fn set_branch_title(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    new_id: &str,
+    title: Option<String>,
+) -> Result<()> {
     let Some(title) = title.filter(|title| !title.trim().is_empty()) else {
         return Ok(());
     };
     let branched = format!("{title} · branch");
-    if let Err(error) = tx.execute(
-        "UPDATE sessions SET title = ?1 WHERE id = ?2",
-        params![branched, new_id],
-    ) {
-        if !is_unique_constraint(&error) {
-            return Err(error.into());
+    let result = sqlx::query("UPDATE sessions SET title = ?1 WHERE id = ?2")
+        .bind(&branched)
+        .bind(new_id)
+        .execute(&mut **tx)
+        .await;
+    match result {
+        Ok(_) => {}
+        Err(err) if is_unique_constraint(&err) => {
+            let suffix: String = new_id.chars().take(8).collect();
+            let unique = format!("{} · {}", truncate_chars(&branched, 60), suffix);
+            sqlx::query("UPDATE sessions SET title = ?1 WHERE id = ?2")
+                .bind(&unique)
+                .bind(new_id)
+                .execute(&mut **tx)
+                .await?;
         }
-        let suffix: String = new_id.chars().take(8).collect();
-        let unique = format!("{} · {}", truncate_chars(&branched, 60), suffix);
-        tx.execute(
-            "UPDATE sessions SET title = ?1 WHERE id = ?2",
-            params![unique, new_id],
-        )?;
+        Err(err) => return Err(err.into()),
     }
     Ok(())
 }
