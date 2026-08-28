@@ -5,7 +5,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 export function useWindowChrome() {
   const [windowMaximized, setWindowMaximized] = useState(false);
   const zoomingRef = useRef(false);
-  const titleDragTimerRef = useRef<number | null>(null);
   const titleLastClickRef = useRef({ time: 0, x: 0, y: 0 });
 
   useEffect(() => {
@@ -51,10 +50,6 @@ export function useWindowChrome() {
       Math.abs(e.clientY - prev.y) < 5;
 
     if (isDouble) {
-      if (titleDragTimerRef.current != null) {
-        window.clearTimeout(titleDragTimerRef.current);
-        titleDragTimerRef.current = null;
-      }
       titleLastClickRef.current = { time: 0, x: 0, y: 0 };
       if (zoomingRef.current) return;
       zoomingRef.current = true;
@@ -68,15 +63,12 @@ export function useWindowChrome() {
     }
 
     titleLastClickRef.current = { time: now, x: e.clientX, y: e.clientY };
-    if (titleDragTimerRef.current != null) {
-      window.clearTimeout(titleDragTimerRef.current);
-    }
-    titleDragTimerRef.current = window.setTimeout(() => {
-      titleDragTimerRef.current = null;
-      void getCurrentWindow()
-        .startDragging()
-        .catch(() => {});
-    }, 200);
+    // AppKit must receive startDragging while the initiating mouse-down event is
+    // still active. Deferring this call can run after mouse-up and produces
+    // "Window move completed without beginning" on macOS.
+    void getCurrentWindow()
+      .startDragging()
+      .catch(() => {});
   };
 
   const onTitleDoubleClick = (e: ReactMouseEvent) => {
