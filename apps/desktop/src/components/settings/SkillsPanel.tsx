@@ -1657,17 +1657,17 @@ export default function SkillsPanel({
     return (
       <button
         type="button"
-        className="skills-action-btn"
+        className="skills-action-btn is-icon skill-card-update"
         disabled={isUpdating}
         onClick={() => void updateSkillRow(row)}
         title={t("skills.update")}
+        aria-label={t("skills.update")}
       >
         {isUpdating ? (
           <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
         ) : (
           <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
         )}
-        <span>{isUpdating ? t("skills.updating") : t("skills.update")}</span>
       </button>
     );
   };
@@ -1785,7 +1785,7 @@ export default function SkillsPanel({
       key={skill.id}
       role="listitem"
       className={`tool-card skill-card ${skill.enabled ? "is-enabled" : "is-disabled"}`}
-      data-tone={skillTone(skill.id)}
+      data-skill-tone={skillTone(skill.id)}
     >
       <header className="skill-card-top">
         <div className="tool-icon skill-card-icon" aria-hidden>
@@ -1856,8 +1856,8 @@ export default function SkillsPanel({
               : t("skills.view")}
           </span>
         </button>
-        {renderSkillUpdateButton(skill)}
         <div className="skill-card-action-icons">
+          {renderSkillUpdateButton(skill)}
           <button
             type="button"
             className="skills-action-btn is-icon"
@@ -1894,7 +1894,7 @@ export default function SkillsPanel({
       key={skill.id}
       role="listitem"
       className={`tool-card skill-card ${skill.linked ? "is-enabled" : "is-disabled"}`}
-      data-tone={skillTone(skill.id)}
+      data-skill-tone={skillTone(skill.id)}
     >
       <header className="skill-card-top">
         <div className="tool-icon skill-card-icon" aria-hidden>
@@ -1944,8 +1944,8 @@ export default function SkillsPanel({
             {skill.linked ? t("skills.unlink") : t("skills.link")}
           </span>
         </button>
-        {renderSkillUpdateButton(skill)}
         <div className="skill-card-action-icons">
+          {renderSkillUpdateButton(skill)}
           <button
             type="button"
             className="skills-action-btn is-icon"
@@ -2010,7 +2010,7 @@ export default function SkillsPanel({
         key={skill.id}
         role="listitem"
         className={`tool-card skill-card ${canUpdate ? "is-enabled" : "is-disabled"}`}
-        data-tone={skillTone(skill.id)}
+        data-skill-tone={skillTone(skill.id)}
       >
         <header className="skill-card-top">
           <div className="tool-icon skill-card-icon" aria-hidden>
@@ -2090,7 +2090,7 @@ export default function SkillsPanel({
         key={skill.id}
         role="listitem"
         className={`tool-card skill-card ${already ? "is-installed" : ""}`}
-        data-tone={skillTone(skill.id)}
+        data-skill-tone={skillTone(skill.id)}
       >
         <header className="skill-card-top">
           <div className="tool-icon skill-card-icon" aria-hidden>

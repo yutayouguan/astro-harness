@@ -31,6 +31,41 @@
   letter-spacing: -0.04em;
 }
 
+/* 画廊卡片仅在图标上使用来源色，卡片层级继续继承页面主题色。 */
+.tool-card.skill-card[data-skill-tone="blue"] {
+  --skill-tone: var(--tone-blue);
+}
+.tool-card.skill-card[data-skill-tone="green"] {
+  --skill-tone: var(--tone-green);
+}
+.tool-card.skill-card[data-skill-tone="purple"] {
+  --skill-tone: var(--tone-purple);
+}
+.tool-card.skill-card[data-skill-tone="orange"] {
+  --skill-tone: var(--tone-orange);
+}
+.tool-card.skill-card[data-skill-tone="cyan"] {
+  --skill-tone: var(--tone-cyan);
+}
+.tool-card.skill-card[data-skill-tone="indigo"] {
+  --skill-tone: var(--tone-indigo);
+}
+.tool-card.skill-card[data-skill-tone="amber"] {
+  --skill-tone: var(--tone-amber);
+}
+.tool-card.skill-card[data-skill-tone="teal"] {
+  --skill-tone: var(--tone-teal);
+}
+
+.tool-card.skill-card .tool-icon-lens {
+  background: color-mix(in srgb, var(--skill-tone, var(--tone)) 10%, transparent);
+  border-color: color-mix(in srgb, var(--skill-tone, var(--tone)) 16%, transparent);
+}
+
+.tool-card.skill-card .tool-icon-glyph {
+  color: var(--skill-tone, var(--tone));
+}
+
 .tool-card.skill-card[data-tone="blue"],
 .skills-detail-item[data-tone="blue"] {
   --tone: var(--tone-blue);

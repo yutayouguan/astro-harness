@@ -58,7 +58,7 @@
 }
 
 .skills-gallery.is-list .tool-card.skill-card:hover {
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .skills-gallery.is-list .skill-card-top {
@@ -95,8 +95,8 @@
 .skills-gallery.is-list .skill-card-desc {
   flex: 1 1 200px;
   min-width: 0;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: 0;
+  border-radius: 0;
 }
 
 .skills-gallery.is-list .skill-card-desc p {
@@ -119,6 +119,8 @@
   align-items: center;
   gap: 6px;
   margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
   flex: 0 0 auto;
   margin-left: auto;
   min-width: 0;
