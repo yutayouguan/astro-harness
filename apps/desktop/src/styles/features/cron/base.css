@@ -32,9 +32,8 @@
   z-index: 1;
 }
 
-/* 顶栏一行：左 Tab，右操作（搜索 / 视图 / 新建）
-   贴窗顶时要盖过 .native-drag-region（z-index 40），否则按钮点不到；
-   行内空档放行指针事件，把窗口拖拽区还给标题栏 */
+/* 顶栏一行：左 Tab，右操作（搜索 / 视图 / 新建）。
+   与标题栏拖拽区的命中规则由 shell/header.css 统一管理。 */
 .cron-toolbar {
   position: relative;
   display: flex;
@@ -43,12 +42,6 @@
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 12px;
-  z-index: 45;
-  pointer-events: none;
-}
-
-.cron-toolbar > * {
-  pointer-events: auto;
 }
 
 .cron-toolbar-end {
@@ -154,4 +147,3 @@
   margin-top: 10px;
   padding: 8px 18px;
 }
-
