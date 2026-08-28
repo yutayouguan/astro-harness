@@ -2,14 +2,11 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  /* overflow-y:auto 会把 overflow-x 一并算成 auto；锁住横滑，避免触控板把整页拖偏 */
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior-x: none;
-  padding: 4px 2px 16px;
+  overflow: hidden;
+  padding: 4px 2px 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
   --tone: var(--tone-aurora);
   --tone-soft: var(--tone-aurora-soft);
   --tone-glow: var(--tone-aurora-glow);
@@ -20,14 +17,29 @@
   --insights-warn-soft: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
-/* 顶栏一行：左视图 Tab，右周期筛选 */
+/* 顶栏一行：左视图 Tab，右周期筛选；固定不随内容滚动 */
 .insights-panel > .insights-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
   flex-wrap: wrap;
   max-width: 100%;
+  padding-bottom: 12px;
+}
+
+/* 工具栏以下的内容区域：独立滚动 */
+.insights-panel > .insights-body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-x: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 16px;
 }
 
 .insights-view-tabs,

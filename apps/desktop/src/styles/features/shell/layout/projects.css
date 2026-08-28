@@ -31,7 +31,12 @@
   gap: 10px;
   border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  background: color-mix(in srgb, var(--glass) 88%, transparent);
+  box-shadow:
+    0 5px 14px color-mix(in srgb, var(--ink) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 30%, transparent);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(1.12);
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(1.12);
   color: color-mix(in srgb, var(--ink) 94%, transparent);
   font: inherit;
   font-size: 14px;
@@ -312,7 +317,38 @@
   height: 40px;
   border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  background: color-mix(in srgb, var(--glass) 88%, transparent);
+  box-shadow:
+    0 5px 14px color-mix(in srgb, var(--ink) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 30%, transparent);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(1.12);
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(1.12);
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-global-search .expandable-search-btn:hover {
+    border: 1px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 18%, transparent);
+    background: color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, var(--glass));
+    box-shadow:
+      0 6px 16px color-mix(in srgb, var(--ink) 12%, transparent),
+      inset 0 1px 0 color-mix(in srgb, white 34%, transparent);
+    color: var(--ink);
+  }
+}
+
+.sidebar-global-search .expandable-search-btn:active {
+  transform: scale(0.97);
+}
+
+.sidebar-global-search .expandable-search-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 60%, transparent);
+  outline-offset: 2px;
 }
 
 .sidebar-primary-actions:has(.sidebar-global-search.is-open) .sidebar-new-chat {
@@ -678,12 +714,14 @@
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar-new-chat,
+  .sidebar-global-search .expandable-search-btn,
   .sidebar-feature-tab,
   .sidebar-settings-btn {
     transition: color 120ms ease, background 120ms ease;
   }
 
   .sidebar-new-chat:active,
+  .sidebar-global-search .expandable-search-btn:active,
   .sidebar-feature-tab:active,
   .sidebar-settings-btn:active {
     transform: none;
@@ -831,8 +869,12 @@ html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
   overflow-y: auto;
 }
 
-/* 自带分区滚动的设置页（工具）：撑满高度，外层不再整体滚动 */
-.settings-content-inline:has(> .agent-tools-page) {
+/* 自带分区滚动的设置页：撑满高度，外层不再整体滚动 */
+.settings-content-inline:has(> .agent-tools-page),
+.settings-content-inline:has(> .model-market),
+.settings-content-inline:has(> .providers-page),
+.settings-content-inline:has(> .insights-panel),
+.settings-content-inline:has(> .memory-panel) {
   display: flex;
   flex-direction: column;
   min-height: 0;

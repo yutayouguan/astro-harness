@@ -555,6 +555,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
         />
       </div>
 
+      <div className="insights-body">
       {error && <p className="insights-error">{error}</p>}
 
       {view === "overview" && data && (
@@ -1009,6 +1010,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
       )}
 
       {view === "api" && <ApiToolsPanel />}
+      </div>
     </div>
   );
 }
