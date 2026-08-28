@@ -1333,7 +1333,7 @@ export default function App() {
             </>
           ) : featureNav ? (
             <>
-              {featureNav !== "cron" && (
+              {featureNav !== "cron" && featureNav !== "loop" && (
                 <div className="content-header">
                   <div className="content-heading">
                     <div className="page-title-block">
@@ -1352,7 +1352,7 @@ export default function App() {
                 </div>
               )}
               <div
-                className={`page-body${featureNav === "cron" ? " page-body--bare" : ""}`}
+                className={`page-body${featureNav === "cron" || featureNav === "loop" ? " page-body--bare" : ""}`}
               >
                 <div className="feature-content-inline">
                   {featureNav === "cron" && (
@@ -1648,6 +1648,8 @@ export default function App() {
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
                       modelId={activeProvider?.model ?? null}
+                      browserPreview={chat.browserPreview}
+                      onCloseBrowserPreview={chat.dismissBrowserPreview}
                       cronProviders={providers.map((provider) => ({
                         id: provider.id,
                         name: provider.display_name,
