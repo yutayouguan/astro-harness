@@ -2816,32 +2816,6 @@ export default function SkillsPanel({
             </div>
           )}
 
-          {primaryTab === "skills" && scope === "global" && (
-            <>
-              <div className="plugins-command-divider" aria-hidden />
-              <div className="plugins-personal-tabs" role="tablist" aria-label={t("plugins.personalTabs")}>
-                {(["installed", "online", "machine"] as const).map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    role="tab"
-                    aria-selected={personalTab === item}
-                    className={`plugins-personal-tab ${item === "machine" ? "is-import" : ""} ${personalTab === item ? "is-active" : ""}`}
-                    onClick={() => setPersonalTab(item)}
-                  >
-                    {item === "installed" ? <Package size={15} aria-hidden /> : item === "online" ? <CloudDownload size={15} aria-hidden /> : <HardDrive size={15} aria-hidden />}
-                    {t(`plugins.personalTab.${item}` as MessageKey)}
-                    {item === "machine" && machineSkills.length > 0 && (
-                      <span className="plugins-personal-tab-count">{machineSkills.length}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="skills-toolbar plugins-context-toolbar">
           <div className="skills-toolbar-end">
           {primaryTab === "skills" ? (
             <>
@@ -2893,12 +2867,6 @@ export default function SkillsPanel({
                 />
               )}
               {viewToggle}
-              {scope === "global" && (
-                <button type="button" className="skills-icon-btn" onClick={() => setDrawer("updates")} title={t("plugins.action.updates")} aria-label={t("plugins.action.updates")}>
-                  <Download size={16} />
-                  {outdatedCount > 0 && <span className="plugins-action-count">{outdatedCount}</span>}
-                </button>
-              )}
               <button
                 type="button"
                 className="skills-icon-btn"
@@ -2941,6 +2909,36 @@ export default function SkillsPanel({
           )}
           </div>
         </div>
+
+        {primaryTab === "skills" && scope === "global" && (
+          <nav className="plugins-personal-tabs plugins-personal-tabs--underline" role="tablist" aria-label={t("plugins.personalTabs")}>
+            {(["installed", "online", "machine", "updates"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="tab"
+                aria-selected={item === "updates" ? drawer === "updates" : personalTab === item}
+                className={`plugins-personal-tab--underline ${(item === "updates" ? drawer === "updates" : personalTab === item) ? "is-active" : ""}`}
+                onClick={() => {
+                  if (item === "updates") {
+                    setDrawer((d) => (d === "updates" ? null : "updates"));
+                  } else {
+                    setPersonalTab(item);
+                    if (drawer === "updates") setDrawer(null);
+                  }
+                }}
+              >
+                {t(item === "updates" ? "plugins.action.updates" : `plugins.personalTab.${item}` as MessageKey)}
+                {item === "updates" && outdatedCount > 0 && (
+                  <span className="plugins-personal-tab-count">{outdatedCount}</span>
+                )}
+                {item === "machine" && machineSkills.length > 0 && (
+                  <span className="plugins-personal-tab-count">{machineSkills.length}</span>
+                )}
+              </button>
+            ))}
+          </nav>
+        )}
 
         {primaryTab === "mcp" && mcpScope === "public" && (
           <div className="plugins-public-category-row">
