@@ -55,8 +55,61 @@ fn confirm_template_validates_and_uses_v2() {
     validate_operations(&ops).unwrap();
     assert_eq!(catalog_ids(&ops), vec![ASTRO_CATALOG_ID]);
     let names = all_component_names(&ops);
-    assert!(names.iter().any(|n| n == "Badge"));
     assert!(names.iter().any(|n| n == "ClarifyWizard"));
+    let wizard = ops
+        .iter()
+        .find_map(|op| {
+            op.pointer("/updateComponents/components")
+                .and_then(Value::as_array)
+        })
+        .and_then(|components| {
+            components.iter().find(|component| {
+                component.get("component").and_then(Value::as_str) == Some("ClarifyWizard")
+            })
+        })
+        .expect("confirm wizard");
+    assert_eq!(
+        wizard.get("variant").and_then(Value::as_str),
+        Some("approval")
+    );
+    assert_eq!(
+        wizard.get("title").and_then(Value::as_str),
+        Some("删除文件？")
+    );
+    assert_eq!(
+        wizard.get("body").and_then(Value::as_str),
+        Some("将永久删除 report.pdf")
+    );
+    assert_eq!(
+        wizard.get("allowAlways").and_then(Value::as_bool),
+        Some(false)
+    );
+}
+
+#[test]
+fn confirm_template_exposes_persistent_approval_without_ui_copy_in_protocol() {
+    let ops = a2ui::templates::build_confirm_surface_ex(
+        "surf-confirm-always",
+        "批准危险命令",
+        "检测到潜在危险操作\n\n```\necho ok\n```",
+        true,
+    );
+    let wizard = ops
+        .iter()
+        .find_map(|op| {
+            op.pointer("/updateComponents/components")
+                .and_then(Value::as_array)
+        })
+        .and_then(|components| components.iter().find(|c| c["id"] == "wizard"))
+        .expect("confirm wizard");
+    assert_eq!(
+        wizard.get("allowAlways").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        wizard.pointer("/steps/0/options"),
+        Some(&serde_json::json!(["approve", "deny", "approve_always"]))
+    );
 }
 
 #[test]

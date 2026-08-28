@@ -24,7 +24,7 @@ pub struct AgentDefinition {
     pub skills: SkillsLayer,
     #[serde(default)]
     pub nickname_candidates: Vec<String>,
-    /// Codex agent files are configuration layers. Preserve forward-compatible
+    /// Agent files are configuration layers. Preserve forward-compatible
     /// keys even when Astro does not consume them yet.
     #[serde(flatten)]
     pub extra: BTreeMap<String, toml::Value>,
@@ -154,7 +154,7 @@ pub fn load_agent_configuration(
     let options = LocalConfigOptions::new(&astro_home, cwd);
     let loaded = load_local_config(&options).with_context(|| {
         format!(
-            "failed to load Codex configuration for agent settings from {}",
+            "failed to load agent configuration for agent settings from {}",
             astro_home.display()
         )
     })?;
@@ -701,7 +701,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_agent_directories_are_not_configuration_inputs() {
+    fn dotcodex_directories_are_not_configuration_inputs() {
         let memory = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
         fs::create_dir_all(memory.path().join(".codex/agents")).unwrap();
@@ -726,7 +726,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_config_toml_is_not_a_configuration_input() {
+    fn dotcodex_config_is_not_a_configuration_input() {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join(".codex")).unwrap();
         fs::write(
@@ -996,7 +996,7 @@ sandbox_mode = "danger-full-access"
     }
 
     #[test]
-    fn codex_paths_preserve_precedence_and_decode_layers() {
+    fn astro_paths_preserve_precedence_and_decode_layers() {
         let memory = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
         fs::create_dir_all(memory.path().join(".astro/agents")).unwrap();
@@ -1012,7 +1012,7 @@ sandbox_mode = "danger-full-access"
         fs::write(
             memory.path().join(".astro/agents/reviewer.toml"),
             r#"name = "reviewer"
-description = "personal codex"
+description = "personal agent"
 developer_instructions = "personal"
 "#,
         )
@@ -1020,7 +1020,7 @@ developer_instructions = "personal"
         fs::write(
             project.path().join(".astro/agents/reviewer.toml"),
             r#"name = "reviewer"
-description = "project codex"
+description = "project agent"
 developer_instructions = "project"
 sandbox_mode = "read-only"
 future_setting = "preserved"
@@ -1047,7 +1047,7 @@ enabled = false
             .starts_with("sha256:"));
         let catalog = configuration.catalog;
         let reviewer = catalog.agents.get("reviewer").unwrap();
-        assert_eq!(reviewer.description, "project codex");
+        assert_eq!(reviewer.description, "project agent");
         assert_eq!(reviewer.sandbox_mode.as_deref(), Some("read-only"));
         assert!(reviewer.mcp_servers.contains_key("docs"));
         assert_eq!(reviewer.skills.config.len(), 1);

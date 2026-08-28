@@ -131,7 +131,7 @@ fn machine_skill_root_priority(path: &Path) -> u8 {
     .map_or(u8::MAX, |index| index as u8)
 }
 
-/// 本机其它技能目录（Agents / Codex / Claude / Cursor 等），不含 Astro 数据根。
+/// 本机其它技能目录（Agents / Claude / Cursor 等），不含 Astro 数据根。
 /// 同名 Skill 冲突时，开放标准 `.agents/skills` 的优先级最高。
 fn machine_skill_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
@@ -1421,7 +1421,10 @@ mod tests {
 
         assert!(recent_astro_tools("recent-skill").is_none());
         let loaded = load_skill_by_name("recent-skill").unwrap();
-        assert_eq!(loaded.metadata.astro_tools, vec!["exec_command", "web_search"]);
+        assert_eq!(
+            loaded.metadata.astro_tools,
+            vec!["exec_command", "web_search"]
+        );
         assert_eq!(
             recent_astro_tools("recent-skill"),
             Some(vec!["exec_command".to_string(), "web_search".to_string()])

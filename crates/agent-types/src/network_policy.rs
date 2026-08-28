@@ -47,7 +47,7 @@ pub struct NetworkPolicyAmendment {
     pub action: NetworkPolicyRuleAction,
 }
 
-/// Codex-compatible payload attached to a sandbox denial by a managed proxy.
+/// Payload attached to a sandbox denial by a managed proxy.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkPolicyDecisionPayload {

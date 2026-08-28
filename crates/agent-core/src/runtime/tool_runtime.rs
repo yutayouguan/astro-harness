@@ -1,4 +1,4 @@
-//! Codex-aligned tool invocation and per-step execution runtime.
+//! Tool invocation and per-step execution runtime.
 
 use std::sync::Arc;
 

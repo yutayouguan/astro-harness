@@ -64,9 +64,9 @@ fn builtin_tool_names_are_openai_compatible() {
 }
 
 #[test]
-fn registers_only_codex_v2_agent_tools() {
+fn registers_only_v2_agent_tools() {
     assert_eq!(
-        tools::builtin::subagent::CODEX_V2_AGENT_TOOL_NAMES,
+        tools::builtin::subagent::V2_AGENT_TOOL_NAMES,
         [
             "spawn_agent",
             "list_agents",
@@ -138,4 +138,3 @@ async fn metadata_tools_have_handlers_without_legacy_memory_aliases() {
         );
     }
 }
-

@@ -1,6 +1,6 @@
 //! Git worktree helpers used by explicit desktop multi-task workflows.
 //!
-//! Codex-style subagent threads intentionally do not create implicit worktrees;
+//! Subagent threads intentionally do not create implicit worktrees;
 //! they inherit the parent workspace and permission policy.
 
 pub mod git_worktree;

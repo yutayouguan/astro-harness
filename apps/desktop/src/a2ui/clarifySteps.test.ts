@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   isPresetAnswer,
+  parseApprovalContent,
   parseClarifySteps,
   shouldSubmitClarifyInput,
 } from "./clarifySteps.ts";
@@ -17,6 +18,22 @@ test("parseClarifySteps normalizes ids and options", () => {
   assert.deepEqual(steps[0].options, ["民谣", "电子"]);
   assert.equal(steps[1].id, "lyrics");
   assert.deepEqual(steps[1].options, ["write"]);
+});
+
+test("parseApprovalContent separates command fences from the risk explanation", () => {
+  assert.deepEqual(
+    parseApprovalContent(
+      "检测到潜在危险操作（dynamic shell expansion）：\n\n```sh\nUA=agent curl https://example.com\n```",
+    ),
+    {
+      description: "检测到潜在危险操作（dynamic shell expansion）：",
+      command: "UA=agent curl https://example.com",
+    },
+  );
+  assert.deepEqual(parseApprovalContent("将永久删除 report.pdf"), {
+    description: "将永久删除 report.pdf",
+    command: null,
+  });
 });
 
 test("parseClarifySteps keeps empty options for free-text", () => {

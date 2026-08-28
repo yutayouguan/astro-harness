@@ -52,3 +52,23 @@ export function isPresetAnswer(step: ClarifyWizardStep, value: string | undefine
 export function shouldSubmitClarifyInput(key: string, isComposing: boolean): boolean {
   return key === "Enter" && !isComposing;
 }
+
+export type ApprovalContent = {
+  description: string;
+  command: string | null;
+};
+
+/** Split an optional fenced command from the human-readable approval reason. */
+export function parseApprovalContent(body: string): ApprovalContent {
+  const fence = /```[^\n]*\n([\s\S]*?)```/m.exec(body);
+  if (!fence) {
+    return { description: body.trim(), command: null };
+  }
+  const description = `${body.slice(0, fence.index)}${body.slice(fence.index + fence[0].length)}`
+    .trim()
+    .replace(/\n{3,}/g, "\n\n");
+  return {
+    description,
+    command: fence[1].trim() || null,
+  };
+}

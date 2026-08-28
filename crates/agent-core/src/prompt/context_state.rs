@@ -1,7 +1,7 @@
 //! Durable baseline for role-bearing prompt context.
 //!
 //! Stable base instructions and native tool schemas deliberately stay outside this state. The
-//! payload mirrors Codex's world-state contract: the first snapshot is full, later changes are
+//! payload mirrors the world-state contract: the first snapshot is full, later changes are
 //! patches, and unchanged state produces no rollout item.
 
 use agent_rollout::RolloutItem;

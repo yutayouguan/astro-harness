@@ -31,7 +31,7 @@ pub enum HookEvent {
 }
 
 impl HookEvent {
-    /// Codex canonical 事件，顺序是对外契约的一部分。
+    /// Canonical 事件（Codex CLI 兼容），顺序是对外契约的一部分。
     pub const CODEX: [Self; 11] = [
         Self::PreToolUse,
         Self::PermissionRequest,
@@ -89,7 +89,7 @@ mod tests {
         USER_PROMPT_SUBMIT,
     };
     #[test]
-    fn codex_events_have_exact_names_and_order() {
+    fn hook_events_have_exact_names_and_order() {
         let codex: [HookEvent; 11] = HookEvent::CODEX;
         let as_str: fn(HookEvent) -> &'static str = HookEvent::as_str;
         let names: Vec<_> = codex.into_iter().map(as_str).collect();

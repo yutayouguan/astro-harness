@@ -3,11 +3,11 @@
 pub mod apply_patch;
 pub mod code_exec;
 pub mod context_remaining;
+pub mod exec_command;
 pub mod jobs;
 pub mod new_context_window;
 pub mod request_permissions;
 pub mod request_plugin_install;
-pub mod exec_command;
 pub mod tool_search;
 pub mod wait_for_environment;
 pub mod web_fetch;

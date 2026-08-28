@@ -1,6 +1,6 @@
 //! TOML 驱动的自定义 OpenAI 兼容 provider — 用户在 config.toml 中声明即可接入。
 //!
-//! 只支持 Responses API 路径（与 Codex 对齐），不需要 thinking format / effort map 等兼容参数。
+//! 只支持 Responses API 路径，不需要 thinking format / effort map 等兼容参数。
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -91,7 +91,7 @@ pub fn read_env_key(env_keys: &[String]) -> Option<String> {
 /// 配置驱动的 Responses API 补全模型。
 ///
 /// 所有行为由运行时配置参数化，不依赖编译期 trait 常量。
-/// 统一走 Responses API，与 Codex 自定义 provider 行为一致。
+/// 统一走 Responses API。
 #[derive(Clone)]
 pub struct ConfigDrivenCompletionModel {
     http: HttpClient,

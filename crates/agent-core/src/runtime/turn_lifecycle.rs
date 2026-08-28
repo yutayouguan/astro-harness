@@ -450,7 +450,7 @@ impl Session {
         } else {
             ::hooks::SESSION_START
         };
-        // Codex emits SubagentStart only for the child startup admission. A
+        // SubagentStart is emitted only for the child startup admission. A
         // resumed/follow-up turn is represented by its own SubagentStop.
         let context = if subagent.is_some() && source != "startup" {
             None
@@ -758,7 +758,7 @@ impl Session {
             .expect("turn input memory-write hook mutex poisoned") = hook;
     }
 
-    /// Compatibility adapter for callers not yet migrated to Codex naming.
+    /// Compatibility adapter for callers not yet migrated to current naming.
     #[deprecated(note = "use start_or_steer_turn")]
     pub async fn run_turn(
         &self,
@@ -768,7 +768,7 @@ impl Session {
         self.start_or_steer_turn(user_message, submission_id).await
     }
 
-    /// Compatibility adapter for callers not yet migrated to Codex naming.
+    /// Compatibility adapter for callers not yet migrated to current naming.
     #[deprecated(note = "use start_or_steer_turn_with_images")]
     pub async fn run_turn_with_images(
         &self,

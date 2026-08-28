@@ -84,7 +84,7 @@ impl ExecToolCallOutput {
     }
 }
 
-/// Conservative classifier matching Codex's retry gate: only a failed,
+/// Conservative classifier for the retry gate: only a failed,
 /// sandboxed attempt with a known denial signal is eligible for escalation.
 pub fn is_likely_sandbox_denied(sandbox_mode: SandboxMode, output: &ExecToolCallOutput) -> bool {
     if sandbox_mode == SandboxMode::DangerFullAccess || output.exit_code == 0 {
@@ -278,7 +278,7 @@ pub enum SandboxErr {
     BackendUnavailable(String),
 }
 
-/// Compatibility alias for the pre-Codex-alignment public name.
+/// Compatibility alias for the legacy public name.
 pub type SandboxError = SandboxErr;
 
 #[derive(Debug, Clone, Default)]

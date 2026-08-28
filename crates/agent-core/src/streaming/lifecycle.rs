@@ -13,7 +13,7 @@ use crate::runtime::event_identity::{event_turn_id, normalize_event_msg};
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::{Session, TurnContext};
 
-/// Match Codex's completed MCP event result cap: keep the model/history copy
+/// MCP event result cap: keep the model/history copy
 /// untouched while preventing a single durable/live event from carrying
 /// multi-megabyte inline payloads.
 pub(crate) const TOOL_COMPLETED_EVENT_MAX_BYTES: usize = 1024 * 1024;

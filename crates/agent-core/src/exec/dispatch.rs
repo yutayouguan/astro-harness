@@ -1,4 +1,4 @@
-//! Session-bound Codex V2 Agent Thread dispatch.
+//! Session-bound V2 Agent Thread dispatch.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -455,7 +455,7 @@ impl DefaultAgentThreadDispatch {
         let settings = &agent_configuration.settings;
         anyhow::ensure!(
             settings.enabled,
-            "agent threads are disabled by Codex agent settings"
+            "agent threads are disabled by agent settings"
         );
         let catalog = &agent_configuration.catalog;
         let mut recovered_material = material.clone();
@@ -563,7 +563,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         )?;
         let settings = &agent_configuration.settings;
         if !settings.enabled {
-            anyhow::bail!("agent threads are disabled by Codex agent settings");
+            anyhow::bail!("agent threads are disabled by agent settings");
         }
         let agent_type = request.request.agent_type.as_deref().unwrap_or("default");
         let resolved = subagents::resolve_agent(

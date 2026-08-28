@@ -167,12 +167,10 @@ mod tests {
             .insert(ApprovalCacheKey::new("exec_command", "npm run build"))
             .await;
         cache.clear().await;
-        assert!(
-            cache
-                .lookup(&ApprovalCacheKey::new("exec_command", "cargo test"))
-                .await
-                .is_none()
-        );
+        assert!(cache
+            .lookup(&ApprovalCacheKey::new("exec_command", "cargo test"))
+            .await
+            .is_none());
     }
 
     #[test]

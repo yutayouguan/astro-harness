@@ -19,6 +19,7 @@ pub use media::{
 pub use memory::{context_tools, memory_tools, scheduled, skills_tool, todo};
 pub use present::present_shared;
 pub use shell::{
-    apply_patch, code_exec, context_remaining, exec_command, new_context_window, request_permissions,
-    request_plugin_install, tool_search, wait_for_environment, web_fetch, web_search, write_stdin,
+    apply_patch, code_exec, context_remaining, exec_command, new_context_window,
+    request_permissions, request_plugin_install, tool_search, wait_for_environment, web_fetch,
+    web_search, write_stdin,
 };

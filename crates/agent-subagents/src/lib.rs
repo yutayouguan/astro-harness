@@ -1,4 +1,4 @@
-//! Codex-style first-class subagent threads.
+//! First-class subagent threads.
 //!
 //! The crate owns durable thread metadata, custom-agent configuration and live
 //! lifecycle controls. The actual model/tool loop is implemented by

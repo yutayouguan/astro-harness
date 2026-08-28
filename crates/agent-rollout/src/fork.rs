@@ -245,10 +245,12 @@ mod tests {
     #[tokio::test]
     async fn fork_without_source_history_is_not_an_error() {
         let temp = TempDir::new().unwrap();
-        assert!(fork_rollout(temp.path(), "missing", "branch", 3, false, false, now())
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            fork_rollout(temp.path(), "missing", "branch", 3, false, false, now())
+                .await
+                .unwrap()
+                .is_none()
+        );
         assert!(find_rollout(temp.path(), "branch").unwrap().is_none());
     }
 

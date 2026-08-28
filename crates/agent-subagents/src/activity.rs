@@ -124,7 +124,7 @@ impl ActivityBus {
         .flatten()
     }
 
-    /// Wait for activity that is visible to the Codex V2 model wait tool.
+    /// Wait for activity that is visible to the V2 model wait tool.
     /// Spawn/start noise is deliberately skipped; durable mailbox delivery,
     /// final lifecycle changes, and main-task steering wake the caller.
     pub(crate) async fn wait_model_after<F>(

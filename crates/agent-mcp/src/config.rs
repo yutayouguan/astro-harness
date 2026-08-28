@@ -18,9 +18,9 @@ use home::{default_memory_dir, ensure_default_workspace_dirs};
 use crate::names::sanitize_server_id;
 use types::{McpToolAnnotations, McpToolApprovalMode};
 
-/// MCP server 启动默认超时（秒），与 Codex 默认值一致。
+/// MCP server 启动默认超时（秒）。
 pub const DEFAULT_STARTUP_TIMEOUT_SECS: u64 = 10;
-/// MCP 工具调用默认超时（秒），与 Codex 默认值一致。
+/// MCP 工具调用默认超时（秒）。
 pub const DEFAULT_TOOL_TIMEOUT_SECS: u64 = 60;
 /// MCP server 启动超时允许范围。
 pub const STARTUP_TIMEOUT_SECS_RANGE: std::ops::RangeInclusive<u64> = 1..=120;
@@ -44,7 +44,7 @@ pub enum McpTransportType {
 pub enum McpHttpAuth {
     /// 标准 MCP OAuth 2.1 Authorization Code + PKCE。
     OAuth,
-    /// Codex 第一方 ChatGPT 会话认证；Astro 当前不具备该信任通道。
+    /// 第一方 ChatGPT 会话认证；Astro 当前不具备该信任通道。
     Chatgpt,
 }
 
@@ -114,7 +114,7 @@ pub struct DiscoveredTool {
     pub annotations: McpToolAnnotations,
 }
 
-/// 单工具配置。布尔值兼容 Astro 旧开关，table 支持 Codex `approval_mode`。
+/// 单工具配置。布尔值兼容 Astro 旧开关，table 支持 `approval_mode`。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum McpToolConfig {
@@ -206,7 +206,7 @@ pub struct McpServerConfig {
     /// HTTP Header 名到本地环境变量名的映射。
     #[serde(default, alias = "env_http_headers", alias = "envHttpHeaders")]
     pub env_http_headers: HashMap<String, String>,
-    /// HTTP 认证方式；缺省时与 Codex 一致，优先匿名连接，401 后提示 OAuth 登录。
+    /// HTTP 认证方式；缺省时优先匿名连接，401 后提示 OAuth 登录。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<McpHttpAuth>,
     #[serde(default = "default_true")]
@@ -404,7 +404,7 @@ struct TomlMcpServer {
     disabled_tools: Vec<String>,
     #[serde(default, skip_serializing_if = "is_auto_approval_mode")]
     default_tools_approval_mode: McpToolApprovalMode,
-    /// Astro 逐工具开关兼容旧 bool；table 同时承载 Codex approval_mode。
+    /// Astro 逐工具开关兼容旧 bool；table 同时承载 approval_mode。
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     tools: HashMap<String, McpToolConfig>,
     /// UI 使用的发现缓存；后续可迁移到独立 runtime state。
@@ -591,7 +591,7 @@ fn merge_servers(
     Ok(())
 }
 
-/// Decode an inline Codex `mcp_servers` table from a custom agent file.
+/// Decode an inline `mcp_servers` table from a custom agent file.
 /// The resulting configs are an overlay; callers decide which inherited layer
 /// they replace.
 pub fn decode_inline_mcp_servers(
@@ -782,7 +782,7 @@ mod tests {
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
-    fn decodes_inline_codex_agent_mcp_servers() {
+    fn decodes_inline_agent_mcp_servers() {
         let value: toml::Value = r#"
 [mcp_servers.docs]
 url = "https://example.invalid/mcp"
@@ -877,7 +877,7 @@ enabled_tools = ["search"]
     }
 
     #[test]
-    fn codex_approval_modes_and_legacy_boolean_tools_coexist() {
+    fn approval_modes_and_legacy_boolean_tools_coexist() {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
@@ -1095,7 +1095,7 @@ command = "project-command"
     }
 
     #[test]
-    fn codex_timeout_aliases_are_preserved() {
+    fn timeout_aliases_are_preserved() {
         let cfg: McpServerConfig = serde_json::from_str(
             r#"{
                 "id": "x",
@@ -1115,7 +1115,7 @@ command = "project-command"
     }
 
     #[test]
-    fn codex_environment_reference_fields_roundtrip_in_toml() {
+    fn environment_reference_fields_roundtrip_in_toml() {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
@@ -1273,7 +1273,7 @@ command = "must-not-load"
     }
 
     #[test]
-    fn codex_and_agent_private_config_paths_are_not_inputs() {
+    fn dotcodex_and_agent_private_config_paths_are_not_inputs() {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());

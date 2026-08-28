@@ -1,6 +1,6 @@
 //! apply_patch 工具：接收 diff-like 自由文本以新增、删除和更新文件。
 //!
-//! 协议格式对齐 Codex apply_patch Lark grammar（见同目录 `apply_patch.lark`）。
+//! 协议格式对齐 apply_patch Lark grammar（见同目录 `apply_patch.lark`）。
 //! 该工具为 *freeform* 类型——模型直接输出原始 patch 文本而非 JSON。
 
 use std::path::{Path, PathBuf};
@@ -39,8 +39,13 @@ impl UpdateFileChunk {
 /// 解析后的单个文件操作。
 #[derive(Debug, Clone, PartialEq)]
 enum Hunk {
-    AddFile { path: PathBuf, contents: String },
-    DeleteFile { path: PathBuf },
+    AddFile {
+        path: PathBuf,
+        contents: String,
+    },
+    DeleteFile {
+        path: PathBuf,
+    },
     UpdateFile {
         path: PathBuf,
         move_path: Option<PathBuf>,
@@ -90,7 +95,9 @@ enum ParserMode {
     StartedPatch,
     AddFile,
     DeleteFile,
-    UpdateFile { hunk_line_number: usize },
+    UpdateFile {
+        hunk_line_number: usize,
+    },
     EndedPatch,
 }
 
@@ -139,8 +146,7 @@ impl PatchParser {
         }
 
         // 尝试 heredoc
-        let is_heredoc =
-            first == "<<EOF" || first == "<<'EOF'" || first == "<<\"EOF\"";
+        let is_heredoc = first == "<<EOF" || first == "<<'EOF'" || first == "<<\"EOF\"";
         if is_heredoc && lines.len() >= 4 {
             let last = lines[lines.len() - 1].trim();
             if last.ends_with("EOF") {
@@ -162,10 +168,7 @@ impl PatchParser {
             if chunks.is_empty() {
                 if let ParserMode::UpdateFile { hunk_line_number } = self.mode {
                     return Err(ParseError::InvalidHunk {
-                        message: format!(
-                            "Update file hunk for path '{}' is empty",
-                            path.display()
-                        ),
+                        message: format!("Update file hunk for path '{}' is empty", path.display()),
                         line_number: hunk_line_number,
                     });
                 }
@@ -250,9 +253,7 @@ impl PatchParser {
                     }
                 }
                 Err(ParseError::InvalidHunk {
-                    message: format!(
-                        "'{trimmed}' is not a valid add line (must start with '+')"
-                    ),
+                    message: format!("'{trimmed}' is not a valid add line (must start with '+')"),
                     line_number: self.line_number,
                 })
             }
@@ -374,12 +375,7 @@ impl PatchParser {
 /// 在 `lines[start..]` 中查找与 `pattern` 匹配的连续子序列，
 /// 依次尝试：精确匹配 → 去尾空白 → 全去空白 → Unicode 标点归一化。
 /// `eof` 为 true 时优先从文件末尾开始搜索。
-fn seek_sequence(
-    lines: &[String],
-    pattern: &[String],
-    start: usize,
-    eof: bool,
-) -> Option<usize> {
+fn seek_sequence(lines: &[String], pattern: &[String], start: usize, eof: bool) -> Option<usize> {
     if pattern.is_empty() {
         return Some(start);
     }
@@ -402,9 +398,10 @@ fn seek_sequence(
 
     // 去尾空白
     for i in search_start..=lines.len().saturating_sub(pattern.len()) {
-        let ok = pattern.iter().enumerate().all(|(j, pat)| {
-            lines[i + j].trim_end() == pat.trim_end()
-        });
+        let ok = pattern
+            .iter()
+            .enumerate()
+            .all(|(j, pat)| lines[i + j].trim_end() == pat.trim_end());
         if ok {
             return Some(i);
         }
@@ -412,9 +409,10 @@ fn seek_sequence(
 
     // 全去空白
     for i in search_start..=lines.len().saturating_sub(pattern.len()) {
-        let ok = pattern.iter().enumerate().all(|(j, pat)| {
-            lines[i + j].trim() == pat.trim()
-        });
+        let ok = pattern
+            .iter()
+            .enumerate()
+            .all(|(j, pat)| lines[i + j].trim() == pat.trim());
         if ok {
             return Some(i);
         }
@@ -425,22 +423,23 @@ fn seek_sequence(
         s.trim()
             .chars()
             .map(|c| match c {
-                '\u{2010}' | '\u{2011}' | '\u{2012}' | '\u{2013}' | '\u{2014}'
-                | '\u{2015}' | '\u{2212}' => '-',
+                '\u{2010}' | '\u{2011}' | '\u{2012}' | '\u{2013}' | '\u{2014}' | '\u{2015}'
+                | '\u{2212}' => '-',
                 '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}' => '\'',
                 '\u{201C}' | '\u{201D}' | '\u{201E}' | '\u{201F}' => '"',
-                '\u{00A0}' | '\u{2002}' | '\u{2003}' | '\u{2004}' | '\u{2005}'
-                | '\u{2006}' | '\u{2007}' | '\u{2008}' | '\u{2009}' | '\u{200A}'
-                | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
+                '\u{00A0}' | '\u{2002}' | '\u{2003}' | '\u{2004}' | '\u{2005}' | '\u{2006}'
+                | '\u{2007}' | '\u{2008}' | '\u{2009}' | '\u{200A}' | '\u{202F}' | '\u{205F}'
+                | '\u{3000}' => ' ',
                 other => other,
             })
             .collect()
     }
 
     for i in search_start..=lines.len().saturating_sub(pattern.len()) {
-        let ok = pattern.iter().enumerate().all(|(j, pat)| {
-            normalise(&lines[i + j]) == normalise(pat)
-        });
+        let ok = pattern
+            .iter()
+            .enumerate()
+            .all(|(j, pat)| normalise(&lines[i + j]) == normalise(pat));
         if ok {
             return Some(i);
         }
@@ -482,9 +481,8 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<String> {
             }
             Hunk::DeleteFile { path } => {
                 let full = resolve_path(workspace, path);
-                std::fs::remove_file(&full).map_err(|e| {
-                    anyhow::anyhow!("Failed to delete {}: {e}", full.display())
-                })?;
+                std::fs::remove_file(&full)
+                    .map_err(|e| anyhow::anyhow!("Failed to delete {}: {e}", full.display()))?;
                 affected.deleted.push(path.clone());
             }
             Hunk::UpdateFile {
@@ -493,9 +491,8 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<String> {
                 chunks,
             } => {
                 let full = resolve_path(workspace, path);
-                let original = std::fs::read_to_string(&full).map_err(|e| {
-                    anyhow::anyhow!("Failed to read {}: {e}", full.display())
-                })?;
+                let original = std::fs::read_to_string(&full)
+                    .map_err(|e| anyhow::anyhow!("Failed to read {}: {e}", full.display()))?;
 
                 let new_contents = derive_new_contents(&original, &full, chunks)?;
 
@@ -506,10 +503,7 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<String> {
                     }
                     std::fs::write(&dest_full, &new_contents)?;
                     std::fs::remove_file(&full).map_err(|e| {
-                        anyhow::anyhow!(
-                            "Failed to remove original {}: {e}",
-                            full.display()
-                        )
+                        anyhow::anyhow!("Failed to remove original {}: {e}", full.display())
                     })?;
                 } else {
                     std::fs::write(&full, &new_contents)?;
@@ -537,8 +531,7 @@ fn derive_new_contents(
     path: &Path,
     chunks: &[UpdateFileChunk],
 ) -> anyhow::Result<String> {
-    let mut original_lines: Vec<String> =
-        original.split('\n').map(String::from).collect();
+    let mut original_lines: Vec<String> = original.split('\n').map(String::from).collect();
     // 去掉末尾空元素（trailing newline 产物）
     if original_lines.last().is_some_and(String::is_empty) {
         original_lines.pop();
@@ -578,9 +571,7 @@ fn compute_replacements(
             ) {
                 line_index = idx + 1;
             } else {
-                anyhow::bail!(
-                    "Failed to find context '{ctx_line}' in {path_str}"
-                );
+                anyhow::bail!("Failed to find context '{ctx_line}' in {path_str}");
             }
         }
 
@@ -597,12 +588,7 @@ fn compute_replacements(
 
         // 查找 old_lines 在文件中的位置
         let mut pattern: &[String] = &chunk.old_lines;
-        let mut found = seek_sequence(
-            original_lines,
-            pattern,
-            line_index,
-            chunk.is_end_of_file,
-        );
+        let mut found = seek_sequence(original_lines, pattern, line_index, chunk.is_end_of_file);
 
         let mut new_slice: &[String] = &chunk.new_lines;
 
@@ -612,12 +598,7 @@ fn compute_replacements(
             if new_slice.last().is_some_and(String::is_empty) {
                 new_slice = &new_slice[..new_slice.len() - 1];
             }
-            found = seek_sequence(
-                original_lines,
-                pattern,
-                line_index,
-                chunk.is_end_of_file,
-            );
+            found = seek_sequence(original_lines, pattern, line_index, chunk.is_end_of_file);
         }
 
         if let Some(start_idx) = found {
@@ -708,10 +689,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let hunks = PatchParser::parse(&patch_text).map_err(|e| anyhow::anyhow!("{e}"))?;
 
     // 以 project_root（如有）或 workspace_dir 为工作目录
-    let workspace = ctx
-        .project_root
-        .as_deref()
-        .unwrap_or(&ctx.workspace_dir);
+    let workspace = ctx.project_root.as_deref().unwrap_or(&ctx.workspace_dir);
 
     apply_patches(workspace, &hunks)
 }
@@ -793,10 +771,7 @@ mod tests {
             Hunk::UpdateFile { path, chunks, .. } => {
                 assert_eq!(path, &PathBuf::from("main.rs"));
                 assert_eq!(chunks.len(), 1);
-                assert_eq!(
-                    chunks[0].change_context,
-                    Some("fn main()".to_string())
-                );
+                assert_eq!(chunks[0].change_context, Some("fn main()".to_string()));
                 assert_eq!(chunks[0].old_lines, vec!["    old_line"]);
                 assert_eq!(chunks[0].new_lines, vec!["    new_line"]);
             }
@@ -815,7 +790,9 @@ mod tests {
         );
         let hunks = PatchParser::parse(&patch).unwrap();
         match &hunks[0] {
-            Hunk::UpdateFile { path, move_path, .. } => {
+            Hunk::UpdateFile {
+                path, move_path, ..
+            } => {
                 assert_eq!(path, &PathBuf::from("old.rs"));
                 assert_eq!(move_path.as_deref(), Some(Path::new("new.rs")));
             }
@@ -908,8 +885,7 @@ mod tests {
             .into_iter()
             .map(String::from)
             .collect();
-        let pattern: Vec<String> =
-            vec!["bar", "baz"].into_iter().map(String::from).collect();
+        let pattern: Vec<String> = vec!["bar", "baz"].into_iter().map(String::from).collect();
         assert_eq!(seek_sequence(&lines, &pattern, 0, false), Some(1));
     }
 
@@ -919,18 +895,14 @@ mod tests {
             .into_iter()
             .map(String::from)
             .collect();
-        let pattern: Vec<String> =
-            vec!["foo", "bar"].into_iter().map(String::from).collect();
+        let pattern: Vec<String> = vec!["foo", "bar"].into_iter().map(String::from).collect();
         assert_eq!(seek_sequence(&lines, &pattern, 0, false), Some(0));
     }
 
     #[test]
     fn seek_pattern_longer_than_input() {
         let lines: Vec<String> = vec!["one"].into_iter().map(String::from).collect();
-        let pattern: Vec<String> = vec!["a", "b", "c"]
-            .into_iter()
-            .map(String::from)
-            .collect();
+        let pattern: Vec<String> = vec!["a", "b", "c"].into_iter().map(String::from).collect();
         assert_eq!(seek_sequence(&lines, &pattern, 0, false), None);
     }
 
@@ -955,10 +927,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("del.txt");
         std::fs::write(&path, "x").unwrap();
-        let patch = wrap_patch(&format!(
-            "*** Delete File: {}",
-            path.display()
-        ));
+        let patch = wrap_patch(&format!("*** Delete File: {}", path.display()));
         let hunks = PatchParser::parse(&patch).unwrap();
         let result = apply_patches(dir.path(), &hunks).unwrap();
         assert!(result.contains("D "));
@@ -1020,8 +989,7 @@ mod tests {
         let patch = wrap_patch("*** Add File: sub/dir/file.txt\n+hello");
         let hunks = PatchParser::parse(&patch).unwrap();
         apply_patches(dir.path(), &hunks).unwrap();
-        let content =
-            std::fs::read_to_string(dir.path().join("sub/dir/file.txt")).unwrap();
+        let content = std::fs::read_to_string(dir.path().join("sub/dir/file.txt")).unwrap();
         assert_eq!(content, "hello\n");
     }
 

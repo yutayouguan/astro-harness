@@ -1,4 +1,4 @@
-//! Codex 对齐的 ToolExecutor trait——新工具的推荐实现方式。
+//! 工具执行器 trait——新工具的推荐实现方式。
 //!
 //! 现有 28 个内置工具通过 [`LegacyToolAdapter`] 自动适配，无需修改。
 
@@ -11,7 +11,7 @@ use types::{ExecApprovalRequirement, ToolName, ToolOutput, ToolSpec};
 /// 新工具的标准 handler future 类型。
 pub type ToolExecutorFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<ToolOutput>> + 'a>>;
 
-/// Codex 对齐的工具执行器 trait。
+/// 工具执行器 trait。
 ///
 /// 新工具应实现此 trait 而非使用 `BuiltinToolHandler` 函数指针。
 /// 现有工具通过 [`LegacyToolAdapter`] 自动桥接。

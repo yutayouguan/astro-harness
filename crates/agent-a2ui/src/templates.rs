@@ -7,47 +7,35 @@ pub fn build_confirm_surface(surface_id: &str, title: &str, body: &str) -> Vec<V
     build_confirm_surface_ex(surface_id, title, body, false)
 }
 
-/// Confirm surface using ClarifyWizard so it renders inline in the composer area.
-///
-/// A single-step wizard with the confirmation body as the question and
-/// approve/deny(/always) as options. Frontend `onUiAction` maps the chosen
-/// option back to `{approved: bool, always: bool}`.
+/// Confirm surface using the approval variant of ClarifyWizard so it renders
+/// inline in the composer area without flattening structured content into a
+/// markdown-looking question.
 pub fn build_confirm_surface_ex(
     surface_id: &str,
     title: &str,
     body: &str,
     allow_always: bool,
 ) -> Vec<Value> {
-    let mut options = vec![
-        json!("✅ Approve"),
-        json!("❌ Deny"),
-    ];
+    let mut options = vec![json!("approve"), json!("deny")];
     if allow_always {
-        options.push(json!("✅ Approve & always allow"));
+        options.push(json!("approve_always"));
     }
-
-    let question = if title.is_empty() {
-        body.to_string()
-    } else {
-        format!("**{title}**\n\n{body}")
-    };
+    let question = if title.is_empty() { body } else { title };
 
     let components = vec![
         json!({ "id": "root", "component": "Card", "child": "col" }),
         json!({
             "id": "col",
             "component": "Column",
-            "children": ["badge", "wizard"]
-        }),
-        json!({
-            "id": "badge",
-            "component": "Badge",
-            "text": "Confirm",
-            "variant": "warn"
+            "children": ["wizard"]
         }),
         json!({
             "id": "wizard",
             "component": "ClarifyWizard",
+            "variant": "approval",
+            "title": title,
+            "body": body,
+            "allowAlways": allow_always,
             "steps": [{
                 "id": "confirm",
                 "question": question,

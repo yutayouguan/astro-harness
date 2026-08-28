@@ -1,11 +1,20 @@
 /** 多题澄清叠层向导：Tab + 选项/自由输入 + 卡片切换动画。 */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, PencilLine } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  ArrowRight,
+  Check,
+  PencilLine,
+  ShieldAlert,
+  ShieldCheck,
+  TerminalSquare,
+  X,
+} from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import {
   isPresetAnswer,
   parseClarifySteps,
+  parseApprovalContent,
   shouldSubmitClarifyInput,
   type ClarifyWizardStep,
 } from "./clarifySteps";
@@ -15,6 +24,10 @@ export { parseClarifySteps };
 
 type Props = {
   steps: ClarifyWizardStep[];
+  variant?: "default" | "approval";
+  approvalTitle?: string;
+  approvalBody?: string;
+  allowAlways?: boolean;
   disabled?: boolean;
   onAction: (name: string, context: Record<string, unknown>) => void;
 };
@@ -24,6 +37,10 @@ type Direction = "forward" | "backward";
 
 export default function ClarifyWizard({
   steps,
+  variant = "default",
+  approvalTitle,
+  approvalBody,
+  allowAlways = false,
   disabled = false,
   onAction,
 }: Props) {
@@ -35,6 +52,10 @@ export default function ClarifyWizard({
   const [direction, setDirection] = useState<Direction>("forward");
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [approvalChoice, setApprovalChoice] = useState<
+    "approve" | "approve_always" | "deny" | null
+  >(null);
+  const approvalTitleId = useId();
   const customInputRef = useRef<HTMLInputElement>(null);
 
   const safeIndex = Math.min(Math.max(index, 0), Math.max(steps.length - 1, 0));
@@ -181,6 +202,30 @@ export default function ClarifyWizard({
 
   if (!steps.length || !step) return null;
 
+  if (collapsed && variant === "approval" && approvalChoice) {
+    const approved = approvalChoice !== "deny";
+    const label =
+      approvalChoice === "approve_always"
+        ? t("chat.a2ui.approvalAlwaysApproved")
+        : approved
+          ? t("chat.a2ui.approvalApproved")
+          : t("chat.a2ui.approvalDenied");
+    return (
+      <div
+        className={`a2ui-clarify-wizard is-collapsed is-approval-result ${approved ? "is-approved" : "is-denied"}`}
+        data-a2ui-id="wizard"
+        role="status"
+      >
+        <div className="a2ui-approval-result">
+          <span className="a2ui-approval-result-icon" aria-hidden>
+            {approved ? <Check size={15} strokeWidth={2.5} /> : <X size={15} strokeWidth={2.5} />}
+          </span>
+          <span>{label}</span>
+        </div>
+      </div>
+    );
+  }
+
   if (collapsed) {
     const summaryParts = steps
       .map((s) => {
@@ -252,6 +297,94 @@ export default function ClarifyWizard({
     : [];
 
   const dirClass = `is-${direction}`;
+
+  if (variant === "approval") {
+    const content = parseApprovalContent(approvalBody ?? step.question);
+    const submitApproval = (choice: "approve" | "approve_always" | "deny") => {
+      if (disabled) return;
+      setApprovalChoice(choice);
+      setCollapsed(true);
+      onAction(choice, {});
+    };
+    return (
+      <section
+        className={`a2ui-clarify-wizard is-approval ${disabled ? "is-disabled" : ""}`}
+        data-a2ui-id="wizard"
+        aria-labelledby={approvalTitleId}
+      >
+        <div className="a2ui-approval-header">
+          <span className="a2ui-approval-mark" aria-hidden>
+            <ShieldAlert size={19} strokeWidth={2} />
+          </span>
+          <div className="a2ui-approval-heading">
+            <span className="a2ui-approval-eyebrow">
+              {t("chat.a2ui.approvalRequired")}
+            </span>
+            <h3 id={approvalTitleId} className="a2ui-approval-title">
+              {approvalTitle || step.question}
+            </h3>
+          </div>
+        </div>
+
+        {content.description ? (
+          <p className="a2ui-approval-description">{content.description}</p>
+        ) : null}
+
+        {content.command ? (
+          <div className="a2ui-approval-command">
+            <div className="a2ui-approval-command-label">
+              <TerminalSquare size={14} aria-hidden />
+              <span>{t("chat.a2ui.approvalCommand")}</span>
+            </div>
+            <pre><code>{content.command}</code></pre>
+          </div>
+        ) : null}
+
+        <div className="a2ui-approval-actions">
+          <button
+            type="button"
+            className="a2ui-approval-action is-deny"
+            disabled={disabled}
+            onClick={() => submitApproval("deny")}
+          >
+            <X size={17} strokeWidth={2.2} aria-hidden />
+            <span className="a2ui-approval-action-copy">
+              <strong>{t("chat.a2ui.approvalDeny")}</strong>
+              <small>{t("chat.a2ui.approvalDenyHint")}</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="a2ui-approval-action is-approve"
+            disabled={disabled}
+            onClick={() => submitApproval("approve")}
+          >
+            <Check size={17} strokeWidth={2.3} aria-hidden />
+            <span className="a2ui-approval-action-copy">
+              <strong>{t("chat.a2ui.approvalOnce")}</strong>
+              <small>{t("chat.a2ui.approvalOnceHint")}</small>
+            </span>
+          </button>
+        </div>
+
+        {allowAlways ? (
+          <button
+            type="button"
+            className="a2ui-approval-always"
+            disabled={disabled}
+            onClick={() => submitApproval("approve_always")}
+          >
+            <ShieldCheck size={17} strokeWidth={2} aria-hidden />
+            <span className="a2ui-approval-action-copy">
+              <strong>{t("chat.a2ui.approvalAlways")}</strong>
+              <small>{t("chat.a2ui.approvalAlwaysHint")}</small>
+            </span>
+            <ArrowRight className="a2ui-approval-always-arrow" size={16} aria-hidden />
+          </button>
+        ) : null}
+      </section>
+    );
+  }
 
   const customInput = (
     <div

@@ -104,7 +104,7 @@ impl AgentLoop {
         self.build_prompt_contract().await.flattened()
     }
 
-    /// 构造 Codex 风格三层契约：稳定基础指令、带角色动态上下文、外置原生工具 schema。
+    /// 构造三层契约：稳定基础指令、带角色动态上下文、外置原生工具 schema。
     pub async fn build_prompt_contract(&self) -> crate::prompt::PromptContract {
         self.build_prompt_contract_with_inject(None).await
     }

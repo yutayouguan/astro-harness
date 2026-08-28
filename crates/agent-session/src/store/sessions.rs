@@ -240,15 +240,18 @@ impl SessionStore {
              WHERE id = ?2 AND parent_session_id IS NOT NULL",
             params![BranchKind::Side.as_str(), id],
         )?;
-        anyhow::ensure!(changed == 1, "mark_session_as_side: forked session not found");
+        anyhow::ensure!(
+            changed == 1,
+            "mark_session_as_side: forked session not found"
+        );
         Ok(())
     }
 
     /// 返回上次进程异常退出后遗留的临时 Side 会话。
     pub fn list_side_session_ids(&self) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id FROM sessions WHERE branch_kind = ?1 ORDER BY started_at, id",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM sessions WHERE branch_kind = ?1 ORDER BY started_at, id")?;
         let ids = stmt
             .query_map(params![BranchKind::Side.as_str()], |row| row.get(0))?
             .collect::<Result<Vec<_>, _>>()?;

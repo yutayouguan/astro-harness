@@ -1,4 +1,4 @@
-//! 工具搜索：BM25 索引 + 缓存（对齐 Codex ToolSearchHandler）。
+//! 工具搜索：BM25 索引 + 缓存。
 
 use std::sync::Mutex;
 

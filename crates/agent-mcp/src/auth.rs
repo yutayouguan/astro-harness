@@ -197,7 +197,7 @@ fn oauth_keyring_account(config: &McpServerConfig) -> String {
     )
 }
 
-/// HTTP 且未指定 Codex 第一方会话认证时可使用标准 OAuth。
+/// HTTP 且未指定第一方会话认证时可使用标准 OAuth。
 pub fn is_oauth_available(config: &McpServerConfig) -> bool {
     config.r#type == McpTransportType::StreamableHttp && config.auth != Some(McpHttpAuth::Chatgpt)
 }

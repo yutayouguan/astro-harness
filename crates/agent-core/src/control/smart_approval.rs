@@ -287,14 +287,8 @@ mod tests {
             redact_sensitive("token: ghp_secret123 rest"),
             "[REDACTED] rest"
         );
-        assert_eq!(
-            redact_sensitive("no secrets here"),
-            "no secrets here"
-        );
-        assert_eq!(
-            redact_sensitive("PASSWORD=hunter2"),
-            "[REDACTED]"
-        );
+        assert_eq!(redact_sensitive("no secrets here"), "no secrets here");
+        assert_eq!(redact_sensitive("PASSWORD=hunter2"), "[REDACTED]");
     }
 
     #[test]

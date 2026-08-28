@@ -55,10 +55,7 @@ crate::submit_builtin_tool! {
 }
 
 /// 向 exec_command 会话写入 stdin 并返回输出（stub 实现）。
-pub async fn dispatch(
-    _ctx: &ToolContext<'_>,
-    args: &WriteStdinArgs,
-) -> anyhow::Result<String> {
+pub async fn dispatch(_ctx: &ToolContext<'_>, args: &WriteStdinArgs) -> anyhow::Result<String> {
     let action = if args.chars.as_ref().is_some_and(|c| !c.is_empty()) {
         "write"
     } else {

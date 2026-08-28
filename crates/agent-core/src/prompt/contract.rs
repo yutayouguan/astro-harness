@@ -1,4 +1,4 @@
-//! Codex-style prompt contract.
+//! Prompt contract.
 //!
 //! A model request has three independent layers:
 //! - stable base instructions;
@@ -99,7 +99,7 @@ pub struct RuntimePromptLayers<'a> {
     pub base_guidance: &'a str,
     /// Turn-varying developer policy such as the current interaction mode.
     pub developer_guidance: &'a str,
-    /// Contextual current time; follows Codex's contextual-user-message model.
+    /// Contextual current time; follows the contextual-user-message model.
     pub timestamp: &'a str,
     /// Server-provided MCP usage instructions.
     pub mcp_instructions: &'a str,
@@ -249,7 +249,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     user.allocate(budget, &dynamic);
 
     let base = base.render(&["soul", "identity", "tool_guidance"]);
-    // Codex renders capabilities before the active collaboration mode so the mode can override
+    // Render capabilities before the active collaboration mode so the mode can override
     // general usage guidance without losing its earlier budget reservation.
     let developer = developer.render(&["skills", "mcp", "mode"]);
     let user = user.render(&[

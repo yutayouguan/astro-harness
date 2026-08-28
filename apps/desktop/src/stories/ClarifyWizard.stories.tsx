@@ -52,7 +52,49 @@ const surface: UiSurface = {
   ],
 };
 
-function ClarifyWizardPreview() {
+const approvalSurface: UiSurface = {
+  messageId: "approval-preview",
+  activityType: "confirmation",
+  status: "active",
+  operations: [
+    {
+      createSurface: {
+        surfaceId: "approval-preview",
+        catalogId: "astro://a2ui/catalog/v2",
+      },
+    },
+    {
+      updateComponents: {
+        surfaceId: "approval-preview",
+        components: [
+          { id: "root", component: "Card", child: "col" },
+          { id: "col", component: "Column", children: ["wizard"] },
+          {
+            id: "wizard",
+            component: "ClarifyWizard",
+            variant: "approval",
+            title: "批准危险命令",
+            body: '检测到潜在危险操作（dynamic shell expansion）：\n\n```sh\nUA="aihot-skill/0.3.6 (+https://aihot.virxact.com/aihot-skill/)" curl -sS --max-time 20 -H "User-Agent: $UA" "https://aihot.virxact.com/api/public/items?mode=selected&take=10"\n```',
+            allowAlways: true,
+            steps: [
+              {
+                id: "confirm",
+                question: "批准危险命令",
+                options: ["approve", "deny", "approve_always"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+function ClarifyWizardPreview({
+  previewSurface = surface,
+}: {
+  previewSurface?: UiSurface;
+}) {
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
 
   return (
@@ -73,7 +115,7 @@ function ClarifyWizardPreview() {
         <div className="composer-shell">
           <div className="composer composer--stacked has-clarify">
             <ComposerClarifySurface
-              surface={surface}
+              surface={previewSurface}
               onAction={(_, context) => setResult(context)}
             />
             <div className="composer-bar" aria-hidden>
@@ -107,3 +149,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+export const Approval: Story = {
+  render: () => <ClarifyWizardPreview previewSurface={approvalSurface} />,
+};

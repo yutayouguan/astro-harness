@@ -1,7 +1,7 @@
 //! 原生 function calling 工具调用解析。
 //!
 //! 流式 `delta.tool_calls` 片段由 [`ToolCallAccumulator`] 累积。自由文本不参与
-//! 工具识别，与 Codex 的结构化响应边界保持一致。
+//! 工具识别，与结构化响应边界保持一致。
 
 use std::collections::BTreeMap;
 

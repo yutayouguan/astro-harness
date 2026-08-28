@@ -438,7 +438,7 @@ async fn finish_task_cancelled(
     Err(TurnCancelled.into())
 }
 
-/// Codex-aligned regular turn loop shared by foreground and background adapters.
+/// Regular turn loop shared by foreground and background adapters.
 pub(crate) async fn run_turn(
     args: RunTurnArgs,
     cancellation_token: CancellationToken,
@@ -866,7 +866,7 @@ pub(crate) async fn run_turn(
             .await;
         }
 
-        // Codex `Stop` hook.
+        // `Stop` hook.
         if calls.is_empty() {
             let verify_outcome = {
                 let agent = session.as_ref();

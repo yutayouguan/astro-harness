@@ -93,7 +93,7 @@ pub struct Config {
     pub context_budget_chars: usize,
     /// 可选的静态上下文覆盖，用于测试或自定义 prompt。
     pub static_override: Option<StaticContext>,
-    /// Per-session memory write policy (Codex-style thread memory mode).
+    /// Per-session memory write policy (thread memory mode).
     pub thread_memory_mode: types::ThreadMemoryMode,
     /// Controls how the compact token limit is measured (total vs body-after-prefix).
     pub compact_scope: types::CompactTokenLimitScope,
@@ -143,7 +143,7 @@ pub struct Session {
     pub(crate) workspace_dir: PathBuf,
 
     // ── 提取的子结构体 ──────────────────────────────────────
-    /// Codex-style session-wide mutable runtime state.
+    /// Session-wide mutable runtime state.
     pub(crate) state: StdMutex<session_state::SessionState>,
     /// Serializes persisted conversation writes with their in-memory history mirror.
     pub(crate) conversation_write_lock: TokioMutex<()>,
@@ -157,7 +157,7 @@ pub struct Session {
     // ── 注入的依赖 ─────────────────────────────────────────
     /// Shared Plugin/Gateway/Shell hook runtime.
     hook_runtime: StdMutex<Arc<::hooks::HookRuntime>>,
-    /// Child-thread identity used to route Codex subagent lifecycle hooks.
+    /// Child-thread identity used to route subagent lifecycle hooks.
     subagent_hook_context: StdMutex<Option<SubagentHookContext>>,
     subagent_stop_turns: StdMutex<HashSet<String>>,
     /// First-class subagent thread dispatcher.
@@ -168,7 +168,7 @@ pub struct Session {
     /// Long-lived controls reused by actor-submitted turns and exposed to adapters.
     thread_controls: StdMutex<Option<ThreadControls>>,
     thread_provider_options: StdMutex<ThreadProviderOptions>,
-    /// Codex-style single-active-task registry for this session.
+    /// Single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
     /// Serializes abort-old -> install -> bind -> start admission for session tasks.
     pub(crate) task_admission: TokioMutex<()>,

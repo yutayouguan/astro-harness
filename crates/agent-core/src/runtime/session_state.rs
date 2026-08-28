@@ -1,6 +1,6 @@
 //! Session-wide mutable runtime state.
 //!
-//! This boundary follows Codex's `SessionState`: mutable state that survives
+//! This boundary follows the `SessionState` pattern: mutable state that survives
 //! across sampling steps lives together, while the active task registry remains
 //! directly on [`super::Session`]. [`super::Session`] owns this container behind
 //! a short-lived mutex so callers never expose references tied to a state guard.

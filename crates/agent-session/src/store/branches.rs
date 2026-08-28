@@ -22,7 +22,7 @@ struct TurnSpan {
 }
 
 impl SessionStore {
-    /// 从父会话的一个已完成 user turn 分叉（Codex `last_turn_id` 语义）。
+    /// 从父会话的一个已完成 user turn 分叉（`last_turn_id` 语义）。
     ///
     /// `parent_user_message_id` 必须属于 `source_id`，且该 turn 在下一条 user 消息前
     /// 至少有一条 assistant 消息。复制范围从会话开头到该 turn 末尾，消息使用新行 id。
@@ -40,7 +40,7 @@ impl SessionStore {
         )
     }
 
-    /// 分叉到某个 user turn 之前（Codex `before_turn_id` 语义）。
+    /// 分叉到某个 user turn 之前（`before_turn_id` 语义）。
     ///
     /// 锚点 turn 本身不进入新分支，因此未完成的 turn 也可作为锚点——这正是
     /// 「改写上一条消息重开一条路径」需要的边界。

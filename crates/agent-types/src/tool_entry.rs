@@ -4,7 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// Codex 对齐的工具名——支持普通名和命名空间。
+/// 工具名——支持普通名和命名空间。
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ToolName {
     Plain(String),
@@ -47,7 +47,7 @@ impl fmt::Display for ToolName {
     }
 }
 
-/// Codex 对齐的工具规格分类。
+/// 工具规格分类。
 #[derive(Debug, Clone)]
 pub enum ToolSpec {
     /// 标准 JSON function 工具（绝大多数）。
@@ -77,7 +77,7 @@ impl Default for ToolSpec {
     }
 }
 
-/// Codex 对齐的工具执行审批需求声明。
+/// 工具执行审批需求声明。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ExecApprovalRequirement {
     /// 不需要审批（只读工具、纯计算等）。
@@ -89,7 +89,7 @@ pub enum ExecApprovalRequirement {
     Forbidden,
 }
 
-/// Tool-level preference for process sandbox selection, aligned with Codex.
+/// Tool-level preference for process sandbox selection.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SandboxablePreference {
     /// Let the orchestrator select a sandbox from the active permission profile.
@@ -101,7 +101,7 @@ pub enum SandboxablePreference {
     Forbid,
 }
 
-/// Tool visibility level for LLM context injection (aligned with Codex ToolExposure).
+/// Tool visibility level for LLM context injection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolExposure {
@@ -144,7 +144,7 @@ pub struct FreeformToolFormat {
     pub definition: String,
 }
 
-/// MCP 工具审批模式，对齐 Codex `approval_mode` 配置。
+/// MCP 工具审批模式。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum McpToolApprovalMode {

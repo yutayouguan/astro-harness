@@ -431,6 +431,10 @@ html[data-theme="dark"] .bubble.assistant {
   scrollbar-width: thin;
 }
 
+.composer-clarify-surface:has(.a2ui-clarify-wizard.is-approval) {
+  max-height: min(72vh, 620px);
+}
+
 .composer-clarify-surface .a2ui-surface {
   margin: 0;
 }
@@ -477,6 +481,10 @@ html[data-theme="dark"] .bubble.assistant {
   .composer-clarify-surface {
     max-height: min(58vh, 560px);
     padding: 14px 12px 8px;
+  }
+
+  .composer-clarify-surface:has(.a2ui-clarify-wizard.is-approval) {
+    max-height: min(68vh, 600px);
   }
 
   .composer-clarify-surface .a2ui-column {

@@ -32,7 +32,7 @@ use crate::names::{
 pub const MAX_PARALLEL_MCP_STARTUPS: usize = 4;
 /// 自动重连退避上限。
 pub const MAX_MCP_RETRY_DELAY_SECS: u64 = 30;
-/// 单个 Server instructions 的内存上限；保留开头以符合 Codex 的 512 字符自包含建议。
+/// 单个 Server instructions 的内存上限。
 pub const MAX_MCP_SERVER_INSTRUCTIONS_CHARS: usize = 16_384;
 /// 单个 Agent 所有已连接 Server instructions 的总上限。
 pub const MAX_TOTAL_MCP_INSTRUCTIONS_CHARS: usize = 65_536;
@@ -1332,7 +1332,7 @@ async fn connect_server_inner(
             }
             if cfg.auth == Some(McpHttpAuth::Chatgpt) {
                 anyhow::bail!(
-                    "ChatGPT session authentication is only available to trusted Codex first-party integrations"
+                    "ChatGPT session authentication is only available to trusted first-party integrations"
                 );
             }
             let map = resolve_http_headers(cfg)?;

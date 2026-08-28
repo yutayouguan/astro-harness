@@ -385,6 +385,10 @@ function CatalogNode({
       return (
         <ClarifyWizard
           steps={steps}
+          variant={node.variant === "approval" ? "approval" : "default"}
+          approvalTitle={typeof node.title === "string" ? node.title : undefined}
+          approvalBody={typeof node.body === "string" ? node.body : undefined}
+          allowAlways={node.allowAlways === true}
           disabled={ctx.disabled}
           onAction={ctx.onAction}
         />

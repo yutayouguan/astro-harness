@@ -533,8 +533,12 @@ async fn review_once_permission(
                 .collect::<Vec<_>>()
         };
         let smart_ctx = build_smart_approval_context(session).await;
-        let action =
-            crate::control::smart_approval::maybe_smart_downgrade_ask(request, &targets, smart_ctx.as_ref()).await;
+        let action = crate::control::smart_approval::maybe_smart_downgrade_ask(
+            request,
+            &targets,
+            smart_ctx.as_ref(),
+        )
+        .await;
         if action == types::ApprovalAction::Auto {
             fire_post_permission_response(
                 session,
@@ -1313,8 +1317,7 @@ async fn execute_tools_serial_inner(
                                         crate::control::approval_cache::ApprovalCacheKey::new(
                                             &call.name, &cmd,
                                         );
-                                    let (_, _, approval_cache) =
-                                        session.ensure_thread_controls();
+                                    let (_, _, approval_cache) = session.ensure_thread_controls();
                                     approval_cache.insert(cache_key).await;
                                 }
                                 permission_audits.push(approval_audit);

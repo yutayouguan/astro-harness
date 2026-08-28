@@ -51,7 +51,7 @@ impl ThreadHistoryBuilder {
                 {
                     return;
                 }
-                // Codex finishes the previous pending turn before opening the next one,
+                // Finish the previous pending turn before opening the next one,
                 // preserving its last observed status and items when no terminal arrived.
                 if let Some(turn) = self.active.take() {
                     self.completed.push(turn);

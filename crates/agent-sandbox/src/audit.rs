@@ -383,7 +383,8 @@ mod tests {
     #[test]
     fn backend_unavailable_error_uses_dedicated_event() {
         let dir = tempfile::tempdir().unwrap();
-        let metadata = SandboxAuditMetadata::new(dir.path(), None, None, "exec_command", ":workspace");
+        let metadata =
+            SandboxAuditMetadata::new(dir.path(), None, None, "exec_command", ":workspace");
         metadata.record_prepare_error(
             None,
             "sh",

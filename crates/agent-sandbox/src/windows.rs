@@ -1,6 +1,6 @@
 //! Windows 沙箱后端——Job Object 进程隔离 + ACL 文件系统控制。
 //!
-//! v2 实现三层隔离（对齐 Codex windows-sandbox-rs）：
+//! v2 实现三层隔离：
 //! - **Job Object**: 进程树容器，`KILL_ON_JOB_CLOSE` 确保父退出时终止子树
 //! - **ACL**: 可写根目录 allow-write ACE + 元数据目录 deny-write ACE
 //! - **环境变量**: 代理注入 + 离线标记（WFP 网络过滤作为 v3）

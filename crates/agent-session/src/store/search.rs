@@ -283,7 +283,7 @@ impl SessionStore {
             super::SessionListFilter::Active => conditions.push("s.archived_at IS NULL"),
             super::SessionListFilter::Archived => conditions.push("s.archived_at IS NOT NULL"),
         }
-        // Codex-style Side 会话是进程内临时旁路，不进入普通会话列表。
+        // Side 会话是进程内临时旁路，不进入普通会话列表。
         conditions.push("COALESCE(s.branch_kind, '') != 'side'");
         conditions.push("s.project_id = ?2");
         let where_clause = format!("WHERE {}", conditions.join(" AND "));

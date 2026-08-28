@@ -46,7 +46,6 @@ pub struct ExecCommandArgs {
     pub offset: Option<usize>,
 
     // ── session management parameters (stub) ──────────────────────────
-
     /// Maximum time in milliseconds to wait before returning a session ID
     /// for a still-running command. Commands that finish sooner return
     /// immediately. Defaults to 10000 ms; effective range 250-30000 ms.
@@ -147,14 +146,8 @@ async fn dispatch_run(
 
     let root = ctx.ensure_project_or_workspace()?;
     // `workdir` 作为 `cwd` 的别名；优先取 `cwd`
-    let effective_cwd = parsed
-        .cwd
-        .as_deref()
-        .or(parsed.workdir.as_deref());
-    let cwd = if let Some(rel) = effective_cwd
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
+    let effective_cwd = parsed.cwd.as_deref().or(parsed.workdir.as_deref());
+    let cwd = if let Some(rel) = effective_cwd.map(str::trim).filter(|s| !s.is_empty()) {
         crate::path_safe::resolve_safe_in_roots(&root, &ctx.workspace_roots, rel)?
     } else {
         root

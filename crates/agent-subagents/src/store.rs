@@ -788,7 +788,7 @@ fn final_parent_notification(
     })
 }
 
-/// Match Codex's terminal-error truncation: retain an even byte-budgeted
+/// Terminal-error truncation: retain an even byte-budgeted
 /// prefix and suffix on UTF-8 boundaries and report the omitted token estimate.
 fn truncate_terminal_error(message: &str) -> String {
     let max_bytes = ERROR_MAX_TOKENS.saturating_mul(APPROX_BYTES_PER_TOKEN);

@@ -1,4 +1,4 @@
-//! Filesystem discovery for Codex-compatible local configuration layers.
+//! Filesystem discovery for local configuration layers.
 
 use std::fs;
 use std::io;
@@ -17,7 +17,7 @@ pub const DOT_ASTRO_DIR: &str = ".astro";
 
 /// Machine-local keys that project configuration must not override.
 ///
-/// This list follows the public Codex project-config contract. These values
+/// This list follows the public project-config contract. These values
 /// redirect credentials, provider traffic, host metadata, notifications, or
 /// telemetry and therefore belong to user/system layers only.
 pub const PROJECT_PROTECTED_KEYS: &[&str] = &[
@@ -142,7 +142,7 @@ pub enum LocalConfigError {
     InvalidProjectRootMarkers,
 }
 
-/// Loads local Codex-compatible configuration without interpreting
+/// Loads local configuration without interpreting
 /// product-specific fields.
 ///
 /// Layer order is defaults < system < user < profile < project(root-to-cwd)

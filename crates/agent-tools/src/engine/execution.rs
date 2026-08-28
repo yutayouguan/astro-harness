@@ -1,4 +1,4 @@
-//! Strict Codex V2 Agent Thread execution boundary.
+//! Strict V2 Agent Thread execution boundary.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -50,7 +50,7 @@ impl From<MessageAgentV2Request> for FollowupAgentDispatchRequest {
     }
 }
 
-/// The six model-visible Codex V2 Agent Thread operations.
+/// The six model-visible V2 Agent Thread operations.
 /// Desktop reads and recursive closes deliberately live outside this trait.
 #[async_trait]
 pub trait AgentThreadDispatch: Send + Sync {

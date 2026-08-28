@@ -154,7 +154,7 @@ pub struct StoredSession {
 
 /// 子会话的来源类别。
 ///
-/// 对应 Codex 对 `forked_from_id`（聊天分叉）与 `parent_thread_id`（子 Agent 派生）
+/// 对应 `forked_from_id`（聊天分叉）与 `parent_thread_id`（子 Agent 派生）
 /// 的区分：两者都写 `parent_session_id`，但只有 `Fork` 属于聊天分支谱系。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BranchKind {
@@ -176,7 +176,7 @@ impl BranchKind {
 
 /// 分叉边界：包含锚点 turn，或停在锚点 turn 之前。
 ///
-/// 对应 Codex `thread/fork` 的 `last_turn_id` / `before_turn_id`。
+/// 分叉边界：`last_turn_id` / `before_turn_id`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ForkBoundary {
     /// 复制到锚点 turn 结束（要求该 turn 已完成）。

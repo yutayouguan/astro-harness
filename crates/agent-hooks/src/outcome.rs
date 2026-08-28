@@ -118,7 +118,7 @@ mod wire_tests {
     use super::{HookInput, HookPayload};
 
     #[test]
-    fn pre_tool_use_has_exact_codex_wire_shape() {
+    fn pre_tool_use_has_exact_wire_shape() {
         let input = HookInput {
             session_id: "session-1".into(),
             cwd: "/workspace".into(),

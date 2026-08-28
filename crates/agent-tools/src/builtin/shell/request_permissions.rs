@@ -78,7 +78,14 @@ pub async fn dispatch(
     let mut parts = vec![format!("Permission request noted. Reason: {reason}")];
 
     if let Some(ref net) = args.permissions.network {
-        parts.push(format!("Network access: {}", if net.enabled { "requested" } else { "not requested" }));
+        parts.push(format!(
+            "Network access: {}",
+            if net.enabled {
+                "requested"
+            } else {
+                "not requested"
+            }
+        ));
     }
     if let Some(ref fs) = args.permissions.file_system {
         if !fs.read.is_empty() {
