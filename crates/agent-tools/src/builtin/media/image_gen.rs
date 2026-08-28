@@ -692,7 +692,7 @@ mod path_tests {
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -733,7 +733,7 @@ mod path_tests {
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();

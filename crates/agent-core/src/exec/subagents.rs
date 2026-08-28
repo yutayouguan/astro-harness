@@ -320,8 +320,7 @@ mod tests {
         let sequence = graph.pending_for(&thread.thread_id, 0).unwrap()[0].sequence;
         let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
         let memory_dir = temp.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions
             .create_session(&thread.session_id, "tauri", None, None, None)
             .unwrap();
@@ -406,7 +405,7 @@ mod tests {
         let memory_dir = temp.path().join("memory");
         {
             let sessions =
-                session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+                session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
             sessions
                 .create_session(&thread.session_id, "tauri", None, None, None)
                 .unwrap();
@@ -447,7 +446,7 @@ mod tests {
                 .delivered,
             0
         );
-        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
             .unwrap()
             .get_messages(&thread.session_id)
             .unwrap();
@@ -508,7 +507,7 @@ mod tests {
         let memory_dir = temp.path().join("memory");
         {
             let sessions =
-                session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+                session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
             sessions
                 .create_session("root-v2", "tauri", None, None, None)
                 .unwrap();
@@ -545,7 +544,7 @@ mod tests {
                 .delivered,
             0
         );
-        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
             .unwrap()
             .get_messages("root-v2")
             .unwrap();
@@ -603,8 +602,7 @@ mod tests {
         let sequence = graph.pending_for(&thread.thread_id, 0).unwrap()[0].sequence;
         let marker = format!("agent-mailbox-through:{sequence}");
         let memory_dir = temp.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions
             .create_session(&thread.session_id, "tauri", None, None, None)
             .unwrap();
@@ -687,8 +685,7 @@ mod tests {
         )
         .unwrap();
         let memory_dir = temp.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions
             .create_session(&thread.session_id, "tauri", None, None, None)
             .unwrap();
@@ -762,8 +759,7 @@ mod tests {
         )
         .unwrap();
         let memory_dir = temp.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions
             .create_session("root-v2", "tauri", None, None, None)
             .unwrap();

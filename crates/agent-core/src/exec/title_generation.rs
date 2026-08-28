@@ -167,7 +167,7 @@ pub async fn maybe_generate_session_title(
 
 fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionStore> {
     memory::ensure_workspace(memory_dir)?;
-    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+    session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
 }
 
 async fn complete_title_chat(target: &types::ChatTarget, prompt: &str) -> anyhow::Result<String> {

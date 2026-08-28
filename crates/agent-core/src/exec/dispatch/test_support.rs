@@ -136,7 +136,7 @@ impl LifecycleTestApp {
     ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(&memory_dir)?;
         let root_thread_id = root_thread_id.into();
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))?;
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))?;
         sessions.ensure_session(&root_thread_id, "acceptance-root")?;
         let store = AgentGraphStore::open(memory_dir.join("subagents-v2.db"))?;
         let control = AgentControl::open(
@@ -311,7 +311,7 @@ impl LifecycleTestApp {
         (self.chat_override, self.provider_calls) = scripted_chat(script);
         let previous_hook_events = Arc::clone(&self.hook_events);
         (self.hook_bus, self.hook_events) = lifecycle_hooks();
-        let sessions = session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions"))?;
+        let sessions = session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))?;
         anyhow::ensure!(
             sessions.get_session(&self.root_thread_id)?.is_some(),
             "root session disappeared during restart"
@@ -357,7 +357,7 @@ impl LifecycleTestApp {
     pub fn session_contents(&self, target: &str) -> anyhow::Result<Vec<String>> {
         let thread = self.control.resolve_desktop_target(target)?;
         Ok(
-            session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions"))?
+            session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))?
                 .get_messages(&thread.session_id)?
                 .into_iter()
                 .filter_map(|message| message.content)
@@ -394,7 +394,7 @@ impl LifecycleTestApp {
     }
 
     pub fn session_ids(&self) -> anyhow::Result<Vec<String>> {
-        let sessions = session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions"))?;
+        let sessions = session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))?;
         Ok(sessions
             .list_sessions(session::SessionListFilter::Active, 100)?
             .into_iter()

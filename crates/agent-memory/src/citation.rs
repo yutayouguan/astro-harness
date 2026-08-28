@@ -98,9 +98,8 @@ pub fn render_with_citations(entries: &[String]) -> String {
 
 /// 从 assistant 消息中提取所有 `[mem:xxx]` 引用。
 pub fn extract_citations(text: &str) -> Vec<String> {
-    static RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
-        regex::Regex::new(r"\[mem:([a-f0-9]{6,16})\]").unwrap()
-    });
+    static RE: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"\[mem:([a-f0-9]{6,16})\]").unwrap());
     RE.captures_iter(text)
         .map(|cap| cap[1].to_string())
         .collect()
@@ -113,11 +112,7 @@ pub fn sort_by_usage(entries: &[String], workspace: &Path) -> Vec<String> {
         .iter()
         .map(|e| {
             let id = entry_id(e);
-            let count = store
-                .entries
-                .get(&id)
-                .map(|c| c.usage_count)
-                .unwrap_or(0);
+            let count = store.entries.get(&id).map(|c| c.usage_count).unwrap_or(0);
             (count, e)
         })
         .collect();

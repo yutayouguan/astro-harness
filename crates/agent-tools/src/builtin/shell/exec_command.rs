@@ -386,7 +386,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -408,7 +408,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -445,7 +445,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -484,7 +484,7 @@ PY"#;
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -508,7 +508,7 @@ PY"#;
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -560,7 +560,7 @@ PY"#;
         std::fs::create_dir_all(&ws).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -610,7 +610,7 @@ PY"#;
         std::fs::create_dir_all(&ws).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let bus = std::sync::Arc::new(hooks::PluginHookBus::new());

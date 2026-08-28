@@ -1493,7 +1493,7 @@ fn ensure_interrupted_history_boundary(
     session_id: &str,
     content: &str,
 ) -> anyhow::Result<()> {
-    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))?;
+    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))?;
     let messages = sessions.get_messages(session_id)?;
     if messages
         .last()
@@ -2053,8 +2053,7 @@ mod tests {
             .drain_mailbox(&thread.canonical_path)
             .unwrap()
             .is_empty());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         let user_messages = sessions
             .get_messages(&thread.session_id)
             .unwrap()
@@ -2132,8 +2131,7 @@ mod tests {
             .drain_mailbox(&thread.canonical_path)
             .unwrap()
             .is_empty());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         let user_messages = sessions
             .get_messages(&thread.session_id)
             .unwrap()
@@ -2278,8 +2276,7 @@ mod tests {
         drop(initial_control);
 
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions
             .ensure_session(&thread.session_id, "tauri")
             .unwrap();
@@ -2352,9 +2349,8 @@ mod tests {
         drop(initial_control);
 
         let memory_dir = dir.path().join("memory");
-        let state_path = memory_dir.join("sessions/state.db");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let state_path = memory_dir.join("data/state.db");
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions
             .ensure_session(&thread.session_id, "tauri")
             .unwrap();
@@ -2666,8 +2662,7 @@ mod tests {
             *captured_roles.lock().unwrap(),
             vec!["user", "assistant", "developer", "user", "user"]
         );
-        let stored =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         assert_eq!(
             stored
                 .get_messages(&thread.session_id)
@@ -2708,7 +2703,7 @@ mod tests {
             Some(RunnerEvent::TurnInterrupted { .. })
         ));
         assert_eq!(
-            session::SessionStore::open_sessions_dir(&dir.path().join("memory/sessions"))
+            session::SessionStore::open_sessions_dir(&dir.path().join("memory/data"))
                 .unwrap()
                 .get_messages(&thread.session_id)
                 .unwrap()
@@ -2930,7 +2925,7 @@ mod tests {
             }
         );
         assert_eq!(
-            session::SessionStore::open_sessions_dir(&dir.path().join("memory/sessions"))
+            session::SessionStore::open_sessions_dir(&dir.path().join("memory/data"))
                 .unwrap()
                 .get_messages(&thread.session_id)
                 .unwrap()
@@ -3307,8 +3302,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker");
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session(&thread.session_id, "test").unwrap();
         let manager = AgentRuntimeManager::default();
         let admission = manager
@@ -3565,8 +3559,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker");
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions
             .create_session("root", "tauri", None, None, None)
             .unwrap();

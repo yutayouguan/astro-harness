@@ -142,7 +142,7 @@ mod permission_tests {
     fn with_ctx(dir: &tempfile::TempDir, write_grant: bool, f: impl FnOnce(&ToolContext<'_>)) {
         let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&manager.base_dir.join("data")).unwrap();
         let manager = std::sync::RwLock::new(manager);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();

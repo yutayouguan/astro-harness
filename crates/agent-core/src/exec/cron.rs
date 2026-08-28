@@ -150,7 +150,7 @@ pub fn reconcile_orphaned_runs_with_roots(
     memory_dir: impl AsRef<Path>,
 ) -> anyhow::Result<u32> {
     let db = CronRunDb::new(cron_db_path(cron_root.as_ref()))?;
-    let sessions = SessionStore::open_sessions_dir(&memory_dir.as_ref().join("sessions")).ok();
+    let sessions = SessionStore::open_sessions_dir(&memory_dir.as_ref().join("data")).ok();
     let finished_at = now_rfc3339();
     let mut changed = 0u32;
 
@@ -317,7 +317,7 @@ async fn execute_job_with_roots_local(
     // 与 run_agent_job / Session 共用同一 memory_dir 下的 SessionStore。
     // show_in_chat 仅影响侧栏展示；执行记录 / Tracing 始终需要 session。
     let memory_dir = default_memory_dir();
-    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).ok();
+    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("data")).ok();
 
     if let Some(ref sid) = session_id {
         let summary = format!("定时任务 · {}", job.title);
@@ -521,7 +521,7 @@ async fn begin_job_local(
 
     let session_id = Some(Uuid::new_v4().to_string());
     let memory_dir = default_memory_dir();
-    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).ok();
+    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("data")).ok();
     if let Some(ref sid) = session_id {
         let summary = format!("定时任务 · {}", job.title);
         if let Some(ref store) = sessions {
@@ -561,7 +561,7 @@ async fn complete_job_local(
     let _active = ActiveCronRunGuard::acquire(run_id);
     let db = CronRunDb::new(cron_db_path(cron_root))?;
     let memory_dir = default_memory_dir();
-    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).ok();
+    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("data")).ok();
     let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
 
     if creds.api_key.trim().is_empty() {
@@ -806,7 +806,7 @@ mod tests {
     fn reconcile_marks_orphan_running_from_session_or_interrupt() {
         let cron_dir = TempDir::new().unwrap();
         let mem_dir = TempDir::new().unwrap();
-        let sessions_dir = mem_dir.path().join("sessions");
+        let sessions_dir = mem_dir.path().join("data");
         std::fs::create_dir_all(&sessions_dir).unwrap();
         let store = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
         store.ensure_session("sess-ok", "cron").unwrap();
@@ -867,7 +867,7 @@ mod tests {
     fn reconcile_upgrades_interrupted_after_session_completes() {
         let cron_dir = TempDir::new().unwrap();
         let mem_dir = TempDir::new().unwrap();
-        let sessions_dir = mem_dir.path().join("sessions");
+        let sessions_dir = mem_dir.path().join("data");
         std::fs::create_dir_all(&sessions_dir).unwrap();
         let store = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
         store.ensure_session("sess-later", "cron").unwrap();

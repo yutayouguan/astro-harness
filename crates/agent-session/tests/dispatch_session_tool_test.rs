@@ -28,7 +28,7 @@ fn format_recalled_marks_anchors() {
 #[test]
 fn dispatch_session_search_and_record_message() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+    let store = SessionStore::open_sessions_dir(&dir.path().join("data")).unwrap();
     store.ensure_session("s1", "test").unwrap();
     store
         .append_message(NewMessage {

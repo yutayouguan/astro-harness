@@ -105,7 +105,7 @@ pub fn export_session_eval_jsonl_with_db(
 }
 
 fn load_session_previews(session_id: &str) -> (String, Vec<EvalMessagePreview>) {
-    let sessions_dir = default_memory_dir().join("sessions");
+    let sessions_dir = default_memory_dir().join("data");
     let Ok(store) = SessionStore::open_sessions_dir(&sessions_dir) else {
         return (String::new(), Vec::new());
     };

@@ -579,7 +579,7 @@ mod tests {
     #[test]
     fn discards_db_without_agent_id_column() {
         let root = TempDir::new().unwrap();
-        let sessions = root.path().join("sessions");
+        let sessions = root.path().join("data");
         fs::create_dir_all(&sessions).unwrap();
         let db_path = artifacts_db_path(root.path());
 
@@ -632,7 +632,7 @@ mod tests {
         let root = TempDir::new().unwrap();
         let uploads = root.path().join("uploads");
         fs::create_dir_all(&uploads).unwrap();
-        fs::create_dir_all(root.path().join("sessions")).unwrap();
+        fs::create_dir_all(root.path().join("data")).unwrap();
 
         let upload_path = uploads.join("photo.png");
         fs::write(&upload_path, b"fake-png").unwrap();
@@ -677,7 +677,7 @@ mod tests {
     #[test]
     fn artifact_db_impls_sqlite_store() {
         let root = TempDir::new().unwrap();
-        fs::create_dir_all(root.path().join("sessions")).unwrap();
+        fs::create_dir_all(root.path().join("data")).unwrap();
         let path = artifacts_db_path(root.path());
         let db = ArtifactDb::new(path.clone()).unwrap();
         assert_eq!(SqliteStore::path(&db), path.as_path());

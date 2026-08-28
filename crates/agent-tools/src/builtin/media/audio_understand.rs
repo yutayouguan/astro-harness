@@ -645,7 +645,7 @@ mod path_escape_tests {
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
         let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&dir.path().join("data")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
@@ -676,7 +676,7 @@ mod path_escape_tests {
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
         let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&dir.path().join("data")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
@@ -706,7 +706,7 @@ mod path_escape_tests {
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
         let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&dir.path().join("data")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
@@ -739,7 +739,7 @@ mod path_escape_tests {
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
         let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&dir.path().join("data")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
@@ -780,7 +780,7 @@ mod path_escape_tests {
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
         let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&dir.path().join("data")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(

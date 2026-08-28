@@ -291,7 +291,7 @@ permissions:
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&manager.base_dir.join("data")).unwrap();
         let manager = std::sync::RwLock::new(manager);
         let targets = ImageGenTargets::default();
         let credentials = ModelCredentials::default();

@@ -1515,7 +1515,7 @@ impl AstroServiceImpl {
         let handle = Arc::new(agent);
         handle.set_hook_runtime(Arc::clone(&self.hook_runtime));
         if let Ok(store) =
-            session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions"))
+            session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))
         {
             if let Ok(Some(project)) = store.project_for_session(session_id) {
                 let roots: Vec<PathBuf> = project.roots.into_iter().map(PathBuf::from).collect();

@@ -10,7 +10,7 @@ pub use home::EnsureWorkspaceReport;
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     let mut report = home::ensure_workspace(base)?;
 
-    let _ = SessionStore::open_sessions_dir(&base.join("sessions"))?;
+    let _ = SessionStore::open_sessions_dir(&base.join("data"))?;
 
     let bundled = skills::seed_bundled_into(base);
     for name in &bundled.installed {
@@ -44,7 +44,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let report = ensure_workspace(dir.path()).unwrap();
 
-        assert!(dir.path().join("sessions").join("state.db").is_file());
+        assert!(dir.path().join("data").join("state.db").is_file());
         assert!(report
             .created_files
             .iter()

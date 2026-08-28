@@ -101,7 +101,7 @@ mod tests {
         std::fs::create_dir_all(&workspace).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();

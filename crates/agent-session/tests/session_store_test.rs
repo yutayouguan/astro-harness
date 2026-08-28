@@ -488,7 +488,7 @@ fn patch_last_assistant_reasoning_details_handles_null_column() {
 #[test]
 fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
     let dir = TempDir::new().unwrap();
-    let sessions_dir = dir.path().join("sessions");
+    let sessions_dir = dir.path().join("data");
     std::fs::create_dir_all(&sessions_dir).unwrap();
 
     // 旧 state.db：v13 但无 archived_at
@@ -613,7 +613,7 @@ fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
 #[test]
 fn discards_legacy_sessions_db_without_importing_titles() {
     let dir = TempDir::new().unwrap();
-    let sessions_dir = dir.path().join("sessions");
+    let sessions_dir = dir.path().join("data");
     std::fs::create_dir_all(&sessions_dir).unwrap();
 
     let legacy_path = sessions_dir.join("sessions.db");

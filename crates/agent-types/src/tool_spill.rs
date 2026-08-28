@@ -23,7 +23,7 @@ const PREVIEW_CHARS: usize = 800;
 
 pub fn spill_file_path(memory_dir: &Path, session_id: &str, message_id: i64) -> PathBuf {
     memory_dir
-        .join("sessions")
+        .join("data")
         .join("tool_spills")
         .join(session_id)
         .join(format!("{message_id}.txt"))

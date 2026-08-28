@@ -1596,7 +1596,7 @@ async fn cold_start_preserves_projected_user_audio_and_video_media_kinds() {
     let mut user = types::message::Message::user("inspect cold media");
     user.media = projected_media.clone();
     {
-        let store = session::SessionStore::open_sessions_dir(&path.join("sessions")).unwrap();
+        let store = session::SessionStore::open_sessions_dir(&path.join("data")).unwrap();
         session::store::rebuild_messages_from_rollout(
             &store,
             "hydrate-media",
@@ -1687,7 +1687,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
         item.unwrap();
     }
 
-    let store = session::SessionStore::open(&dir.path().join("sessions/state.db")).unwrap();
+    let store = session::SessionStore::open(&dir.path().join("data/state.db")).unwrap();
     let hist = store.build_chat_history("persist-session", 50).unwrap();
     assert!(
         hist.iter()
