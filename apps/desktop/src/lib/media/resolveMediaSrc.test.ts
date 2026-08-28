@@ -48,6 +48,13 @@ test("resolveMediaSrc passthrough for http/data/blob", () => {
   assert.equal(resolveMediaSrc(null), null);
 });
 
+test("placeholder media paths are not requested from the Tauri asset protocol", () => {
+  const baseDir = "/Users/a/.astro/workspace";
+  assert.equal(absolutizeMediaPath("path", baseDir), null);
+  assert.equal(resolveMediaSrc("path", baseDir), null);
+  assert.equal(resolveMediaSrc("image_path", baseDir), null);
+});
+
 test("looksLikeRelativeLocalPath recognizes workspace-relative media", () => {
   assert.equal(
     looksLikeRelativeLocalPath("generated/img-20260715-195717-4d0d50c2.png"),
