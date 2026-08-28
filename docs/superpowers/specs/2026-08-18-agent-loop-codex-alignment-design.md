@@ -238,7 +238,8 @@ token、reasoning、plan、exec stdout、patch 更新和图像生成进度仍使
 [Codex 网络恢复对齐设计](./2026-08-28-codex-network-recovery-alignment-design.md)：
 
 - 前台交互式 Turn 发出非终态 `StreamError` 后持续等待网络恢复；
-- `StreamError` 使用专用 payload，不复用终态 `ErrorEvent`，Server 也不得投影成 `ThreadError`；
+- `StreamError` 使用与 Codex 一致的专用 payload，Server 对外投影为
+  `ErrorNotification { will_retry: true }`，不得丢失重试语义；
 - 等待期间 Turn 保持 active，恢复后沿同一 `turn_id` 继续；
 - 用户中断产生 `TurnAborted`，后台有界重试耗尽才产生 `Error → TurnComplete(error)`；
 - `StreamError` 是瞬时状态，不进入 rollout 或助手回答内容。

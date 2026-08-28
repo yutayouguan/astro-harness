@@ -901,16 +901,16 @@ useEffect(() => {
 ```rust
 StreamErrorEvent {
     message: "Reconnecting... waiting for network".into(),
-    error_info: Some(ErrorInfo::ResponseStreamDisconnected { http_status_code: None }),
+    codex_error_info: Some(CodexErrorInfo::ResponseStreamDisconnected {
+        http_status_code: None,
+    }),
     additional_details: Some(connection_error.to_string()),
-    retrying: true,
-    retry_attempt,
-    next_retry_ms: Some(delay.as_millis() as u64),
 }
 ```
 
 `StreamError` 不写入 assistant 内容、不结束 Turn、不切换模型，也不显示永久错误 Toast。
-前端更新当前回答中的单条重连状态；网络恢复后自动继续同一 `turn_id`。等待实现必须同时监听
+对外通知使用 `ErrorNotification.will_retry=true`，前端更新当前 Turn 的单条瞬时状态；
+网络恢复后自动继续同一 `turn_id`。等待实现必须同时监听
 Turn cancellation 和 pause/interrupt，不能使用不可取消的裸 `sleep`。
 
 完整契约见

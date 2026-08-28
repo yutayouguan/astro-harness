@@ -1,7 +1,7 @@
 # 聊天 Fallback 链（主模型故障切换）
 
 **日期:** 2026-07-14  
-**状态:** **已实现**  
+**状态:** 显式 fallback 已实现；Codex retry/网络恢复顺序待硬切
 **实现分支:** `feat/chat-fallback-chain`  
 **关联:** [Providers Hermes Profiles](./2026-07-13-providers-hermes-profiles-design.md)、[路由感知用量与费用](./2026-07-13-route-aware-usage-pricing-design.md)  
 **外部参考（正文不重复品牌名）:** 参考 Agent 主循环「主模型失败 → fallback_providers」语义
@@ -27,7 +27,7 @@
 | 项 | 选择 |
 |----|------|
 | 切换粒度 | **单次 LLM 调用**临时切换；不改 `active_provider_id` / 会话默认模型（下一用户消息仍先打 primary） |
-| 可切换窗口 | **仅首包前**（建连/`chat_stream` Err，或尚未向 UI 发出有效内容时的流错误） |
+| 可切换窗口 | **仅首包前**，且当前目标的 Codex retry 预算已耗尽（429、401/403 可直接切换） |
 | 配置来源 | 活跃/指定 provider 条目上显式 `fallback: [{ provider_id, model? }, …]`，存 `providers.json` |
 | 覆盖入口 | 主聊天多轮 + cron + 子 Agent / 编排委派（同一 helper） |
 | 实现位置 | Agent 侧 `try_stream_completion_with_fallback`；边界解析凭据后下传 `Vec<ChatTarget>` |
@@ -42,7 +42,7 @@
 
 ## 非目标
 
-- 流中途丢弃 partial 再整轮重试或续写  
+- 在 fallback 层处理流中途 partial；该恢复由 Codex-aligned sampling retry 独立负责
 - 会话 / 全局 sticky 记住后备  
 - OAuth / token refresh 后再重试同一 provider  
 - `ApiMode::Responses` 接线、Bedrock 等新协议  
@@ -113,11 +113,12 @@ Providers 面板：当前编辑条目下「聊天后备」——选择其它已�
 
 对链上每个 `ChatTarget`：
 
-1. 组装 `ProviderConfig`，调用 `AiProvider::chat_stream`。  
-2. 返回 `Err` → 进入 failover 判定。  
-3. 返回 `Ok(stream)`：消费至 **首个有效业务 chunk**（文本 / tool_call / reasoning 等会向上游发出的内容）之前：  
-   - 流 `Err`，或首事件即为 `finish_reason: error:*` → 仍算首包前失败，可切。  
-4. 一旦已向上游发出有效内容 → **本跳锁定**；其后失败不可 failover。
+1. 组装该目标的 `ProviderConfig`，先执行 request retry。
+2. `ConnectionFailed` 返回 sampling 层进入同目标网络恢复，不进入 failover。
+3. 其他 Codex-retryable 错误在当前目标耗尽 stream retry 预算。
+4. 仅在尚未向 UI 发出文本 / tool call / reasoning 等有效内容时，对符合矩阵的错误切换下一目标。
+5. 一旦已向上游发出有效内容 → **本跳锁定**；其后失败不可 failover。
+6. 新目标使用新 retry state；链耗尽后终止，不从 primary 重启。
 
 ### 可 failover
 
@@ -131,7 +132,7 @@ Providers 面板：当前编辑条目下「聊天后备」——选择其它已�
 连接/TLS/DNS/CONNECT 错误不属于可 failover 条件。请求超时走共享的有界 retry；只有最终被
 分类为可 failover 的服务端错误才允许进入下一目标。
 
-实现：`is_failover_eligible(&Error) -> bool`（稳定匹配 status / 错误串）；单测覆盖。
+实现：`is_failover_eligible(&ProviderError) -> bool`，仅做 typed match；不保留 status/错误串匹配。
 
 ### 不可 failover
 
@@ -158,15 +159,17 @@ Providers 面板：当前编辑条目下「聊天后备」——选择其它已�
 ### Helper（`agent`）
 
 ```text
-try_stream_completion_with_fallback(
-  targets: &[ChatTarget],
-  registry: &ProviderRegistry,  // 或等价查表
-  messages, tools,
-  on_failover: impl Fn(...),    // 日志 / Status
-) -> Result<(AssistantContentStream, ActiveTargetMeta)>
+run_sampling_with_fallback(targets)
+  for target in targets:
+    run_target_with_retry(target, fresh_retry_state)
+      → request retry
+      → connection recovery or bounded stream retry
+    if pre-content + failover eligible: continue
+    else: return
 ```
 
-- `ProviderStreamer` 持有完整 `targets`（不再只有单一 `ProviderConfig`），`stream_completion` 调 helper。  
+- `ProviderStreamer` 持有完整 `targets`，但 retry state 按当前 target 创建，不包住整条链重试。
+- 现有 `try_stream_completion_with_fallback` 是待重构入口，不能继续在单次 sampling 请求内直接遍历整链。
 - 返回的 `ActiveTargetMeta` 供本跳 usage / 展示；下一用户轮仍从 `targets[0]` 起试。
 
 ### 入口
@@ -187,12 +190,13 @@ gRPC 若自带凭据：以请求 primary 为准，再按 primary 条目上的 `f
 
 - `is_failover_eligible`：429/503/401 vs 400/abort/connection/TLS/DNS
 - 链：primary 失败 → secondary 成功；双失败 → 聚合错误  
+- retry 顺序：当前目标耗尽后只向后移动，不从 primary 循环重启
 - 首包后错误：已 yield 文本再失败 → 不进下一家  
 - 解析：跳过无 key / 自引用 / 去重 / 最多 3 条  
 
 ### 验收标准
 
-1. 配置空 fallback 时行为与现网一致。  
+1. 配置空 fallback 时不发生模型切换；retry/网络恢复仍按新契约执行。
 2. Primary 429（首包前）且后备可用 → 用户看到完整回复；默认活跃 provider 未变。  
 3. 流中途失败 → 直接错误，不静默换模。  
 4. Cron / delegate 在传入链时与主聊一致切换。  

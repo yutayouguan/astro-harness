@@ -23,19 +23,23 @@ Provider fallback 与网络恢复是两个不同机制：
 ## 2. 结构化错误分类
 
 `agent-providers` 在 HTTP/stream 边界产生 typed error；Core 不解析错误字符串。
+`CompletionStream` 的 item 必须是 `ProviderResult<StreamChunk>`，并删除
+`StreamChunk::Error(String)`；否则首包后错误仍然无法安全分类。
 
 | 类型 | 典型来源 | Request retry | Network recovery | Provider fallback |
 | --- | --- | ---: | ---: | ---: |
 | `ConnectionFailed` | DNS、TCP、TLS、CONNECT | 是 | 前台持续、后台有界 | 否 |
 | `RequestTimeout` | 请求或响应头超时 | 是 | 否 | 否 |
+| `Network` | 其他发送/读取响应头传输错误 | 是 | 否 | 否 |
 | `ResponseStreamFailed` | 首包后 SSE/HTTP body 中断 | 否 | 否 | 否 |
 | `HttpStatus(5xx)` | 服务暂不可用 | 是 | 否 | 显式链可用 |
-| `HttpStatus(429)` | 限流 | 否 | 否 | 显式链可用 |
-| `AuthenticationFailed` | 401/403 | 否 | 否 | 保留现有显式链策略 |
+| `RateLimited` / `HttpStatus(429)` | 限流 | 否 | 否 | 显式链可用 |
+| `AuthFailed` | 401/403 | 否 | 否 | 保留现有显式链策略 |
 | `InvalidRequest` | 400、上下文或参数错误 | 否 | 否 | 否 |
 | `Cancelled` | 用户中断或 Turn 替换 | 否 | 否 | 否 |
 
 `ConnectionFailed` 是唯一进入前台持续等待的错误。TLS handshake EOF 必须归入此类。
+`Network`、`ResponseStreamFailed` 和泛化 I/O 错误不得扩大成无上限等待。
 
 ## 3. Request retry
 
@@ -84,7 +88,8 @@ Sampling
 - 网络恢复后自动继续，不要求用户点击“恢复”；
 - 用户中断产生唯一 `TurnAborted`。
 
-Cron、自动化和其他无人值守任务使用 `NetworkRecoveryMode::Bounded`，耗尽后形成
+Cron、自动化和其他无人值守任务使用 `NetworkRecoveryMode::Bounded`。该模式不携带
+全局次数；每个当前目标的上限取该 Provider 的有效 `stream_max_retries`（默认 5），耗尽后形成
 `Error → TurnComplete(error)`，避免永久占用 worker。
 
 ## 5. Stream retry
@@ -125,6 +130,12 @@ fallback 链时才允许切换，且仅限首个有效业务 chunk 之前。
 切换只影响当前 sampling，不写回 `active_provider_id`。Usage 必须记录实际命中的
 provider/model/base URL。
 
+执行顺序是“当前目标 request retry → 当前目标 stream retry → 显式 fallback 下一目标”。
+429 和 401/403 因不属于 Codex-retryable 错误，可在首包前直接切换。每个目标拥有独立 retry
+state；外层 stream retry 不得重新从 primary 遍历整链。
+只有实际尝试两个或以上目标后仍失败才返回链聚合错误。单目标或不可 failover 错误
+保留原 typed error，不添加“全部模型尝试失败”前缀。
+
 ## 7. 事件协议
 
 网络等待使用专用非终态事件：
@@ -132,36 +143,40 @@ provider/model/base URL。
 ```rust
 EventMsg::StreamError(StreamErrorEvent {
     message,
-    error_info,
+    codex_error_info,
     additional_details,
-    retrying,
-    retry_attempt,
-    next_retry_ms,
 })
 ```
 
-Server 必须将其映射为独立 `ThreadStreamError`，不能复用 `ThreadError`。`StreamError` 不写入
-rollout，也不进入最终助手回答。前端更新同一个网络状态项；恢复后收起，只有真正失败才显示终态错误。
+`ErrorEvent` 同步硬切为 `{ message, codex_error_info }`，`WarningEvent` 只保留 `message`；
+删除旧 `error_type` 字符串。
+Server 对齐 Codex app-server，将 `Error` 和 `StreamError` 投影为同一个
+`ErrorNotification`，由 `will_retry=false/true` 区分不再自动重试的错误与中间重试状态。
+`ErrorNotification` 不是 Turn 终态；最终失败仍由后续 `TurnComplete(error)` 确定。
+`StreamError` 不写 rollout，也不进入最终助手回答。前端更新同一个瞬时状态槽；
+恢复后收起，只有 `will_retry=false` 才进入终态错误展示。
 
 ## 8. 配置
 
-```toml
-[provider_retry]
-request_max_retries = 4
-stream_max_retries = 5
-stream_idle_timeout_ms = 300000
-unbounded_connection_retries = true
+`request_max_retries`、`stream_max_retries` 和 `stream_idle_timeout_ms` 是单个 Provider 条目的
+可选字段，按以下路径传递：
 
-[provider_retry.background]
-connection_max_retries = 5
+```text
+providers.json ProviderConfig
+  → ChatTarget
+  → providers::ProviderConfig
+  → RequestRetryPolicy / SamplingRetryState
 ```
+
+Desktop 和 Cron 各自的 provider 解析器必须保留这三个字段。不新增全局 `[provider_retry]`
+配置块。Request 退避基数 200ms 是固定 policy；前台无上限连接恢复是运行来源策略，
+不是 Provider 字段。
 
 配置约束：
 
 - `request_max_retries` 与 `stream_max_retries` 上限均为 100；
-- `unbounded_connection_retries` 只影响前台交互 Turn；
-- 后台上限不可被配置为无限；
-- 关闭前台无限恢复后，连接失败按 `stream_max_retries` 有界处理，但仍不得触发 Provider fallback。
+- 后台恢复上限按每个当前目标的 `stream_max_retries` 计算，不另设配置项；
+- 前台连接恢复仍不得触发 Provider fallback。
 
 ## 9. 可观测性
 
@@ -191,6 +206,9 @@ error.kind
 6. 5xx/429/401 的显式 fallback 行为保持可测试。
 7. `StreamError` 不持久化、不进入回答正文。
 8. 删除 Google 私有 retry 与字符串错误分类后无残留引用。
+9. `StreamError → TurnComplete(success)` 在后台 collector 中仍返回成功。
+10. fallback 切换后不会由外层 retry 重新从 primary 启动整链。
+11. 单目标或不可 failover 错误不伪装成“全部模型尝试失败”。
 
 ## 11. 相关文档
 
