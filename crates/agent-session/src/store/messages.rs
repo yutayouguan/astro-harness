@@ -4,7 +4,10 @@ use agent_db::sqlx::{self, Row};
 use anyhow::Result;
 use serde_json::Value;
 
-use super::{json_from_db, json_to_db, now_epoch_secs, truncate_chars, NewMessage, SessionStore, StoredMessage};
+use super::{
+    json_from_db, json_to_db, now_epoch_secs, truncate_chars, BranchKind, NewMessage, SessionStore,
+    StoredMessage,
+};
 
 pub(crate) async fn insert_message_row(
     executor: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
@@ -226,11 +229,15 @@ impl SessionStore {
             .await?;
 
         if keep_chat_bubbles == 0 {
+            self.write_legacy_fork_metadata(source_id, new_id, &[], BranchKind::Fork)
+                .await?;
             return Ok(());
         }
 
         let messages = self.get_messages(source_id).await?;
         let Some(end) = end_inclusive_for_bubbles(&messages, keep_chat_bubbles) else {
+            self.write_legacy_fork_metadata(source_id, new_id, &messages, BranchKind::Fork)
+                .await?;
             return Ok(());
         };
 
@@ -297,6 +304,8 @@ impl SessionStore {
             let branched = format!("{title} · branch");
             let _ = self.set_session_title(new_id, &branched).await;
         }
+        self.write_legacy_fork_metadata(source_id, new_id, &messages[..=end], BranchKind::Fork)
+            .await?;
 
         Ok(())
     }
@@ -476,6 +485,8 @@ impl SessionStore {
             }
         }
         tx.commit().await?;
+        self.infer_and_write_fork_metadata(source_id, new_id, BranchKind::Agent)
+            .await?;
 
         Ok(())
     }

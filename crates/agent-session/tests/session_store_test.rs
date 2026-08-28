@@ -1095,7 +1095,7 @@ async fn fork_session_copies_bubbles_and_trailing_tools() {
         .create_session("src", "test", Some("gpt"), None, None)
         .await.unwrap();
     store.set_session_title("src", "hello").await.unwrap();
-    store
+    let first_user_id = store
         .append_message(NewMessage {
             content: Some("u1"),
             ..NewMessage::empty("src", "user")
@@ -1142,6 +1142,11 @@ async fn fork_session_copies_bubbles_and_trailing_tools() {
     let meta = store.get_session("dst").await.unwrap().unwrap();
     assert_eq!(meta.parent_session_id.as_deref(), Some("src"));
     assert!(meta.title.as_deref().unwrap_or("").contains("branch"));
+    assert_eq!(meta.branch_kind.as_deref(), Some("fork"));
+    assert_eq!(meta.branch_parent_message_id, Some(first_user_id));
+    assert_eq!(meta.branch_parent_turn_index, Some(1));
+    assert_eq!(meta.branch_inherited_turn_count, Some(1));
+    assert!(meta.branch_created_at.is_some());
 }
 
 #[tokio::test]
@@ -1209,7 +1214,7 @@ async fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries()
             ..NewMessage::empty("source", "assistant")
         })
         .await.unwrap();
-    store
+    let second_user_id = store
         .append_message(NewMessage {
             session_id: "source",
             role: "user",
@@ -1278,7 +1283,40 @@ async fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries()
         let fork = store.get_session(fork_id).await.unwrap().unwrap();
         assert_eq!(fork.parent_session_id.as_deref(), Some("source"));
         assert_eq!(fork.model.as_deref(), Some("model-a"));
+        assert_eq!(fork.branch_kind.as_deref(), Some("agent"));
+        assert!(fork.branch_created_at.is_some());
     }
+
+    for fork_id in ["all", "last", "last-two"] {
+        let fork = store.get_session(fork_id).await.unwrap().unwrap();
+        assert_eq!(fork.branch_parent_message_id, Some(second_user_id));
+        assert_eq!(fork.branch_parent_turn_index, Some(2));
+    }
+    assert_eq!(
+        store
+            .get_session("all")
+            .await.unwrap().unwrap()
+            .branch_inherited_turn_count,
+        Some(2)
+    );
+    assert_eq!(
+        store
+            .get_session("last")
+            .await.unwrap().unwrap()
+            .branch_inherited_turn_count,
+        Some(1)
+    );
+    assert_eq!(
+        store
+            .get_session("last-two")
+            .await.unwrap().unwrap()
+            .branch_inherited_turn_count,
+        Some(2)
+    );
+    let empty_fork = store.get_session("none").await.unwrap().unwrap();
+    assert_eq!(empty_fork.branch_parent_message_id, None);
+    assert_eq!(empty_fork.branch_parent_turn_index, None);
+    assert_eq!(empty_fork.branch_inherited_turn_count, Some(0));
 }
 
 #[tokio::test]
