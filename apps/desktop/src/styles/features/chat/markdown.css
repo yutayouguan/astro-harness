@@ -365,12 +365,16 @@ html[data-theme="dark"] .bubble.assistant {
 }
 
 .composer {
-  --composer-surface-base: rgba(247, 249, 253, 0.9);
-  --composer-surface-focus: rgba(248, 250, 254, 0.94);
+  --composer-surface-base: var(--sidebar-bg);
+  --composer-surface-focus: color-mix(
+    in srgb,
+    var(--tone-soft, transparent) 12%,
+    var(--sidebar-bg)
+  );
   --composer-surface-sheen: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.22),
-    rgba(255, 255, 255, 0.06)
+    165deg,
+    color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
+    transparent 72%
   );
   display: flex;
   align-items: flex-end;
@@ -380,13 +384,15 @@ html[data-theme="dark"] .bubble.assistant {
   border-radius: 22px;
   background:
     var(--composer-surface-sheen),
-    color-mix(in srgb, var(--tone-soft, transparent) 10%, var(--composer-surface-base));
-  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 10%, var(--glass-edge));
+    var(--composer-surface-base);
+  border: 1px solid var(--glass-edge);
   box-shadow:
-    0 5px 16px rgba(var(--shadow-ink), 0.055),
-    inset 0 1px 0 rgba(255, 255, 255, 0.42);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.06));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.06));
+    var(--glass-rim),
+    0 2px 8px rgba(var(--shadow-ink), 0.04);
+  backdrop-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
   transition:
     border-color 0.18s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
     box-shadow 0.18s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
@@ -397,11 +403,20 @@ html[data-theme="dark"] .bubble.assistant {
   border-color: color-mix(in srgb, var(--tone, var(--accent)) 24%, var(--glass-edge));
   background:
     var(--composer-surface-sheen),
-    color-mix(in srgb, var(--tone-soft, transparent) 12%, var(--composer-surface-focus));
+    var(--composer-surface-focus);
   box-shadow:
-    0 6px 18px rgba(var(--shadow-ink), 0.065),
+    var(--glass-rim),
+    0 3px 10px rgba(var(--shadow-ink), 0.045),
     0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.46);
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
+  --composer-surface-sheen: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--unified-tone-soft, var(--tone-soft, transparent)) 55%, transparent),
+    color-mix(in srgb, var(--unified-tone-soft, var(--tone-soft, transparent)) 22%, transparent)
+  );
 }
 
 .composer--stacked {
@@ -2188,29 +2203,30 @@ html[data-theme="dark"] .composer-mcp-menu-search.composer-plus-search {
 }
 
 html[data-theme="dark"] .composer {
-  --composer-surface-base: rgba(12, 10, 24, 0.88);
-  --composer-surface-focus: rgba(14, 12, 28, 0.92);
-  --composer-surface-sheen: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.08),
-    rgba(255, 255, 255, 0.025)
+  --composer-surface-focus: color-mix(
+    in srgb,
+    var(--tone-soft, transparent) 14%,
+    var(--sidebar-bg)
   );
-  background:
-    var(--composer-surface-sheen),
-    color-mix(in srgb, var(--tone-soft, transparent) 10%, var(--composer-surface-base));
+  --composer-surface-sheen: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.04),
+    transparent 62%
+  );
   border-color: rgba(255, 255, 255, 0.09);
   box-shadow:
-    0 6px 18px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    var(--glass-rim),
+    0 2px 10px rgba(0, 0, 0, 0.14);
 }
 
 html[data-theme="dark"] .composer:focus-within {
   border-color: color-mix(in srgb, var(--tone, #60a5fa) 20%, rgba(255, 255, 255, 0.12));
   background:
     var(--composer-surface-sheen),
-    color-mix(in srgb, var(--tone-soft, transparent) 12%, var(--composer-surface-focus));
+    var(--composer-surface-focus);
   box-shadow:
-    0 7px 20px rgba(0, 0, 0, 0.2),
+    var(--glass-rim),
+    0 3px 12px rgba(0, 0, 0, 0.16),
     0 0 0 1px color-mix(in srgb, var(--tone, #60a5fa) 10%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }

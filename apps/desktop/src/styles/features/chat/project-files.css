@@ -478,12 +478,12 @@
   max-width: 760px;
 }
 
-/* 阴影必须落在 .composer 上：父级 filter 会成为 backdrop root，令毛玻璃失效。 */
+/* 文件打开时仍沿用侧栏同款材质，只略微增强边界。 */
 .chat-pane.has-project-file .composer {
   border-color: color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
-  backdrop-filter: blur(calc(26px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
-  -webkit-backdrop-filter: blur(calc(26px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
-  box-shadow: 0 16px 34px rgba(var(--shadow-ink), 0.1);
+  box-shadow:
+    var(--glass-rim),
+    0 2px 8px rgba(var(--shadow-ink), 0.04);
 }
 
 .chat-pane.has-project-file > .todo-progress-float {
