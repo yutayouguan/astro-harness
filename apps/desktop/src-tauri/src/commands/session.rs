@@ -165,7 +165,7 @@ pub async fn get_chat_history(
     session_id: Option<String>,
     limit: Option<i32>,
 ) -> Result<ChatHistoryDto, String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     let limit = limit.unwrap_or(200).clamp(1, 500) as usize;
 
     let sid = match session_id.filter(|s| !s.is_empty()) {
@@ -189,7 +189,7 @@ pub async fn get_chat_history(
 
     let messages = store
         .build_chat_history(&sid, limit)
-        .map_err(|e| e.to_string()).await?
+        .await.map_err(|e| e.to_string())?
         .into_iter()
         .map(|m| ChatHistoryMessageDto {
             id: format!("db-{}", m.id),
@@ -241,10 +241,10 @@ pub async fn fork_chat_session(
         return Err("新会话 id 不能与源会话相同".into());
     }
 
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     store
         .fork_session(source, &new_id, keep)
-        .map_err(|e| e.to_string()).await?;
+        .await.map_err(|e| e.to_string())?;
     Ok(new_id)
 }
 
@@ -260,7 +260,7 @@ pub async fn remove_chat_bubbles(session_id: String, start: i32, end: i32) -> Re
     if start >= end {
         return Ok(());
     }
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     store
         .remove_chat_bubbles(sid, start, end)
         .await.map_err(|e| e.to_string())
@@ -276,16 +276,16 @@ pub async fn list_sessions(
     project_id: Option<String>,
 ) -> Result<Vec<RecentSessionDto>, String> {
     let filter = parse_session_filter(&filter)?;
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
     let sessions = if let Some(pid) = project_id.filter(|s| !s.is_empty()) {
         store
             .list_sessions_by_project(filter, limit, &pid)
-            .map_err(|e| e.to_string()).await?
+            .await.map_err(|e| e.to_string())?
     } else {
         store
             .list_sessions_filtered(filter, limit, project_root.as_deref())
-            .map_err(|e| e.to_string()).await?
+            .await.map_err(|e| e.to_string())?
     };
     Ok(sessions.into_iter().map(recent_session_dto).collect())
 }
@@ -302,7 +302,7 @@ pub async fn set_session_project_root(
     session_id: String,
     project_root: Option<String>,
 ) -> Result<(), String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     // 兼容：尝试按 root 路径查找 project 并关联
     if let Some(root) = project_root.as_deref().filter(|r| !r.is_empty()) {
         if let Ok(Some(proj)) = store.find_project_by_root(root).await {
@@ -320,7 +320,7 @@ pub async fn set_session_project_root(
 #[tauri::command]
 pub async fn rename_session(session_id: String, title: String) -> Result<(), String> {
     let title = validate_session_title(&title)?;
-    open_sessions()?
+    open_sessions().await?
         .set_session_title(&session_id, &title)
         .await.map_err(|e| e.to_string())
 }
@@ -344,14 +344,14 @@ pub async fn regenerate_session_title(
     }
 
     let (user, assistant) = {
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         store
             .first_turn_text(&sid)
-            .map_err(|e| e.to_string()).await?
+            .await.map_err(|e| e.to_string())?
             .ok_or_else(|| "会话尚无完整首轮对话，无法生成标题".to_string())?
     };
 
-    let primary = primary_chat_target_for_session(&sid)?;
+    let primary = primary_chat_target_for_session(&sid).await?;
     let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::TitleGeneration, &primary)?;
     let chain: Vec<&ResolvedTarget> = std::iter::once(&targets.preferred)
         .chain(targets.fallback.as_ref())
@@ -432,9 +432,9 @@ pub async fn regenerate_session_title(
         return Err("模型未返回可用标题".into());
     }
 
-    open_sessions()?
+    open_sessions().await?
         .set_session_title(&sid, &title)
-        .map_err(|e| e.to_string()).await?;
+        .await.map_err(|e| e.to_string())?;
 
     emit_session_event(
         &app,
@@ -458,7 +458,7 @@ pub async fn regenerate_session_title(
 /// 归档会话。
 #[tauri::command]
 pub async fn archive_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions().await?
         .archive_session(&session_id)
         .await.map_err(|e| e.to_string())
 }
@@ -466,7 +466,7 @@ pub async fn archive_session(session_id: String) -> Result<(), String> {
 /// 取消归档会话。
 #[tauri::command]
 pub async fn unarchive_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions().await?
         .unarchive_session(&session_id)
         .await.map_err(|e| e.to_string())
 }
@@ -474,7 +474,7 @@ pub async fn unarchive_session(session_id: String) -> Result<(), String> {
 /// 置顶会话。
 #[tauri::command]
 pub async fn pin_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions().await?
         .pin_session(&session_id)
         .await.map_err(|e| e.to_string())
 }
@@ -482,7 +482,7 @@ pub async fn pin_session(session_id: String) -> Result<(), String> {
 /// 取消置顶。
 #[tauri::command]
 pub async fn unpin_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions().await?
         .unpin_session(&session_id)
         .await.map_err(|e| e.to_string())
 }
@@ -502,7 +502,7 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
             "release_session before delete failed; deleting DB anyway"
         );
     }
-    open_sessions()?
+    open_sessions().await?
         .delete_session_permanently(&session_id)
         .await.map_err(|e| e.to_string())
 }
@@ -537,10 +537,10 @@ fn project_to_dto(p: session::Project) -> ProjectDto {
 
 #[tauri::command]
 pub async fn list_projects() -> Result<Vec<ProjectDto>, String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     Ok(store
         .list_projects()
-        .map_err(|e| e.to_string()).await?
+        .await.map_err(|e| e.to_string())?
         .into_iter()
         .map(project_to_dto)
         .collect())
@@ -552,11 +552,11 @@ pub async fn create_project(name: String, roots: Vec<String>) -> Result<ProjectD
     if name.is_empty() {
         return Err("project name cannot be empty".into());
     }
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     let root_refs: Vec<&str> = roots.iter().map(|s| s.as_str()).collect();
     let proj = store
         .create_project(name, &root_refs)
-        .map_err(|e| e.to_string()).await?;
+        .await.map_err(|e| e.to_string())?;
     Ok(project_to_dto(proj))
 }
 
@@ -567,7 +567,7 @@ pub async fn update_project(
     icon: Option<Option<String>>,
     roots: Option<Vec<String>>,
 ) -> Result<ProjectDto, String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     let root_strs: Option<Vec<&str>> = roots
         .as_ref()
         .map(|v| v.iter().map(|s| s.as_str()).collect());
@@ -581,13 +581,13 @@ pub async fn update_project(
             icon_ref,
             root_strs.as_deref(),
         )
-        .map_err(|e| e.to_string()).await?;
+        .await.map_err(|e| e.to_string())?;
     Ok(project_to_dto(proj))
 }
 
 #[tauri::command]
 pub async fn delete_project(project_id: String) -> Result<Vec<String>, String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     store
         .delete_project(&project_id)
         .await.map_err(|e| e.to_string())
@@ -598,7 +598,7 @@ pub async fn move_project(
     project_id: String,
     before_project_id: Option<String>,
 ) -> Result<(), String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     store
         .move_project(&project_id, before_project_id.as_deref())
         .await.map_err(|e| e.to_string())
@@ -609,7 +609,7 @@ pub async fn assign_session_to_project(
     session_id: String,
     project_id: String,
 ) -> Result<(), String> {
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     store
         .assign_session_to_project(&session_id, &project_id)
         .await.map_err(|e| e.to_string())

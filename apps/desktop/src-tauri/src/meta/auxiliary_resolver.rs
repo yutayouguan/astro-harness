@@ -264,13 +264,15 @@ fn to_common_task(kind: AuxiliaryKind) -> types::AuxiliaryTask {
 
 /// 解析会话侧辅助任务用的 primary：优先匹配会话账单里的 backend/endpoint/model，
 /// 否则回退到 UI 当前激活提供商。
-pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTarget, String> {
+pub async fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTarget, String> {
     let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
     let store = session::SessionStore::open_sessions_dir(&root.join("sessions"))
-        .map_err(|e| e.to_string()).await?;
+        .await
+        .map_err(|e| e.to_string())?;
     let billing = store
         .get_session_billing(session_id)
+        .await
         .map_err(|e| e.to_string())?;
     let session_model = billing
         .as_ref()

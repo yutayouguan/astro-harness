@@ -382,10 +382,10 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
         // 轮询直到非 running（最长约 10 分钟 + 余量）
         for _ in 0..650 {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            let Ok(db) = cron::CronRunDb::open_default() else {
+            let Ok(db) = cron::CronRunDb::open_default().await else {
                 continue;
             };
-            let Ok(Some(finished)) = db.get(&run_id) else {
+            let Ok(Some(finished)) = db.get(&run_id).await else {
                 continue;
             };
             if finished.status == "running" {
@@ -464,7 +464,7 @@ pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, S
             date_to: args.date_to,
             limit: args.limit,
         })
-        .map_err(|e| e.to_string()).await?;
+        .await.map_err(|e| e.to_string())?;
     Ok(rows.into_iter().map(run_to_dto).collect())
 }
 

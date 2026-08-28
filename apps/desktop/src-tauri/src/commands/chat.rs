@@ -399,7 +399,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
     // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
     {
         bootstrap_workspace()?;
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         if let Ok(Some(meta)) = store.get_session(&sid).await {
             if meta.ended_at.is_some() {
                 let reason = meta.end_reason.as_deref().unwrap_or("ended");
@@ -414,13 +414,13 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
 
     if let Some(keep) = keep_chat_bubbles {
         bootstrap_workspace()?;
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         store
             .ensure_session(&sid, "tauri")
-            .map_err(|e| e.to_string()).await?;
+            .await.map_err(|e| e.to_string())?;
         store
             .truncate_session_to_bubbles(&sid, keep.max(0) as usize)
-            .map_err(|e| e.to_string()).await?;
+            .await.map_err(|e| e.to_string())?;
     }
 
     // 从 providers.json + keyring 解析 primary 与聊天后备链

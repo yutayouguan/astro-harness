@@ -207,7 +207,7 @@ async fn reflect_over_targets(
 }
 
 /// 为近期决策关联的会话构建精简 transcript（最多 3 个会话，各 ~1500 字符）。
-fn build_transcripts(base: &Path, decisions: &[memory::DecisionEntry]) -> Vec<(String, String)> {
+async fn build_transcripts(base: &Path, decisions: &[memory::DecisionEntry]) -> Vec<(String, String)> {
     let mut session_ids: Vec<String> = Vec::new();
     for d in decisions {
         if let Some(sid) = d.session_id.as_deref().filter(|s| !s.is_empty()) {
@@ -222,13 +222,13 @@ fn build_transcripts(base: &Path, decisions: &[memory::DecisionEntry]) -> Vec<(S
     if session_ids.is_empty() {
         return Vec::new();
     }
-    let store = match session::SessionStore::open_sessions_dir(&base.join("sessions")) {
+    let store = match session::SessionStore::open_sessions_dir(&base.join("sessions")).await {
         Ok(s) => s,
         Err(_) => return Vec::new(),
     };
     let mut out = Vec::new();
     for sid in session_ids {
-        let Ok(msgs) = store.get_messages(&sid) else {
+        let Ok(msgs) = store.get_messages(&sid).await else {
             continue;
         };
         let start = msgs.len().saturating_sub(10);
@@ -273,8 +273,8 @@ fn truncate_task(text: &str, max_chars: usize) -> String {
     }
 }
 
-fn session_user_task(store: &session::SessionStore, session_id: &str) -> Option<String> {
-    let msgs = store.get_messages(session_id).ok().await?;
+async fn session_user_task(store: &session::SessionStore, session_id: &str) -> Option<String> {
+    let msgs = store.get_messages(session_id).await.ok()?;
     for m in msgs {
         if m.role != "user" {
             continue;
@@ -286,6 +286,7 @@ fn session_user_task(store: &session::SessionStore, session_id: &str) -> Option<
     }
     store
         .get_session(session_id)
+        .await
         .ok()
         .flatten()
         .and_then(|s| s.title)
@@ -321,7 +322,7 @@ async fn run_evolution_core(
 
     let decisions = memory::list_recent_decisions(&base, 20).unwrap_or_default();
     let enabled_skills = skills::list_enabled_for_prompt();
-    let transcripts = build_transcripts(&base, &decisions);
+    let transcripts = build_transcripts(&base, &decisions).await;
     let input = ReflectionInput {
         decisions,
         enabled_skills,
@@ -887,7 +888,7 @@ pub async fn run_evolution_search(
     let curator_report = load_curator_last(&base);
     // [P3] 准备 known_skill_ids（用于信号提取）
     let known_skill_ids: Vec<String> = enabled_skills.iter().map(|(n, _)| n.clone()).collect();
-    let transcripts = build_transcripts(&base, &decisions);
+    let transcripts = build_transcripts(&base, &decisions).await;
     let seed_user = build_reflection_user_prompt(&ReflectionInput {
         decisions: decisions.clone(), // [P3] 保留 decisions 所有权用于后续 detect_opportunities
         enabled_skills: enabled_skills.clone(),
@@ -1783,7 +1784,7 @@ pub struct EvalImportCandidateDto {
     pub fail_count: usize,
 }
 
-fn collect_eval_import_candidates(
+async fn collect_eval_import_candidates(
     base: &Path,
     limit: usize,
 ) -> Result<Vec<EvalImportCandidateDto>, String> {
@@ -1796,7 +1797,8 @@ fn collect_eval_import_candidates(
         .collect();
 
     let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
-        .map_err(|e| format!("打开会话库失败: {e}")).await?;
+        .await
+        .map_err(|e| format!("打开会话库失败: {e}"))?;
 
     let mut by_session: HashMap<String, Vec<String>> = HashMap::new();
     for d in decisions {
@@ -1826,7 +1828,7 @@ fn collect_eval_import_candidates(
     for (session_id, mut expectations) in by_session {
         expectations.sort();
         expectations.dedup();
-        let Some(task) = session_user_task(&store, &session_id) else {
+        let Some(task) = session_user_task(&store, &session_id).await else {
             continue;
         };
         let fail_count = expectations.len();
@@ -1854,7 +1856,7 @@ pub async fn list_eval_import_candidates(
     limit: Option<u32>,
 ) -> Result<Vec<EvalImportCandidateDto>, String> {
     let base = default_memory_dir();
-    collect_eval_import_candidates(&base, limit.unwrap_or(12) as usize)
+    collect_eval_import_candidates(&base, limit.unwrap_or(12) as usize).await
 }
 
 /// 从指定会话导入一条失败评测例。
@@ -1877,9 +1879,9 @@ pub async fn import_eval_from_session(
     }
 
     let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
-        .map_err(|e| format!("打开会话库失败: {e}")).await?;
+        .await.map_err(|e| format!("打开会话库失败: {e}"))?;
     let task = session_user_task(&store, &session_id)
-        .ok_or_else(|| "无法从会话提取任务文本".to_string())?;
+        .await.ok_or_else(|| "无法从会话提取任务文本".to_string())?;
 
     let decisions = memory::list_recent_decisions(&base, 200)
         .map_err(|e| format!("读取 DecisionLog 失败: {e}"))?;
