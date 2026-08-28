@@ -1351,9 +1351,7 @@ export default function App() {
                   </div>
                 </div>
               )}
-              <div
-                className={`page-body${featureNav === "cron" || featureNav === "loop" ? " page-body--bare" : ""}`}
-              >
+              <div className="page-body page-body--bare">
                 <div className="feature-content-inline">
                   {featureNav === "cron" && (
                     <CronPanel

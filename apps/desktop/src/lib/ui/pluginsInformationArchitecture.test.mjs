@@ -125,8 +125,8 @@ test("plugin toolbar is compact and degrades to stacked rows on narrow screens",
   assert.match(styles, /\.plugins-command-bar\s*\{[\s\S]*?gap:\s*8px;/);
   assert.match(
     styles,
-    /\.plugins-command-bar\s*\{[\s\S]*?padding:\s*12px 8px 0;/,
-    "plugin command bar should keep 12px clear of the window chrome",
+    /\.plugins-command-bar\s*\{[\s\S]*?padding:\s*0;/,
+    "plugin command bar should rely on the shared feature-page inset",
   );
   assert.match(
     tabs,

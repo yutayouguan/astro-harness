@@ -46,6 +46,14 @@ test("sidebar keeps primary actions above the workspace navigation", () => {
   );
 });
 
+test("cron, loop, and plugin pages share the same top inset", () => {
+  assert.match(
+    app,
+    /featureNav \? \([\s\S]*?<div className="page-body page-body--bare">[\s\S]*?<CronPanel[\s\S]*?<LoopPanel[\s\S]*?<PluginsPage/,
+    "all three feature pages should use the shared bare-page inset",
+  );
+});
+
 test("project and recent actions stay with the section they affect", () => {
   const projects = app.indexOf('t("sidebar.projects")');
   const addProject = app.indexOf('className="sidebar-add-btn"', projects);

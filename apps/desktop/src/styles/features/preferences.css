@@ -95,9 +95,12 @@
   grid-auto-flow: column;
   overflow: hidden;
   min-height: 42px;
-  border: 1px solid color-mix(in srgb, var(--ink) 13%, transparent);
+  border: 1px solid var(--seg-shell-border);
   border-radius: 11px;
-  background: color-mix(in srgb, var(--glass-panel, transparent) 72%, transparent);
+  background: var(--seg-shell-bg);
+  box-shadow: var(--seg-shell-shadow);
+  backdrop-filter: var(--seg-shell-blur);
+  -webkit-backdrop-filter: var(--seg-shell-blur);
 }
 
 .morphicon-segmented button {
@@ -118,13 +121,14 @@
 }
 
 .morphicon-segmented button:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone-soft) 45%, transparent);
+  color: var(--seg-item-color-hover);
+  background: var(--seg-item-bg-hover);
 }
 
 .morphicon-segmented button.is-active {
-  color: var(--bg0, #fff);
-  background: color-mix(in srgb, var(--ink) 92%, transparent);
+  color: var(--seg-item-color-active);
+  background: var(--seg-item-bg-active);
+  box-shadow: var(--seg-item-shadow-active);
 }
 
 .morphicon-segmented button:focus-visible {
