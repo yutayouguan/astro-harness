@@ -39,6 +39,7 @@ import {
   Sparkles,
   Square,
   Trash2,
+  X,
   MoreHorizontal,
 } from "lucide-react";
 import {
@@ -120,7 +121,6 @@ import McpIcon from "../icons/McpIcon";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
 import MsgActivity from "./MsgActivity";
 import MsgActivityGroup from "./MsgActivityGroup";
-import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgCitations from "./MsgCitations";
 import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
@@ -131,12 +131,19 @@ import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
+import {
+  CronRunChatCard,
+  CronRunDetailDrawer,
+  cronRunStatusKind,
+  type CronRunDto,
+} from "../schedule/CronRunDetailDrawer";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
 import {
   groupConsecutiveActivities,
   isConsecutiveActivityGroup,
 } from "../../lib/chat/groupActivities";
+import { findLastUserMessageId } from "../../lib/chat/messageEditing";
 import { isLocationRequiredSurface } from "../../lib/chat/locationSurface";
 import {
   findComposerClarifySurface,
@@ -322,12 +329,8 @@ type Props = {
   contextWindow?: number;
   /** 重新生成该条 assistant 回复（基于前一条 user） */
   onRegenerateMessage?: (messageId: string) => void;
-  /** 编辑用户消息并重发（内容填回输入框，截断该条及之后） */
-  onEditUserMessage?: (messageId: string) => void;
-  /** 正在粒子消散的消息 id（编辑截断中） */
-  dissolvingIds?: string[];
-  /** 删除该条消息 */
-  onDeleteMessage?: (messageId: string) => void;
+  /** 原位修改最后一条用户消息，并截断旧回答后重新执行 */
+  onEditUserMessage?: (messageId: string, content: string) => Promise<boolean>;
   /** 从该条消息分支新会话（复制历史到新 session） */
   onBranchMessage?: (messageId: string) => void;
   /** Hermes 风格斜杠命令执行（不含 insert_skill / help 本地处理） */
@@ -512,24 +515,18 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
   );
 }
 
-/** 消息悬停操作（复制 / 再生或编辑 / 删除 / 分支） */
+/** AI 消息悬停操作（复制 / 重新生成 / 分支）。 */
 export function MessageActions({
   messageId,
   content,
-  role,
   disabled,
   onRegenerate,
-  onEdit,
-  onDelete,
   onBranch,
 }: {
   messageId: string;
   content: string;
-  role: "user" | "assistant";
   disabled?: boolean;
   onRegenerate?: (messageId: string) => void;
-  onEdit?: (messageId: string) => void;
-  onDelete?: (messageId: string) => void;
   onBranch?: (messageId: string) => void;
 }) {
   const { t } = useI18n();
@@ -565,38 +562,15 @@ export function MessageActions({
           aria-hidden
         />
       </button>
-      {role === "assistant" ? (
-        <button
-          type="button"
-          className="msg-action-btn"
-          disabled={disabled || !onRegenerate}
-          onClick={() => onRegenerate?.(messageId)}
-          aria-label={t("chat.regenerate")}
-          title={t("chat.regenerate")}
-        >
-          <RefreshCw size={14} strokeWidth={2} aria-hidden />
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="msg-action-btn"
-          disabled={disabled || !onEdit}
-          onClick={() => onEdit?.(messageId)}
-          aria-label={t("chat.editResend")}
-          title={t("chat.editResend")}
-        >
-          <Pencil size={14} strokeWidth={2} aria-hidden />
-        </button>
-      )}
       <button
         type="button"
-        className="msg-action-btn msg-action-btn--danger"
-        disabled={disabled || !onDelete}
-        onClick={() => onDelete?.(messageId)}
-        aria-label={t("chat.delete")}
-        title={t("chat.delete")}
+        className="msg-action-btn"
+        disabled={disabled || !onRegenerate}
+        onClick={() => onRegenerate?.(messageId)}
+        aria-label={t("chat.regenerate")}
+        title={t("chat.regenerate")}
       >
-        <Trash2 size={14} strokeWidth={2} aria-hidden />
+        <RefreshCw size={14} strokeWidth={2} aria-hidden />
       </button>
       <button
         type="button"
@@ -608,6 +582,85 @@ export function MessageActions({
       >
         <GitBranch size={14} strokeWidth={2} aria-hidden />
       </button>
+    </div>
+  );
+}
+
+function InlineUserMessageEditor({
+  value,
+  originalValue,
+  disabled,
+  onChange,
+  onCancel,
+  onSubmit,
+}: {
+  value: string;
+  originalValue: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const { t } = useI18n();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const canSubmit =
+    !disabled && value.trim().length > 0 && value.trim() !== originalValue.trim();
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.focus();
+    textarea.select();
+  }, []);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "0px";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`;
+  }, [value]);
+
+  return (
+    <div className="user-message-editor">
+      <textarea
+        ref={textareaRef}
+        className="user-message-editor-input"
+        value={value}
+        disabled={disabled}
+        aria-label={t("chat.editQuestion")}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+            return;
+          }
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            if (canSubmit) onSubmit();
+          }
+        }}
+      />
+      <div className="user-message-editor-actions">
+        <button
+          type="button"
+          className="user-message-editor-btn is-cancel"
+          disabled={disabled}
+          onClick={onCancel}
+        >
+          <X size={14} strokeWidth={2} aria-hidden />
+          {t("chat.editCancel")}
+        </button>
+        <button
+          type="button"
+          className="user-message-editor-btn is-submit"
+          disabled={!canSubmit}
+          onClick={onSubmit}
+        >
+          <RefreshCw size={14} strokeWidth={2} aria-hidden />
+          {t("chat.editSubmit")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -664,15 +717,19 @@ export default function ChatView({
   contextWindow = 0,
   onRegenerateMessage,
   onEditUserMessage,
-  dissolvingIds = [],
-  onDeleteMessage,
   onBranchMessage,
   onSlashAction,
 }: Props) {
   const { t } = useI18n();
   const { showToast, toastHost } = useTransientToast();
   const confirm = useConfirm();
-  const dissolvingSet = useMemo(() => new Set(dissolvingIds), [dissolvingIds]);
+  const lastUserMessageId = useMemo(
+    () => findLastUserMessageId(messages),
+    [messages],
+  );
+  const [editingUserMessageId, setEditingUserMessageId] = useState<string | null>(null);
+  const [editingUserDraft, setEditingUserDraft] = useState("");
+  const [submittingUserEdit, setSubmittingUserEdit] = useState(false);
   const chatPaneRef = useRef<HTMLElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -711,6 +768,8 @@ export default function ChatView({
   const [previewTarget, setPreviewTarget] =
     useState<ComposerPreviewTarget | null>(null);
   const [mediaBaseDir, setMediaBaseDir] = useState<string | null>(null);
+  const [cronRun, setCronRun] = useState<CronRunDto | null>(null);
+  const [cronRunOpen, setCronRunOpen] = useState(false);
   /** 创建 Agent：发送校验失败时高亮的必填槽 index */
   const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
   const { servers: mcpServers } = useMcpTools(agentId);
@@ -740,6 +799,62 @@ export default function ChatView({
     setComposerContexts([]);
     setPreviewTarget(null);
   }, [sessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | null = null;
+    setCronRun(null);
+    setCronRunOpen(false);
+    if (!sessionId) return;
+
+    const refresh = async () => {
+      try {
+        const run = await invoke<CronRunDto | null>("get_cron_run_by_session", {
+          sessionId,
+        });
+        if (cancelled) return;
+        setCronRun(run);
+        if (run && cronRunStatusKind(run.status) === "running") {
+          timer = window.setTimeout(() => void refresh(), 1500);
+        }
+      } catch {
+        if (!cancelled) setCronRun(null);
+      }
+    };
+
+    void refresh();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [sessionId]);
+
+  const cronResultMessageId = useMemo(() => {
+    if (!cronRun) return null;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role === "assistant" && message.content.trim()) return message.id;
+    }
+    return null;
+  }, [cronRun, messages]);
+
+  const deleteCronRun = useCallback(async () => {
+    if (!cronRun) return;
+    const approved = await confirm({
+      title: t("dialog.deleteTitle"),
+      message: t("cron.history.deleteRunConfirm"),
+      confirmLabel: t("cron.history.deleteRun"),
+      variant: "danger",
+    });
+    if (!approved) return;
+    try {
+      await invoke("delete_cron_run", { id: cronRun.id });
+      setCronRunOpen(false);
+      setCronRun(null);
+    } catch (error) {
+      showToast(String(error));
+    }
+  }, [confirm, cronRun, showToast, t]);
 
   const cancelContextPopoverClose = useCallback(() => {
     if (contextCloseTimerRef.current == null) return;
@@ -1759,6 +1874,55 @@ export default function ChatView({
                 ? t("chat.placeholderPlan")
                 : t("chat.placeholder");
 
+  useEffect(() => {
+    if (
+      editingUserMessageId &&
+      (editingUserMessageId !== lastUserMessageId || !onEditUserMessage)
+    ) {
+      setEditingUserMessageId(null);
+      setEditingUserDraft("");
+      setSubmittingUserEdit(false);
+    }
+  }, [editingUserMessageId, lastUserMessageId, onEditUserMessage]);
+
+  const beginUserMessageEdit = useCallback(
+    (message: ChatMessage) => {
+      if (
+        message.id !== lastUserMessageId ||
+        streaming ||
+        turnInFlight ||
+        sendBlocked ||
+        !onEditUserMessage
+      ) {
+        return;
+      }
+      setEditingUserMessageId(message.id);
+      setEditingUserDraft(message.content);
+    },
+    [lastUserMessageId, onEditUserMessage, sendBlocked, streaming, turnInFlight],
+  );
+
+  const cancelUserMessageEdit = useCallback(() => {
+    if (submittingUserEdit) return;
+    setEditingUserMessageId(null);
+    setEditingUserDraft("");
+  }, [submittingUserEdit]);
+
+  const submitUserMessageEdit = useCallback(async () => {
+    const messageId = editingUserMessageId;
+    const content = editingUserDraft.trim();
+    if (!messageId || !content || !onEditUserMessage || submittingUserEdit) return;
+    setSubmittingUserEdit(true);
+    try {
+      const accepted = await onEditUserMessage(messageId, content);
+      if (!accepted) return;
+      setEditingUserMessageId(null);
+      setEditingUserDraft("");
+    } finally {
+      setSubmittingUserEdit(false);
+    }
+  }, [editingUserDraft, editingUserMessageId, onEditUserMessage, submittingUserEdit]);
+
   return (
     <ChatMediaAttachProvider value={mediaAttachApi}>
     <section
@@ -1791,26 +1955,21 @@ export default function ChatView({
               const reasoningActive = Boolean(
                 isStreamingBubble && m.reasoning && !m.content,
               );
-              const dissolving = dissolvingSet.has(m.id);
-              const dissolveStagger = dissolving
-                ? Math.max(0, dissolvingIds.indexOf(m.id))
-                : 0;
+              const isEditingUserMessage = editingUserMessageId === m.id;
+              const canEditUserMessage =
+                m.role === "user" &&
+                m.id === lastUserMessageId &&
+                !streaming &&
+                !turnInFlight &&
+                !sendBlocked &&
+                Boolean(onEditUserMessage);
               return (
                 <div
                   key={m.id}
                   id={`msg-${m.id}`}
                   data-msg-id={m.id}
-                  className={`msg-row ${m.role === "user" ? "user" : "assistant"}${
-                    dissolving ? " is-dissolving" : ""
-                  }`}
+                  className={`msg-row ${m.role === "user" ? "user" : "assistant"}`}
                 >
-                  {dissolving ? (
-                    <MsgDissolveOverlay
-                      messageId={m.id}
-                      text={`${m.content || ""}${m.reasoning || ""}`}
-                      staggerIndex={dissolveStagger}
-                    />
-                  ) : null}
                   {m.role === "assistant" && (
                     <div
                       className={`avatar ${m.error ? "error" : ""}${
@@ -1841,12 +2000,25 @@ export default function ChatView({
                         streaming
                           ? "typing"
                           : ""
-                      } ${isStreamingBubble && (m.content || m.reasoning) ? "is-streaming" : ""}`}
+                      } ${isStreamingBubble && (m.content || m.reasoning) ? "is-streaming" : ""}${
+                        canEditUserMessage && !isEditingUserMessage
+                          ? " has-inline-edit"
+                          : ""
+                      }${isEditingUserMessage ? " is-editing" : ""}`}
                     >
                       {m.attachments && m.attachments.length > 0 && (
                         <MessageAttachments items={m.attachments} />
                       )}
-                      {(() => {
+                      {isEditingUserMessage ? (
+                        <InlineUserMessageEditor
+                          value={editingUserDraft}
+                          originalValue={m.content}
+                          disabled={submittingUserEdit}
+                          onChange={setEditingUserDraft}
+                          onCancel={cancelUserMessageEdit}
+                          onSubmit={() => void submitUserMessageEdit()}
+                        />
+                      ) : (() => {
                         type Step = {
                           key: string;
                           kind: MsgTimelineKind;
@@ -1989,14 +2161,21 @@ export default function ChatView({
                             kind: "reply",
                             node: (
                               <>
-                                <ChatMarkdown
-                                  content={m.content}
-                                  streaming={isStreamingBubble}
-                                  compact={displayPrefs.verbosity === "compact"}
-                                  plain={Boolean(m.error)}
-                                  caret={false}
-                                  mediaBaseDir={mediaBaseDir}
-                                />
+                                {cronRun && m.id === cronResultMessageId ? (
+                                  <CronRunChatCard
+                                    run={cronRun}
+                                    onOpen={() => setCronRunOpen(true)}
+                                  />
+                                ) : (
+                                  <ChatMarkdown
+                                    content={m.content}
+                                    streaming={isStreamingBubble}
+                                    compact={displayPrefs.verbosity === "compact"}
+                                    plain={Boolean(m.error)}
+                                    caret={false}
+                                    mediaBaseDir={mediaBaseDir}
+                                  />
+                                )}
                                 <MsgStreamLoader visible={isStreamingBubble} />
                               </>
                             ),
@@ -2073,6 +2252,17 @@ export default function ChatView({
                           </MsgTimeline>
                         );
                       })()}
+                      {canEditUserMessage && !isEditingUserMessage ? (
+                        <button
+                          type="button"
+                          className="user-message-edit-trigger"
+                          aria-label={t("chat.editQuestion")}
+                          title={t("chat.editQuestion")}
+                          onClick={() => beginUserMessageEdit(m)}
+                        >
+                          <Pencil size={14} strokeWidth={2} aria-hidden />
+                        </button>
+                      ) : null}
                       {displayPrefs.showTimestamps && m.createdAt ? (
                         <div className="msg-timestamp">
                           {new Date(m.createdAt).toLocaleTimeString()}
@@ -2089,21 +2279,13 @@ export default function ChatView({
                       ) : null}
                     </div>
                     {!isStreamingBubble &&
-                    !dissolving &&
                     m.id !== "welcome" &&
-                    (m.role === "user" || m.role === "assistant") ? (
+                    m.role === "assistant" ? (
                       <MessageActions
                         messageId={m.id}
                         content={m.content}
-                        role={m.role}
-                        disabled={streaming || dissolvingIds.length > 0}
-                        onRegenerate={
-                          m.role === "assistant" ? onRegenerateMessage : undefined
-                        }
-                        onEdit={
-                          m.role === "user" ? onEditUserMessage : undefined
-                        }
-                        onDelete={onDeleteMessage}
+                        disabled={streaming}
+                        onRegenerate={onRegenerateMessage}
                         onBranch={onBranchMessage}
                       />
                     ) : null}
@@ -2927,11 +3109,19 @@ export default function ChatView({
           </div>
         </div>
       </form>
-      <ComposerContextPreview
-        target={previewTarget}
-        onClose={() => setPreviewTarget(null)}
-      />
-    </section>
+        <ComposerContextPreview
+          target={previewTarget}
+          onClose={() => setPreviewTarget(null)}
+        />
+      </section>
+      {cronRun && cronRunOpen ? (
+        <CronRunDetailDrawer
+          run={cronRun}
+          messages={messages}
+          onClose={() => setCronRunOpen(false)}
+          onDelete={() => void deleteCronRun()}
+        />
+      ) : null}
     </ChatMediaAttachProvider>
   );
 }

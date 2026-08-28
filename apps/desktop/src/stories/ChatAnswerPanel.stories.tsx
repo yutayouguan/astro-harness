@@ -1,12 +1,14 @@
+import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { LocaleProvider } from "../i18n/LocaleContext";
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
+import { DialogProvider } from "../hooks/ui/DialogContext";
 import { ChatMarkdown } from "../components/chat/ChatMarkdown";
 import MsgActivity from "../components/chat/MsgActivity";
 import MsgActivityGroup from "../components/chat/MsgActivityGroup";
 import { MsgTimeline, MsgTimelineStep } from "../components/chat/MsgTimeline";
-import { MessageActions } from "../components/chat/ChatView";
-import type { ChatActivity } from "../types";
+import ChatView, { MessageActions } from "../components/chat/ChatView";
+import type { ChatActivity, ChatMessage } from "../types";
 
 const terminalActivity: ChatActivity = {
   id: "storybook-terminal",
@@ -103,14 +105,70 @@ function ChatAnswerPanel() {
             <MessageActions
               messageId="storybook-assistant"
               content={answer}
-              role="assistant"
               onRegenerate={() => {}}
-              onDelete={() => {}}
               onBranch={() => {}}
             />
           </div>
         </div>
       </main>
+      </LocaleProvider>
+    </MorphiconProvider>
+  );
+}
+
+function InlineUserEditPreview() {
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: "u-1", role: "user", content: "先给我解释一下这个模块。" },
+    { id: "a-1", role: "assistant", content: "这是上一轮回答，历史问题不可编辑。" },
+    { id: "u-2", role: "user", content: "把结论整理得更简洁，并补充一个示例。" },
+    { id: "a-2", role: "assistant", content: "这是当前回答；最后一个问题可以原位修改。" },
+  ]);
+
+  return (
+    <MorphiconProvider>
+      <LocaleProvider>
+        <DialogProvider>
+          <main style={{ height: "760px", background: "var(--shell-bg)" }}>
+            <ChatView
+              messages={messages}
+              input=""
+              attachments={[]}
+              streaming={false}
+              displayPrefs={{
+                verbosity: "normal",
+                showTools: true,
+                showSkills: true,
+                showMcp: false,
+                showHooks: true,
+                showMemory: true,
+                showStatus: true,
+                showTimestamps: false,
+              }}
+              emptyMode={null}
+              onInputChange={() => {}}
+              onAttachmentsChange={() => {}}
+              onSend={() => {}}
+              onNewChat={() => {}}
+              onPickWelcomePrompt={() => {}}
+              thinkingPrefs={{ level: "off" }}
+              onToggleThinking={() => {}}
+              onThinkingLevelChange={() => {}}
+              chatMode="agent"
+              onChatModeChange={() => {}}
+              onOpenContext={() => {}}
+              onRegenerateMessage={() => {}}
+              onEditUserMessage={async (messageId, content) => {
+                setMessages((current) =>
+                  current.map((message) =>
+                    message.id === messageId ? { ...message, content } : message,
+                  ),
+                );
+                return true;
+              }}
+              onBranchMessage={() => {}}
+            />
+          </main>
+        </DialogProvider>
       </LocaleProvider>
     </MorphiconProvider>
   );
@@ -129,3 +187,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const InlineUserEdit: Story = {
+  render: () => <InlineUserEditPreview />,
+};

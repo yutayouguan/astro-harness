@@ -20,7 +20,7 @@ test("side chat mounts the complete main chat surface", async () => {
   assert.match(panel, /onOpenMcpSettings=\{onOpenMcpSettings\}/);
   assert.match(panel, /onRegenerateMessage=\{chat\.regenerateMessage\}/);
   assert.match(panel, /onEditUserMessage=\{chat\.editUserMessage\}/);
-  assert.match(panel, /onDeleteMessage=\{chat\.deleteMessage\}/);
+  assert.doesNotMatch(panel, /onDeleteMessage|chat\.deleteMessage/);
 
   assert.doesNotMatch(panel, /side-chat-msg/);
   assert.doesNotMatch(panel, /side-chat-composer/);

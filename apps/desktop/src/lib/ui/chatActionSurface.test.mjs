@@ -11,6 +11,10 @@ const contextUsagePopoverUrl = new URL(
   import.meta.url,
 );
 const messagesUrl = new URL("../../i18n/messages.ts", import.meta.url);
+const chatSessionUrl = new URL(
+  "../../hooks/chat/useChatSession.ts",
+  import.meta.url,
+);
 const coreCssUrl = new URL(
   "../../styles/features/chat/core.css",
   import.meta.url,
@@ -20,18 +24,35 @@ const markdownCssUrl = new URL(
   import.meta.url,
 );
 
-test("message actions keep the supported conversation controls", async () => {
-  const source = await readFile(chatViewUrl, "utf8");
+test("assistant actions exclude deletion and user editing stays in the latest bubble", async () => {
+  const [source, session, messages, styles] = await Promise.all([
+    readFile(chatViewUrl, "utf8"),
+    readFile(chatSessionUrl, "utf8"),
+    readFile(messagesUrl, "utf8"),
+    readFile(coreCssUrl, "utf8"),
+  ]);
+  const assistantActions = source.match(
+    /export function MessageActions[\s\S]*?\n}\n\nfunction InlineUserMessageEditor/,
+  )?.[0];
 
-  for (const label of [
-    "chat.copy",
-    "chat.regenerate",
-    "chat.editResend",
-    "chat.delete",
-    "chat.branch",
-  ]) {
-    assert.ok(source.includes(`t("${label}")`), label);
+  assert.ok(assistantActions, "missing assistant action surface");
+  for (const label of ["chat.copy", "chat.regenerate", "chat.branch"]) {
+    assert.ok(assistantActions.includes(`t("${label}")`), label);
   }
+  assert.doesNotMatch(assistantActions, /onDelete|chat\.delete|Trash2/);
+  assert.match(source, /findLastUserMessageId\(messages\)/);
+  assert.match(source, /m\.id === lastUserMessageId/);
+  assert.match(source, /<InlineUserMessageEditor/);
+  assert.match(source, /event\.key === "Escape"/);
+  assert.match(source, /event\.metaKey \|\| event\.ctrlKey/);
+  assert.match(session, /findLastUserMessageIndex\(messages\)/);
+  assert.match(session, /await sendImmediate\(\{[\s\S]*?truncateTo: idx,[\s\S]*?reuseUserId: userMsg\.id/);
+  assert.match(messages, /"chat\.editSubmit": "保存并重新生成"/);
+  assert.match(styles, /\.bubble\.user\.is-editing/);
+  assert.match(styles, /\.user-message-edit-trigger/);
+  assert.doesNotMatch(source, /MsgDissolveOverlay|onDeleteMessage/);
+  assert.doesNotMatch(session, /const deleteMessage|persistAfterEditTruncate/);
+  assert.doesNotMatch(styles, /msg-dissolve/);
 });
 
 test("chat surfaces do not expose read-aloud or voice-input controls", async () => {

@@ -190,8 +190,6 @@ export default function SideChatPanel({
           onOpenContext={onOpenContext}
           onRegenerateMessage={chat.regenerateMessage}
           onEditUserMessage={chat.editUserMessage}
-          dissolvingIds={chat.dissolvingIds}
-          onDeleteMessage={chat.deleteMessage}
           contextUsage={chat.contextUsage}
           contextWindow={contextWindow}
           modelId={provider.model}

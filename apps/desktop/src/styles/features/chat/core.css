@@ -85,107 +85,9 @@
   justify-content: flex-start;
 }
 
-/* 编辑截断：气泡与文字粒子消散 */
-.msg-row.is-dissolving {
-  position: relative;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.msg-row.is-dissolving .avatar,
-.msg-row.is-dissolving .msg-stack {
-  animation: msg-dissolve-fade 0.85s ease-out forwards;
-}
-
-.msg-row.is-dissolving .msg-actions {
-  opacity: 0 !important;
-}
-
-.msg-dissolve-layer {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
-  pointer-events: none;
-  z-index: 3;
-}
-
-.msg-dissolve-particle {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: translate(-50%, -50%);
-  animation: msg-dissolve-fly 0.88s cubic-bezier(0.2, 0.7, 0.25, 1) forwards;
-  will-change: transform, opacity, filter;
-}
-
-.msg-dissolve-particle.is-char {
-  font-weight: 600;
-  line-height: 1;
-  color: color-mix(in srgb, var(--tone, #60a5fa) 35%, var(--ink));
-  text-shadow: 0 0 8px color-mix(in srgb, var(--tone, #60a5fa) 25%, transparent);
-  user-select: none;
-}
-
-.msg-dissolve-particle.is-dust {
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--tone, #60a5fa) 55%, #fff);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--tone, #60a5fa) 40%, transparent);
-}
-
-@keyframes msg-dissolve-fade {
-  0% {
-    opacity: 1;
-    filter: blur(0);
-    transform: none;
-  }
-  35% {
-    opacity: 0.55;
-    filter: blur(0.6px);
-  }
-  100% {
-    opacity: 0;
-    filter: blur(6px);
-    transform: scale(0.96) translateY(-6px);
-  }
-}
-
-@keyframes msg-dissolve-fly {
-  0% {
-    opacity: 0.95;
-    transform: translate(-50%, -50%) scale(1) rotate(0deg);
-    filter: blur(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(
-        calc(-50% + var(--dx, 0px)),
-        calc(-50% + var(--dy, 0px))
-      )
-      scale(0.25)
-      rotate(var(--rot, 0deg));
-    filter: blur(2px);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .msg-row:not(.is-dissolving) {
+  .msg-row {
     animation: msg-row-fade-in 0.1s ease-out both;
-  }
-
-  .msg-row.is-dissolving .avatar,
-  .msg-row.is-dissolving .msg-stack,
-  .msg-dissolve-particle {
-    animation: none !important;
-  }
-
-  .msg-row.is-dissolving .avatar,
-  .msg-row.is-dissolving .msg-stack {
-    opacity: 0;
-  }
-
-  .msg-dissolve-layer {
-    display: none;
   }
 }
 
@@ -361,8 +263,6 @@ html[data-theme="dark"] .msg-token-stats {
 
 .msg-row.assistant:hover .msg-actions,
 .msg-row.assistant:focus-within .msg-actions,
-.msg-row.user:hover .msg-actions,
-.msg-row.user:focus-within .msg-actions,
 .msg-actions:focus-within {
   opacity: 1;
   pointer-events: auto;
@@ -393,11 +293,6 @@ html[data-theme="dark"] .msg-token-stats {
 
 .msg-action-btn.is-copied {
   color: var(--tone-green, #16a34a);
-}
-
-.msg-action-btn--danger:hover:not(:disabled) {
-  color: var(--danger, #e11d48);
-  background: color-mix(in srgb, var(--danger, #e11d48) 12%, transparent);
 }
 
 .msg-action-btn:disabled {
@@ -509,6 +404,133 @@ html[data-theme="dark"] .avatar {
   white-space: pre-wrap;
   width: fit-content;
   max-width: 100%;
+}
+
+.bubble.user.has-inline-edit {
+  position: relative;
+  padding-right: 48px;
+}
+
+.user-message-edit-trigger {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: color-mix(in srgb, currentColor 62%, transparent);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.user-message-edit-trigger:hover {
+  color: currentColor;
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  border-color: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.user-message-edit-trigger:active {
+  transform: scale(0.97);
+}
+
+.user-message-edit-trigger:focus-visible,
+.user-message-editor-btn:focus-visible,
+.user-message-editor-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone, #2563eb) 64%, transparent);
+  outline-offset: 2px;
+}
+
+.bubble.user.is-editing {
+  width: min(620px, calc(100vw - 96px));
+  padding: 12px;
+  white-space: normal;
+}
+
+.user-message-editor {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.user-message-editor-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  max-height: 240px;
+  padding: 10px 11px;
+  resize: none;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--assist-fill) 58%, transparent);
+  color: inherit;
+  font: inherit;
+  line-height: 1.55;
+  caret-color: var(--tone, #2563eb);
+}
+
+.user-message-editor-input:disabled {
+  opacity: 0.68;
+}
+
+.user-message-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.user-message-editor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.user-message-editor-btn.is-submit {
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 30%, transparent);
+  background: color-mix(in srgb, var(--tone, #2563eb) 18%, transparent);
+}
+
+.user-message-editor-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.user-message-editor-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.user-message-editor-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .user-message-edit-trigger {
+    color: currentColor;
+  }
 }
 
 html[data-theme="light"] .bubble.user {

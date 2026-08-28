@@ -34,7 +34,6 @@ import {
   isWelcomeOnly,
   loadChatSession,
   loadContextUsageForSession,
-  persistAfterEditTruncate,
   saveChatSession,
   saveContextUsageForSession,
   saveEphemeralSessionMeta,
@@ -43,7 +42,7 @@ import {
   mapHistoryMessages,
   settleRestoredActivities,
 } from "../../lib/chat/mapHistoryMessages";
-import { MSG_DISSOLVE_MS } from "../../components/chat/MsgDissolveOverlay";
+import { findLastUserMessageIndex } from "../../lib/chat/messageEditing";
 import type {
   ArtifactDto,
   ChatAttachment,
@@ -196,7 +195,6 @@ export function useChatSession({
   const [currentTurnId, setCurrentTurnId] = useState<string | null>(null);
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [isCompacting, setIsCompacting] = useState(false);
-  const [dissolvingIds, setDissolvingIds] = useState<string[]>([]);
   const [status, setStatus] = useState<"ready" | "busy" | "error">("ready");
   const [statusPhase, setStatusPhase] = useState<StatusPhase>("ready");
   const [statusDetail, setStatusDetail] = useState<string | null>(null);
@@ -236,12 +234,9 @@ export function useChatSession({
   const unlistenRef = useRef<(() => void) | null>(null);
   const restoringRef = useRef(false);
   const pendingKeepChatBubblesRef = useRef<number | null>(null);
-  const dissolvingIdsRef = useRef<string[]>([]);
-  dissolvingIdsRef.current = dissolvingIds;
   const compactingRef = useRef(false);
   const lastRecommendCompactToastAtRef = useRef(0);
   const memoryToastDedupeRef = useRef<{ key: string; at: number } | null>(null);
-  const dissolveTimerRef = useRef<number | null>(null);
 
   // ── Stream buffer layer ───────────────────────────────────────────────────
   const {
@@ -343,8 +338,6 @@ export function useChatSession({
     unlistenRef,
     compactingRef,
     pendingKeepChatBubblesRef,
-    dissolvingIdsRef,
-    dissolveTimerRef,
     lastRecommendCompactToastAtRef,
     setMessages,
     setSessionId,
@@ -360,7 +353,6 @@ export function useChatSession({
     setAttachments,
     setSessionPendingInterrupts,
     setCurrentTurnId,
-    setDissolvingIds,
     showTransientToast,
     turnInFlightRef,
     setTurnInFlight,
@@ -870,15 +862,6 @@ export function useChatSession({
     return () => { unlisten?.(); };
   }, [sessionId, showTransientToast, t]);
 
-  // ── Cleanup dissolve timer ────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (dissolveTimerRef.current != null) {
-        window.clearTimeout(dissolveTimerRef.current);
-      }
-    };
-  }, []);
-
   // ── Cleanup event listener on unmount ────────────────────────────────────
   useEffect(() => {
     return () => {
@@ -927,7 +910,7 @@ export function useChatSession({
   const restoreChatHistory = useCallback(async () => {
     if (streaming || restoringRef.current) return;
     if (!isWelcomeOnly(messages)) return;
-    if (pendingKeepChatBubblesRef.current != null || dissolvingIdsRef.current.length > 0) {
+    if (pendingKeepChatBubblesRef.current != null) {
       return;
     }
     if (persistClientState && isChatCleared()) return;
@@ -1398,134 +1381,27 @@ export function useChatSession({
   }, [messages, streaming, regenerateMessage, showTransientToast, t]);
 
   const editUserMessage = useCallback(
-    (messageId: string) => {
-      if (streaming || dissolvingIds.length > 0) return;
-      const idx = messages.findIndex((m) => m.id === messageId);
-      if (idx < 0 || messages[idx]?.role !== "user") return;
+    async (messageId: string, content: string): Promise<boolean> => {
+      if (streaming || turnInFlight) return false;
+      const idx = findLastUserMessageIndex(messages);
+      if (idx < 0 || messages[idx]?.id !== messageId) return false;
       const userMsg = messages[idx];
-      const victimIds = messages.slice(idx).map((m) => m.id);
-      const kept = messages.slice(0, idx);
-      const bubbleStart = countChatBubbles(kept);
-      const bubbleEnd = countChatBubbles(messages);
-      pendingKeepChatBubblesRef.current = bubbleStart;
-
-      const beginCut = () => {
-        if (persistClientState) persistAfterEditTruncate(sessionId, kept);
-        setInput(userMsg.content);
-        setAttachments((userMsg.attachments ?? []).map((a) => ({ ...a })));
-        setSessionPendingInterrupts([]);
-
-        const reduced =
-          typeof window !== "undefined" &&
-          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-        const finishCut = () => {
-          setMessages((prev) => {
-            const cut = prev.findIndex((m) => m.id === messageId);
-            return cut < 0 ? prev : prev.slice(0, cut);
-          });
-          setDissolvingIds([]);
-          dissolveTimerRef.current = null;
-          if (bubbleStart === 0) {
-            queueMicrotask(() => setEmptyMode("chat"));
-          }
-        };
-
-        if (reduced) {
-          finishCut();
-        } else {
-          setDissolvingIds(victimIds);
-          if (dissolveTimerRef.current != null) {
-            window.clearTimeout(dissolveTimerRef.current);
-          }
-          dissolveTimerRef.current = window.setTimeout(finishCut, MSG_DISSOLVE_MS);
-        }
-
-        queueMicrotask(() => {
-          const el = document.querySelector<HTMLTextAreaElement>(".composer-shell textarea");
-          el?.focus();
-          if (el) {
-            const len = el.value.length;
-            el.setSelectionRange(len, len);
-          }
-        });
-      };
-
-      if (
-        sessionId &&
-        bubbleStart < bubbleEnd &&
-        typeof window !== "undefined" &&
-        "__TAURI_INTERNALS__" in window
-      ) {
-        void invoke("remove_chat_bubbles", {
-          sessionId,
-          start: bubbleStart,
-          end: bubbleEnd,
-        })
-          .then(beginCut)
-          .catch((e) => {
-            pendingKeepChatBubblesRef.current = null;
-            showTransientToast(
-              t("chat.deleteFailed", {
-                error: e instanceof Error ? e.message : String(e ?? "error"),
-              }),
-            );
-          });
-        return;
-      }
-      beginCut();
-    },
-    [messages, streaming, dissolvingIds.length, sessionId, persistClientState, showTransientToast, t],
-  );
-
-  const deleteMessage = useCallback(
-    (messageId: string) => {
-      if (streaming) return;
-      const idx = messages.findIndex((m) => m.id === messageId);
-      if (idx < 0) return;
-      let end = idx + 1;
-      if (messages[idx].role === "user") {
-        while (end < messages.length && messages[end].role === "assistant") end += 1;
-      }
+      const nextText = content.trim();
+      if (!nextText || nextText === userMsg.content.trim()) return false;
       const bubbleStart = countChatBubbles(messages.slice(0, idx));
-      const bubbleEnd = countChatBubbles(messages.slice(0, end));
-      const next = [...messages.slice(0, idx), ...messages.slice(end)];
-
-      const applyLocal = () => {
-        setMessages(next);
-        if (next.length === 0 || next.every((m) => m.id === "welcome")) {
-          if (persistClientState) clearChatSession();
-          queueMicrotask(() => setEmptyMode("chat"));
-        } else {
-          if (persistClientState) saveChatSession(sessionId, next, []);
-        }
-        setSessionPendingInterrupts([]);
-      };
-
-      if (
-        sessionId &&
-        bubbleStart < bubbleEnd &&
-        typeof window !== "undefined" &&
-        "__TAURI_INTERNALS__" in window
-      ) {
-        void invoke("remove_chat_bubbles", {
-          sessionId,
-          start: bubbleStart,
-          end: bubbleEnd,
-        })
-          .then(applyLocal)
-          .catch((e) => {
-            showTransientToast(
-              t("chat.deleteFailed", {
-                error: e instanceof Error ? e.message : String(e ?? "error"),
-              }),
-            );
-          });
-        return;
-      }
-      applyLocal();
+      pendingKeepChatBubblesRef.current = bubbleStart;
+      setSessionPendingInterrupts([]);
+      const accepted = await sendImmediate({
+        text: nextText,
+        attachments: (userMsg.attachments ?? []).map((attachment) => ({ ...attachment })),
+        truncateTo: idx,
+        skipUserAppend: false,
+        reuseUserId: userMsg.id,
+      });
+      if (!accepted) pendingKeepChatBubblesRef.current = null;
+      return accepted;
     },
-    [messages, sessionId, streaming, persistClientState, showTransientToast, t],
+    [messages, sendImmediate, streaming, turnInFlight],
   );
 
   const branchMessage = useCallback(
@@ -1967,7 +1843,6 @@ export function useChatSession({
     currentTurnId,
     focusMessageId,
     isCompacting,
-    dissolvingIds,
     status,
     statusPhase,
     statusDetail,
@@ -2003,7 +1878,6 @@ export function useChatSession({
     undoLastExchange,
     retryLastAssistant,
     editUserMessage,
-    deleteMessage,
     branchMessage,
     runCompactSession,
     onUiAction,

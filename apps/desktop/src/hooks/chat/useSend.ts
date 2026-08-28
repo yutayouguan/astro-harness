@@ -113,8 +113,6 @@ export interface UseSendDeps {
   unlistenRef: MutableRefObject<UnlistenFn | null>;
   compactingRef: MutableRefObject<boolean>;
   pendingKeepChatBubblesRef: MutableRefObject<number | null>;
-  dissolvingIdsRef: MutableRefObject<string[]>;
-  dissolveTimerRef: MutableRefObject<number | null>;
   /** recommendCompact toast 冷却（ms epoch） */
   lastRecommendCompactToastAtRef: MutableRefObject<number>;
   // setters
@@ -132,7 +130,6 @@ export interface UseSendDeps {
   setAttachments: Dispatch<SetStateAction<ChatAttachment[]>>;
   setSessionPendingInterrupts: Dispatch<SetStateAction<PendingInterrupt[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
-  setDissolvingIds: Dispatch<SetStateAction<string[]>>;
   showTransientToast: ShowToastFn;
   /** 主会话整轮未结束（含 HITL 停顿）；供队列软边界 */
   turnInFlightRef: MutableRefObject<boolean>;
@@ -199,8 +196,6 @@ export function useSend(deps: UseSendDeps) {
         unlistenRef,
         compactingRef,
         pendingKeepChatBubblesRef,
-        dissolvingIdsRef,
-        dissolveTimerRef,
         lastRecommendCompactToastAtRef,
         setMessages,
         setSessionId,
@@ -216,7 +211,6 @@ export function useSend(deps: UseSendDeps) {
         setAttachments,
         setSessionPendingInterrupts,
         setCurrentTurnId,
-        setDissolvingIds,
         showTransientToast,
         turnInFlightRef,
         setTurnInFlight,
@@ -263,20 +257,6 @@ export function useSend(deps: UseSendDeps) {
         !activeProvider
       ) {
         return false;
-      }
-
-      // flush any pending dissolve before sending
-      if (dissolveTimerRef.current != null) {
-        window.clearTimeout(dissolveTimerRef.current);
-        dissolveTimerRef.current = null;
-      }
-      if (dissolvingIdsRef.current.length > 0) {
-        const cutId = dissolvingIdsRef.current[0];
-        setDissolvingIds([]);
-        setMessages((prev) => {
-          const cut = prev.findIndex((m) => m.id === cutId);
-          return cut < 0 ? prev : prev.slice(0, cut);
-        });
       }
 
       // resolve /skill and @mentions

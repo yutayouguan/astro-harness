@@ -284,7 +284,6 @@ export default function App() {
     resumeStream,
     regenerateMessage,
     editUserMessage,
-    deleteMessage,
     branchMessage,
     onUiAction,
     openSessionFromFilespace,
@@ -1644,8 +1643,6 @@ export default function App() {
                       }}
                       onRegenerateMessage={regenerateMessage}
                       onEditUserMessage={editUserMessage}
-                      dissolvingIds={chat.dissolvingIds}
-                      onDeleteMessage={deleteMessage}
                       onBranchMessage={(id) => void branchMessage(id)}
                       onSlashAction={handleSlashAction}
                       contextUsage={chat.contextUsage}
