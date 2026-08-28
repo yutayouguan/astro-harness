@@ -72,7 +72,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、AgentThreadChanged 等 RPC。 |
 | `crates/agent-protocol` | `protocol` | Core 领域事件协议：`Event`、`EventMsg`、`TurnItem`、`Submission`。运行时唯一事件格式。 |
 | `crates/agent-rollout` | `rollout` | JSONL append-only 历史记录：`RolloutRecorder`、`PersistencePolicy`、`reconstruct` 重建。rollout 是线程历史的权威事实源。 |
-| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回、rollout 投影重建。 |
+| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v23，FTS5）— 消息、会话、billing、FTS 召回、rollout 投影重建。 |
 | `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源注册文件，MIME 分类。 |
 | `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
 | `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`cron.db`）、ticker（每 30s，`current_thread` runtime）。 |
@@ -205,7 +205,7 @@ Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`Permi
     config.json        # AgentRuntimeConfig
     tools_enabled.json # tool gate 热加载
   sessions/
-    state.db           # 消息、会话、FTS5（schema v17）
+    state.db           # 消息、会话、FTS5（schema v23）
     artifacts.db       # 文件空间索引
     knowledge.db       # 知识内容 FTS
   cache/
