@@ -15,8 +15,7 @@ const terminalActivity: ChatActivity = {
   input: '{"operation":"list","path":"."}',
   output:
     "已读取 **当前目录**。可继续查看 `00-README.md`，或按主题生成摘要。\n\n- 14 篇 Markdown\n- 2 个代码目录",
-  status: "done",
-  durationSec: 3.6,
+  status: "running",
 };
 
 const groupedActivities: ChatActivity[] = [
