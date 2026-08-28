@@ -152,6 +152,35 @@ impl Registry {
         self.providers.insert("minimax".to_string(), provider);
     }
 
+    /// 注册 OpenAI 兼容 provider（Chat + 媒体）的 Responses API 变体。
+    pub fn register_compat_responses_with_media<Ext>(
+        &mut self,
+        id: &'static str,
+        api_key: &str,
+        base_url: Option<&str>,
+        model: &str,
+    ) where
+        Ext: crate::compat::OpenAICompatible
+            + crate::traits::ProviderExt
+            + crate::traits::Capabilities<
+                Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>,
+                ImageGen = crate::traits::Capable<crate::compat::media::CompatImageGenModel>,
+                TTS = crate::traits::Capable<crate::compat::media::CompatTTSModel>,
+            > + Default
+            + Copy
+            + 'static,
+    {
+        use crate::traits::FromClient;
+        let client = self.make_client(api_key, base_url, Ext::default());
+        let completion = crate::compat::OpenAIResponsesModel::<Ext>::from_client(&client, model);
+        let provider = DynProvider::new(id, id)
+            .with_completion(completion)
+            .with_embedding(client.embedding_model(model))
+            .with_image_gen(client.image_model(model))
+            .with_tts(client.tts_model(model));
+        self.providers.insert(id.to_string(), provider);
+    }
+
     /// 注册 OpenAI 兼容 provider（仅 Chat）的 Responses API 变体。
     pub fn register_openai_compat_responses<Ext>(
         &mut self,

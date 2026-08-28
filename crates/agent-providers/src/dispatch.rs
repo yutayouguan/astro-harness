@@ -499,6 +499,10 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         "moonshot" => register_compat::<crate::impls::moonshot::Moonshot>(reg, key, base, model),
         "ollama" => register_compat::<crate::impls::ollama::Ollama>(reg, key, base, model),
         "nvidia" => register_compat::<crate::impls::nvidia::Nvidia>(reg, key, base, model),
+        "bailian" if responses => reg
+            .register_compat_responses_with_media::<crate::impls::bailian::Bailian>(
+                "bailian", key, base, model,
+            ),
         "bailian" => register_media::<crate::impls::bailian::Bailian>(reg, key, base, model),
         "volcengine" => {
             register_media::<crate::impls::volcengine::Volcengine>(reg, key, base, model)
@@ -634,7 +638,7 @@ mod tests {
     #[test]
     fn responses_default_for_supported_providers() {
         let config = ProviderConfig::default();
-        for id in ["openai", "deepseek", "minimax", "azure", "mimo"] {
+        for id in ["openai", "deepseek", "minimax", "azure", "bailian", "mimo"] {
             assert!(
                 use_responses(id, &config),
                 "{id} should default to Responses API"

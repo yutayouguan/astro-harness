@@ -289,7 +289,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "qwen-asr-v2.5",
         default_embedding_model: "qwen-embedding-v3",
-        supports_responses: false,
+        supports_responses: true,
     },
     ProviderProfile {
         id: "nvidia",
@@ -734,6 +734,7 @@ mod tests {
         assert!(resolve("deepseek").unwrap().supports_responses);
         assert!(resolve("minimax").unwrap().supports_responses);
         assert!(resolve("azure").unwrap().supports_responses);
+        assert!(resolve("bailian").unwrap().supports_responses);
         assert!(!resolve("claude").unwrap().supports_responses);
         assert!(!resolve("google").unwrap().supports_responses);
     }
