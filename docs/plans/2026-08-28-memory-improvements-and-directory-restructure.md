@@ -1,7 +1,13 @@
 # Memory Improvements & Directory Restructure Plan
 
-> 日期：2026-08-28
+> 日期：2026-08-28 | **状态：已实施**
 > 来源：Codex 对标分析后的三个借鉴点 + `~/.astro/` 目录整理
+>
+> 实施结果：
+> - A1 Citation tracking → `crates/agent-memory/src/citation.rs`（companion 文件 `memory/usage.json`）
+> - A2 Baselines → `crates/agent-memory/src/dreaming/mod.rs`（`workspace/memory/baselines/`）
+> - A3 Polluted state → `AgentDreamStats.memory_hash + polluted` 字段
+> - B 目录重组 → DB 归拢到 `data/`，记忆归拢到 `memory/`，workspace 保持不变
 
 ---
 
