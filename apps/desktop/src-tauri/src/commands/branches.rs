@@ -95,9 +95,10 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
     }
 
     let lineage = {
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         store
             .session_lineage_graph(&current_session_id)
+            .await
             .map_err(|error| error.to_string())?
     };
 
@@ -126,7 +127,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
         .collect::<HashSet<_>>();
 
     let (mut nodes, anchors, branch_heads, spawn_anchors, branch_count, side_count) = {
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         let mut nodes = Vec::new();
         let mut anchors: HashMap<String, Vec<TurnAnchor>> = HashMap::new();
         let mut branch_heads = HashMap::new();
@@ -141,6 +142,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
         for session_node in &chat_sessions {
             let metadata = store
                 .get_session(&session_node.session_id)
+                .await
                 .map_err(|error| error.to_string())?;
             let model = metadata.as_ref().and_then(|session| session.model.clone());
             let is_ephemeral = metadata
@@ -159,6 +161,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                 .unwrap_or_else(|| "Branch".into());
             let messages = store
                 .get_messages(&session_node.session_id)
+                .await
                 .map_err(|error| error.to_string())?;
             let message_by_id = messages
                 .iter()
@@ -274,7 +277,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
         // spawn 时复制的历史前缀就是 Agent 的发起点，读它的分叉锚点比按创建时间猜更准。
         let mut spawn_anchors = HashMap::new();
         for (_, thread) in &threads {
-            let Ok(Some(session)) = store.get_session(&thread.session_id) else {
+            let Ok(Some(session)) = store.get_session(&thread.session_id).await else {
                 continue;
             };
             if let (Some(parent), Some(message_id)) =

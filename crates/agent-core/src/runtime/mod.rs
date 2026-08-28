@@ -209,6 +209,7 @@ struct RuntimeIoBindings {
 struct ThreadControls {
     pause: Arc<providers::PauseControl>,
     hitl_gate: Arc<crate::HitlGate>,
+    approval_cache: Arc<crate::control::approval_cache::SessionApprovalCache>,
 }
 
 #[derive(Clone)]
@@ -388,8 +389,14 @@ impl Session {
             .map_err(|_| RuntimeIoBindError::AlreadyBound)
     }
 
-    /// Returns the stable pause and HITL controls used by actor-submitted turns.
-    pub fn ensure_thread_controls(&self) -> (Arc<providers::PauseControl>, Arc<crate::HitlGate>) {
+    /// Returns the stable pause, HITL, and approval cache controls used by actor-submitted turns.
+    pub fn ensure_thread_controls(
+        &self,
+    ) -> (
+        Arc<providers::PauseControl>,
+        Arc<crate::HitlGate>,
+        Arc<crate::control::approval_cache::SessionApprovalCache>,
+    ) {
         let mut controls = self
             .thread_controls
             .lock()
@@ -397,8 +404,15 @@ impl Session {
         let controls = controls.get_or_insert_with(|| ThreadControls {
             pause: providers::PauseControl::new(),
             hitl_gate: crate::HitlGate::new(self.session_id.clone()),
+            approval_cache: crate::control::approval_cache::SessionApprovalCache::new(
+                &self.session_id,
+            ),
         });
-        (Arc::clone(&controls.pause), Arc::clone(&controls.hitl_gate))
+        (
+            Arc::clone(&controls.pause),
+            Arc::clone(&controls.hitl_gate),
+            Arc::clone(&controls.approval_cache),
+        )
     }
 
     pub fn set_thread_provider_options(&self, options: ThreadProviderOptions) {
@@ -614,12 +628,14 @@ impl Session {
     pub async fn set_current_turn_id(&self, turn_id: impl Into<String>) {
         let sub_id = turn_id.into();
         let mut state = self.lock_state();
-        let turn_context = Arc::new(TurnContext::new(
+        let workspace_roots = state.workspace_roots.clone();
+        let turn_context = Arc::new(TurnContext::new_with_roots(
             sub_id,
             state.turn.current_turn(),
             state.interaction_mode,
             state.permission_profile.clone(),
             state.project_root.clone(),
+            workspace_roots,
         ));
         state
             .turn
@@ -630,12 +646,14 @@ impl Session {
     #[doc(hidden)]
     pub async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
         let state = self.lock_state();
-        Arc::new(TurnContext::new(
+        let workspace_roots = state.workspace_roots.clone();
+        Arc::new(TurnContext::new_with_roots(
             sub_id,
             state.turn.current_turn().saturating_add(1),
             state.interaction_mode,
             state.permission_profile.clone(),
             state.project_root.clone(),
+            workspace_roots,
         ))
     }
 
@@ -1079,6 +1097,10 @@ impl Session {
         self.lock_state().project_root.clone()
     }
 
+    pub fn workspace_roots(&self) -> Vec<PathBuf> {
+        self.lock_state().workspace_roots.clone()
+    }
+
     pub async fn project_root_snapshot(&self) -> Option<PathBuf> {
         self.lock_state().project_root.clone()
     }
@@ -1487,6 +1509,124 @@ impl Session {
     /// 解析当前 Agent 工作区目录，供工具上下文注入。
     fn resolve_workspace_dir(&self) -> PathBuf {
         self.workspace_dir.clone()
+    }
+
+    // ── Prompt context persistence ──────────────────────────
+
+    /// Return a clone of the current prompt context event history.
+    pub fn prompt_context_history(
+        &self,
+    ) -> Vec<crate::prompt::context_state::PromptContextEvent> {
+        self.lock_state().prompt_context_history.clone()
+    }
+
+    /// Persist the prompt context snapshot to the rollout if it changed since
+    /// the last persisted version.
+    pub async fn persist_prompt_context_if_changed(
+        &self,
+        prompt: &crate::prompt::PromptContract,
+    ) {
+        let new_snapshot = match crate::prompt::context_state::snapshot(prompt) {
+            Ok(s) => s,
+            Err(err) => {
+                tracing::warn!(%err, "failed to serialize prompt context snapshot");
+                return;
+            }
+        };
+        let rollout_item = {
+            let mut state = self.lock_state();
+            let before_user = state
+                .history
+                .iter()
+                .filter(|m| m.role == types::message::Role::User)
+                .count();
+            let previous = state.prompt_context_snapshot.as_ref();
+            let rollout_item = crate::prompt::context_state::rollout_update(
+                previous,
+                &new_snapshot,
+                before_user,
+            );
+            let model_messages =
+                crate::prompt::context_state::model_updates(previous, &new_snapshot);
+            state.prompt_context_snapshot = Some(new_snapshot);
+            if !model_messages.is_empty() {
+                state.prompt_context_history.push(
+                    crate::prompt::context_state::PromptContextEvent::new(
+                        before_user,
+                        model_messages,
+                    ),
+                );
+            }
+            rollout_item
+        };
+        if let Some(item) = rollout_item {
+            if let Some(bindings) = self.runtime_io.get() {
+                if let Err(err) = bindings.rollout.record(vec![item]).await {
+                    tracing::warn!(%err, "failed to persist prompt context rollout item");
+                }
+            }
+        }
+    }
+
+    /// Reset prompt context history after a mid-run compaction, keeping only
+    /// the compacted summary as the new baseline.
+    pub async fn rebase_prompt_context_after_compaction(&self, summary_text: &str) {
+        // Build a minimal prompt contract from the summary to create a fresh snapshot.
+        let rebased_prompt =
+            crate::prompt::PromptContract::from_base_instructions(summary_text);
+        let rebased_context = rebased_prompt.context.clone();
+        let rebased_snapshot =
+            match crate::prompt::context_state::snapshot(&rebased_prompt) {
+                Ok(s) => s,
+                Err(err) => {
+                    tracing::warn!(%err, "failed to create rebased prompt context snapshot");
+                    return;
+                }
+            };
+        {
+            let mut state = self.lock_state();
+            state.prompt_context_snapshot = Some(rebased_snapshot.clone());
+            state.prompt_context_history = if rebased_context.is_empty() {
+                Vec::new()
+            } else {
+                vec![crate::prompt::context_state::PromptContextEvent::new(
+                    0,
+                    rebased_context,
+                )]
+            };
+        }
+        if let Some(bindings) = self.runtime_io.get() {
+            let compacted_item =
+                RolloutItem::Compacted(serde_json::json!({ "reason": "mid-run-summary" }));
+            let world_state_item = crate::prompt::context_state::rollout_update(
+                None,
+                &rebased_snapshot,
+                0,
+            );
+            let mut items = vec![compacted_item];
+            if let Some(ws) = world_state_item {
+                items.push(ws);
+            }
+            if let Err(err) = bindings.rollout.record(items).await {
+                tracing::warn!(%err, "failed to persist rebased prompt context");
+            }
+        }
+    }
+
+    /// Restore prompt context state from previously persisted rollout items.
+    pub fn restore_prompt_context_from_rollout(&self, items: &[RolloutItem]) {
+        let restored = crate::prompt::context_state::restore(items);
+        let mut state = self.lock_state();
+        state.prompt_context_snapshot = restored.snapshot;
+        state.prompt_context_history = restored.history;
+    }
+
+    /// Return the last `n` messages from the conversation history.
+    pub fn tail_history(&self, n: usize) -> Vec<types::message::Message> {
+        let state = self.lock_state();
+        let history = &state.history;
+        let start = history.len().saturating_sub(n);
+        history[start..].to_vec()
     }
 }
 
@@ -1993,7 +2133,11 @@ fn tool_writes_disk(name: &str, args: &Value) -> bool {
 #[derive(Debug)]
 pub enum TurnResult {
     /// 准备就绪，携带轮次编号与 system prompt，等待 LLM 响应。
-    Continue { turn: usize, system_prompt: String },
+    Continue {
+        turn: usize,
+        system_prompt: String,
+        prompt: crate::prompt::PromptContract,
+    },
     /// Input was queued into the currently active regular task.
     Steered { turn_id: String },
     /// 模型请求的工具名称列表（由 streaming 层填充）。

@@ -203,6 +203,15 @@ impl CronRunDb {
         Ok(row)
     }
 
+    pub async fn get_by_session_id(&self, session_id: &str) -> anyhow::Result<Option<CronRunRow>> {
+        let row = sqlx::query("SELECT * FROM cron_runs WHERE session_id = ?1 LIMIT 1")
+            .bind(session_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|r| row_to_cron_run(&r));
+        Ok(row)
+    }
+
     pub async fn delete(&self, id: &str) -> anyhow::Result<bool> {
         let result = sqlx::query("DELETE FROM cron_runs WHERE id = ?1")
             .bind(id)

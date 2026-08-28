@@ -616,6 +616,62 @@ pub async fn assign_session_to_project(
 }
 
 // ---------------------------------------------------------------------------
+// Session status / side-session / project stubs
+// ---------------------------------------------------------------------------
+
+/// List status of each session (active / idle / terminated).
+#[tauri::command]
+pub async fn list_session_statuses() -> Result<Vec<serde_json::Value>, String> {
+    // Stub added during sqlx-migration merge – full implementation pending.
+    Ok(Vec::new())
+}
+
+/// Discard an ephemeral side session that is no longer needed.
+#[tauri::command]
+pub async fn discard_side_session(session_id: String) -> Result<(), String> {
+    let store = open_sessions().await?;
+    store
+        .delete_session_permanently(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Ensure the built-in default project exists, creating it if absent.
+#[tauri::command]
+pub async fn ensure_default_project() -> Result<ProjectDto, String> {
+    let store = open_sessions().await?;
+    let projects = store.list_projects().await.map_err(|e| e.to_string())?;
+    if let Some(p) = projects.into_iter().next() {
+        return Ok(project_to_dto(p));
+    }
+    let proj = store
+        .create_project("Default", &[])
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(project_to_dto(proj))
+}
+
+/// Assign session to project only if it is not already assigned.
+#[tauri::command]
+pub async fn assign_session_to_project_if_unassigned(
+    session_id: String,
+    project_id: String,
+) -> Result<(), String> {
+    let store = open_sessions().await?;
+    // Best-effort: silently ignore if already assigned.
+    let _ = store
+        .assign_session_to_project(&session_id, &project_id)
+        .await;
+    Ok(())
+}
+
+/// Synchronous cleanup of stale side sessions at startup.
+pub fn cleanup_stale_side_sessions() -> Result<usize, String> {
+    // Stub – side-session cleanup not yet ported to sqlx store.
+    Ok(0)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

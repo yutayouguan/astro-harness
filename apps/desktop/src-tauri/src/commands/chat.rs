@@ -124,6 +124,14 @@ pub enum ChatStreamEvent {
     Citations {
         citations: String,
     },
+    AsyncMessage {
+        id: String,
+        content: String,
+    },
+    ToolOutputDelta {
+        id: String,
+        delta: String,
+    },
     Done,
     Error {
         message: String,
@@ -586,6 +594,8 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         // Initial submissions are not queued steer messages and therefore do
         // not participate in client-side optimistic delivery reconciliation.
         client_message_id: String::new(),
+        project_id: String::new(),
+        workspace_roots: vec![],
     };
 
     let bridge = managed_bridge(&app).inner().clone();

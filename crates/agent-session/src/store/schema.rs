@@ -68,8 +68,8 @@ CREATE TABLE IF NOT EXISTS messages (
     reasoning TEXT,
     reasoning_content TEXT,
     reasoning_details TEXT,
-    codex_reasoning_items TEXT,
-    codex_message_items TEXT
+    reasoning_items TEXT,
+    message_items TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);

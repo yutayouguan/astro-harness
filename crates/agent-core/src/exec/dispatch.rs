@@ -172,6 +172,7 @@ async fn active_root_runtime_material_with_upgrade_hook(
             inherited_skill_config: session.skill_config_overrides(),
             chat_targets: session.chat_targets(),
             project_root: session.project_root(),
+            workspace_roots: session.workspace_roots(),
             hook_runtime: Some(session.hook_runtime()),
             hook_bus: Some(session.hook_bus()),
         };
@@ -954,6 +955,7 @@ fn build_runtime_request(
         skills_config: skills,
         chat_targets: material.chat_targets,
         project_root: material.project_root,
+        workspace_roots: material.workspace_roots,
         hook_runtime: material.hook_runtime,
         hook_bus: material.hook_bus,
         interrupt_message,
@@ -1325,8 +1327,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                 reasoning: message.reasoning,
                 reasoning_content: message.reasoning_content,
                 reasoning_details: message.reasoning_details,
-                codex_reasoning_items: message.codex_reasoning_items,
-                codex_message_items: message.codex_message_items,
+                reasoning_items: message.reasoning_items,
+                message_items: message.message_items,
                 media_json: message.media_json,
             })
             .collect();
@@ -1796,6 +1798,7 @@ mod tests {
                     api_mode: String::new(),
                 }],
                 project_root: None,
+                workspace_roots: Vec::new(),
                 hook_runtime: None,
                 hook_bus: None,
             },
@@ -1849,8 +1852,8 @@ mod tests {
                 reasoning: Some("summary"),
                 reasoning_content: Some("private reasoning"),
                 reasoning_details: Some(serde_json::json!({"phase":"analysis"})),
-                codex_reasoning_items: Some(serde_json::json!([{"type":"reasoning"}])),
-                codex_message_items: Some(serde_json::json!([{"type":"message"}])),
+                reasoning_items: Some(serde_json::json!([{"type":"reasoning"}])),
+                message_items: Some(serde_json::json!([{"type":"message"}])),
                 media_json: Some(r#"[{"kind":"image","path":"artifact.png"}]"#),
                 ..session::NewMessage::empty(&child.session_id, "assistant")
             })
@@ -1878,8 +1881,8 @@ mod tests {
         );
         assert!(detail.messages[1].tool_calls.is_some());
         assert!(detail.messages[1].reasoning_details.is_some());
-        assert!(detail.messages[1].codex_reasoning_items.is_some());
-        assert!(detail.messages[1].codex_message_items.is_some());
+        assert!(detail.messages[1].reasoning_items.is_some());
+        assert!(detail.messages[1].message_items.is_some());
         assert!(detail.messages[1].media_json.is_some());
         assert_eq!(detail.messages[2].role, "tool");
         assert_eq!(detail.messages[2].tool_call_id.as_deref(), Some("call-1"));
@@ -6294,6 +6297,7 @@ enabled = true
                     inherited_skill_config: vec![(PathBuf::from("parent/SKILL.md"), true)],
                     chat_targets: Vec::new(),
                     project_root: Some(project),
+                    workspace_roots: Vec::new(),
                     hook_runtime: None,
                     hook_bus: None,
                 },

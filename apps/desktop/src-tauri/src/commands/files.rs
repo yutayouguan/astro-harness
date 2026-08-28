@@ -50,13 +50,14 @@ fn resolve_memory_path(path: &str) -> Result<std::path::PathBuf, String> {
 }
 
 /// 读取项目 roots。项目文件 API 仅使用这些 roots，不复用记忆沙箱边界。
-fn project_roots(project_id: &str) -> Result<Vec<std::path::PathBuf>, String> {
+async fn project_roots(project_id: &str) -> Result<Vec<std::path::PathBuf>, String> {
     let project_id = project_id.trim();
     if project_id.is_empty() {
         return Err("project_id 不能为空".into());
     }
-    let project = open_sessions()?
+    let project = open_sessions().await?
         .get_project(project_id)
+        .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "项目不存在".to_string())?;
     if project.roots.is_empty() {
@@ -346,7 +347,7 @@ pub async fn project_list_files(
     project_id: String,
     path: String,
 ) -> Result<Vec<FileEntryDto>, String> {
-    let roots = project_roots(&project_id)?;
+    let roots = project_roots(&project_id).await?;
     let directory = resolve_project_path(&roots, &path)?;
     if !directory.is_dir() {
         return Err("路径不是目录".into());
@@ -395,7 +396,7 @@ pub async fn project_list_files(
 /// 读取项目内 UTF-8 文本文件。
 #[tauri::command]
 pub async fn project_read_file(project_id: String, path: String) -> Result<String, String> {
-    let roots = project_roots(&project_id)?;
+    let roots = project_roots(&project_id).await?;
     let path = resolve_project_path(&roots, &path)?;
     if path.is_dir() {
         return Err("路径是目录".into());
@@ -410,7 +411,7 @@ pub async fn project_write_file(
     path: String,
     content: String,
 ) -> Result<(), String> {
-    let roots = project_roots(&project_id)?;
+    let roots = project_roots(&project_id).await?;
     let path = resolve_project_path(&roots, &path)?;
     if path.is_dir() {
         return Err("不能写入目录".into());
@@ -429,7 +430,7 @@ pub async fn project_create_file(
     name: String,
 ) -> Result<FileEntryDto, String> {
     let name = sanitize_entry_name(&name)?;
-    let roots = project_roots(&project_id)?;
+    let roots = project_roots(&project_id).await?;
     let parent = resolve_project_path(&roots, &parent)?;
     if !parent.is_dir() {
         return Err("父路径不是目录".into());
@@ -449,7 +450,7 @@ pub async fn project_create_directory(
     name: String,
 ) -> Result<FileEntryDto, String> {
     let name = sanitize_entry_name(&name)?;
-    let roots = project_roots(&project_id)?;
+    let roots = project_roots(&project_id).await?;
     let parent = resolve_project_path(&roots, &parent)?;
     if !parent.is_dir() {
         return Err("父路径不是目录".into());
@@ -467,7 +468,7 @@ pub async fn project_rename_path(
     new_name: String,
 ) -> Result<FileEntryDto, String> {
     let new_name = sanitize_entry_name(&new_name)?;
-    let roots = project_roots(&project_id)?;
+    let roots = project_roots(&project_id).await?;
     let source = resolve_project_path(&roots, &path)?;
     if !source.exists() {
         return Err("路径不存在".into());
@@ -494,7 +495,7 @@ pub async fn project_rename_path(
 /// 将项目内路径移入系统废纸篓；项目 roots 本身不可删除。
 #[tauri::command]
 pub async fn project_trash_paths(project_id: String, paths: Vec<String>) -> Result<u32, String> {
-    let roots = project_roots(&project_id)?;
+    let roots = project_roots(&project_id).await?;
     let mut resolved = Vec::with_capacity(paths.len());
     for path in paths {
         let path = resolve_project_path(&roots, &path)?;
@@ -570,7 +571,7 @@ pub async fn open_path_externally(path: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn open_path_in_vscode(path: String, project_id: Option<String>) -> Result<(), String> {
     let resolved = if let Some(project_id) = project_id.filter(|id| !id.trim().is_empty()) {
-        let roots = project_roots(&project_id)?;
+        let roots = project_roots(&project_id).await?;
         resolve_project_path(&roots, &path)?
     } else {
         resolve_memory_path(&path)?

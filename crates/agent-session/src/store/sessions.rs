@@ -33,6 +33,8 @@ impl SessionStore {
             tool_call_count: r.get(9),
             archived_at: r.get(10),
             pinned_at: r.get(11),
+            branch_kind: None,
+            branch_parent_message_id: None,
         }))
     }
 

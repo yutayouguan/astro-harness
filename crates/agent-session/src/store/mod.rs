@@ -73,8 +73,8 @@ pub struct NewMessage<'a> {
     pub reasoning: Option<&'a str>,
     pub reasoning_content: Option<&'a str>,
     pub reasoning_details: Option<Value>,
-    pub codex_reasoning_items: Option<Value>,
-    pub codex_message_items: Option<Value>,
+    pub reasoning_items: Option<Value>,
+    pub message_items: Option<Value>,
     /// 结构化媒体 JSON 数组（`MediaAsset[]`）；空则不写列。
     pub media_json: Option<&'a str>,
 }
@@ -95,8 +95,8 @@ impl<'a> NewMessage<'a> {
             reasoning: None,
             reasoning_content: None,
             reasoning_details: None,
-            codex_reasoning_items: None,
-            codex_message_items: None,
+            reasoning_items: None,
+            message_items: None,
             media_json: None,
         }
     }
@@ -119,8 +119,8 @@ pub struct StoredMessage {
     pub reasoning: Option<String>,
     pub reasoning_content: Option<String>,
     pub reasoning_details: Option<Value>,
-    pub codex_reasoning_items: Option<Value>,
-    pub codex_message_items: Option<Value>,
+    pub reasoning_items: Option<Value>,
+    pub message_items: Option<Value>,
     /// 结构化媒体 JSON 数组字符串。
     pub media_json: Option<String>,
 }
@@ -140,6 +140,10 @@ pub struct StoredSession {
     pub tool_call_count: i64,
     pub archived_at: Option<f64>,
     pub pinned_at: Option<f64>,
+    /// Branch type: `"branch"`, `"side"`, `"agent"`, or `None` for the root session.
+    pub branch_kind: Option<String>,
+    /// The message id in the parent session where this branch forked from.
+    pub branch_parent_message_id: Option<i64>,
 }
 
 /// FTS 搜索命中。
@@ -223,6 +227,38 @@ pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Branch / lineage types (stub — full implementation pending sqlx migration)
+// ---------------------------------------------------------------------------
+
+/// A single user-turn anchor within a session lineage node.
+#[derive(Debug, Clone)]
+pub struct SessionTurnNode {
+    pub user_message_id: i64,
+    pub turn_index: i64,
+    pub content: Option<String>,
+    pub completed: bool,
+}
+
+/// One session in the lineage graph.
+#[derive(Debug, Clone)]
+pub struct SessionLineageNode {
+    pub session_id: String,
+    pub parent_session_id: Option<String>,
+    pub parent_message_id: Option<i64>,
+    pub inherited_turn_count: i64,
+    pub legacy_metadata: bool,
+    pub branch_created_at: Option<f64>,
+    pub turns: Vec<SessionTurnNode>,
+}
+
+/// The complete lineage graph for a session tree.
+#[derive(Debug, Clone)]
+pub struct SessionLineageGraph {
+    pub root_session_id: String,
+    pub nodes: Vec<SessionLineageNode>,
+}
+
 /// 单库会话存储：元数据、富消息行与消息级 FTS。
 pub struct SessionStore {
     pub(crate) pool: SqlitePool,
@@ -285,6 +321,48 @@ impl SessionStore {
             Some(r) => Ok(r.get::<i32, _>(0)),
             None => Err(anyhow!("schema_version table is empty")),
         }
+    }
+
+    /// Build the lineage graph for a session.
+    ///
+    /// Stub implementation: returns only the requested session as a single node.
+    /// Full branch traversal pending sqlx migration of the branches module.
+    pub async fn session_lineage_graph(&self, session_id: &str) -> Result<SessionLineageGraph> {
+        let session = self
+            .get_session(session_id)
+            .await?
+            .ok_or_else(|| anyhow!("session_lineage_graph: session not found"))?;
+        let messages = self.get_messages(session_id).await?;
+        let mut turns = Vec::new();
+        let mut turn_index = 0i64;
+        for msg in &messages {
+            if msg.role == "user" {
+                let completed = messages
+                    .iter()
+                    .skip_while(|m| m.id != msg.id)
+                    .skip(1)
+                    .any(|m| m.role == "assistant");
+                turns.push(SessionTurnNode {
+                    user_message_id: msg.id,
+                    turn_index,
+                    content: msg.content.clone(),
+                    completed,
+                });
+                turn_index += 1;
+            }
+        }
+        Ok(SessionLineageGraph {
+            root_session_id: session.id.clone(),
+            nodes: vec![SessionLineageNode {
+                session_id: session.id,
+                parent_session_id: session.parent_session_id,
+                parent_message_id: session.branch_parent_message_id,
+                inherited_turn_count: 0,
+                legacy_metadata: false,
+                branch_created_at: Some(session.started_at),
+                turns,
+            }],
+        })
     }
 }
 

@@ -1640,7 +1640,7 @@ async fn run_request(
     let prepared_system_prompt = if request.consume_mailbox {
         let turn = session.prepare_mailbox_turn().await?;
         let system_prompt = match turn {
-            TurnResult::Continue { system_prompt, .. } => system_prompt,
+            TurnResult::Continue { prompt, .. } => prompt,
             TurnResult::BudgetExhausted => anyhow::bail!("conversation turn budget exhausted"),
             TurnResult::Interrupted => anyhow::bail!("follow-up turn interrupted while preparing"),
             other => anyhow::bail!("unexpected follow-up preparation result: {other:?}"),

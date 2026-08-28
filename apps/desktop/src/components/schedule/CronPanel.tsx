@@ -1320,8 +1320,9 @@ export default function CronPanel({
                 type="button"
                 className="cron-toolbar-action cron-toolbar-action--primary cron-toolbar-action--template"
                 onClick={() => {
+                  const nextOpen = activeTab !== "jobs" || !showTemplates;
                   setActiveTab("jobs");
-                  setShowTemplates((value) => !value);
+                  setShowTemplates(nextOpen);
                 }}
                 aria-expanded={showTemplates}
               >
@@ -1336,7 +1337,7 @@ export default function CronPanel({
               <nav className="cron-tabs" aria-label={t("page.cron.title")}>
                 <button
                   type="button"
-                  className={`cron-tab ${activeTab === "jobs" ? "is-active" : ""}`}
+                  className="cron-tab is-active"
                   onClick={() => setActiveTab("jobs")}
                 >
                   <ListTodo size={15} strokeWidth={2.25} aria-hidden />
@@ -1344,8 +1345,11 @@ export default function CronPanel({
                 </button>
                 <button
                   type="button"
-                  className={`cron-tab ${activeTab === "history" ? "is-active" : ""}`}
-                  onClick={() => setActiveTab("history")}
+                  className="cron-tab"
+                  onClick={() => {
+                    setShowTemplates(false);
+                    setActiveTab("history");
+                  }}
                 >
                   <History size={15} strokeWidth={2.25} aria-hidden />
                   {t("cron.tab.history")}
@@ -1389,7 +1393,7 @@ export default function CronPanel({
               <nav className="cron-tabs" aria-label={t("page.cron.title")}>
                 <button
                   type="button"
-                  className={`cron-tab ${activeTab === "jobs" ? "is-active" : ""}`}
+                  className="cron-tab"
                   onClick={() => setActiveTab("jobs")}
                 >
                   <ListTodo size={15} strokeWidth={2.25} aria-hidden />
@@ -1397,7 +1401,7 @@ export default function CronPanel({
                 </button>
                 <button
                   type="button"
-                  className={`cron-tab ${activeTab === "history" ? "is-active" : ""}`}
+                  className="cron-tab is-active"
                   onClick={() => setActiveTab("history")}
                 >
                   <History size={15} strokeWidth={2.25} aria-hidden />

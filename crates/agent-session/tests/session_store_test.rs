@@ -54,8 +54,8 @@ async fn append_and_reload_tool_calls_and_reasoning() {
             reasoning: Some("think"),
             reasoning_content: None,
             reasoning_details: None,
-            codex_reasoning_items: None,
-            codex_message_items: None,
+            reasoning_items: None,
+            message_items: None,
             media_json: None,
         })
         .await.unwrap();
@@ -73,8 +73,8 @@ async fn append_and_reload_tool_calls_and_reasoning() {
             reasoning: None,
             reasoning_content: None,
             reasoning_details: None,
-            codex_reasoning_items: None,
-            codex_message_items: None,
+            reasoning_items: None,
+            message_items: None,
             media_json: None,
         })
         .await.unwrap();
@@ -536,8 +536,8 @@ async fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                codex_reasoning_items TEXT,
-                codex_message_items TEXT
+                reasoning_items TEXT,
+                message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (13);
              INSERT INTO sessions (
@@ -929,8 +929,8 @@ async fn v13_schema_migrates_to_v14_without_data_loss() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                codex_reasoning_items TEXT,
-                codex_message_items TEXT
+                reasoning_items TEXT,
+                message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (13);
              INSERT INTO sessions (
@@ -1005,8 +1005,8 @@ async fn schema_v13_to_v14_preserves_chat_and_adds_compressed_content() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                codex_reasoning_items TEXT,
-                codex_message_items TEXT
+                reasoning_items TEXT,
+                message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (13);
              INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
@@ -1067,8 +1067,8 @@ async fn stamped_v14_without_compressed_content_self_heals() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                codex_reasoning_items TEXT,
-                codex_message_items TEXT
+                reasoning_items TEXT,
+                message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (14);
              INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
@@ -1177,8 +1177,8 @@ async fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries()
             reasoning: Some("visible reasoning"),
             reasoning_content: Some("provider reasoning"),
             reasoning_details: Some(serde_json::json!({"detail": true})),
-            codex_reasoning_items: Some(serde_json::json!([{"type": "reasoning"}])),
-            codex_message_items: Some(serde_json::json!([{"type": "message"}])),
+            reasoning_items: Some(serde_json::json!([{"type": "reasoning"}])),
+            message_items: Some(serde_json::json!([{"type": "message"}])),
             ..NewMessage::empty("source", "assistant")
         })
         .await.unwrap();
@@ -1255,8 +1255,8 @@ async fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries()
         assert_eq!(actual.reasoning, expected.reasoning);
         assert_eq!(actual.reasoning_content, expected.reasoning_content);
         assert_eq!(actual.reasoning_details, expected.reasoning_details);
-        assert_eq!(actual.codex_reasoning_items, expected.codex_reasoning_items);
-        assert_eq!(actual.codex_message_items, expected.codex_message_items);
+        assert_eq!(actual.reasoning_items, expected.reasoning_items);
+        assert_eq!(actual.message_items, expected.message_items);
         assert_eq!(actual.media_json, expected.media_json);
     }
     assert!(store.get_messages("none").await.unwrap().is_empty());
@@ -2036,8 +2036,8 @@ async fn v14_to_v15_adds_media_json_without_data_loss() {
                 reasoning TEXT,
                 reasoning_content TEXT,
                 reasoning_details TEXT,
-                codex_reasoning_items TEXT,
-                codex_message_items TEXT
+                reasoning_items TEXT,
+                message_items TEXT
              );
              INSERT INTO schema_version (version) VALUES (14);
              INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
