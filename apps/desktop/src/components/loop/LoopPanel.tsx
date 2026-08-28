@@ -634,7 +634,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       )}
 
       {/* ── Content ── */}
-      <div className="loop-content">
+      <div className="loop-content" hidden={showTemplates}>
         {loading && <div className="loop-empty">{t("loop.loading")}</div>}
         {!loading && filtered.length === 0 && (
           <div className="loop-empty-with-templates">

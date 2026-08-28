@@ -1318,13 +1318,13 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
 
 /* 无页头功能页的工具栏会与窗口拖拽区垂直重叠。
    只提升实际控件，行内空白仍可用于拖动窗口。 */
-.feature-content-inline :is(.cron-toolbar, .loop-toolbar, .plugins-command-bar) {
+.feature-content-inline :is(.cron-toolbar, .loop-toolbar, .loop-editor-toolbar, .plugins-command-bar) {
   position: relative;
   z-index: 45;
   pointer-events: none;
 }
 
-.feature-content-inline :is(.cron-toolbar, .loop-toolbar, .plugins-command-bar) > * {
+.feature-content-inline :is(.cron-toolbar, .loop-toolbar, .loop-editor-toolbar, .plugins-command-bar) > * {
   pointer-events: auto;
 }
 

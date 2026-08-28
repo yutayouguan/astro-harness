@@ -29,6 +29,21 @@ test("workflow creation actions form the left toolbar group without a visible ti
   assert.match(loopStyles, /\.loop-toolbar-end\s*\{[\s\S]*?margin-left:\s*auto;/);
 });
 
+test("workflow template mode replaces the saved workflow content", () => {
+  assert.match(
+    loopPanel,
+    /\{showTemplates && \([\s\S]*?className="loop-template-picker"/,
+  );
+  assert.match(
+    loopPanel,
+    /className="loop-content" hidden=\{showTemplates\}[\s\S]*?renderGallery\(\)/,
+  );
+  assert.match(
+    loopStyles,
+    /\.loop-template-picker\s*\{[\s\S]*?border-radius:\s*16px;[\s\S]*?background:/,
+  );
+});
+
 test("scheduled task creation actions form the left toolbar group without a visible title", () => {
   assert.match(
     cronPanel,
