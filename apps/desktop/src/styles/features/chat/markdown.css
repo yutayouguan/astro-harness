@@ -3150,13 +3150,43 @@ html[data-theme="dark"] .chat-welcome-logo {
 }
 
 .chat-welcome-mark {
+  --welcome-tilt-x: 0deg;
+  --welcome-tilt-y: 0deg;
+  --welcome-glare-x: 50%;
+  --welcome-glare-y: 50%;
   position: relative;
   width: 88px;
   height: 88px;
   margin-inline: auto;
   display: grid;
   place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 28px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
   animation: welcome-mark-float 5.5s ease-in-out infinite;
+}
+
+.chat-welcome-mark.is-dragging {
+  cursor: grabbing;
+}
+
+.chat-welcome-mark:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone-blue) 72%, white);
+  outline-offset: 4px;
+}
+
+.chat-welcome-drag-layer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  will-change: transform;
 }
 
 .chat-welcome-mark-glow {
@@ -3175,6 +3205,7 @@ html[data-theme="dark"] .chat-welcome-logo {
   opacity: 0.7;
   pointer-events: none;
   animation: welcome-mark-glow-pulse 9s ease-in-out infinite;
+  transition: opacity 220ms ease, filter 220ms ease;
 }
 
 .chat-welcome-illust {
@@ -3184,6 +3215,148 @@ html[data-theme="dark"] .chat-welcome-logo {
   justify-content: center;
   align-items: center;
   line-height: 0;
+  transform: perspective(320px) rotateX(var(--welcome-tilt-x)) rotateY(var(--welcome-tilt-y)) scale(1);
+  transform-style: preserve-3d;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.chat-welcome-illust::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 22px;
+  background: radial-gradient(
+    circle at var(--welcome-glare-x) var(--welcome-glare-y),
+    rgba(255, 255, 255, 0.42),
+    transparent 44%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.chat-welcome-mark:hover .chat-welcome-mark-glow,
+.chat-welcome-mark:focus-visible .chat-welcome-mark-glow {
+  opacity: 0.92;
+  filter: blur(10px);
+}
+
+.chat-welcome-mark:hover .chat-welcome-illust::after,
+.chat-welcome-mark:focus-visible .chat-welcome-illust::after {
+  opacity: 0.72;
+}
+
+.chat-welcome-mark:active .chat-welcome-illust {
+  transform: perspective(320px) rotateX(var(--welcome-tilt-x)) rotateY(var(--welcome-tilt-y)) scale(0.96);
+  transition-duration: 80ms;
+}
+
+.chat-welcome-mark-pulse {
+  position: absolute;
+  inset: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone-blue) 62%, transparent);
+  border-radius: 24px;
+  pointer-events: none;
+  animation: welcome-mark-pulse 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chat-welcome-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.chat-welcome-burst i {
+  --burst-x: 0px;
+  --burst-y: -58px;
+  --burst-rotation: 160deg;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--tone-blue);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--tone-blue) 40%, transparent);
+  animation: welcome-logo-confetti 760ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.chat-welcome-burst i:nth-child(2) {
+  --burst-x: 28px;
+  --burst-y: -52px;
+  --burst-rotation: -130deg;
+  background: var(--tone-purple);
+}
+
+.chat-welcome-burst i:nth-child(3) {
+  --burst-x: 48px;
+  --burst-y: -34px;
+  --burst-rotation: 220deg;
+  background: var(--tone-cyan);
+}
+
+.chat-welcome-burst i:nth-child(4) {
+  --burst-x: 58px;
+  --burst-y: -8px;
+  --burst-rotation: -180deg;
+  background: var(--tone-amber, #f59e0b);
+}
+
+.chat-welcome-burst i:nth-child(5) {
+  --burst-x: 38px;
+  --burst-y: 18px;
+  --burst-rotation: 140deg;
+  background: var(--tone-pink, #ec4899);
+}
+
+.chat-welcome-burst i:nth-child(6) {
+  --burst-x: 14px;
+  --burst-y: -66px;
+  --burst-rotation: -240deg;
+  background: var(--tone-purple);
+}
+
+.chat-welcome-burst i:nth-child(7) {
+  --burst-x: -14px;
+  --burst-y: -64px;
+  --burst-rotation: 190deg;
+  background: var(--tone-cyan);
+}
+
+.chat-welcome-burst i:nth-child(8) {
+  --burst-x: -34px;
+  --burst-y: -48px;
+  --burst-rotation: -150deg;
+  background: var(--tone-pink, #ec4899);
+}
+
+.chat-welcome-burst i:nth-child(9) {
+  --burst-x: -56px;
+  --burst-y: -24px;
+  --burst-rotation: 230deg;
+  background: var(--tone-amber, #f59e0b);
+}
+
+.chat-welcome-burst i:nth-child(10) {
+  --burst-x: -60px;
+  --burst-y: 2px;
+  --burst-rotation: -190deg;
+  background: var(--tone-purple);
+}
+
+.chat-welcome-burst i:nth-child(11) {
+  --burst-x: -34px;
+  --burst-y: 18px;
+  --burst-rotation: 150deg;
+  background: var(--tone-cyan);
+}
+
+.chat-welcome-burst i:nth-child(12) {
+  --burst-x: 52px;
+  --burst-y: 12px;
+  --burst-rotation: -220deg;
+  background: var(--tone-blue);
 }
 
 .chat-welcome-logo {
@@ -3318,6 +3491,41 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   50% {
     transform: scale(1.08);
     background-position: 58% 52%;
+  }
+}
+
+@keyframes welcome-mark-pulse {
+  0% {
+    opacity: 0.72;
+    transform: scale(0.72);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.34);
+  }
+}
+
+@keyframes welcome-logo-confetti {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -20%) rotate(0deg) scale(0.45);
+  }
+  16% {
+    opacity: 1;
+  }
+  58% {
+    opacity: 0.92;
+    transform: translate(
+      calc(-50% + var(--burst-x)),
+      calc(-50% + var(--burst-y) - 12px)
+    ) rotate(var(--burst-rotation)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(
+      calc(-50% + var(--burst-x)),
+      calc(-50% + var(--burst-y) + 18px)
+    ) rotate(var(--burst-rotation)) scale(0.76);
   }
 }
 
@@ -3741,9 +3949,24 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 
   .chat-welcome-orb,
   .chat-welcome-mark,
+  .chat-welcome-mark-glow,
   .chat-welcome-copy,
   .chat-welcome-marquee-track {
     animation: none !important;
+  }
+
+  .chat-welcome-illust {
+    transform: none !important;
+    transition: none;
+  }
+
+  .chat-welcome-drag-layer {
+    transform: none !important;
+  }
+
+  .chat-welcome-mark-pulse,
+  .chat-welcome-burst {
+    display: none;
   }
 
   .chat-welcome-card {

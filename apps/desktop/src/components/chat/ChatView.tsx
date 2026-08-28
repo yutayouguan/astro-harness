@@ -2115,7 +2115,10 @@ export default function ChatView({
       {workspaceContent ? (
         workspaceContent
       ) : emptyMode === "chat" || emptyMode === "agent" ? (
-        <ChatWelcome onPickCard={onPickWelcomePrompt} />
+        <ChatWelcome
+          onPickCard={onPickWelcomePrompt}
+          onActivate={() => textareaRef.current?.focus()}
+        />
       ) : (
         <div className="message-list-wrap">
           <div className="message-list" ref={messageListRef}>

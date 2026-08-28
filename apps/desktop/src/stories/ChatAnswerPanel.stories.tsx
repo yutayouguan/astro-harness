@@ -175,6 +175,49 @@ function InlineUserEditPreview() {
   );
 }
 
+function WelcomeLogoInteractionPreview() {
+  const [input, setInput] = useState("");
+
+  return (
+    <MorphiconProvider>
+      <LocaleProvider>
+        <DialogProvider>
+          <main style={{ height: "760px", background: "var(--shell-bg)" }}>
+            <ChatView
+              messages={[]}
+              input={input}
+              attachments={[]}
+              streaming={false}
+              displayPrefs={{
+                verbosity: "normal",
+                showTools: true,
+                showSkills: true,
+                showMcp: false,
+                showHooks: true,
+                showMemory: true,
+                showStatus: true,
+                showTimestamps: false,
+              }}
+              emptyMode="chat"
+              onInputChange={setInput}
+              onAttachmentsChange={() => {}}
+              onSend={() => {}}
+              onNewChat={() => {}}
+              onPickWelcomePrompt={setInput}
+              thinkingPrefs={{ level: "off" }}
+              onToggleThinking={() => {}}
+              onThinkingLevelChange={() => {}}
+              chatMode="agent"
+              onChatModeChange={() => {}}
+              onOpenContext={() => {}}
+            />
+          </main>
+        </DialogProvider>
+      </LocaleProvider>
+    </MorphiconProvider>
+  );
+}
+
 const meta = {
   id: "chat-answer-panel",
   title: "Chat/Answer Panel",
@@ -191,4 +234,8 @@ export const Default: Story = {};
 
 export const InlineUserEdit: Story = {
   render: () => <InlineUserEditPreview />,
+};
+
+export const WelcomeLogoInteraction: Story = {
+  render: () => <WelcomeLogoInteractionPreview />,
 };

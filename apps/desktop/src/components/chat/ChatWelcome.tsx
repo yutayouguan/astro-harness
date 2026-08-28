@@ -1,5 +1,13 @@
 /** 空会话欢迎卡片 — 双行跑马灯无限滚动。 */
-import { useState, type ComponentType, type SVGProps } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ComponentType,
+  type PointerEvent as ReactPointerEvent,
+  type SVGProps,
+} from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { AstroLogoMark } from "../icons/AstroLogoMark";
@@ -33,6 +41,7 @@ export type WelcomeCardId =
 
 type Props = {
   onPickCard: (prompt: string) => void;
+  onActivate?: () => void;
 };
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -63,6 +72,37 @@ const ALL_CARDS: { id: WelcomeCardId; meta: CardMeta }[] = [
 
 const ROW1 = ALL_CARDS.slice(0, 6);
 const ROW2 = ALL_CARDS.slice(6, 12);
+
+type LogoDragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  originX: number;
+  originY: number;
+  x: number;
+  y: number;
+  lastX: number;
+  lastY: number;
+  lastAt: number;
+  velocityX: number;
+  velocityY: number;
+  moved: boolean;
+};
+
+function currentTranslate(element: HTMLElement): { x: number; y: number } {
+  const transform = window.getComputedStyle(element).transform;
+  if (!transform || transform === "none") return { x: 0, y: 0 };
+  try {
+    const matrix = new DOMMatrixReadOnly(transform);
+    return { x: matrix.m41, y: matrix.m42 };
+  } catch {
+    return { x: 0, y: 0 };
+  }
+}
+
+function clampedMomentum(velocity: number): number {
+  return Math.max(-18, Math.min(18, velocity * 0.025));
+}
 
 function MarqueeCard({ card, onPick, duplicate = false }: {
   card: typeof ALL_CARDS[0];
@@ -118,11 +158,136 @@ function MarqueeRow({ cards, direction, onPick }: {
   );
 }
 
-export function ChatWelcome({ onPickCard }: Props) {
+export function ChatWelcome({ onPickCard, onActivate }: Props) {
   const { t } = useI18n();
+  const subtitleId = useId();
   const [marqueePaused, setMarqueePaused] = useState(false);
+  const [pulseId, setPulseId] = useState(0);
+  const [burstId, setBurstId] = useState(0);
+  const dragLayerRef = useRef<HTMLSpanElement>(null);
+  const dragRef = useRef<LogoDragState | null>(null);
+  const dragReturnRef = useRef<Animation | null>(null);
+  const suppressLogoClickRef = useRef(false);
   const brandLabel = `${t("chat.welcomeGreeting")} Astro`;
   const marqueeControlLabel = t(marqueePaused ? "media.play" : "media.pause");
+
+  useEffect(() => () => dragReturnRef.current?.cancel(), []);
+
+  const handleLogoPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (drag?.pointerId === event.pointerId && dragLayerRef.current) {
+      const now = performance.now();
+      const elapsed = Math.max(1, now - drag.lastAt);
+      drag.x = drag.originX + event.clientX - drag.startX;
+      drag.y = drag.originY + event.clientY - drag.startY;
+      drag.velocityX = ((event.clientX - drag.lastX) / elapsed) * 1000;
+      drag.velocityY = ((event.clientY - drag.lastY) / elapsed) * 1000;
+      drag.lastX = event.clientX;
+      drag.lastY = event.clientY;
+      drag.lastAt = now;
+      drag.moved ||= Math.hypot(
+        event.clientX - drag.startX,
+        event.clientY - drag.startY,
+      ) > 5;
+      dragLayerRef.current.style.transform = `translate3d(${drag.x}px, ${drag.y}px, 0)`;
+      return;
+    }
+
+    if (event.pointerType === "touch") return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    event.currentTarget.style.setProperty("--welcome-tilt-x", `${(-y * 5).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty("--welcome-tilt-y", `${(x * 6).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty("--welcome-glare-x", `${Math.round((x + 0.5) * 100)}%`);
+    event.currentTarget.style.setProperty("--welcome-glare-y", `${Math.round((y + 0.5) * 100)}%`);
+  };
+
+  const resetLogoTilt = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (dragRef.current) return;
+    event.currentTarget.style.removeProperty("--welcome-tilt-x");
+    event.currentTarget.style.removeProperty("--welcome-tilt-y");
+    event.currentTarget.style.removeProperty("--welcome-glare-x");
+    event.currentTarget.style.removeProperty("--welcome-glare-y");
+  };
+
+  const startLogoDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || !dragLayerRef.current) return;
+    const layer = dragLayerRef.current;
+    const origin = currentTranslate(layer);
+    dragReturnRef.current?.cancel();
+    dragReturnRef.current = null;
+    layer.style.transform = `translate3d(${origin.x}px, ${origin.y}px, 0)`;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.classList.add("is-dragging");
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: origin.x,
+      originY: origin.y,
+      x: origin.x,
+      y: origin.y,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      lastAt: performance.now(),
+      velocityX: 0,
+      velocityY: 0,
+      moved: false,
+    };
+  };
+
+  const finishLogoDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    const layer = dragLayerRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || !layer) return;
+    dragRef.current = null;
+    event.currentTarget.classList.remove("is-dragging");
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    suppressLogoClickRef.current = drag.moved;
+    window.setTimeout(() => {
+      suppressLogoClickRef.current = false;
+    }, 0);
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      layer.style.removeProperty("transform");
+      return;
+    }
+
+    const peakX = drag.x + clampedMomentum(drag.velocityX);
+    const peakY = drag.y + clampedMomentum(drag.velocityY);
+    const distance = Math.hypot(drag.x, drag.y);
+    dragReturnRef.current = layer.animate(
+      [
+        { transform: `translate3d(${drag.x}px, ${drag.y}px, 0)`, offset: 0 },
+        { transform: `translate3d(${peakX}px, ${peakY}px, 0)`, offset: 0.16 },
+        { transform: `translate3d(${-drag.x * 0.07}px, ${-drag.y * 0.07}px, 0)`, offset: 0.72 },
+        { transform: "translate3d(0, 0, 0)", offset: 1 },
+      ],
+      {
+        duration: Math.min(600, 420 + distance * 1.15),
+        easing: "cubic-bezier(0.22, 0.8, 0.24, 1)",
+        fill: "both",
+      },
+    );
+    dragReturnRef.current.addEventListener("finish", () => {
+      layer.style.removeProperty("transform");
+      dragReturnRef.current = null;
+    }, { once: true });
+  };
+
+  const activateLogo = () => {
+    if (suppressLogoClickRef.current) {
+      suppressLogoClickRef.current = false;
+      return;
+    }
+    setPulseId((value) => value + 1);
+    setBurstId((value) => value + 1);
+    onActivate?.();
+  };
 
   return (
     <div className="chat-empty chat-welcome" role="region" aria-label={brandLabel}>
@@ -135,12 +300,36 @@ export function ChatWelcome({ onPickCard }: Props) {
 
       <div className="chat-welcome-copy">
         <div className="chat-welcome-brand">
-          <div className="chat-welcome-mark">
-            <span className="chat-welcome-mark-glow" />
-            <div className="chat-welcome-illust">
-              <AstroLogoMark className="chat-welcome-logo" width={72} height={72} />
-            </div>
-          </div>
+          <button
+            type="button"
+            className="chat-welcome-mark"
+            aria-label={brandLabel}
+            aria-describedby={subtitleId}
+            title={t("chat.welcomePlaceholder")}
+            onPointerDown={startLogoDrag}
+            onPointerMove={handleLogoPointerMove}
+            onPointerUp={finishLogoDrag}
+            onPointerCancel={finishLogoDrag}
+            onLostPointerCapture={finishLogoDrag}
+            onPointerLeave={resetLogoTilt}
+            onClick={activateLogo}
+            onDragStart={(event) => event.preventDefault()}
+          >
+            <span ref={dragLayerRef} className="chat-welcome-drag-layer">
+              <span className="chat-welcome-mark-glow" />
+              <span className="chat-welcome-illust">
+                <AstroLogoMark className="chat-welcome-logo" width={72} height={72} />
+              </span>
+              {pulseId > 0 ? (
+                <span key={pulseId} className="chat-welcome-mark-pulse" aria-hidden />
+              ) : null}
+              {burstId > 0 ? (
+                <span key={burstId} className="chat-welcome-burst" aria-hidden>
+                  {Array.from({ length: 12 }, (_, index) => <i key={index} />)}
+                </span>
+              ) : null}
+            </span>
+          </button>
           <p className="chat-welcome-wordmark">
             <span className="chat-welcome-wordmark-astro">Astro</span>
             <span className="chat-welcome-wordmark-agent">Agent</span>
@@ -151,7 +340,7 @@ export function ChatWelcome({ onPickCard }: Props) {
           <span className="chat-welcome-greeting">{t("chat.welcomeGreeting")}</span>{" "}
           <span className="chat-welcome-title-brand">Astro</span>
         </h2>
-        <p className="chat-welcome-sub">{t("chat.welcomeSub")}</p>
+        <p id={subtitleId} className="chat-welcome-sub">{t("chat.welcomeSub")}</p>
       </div>
 
       <div className="chat-welcome-marquee-region">
