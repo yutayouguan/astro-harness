@@ -8,7 +8,8 @@ description = "文件空间索引（artifacts.db）"
 anyhow = { workspace = true }
 types = { path = "../agent-types" }
 home = { path = "../agent-home" }
-rusqlite = { version = "0.31", features = ["bundled"] }
+agent-db = { path = "../agent-db" }
+tokio = { version = "1", features = ["sync"] }
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

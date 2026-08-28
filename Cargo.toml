@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/agent-types",
+    "crates/agent-db",
     "crates/agent-config",
     "crates/agent-protocol",
     "crates/agent-rollout",
