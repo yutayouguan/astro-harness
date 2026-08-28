@@ -28,6 +28,14 @@ const mcpSection = await readFile(mcpSectionUrl, "utf8");
 const mcpTools = await readFile(mcpToolsUrl, "utf8");
 const messages = await readFile(messagesUrl, "utf8");
 
+test("plugin catalog remounts after hook-signature edits during Fast Refresh", () => {
+  assert.match(
+    panel,
+    /^\/\/ @refresh reset/m,
+    "the state-heavy plugin catalog must not reuse a stale hook queue after edits",
+  );
+});
+
 test("plugin navigation keeps type and scope in one primary command row", () => {
   const commandBar = panel.indexOf('className="plugins-command-bar"');
   const primaryRow = panel.indexOf(

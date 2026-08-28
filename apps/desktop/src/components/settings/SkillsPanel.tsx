@@ -1,4 +1,10 @@
-/** Skills 面板：已安装、商店搜索与安装。 */
+// @refresh reset
+/**
+ * Skills 面板：已安装、商店搜索与安装。
+ *
+ * 该页面组合了多组本地状态和状态型 MCP Hook。开发期修改 Hook 布局时
+ * 必须重挂载，避免 Fast Refresh 复用旧 Hook 队列导致 React `Should have a queue`。
+ */
 import {
   useCallback,
   useEffect,
