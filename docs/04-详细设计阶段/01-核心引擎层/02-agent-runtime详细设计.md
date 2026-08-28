@@ -877,59 +877,44 @@ useEffect(() => {
 
 ### 11.3 网络失败分级处理
 
-> `call_llm_with_retry` 是 LLM 专用的重试封装，内部使用 §13 的通用 `with_retry` 工具，并在此基础上增加了自动暂停（3 次失败后触发 `set_paused`）和事件发射能力。
+网络恢复对齐 Codex，并分为互不混用的两层：
 
-各错误类型采用不同处理策略：
+1. `agent-providers` request 层：默认在首次请求后最多重试 4 次，200ms 指数退避并带
+   `0.9..1.1` jitter；只处理 connection/timeout/network/5xx。
+2. `agent-core::streaming` sampling 层：request retry 耗尽后，前台交互式 Turn 对明确的
+   `ConnectionFailed` 按 5/10/20/40/60 秒持续等待，60 秒封顶，直到恢复或用户中断。
 
-| 错误类型 | HTTP 状态码 | 处理策略 |
-| --- | --- | --- |
-| 速率限制 | 429 | 退避重试，间隔取 `Retry-After` 头或指数退避 |
-| 服务暂时不可用 | 500 / 503 | 指数退避重试，最多 3 次 |
-| 网络超时 | — | 退避重试，最多 3 次 |
-| 请求格式错误 | 400 | **不重试**，直接失败，通知用户检查配置 |
-| 认证失败 | 401 / 403 | **不重试**，直接失败，引导用户更新 API Key |
+各错误类型采用以下策略：
+
+| 错误类型 | 处理策略 |
+| --- | --- |
+| DNS/TCP/TLS/CONNECT | 前台持续重连；后台有界重试；不切换 Provider |
+| 请求超时 | request 层有限重试，随后进入有界 stream retry |
+| 500 / 503 等 5xx | request 层有限重试；耗尽后可按显式 fallback 链切换 |
+| 429 | 不进入通用 request retry；按服务端提示和显式 fallback 产品策略处理 |
+| 400 / 上下文 / 内容拒绝 | 不重试、不 fallback，立即失败 |
+| 401 / 403 | 不重试；保留显式 fallback 产品策略 |
+| 用户取消 | 立即 `TurnAborted` |
+
+前台断网时发送专用、非终态 `StreamError`：
 
 ```rust
-async fn call_llm_with_retry(
-    provider: &dyn TextClient,
-    messages: &[Message],
-    guard: &HumanGuard,
-    event_tx: &mpsc::Sender<AgentEvent>,
-) -> Result<LlmResponse, AgentError> {
-    let mut delay = Duration::from_secs(1);
-
-    for attempt in 0..3u32 {
-        match provider.chat_stream(messages).await {
-            Ok(resp) => return Ok(resp),
-            Err(e) if e.is_retryable() => {
-                tracing::warn!("LLM 调用失败（第 {} 次），{:.1}s 后重试: {}", attempt + 1, delay.as_secs_f32(), e);
-                event_tx.send(AgentEvent::RetryNotice { attempt: attempt + 1 }).await.ok();
-                tokio::time::sleep(delay).await;
-                delay = (delay * 2).min(Duration::from_secs(30));
-            }
-            Err(e) => return Err(AgentError::Provider(e.to_string())),
-        }
-    }
-
-    // 超过重试上限：自动切换到 Paused 状态，通知用户
-    guard.set_paused(true);
-    event_tx.send(AgentEvent::PausedByNetworkError).await.ok();
-    Err(AgentError::NetworkExhausted)
+StreamErrorEvent {
+    message: "Reconnecting... waiting for network".into(),
+    error_info: Some(ErrorInfo::ResponseStreamDisconnected { http_status_code: None }),
+    additional_details: Some(connection_error.to_string()),
+    retrying: true,
+    retry_attempt,
+    next_retry_ms: Some(delay.as_millis() as u64),
 }
 ```
 
-前端收到 `paused_by_network` 时展示可操作提示：
+`StreamError` 不写入 assistant 内容、不结束 Turn、不切换模型，也不显示永久错误 Toast。
+前端更新当前回答中的单条重连状态；网络恢复后自动继续同一 `turn_id`。等待实现必须同时监听
+Turn cancellation 和 pause/interrupt，不能使用不可取消的裸 `sleep`。
 
-```typescript
-listen<void>('paused_by_network_error', () => {
-    toast.error('网络连接不稳定，Agent 已自动暂停', {
-        action: { label: '重试', onClick: () => invoke('resume_agent') },
-        duration: Infinity,
-    });
-});
-```
-
-用户点击"重试"后 `resume_agent` 将状态切回 Running，`guard.resumed()` 信号触发，Agent 从被 abort 的 LLM 调用处重新发起请求。
+完整契约见
+[Codex 网络恢复对齐设计](../../superpowers/specs/2026-08-28-codex-network-recovery-alignment-design.md)。
 
 ### 11.4 工具幂等性保护
 
@@ -969,7 +954,8 @@ LIMIT 1
 | --- | --- | --- |
 | 暂停信号 | `watch::Sender<GuardState>` 广播，LLM 调用与工具执行通过 `select!` 即时响应 | §4, §9.3 |
 | LLM 流式中断 | 发送 `StreamAborted` 事件，前端清空 streaming buffer；assistant 消息不写入数据库 | §11.2 |
-| 可重试错误（429/5xx/超时） | 指数退避重试，最多 3 次；超限后自动切换 Paused 状态并通知用户 | §11.3 |
+| 明确连接失败 | request 层有限重试；前台持续等待网络恢复，后台有界失败；不进入 Provider fallback | §11.3 |
+| 5xx/超时/普通流错误 | request/stream 两层有界重试；符合显式策略的 5xx 可进入 fallback | §11.3 |
 | 不可重试错误（400/401/403） | 立即失败，不重试 | §11.3 |
 | 工具重复执行 | 执行前查 `messages` 表，同 `tool_call_id` 已有结果则跳过 | §11.4 |
 
@@ -1048,32 +1034,18 @@ fn weibull_score(entry: &MemoryEntry) -> f64 {
 
 ## 13. 重试与限流
 
-```rust
-pub async fn with_retry<F, T, E>(
-    f: F,
-    max_attempts: u32,
-) -> Result<T, E>
-where
-    F: Fn() -> BoxFuture<'static, Result<T, E>>,
-    E: IsRetryable,
-{
-    let mut attempt = 0;
-    let mut delay = Duration::from_millis(500);
-    loop {
-        match f().await {
-            Ok(v) => return Ok(v),
-            Err(e) if e.is_retryable() && attempt < max_attempts => {
-                attempt += 1;
-                sleep(delay).await;
-                delay = (delay * 2).min(Duration::from_secs(30)); // 指数退避，上限 30s
-            }
-            Err(e) => return Err(e),
-        }
-    }
-}
-```
+重试实现不再由通用 `with_retry<anyhow::Error>` 猜测错误文本，而由 typed
+`ProviderError` 驱动：
 
-全局 Token 速率窗口：使用 `governor` crate 的令牌桶算法，按 Provider 分别限速（如 Anthropic 限 100k TPM）。超限时 `RateLimit` 错误触发退避而非立即 fallback 到备用 Provider。
+- request retry：默认 4 次重试，base 200ms、factor 2、jitter `0.9..1.1`；
+- stream retry：默认 5 次；
+- foreground connection retry：5 秒起步、倍增至 60 秒后保持，无次数上限；
+- background connection retry：必须有界；
+- 所有等待均可取消；
+- Google 等单一 Provider 不得再维护私有 retry helper。
+
+全局 Token 速率窗口仍按 Provider 分别限速；Rate Limit 与本机断网是不同错误类别，不进入
+无限网络恢复循环。
 
 ---
 

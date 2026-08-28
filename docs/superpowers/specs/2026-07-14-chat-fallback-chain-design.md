@@ -6,6 +6,11 @@
 **关联:** [Providers Hermes Profiles](./2026-07-13-providers-hermes-profiles-design.md)、[路由感知用量与费用](./2026-07-13-route-aware-usage-pricing-design.md)  
 **外部参考（正文不重复品牌名）:** 参考 Agent 主循环「主模型失败 → fallback_providers」语义
 
+> **2026-08-28 网络恢复边界：** DNS/TCP/TLS/CONNECT 建连失败不再进入本设计的
+> Provider fallback 链，而按
+> [Codex 网络恢复对齐设计](./2026-08-28-codex-network-recovery-alignment-design.md)
+> 在同一目标、同一 Turn 内等待恢复。该变更为硬切，不保留字符串分类或 Google 私有重试。
+
 ### 实现说明
 
 | 入口 | 状态 |
@@ -30,7 +35,7 @@
 
 ## 目标
 
-1. Primary 在首包前因限流/服务端/鉴权/网络失败时，按配置顺序尝试后备 provider/model。  
+1. Primary 在首包前因限流、服务端或鉴权失败时，按配置顺序尝试后备 provider/model；明确的连接失败留在当前目标等待恢复。
 2. 成功跳的真实路由写入 usage（双写路径不变）。  
 3. 链耗尽时返回聚合错误；配置缺失时行为与今天一致。  
 4. 主聊 / cron / delegate 共用一套尝试逻辑，避免分叉。
@@ -121,8 +126,10 @@ Providers 面板：当前编辑条目下「聊天后备」——选择其它已�
 | HTTP 429 | 限流 |
 | HTTP 5xx | 服务端错误 |
 | HTTP 401 / 403 | 鉴权失败（不 refresh，直接下一家） |
-| 连接 / TLS / 超时且尚无成功 body | 网络 |
 | SSE 首事件即供应商错误且未产出内容 | 立即拒请求 |
+
+连接/TLS/DNS/CONNECT 错误不属于可 failover 条件。请求超时走共享的有界 retry；只有最终被
+分类为可 failover 的服务端错误才允许进入下一目标。
 
 实现：`is_failover_eligible(&Error) -> bool`（稳定匹配 status / 错误串）；单测覆盖。
 
@@ -130,6 +137,7 @@ Providers 面板：当前编辑条目下「聊天后备」——选择其它已�
 
 - 400 等其它 4xx（坏请求、上下文过长等）  
 - 用户取消 / abort  
+- DNS / TCP / TLS / CONNECT 建连失败（进入同目标网络恢复循环）
 - 已吐字或已组 tool_call 后的流错误  
 - 工具执行失败、HITL 取消等非 `chat_stream` 错误  
 
@@ -177,7 +185,7 @@ gRPC 若自带凭据：以请求 primary 为准，再按 primary 条目上的 `f
 
 ### 测试
 
-- `is_failover_eligible`：429/503/401 vs 400/abort  
+- `is_failover_eligible`：429/503/401 vs 400/abort/connection/TLS/DNS
 - 链：primary 失败 → secondary 成功；双失败 → 聚合错误  
 - 首包后错误：已 yield 文本再失败 → 不进下一家  
 - 解析：跳过无 key / 自引用 / 去重 / 最多 3 条  
@@ -189,6 +197,7 @@ gRPC 若自带凭据：以请求 primary 为准，再按 primary 条目上的 `f
 3. 流中途失败 → 直接错误，不静默换模。  
 4. Cron / delegate 在传入链时与主聊一致切换。  
 5. 成功跳的 usage 落在实际 provider/model 上。
+6. 前台断网不切换 Provider、不返回“全部模型尝试失败”，网络恢复后继续原 Turn。
 
 ---
 
