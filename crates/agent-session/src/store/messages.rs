@@ -16,15 +16,15 @@ pub(crate) fn insert_message_row(
 ) -> Result<i64> {
     let tool_calls = json_to_db(&msg.tool_calls)?;
     let reasoning_details = json_to_db(&msg.reasoning_details)?;
-    let codex_reasoning_items = json_to_db(&msg.codex_reasoning_items)?;
-    let codex_message_items = json_to_db(&msg.codex_message_items)?;
+    let reasoning_items = json_to_db(&msg.reasoning_items)?;
+    let message_items = json_to_db(&msg.message_items)?;
     tx.execute(
         "INSERT INTO messages (
             session_id, role, content, compressed_content,
             tool_call_id, tool_calls, tool_name,
             timestamp, token_count, finish_reason,
             reasoning, reasoning_content, reasoning_details,
-            codex_reasoning_items, codex_message_items, media_json
+            reasoning_items, message_items, media_json
          ) VALUES (
             ?1, ?2, ?3, ?4,
             ?5, ?6, ?7,
@@ -46,8 +46,8 @@ pub(crate) fn insert_message_row(
             msg.reasoning,
             msg.reasoning_content,
             reasoning_details,
-            codex_reasoning_items,
-            codex_message_items,
+            reasoning_items,
+            message_items,
             msg.media_json,
         ],
     )?;
@@ -112,7 +112,7 @@ impl SessionStore {
             "SELECT id, session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
                     reasoning, reasoning_content, reasoning_details,
-                    codex_reasoning_items, codex_message_items, media_json
+                    reasoning_items, message_items, media_json
              FROM messages
              WHERE session_id = ?1
              ORDER BY timestamp ASC, id ASC",
@@ -156,8 +156,8 @@ impl SessionStore {
                 reasoning,
                 reasoning_content,
                 reasoning_details_raw,
-                codex_reasoning_items_raw,
-                codex_message_items_raw,
+                reasoning_items_raw,
+                message_items_raw,
                 media_json,
             ) = row?;
             out.push(StoredMessage {
@@ -175,8 +175,8 @@ impl SessionStore {
                 reasoning,
                 reasoning_content,
                 reasoning_details: json_from_db(reasoning_details_raw)?,
-                codex_reasoning_items: json_from_db(codex_reasoning_items_raw)?,
-                codex_message_items: json_from_db(codex_message_items_raw)?,
+                reasoning_items: json_from_db(reasoning_items_raw)?,
+                message_items: json_from_db(message_items_raw)?,
                 media_json,
             });
         }
@@ -275,14 +275,14 @@ impl SessionStore {
         for m in &messages[..=end] {
             let tool_calls = json_to_db(&m.tool_calls)?;
             let reasoning_details = json_to_db(&m.reasoning_details)?;
-            let codex_reasoning_items = json_to_db(&m.codex_reasoning_items)?;
-            let codex_message_items = json_to_db(&m.codex_message_items)?;
+            let reasoning_items = json_to_db(&m.reasoning_items)?;
+            let message_items = json_to_db(&m.message_items)?;
             tx.execute(
                 "INSERT INTO messages (
                     session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
                     reasoning, reasoning_content, reasoning_details,
-                    codex_reasoning_items, codex_message_items, media_json
+                    reasoning_items, message_items, media_json
                  ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7,
                     ?8, ?9, ?10,
@@ -303,8 +303,8 @@ impl SessionStore {
                     m.reasoning,
                     m.reasoning_content,
                     reasoning_details,
-                    codex_reasoning_items,
-                    codex_message_items,
+                    reasoning_items,
+                    message_items,
                     m.media_json,
                 ],
             )?;
@@ -388,12 +388,12 @@ impl SessionStore {
                 session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                 timestamp, token_count, finish_reason,
                 reasoning, reasoning_content, reasoning_details,
-                codex_reasoning_items, codex_message_items, media_json
+                reasoning_items, message_items, media_json
              )
              SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
                     reasoning, reasoning_content, reasoning_details,
-                    codex_reasoning_items, codex_message_items, media_json
+                    reasoning_items, message_items, media_json
              FROM messages
              WHERE session_id = ?2";
         match recent_turns {
@@ -685,8 +685,8 @@ impl SessionStore {
                 for (i, m) in messages[start..].iter().enumerate() {
                     let tool_calls = json_to_db(&m.tool_calls)?;
                     let reasoning_details = json_to_db(&m.reasoning_details)?;
-                    let codex_reasoning_items = json_to_db(&m.codex_reasoning_items)?;
-                    let codex_message_items = json_to_db(&m.codex_message_items)?;
+                    let reasoning_items = json_to_db(&m.reasoning_items)?;
+                    let message_items = json_to_db(&m.message_items)?;
                     // 摘要按当前时间写入；尾部需重排 timestamp，确保显示在摘要之后。
                     let timestamp = now + (i + 1) as f64 * 0.001;
                     tx.execute(
@@ -694,7 +694,7 @@ impl SessionStore {
                             session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                             timestamp, token_count, finish_reason,
                             reasoning, reasoning_content, reasoning_details,
-                            codex_reasoning_items, codex_message_items, media_json
+                            reasoning_items, message_items, media_json
                          ) VALUES (
                             ?1, ?2, ?3, ?4, ?5, ?6, ?7,
                             ?8, ?9, ?10,
@@ -715,8 +715,8 @@ impl SessionStore {
                             m.reasoning,
                             m.reasoning_content,
                             reasoning_details,
-                            codex_reasoning_items,
-                            codex_message_items,
+                            reasoning_items,
+                            message_items,
                             m.media_json,
                         ],
                     )?;
@@ -772,11 +772,11 @@ impl SessionStore {
             if let Some(r) = m.reasoning_details {
                 obj.insert("reasoning_details".into(), r);
             }
-            if let Some(r) = m.codex_reasoning_items {
-                obj.insert("codex_reasoning_items".into(), r);
+            if let Some(r) = m.reasoning_items {
+                obj.insert("reasoning_items".into(), r);
             }
-            if let Some(r) = m.codex_message_items {
-                obj.insert("codex_message_items".into(), r);
+            if let Some(r) = m.message_items {
+                obj.insert("message_items".into(), r);
             }
             out.push(Value::Object(obj));
         }

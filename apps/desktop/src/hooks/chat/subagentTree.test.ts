@@ -293,8 +293,8 @@ test("normalizes the real SessionStore timeline including tool metadata", () => 
       reasoning: null,
       reasoning_content: null,
       reasoning_details: null,
-      codex_reasoning_items: null,
-      codex_message_items: null,
+      reasoning_items: null,
+      message_items: null,
       media_json: null,
     }],
   });

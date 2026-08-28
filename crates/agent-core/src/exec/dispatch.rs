@@ -1261,8 +1261,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                 reasoning: message.reasoning,
                 reasoning_content: message.reasoning_content,
                 reasoning_details: message.reasoning_details,
-                codex_reasoning_items: message.codex_reasoning_items,
-                codex_message_items: message.codex_message_items,
+                reasoning_items: message.reasoning_items,
+                message_items: message.message_items,
                 media_json: message.media_json,
             })
             .collect();
@@ -1785,8 +1785,8 @@ mod tests {
                 reasoning: Some("summary"),
                 reasoning_content: Some("private reasoning"),
                 reasoning_details: Some(serde_json::json!({"phase":"analysis"})),
-                codex_reasoning_items: Some(serde_json::json!([{"type":"reasoning"}])),
-                codex_message_items: Some(serde_json::json!([{"type":"message"}])),
+                reasoning_items: Some(serde_json::json!([{"type":"reasoning"}])),
+                message_items: Some(serde_json::json!([{"type":"message"}])),
                 media_json: Some(r#"[{"kind":"image","path":"artifact.png"}]"#),
                 ..session::NewMessage::empty(&child.session_id, "assistant")
             })
@@ -1814,8 +1814,8 @@ mod tests {
         );
         assert!(detail.messages[1].tool_calls.is_some());
         assert!(detail.messages[1].reasoning_details.is_some());
-        assert!(detail.messages[1].codex_reasoning_items.is_some());
-        assert!(detail.messages[1].codex_message_items.is_some());
+        assert!(detail.messages[1].reasoning_items.is_some());
+        assert!(detail.messages[1].message_items.is_some());
         assert!(detail.messages[1].media_json.is_some());
         assert_eq!(detail.messages[2].role, "tool");
         assert_eq!(detail.messages[2].tool_call_id.as_deref(), Some("call-1"));

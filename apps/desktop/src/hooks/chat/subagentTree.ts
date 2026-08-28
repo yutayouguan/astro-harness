@@ -252,8 +252,8 @@ export function normalizeAgentThreadMessage(value: unknown): AgentThreadMessage 
     ),
     reasoningDetails: message.reasoningDetails ?? message.reasoning_details ?? null,
     reasoningItems:
-      message.reasoningItems ?? message.codex_reasoning_items ?? null,
-    messageItems: message.messageItems ?? message.codex_message_items ?? null,
+      message.reasoningItems ?? message.reasoning_items ?? null,
+    messageItems: message.messageItems ?? message.message_items ?? null,
     mediaJson: nullableString(message.mediaJson ?? message.media_json, "media json"),
   };
 }

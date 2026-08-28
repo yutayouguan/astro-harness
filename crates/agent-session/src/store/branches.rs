@@ -524,11 +524,11 @@ fn copy_prefix_through_turn(
     let base = "INSERT INTO messages (
             session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
             timestamp, token_count, finish_reason, reasoning, reasoning_content, reasoning_details,
-            codex_reasoning_items, codex_message_items, media_json
+            reasoning_items, message_items, media_json
          )
          SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                 timestamp, token_count, finish_reason, reasoning, reasoning_content,
-                reasoning_details, codex_reasoning_items, codex_message_items, media_json
+                reasoning_details, reasoning_items, message_items, media_json
          FROM messages WHERE session_id = ?2";
     let copied = match next_user {
         Some((timestamp, id)) => tx.execute(

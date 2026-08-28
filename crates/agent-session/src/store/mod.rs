@@ -73,8 +73,8 @@ pub struct NewMessage<'a> {
     pub reasoning: Option<&'a str>,
     pub reasoning_content: Option<&'a str>,
     pub reasoning_details: Option<Value>,
-    pub codex_reasoning_items: Option<Value>,
-    pub codex_message_items: Option<Value>,
+    pub reasoning_items: Option<Value>,
+    pub message_items: Option<Value>,
     /// 结构化媒体 JSON 数组（`MediaAsset[]`）；空则不写列。
     pub media_json: Option<&'a str>,
 }
@@ -95,8 +95,8 @@ impl<'a> NewMessage<'a> {
             reasoning: None,
             reasoning_content: None,
             reasoning_details: None,
-            codex_reasoning_items: None,
-            codex_message_items: None,
+            reasoning_items: None,
+            message_items: None,
             media_json: None,
         }
     }
@@ -119,8 +119,8 @@ pub struct StoredMessage {
     pub reasoning: Option<String>,
     pub reasoning_content: Option<String>,
     pub reasoning_details: Option<Value>,
-    pub codex_reasoning_items: Option<Value>,
-    pub codex_message_items: Option<Value>,
+    pub reasoning_items: Option<Value>,
+    pub message_items: Option<Value>,
     /// 结构化媒体 JSON 数组字符串。
     pub media_json: Option<String>,
 }

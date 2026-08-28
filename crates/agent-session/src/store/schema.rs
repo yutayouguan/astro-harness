@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 22;
+pub const SCHEMA_VERSION: i32 = 23;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS messages (
     reasoning TEXT,
     reasoning_content TEXT,
     reasoning_details TEXT,
-    codex_reasoning_items TEXT,
-    codex_message_items TEXT
+    reasoning_items TEXT,
+    message_items TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
@@ -255,6 +255,15 @@ impl SessionStore {
                 )?;
                 // 迁移已有 project_root → projects 实体
                 self.migrate_project_root_to_projects()?;
+            }
+            // v22→v23：rename codex_reasoning_items / codex_message_items → reasoning_items / message_items。
+            if current >= 11 && current < 23 && self.table_exists("messages")? {
+                if self.column_exists("messages", "codex_reasoning_items")? {
+                    self.conn.execute_batch(
+                        "ALTER TABLE messages RENAME COLUMN codex_reasoning_items TO reasoning_items;
+                         ALTER TABLE messages RENAME COLUMN codex_message_items TO message_items;",
+                    )?;
+                }
             }
             // v19→v22 的列与索引由上方幂等自愈分支补齐。
             self.stamp_schema_version()?;

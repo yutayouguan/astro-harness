@@ -140,8 +140,8 @@ pub struct AgentThreadMessageV2 {
     pub reasoning: Option<String>,
     pub reasoning_content: Option<String>,
     pub reasoning_details: Option<serde_json::Value>,
-    pub codex_reasoning_items: Option<serde_json::Value>,
-    pub codex_message_items: Option<serde_json::Value>,
+    pub reasoning_items: Option<serde_json::Value>,
+    pub message_items: Option<serde_json::Value>,
     pub media_json: Option<String>,
 }
 

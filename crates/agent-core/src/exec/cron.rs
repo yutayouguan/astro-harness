@@ -767,8 +767,8 @@ mod tests {
             reasoning: None,
             reasoning_content: None,
             reasoning_details: None,
-            codex_reasoning_items: None,
-            codex_message_items: None,
+            reasoning_items: None,
+            message_items: None,
             media_json: None,
         }
     }
