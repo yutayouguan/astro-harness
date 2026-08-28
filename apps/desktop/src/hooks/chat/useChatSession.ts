@@ -39,7 +39,10 @@ import {
   saveContextUsageForSession,
   saveEphemeralSessionMeta,
 } from "../../lib/chat/chatSessionStore";
-import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
+import {
+  mapHistoryMessages,
+  settleRestoredActivities,
+} from "../../lib/chat/mapHistoryMessages";
 import { MSG_DISSOLVE_MS } from "../../components/chat/MsgDissolveOverlay";
 import type {
   ArtifactDto,
@@ -133,9 +136,14 @@ export function useChatSession({
   initialExcludedTurnCount = 0,
   initialEphemeral = false,
 }: UseChatSessionDeps) {
-  const [initialStored] = useState(() =>
-    persistClientState ? loadChatSession() : null,
-  );
+  const [initialStored] = useState(() => {
+    const stored = persistClientState ? loadChatSession() : null;
+    if (!stored) return null;
+    return {
+      ...stored,
+      messages: settleRestoredActivities(stored.messages),
+    };
+  });
   // ── Core state ────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     if (initialStored?.messages?.length) return initialStored.messages;
@@ -896,7 +904,8 @@ export function useChatSession({
       currentRunIdRef.current = null;
       setCurrentTurnId(null);
       setSessionId(sid);
-      setMessages(restored);
+      const settled = settleRestoredActivities(restored);
+      setMessages(settled);
       setSessionPendingInterrupts(pendingInterrupts);
       setSessionReadOnly(!!endReason);
       setSessionEndReason(endReason ?? null);
@@ -905,7 +914,7 @@ export function useChatSession({
       const usage = loadContextUsageForSession(sid);
       setContextUsage(usage);
       if (persistClientState) {
-        saveChatSession(sid, restored, pendingInterrupts, usage);
+        saveChatSession(sid, settled, pendingInterrupts, usage);
       }
       queueMicrotask(() => {
         restoringRef.current = false;

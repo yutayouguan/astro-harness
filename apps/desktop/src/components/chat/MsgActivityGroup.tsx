@@ -26,11 +26,16 @@ export default function MsgActivityGroup({
   const { t } = useI18n();
   const running = activities.some((activity) => activity.status === "running");
   const failed = activities.some((activity) => activity.status === "error");
-  const [open, setOpen] = useState(() => defaultOpen || running || failed);
+  const interrupted = activities.some(
+    (activity) => activity.status === "interrupted",
+  );
+  const [open, setOpen] = useState(
+    () => defaultOpen || running || failed || interrupted,
+  );
 
   useEffect(() => {
-    if (running || failed) setOpen(true);
-  }, [running, failed]);
+    if (running || failed || interrupted) setOpen(true);
+  }, [running, failed, interrupted]);
 
   const actionLabel = useMemo(
     () =>
@@ -43,13 +48,17 @@ export default function MsgActivityGroup({
     ? t("chat.activity.status.running")
     : failed
       ? t("chat.activity.status.error")
-      : null;
+      : interrupted
+        ? t("chat.activity.status.interrupted")
+        : null;
 
   return (
     <section
       className={`msg-activity-group${open ? " is-open" : ""}${
         running ? " is-running" : ""
-      }${failed ? " is-error" : ""}`}
+      }${failed ? " is-error" : ""}${
+        interrupted ? " is-interrupted" : ""
+      }`}
     >
       <button
         type="button"
@@ -82,7 +91,9 @@ export default function MsgActivityGroup({
             <MsgActivity
               key={activity.id}
               activity={activity}
-              defaultOpen={activity.status === "error"}
+              defaultOpen={
+                activity.status === "error" || activity.status === "interrupted"
+              }
               showTimestamp={showTimestamp}
               mediaBaseDir={mediaBaseDir}
             />

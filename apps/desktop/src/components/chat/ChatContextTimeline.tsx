@@ -28,6 +28,7 @@ const STATUS_KEYS: Record<NonNullable<ChatActivity["status"]>, MessageKey> = {
   running: "chat.activity.status.running",
   done: "chat.activity.status.done",
   error: "chat.activity.status.error",
+  interrupted: "chat.activity.status.interrupted",
 };
 
 export default function ChatContextTimeline({ messages }: Props) {

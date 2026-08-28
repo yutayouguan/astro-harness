@@ -8,6 +8,7 @@ import type {
   ChatTimelineSegment,
   UiSurface,
 } from "../../types";
+import { elapsedSecSince } from "./elapsedSec.ts";
 
 const ACTIVITY_KINDS = new Set<ChatActivityKind>([
   "tool",
@@ -174,7 +175,10 @@ function mapActivity(a: ChatHistoryActivityDto): ChatActivity {
     ? (a.kind as ChatActivityKind)
     : "tool";
   const status =
-    a.status === "running" || a.status === "done" || a.status === "error"
+    a.status === "running" ||
+    a.status === "done" ||
+    a.status === "error" ||
+    a.status === "interrupted"
       ? a.status
       : undefined;
   const media = Array.isArray(a.media)
@@ -202,6 +206,37 @@ function mapActivity(a: ChatHistoryActivityDto): ChatActivity {
     status,
     media: media && media.length > 0 ? media : undefined,
   };
+}
+
+/**
+ * 历史快照中的 running 已经失去对应的当前进程执行实例。
+ * 将其收敛为终态并冻结耗时，避免应用重启后继续显示和累计“运行中”。
+ */
+export function settleRestoredActivities(
+  messages: ChatMessage[],
+  settledAt = Date.now(),
+): ChatMessage[] {
+  return messages.map((message) => {
+    if (!message.activities?.some((activity) => activity.status === "running")) {
+      return message;
+    }
+    return {
+      ...message,
+      activities: message.activities.map((activity) => {
+        if (activity.status !== "running") return activity;
+        const durationSec =
+          activity.durationSec ??
+          (activity.at != null
+            ? elapsedSecSince(activity.at, settledAt)
+            : undefined);
+        return {
+          ...activity,
+          status: "interrupted" as const,
+          durationSec,
+        };
+      }),
+    };
+  });
 }
 
 export function mapHistoryMessages(messages: ChatHistoryMessageDto[]): ChatMessage[] {

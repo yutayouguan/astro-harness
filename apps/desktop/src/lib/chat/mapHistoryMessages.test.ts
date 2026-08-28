@@ -4,6 +4,7 @@ import {
   coalesceConsecutiveAssistants,
   enrichTimelineDurations,
   mapHistoryMessages,
+  settleRestoredActivities,
 } from "./mapHistoryMessages.ts";
 
 test("mapHistoryMessages restores activity media from history DTO", () => {
@@ -136,6 +137,60 @@ test("mapHistoryMessages restores durationSec from segment timestamps", () => {
   }
   assert.equal(msgs[0]!.reasoningDurationSec, 2.5);
   assert.equal(msgs[0]!.activities?.[0]?.durationSec, 1.5);
+});
+
+test("restored history settles orphaned running activity after restart", () => {
+  const msgs = settleRestoredActivities(
+    mapHistoryMessages([
+      {
+        id: "a1",
+        role: "assistant",
+        content: "",
+        activities: [
+          { id: "c1", kind: "tool", title: "terminal", status: "running" },
+        ],
+        segments: [{ type: "activity", id: "c1", at: 1_000 }],
+      },
+    ]),
+    4_500,
+  );
+
+  assert.equal(msgs[0]!.activities?.[0]?.status, "interrupted");
+  assert.equal(msgs[0]!.activities?.[0]?.durationSec, 3.5);
+});
+
+test("settleRestoredActivities preserves terminal states and existing duration", () => {
+  const [message] = settleRestoredActivities(
+    [
+      {
+        id: "a1",
+        role: "assistant",
+        content: "",
+        activities: [
+          {
+            id: "running",
+            kind: "tool",
+            title: "terminal",
+            status: "running",
+            at: 1_000,
+            durationSec: 1.25,
+          },
+          {
+            id: "done",
+            kind: "tool",
+            title: "read",
+            status: "done",
+            at: 2_000,
+          },
+        ],
+      },
+    ],
+    9_000,
+  );
+
+  assert.equal(message!.activities?.[0]?.status, "interrupted");
+  assert.equal(message!.activities?.[0]?.durationSec, 1.25);
+  assert.equal(message!.activities?.[1]?.status, "done");
 });
 
 test("enrichTimelineDurations keeps existing durationSec", () => {

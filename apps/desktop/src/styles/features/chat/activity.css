@@ -1740,6 +1740,11 @@ html[data-theme="dark"] .msg-activity-io-label {
   animation: msg-live-glow 1.8s ease-in-out infinite;
 }
 
+.msg-activity.is-interrupted .msg-activity-kind-icon,
+.msg-activity.is-interrupted .msg-activity-duration {
+  color: var(--tone-amber, #d97706);
+}
+
 .msg-reasoning {
   margin: 0 0 0.75rem;
   border-radius: 12px;
