@@ -566,8 +566,22 @@ pub fn mark_agent_dream_error(state: &mut DreamingState, agent_id: &str, err: &s
 mod tests {
     use super::*;
     use crate::workspace::ensure_workspace;
-    use home::{agent_workspace_dir, create_agent, daily_memory_path};
+    use home::{agent_workspace_dir, daily_memory_path, AgentInfo, DEFAULT_AGENT_ID};
     use tempfile::tempdir;
+
+    fn default_agent(base: &std::path::Path) -> AgentInfo {
+        let ws = agent_workspace_dir(base, DEFAULT_AGENT_ID);
+        AgentInfo {
+            id: DEFAULT_AGENT_ID.to_string(),
+            name: "default".to_string(),
+            path: ws.to_string_lossy().into_owned(),
+            is_default: true,
+            is_active: true,
+            emoji: None,
+            avatar: None,
+            vibe: None,
+        }
+    }
 
     #[test]
     fn sanitize_strips_fences() {
@@ -579,7 +593,7 @@ mod tests {
     fn select_skips_dreamed_and_empty() {
         let dir = tempdir().unwrap();
         ensure_workspace(dir.path()).unwrap();
-        let agent = create_agent(dir.path(), "Tester").unwrap();
+        let agent = default_agent(dir.path());
         let ws = agent_workspace_dir(dir.path(), &agent.id);
         let d1 = daily_memory_path(&ws, "2026-07-10");
         let d2 = daily_memory_path(&ws, "2026-07-11");
@@ -598,7 +612,7 @@ mod tests {
     fn finalize_writes_memory_and_marks_dates() {
         let dir = tempdir().unwrap();
         ensure_workspace(dir.path()).unwrap();
-        let agent = create_agent(dir.path(), "Bot").unwrap();
+        let agent = default_agent(dir.path());
         let ws = agent_workspace_dir(dir.path(), &agent.id);
         let diary = daily_memory_path(&ws, "2026-07-09");
         fs::create_dir_all(diary.parent().unwrap()).unwrap();
@@ -623,7 +637,7 @@ mod tests {
     fn finalize_from_structured_update() {
         let dir = tempdir().unwrap();
         ensure_workspace(dir.path()).unwrap();
-        let agent = create_agent(dir.path(), "Bot").unwrap();
+        let agent = default_agent(dir.path());
         let ws = agent_workspace_dir(dir.path(), &agent.id);
         let diary = daily_memory_path(&ws, "2026-07-08");
         fs::create_dir_all(diary.parent().unwrap()).unwrap();
@@ -648,13 +662,12 @@ mod tests {
     fn finalize_over_limit_fails_without_silent_truncate() {
         let dir = tempdir().unwrap();
         ensure_workspace(dir.path()).unwrap();
-        // Tiny MEMORY limit so finalize must fail instead of truncating.
         fs::write(
             dir.path().join("config.yaml"),
             "memory:\n  memory_char_limit: 30\n",
         )
         .unwrap();
-        let agent = create_agent(dir.path(), "Bot").unwrap();
+        let agent = default_agent(dir.path());
         let ws = agent_workspace_dir(dir.path(), &agent.id);
         let diary = daily_memory_path(&ws, "2026-07-07");
         fs::create_dir_all(diary.parent().unwrap()).unwrap();
