@@ -152,94 +152,37 @@ impl Registry {
         self.providers.insert("minimax".to_string(), provider);
     }
 
-    /// 注册 OpenAI 兼容 provider（Chat + 媒体）的 Responses API 变体。
-    pub fn register_compat_responses_with_media<Ext>(
+    /// 将已注册 provider 的 completion 升级为 Responses API 变体。
+    ///
+    /// 保留已有的全部媒体能力，只替换 completion model。
+    /// 通过 `Ext::responses_base_url()` 处理 base_url 变换（如 Azure）。
+    pub fn upgrade_to_responses<Ext>(
         &mut self,
-        id: &'static str,
+        id: &str,
         api_key: &str,
         base_url: Option<&str>,
         model: &str,
     ) where
         Ext: crate::compat::OpenAICompatible
             + crate::traits::ProviderExt
-            + crate::traits::Capabilities<
-                Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>,
-                ImageGen = crate::traits::Capable<crate::compat::media::CompatImageGenModel>,
-                TTS = crate::traits::Capable<crate::compat::media::CompatTTSModel>,
-            > + Default
+            + Default
             + Copy
             + 'static,
     {
         use crate::traits::FromClient;
-        let client = self.make_client(api_key, base_url, Ext::default());
+        let ext = Ext::default();
+        let responses_base = base_url.map(|b| ext.responses_base_url(b));
+        let effective_base = responses_base
+            .as_deref()
+            .map(|cow| cow.as_ref())
+            .or(base_url);
+        let client = self.make_client(api_key, effective_base, ext);
         let completion = crate::compat::OpenAIResponsesModel::<Ext>::from_client(&client, model);
-        let provider = DynProvider::new(id, id)
-            .with_completion(completion)
-            .with_embedding(client.embedding_model(model))
-            .with_image_gen(client.image_model(model))
-            .with_tts(client.tts_model(model));
-        self.providers.insert(id.to_string(), provider);
+        if let Some(provider) = self.providers.get_mut(id) {
+            provider.replace_completion(completion);
+        }
     }
 
-    /// 注册 OpenAI 兼容 provider（仅 Chat）的 Responses API 变体。
-    pub fn register_openai_compat_responses<Ext>(
-        &mut self,
-        id: &'static str,
-        api_key: &str,
-        base_url: Option<&str>,
-        model: &str,
-    ) where
-        Ext:
-            crate::compat::OpenAICompatible + crate::traits::ProviderExt + Default + Copy + 'static,
-    {
-        use crate::traits::FromClient;
-        let client = self.make_client(api_key, base_url, Ext::default());
-        let completion = crate::compat::OpenAIResponsesModel::<Ext>::from_client(&client, model);
-        let provider = DynProvider::new(id, id).with_completion(completion);
-        self.providers.insert(id.to_string(), provider);
-    }
-
-    /// 注册 OpenAI provider 的 Responses API 变体（Chat + 媒体）。
-    pub fn register_openai_responses(
-        &mut self,
-        api_key: &str,
-        base_url: Option<&str>,
-        model: &str,
-    ) {
-        use crate::impls::openai::OpenAI;
-        use crate::traits::FromClient;
-        let client = self.make_client(api_key, base_url, OpenAI);
-        let provider = DynProvider::new("openai", "openai")
-            .with_completion(crate::compat::OpenAIResponsesModel::<OpenAI>::from_client(
-                &client, model,
-            ))
-            .with_embedding(client.embedding_model(model))
-            .with_image_gen(client.image_model(model))
-            .with_tts(client.tts_model(model));
-        self.providers.insert("openai".to_string(), provider);
-    }
-
-    /// 注册 MiniMax provider 的 Responses API 变体（Chat + 全媒体）。
-    pub fn register_minimax_responses(
-        &mut self,
-        api_key: &str,
-        base_url: Option<&str>,
-        model: &str,
-    ) {
-        use crate::impls::minimax_chat::MiniMax;
-        use crate::traits::FromClient;
-        let client = self.make_client(api_key, base_url, MiniMax);
-        let provider = DynProvider::new("minimax", "minimax")
-            .with_completion(crate::compat::OpenAIResponsesModel::<MiniMax>::from_client(
-                &client, model,
-            ))
-            .with_embedding(client.embedding_model(model))
-            .with_image_gen(client.image_model(model))
-            .with_video_gen(client.video_model(model))
-            .with_tts(client.tts_model(model))
-            .with_music_gen(client.music_model(model));
-        self.providers.insert("minimax".to_string(), provider);
-    }
 
     /// 注册 Gemini Native provider（仅 Chat — streamGenerateContent）。
     pub fn register_gemini_native(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {

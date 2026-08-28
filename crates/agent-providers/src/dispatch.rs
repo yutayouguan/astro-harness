@@ -468,41 +468,17 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
     let model = &config.model;
     let responses = use_responses(provider, config);
 
+    // 1) 正常注册（Chat Completions + 全部媒体能力）
     match provider {
         "anthropic" | "claude" => reg.register_anthropic(key, base, model),
         "google" => reg.register_google(key, base, model),
-        "openai" if responses => reg.register_openai_responses(key, base, model),
         "openai" => reg.register_openai(key, base, model),
-        "deepseek" if responses => reg
-            .register_openai_compat_responses::<crate::impls::deepseek::DeepSeek>(
-                "deepseek", key, base, model,
-            ),
         "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
-        "azure" if responses => {
-            let responses_base = base.map(|b| {
-                let b = b.trim_end_matches('/');
-                if b.ends_with("/v1") || b.ends_with("/openai") {
-                    b.to_string()
-                } else {
-                    format!("{b}/openai/v1")
-                }
-            });
-            reg.register_openai_compat_responses::<crate::impls::azure::Azure>(
-                "azure",
-                key,
-                responses_base.as_deref().or(base),
-                model,
-            )
-        }
         "azure" => register_compat::<crate::impls::azure::Azure>(reg, key, base, model),
         "zhipu" => register_media::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
         "moonshot" => register_compat::<crate::impls::moonshot::Moonshot>(reg, key, base, model),
         "ollama" => register_compat::<crate::impls::ollama::Ollama>(reg, key, base, model),
         "nvidia" => register_compat::<crate::impls::nvidia::Nvidia>(reg, key, base, model),
-        "bailian" if responses => reg
-            .register_compat_responses_with_media::<crate::impls::bailian::Bailian>(
-                "bailian", key, base, model,
-            ),
         "bailian" => register_media::<crate::impls::bailian::Bailian>(reg, key, base, model),
         "volcengine" => {
             register_media::<crate::impls::volcengine::Volcengine>(reg, key, base, model)
@@ -510,17 +486,12 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         "openrouter" => {
             register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
         }
-        "minimax" | "minmax" if responses => reg.register_minimax_responses(key, base, model),
         "minimax" | "minmax" => reg.register_minimax(key, base, model),
         "minimax-anthropic" => {
             reg.register_anthropic(key, base, model);
             reg.register_alias("minimax-anthropic", "anthropic");
         }
         "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
-        "mimo" if responses => reg
-            .register_openai_compat_responses::<crate::impls::mimo::Mimo>(
-                "mimo", key, base, model,
-            ),
         "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
         "gemini-native" => reg.register_gemini_native(key, base, model),
         other => {
@@ -529,6 +500,19 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
             } else {
                 register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model);
             }
+        }
+    }
+
+    // 2) Responses 模式：替换 completion model（保留已注册的全部媒体能力）
+    if responses {
+        match provider {
+            "openai" => reg.upgrade_to_responses::<crate::impls::openai::OpenAI>(provider, key, base, model),
+            "deepseek" => reg.upgrade_to_responses::<crate::impls::deepseek::DeepSeek>(provider, key, base, model),
+            "azure" => reg.upgrade_to_responses::<crate::impls::azure::Azure>(provider, key, base, model),
+            "bailian" => reg.upgrade_to_responses::<crate::impls::bailian::Bailian>(provider, key, base, model),
+            "minimax" | "minmax" => reg.upgrade_to_responses::<crate::impls::minimax_chat::MiniMax>("minimax", key, base, model),
+            "mimo" => reg.upgrade_to_responses::<crate::impls::mimo::Mimo>(provider, key, base, model),
+            _ => {}
         }
     }
 }

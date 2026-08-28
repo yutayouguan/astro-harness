@@ -37,6 +37,15 @@ impl OpenAICompatible for Azure {
         apply_thinking_compat(Self::THINKING_FORMAT, Self::EFFORT_MAP, body);
         body.as_object_mut().map(|obj| obj.remove("model"));
     }
+
+    fn responses_base_url<'a>(&self, base: &'a str) -> std::borrow::Cow<'a, str> {
+        let b = base.trim_end_matches('/');
+        if b.ends_with("/v1") || b.ends_with("/openai") {
+            std::borrow::Cow::Borrowed(base)
+        } else {
+            std::borrow::Cow::Owned(format!("{b}/openai/v1"))
+        }
+    }
 }
 
 impl Capabilities for Azure {

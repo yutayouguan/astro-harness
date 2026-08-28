@@ -151,6 +151,10 @@ impl DynProvider {
         self
     }
 
+    pub fn replace_completion(&mut self, model: impl CompletionModel + Clone + 'static) {
+        self.completion = Some(Box::new(model));
+    }
+
     pub fn completion_model(&self) -> Option<&dyn DynCompletionModel> {
         self.completion.as_deref()
     }

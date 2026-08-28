@@ -74,6 +74,13 @@ pub trait OpenAICompatible: ProviderExt {
     /// 在 Responses JSON body 构造完成后、发送前调用。
     /// 默认空实现；厂商可覆盖以处理 thinking/reasoning 等差异。
     fn finalize_responses_body(&self, _body: &mut Value) {}
+
+    /// Responses API 的 base URL。
+    ///
+    /// 默认直接返回传入的 base_url。Azure 覆盖此方法追加 `/openai/v1`。
+    fn responses_base_url<'a>(&self, base: &'a str) -> std::borrow::Cow<'a, str> {
+        std::borrow::Cow::Borrowed(base)
+    }
 }
 
 /// 根据 thinking 格式和 effort 映射表处理 `thinking_config`。
