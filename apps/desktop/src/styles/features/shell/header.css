@@ -69,6 +69,13 @@
   flex-wrap: nowrap;
 }
 
+/* 文件栏打开时与模型选择器共用左边界。宽度由文件栏的真实渲染尺寸回传，
+   因此仍保留用户拖拽后的宽度，也能正确处理 42% 和窄屏上限。 */
+.content-header--chat.has-project-files .header-actions {
+  right: auto;
+  left: calc(100% - var(--chat-header-right-offset, 0px) - 6px);
+}
+
 /* 只有真正的窄屏才折叠模型文案，普通桌面尺寸仍保留当前模型信息。 */
 @media (max-width: 700px) {
   .content-header--chat.has-right-dock .model-picker {

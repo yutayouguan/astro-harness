@@ -3,8 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import type { GeneratingPreview } from "./useGeneratingPreview";
 import type { FileEntryDto, ProjectDto } from "../../types";
 
-const PANEL_OPEN_KEY = "astro.projectFiles.open";
-
 export type ProjectFileTab = {
   key: string;
   path: string | null;
@@ -51,14 +49,6 @@ function dirname(path: string): string {
   return path.replace(/[\\/][^\\/]+$/, "");
 }
 
-function storedPanelOpen(): boolean {
-  try {
-    return localStorage.getItem(PANEL_OPEN_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 function dirty(tab: ProjectFileTab): boolean {
   return !tab.readonly && tab.content !== tab.savedContent;
 }
@@ -67,7 +57,7 @@ export function useProjectFileWorkbench(
   project: ProjectDto | null,
   generatingPreview: GeneratingPreview | null,
 ): ProjectFileWorkbench {
-  const [panelOpen, setPanelOpenState] = useState(storedPanelOpen);
+  const [panelOpen, setPanelOpenState] = useState(false);
   const [entriesByDirectory, setEntriesByDirectory] = useState<Record<string, FileEntryDto[]>>({});
   const entriesRef = useRef<Record<string, FileEntryDto[]>>({});
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set());
@@ -88,11 +78,6 @@ export function useProjectFileWorkbench(
 
   const setPanelOpen = useCallback((open: boolean) => {
     setPanelOpenState(open);
-    try {
-      localStorage.setItem(PANEL_OPEN_KEY, open ? "1" : "0");
-    } catch {
-      // Locked-down WebViews may not expose localStorage.
-    }
   }, []);
 
   const loadDirectory = useCallback(

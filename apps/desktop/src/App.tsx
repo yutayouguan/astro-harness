@@ -1399,7 +1399,7 @@ export default function App() {
           ) : (
             <>
               <div
-                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}`}
+                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}${activeChatRightDock === "project-files" ? " has-project-files" : ""}`}
                 style={{
                   "--chat-header-right-offset": `${chatHeaderRightOffset}px`,
                 } as CSSProperties}

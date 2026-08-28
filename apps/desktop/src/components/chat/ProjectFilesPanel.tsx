@@ -139,6 +139,7 @@ export default function ProjectFilesPanel({
   const [width, setWidth] = useState(initialWidth);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number; entry: FileEntryDto } | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<{ id: number; x: number; width: number } | null>(null);
   const { t } = useI18n();
   const dialog = useAppDialog();
@@ -147,6 +148,21 @@ export default function ProjectFilesPanel({
   useEffect(() => {
     onWidthChange?.(width);
   }, [onWidthChange, width]);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!open || !panel || !onWidthChange) return;
+
+    const reportRenderedWidth = () => {
+      onWidthChange(Math.round(panel.getBoundingClientRect().width));
+    };
+    reportRenderedWidth();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(reportRenderedWidth);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [onWidthChange, open]);
 
   const updateWidth = useCallback((value: number, persist = false) => {
     const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(value)));
@@ -321,6 +337,7 @@ export default function ProjectFilesPanel({
 
   return (
     <aside
+      ref={panelRef}
       className={`project-files-panel${open ? " is-open" : ""}`}
       style={{ "--project-files-width": `${width}px` } as CSSProperties}
       aria-label="项目文件"

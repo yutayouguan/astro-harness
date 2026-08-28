@@ -22,6 +22,10 @@ const projectFilesStyles = await readFile(
   new URL("../../styles/features/chat/project-files.css", import.meta.url),
   "utf8",
 );
+const projectFilesPanel = await readFile(
+  new URL("../../components/chat/ProjectFilesPanel.tsx", import.meta.url),
+  "utf8",
+);
 const sideChatStyles = await readFile(
   new URL("../../styles/features/chat/side-chat.css", import.meta.url),
   "utf8",
@@ -38,12 +42,12 @@ function rule(css, selector) {
   )?.groups?.body;
 }
 
-test("chat header keeps floating controls fixed while docks toggle", () => {
+test("chat header aligns project files with the model picker without changing other docks", () => {
   const header = rule(headerStyles, ".content-header--chat");
   const actions = rule(headerStyles, ".content-header--chat .header-actions");
-  const dockedActions = rule(
+  const projectFileActions = rule(
     headerStyles,
-    ".content-header--chat.has-right-dock .header-actions",
+    ".content-header--chat.has-project-files .header-actions",
   );
 
   assert.ok(header, "missing chat header rule");
@@ -53,7 +57,12 @@ test("chat header keeps floating controls fixed while docks toggle", () => {
   assert.match(actions, /right:\s*16px;/);
   assert.match(actions, /bottom:\s*8px;/);
   assert.doesNotMatch(actions, /transition:\s*right/);
-  assert.equal(dockedActions, undefined);
+  assert.ok(projectFileActions, "missing project-file header alignment rule");
+  assert.match(projectFileActions, /right:\s*auto;/);
+  assert.match(
+    projectFileActions,
+    /left:\s*calc\(100% - var\(--chat-header-right-offset, 0px\) - 6px\);/,
+  );
 });
 
 test("right-side chat surfaces share one inset container material", () => {
@@ -109,6 +118,8 @@ test("project files dock animates layout in both directions", () => {
   assert.match(openPanel, /border-width:\s*1px;/);
   assert.match(openPanel, /visibility:\s*visible;/);
   assert.match(openPanel, /pointer-events:\s*auto;/);
+  assert.match(projectFilesPanel, /new ResizeObserver\(reportRenderedWidth\)/);
+  assert.match(projectFilesPanel, /getBoundingClientRect\(\)\.width/);
 });
 
 test("composer floats above a full-height conversation viewport", () => {

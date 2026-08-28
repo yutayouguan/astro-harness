@@ -250,7 +250,7 @@ function ChatDockLayout({
     >
       <section className="content-pane">
         <div
-          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}`}
+          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}${kind === "files" ? " has-project-files" : ""}`}
           style={{ "--chat-header-right-offset": `${dockWidth}px` } as CSSProperties}
         >
           <div className="content-heading" />
