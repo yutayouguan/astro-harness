@@ -88,6 +88,15 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.ok(newChat, "missing new-chat styles");
   assert.match(newChat, /min-height:\s*40px;/);
   assert.match(newChat, /font-size:\s*14px;/);
+  assert.match(newChat, /box-shadow:/, "new chat should share the floating action treatment");
+  assert.match(newChat, /backdrop-filter:/, "new chat should retain the glass material");
+  const globalSearch = rule(
+    projectStyles,
+    ".sidebar-global-search .expandable-search-btn",
+  );
+  assert.ok(globalSearch, "missing global search action styles");
+  assert.match(globalSearch, /box-shadow:/, "search should remain a floating action");
+  assert.match(globalSearch, /backdrop-filter:/, "search should retain the glass material");
   assert.ok(groupLabel, "missing workspace group heading styles");
   assert.match(groupLabel, /font-size:\s*14px;/);
   assert.ok(activeNav, "active workspace navigation needs a position marker");

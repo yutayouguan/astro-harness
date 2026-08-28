@@ -205,7 +205,10 @@ pub async fn get_chat_history(
         .as_ref()
         .is_some_and(|session| session.branch_kind.as_deref() == Some("side"));
     let parent_session_id = ephemeral
-        .then(|| meta.as_ref().and_then(|session| session.parent_session_id.clone()))
+        .then(|| {
+            meta.as_ref()
+                .and_then(|session| session.parent_session_id.clone())
+        })
         .flatten();
     let excluded_turn_count = if ephemeral {
         meta.as_ref()
@@ -235,37 +238,37 @@ pub async fn get_chat_history(
         Vec::new()
     } else {
         history
-        .into_iter()
-        .filter(|message| {
-            visible_start_id.is_none_or(|start| {
-                message
-                    .id
-                    .parse::<i64>()
-                    .is_ok_and(|message_id| message_id >= start)
-            })
-        })
-        .map(|m| ChatHistoryMessageDto {
-            id: format!("db-{}", m.id),
-            role: m.role,
-            content: m.content,
-            reasoning: m.reasoning,
-            activities: m
-                .activities
-                .into_iter()
-                .map(|a| ChatHistoryActivityDto {
-                    id: a.id,
-                    kind: a.kind,
-                    title: a.title,
-                    input: a.input,
-                    output: a.output,
-                    status: a.status,
-                    media: history_media_from_json(a.media.as_ref()),
+            .into_iter()
+            .filter(|message| {
+                visible_start_id.is_none_or(|start| {
+                    message
+                        .id
+                        .parse::<i64>()
+                        .is_ok_and(|message_id| message_id >= start)
                 })
-                .collect(),
-            segments: m.segments,
-            ui_surfaces: m.ui_surfaces,
-        })
-        .collect()
+            })
+            .map(|m| ChatHistoryMessageDto {
+                id: format!("db-{}", m.id),
+                role: m.role,
+                content: m.content,
+                reasoning: m.reasoning,
+                activities: m
+                    .activities
+                    .into_iter()
+                    .map(|a| ChatHistoryActivityDto {
+                        id: a.id,
+                        kind: a.kind,
+                        title: a.title,
+                        input: a.input,
+                        output: a.output,
+                        status: a.status,
+                        media: history_media_from_json(a.media.as_ref()),
+                    })
+                    .collect(),
+                segments: m.segments,
+                ui_surfaces: m.ui_surfaces,
+            })
+            .collect()
     };
 
     Ok(ChatHistoryDto {

@@ -124,6 +124,11 @@ test("public MCP directory has category metadata and a scrollable filter rail", 
 test("plugin toolbar is compact and degrades to stacked rows on narrow screens", () => {
   assert.match(styles, /\.plugins-command-bar\s*\{[\s\S]*?gap:\s*8px;/);
   assert.match(
+    styles,
+    /\.plugins-command-bar\s*\{[\s\S]*?padding:\s*12px 8px 0;/,
+    "plugin command bar should keep 12px clear of the window chrome",
+  );
+  assert.match(
     tabs,
     /\.skills-page \.plugins-personal-tabs\s*\{[\s\S]*?background:\s*transparent;/,
   );

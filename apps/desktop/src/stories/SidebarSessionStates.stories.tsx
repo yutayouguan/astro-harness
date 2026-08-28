@@ -10,10 +10,13 @@ import {
   Plus,
   Wrench,
 } from "lucide-react";
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import ProjectFolderIcon from "../components/chat/ProjectFolderIcon";
 import SessionStatusIcon from "../components/chat/SessionStatusIcon";
+import { IconNewChat } from "../components/icons/NavIcons";
+import ExpandableSearch from "../components/ui/ExpandableSearch";
 import { useBeautifyTips } from "../hooks/ui/useBeautifyTips";
+import { LocaleProvider } from "../i18n/LocaleContext";
 
 function SessionRow({
   title,
@@ -56,6 +59,7 @@ function SessionRow({
 
 function SidebarSessionStates() {
   useBeautifyTips();
+  const [query, setQuery] = useState("");
 
   return (
     <main className="app-shell" data-tone="blue" style={{ minHeight: "100vh" }}>
@@ -64,6 +68,18 @@ function SidebarSessionStates() {
           className="sidebar is-open is-pinned is-labels"
           style={{ "--sidebar-w-wide": "280px" } as CSSProperties}
         >
+          <div className="sidebar-primary-actions">
+            <button type="button" className="sidebar-new-chat">
+              <IconNewChat width={18} height={18} strokeWidth={1.8} />
+              <span className="sidebar-item-label">新对话</span>
+            </button>
+            <ExpandableSearch
+              value={query}
+              onChange={setQuery}
+              placeholderKey="chat.rightPanel.searchSessions"
+              className="sidebar-session-search sidebar-global-search"
+            />
+          </div>
           <div className="sidebar-projects">
             <div className="sidebar-collapsible-section">
               <button type="button" className="sidebar-section-toggle" aria-expanded>
@@ -150,6 +166,7 @@ const meta = {
   id: "sidebar-session-states",
   title: "Shell/Sidebar Session States",
   component: SidebarSessionStates,
+  decorators: [(Story) => <LocaleProvider><Story /></LocaleProvider>],
   parameters: {
     controls: { disable: true },
   },
