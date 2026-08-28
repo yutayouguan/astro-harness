@@ -3015,15 +3015,12 @@ export default function ChatView({
                 >
                   {(() => {
                     const Meta = modeMeta[chatMode];
-                    const Icon = Meta.Icon;
+                    const ModeIcon = Meta.Icon;
+                    const ApprovalIcon = approvalMeta[approvalMode].Icon;
                     return (
                       <>
-                        <Icon size={15} strokeWidth={2.2} />
-                        <span>{Meta.label}</span>
-                        <span className="composer-policy-separator" aria-hidden>·</span>
-                        <span className="composer-policy-approval">
-                          {approvalMeta[approvalMode].label}
-                        </span>
+                        <ModeIcon size={15} strokeWidth={2.2} />
+                        <ApprovalIcon size={14} strokeWidth={2.2} />
                         <ChevronDown size={14} strokeWidth={2} />
                       </>
                     );
