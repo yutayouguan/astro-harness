@@ -2815,30 +2815,33 @@ export default function SkillsPanel({
               ))}
             </div>
           )}
+
+          {primaryTab === "skills" && scope === "global" && (
+            <>
+              <div className="plugins-command-divider" aria-hidden />
+              <div className="plugins-personal-tabs" role="tablist" aria-label={t("plugins.personalTabs")}>
+                {(["installed", "online", "machine"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    role="tab"
+                    aria-selected={personalTab === item}
+                    className={`plugins-personal-tab ${item === "machine" ? "is-import" : ""} ${personalTab === item ? "is-active" : ""}`}
+                    onClick={() => setPersonalTab(item)}
+                  >
+                    {item === "installed" ? <Package size={15} aria-hidden /> : item === "online" ? <CloudDownload size={15} aria-hidden /> : <HardDrive size={15} aria-hidden />}
+                    {t(`plugins.personalTab.${item}` as MessageKey)}
+                    {item === "machine" && machineSkills.length > 0 && (
+                      <span className="plugins-personal-tab-count">{machineSkills.length}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="skills-toolbar plugins-context-toolbar">
-          {primaryTab === "skills" && scope === "global" && (
-            <div className="plugins-personal-tabs" role="tablist" aria-label={t("plugins.personalTabs")}>
-              {(["installed", "online", "machine"] as const).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  role="tab"
-                  aria-selected={personalTab === item}
-                  className={`plugins-personal-tab ${item === "machine" ? "is-import" : ""} ${personalTab === item ? "is-active" : ""}`}
-                  onClick={() => setPersonalTab(item)}
-                >
-                  {item === "installed" ? <Package size={15} aria-hidden /> : item === "online" ? <CloudDownload size={15} aria-hidden /> : <HardDrive size={15} aria-hidden />}
-                  {t(`plugins.personalTab.${item}` as MessageKey)}
-                  {item === "machine" && machineSkills.length > 0 && (
-                    <span className="plugins-personal-tab-count">{machineSkills.length}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-
           <div className="skills-toolbar-end">
           {primaryTab === "skills" ? (
             <>

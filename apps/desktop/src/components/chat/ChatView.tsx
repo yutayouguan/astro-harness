@@ -132,6 +132,8 @@ import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
+import BrowserPreviewFloat from "./BrowserPreviewFloat";
+import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
 import {
   CronRunFloatingCard,
   CronTaskDetailDrawer,
@@ -318,6 +320,9 @@ type Props = {
   agentId?: string | null;
   /** 当前聊天模型 id：助手无自定义头像时用作品牌图标 */
   modelId?: string | null;
+  /** 当前任务绑定浏览器的悬浮预览。 */
+  browserPreview?: BrowserPreview | null;
+  onCloseBrowserPreview?: () => void;
   /** 定时任务编辑器使用的供应商列表。 */
   cronProviders?: ProviderOpt[];
   cronActiveProviderId?: string | null;
@@ -736,6 +741,8 @@ export default function ChatView({
   onPickWelcomePrompt,
   agentId = null,
   modelId = null,
+  browserPreview = null,
+  onCloseBrowserPreview,
   cronProviders = [],
   cronActiveProviderId = null,
   modelCapabilities = null,
@@ -2098,6 +2105,12 @@ export default function ChatView({
             onOpen={() => setCronTaskOpen(true)}
           />
         </aside>
+      ) : null}
+      {browserPreview && !workspaceContent ? (
+        <BrowserPreviewFloat
+          preview={browserPreview}
+          onClose={() => onCloseBrowserPreview?.()}
+        />
       ) : null}
       {workspaceContent ? (
         workspaceContent
