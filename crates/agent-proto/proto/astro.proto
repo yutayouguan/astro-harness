@@ -53,6 +53,7 @@ message ChatFallbackTarget {
   string api_key = 3;
   string base_url = 4;
   string provider_id = 5; // providers.json 条目 id，可空
+  string api_mode = 6; // chat_completions | responses；空=供应商默认
 }
 
 // 单条辅助模型已解析目标（title_generation / compaction / smart_approval /
@@ -129,6 +130,8 @@ message ChatRequest {
   string project_id = 38;
   // 当前项目全部可读写目录；第一个元素必须与 project_root（主 cwd）一致。
   repeated string workspace_roots = 39;
+  // 主模型 API 协议覆盖；与 providers.json 中当前选择保持一致。
+  string api_mode = 40;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

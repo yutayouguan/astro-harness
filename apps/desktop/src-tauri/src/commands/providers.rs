@@ -1251,7 +1251,7 @@ const IMAGE_GEN_NO_PROVIDER_MSG: &str =
 fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
     // 硬编码 fallback — 仅在缓存为空时使用
     match kind {
-        ProviderKind::Google => Some("nanobanana-v2"),
+        ProviderKind::Google => Some("nano-banana-pro-preview"),
         ProviderKind::Openai => Some("gpt-image-2"),
         ProviderKind::Minimax => Some("image-01"),
         _ => None,

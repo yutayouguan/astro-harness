@@ -199,7 +199,7 @@ const MEDIA_MODEL_DEFAULTS: Record<
   { image: string; video: string; tts: string; music: string; vision: string }
 > = {
   google: {
-    image: "gemini-3.1-flash-image",
+    image: "nano-banana-pro-preview",
     video: "veo-3.1-generate-preview",
     tts: "gemini-3.1-flash-tts-preview",
     music: "lyria-3-clip-preview",

@@ -457,7 +457,7 @@ pub fn build_interaction_image_body(model: &str, req: &InteractionImageRequest) 
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("image/png");
+        .unwrap_or("image/jpeg");
     let mut response_format = json!({ "type": "image", "mime_type": mime });
     if let Some(ar) = req.aspect_ratio.as_deref().filter(|s| !s.is_empty()) {
         response_format["aspect_ratio"] = json!(ar);
@@ -592,7 +592,7 @@ pub async fn google_interactions_image(
         anyhow::bail!("Google API Key 为空");
     }
     let model = if config.model.trim().is_empty() {
-        "gemini-3.1-flash-image"
+        "nano-banana-pro-preview"
     } else {
         config.model.trim()
     };
@@ -1713,9 +1713,10 @@ mod tests {
             thinking_level: Some("high".into()),
             video: None,
         };
-        let body = build_interaction_image_body("gemini-3.1-flash-image", &req);
-        assert_eq!(body["model"], "gemini-3.1-flash-image");
+        let body = build_interaction_image_body("nano-banana-pro-preview", &req);
+        assert_eq!(body["model"], "nano-banana-pro-preview");
         assert_eq!(body["response_format"]["type"], "image");
+        assert_eq!(body["response_format"]["mime_type"], "image/jpeg");
         assert_eq!(body["response_format"]["aspect_ratio"], "16:9");
         assert_eq!(body["response_format"]["image_size"], "2K");
         assert_eq!(body["generation_config"]["thinking_level"], "high");

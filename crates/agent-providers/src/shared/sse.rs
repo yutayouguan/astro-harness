@@ -8,6 +8,16 @@ use futures::StreamExt;
 
 use crate::types::stream::{CompletionStream, StreamChunk};
 
+fn take_complete_line(buf: &mut Vec<u8>) -> Option<String> {
+    let newline = buf.iter().position(|byte| *byte == b'\n')?;
+    let mut line = buf.drain(..=newline).collect::<Vec<_>>();
+    line.pop();
+    if line.last() == Some(&b'\r') {
+        line.pop();
+    }
+    Some(String::from_utf8_lossy(&line).into_owned())
+}
+
 /// SSE 事件提取器：解析 `data:` 负载为零或多个 [`StreamChunk`]。
 pub type ChunkExtract = Arc<dyn Fn(&str) -> Vec<StreamChunk> + Send + Sync>;
 
@@ -41,7 +51,7 @@ pub async fn sse_stream(
     let stream = futures::stream::unfold(
         (
             byte_stream,
-            String::new(),
+            Vec::<u8>::new(),
             false,
             extract,
             VecDeque::<StreamChunk>::new(),
@@ -56,9 +66,7 @@ pub async fn sse_stream(
                 return None;
             }
             loop {
-                if let Some(nl) = buf.find('\n') {
-                    let line = buf[..nl].trim_end_matches('\r').to_string();
-                    buf = buf[nl + 1..].to_string();
+                if let Some(line) = take_complete_line(&mut buf) {
                     let trimmed = line.trim();
                     if trimmed.is_empty() || trimmed.starts_with(':') {
                         continue;
@@ -94,14 +102,14 @@ pub async fn sse_stream(
 
                 match byte_stream.next().await {
                     Some(Ok(bytes)) => {
-                        buf.push_str(&String::from_utf8_lossy(&bytes));
+                        buf.extend_from_slice(&bytes);
                     }
                     Some(Err(err)) => {
                         return Some((Err(err.into()), (byte_stream, buf, true, extract, pending)));
                     }
                     None => {
-                        if !buf.trim().is_empty() {
-                            let line = buf.trim().to_string();
+                        if buf.iter().any(|byte| !byte.is_ascii_whitespace()) {
+                            let line = String::from_utf8_lossy(&buf).trim().to_string();
                             buf.clear();
                             if let Some(data) = line.strip_prefix("data:") {
                                 let data = data.trim();
@@ -138,4 +146,27 @@ pub async fn sse_stream(
     );
 
     Ok(Box::pin(stream))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::take_complete_line;
+
+    #[test]
+    fn complete_line_preserves_utf8_split_across_chunks() {
+        let line = "data: {\"delta\":\"中央\"}\n";
+        let chinese_start = line.find('中').expect("fixture contains Chinese text");
+        let split = chinese_start + 1;
+        let bytes = line.as_bytes();
+        let mut buffer = bytes[..split].to_vec();
+
+        assert_eq!(take_complete_line(&mut buffer), None);
+
+        buffer.extend_from_slice(&bytes[split..]);
+        assert_eq!(
+            take_complete_line(&mut buffer).as_deref(),
+            Some("data: {\"delta\":\"中央\"}")
+        );
+        assert!(buffer.is_empty());
+    }
 }

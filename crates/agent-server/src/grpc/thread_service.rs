@@ -560,6 +560,48 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn configure_thread_preserves_primary_and_fallback_api_modes() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("api-mode-thread")
+            .await
+            .expect("thread");
+
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "api-mode-thread".into(),
+                    provider: "deepseek".into(),
+                    model: "deepseek-v4-flash".into(),
+                    api_mode: "chat_completions".into(),
+                    chat_fallbacks: vec![proto::ChatFallbackTarget {
+                        provider: "openai".into(),
+                        model: "gpt-5.6".into(),
+                        api_mode: "responses".into(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure thread");
+
+        let targets = managed.runtime.session().chat_targets();
+        assert_eq!(targets[0].api_mode, "chat_completions");
+        assert_eq!(targets[1].api_mode, "responses");
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
     #[test]
     fn turn_request_preserves_client_message_identity() {
         let mut chat = valid_chat_request();
