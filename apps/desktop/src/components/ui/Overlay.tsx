@@ -8,6 +8,7 @@ import {
 import { createPortal } from "react-dom";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useOverlayFocus } from "../../hooks/ui/useOverlayFocus";
+import { useDynamicOverlayLayer } from "../../hooks/ui/useDynamicOverlayLayer";
 
 type OverlayAccessibleName =
   | { "aria-label": string; "aria-labelledby"?: string }
@@ -56,6 +57,7 @@ function OverlayFrame({
 }: OverlayFrameProps) {
   const localPanelRef = useRef<HTMLDivElement>(null);
   const panelRef = providedPanelRef ?? localPanelRef;
+  const { layer, bringToFront } = useDynamicOverlayLayer(open);
 
   useOverlayFocus({
     open,
@@ -78,7 +80,9 @@ function OverlayFrame({
         .filter(Boolean)
         .join(" ")}
       role="presentation"
-      style={backdropStyle}
+      data-app-overlay-layer={layer}
+      style={{ ...backdropStyle, zIndex: layer }}
+      onPointerDownCapture={bringToFront}
       onMouseDown={(event) => {
         if (closeOnBackdrop && event.target === event.currentTarget) onClose();
       }}

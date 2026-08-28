@@ -1,13 +1,7 @@
 /* 通用应用内对话框（Portal → body） */
-:root {
-  /* 命令式确认框必须覆盖已打开的 drawer / modal / popover。 */
-  --z-dialog: 1580;
-}
-
 .app-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: var(--z-dialog);
   display: grid;
   place-items: center;
   padding: 24px 16px;
@@ -333,10 +327,6 @@ body:has(.app-dialog-backdrop.is-closing) .app-shell {
 }
 
 /* ── 关于 Astro ── */
-.about-dialog-backdrop {
-  z-index: calc(var(--z-dialog) + 20);
-}
-
 .about-dialog {
   position: relative;
   width: min(420px, 92vw);

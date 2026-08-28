@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useTheme } from "../../hooks/app/useTheme";
+import { useDynamicOverlayLayer } from "../../hooks/ui/useDynamicOverlayLayer";
 import {
   clampPercent,
   cloneGradient,
@@ -40,6 +41,7 @@ export default function ShellGradientEditor({
   const { t } = useI18n();
   const { resolved } = useTheme();
   const titleId = useId();
+  const { layer, bringToFront } = useDynamicOverlayLayer(open);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<number | null>(null);
   const [draft, setDraft] = useState<ShellGradient>(() => ({
@@ -204,7 +206,10 @@ export default function ShellGradientEditor({
   return createPortal(
     <div
       className="shell-grad-editor-backdrop"
+      data-app-overlay-layer={layer}
+      style={{ zIndex: layer }}
       role="presentation"
+      onPointerDownCapture={bringToFront}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}

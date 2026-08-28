@@ -61,20 +61,9 @@ test("task drawer refreshes its own run history after actions", () => {
   assert.match(panel, /if \(drawerJobId === run\.job_id\)/);
 });
 
-test("delete confirmation stays above the open task drawer", () => {
-  const dialogLayer = Number(dialog.match(/--z-dialog:\s*(\d+)/)?.[1]);
-  const overlayLayers = [
-    "z-overlay-drawer",
-    "z-overlay-modal",
-    "z-overlay-popover",
-  ].map((name) => Number(overlay.match(new RegExp(`--${name}:\\s*(\\d+)`))?.[1]));
-
-  assert.ok(Number.isFinite(dialogLayer));
-  assert.ok(overlayLayers.every(Number.isFinite));
-  assert.ok(
-    overlayLayers.every((layer) => dialogLayer > layer),
-    "confirmation dialog must render above every shared overlay",
-  );
+test("shared overlays no longer encode a fixed component hierarchy", () => {
+  assert.doesNotMatch(dialog, /--z-dialog/);
+  assert.doesNotMatch(overlay, /--z-overlay-(?:drawer|modal|popover)/);
 });
 
 test("cron sessions keep the answer and expose a separate floating task card", () => {

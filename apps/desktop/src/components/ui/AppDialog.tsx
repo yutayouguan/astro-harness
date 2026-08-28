@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Info, Pencil } from "lucide-react";
+import { useDynamicOverlayLayer } from "../../hooks/ui/useDynamicOverlayLayer";
 
 export type AppDialogVariant = "default" | "danger" | "prompt";
 
@@ -40,6 +41,7 @@ export default function AppDialog({
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const [closing, setClosing] = useState(false);
+  const { layer, bringToFront } = useDynamicOverlayLayer(open);
 
   const startClose = useCallback(
     (action: () => void) => {
@@ -116,7 +118,10 @@ export default function AppDialog({
     <div
       ref={backdropRef}
       className={`app-dialog-backdrop${closing ? " is-closing" : ""}`}
+      data-app-overlay-layer={layer}
+      style={{ zIndex: layer }}
       role="presentation"
+      onPointerDownCapture={bringToFront}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) startClose(onCancel);
       }}

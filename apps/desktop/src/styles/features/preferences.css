@@ -1679,7 +1679,6 @@ html[data-theme="dark"] .shell-color-presets {
 .shell-grad-editor-backdrop {
   position: fixed;
   inset: 0;
-  z-index: var(--z-dialog, 1500);
   display: grid;
   place-items: start end;
   padding: 52px 22px 22px;

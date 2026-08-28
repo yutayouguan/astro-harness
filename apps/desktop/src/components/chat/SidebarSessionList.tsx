@@ -39,6 +39,7 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type { RecentSessionDto } from "../../types";
 import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
+import { visibleSessionTitle } from "../../lib/chat/sessionTitle";
 import SessionStatusIcon, {
   resolveSessionStatus,
   type SessionActivityStatus,
@@ -152,7 +153,12 @@ export default function SidebarSessionList({
         limit: projectId ? 50 : 200,
         projectId,
       });
-      setItems(list ?? []);
+      setItems(
+        (list ?? []).map((item) => ({
+          ...item,
+          summary: visibleSessionTitle(item.summary, item.sessionId),
+        })),
+      );
     } catch {
       setItems([]);
     }
@@ -178,7 +184,9 @@ export default function SidebarSessionList({
       if (!sessionId || !title) return;
       setItems((prev) =>
         prev.map((item) =>
-          item.sessionId === sessionId ? { ...item, summary: title } : item,
+          item.sessionId === sessionId
+            ? { ...item, summary: visibleSessionTitle(title, sessionId) }
+            : item,
         ),
       );
     })
