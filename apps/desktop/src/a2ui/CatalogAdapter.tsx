@@ -402,17 +402,25 @@ function CatalogNode({
   }
 }
 
-export function renderCatalogTree(
-  components: A2uiComponent[],
-  opts: {
-    disabled: boolean;
-    onAction: (name: string, context: Record<string, unknown>) => void;
-    unknownLabel: string;
-    fieldValues: Record<string, unknown>;
-    setFieldValue: (id: string, value: unknown) => void;
-    mediaBaseDir?: string | null;
-  },
-): ReactNode {
+type CatalogTreeProps = {
+  components: A2uiComponent[];
+  disabled: boolean;
+  onAction: (name: string, context: Record<string, unknown>) => void;
+  unknownLabel: string;
+  fieldValues: Record<string, unknown>;
+  setFieldValue: (id: string, value: unknown) => void;
+  mediaBaseDir?: string | null;
+};
+
+export function CatalogTree({
+  components,
+  disabled,
+  onAction,
+  unknownLabel,
+  fieldValues,
+  setFieldValue,
+  mediaBaseDir,
+}: CatalogTreeProps): ReactNode {
   const byId = new Map(components.map((c) => [c.id, c]));
   const referenced = new Set<string>();
   for (const c of components) {
@@ -423,15 +431,15 @@ export function renderCatalogTree(
   const root = roots.find((c) => c.component === "Card") ?? roots[0] ?? components[0];
   if (!root) return null;
   const requiredBlocked =
-    missingRequiredFields(components, opts.fieldValues).length > 0;
+    missingRequiredFields(components, fieldValues).length > 0;
   const ctx: RenderCtx = {
     byId,
-    disabled: opts.disabled,
-    onAction: opts.onAction,
-    unknownLabel: opts.unknownLabel,
-    fieldValues: opts.fieldValues,
-    setFieldValue: opts.setFieldValue,
-    mediaBaseDir: opts.mediaBaseDir,
+    disabled,
+    onAction,
+    unknownLabel,
+    fieldValues,
+    setFieldValue,
+    mediaBaseDir,
     requiredBlocked,
   };
   return <CatalogNode node={root} ctx={ctx} />;
