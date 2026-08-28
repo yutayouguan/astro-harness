@@ -115,7 +115,7 @@ async fn tick_inner() -> anyhow::Result<()> {
                 .enable_all()
                 .build()?;
             rt.block_on(async {
-                let run_db = WorkflowRunDb::open_default()?;
+                let run_db = WorkflowRunDb::open_default().await?;
                 workflow::engine::execute_workflow(
                     &wf_clone,
                     serde_json::json!({ "trigger": "scheduled", "schedule": schedule_clone }),

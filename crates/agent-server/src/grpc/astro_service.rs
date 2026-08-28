@@ -36,9 +36,10 @@ use crate::{
     ThreadState, ThreadStateManager, WORKSPACE_EVENT_THREAD_ID,
 };
 
-fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
+async fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
     session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -1488,6 +1489,7 @@ impl AstroServiceImpl {
         }
         let (agent, _) = builder
             .build_with_session_id(session_id.to_string())
+            .await
             .map_err(|e| Status::internal(e.to_string()))?;
         let handle = Arc::new(agent);
         handle.set_hook_runtime(Arc::clone(&self.hook_runtime));
@@ -2601,10 +2603,11 @@ impl AstroService for AstroServiceImpl {
             .map_err(|e| Status::internal(e.to_string()))?;
         let (memory_content, user_content) = memory.prompt_content();
         let sessions =
-            open_sessions(&self.memory_dir).map_err(|e| Status::internal(e.to_string()))?;
+            open_sessions(&self.memory_dir).await.map_err(|e| Status::internal(e.to_string()))?;
 
         let sessions = sessions
             .search_messages(&query.query, None, None, query.limit.max(1) as i64)
+            .await
             .map_err(|e| Status::internal(e.to_string()))?
             .into_iter()
             .map(|hit| {
