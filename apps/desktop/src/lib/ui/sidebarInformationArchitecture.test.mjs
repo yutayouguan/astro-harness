@@ -97,15 +97,15 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.ok(newChat, "missing new-chat styles");
   assert.match(newChat, /min-height:\s*40px;/);
   assert.match(newChat, /font-size:\s*14px;/);
-  assert.match(newChat, /0 3px 9px/, "new chat should use a restrained surface shadow");
+  assert.match(newChat, /box-shadow:\s*none;/, "new chat should sit flat in the sidebar");
+  assert.match(newChat, /backdrop-filter:\s*none;/, "new chat should not stack another glass layer");
   assert.match(
     projectStyles,
-    /\.sidebar-new-chat:hover\s*\{[\s\S]*?0 4px 11px/,
-    "hover should not make the action float prominently",
+    /\.sidebar-new-chat:hover\s*\{[\s\S]*?box-shadow:\s*none;/,
+    "hover should preserve the flat surface treatment",
   );
   assert.ok(newChatActive, "missing new-chat pressed feedback");
-  assert.match(newChatActive, /scale\(0\.985\)/);
-  assert.match(newChat, /backdrop-filter:/, "new chat should retain the glass material");
+  assert.match(newChatActive, /scale\(0\.99\)/);
   const globalSearch = rule(
     projectStyles,
     ".sidebar-global-search .expandable-search-btn",
