@@ -382,6 +382,23 @@ mod tests {
         assert!(input.is_empty(), "orphan tool_call should be dropped");
     }
 
+    #[test]
+    fn orphan_tool_calls_preserve_text() {
+        let msgs = vec![Message::assistant(vec![
+            AssistantContent::Text { text: "analysis done".into() },
+            AssistantContent::ToolCall(ToolCall {
+                id: "call_orphan".into(),
+                name: "dangling".into(),
+                arguments: json!({}),
+                signature: None,
+            }),
+        ])];
+        let input = to_responses_input(&msgs);
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["role"], "assistant");
+        assert_eq!(input[0]["content"], "analysis done");
+    }
+
     // ── 内容构建 ──
 
     #[test]
