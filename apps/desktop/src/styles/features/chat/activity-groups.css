@@ -102,6 +102,11 @@
   padding-left: 24px;
 }
 
+/* 收起详情时不让零高度折叠区继续占用 gap，工具项上下留白保持一致。 */
+.bubble.assistant .msg-activity-group-items .msg-activity-body {
+  gap: 0;
+}
+
 .bubble.assistant .msg-activity-group-items .msg-activity:last-child {
   padding-bottom: 0;
   border-bottom: 0;

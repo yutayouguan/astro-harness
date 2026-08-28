@@ -16,9 +16,29 @@ test("collapsed tool activity reads as a rounded status row", async () => {
 
   assert.match(index, /activity-groups\.css[\s\S]*tool-activity-polish\.css/);
   assert.match(css, /> \.msg-activity \{/);
-  assert.match(css, /border-radius: 15px/);
-  assert.match(css, /min-height: 43px/);
+  assert.match(css, /border-radius: 11px/);
+  assert.match(css, /min-height: 38px/);
+  assert.match(
+    css,
+    /msg-timeline-step:has\(> \.msg-timeline-body > \.msg-activity\)[\s\S]*padding-top: 10px/,
+  );
   assert.doesNotMatch(css, /border-radius: 999px/);
+});
+
+test("grouped activity rows and reply icons share balanced alignment", async () => {
+  const [activity, groups] = await Promise.all([
+    source("styles/features/chat/activity.css"),
+    source("styles/features/chat/activity-groups.css"),
+  ]);
+
+  assert.match(
+    groups,
+    /msg-activity-group-items \.msg-activity-body \{[\s\S]*gap: 0/,
+  );
+  assert.match(
+    activity,
+    /msg-timeline-step\.kind-reply \.msg-timeline-rail \{[\s\S]*padding-top: 7px/,
+  );
 });
 
 test("expanded tool activity gains depth while running state avoids full-card glow", async () => {

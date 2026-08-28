@@ -9,7 +9,7 @@
       var(--tl-tone, var(--tone, var(--accent))) 10%,
       color-mix(in srgb, var(--ink) 7%, transparent)
     );
-  border-radius: 15px;
+  border-radius: 11px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 46%),
     color-mix(in srgb, var(--ink) 3%, transparent);
@@ -26,13 +26,20 @@
     box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* 单独工具条压低后，轴图标回到与状态条相同的视觉中线；工具组保持原位。 */
+.bubble.assistant
+  .msg-timeline-step:has(> .msg-timeline-body > .msg-activity)
+  > .msg-timeline-rail {
+  padding-top: 10px;
+}
+
 .bubble.assistant .msg-timeline-body > .msg-activity .msg-activity-body {
   gap: 0;
 }
 
 .bubble.assistant .msg-timeline-body > .msg-activity .msg-activity-toggle,
 .bubble.assistant .msg-timeline-body > .msg-activity .msg-activity-summary {
-  min-height: 43px;
+  min-height: 38px;
   padding: 0 11px;
   border-radius: inherit;
   transition: background 140ms ease-out;
@@ -61,6 +68,7 @@
 }
 
 .bubble.assistant .msg-timeline-body > .msg-activity.is-open {
+  border-radius: 12px;
   border-color: color-mix(
     in srgb,
     var(--tl-tone, var(--tone, var(--accent))) 16%,
