@@ -23,7 +23,7 @@
   place-items: center;
   flex-shrink: 0;
   position: relative;
-  /* 与侧栏选中态一致：渐变图标，无底板背景 */
+  /* 标题栏保持轻量线稿；只复用侧栏的渐变描边，不继承选中态填充。 */
   --nav-grad-top: color-mix(in srgb, var(--tone, #c084fc) 28%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 82%, #6d28d9);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 70%, #2e1065);
@@ -44,7 +44,7 @@
   z-index: 1;
   width: 22px;
   height: 22px;
-  fill: var(--nav-grad-paint);
+  fill: none;
   stroke-width: 1.45;
 }
 
@@ -79,10 +79,13 @@
   fill: none !important;
 }
 
-.page-title-icon svg .nav-icon-dot,
-.page-title-icon svg .nav-icon-fill {
+.page-title-icon svg .nav-icon-dot {
   fill: var(--nav-grad-bottom);
   stroke: none;
+}
+
+.page-title-icon svg .nav-icon-fill {
+  fill: none;
 }
 
 html[data-theme="dark"] .page-title-icon {
