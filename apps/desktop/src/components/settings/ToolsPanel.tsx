@@ -189,7 +189,11 @@ function ApprovalsSection({ active }: { active: boolean }) {
               <li key={`${rule.origin}:${rule.actionClass}`} className="mcp-tool-row">
                 <span className="approvals-rule-copy">
                   <code className="mcp-tool-name">{rule.origin}</code>
-                  <small className="tools-detail-body">{rule.actionClass}</small>
+                  <small className="tools-detail-body">
+                    {rule.actionClass === "state_changing"
+                      ? t("approvals.browser.stateChanging")
+                      : rule.actionClass}
+                  </small>
                 </span>
                 <button
                   type="button"

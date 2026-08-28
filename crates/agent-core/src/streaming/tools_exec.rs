@@ -956,7 +956,10 @@ async fn preflight_browser_action(
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
-    let Some(class) = tools::browser::approval_class(&call.name, &call.arguments) else {
+    let Some(class) =
+        tools::browser::effective_approval_class(session.session_id(), &call.name, &call.arguments)
+            .await
+    else {
         return Some(PermissionPreflight::NotRequired);
     };
     let origin = tools::browser::current_origin(session.session_id())

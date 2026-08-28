@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use base64::Engine;
@@ -139,7 +139,7 @@ impl BrowserActionIntent {
 }
 
 /// Conservatively classify browser calls that need a user/guardian review.
-/// The declaration is only a hint: risky labels/selectors always win.
+/// All clicks and typing are state-changing unless a sensitive target is detected.
 pub fn approval_class(name: &str, args: &Value) -> Option<BrowserApprovalClass> {
     if !matches!(name, "browser_click" | "browser_type") {
         return None;
@@ -170,8 +170,15 @@ pub fn approval_class(name: &str, args: &Value) -> Option<BrowserApprovalClass> 
         "publish",
         "permission",
         "authorize",
+        "api-key",
+        "api_key",
+        "secret",
+        "token",
+        "credential",
+        "account",
         "login",
         "sign in",
+        "sign up",
         "密码",
         "验证码",
         "支付",
@@ -186,17 +193,56 @@ pub fn approval_class(name: &str, args: &Value) -> Option<BrowserApprovalClass> 
     if declared == "sensitive" || sensitive {
         return Some(BrowserApprovalClass::Sensitive);
     }
-    let mutating = [
-        "submit", "save", "send", "confirm", "create", "update", "apply", "提交", "保存", "发送",
-        "确认", "创建", "更新",
-    ]
-    .iter()
-    .any(|needle| haystack.contains(needle));
-    if declared == "state_changing" || mutating {
-        Some(BrowserApprovalClass::StateChanging)
-    } else {
-        None
+    Some(BrowserApprovalClass::StateChanging)
+}
+
+/// Re-check the live target before applying a remembered approval. This prevents
+/// a generic selector from hiding a sensitive button or input from the policy.
+pub async fn effective_approval_class(
+    session_id: &str,
+    name: &str,
+    args: &Value,
+) -> Option<BrowserApprovalClass> {
+    let base = approval_class(name, args)?;
+    if base == BrowserApprovalClass::Sensitive {
+        return Some(base);
     }
+    let session = browser_session(session_id).await.ok()?;
+    let mut session = session.lock().await;
+    let selector = serde_json::to_string(&args.get("selector").and_then(Value::as_str))
+        .unwrap_or_else(|_| "null".to_string());
+    let text = serde_json::to_string(&args.get("text").and_then(Value::as_str))
+        .unwrap_or_else(|_| "null".to_string());
+    let expression = format!(
+        r#"(() => {{
+          const selector = {selector}; const wanted = {text};
+          let el = selector ? document.querySelector(selector) : null;
+          if (!el && wanted) {{
+            el = [...document.querySelectorAll('button,a,input,textarea,select,[role="button"],[role="link"],[contenteditable="true"]')]
+              .find(node => ((node.innerText || node.getAttribute('aria-label') || '').trim() === wanted));
+          }}
+          if (!el) return JSON.stringify({{}});
+          return JSON.stringify({{
+            selector: [el.id, el.getAttribute('name'), el.getAttribute('type'), el.getAttribute('autocomplete'), el.getAttribute('aria-label'), el.getAttribute('placeholder')].filter(Boolean).join(' '),
+            text: (el.innerText || el.getAttribute('aria-label') || '').trim().slice(0, 300)
+          }});
+        }})()"#
+    );
+    let live = session.evaluate_json(&expression).await.ok()?;
+    let enriched = json!({
+        "intent": args.get("intent").cloned().unwrap_or(Value::Null),
+        "selector": format!(
+            "{} {}",
+            args.get("selector").and_then(Value::as_str).unwrap_or(""),
+            live.get("selector").and_then(Value::as_str).unwrap_or("")
+        ),
+        "text": format!(
+            "{} {}",
+            args.get("text").and_then(Value::as_str).unwrap_or(""),
+            live.get("text").and_then(Value::as_str).unwrap_or("")
+        ),
+    });
+    approval_class(name, &enriched).or(Some(base))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -207,6 +253,11 @@ pub struct BrowserApprovalRule {
 
 fn approvals_path(memory_dir: &Path) -> PathBuf {
     memory_dir.join("browser-approvals.json")
+}
+
+fn approval_rules_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
 }
 
 pub fn load_approval_rules(memory_dir: &Path) -> Vec<BrowserApprovalRule> {
@@ -227,6 +278,9 @@ pub fn add_approval_rule(
     origin: &str,
     class: BrowserApprovalClass,
 ) -> anyhow::Result<()> {
+    let _guard = approval_rules_lock()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("browser approval lock is poisoned"))?;
     let path = approvals_path(memory_dir);
     let mut rules = load_approval_rules(memory_dir);
     let rule = BrowserApprovalRule {
@@ -251,6 +305,9 @@ pub fn remove_approval_rule(
     origin: &str,
     action_class: &str,
 ) -> anyhow::Result<()> {
+    let _guard = approval_rules_lock()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("browser approval lock is poisoned"))?;
     let path = approvals_path(memory_dir);
     let mut rules = load_approval_rules(memory_dir);
     rules.retain(|rule| rule.origin != origin || rule.action_class != action_class);
@@ -264,8 +321,11 @@ pub fn remove_approval_rule(
 }
 
 pub async fn current_origin(session_id: &str) -> Option<String> {
-    let mut manager = manager().lock().await;
-    let session = manager.sessions.get_mut(session_id)?;
+    let session = {
+        let manager = manager().lock().await;
+        manager.sessions.get(session_id).cloned()
+    }?;
+    let mut session = session.lock().await;
     session
         .evaluate("location.origin")
         .await
@@ -392,7 +452,7 @@ pub async fn dispatch(
 
 #[derive(Default)]
 struct BrowserManager {
-    sessions: HashMap<String, BrowserSession>,
+    sessions: HashMap<String, Arc<Mutex<BrowserSession>>>,
 }
 
 struct BrowserSession {
@@ -412,6 +472,18 @@ impl Drop for BrowserSession {
 fn manager() -> &'static Mutex<BrowserManager> {
     static MANAGER: OnceLock<Mutex<BrowserManager>> = OnceLock::new();
     MANAGER.get_or_init(|| Mutex::new(BrowserManager::default()))
+}
+
+async fn browser_session(session_id: &str) -> anyhow::Result<Arc<Mutex<BrowserSession>>> {
+    manager()
+        .lock()
+        .await
+        .sessions
+        .get(session_id)
+        .cloned()
+        .ok_or_else(|| {
+            anyhow::anyhow!("browser session is disconnected; call browser_open to restore it")
+        })
 }
 
 fn browser_available() -> bool {
@@ -516,6 +588,9 @@ fn validate_url(raw: &str) -> anyhow::Result<String> {
     if !matches!(parsed.scheme(), "http" | "https") {
         anyhow::bail!("browser only supports http(s) URLs");
     }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        anyhow::bail!("browser URLs must not contain embedded credentials");
+    }
     let host = parsed
         .host_str()
         .ok_or_else(|| anyhow::anyhow!("URL is missing a host"))?;
@@ -542,22 +617,25 @@ async fn open(ctx: &ToolContext<'_>, args: BrowserOpenArgs) -> anyhow::Result<St
     let output_dir = session_dir(ctx);
     tokio::fs::create_dir_all(&output_dir).await?;
 
-    let mut manager = manager().lock().await;
-    if let Some(mut old) = manager.sessions.remove(&ctx.session_id) {
+    let old = manager().lock().await.sessions.remove(&ctx.session_id);
+    if let Some(old) = old {
+        let mut old = old.lock().await;
         let _ = old.child.kill().await;
     }
     let mut session = BrowserSession::launch(&url, output_dir).await?;
     session.wait_ready(args.wait_ms).await?;
     let result = session.snapshot(true).await?;
-    manager.sessions.insert(ctx.session_id.clone(), session);
+    manager()
+        .lock()
+        .await
+        .sessions
+        .insert(ctx.session_id.clone(), Arc::new(Mutex::new(session)));
     Ok(result.to_string())
 }
 
 async fn snapshot(ctx: &ToolContext<'_>, args: BrowserSnapshotArgs) -> anyhow::Result<String> {
-    let mut manager = manager().lock().await;
-    let session = manager.sessions.get_mut(&ctx.session_id).ok_or_else(|| {
-        anyhow::anyhow!("browser session is disconnected; call browser_open to restore it")
-    })?;
+    let session = browser_session(&ctx.session_id).await?;
+    let mut session = session.lock().await;
     session.wait_ready(args.wait_ms).await?;
     Ok(session
         .snapshot(args.screenshot.unwrap_or(true))
@@ -571,23 +649,27 @@ async fn click(ctx: &ToolContext<'_>, args: BrowserClickArgs) -> anyhow::Result<
     {
         anyhow::bail!("browser_click requires selector or text");
     }
-    let mut manager = manager().lock().await;
-    let session = manager.sessions.get_mut(&ctx.session_id).ok_or_else(|| {
-        anyhow::anyhow!("browser session is disconnected; call browser_open to restore it")
-    })?;
+    let session = browser_session(&ctx.session_id).await?;
+    let mut session = session.lock().await;
     let selector = serde_json::to_string(&args.selector)?;
     let text = serde_json::to_string(&args.text)?;
     let expression = format!(
         r#"(() => {{
           const selector = {selector}; const wanted = {text};
+          const visible = node => {{
+            const rect = node.getBoundingClientRect(); const style = getComputedStyle(node);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+          }};
           let el = selector ? document.querySelector(selector) : null;
           if (!el && wanted) {{
             el = [...document.querySelectorAll('button,a,input,[role="button"],[role="link"],summary')]
-              .find(node => ((node.innerText || node.value || node.getAttribute('aria-label') || '').trim() === wanted));
+              .find(node => visible(node) && ((node.innerText || node.value || node.getAttribute('aria-label') || '').trim() === wanted));
           }}
           if (!el) return JSON.stringify({{ok:false,error:'element_not_found'}});
+          if (!visible(el)) return JSON.stringify({{ok:false,error:'element_not_visible'}});
+          if (el.disabled || el.getAttribute('aria-disabled') === 'true') return JSON.stringify({{ok:false,error:'element_disabled'}});
           el.scrollIntoView({{block:'center',inline:'center'}}); el.click();
-          return JSON.stringify({{ok:true,tag:el.tagName.toLowerCase(),text:(el.innerText || el.value || el.getAttribute('aria-label') || '').trim().slice(0,160)}});
+          return JSON.stringify({{ok:true,tag:el.tagName.toLowerCase(),text:(el.innerText || el.getAttribute('aria-label') || '').trim().slice(0,160)}});
         }})()"#
     );
     let action = session.evaluate_json(&expression).await?;
@@ -614,10 +696,8 @@ async fn type_text(ctx: &ToolContext<'_>, args: BrowserTypeArgs) -> anyhow::Resu
     if args.text.len() > 10_000 {
         anyhow::bail!("browser_type text exceeds 10000 characters");
     }
-    let mut manager = manager().lock().await;
-    let session = manager.sessions.get_mut(&ctx.session_id).ok_or_else(|| {
-        anyhow::anyhow!("browser session is disconnected; call browser_open to restore it")
-    })?;
+    let session = browser_session(&ctx.session_id).await?;
+    let mut session = session.lock().await;
     let selector = serde_json::to_string(&args.selector)?;
     let text = serde_json::to_string(&args.text)?;
     let expression = format!(
@@ -626,13 +706,15 @@ async fn type_text(ctx: &ToolContext<'_>, args: BrowserTypeArgs) -> anyhow::Resu
           if (!el) return JSON.stringify({{ok:false,error:'element_not_found'}});
           const type = (el.getAttribute('type') || '').toLowerCase();
           const autocomplete = (el.getAttribute('autocomplete') || '').toLowerCase();
-          if (type === 'password' || ['one-time-code','cc-number','cc-csc'].includes(autocomplete))
+          const fieldContext = [el.id, el.getAttribute('name'), autocomplete, el.getAttribute('aria-label'), el.getAttribute('placeholder')].filter(Boolean).join(' ').toLowerCase();
+          if (type === 'password' || ['one-time-code','cc-number','cc-csc','cc-exp'].includes(autocomplete) || /(password|passwd|otp|token|secret|api.?key|credit|card|验证码|密码|支付)/.test(fieldContext))
             return JSON.stringify({{ok:false,error:'sensitive_input_blocked'}});
+          if (el.disabled || el.readOnly) return JSON.stringify({{ok:false,error:'element_not_editable'}});
           el.focus();
           if (el.isContentEditable) {{
             el.textContent = value;
           }} else {{
-            const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+            const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
             const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
             if (setter) setter.call(el, value); else el.value = value;
           }}
@@ -657,10 +739,8 @@ async fn type_text(ctx: &ToolContext<'_>, args: BrowserTypeArgs) -> anyhow::Resu
 }
 
 async fn scroll(ctx: &ToolContext<'_>, args: BrowserScrollArgs) -> anyhow::Result<String> {
-    let mut manager = manager().lock().await;
-    let session = manager.sessions.get_mut(&ctx.session_id).ok_or_else(|| {
-        anyhow::anyhow!("browser session is disconnected; call browser_open to restore it")
-    })?;
+    let session = browser_session(&ctx.session_id).await?;
+    let mut session = session.lock().await;
     let x = args.x.unwrap_or(0).clamp(-10_000, 10_000);
     let y = args.y.unwrap_or(600).clamp(-10_000, 10_000);
     session
@@ -679,16 +759,19 @@ async fn wait_for(ctx: &ToolContext<'_>, args: BrowserWaitArgs) -> anyhow::Resul
     {
         anyhow::bail!("browser_wait requires selector or text");
     }
-    let mut manager = manager().lock().await;
-    let session = manager.sessions.get_mut(&ctx.session_id).ok_or_else(|| {
-        anyhow::anyhow!("browser session is disconnected; call browser_open to restore it")
-    })?;
+    let session = browser_session(&ctx.session_id).await?;
+    let mut session = session.lock().await;
     let selector = serde_json::to_string(&args.selector)?;
     let text = serde_json::to_string(&args.text)?;
     let expression = format!(
         r#"(() => {{ const selector = {selector}; const wanted = {text};
-          if (selector) return Boolean(document.querySelector(selector));
-          return [...document.querySelectorAll('body *')].some(el => (el.innerText || '').includes(wanted));
+          const visible = el => {{
+            if (!el) return false;
+            const rect = el.getBoundingClientRect(); const style = getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+          }};
+          if (selector) return visible(document.querySelector(selector));
+          return [...document.querySelectorAll('body *')].some(el => visible(el) && (el.innerText || '').includes(wanted));
         }})()"#
     );
     let deadline = tokio::time::Instant::now()
@@ -711,8 +794,9 @@ async fn wait_for(ctx: &ToolContext<'_>, args: BrowserWaitArgs) -> anyhow::Resul
 }
 
 async fn close(ctx: &ToolContext<'_>) -> anyhow::Result<String> {
-    let mut manager = manager().lock().await;
-    if let Some(mut session) = manager.sessions.remove(&ctx.session_id) {
+    let session = manager().lock().await.sessions.remove(&ctx.session_id);
+    if let Some(session) = session {
+        let mut session = session.lock().await;
         let _ = session.child.kill().await;
     }
     Ok(json!({
@@ -734,6 +818,7 @@ impl BrowserSession {
         tokio::fs::create_dir_all(&profile_dir).await?;
         let mut child = Command::new(executable)
             .arg("--headless=new")
+            .arg("--remote-debugging-address=127.0.0.1")
             .arg("--remote-debugging-port=0")
             .arg(format!("--user-data-dir={}", profile_dir.display()))
             .arg("--no-first-run")
@@ -766,6 +851,7 @@ impl BrowserSession {
         })
         .await
         .map_err(|_| anyhow::anyhow!("timed out starting Chromium DevTools"))??;
+        tokio::spawn(async move { while matches!(lines.next_line().await, Ok(Some(_))) {} });
 
         let port = reqwest::Url::parse(&browser_ws)?
             .port_or_known_default()
@@ -798,7 +884,12 @@ impl BrowserSession {
                 json!({"patterns":[{"urlPattern":"*","requestStage":"Request"}]}),
             )
             .await?;
-        session.command("Page.navigate", json!({"url":url})).await?;
+        let navigation = session.command("Page.navigate", json!({"url":url})).await?;
+        if let Some(error) = navigation.get("errorText").and_then(Value::as_str) {
+            if !error.is_empty() {
+                anyhow::bail!("browser navigation failed: {error}");
+            }
+        }
         Ok(session)
     }
 
@@ -866,6 +957,9 @@ impl BrowserSession {
         if !matches!(url.scheme(), "http" | "https") {
             return matches!(url.scheme(), "data" | "blob" | "about");
         }
+        if !url.username().is_empty() || url.password().is_some() {
+            return false;
+        }
         let Some(host) = url.host_str() else {
             return false;
         };
@@ -928,6 +1022,11 @@ impl BrowserSession {
     async fn snapshot(&mut self, with_screenshot: bool) -> anyhow::Result<Value> {
         let expression = r#"(() => {
           const visible = el => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+          const sensitive = el => {
+            const type = (el.getAttribute('type') || '').toLowerCase();
+            const context = [el.id, el.getAttribute('name'), el.getAttribute('autocomplete'), el.getAttribute('aria-label'), el.getAttribute('placeholder')].filter(Boolean).join(' ').toLowerCase();
+            return type === 'password' || /(password|passwd|otp|token|secret|api.?key|credit|card|验证码|密码|支付)/.test(context);
+          };
           const selector = el => {
             if (el.id) return '#' + CSS.escape(el.id);
             const testId = el.getAttribute('data-testid');
@@ -946,7 +1045,7 @@ impl BrowserSession {
           const nodes = [...document.querySelectorAll('a,button,input,textarea,select,summary,[role="button"],[role="link"],[contenteditable="true"]')]
             .filter(visible).slice(0, 60).map(el => ({
               selector: selector(el), tag: el.tagName.toLowerCase(), role: el.getAttribute('role'),
-              type: el.getAttribute('type'), text: (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 180),
+              type: el.getAttribute('type'), text: (el.innerText || (sensitive(el) ? '' : el.value) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 180),
               disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true')
             }));
           return JSON.stringify({url:location.href,title:document.title,text:(document.body?.innerText || '').slice(0,20000),interactive:nodes});
@@ -1006,6 +1105,7 @@ mod tests {
     fn rejects_non_http_and_private_lan_urls() {
         assert!(validate_url("file:///tmp/a.html").is_err());
         assert!(validate_url("http://192.168.1.2").is_err());
+        assert!(validate_url("https://user:secret@example.com").is_err());
     }
 
     #[test]
@@ -1038,7 +1138,11 @@ mod tests {
                 "browser_type",
                 &json!({"selector":"#search","text":"Astro"})
             ),
-            None
+            Some(BrowserApprovalClass::StateChanging)
+        );
+        assert_eq!(
+            approval_class("browser_click", &json!({"selector":"#api-token"})),
+            Some(BrowserApprovalClass::Sensitive)
         );
         assert_eq!(approval_class("browser_snapshot", &json!({})), None);
     }
@@ -1085,7 +1189,7 @@ mod tests {
                 };
                 let mut request = [0_u8; 2048];
                 let _ = socket.read(&mut request).await;
-                let body = "<!doctype html><title>Astro Browser Test</title><button id='hello'>Hello</button>";
+                let body = "<!doctype html><title>Astro Browser Test</title><input id='api-token' value='secret-token'><button id='danger'>Delete account</button>";
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(), body
@@ -1104,5 +1208,25 @@ mod tests {
         assert!(snapshot["screenshot_path"]
             .as_str()
             .is_some_and(|path| Path::new(path).exists()));
+        assert!(!snapshot.to_string().contains("secret-token"));
+
+        let session_id = format!("browser-live-{}", std::process::id());
+        manager()
+            .lock()
+            .await
+            .sessions
+            .insert(session_id.clone(), Arc::new(Mutex::new(session)));
+        assert_eq!(
+            effective_approval_class(
+                &session_id,
+                "browser_click",
+                &json!({"selector":"#danger","intent":"read_only"}),
+            )
+            .await,
+            Some(BrowserApprovalClass::Sensitive)
+        );
+        let session = manager().lock().await.sessions.remove(&session_id).unwrap();
+        let mut session = session.lock().await;
+        let _ = session.child.kill().await;
     }
 }

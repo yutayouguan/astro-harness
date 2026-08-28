@@ -67,7 +67,15 @@ export default function BrowserPreviewFloat({ preview, onClose }: Props) {
 
   const openExternal = useCallback(() => {
     if (!preview.url) return;
-    void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(preview.url));
+    try {
+      const url = new URL(preview.url);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return;
+      void import("@tauri-apps/plugin-opener")
+        .then(({ openUrl }) => openUrl(url.toString()))
+        .catch(() => undefined);
+    } catch {
+      // Ignore malformed persisted URLs.
+    }
   }, [preview.url]);
 
   const statusKey = `chat.browserPreview.${preview.status}` as const;

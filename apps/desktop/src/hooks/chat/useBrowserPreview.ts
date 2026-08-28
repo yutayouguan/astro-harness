@@ -44,21 +44,32 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function status(value: unknown, fallback: BrowserPreviewStatus): BrowserPreviewStatus {
+  return value === "connecting" ||
+    value === "connected" ||
+    value === "disconnected" ||
+    value === "closed" ||
+    value === "error"
+    ? value
+    : fallback;
+}
+
 function loadStored(sessionId: string | null): BrowserPreview | null {
   if (!sessionId) return null;
   try {
     const value = parseRecord(localStorage.getItem(`${STORAGE_PREFIX}${sessionId}`) ?? undefined);
     if (!value) return null;
-    const status = text(value.status) as BrowserPreviewStatus;
+    const storedStatus = status(value.status, "disconnected");
+    if (storedStatus === "closed") return null;
     return {
       sessionId,
       url: text(value.url),
       title: text(value.title),
       screenshotPath: text(value.screenshotPath) || null,
       status:
-        status === "connected" || status === "connecting"
+        storedStatus === "connected" || storedStatus === "connecting"
           ? "disconnected"
-          : status || "disconnected",
+          : storedStatus,
       action: text(value.action) || null,
       updatedAt: Number(value.updatedAt) || Date.now(),
     };
@@ -92,6 +103,7 @@ export function useBrowserPreview(sessionId: string | null) {
       result?: string;
       phase?: string;
     }) => {
+      if (!sessionId) return;
       const name = call.name?.toLowerCase() ?? "";
       if (!name.startsWith("browser_")) return;
       const args = parseRecord(call.arguments_json);
@@ -101,7 +113,7 @@ export function useBrowserPreview(sessionId: string | null) {
       if (call.phase === "started") {
         setDismissed(false);
         setPreview((current) => ({
-          sessionId: sessionId ?? current?.sessionId ?? "pending",
+          sessionId,
           url: text(args?.url) || current?.url || "",
           title: current?.title || "",
           screenshotPath: current?.screenshotPath ?? null,
@@ -113,19 +125,29 @@ export function useBrowserPreview(sessionId: string | null) {
       }
 
       if (result?.astro_browser === true) {
-        const status = text(result.status) as BrowserPreviewStatus;
+        const nextStatus = status(result.status, "connected");
+        if (nextStatus === "closed") {
+          setDismissed(true);
+          setPreview(null);
+          try {
+            localStorage.removeItem(`${STORAGE_PREFIX}${sessionId}`);
+          } catch {
+            // Persistence is best-effort.
+          }
+          return;
+        }
         const actionRecord =
           result.action && typeof result.action === "object"
             ? (result.action as Record<string, unknown>)
             : null;
-        setDismissed(status === "closed");
+        setDismissed(false);
         setPreview((current) => ({
-          sessionId: sessionId ?? current?.sessionId ?? "pending",
+          sessionId,
           url: text(result.url) || current?.url || "",
           title: text(result.title) || current?.title || "",
           screenshotPath:
             text(result.screenshot_path) || current?.screenshotPath || null,
-          status: status || "connected",
+          status: nextStatus,
           action: text(actionRecord?.kind) || name.replace(/^browser_/, ""),
           updatedAt: now,
         }));
@@ -140,8 +162,21 @@ export function useBrowserPreview(sessionId: string | null) {
     [sessionId],
   );
 
-  const dismiss = useCallback(() => setDismissed(true), []);
+  const dismiss = useCallback(() => {
+    setDismissed(true);
+    setPreview(null);
+    if (!sessionId) return;
+    try {
+      localStorage.removeItem(`${STORAGE_PREFIX}${sessionId}`);
+    } catch {
+      // Persistence is best-effort.
+    }
+  }, [sessionId]);
   const api = useMemo<BrowserPreviewApi>(() => ({ onToolCall }), [onToolCall]);
 
-  return { preview: dismissed ? null : preview, api, dismiss };
+  return {
+    preview: !dismissed && preview?.sessionId === sessionId ? preview : null,
+    api,
+    dismiss,
+  };
 }

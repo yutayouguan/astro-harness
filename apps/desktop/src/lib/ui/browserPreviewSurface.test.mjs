@@ -12,8 +12,11 @@ test("browser preview is task-bound and driven by completed browser tool results
   assert.match(hook, /STORAGE_PREFIX = "astro\.browserPreview\."/);
   assert.match(hook, /name\.startsWith\("browser_"\)/);
   assert.match(hook, /result\?\.astro_browser === true/);
-  assert.match(hook, /status === "connected" \|\| status === "connecting"/);
+  assert.match(hook, /storedStatus === "connected" \|\| storedStatus === "connecting"/);
   assert.match(hook, /\? "disconnected"/);
+  assert.match(hook, /if \(storedStatus === "closed"\) return null/);
+  assert.match(hook, /localStorage\.removeItem/);
+  assert.match(hook, /preview\?\.sessionId === sessionId/);
 });
 
 test("floating browser preview supports direct manipulation and accessibility fallbacks", () => {
@@ -21,6 +24,7 @@ test("floating browser preview supports direct manipulation and accessibility fa
   const css = source("../../styles/features/chat/browser-preview.css");
   assert.match(component, /setPointerCapture/);
   assert.match(component, /onPointerMove/);
+  assert.match(component, /url\.protocol !== "http:" && url\.protocol !== "https:"/);
   assert.match(css, /resize: both/);
   assert.match(css, /@media \(max-width: 620px\)/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
