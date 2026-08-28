@@ -450,12 +450,12 @@ fn normalize_provider_id(id: &str) -> &str {
 /// 是否应使用 Responses API 协议。
 ///
 /// 优先级：`config.api_mode` 显式指定 > profile `supports_responses` 默认。
-/// - `api_mode == "chat"` → 强制 ChatCompletions
+/// - `api_mode == "chat" | "chat_completions"` → 强制 Chat Completions
 /// - `api_mode == "responses"` → 强制 Responses
 /// - `api_mode` 为空 → profile.supports_responses 决定
 fn use_responses(provider: &str, config: &ProviderConfig) -> bool {
     match config.api_mode.as_str() {
-        "chat" => false,
+        "chat" | "chat_completions" => false,
         "responses" => true,
         _ => crate::profile::resolve(provider).is_some_and(|p| p.supports_responses),
     }
@@ -651,6 +651,12 @@ mod tests {
         assert!(
             !use_responses("openai", &chat_config),
             "api_mode=chat forces ChatCompletions"
+        );
+
+        chat_config.api_mode = "chat_completions".to_string();
+        assert!(
+            !use_responses("deepseek", &chat_config),
+            "persisted api_mode=chat_completions forces ChatCompletions"
         );
 
         let mut resp_config = ProviderConfig::default();
