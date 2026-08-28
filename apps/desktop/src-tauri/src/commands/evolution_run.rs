@@ -274,7 +274,7 @@ fn truncate_task(text: &str, max_chars: usize) -> String {
 }
 
 fn session_user_task(store: &session::SessionStore, session_id: &str) -> Option<String> {
-    let msgs = store.get_messages(session_id).ok()?;
+    let msgs = store.get_messages(session_id).ok().await?;
     for m in msgs {
         if m.role != "user" {
             continue;
@@ -1796,7 +1796,7 @@ fn collect_eval_import_candidates(
         .collect();
 
     let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
-        .map_err(|e| format!("打开会话库失败: {e}"))?;
+        .map_err(|e| format!("打开会话库失败: {e}")).await?;
 
     let mut by_session: HashMap<String, Vec<String>> = HashMap::new();
     for d in decisions {
@@ -1877,7 +1877,7 @@ pub async fn import_eval_from_session(
     }
 
     let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
-        .map_err(|e| format!("打开会话库失败: {e}"))?;
+        .map_err(|e| format!("打开会话库失败: {e}")).await?;
     let task = session_user_task(&store, &session_id)
         .ok_or_else(|| "无法从会话提取任务文本".to_string())?;
 

@@ -400,7 +400,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
     {
         bootstrap_workspace()?;
         let store = open_sessions()?;
-        if let Ok(Some(meta)) = store.get_session(&sid) {
+        if let Ok(Some(meta)) = store.get_session(&sid).await {
             if meta.ended_at.is_some() {
                 let reason = meta.end_reason.as_deref().unwrap_or("ended");
                 return Err(if reason == "compacted" {
@@ -417,10 +417,10 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         let store = open_sessions()?;
         store
             .ensure_session(&sid, "tauri")
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string()).await?;
         store
             .truncate_session_to_bubbles(&sid, keep.max(0) as usize)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string()).await?;
     }
 
     // 从 providers.json + keyring 解析 primary 与聊天后备链

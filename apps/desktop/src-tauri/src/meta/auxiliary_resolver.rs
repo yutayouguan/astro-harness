@@ -268,7 +268,7 @@ pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTa
     let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
     let store = session::SessionStore::open_sessions_dir(&root.join("sessions"))
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string()).await?;
     let billing = store
         .get_session_billing(session_id)
         .map_err(|e| e.to_string())?;

@@ -4,7 +4,7 @@
 pub(super) fn open_sessions() -> Result<session::SessionStore, String> {
     let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&root.join("sessions")).map_err(|e| e.to_string())
+    session::SessionStore::open_sessions_dir(&root.join("sessions")).await.map_err(|e| e.to_string())
 }
 
 /// 返回本机 Astro 记忆根目录路径。

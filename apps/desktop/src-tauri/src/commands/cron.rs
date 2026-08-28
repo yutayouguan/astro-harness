@@ -437,8 +437,8 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
 pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
     bootstrap_workspace()?;
     let _ = agent::exec::cron::reconcile_orphaned_runs();
-    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
-    let row = db.get(&id).map_err(|e| e.to_string())?;
+    let db = cron::CronRunDb::open_default().await.map_err(|e| e.to_string())?;
+    let row = db.get(&id).await.map_err(|e| e.to_string())?;
     Ok(row.map(run_to_dto))
 }
 
@@ -446,8 +446,8 @@ pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
 #[tauri::command]
 pub async fn delete_cron_run(id: String) -> Result<bool, String> {
     bootstrap_workspace()?;
-    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
-    db.delete(&id).map_err(|e| e.to_string())
+    let db = cron::CronRunDb::open_default().await.map_err(|e| e.to_string())?;
+    db.delete(&id).await.map_err(|e| e.to_string())
 }
 
 /// 列出定时任务运行记录。
@@ -455,7 +455,7 @@ pub async fn delete_cron_run(id: String) -> Result<bool, String> {
 pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, String> {
     bootstrap_workspace()?;
     let _ = agent::exec::cron::reconcile_orphaned_runs();
-    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
+    let db = cron::CronRunDb::open_default().await.map_err(|e| e.to_string())?;
     let rows = db
         .list_filtered(cron::run_db::CronRunFilters {
             job_id: args.job_id,
@@ -464,7 +464,7 @@ pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, S
             date_to: args.date_to,
             limit: args.limit,
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string()).await?;
     Ok(rows.into_iter().map(run_to_dto).collect())
 }
 
