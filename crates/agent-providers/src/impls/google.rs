@@ -1,5 +1,8 @@
 //! Google Gemini Interactions API — 原生 CompletionModel 实现。
 
+use std::future::Future;
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client as HttpClient;
@@ -16,6 +19,33 @@ use crate::types::media::{
 use crate::types::{CompletionRequest, CompletionStream};
 
 const API_REVISION: &str = "2026-05-20";
+const MAX_CONNECT_ATTEMPTS: usize = 3;
+const CONNECT_RETRY_BASE_DELAY_MS: u64 = 150;
+
+// Retry only connection-establishment failures. HTTP responses and stream errors
+// must not be replayed because the server may already have stored the interaction.
+async fn retry_connect<T, E, SendFn, SendFuture, Retryable>(
+    mut send: SendFn,
+    retryable: Retryable,
+) -> std::result::Result<T, E>
+where
+    SendFn: FnMut() -> SendFuture,
+    SendFuture: Future<Output = std::result::Result<T, E>>,
+    Retryable: Fn(&E) -> bool,
+{
+    let mut attempt = 1usize;
+    loop {
+        match send().await {
+            Ok(value) => return Ok(value),
+            Err(error) if attempt < MAX_CONNECT_ATTEMPTS && retryable(&error) => {
+                let delay_ms = CONNECT_RETRY_BASE_DELAY_MS * attempt as u64;
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                attempt += 1;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
 
 // ─── Provider Extension ─────────────────────────────────
 
@@ -74,6 +104,33 @@ impl FromClient<Google> for InteractionsCompletionModel {
             base_url: client.base_url.clone(),
             api_key: client.api_key.clone(),
             model: model.to_string(),
+        }
+    }
+}
+
+impl InteractionsCompletionModel {
+    async fn send_interactions(&self, url: &str, body: &Value) -> Result<reqwest::Response> {
+        let response = retry_connect(
+            || {
+                self.http
+                    .post(url)
+                    .headers(Google.auth_headers(&self.api_key))
+                    .header("content-type", "application/json")
+                    .json(body)
+                    .send()
+            },
+            reqwest::Error::is_connect,
+        )
+        .await;
+
+        match response {
+            Ok(response) => Ok(response),
+            Err(error) if error.is_connect() => Err(error).with_context(|| {
+                format!("连接 Google Interactions 失败（已尝试 {MAX_CONNECT_ATTEMPTS} 次）: {url}")
+            }),
+            Err(error) => {
+                Err(error).with_context(|| format!("连接 Google Interactions 失败: {url}"))
+            }
         }
     }
 }
@@ -200,23 +257,7 @@ impl CompletionModel for InteractionsCompletionModel {
             request.tool_choice.as_ref(),
         );
 
-        let send = |body: Value| {
-            let request = self
-                .http
-                .post(&url)
-                .headers(Google.auth_headers(&self.api_key))
-                .header("content-type", "application/json")
-                .json(&body);
-            let url = url.clone();
-            async move {
-                request
-                    .send()
-                    .await
-                    .with_context(|| format!("连接 Google Interactions 失败: {url}"))
-            }
-        };
-
-        let mut response = send(body.clone()).await?;
+        let mut response = self.send_interactions(&url, &body).await?;
         // 服务端 interaction 状态过期或与客户端历史不一致时，续写会以 404 拒绝；
         // 此时放弃 previous_interaction_id 并整段重放。
         if converted.continues_previous && response.status() == reqwest::StatusCode::NOT_FOUND {
@@ -227,7 +268,7 @@ impl CompletionModel for InteractionsCompletionModel {
                     json!(to_interactions_input(&messages, false).steps),
                 );
             }
-            response = send(body).await?;
+            response = self.send_interactions(&url, &body).await?;
         }
 
         let parser = std::sync::Arc::new(std::sync::Mutex::new(InteractionsStreamState::default()));
@@ -961,6 +1002,9 @@ impl MusicGenModel for LyriaMusicModel {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
     use super::*;
 
     fn extract_single(data: &str) -> Option<crate::types::StreamChunk> {
@@ -970,6 +1014,46 @@ mod tests {
             .next()
     }
     use crate::traits::client::ChatClient;
+
+    #[tokio::test]
+    async fn connect_retry_succeeds_on_the_third_attempt() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let observed = attempts.clone();
+
+        let result = retry_connect(
+            || {
+                let attempt = observed.fetch_add(1, Ordering::SeqCst) + 1;
+                std::future::ready(if attempt < MAX_CONNECT_ATTEMPTS {
+                    Err(true)
+                } else {
+                    Ok("connected")
+                })
+            },
+            |retryable| *retryable,
+        )
+        .await;
+
+        assert_eq!(result, Ok("connected"));
+        assert_eq!(attempts.load(Ordering::SeqCst), MAX_CONNECT_ATTEMPTS);
+    }
+
+    #[tokio::test]
+    async fn connect_retry_does_not_repeat_non_connect_errors() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let observed = attempts.clone();
+
+        let result = retry_connect(
+            || {
+                observed.fetch_add(1, Ordering::SeqCst);
+                std::future::ready(Err::<(), _>(false))
+            },
+            |retryable| *retryable,
+        )
+        .await;
+
+        assert_eq!(result, Err(false));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
 
     #[test]
     fn google_has_chat() {
