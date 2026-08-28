@@ -1505,6 +1505,8 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use subagents::{AgentGraphStore, AgentStatusV2, Limits, RunnerEvent};
 
+    use agent_db::sqlx::{self, Row};
+
     fn dispatch(dir: &tempfile::TempDir) -> DefaultAgentThreadDispatch {
         dispatch_for_root(
             dir,
@@ -2186,18 +2188,19 @@ mod tests {
         while dispatch.runtime_manager.is_running(&leaf.thread_id) {
             tokio::task::yield_now().await;
         }
-        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
-        graph
-            .execute_batch(&format!(
-                "CREATE TRIGGER fail_parent_shutdown
-                 BEFORE UPDATE OF status_kind ON agent_threads
-                 WHEN NEW.thread_id = '{}' AND NEW.status_kind = 'shutdown'
-                 BEGIN
-                   SELECT RAISE(ABORT, 'injected parent shutdown failure');
-                 END;",
-                parent.thread_id
-            ))
-            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
+        ).await.unwrap();
+        sqlx::raw_sql(&format!(
+            "CREATE TRIGGER fail_parent_shutdown
+             BEFORE UPDATE OF status_kind ON agent_threads
+             WHEN NEW.thread_id = '{}' AND NEW.status_kind = 'shutdown'
+             BEGIN
+               SELECT RAISE(ABORT, 'injected parent shutdown failure');
+             END;",
+            parent.thread_id
+        ))
+        .execute(&pool).await.unwrap();
         let desktop = desktop_control(&dispatch, &memory_dir);
 
         let error = desktop
@@ -2613,14 +2616,14 @@ mod tests {
             .runtime_handle(&spawned.thread.thread_id)
             .unwrap()
             .is_none());
-        let edge_state: String = rusqlite::Connection::open(dir.path().join("subagents-v2.db"))
-            .unwrap()
-            .query_row(
-                "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
-                [&spawned.thread.thread_id],
-                |row| row.get(0),
-            )
-            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
+        ).await.unwrap();
+        let (edge_state,): (String,) = agent_db::sqlx::query_as(
+            "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
+        )
+        .bind(&spawned.thread.thread_id)
+        .fetch_one(&pool).await.unwrap();
         assert_eq!(edge_state, "closed");
     }
 
@@ -3130,17 +3133,14 @@ mod tests {
             .is_err());
 
         assert_eq!(dispatch.control.snapshot().unwrap(), before);
-        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
-        assert_eq!(
-            graph
-                .query_row(
-                    "SELECT COUNT(*) FROM agent_threads WHERE status_kind = 'pending_init'",
-                    [],
-                    |row| row.get::<_, i64>(0),
-                )
-                .unwrap(),
-            0
-        );
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
+        ).await.unwrap();
+        let (count,): (i64,) = agent_db::sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_threads WHERE status_kind = 'pending_init'",
+        )
+        .fetch_one(&pool).await.unwrap();
+        assert_eq!(count, 0);
     }
 
     #[tokio::test]
@@ -3566,19 +3566,17 @@ mod tests {
                 .len(),
             1
         );
-        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
-        let child_rows: i64 = graph
-            .query_row(
-                "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let edge_rows: i64 = graph
-            .query_row("SELECT COUNT(*) FROM agent_spawn_edges", [], |row| {
-                row.get(0)
-            })
-            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
+        ).await.unwrap();
+        let (child_rows,): (i64,) = agent_db::sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
+        )
+        .fetch_one(&pool).await.unwrap();
+        let (edge_rows,): (i64,) = agent_db::sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_spawn_edges",
+        )
+        .fetch_one(&pool).await.unwrap();
         assert_eq!(child_rows, 0);
         assert_eq!(edge_rows, 0);
         assert!(dispatch
@@ -3809,19 +3807,17 @@ mod tests {
                 .len(),
             1
         );
-        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
-        let child_rows: i64 = graph
-            .query_row(
-                "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let edge_rows: i64 = graph
-            .query_row("SELECT COUNT(*) FROM agent_spawn_edges", [], |row| {
-                row.get(0)
-            })
-            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
+        ).await.unwrap();
+        let (child_rows,): (i64,) = agent_db::sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
+        )
+        .fetch_one(&pool).await.unwrap();
+        let (edge_rows,): (i64,) = agent_db::sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_spawn_edges",
+        )
+        .fetch_one(&pool).await.unwrap();
         assert_eq!(child_rows, 0);
         assert_eq!(edge_rows, 0);
         assert!(dispatch
@@ -3910,25 +3906,19 @@ mod tests {
             .unwrap()
             .is_none());
         assert!(sessions.get_session(&child.session_id).unwrap().is_none());
-        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
-        assert_eq!(
-            graph
-                .query_row(
-                    "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
-                    [],
-                    |row| row.get::<_, i64>(0),
-                )
-                .unwrap(),
-            0
-        );
-        assert_eq!(
-            graph
-                .query_row("SELECT COUNT(*) FROM agent_spawn_edges", [], |row| {
-                    row.get::<_, i64>(0)
-                })
-                .unwrap(),
-            0
-        );
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
+        ).await.unwrap();
+        let (thread_count,): (i64,) = agent_db::sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
+        )
+        .fetch_one(&pool).await.unwrap();
+        assert_eq!(thread_count, 0);
+        let (edge_count,): (i64,) = agent_db::sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_spawn_edges",
+        )
+        .fetch_one(&pool).await.unwrap();
+        assert_eq!(edge_count, 0);
 
         let retried = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
             .await
@@ -4846,24 +4836,26 @@ mod tests {
         drop(initial);
 
         let graph_path = dir.path().join("subagents-v2.db");
-        let graph = rusqlite::Connection::open(&graph_path).unwrap();
-        graph
-            .execute_batch(
-                "DROP TABLE agent_runtime_descriptors;
-                 UPDATE schema_meta SET value = '2' WHERE key = 'schema_version';",
-            )
-            .unwrap();
-        drop(graph);
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", graph_path.display())
+        ).await.unwrap();
+        sqlx::raw_sql(
+            "DROP TABLE agent_runtime_descriptors;
+             UPDATE schema_meta SET value = '2' WHERE key = 'schema_version';",
+        )
+        .execute(&pool).await.unwrap();
+        drop(pool);
 
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(graph_path).unwrap(),
+            AgentGraphStore::open(graph_path).await.unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 2,
             },
         )
+        .await
         .unwrap();
         let recovered = DefaultAgentThreadDispatch::for_test(
             control,
@@ -4922,29 +4914,30 @@ mod tests {
         drop(initial);
 
         let graph_path = dir.path().join("subagents-v2.db");
-        let graph = rusqlite::Connection::open(&graph_path).unwrap();
-        graph
-            .execute_batch(
-                "PRAGMA foreign_keys=OFF;
-                 ALTER TABLE agent_runtime_descriptors RENAME TO descriptors_v4;
-                 CREATE TABLE agent_runtime_descriptors (
-                     thread_id TEXT PRIMARY KEY,
-                     model TEXT,
-                     reasoning_effort TEXT,
-                     FOREIGN KEY(thread_id) REFERENCES agent_threads(thread_id) ON DELETE CASCADE
-                 );
-                 INSERT INTO agent_runtime_descriptors (thread_id, model, reasoning_effort)
-                     SELECT thread_id, model, reasoning_effort FROM descriptors_v4;
-                 DROP TABLE descriptors_v4;
-                 UPDATE schema_meta SET value = '3' WHERE key = 'schema_version';
-                 PRAGMA foreign_keys=ON;",
-            )
-            .unwrap();
-        drop(graph);
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", graph_path.display())
+        ).await.unwrap();
+        sqlx::raw_sql(
+            "PRAGMA foreign_keys=OFF;
+             ALTER TABLE agent_runtime_descriptors RENAME TO descriptors_v4;
+             CREATE TABLE agent_runtime_descriptors (
+                 thread_id TEXT PRIMARY KEY,
+                 model TEXT,
+                 reasoning_effort TEXT,
+                 FOREIGN KEY(thread_id) REFERENCES agent_threads(thread_id) ON DELETE CASCADE
+             );
+             INSERT INTO agent_runtime_descriptors (thread_id, model, reasoning_effort)
+                 SELECT thread_id, model, reasoning_effort FROM descriptors_v4;
+             DROP TABLE descriptors_v4;
+             UPDATE schema_meta SET value = '3' WHERE key = 'schema_version';
+             PRAGMA foreign_keys=ON;",
+        )
+        .execute(&pool).await.unwrap();
+        drop(pool);
 
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(graph_path).unwrap(),
+            AgentGraphStore::open(graph_path).await.unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
@@ -5272,17 +5265,18 @@ mod tests {
             tokio::task::yield_now().await;
         }
 
-        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
-        graph
-            .execute_batch(
-                "CREATE TRIGGER fail_first_followup_ack
-                 BEFORE UPDATE OF delivery_state ON agent_mailbox
-                 WHEN NEW.delivery_state = 'delivered'
-                 BEGIN
-                   SELECT RAISE(ABORT, 'injected first followup ack failure');
-                 END;",
-            )
-            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
+        ).await.unwrap();
+        sqlx::raw_sql(
+            "CREATE TRIGGER fail_first_followup_ack
+             BEFORE UPDATE OF delivery_state ON agent_mailbox
+             WHEN NEW.delivery_state = 'delivered'
+             BEGIN
+               SELECT RAISE(ABORT, 'injected first followup ack failure');
+             END;",
+        )
+        .execute(&pool).await.unwrap();
         let first = AgentThreadDispatch::followup_task(
             &dispatch,
             MessageAgentV2Request {
@@ -5294,9 +5288,8 @@ mod tests {
         .await
         .unwrap_err();
         assert!(format!("{first:#}").contains("injected first followup ack failure"));
-        graph
-            .execute_batch("DROP TRIGGER fail_first_followup_ack;")
-            .unwrap();
+        sqlx::raw_sql("DROP TRIGGER fail_first_followup_ack;")
+            .execute(&pool).await.unwrap();
 
         AgentThreadDispatch::followup_task(
             &dispatch,

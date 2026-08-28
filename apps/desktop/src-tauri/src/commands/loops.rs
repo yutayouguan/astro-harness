@@ -178,7 +178,7 @@ pub async fn run_loop(id: String) -> Result<WorkflowRunResult, String> {
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("workflow {} 不存在", id))?;
 
-    // WorkflowRunDb 含 rusqlite Connection（非 Send），需在 spawn_blocking + current_thread runtime 中执行
+    // WorkflowRunDb 在 spawn_blocking + current_thread runtime 中执行
     tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()

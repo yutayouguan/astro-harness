@@ -202,7 +202,7 @@ pub async fn compact_chat_session(
     let live_session = agent::exec::dispatch::active_root_session_for_hooks(&memory_dir, sid)
         .map_err(|error| error.to_string())?;
 
-    // SessionStore（rusqlite）非 Send：先读出元数据/消息并 drop，再 await LLM。
+    // 先读出元数据/消息并 drop store，再 await LLM。
     let (messages, expected_last_message_id, transcript) = {
         let store = open_sessions().await?;
         let meta = store

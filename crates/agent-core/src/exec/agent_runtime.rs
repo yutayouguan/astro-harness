@@ -3095,14 +3095,14 @@ mod tests {
                 .status,
             AgentStatusV2::Shutdown
         );
-        let edge_state: String = rusqlite::Connection::open(dir.path().join("agents.db"))
-            .unwrap()
-            .query_row(
-                "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
-                [&thread.thread_id],
-                |row| row.get(0),
-            )
-            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", dir.path().join("agents.db").display())
+        ).await.unwrap();
+        let (edge_state,): (String,) = agent_db::sqlx::query_as(
+            "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
+        )
+        .bind(&thread.thread_id)
+        .fetch_one(&pool).await.unwrap();
         assert_eq!(edge_state, "closed");
         assert!(matches!(
             control
