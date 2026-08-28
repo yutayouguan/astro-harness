@@ -229,7 +229,7 @@ impl AgentLoop {
             ..NewMessage::empty(&self.session_id, "tool")
         }).await?;
 
-        self.register_media_artifacts(&media, msg_id);
+        self.register_media_artifacts(&media, msg_id).await;
 
         let mut spill_view: Option<String> = None;
         if content.len() >= types::DEFAULT_SPILL_THRESHOLD_BYTES {

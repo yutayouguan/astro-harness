@@ -288,7 +288,7 @@ impl Session {
     ) -> anyhow::Result<Self> {
         let graph_db_path = config.memory_dir.join("subagents-v2.db");
         let agent_control = crate::exec::agent_control_directory::AgentControlDirectory::global()
-            .open_root_at(&session_id, &graph_db_path)?;
+            .open_root_at(&session_id, &graph_db_path).await?;
         Self::from_memory_with_agent_control(
             config,
             session_id,

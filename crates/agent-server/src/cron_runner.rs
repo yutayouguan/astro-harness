@@ -168,7 +168,7 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
 
 /// 认领到期任务并逐个执行；打开 store / claim 失败时提前返回。
 pub async fn tick_and_execute() {
-    if let Err(err) = cron_exec::reconcile_orphaned_runs() {
+    if let Err(err) = cron_exec::reconcile_orphaned_runs().await {
         tracing::warn!(error = %err, "cron tick: reconcile orphaned runs failed");
     }
 

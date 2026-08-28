@@ -27,6 +27,44 @@ use crate::runtime::{Config, Session};
 
 type ActiveRootSession = Session;
 
+/// Bridge an async future into a synchronous context.
+/// Works with both multi-thread and current-thread Tokio runtimes.
+fn sync_bridge<F, T>(fut: F) -> T
+where
+    F: std::future::Future<Output = T> + Send,
+    T: Send,
+{
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle)
+            if matches!(
+                handle.runtime_flavor(),
+                tokio::runtime::RuntimeFlavor::MultiThread
+            ) =>
+        {
+            tokio::task::block_in_place(|| handle.block_on(fut))
+        }
+        Ok(_) => std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("failed to build sync bridge runtime");
+                    rt.block_on(fut)
+                })
+                .join()
+                .expect("sync bridge thread panicked")
+        }),
+        Err(_) => {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build sync bridge runtime");
+            rt.block_on(fut)
+        }
+    }
+}
+
 #[derive(Default)]
 struct ActiveRootSessionRegistry {
     sessions: Mutex<HashMap<(PathBuf, String), Weak<ActiveRootSession>>>,
@@ -164,12 +202,12 @@ struct ForkedSessionGuard {
 }
 
 impl ForkedSessionGuard {
-    fn rollback(&mut self) -> anyhow::Result<()> {
+    async fn rollback(&mut self) -> anyhow::Result<()> {
         if !self.armed {
             return Ok(());
         }
-        let sessions = session::SessionStore::open_sessions_dir(&self.sessions_dir)?;
-        let Some(child) = sessions.get_session(&self.child_session_id)? else {
+        let sessions = session::SessionStore::open_sessions_dir(&self.sessions_dir).await?;
+        let Some(child) = sessions.get_session(&self.child_session_id).await? else {
             self.armed = false;
             return Ok(());
         };
@@ -177,7 +215,7 @@ impl ForkedSessionGuard {
             child.parent_session_id.as_deref() == Some(self.parent_session_id.as_str()),
             "refusing to delete child session whose fork ownership changed"
         );
-        sessions.delete_session_permanently(&self.child_session_id)?;
+        sessions.delete_session_permanently(&self.child_session_id).await?;
         self.armed = false;
         Ok(())
     }
@@ -190,19 +228,44 @@ impl ForkedSessionGuard {
 impl Drop for ForkedSessionGuard {
     fn drop(&mut self) {
         if self.armed {
-            if let Err(error) = self.rollback() {
-                tracing::warn!(%error, child_session_id = %self.child_session_id, "failed to compensate forked child session");
+            self.armed = false;
+            let sessions_dir = self.sessions_dir.clone();
+            let child_session_id = self.child_session_id.clone();
+            let parent_session_id = self.parent_session_id.clone();
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                handle.spawn(async move {
+                    let result: anyhow::Result<()> = async {
+                        let sessions =
+                            session::SessionStore::open_sessions_dir(&sessions_dir).await?;
+                        let Some(child) = sessions.get_session(&child_session_id).await? else {
+                            return Ok(());
+                        };
+                        if child.parent_session_id.as_deref()
+                            != Some(parent_session_id.as_str())
+                        {
+                            return Ok(());
+                        }
+                        sessions
+                            .delete_session_permanently(&child_session_id)
+                            .await?;
+                        Ok(())
+                    }
+                    .await;
+                    if let Err(error) = result {
+                        tracing::warn!(%error, %child_session_id, "failed to compensate forked child session");
+                    }
+                });
             }
         }
     }
 }
 
-fn rollback_fork_error(
+async fn rollback_fork_error(
     guard: &mut ForkedSessionGuard,
     operation: &str,
     error: anyhow::Error,
 ) -> anyhow::Error {
-    match guard.rollback() {
+    match guard.rollback().await {
         Ok(()) => anyhow::anyhow!("{operation} failed: {error:#}"),
         Err(rollback_error) => anyhow::anyhow!(
             "{operation} failed: {error:#}; child session rollback failed: {rollback_error:#}"
@@ -422,7 +485,7 @@ impl DefaultAgentThreadDispatch {
         }
     }
 
-    fn recover_runtime_request(
+    async fn recover_runtime_request(
         &self,
         target: &AgentThreadV2,
         material: Option<&ParentRuntimeMaterial>,
@@ -440,7 +503,7 @@ impl DefaultAgentThreadDispatch {
         })?;
         let descriptor = self
             .control
-            .runtime_descriptor(&target.thread_id)?
+            .runtime_descriptor(&target.thread_id).await?
             .with_context(|| {
                 format!(
                     "runtime descriptor is unavailable for {}",
@@ -469,10 +532,10 @@ impl DefaultAgentThreadDispatch {
         }
         ancestors.reverse();
         for path in ancestors {
-            let ancestor = self.control.resolve_desktop_target(path.as_str())?;
+            let ancestor = self.control.resolve_desktop_target(path.as_str()).await?;
             let ancestor_descriptor = self
                 .control
-                .runtime_descriptor(&ancestor.thread_id)?
+                .runtime_descriptor(&ancestor.thread_id).await?
                 .with_context(|| {
                     format!("runtime descriptor is unavailable for ancestor {path}")
                 })?;
@@ -542,7 +605,7 @@ impl DefaultAgentThreadDispatch {
             &runtime.chat_targets,
             runtime.model_request.model.as_deref(),
         )?;
-        validate_recovered_runtime_setup(&material.memory_dir, &self.control, target, &runtime)?;
+        validate_recovered_runtime_setup(&material.memory_dir, &self.control, target, &runtime).await?;
         Ok(Arc::new(StoredRuntimeRequest {
             runtime,
             memory_dir: material.memory_dir.clone(),
@@ -583,7 +646,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             &self.current_path,
             &request.request.task_name,
             &resolved.definition.name,
-        )?;
+        ).await?;
         let thread = reservation.thread().clone();
         let memory_dir = request.runtime.memory_dir.clone();
         let runtime = build_runtime_request(
@@ -600,26 +663,26 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 thread_id: thread.thread_id.clone(),
                 model: runtime.model_request.model.clone(),
                 reasoning_effort: runtime.model_request.reasoning_effort.clone(),
-            })?;
+            }).await?;
 
         let mut forked_session = fork_parent_session(
             &memory_dir,
             &runtime,
             &thread.session_id,
             &runtime.model_request.fork_turns,
-        )?;
+        ).await?;
         if let Err(error) = validate_runtime_setup(
             &memory_dir,
             &self.control,
             &thread,
             &runtime,
             &thread.session_id,
-        ) {
+        ).await {
             return Err(rollback_fork_error(
                 &mut forked_session,
                 "validate agent runtime setup",
                 error,
-            ));
+            ).await);
         }
 
         let stored = Arc::new(StoredRuntimeRequest {
@@ -634,15 +697,15 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 &mut forked_session,
                 "register agent runtime request",
                 error,
-            ));
+            ).await);
         }
-        if let Err(error) = reservation.commit() {
+        if let Err(error) = reservation.commit().await {
             self.runtime_requests.remove(&thread.thread_id);
             return Err(rollback_fork_error(
                 &mut forked_session,
                 "commit agent thread reservation",
                 error,
-            ));
+            ).await);
         }
         let sessions_dir = forked_session.sessions_dir.clone();
         let child_session_id = forked_session.child_session_id.clone();
@@ -653,18 +716,22 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let cleanup_thread = thread.clone();
         let unaccepted_cleanup = Arc::new(UnacceptedSpawnCleanup::new(move |turn_id| {
             cleanup_requests.remove(&cleanup_thread.thread_id);
-            let graph_result = cleanup_control
-                .finalize_unaccepted_spawn(&cleanup_thread, turn_id)
-                .map_err(|error| error.context("spawn graph and identity rollback"));
+            let graph_result = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(
+                    cleanup_control.finalize_unaccepted_spawn(&cleanup_thread, turn_id),
+                )
+            })
+            .map_err(|error| error.context("spawn graph and identity rollback"));
             let mut owned_session = ForkedSessionGuard {
                 sessions_dir: sessions_dir.clone(),
                 child_session_id: child_session_id.clone(),
                 parent_session_id: parent_session_id.clone(),
                 armed: true,
             };
-            let session_result = owned_session
-                .rollback()
-                .map_err(|error| error.context("child session rollback"));
+            let session_result = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(owned_session.rollback())
+            })
+            .map_err(|error| error.context("child session rollback"));
             match (graph_result, session_result) {
                 (Ok(()), Ok(())) => Ok(()),
                 (Err(graph), Ok(())) => Err(graph),
@@ -697,7 +764,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         request: ListAgentsV2Request,
     ) -> anyhow::Result<Vec<subagents::AgentThreadV2>> {
         self.control
-            .list_agents(&self.current_path, request.path_prefix.as_deref())
+            .list_agents(&self.current_path, request.path_prefix.as_deref()).await
     }
 
     async fn send_message(
@@ -706,7 +773,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
     ) -> anyhow::Result<MessageAgentV2Result> {
         let message = self
             .control
-            .enqueue_message(&self.current_path, request, false)?;
+            .enqueue_message(&self.current_path, request, false).await?;
         Ok(MessageAgentV2Result {
             message_id: message.message_id,
             queued: true,
@@ -720,7 +787,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
     ) -> anyhow::Result<MessageAgentV2Result> {
         let resolved = self
             .control
-            .resolve_target(&self.current_path, &request.request.target)?;
+            .resolve_target(&self.current_path, &request.request.target).await?;
         anyhow::ensure!(
             resolved.canonical_path != AgentPath::root(),
             "follow-up tasks cannot target the root agent"
@@ -728,11 +795,9 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let followup_text = request.request.message.trim().to_string();
         #[cfg(test)]
         if let Some(hook) = self.before_followup_atomic_hook.as_ref() {
-            // Deliberately model a stale pre-check; the control-layer atomic
-            // admission below must re-check after this race window.
             let _ = self
                 .control
-                .resolve_target(&self.current_path, &request.request.target)?;
+                .resolve_target(&self.current_path, &request.request.target).await?;
             hook.entered.notify_one();
             hook.release.notified().await;
         }
@@ -743,8 +808,9 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 let stored = match self.runtime_requests.get(&target.thread_id)? {
                     Some(stored) => stored,
                     None => {
-                        let recovered =
-                            self.recover_runtime_request(target, request.runtime.as_ref())?;
+                        let recovered = futures::executor::block_on(
+                            self.recover_runtime_request(target, request.runtime.as_ref()),
+                        )?;
                         self.runtime_requests
                             .get_or_insert(&target.thread_id, recovered)?
                     }
@@ -755,7 +821,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 self.runtime_manager
                     .request_or_start_followup(&target.thread_id, run)
             },
-        )?;
+        ).await?;
         match admission {
             FollowupAdmission::StartNow { request, result_rx } => {
                 let start_tx = request
@@ -828,7 +894,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
     ) -> anyhow::Result<InterruptAgentV2Result> {
         let target = self
             .control
-            .resolve_target(&self.current_path, &request.target)?;
+            .resolve_target(&self.current_path, &request.target).await?;
         anyhow::ensure!(
             target.canonical_path != AgentPath::root(),
             "the root agent cannot be interrupted through model tools"
@@ -843,7 +909,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             .await?;
         let thread = self
             .control
-            .resolve_target(&self.current_path, target.canonical_path.as_str())?;
+            .resolve_target(&self.current_path, target.canonical_path.as_str()).await?;
         Ok(InterruptAgentV2Result {
             thread,
             previous_status,
@@ -894,20 +960,20 @@ fn build_runtime_request(
     }
 }
 
-fn fork_parent_session(
+async fn fork_parent_session(
     memory_dir: &Path,
     runtime: &SpawnRuntimeV2Request,
     child_session_id: &str,
     fork_turns: &Option<String>,
 ) -> anyhow::Result<ForkedSessionGuard> {
     let sessions_dir = memory_dir.join("sessions");
-    let sessions = session::SessionStore::open_sessions_dir(&sessions_dir)?;
+    let sessions = session::SessionStore::open_sessions_dir(&sessions_dir).await?;
     let recent_turns = parse_fork_turns(fork_turns.as_deref())?;
     sessions.fork_session_recent_turns(
         &runtime.parent_session_id,
         child_session_id,
         recent_turns,
-    )?;
+    ).await?;
     Ok(ForkedSessionGuard {
         sessions_dir,
         child_session_id: child_session_id.to_string(),
@@ -930,7 +996,7 @@ fn parse_fork_turns(value: Option<&str>) -> anyhow::Result<Option<usize>> {
     }
 }
 
-fn validate_runtime_setup(
+async fn validate_runtime_setup(
     memory_dir: &Path,
     control: &Arc<AgentControl>,
     thread: &subagents::AgentThreadV2,
@@ -949,25 +1015,25 @@ fn validate_runtime_setup(
         &runtime.parent_agent_id,
         Arc::clone(control),
         thread.canonical_path.clone(),
-    )?;
+    ).await?;
     Ok(())
 }
 
-fn validate_recovered_runtime_setup(
+async fn validate_recovered_runtime_setup(
     memory_dir: &Path,
     control: &Arc<AgentControl>,
     thread: &subagents::AgentThreadV2,
     runtime: &SpawnRuntimeV2Request,
 ) -> anyhow::Result<()> {
-    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))?;
+    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).await?;
     let stored = sessions
-        .get_session(&thread.session_id)?
+        .get_session(&thread.session_id).await?
         .with_context(|| format!("child session {:?} is unavailable", thread.session_id))?;
     anyhow::ensure!(
         stored.parent_session_id.as_deref() == thread.parent_thread_id.as_deref(),
         "child session ownership no longer matches the durable Agent Thread parent"
     );
-    validate_runtime_setup(memory_dir, control, thread, runtime, &thread.session_id)
+    validate_runtime_setup(memory_dir, control, thread, runtime, &thread.session_id).await
 }
 
 /// Desktop-only operations. This trait deliberately remains separate from the
@@ -1040,12 +1106,12 @@ impl std::fmt::Display for CloseSubtreeError {
 
 impl std::error::Error for CloseSubtreeError {}
 
-fn close_subtree_error(
+async fn close_subtree_error(
     control: &AgentControl,
     failed_path: &AgentPath,
     cause: impl std::fmt::Display,
 ) -> anyhow::Error {
-    match control.snapshot() {
+    match control.snapshot().await {
         Ok(snapshot) => CloseSubtreeError {
             failed_path: failed_path.to_string(),
             cause: cause.to_string(),
@@ -1067,7 +1133,7 @@ async fn finish_close_operation(
     let mut index = 0;
     loop {
         let Some(thread) = threads.get(index) else {
-            return control.snapshot();
+            return control.snapshot().await;
         };
         match runtime_manager
             .begin_close_thread(control.as_ref(), thread)
@@ -1121,7 +1187,7 @@ async fn finish_close_operation(
                     control.as_ref(),
                     &thread.canonical_path,
                     error,
-                ));
+                ).await);
             }
         }
     }
@@ -1194,7 +1260,7 @@ impl DefaultDesktopAgentThreadControl {
         self.close_barrier_hook = hook;
     }
 
-    fn control(&self, root_session_id: &str) -> anyhow::Result<Arc<AgentControl>> {
+    async fn control(&self, root_session_id: &str) -> anyhow::Result<Arc<AgentControl>> {
         anyhow::ensure!(
             !root_session_id.trim().is_empty(),
             "root session id must not be empty"
@@ -1208,6 +1274,7 @@ impl DefaultDesktopAgentThreadControl {
         }
         crate::exec::agent_control_directory::AgentControlDirectory::global()
             .open_root_at(root_session_id, &self.memory_dir.join("subagents-v2.db"))
+            .await
     }
 
     fn dispatch(&self, control: Arc<AgentControl>) -> DefaultAgentThreadDispatch {
@@ -1230,7 +1297,7 @@ impl DefaultDesktopAgentThreadControl {
 #[async_trait]
 impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
     async fn snapshot(&self, root_session_id: &str) -> anyhow::Result<AgentTreeSnapshotV2> {
-        self.control(root_session_id)?.snapshot()
+        self.control(root_session_id).await?.snapshot().await
     }
 
     async fn read_thread(
@@ -1238,10 +1305,10 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         root_session_id: &str,
         target: &str,
     ) -> anyhow::Result<AgentThreadDetailV2> {
-        let control = self.control(root_session_id)?;
-        let thread = control.resolve_desktop_target(target)?;
-        let messages = session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions"))?
-            .get_messages(&thread.session_id)?
+        let control = self.control(root_session_id).await?;
+        let thread = control.resolve_desktop_target(target).await?;
+        let messages = session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions")).await?
+            .get_messages(&thread.session_id).await?
             .into_iter()
             .map(|message| AgentThreadMessageV2 {
                 id: message.id,
@@ -1272,8 +1339,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         target: &str,
         message: String,
     ) -> anyhow::Result<AgentThreadV2> {
-        let control = self.control(root_session_id)?;
-        let target_thread = control.resolve_desktop_target(target)?;
+        let control = self.control(root_session_id).await?;
+        let target_thread = control.resolve_desktop_target(target).await?;
         anyhow::ensure!(
             target_thread.canonical_path != AgentPath::root(),
             "the root agent cannot receive a desktop subagent follow-up"
@@ -1301,7 +1368,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                 runtime,
             })
             .await?;
-        control.resolve_desktop_target(target_thread.canonical_path.as_str())
+        control.resolve_desktop_target(target_thread.canonical_path.as_str()).await
     }
 
     async fn interrupt(
@@ -1309,8 +1376,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         root_session_id: &str,
         target: &str,
     ) -> anyhow::Result<InterruptAgentV2Result> {
-        let control = self.control(root_session_id)?;
-        let target_thread = control.resolve_desktop_target(target)?;
+        let control = self.control(root_session_id).await?;
+        let target_thread = control.resolve_desktop_target(target).await?;
         anyhow::ensure!(
             target_thread.canonical_path != AgentPath::root(),
             "the root agent cannot be interrupted through desktop subagent controls"
@@ -1319,7 +1386,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         self.runtime_manager
             .interrupt(&target_thread.thread_id)
             .await?;
-        let thread = control.resolve_desktop_target(target_thread.canonical_path.as_str())?;
+        let thread = control.resolve_desktop_target(target_thread.canonical_path.as_str()).await?;
         Ok(InterruptAgentV2Result {
             thread,
             previous_status,
@@ -1333,8 +1400,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
     ) -> anyhow::Result<AgentTreeSnapshotV2> {
         let response_timeout = self.runtime_manager.close_timeout();
         let response_deadline = tokio::time::Instant::now() + response_timeout;
-        let control = self.control(root_session_id)?;
-        let target_thread = control.resolve_desktop_target(target)?;
+        let control = self.control(root_session_id).await?;
+        let target_thread = control.resolve_desktop_target(target).await?;
         let _close = match tokio::time::timeout_at(
             response_deadline,
             self.runtime_manager.lock_subtree_close(control.as_ref()),
@@ -1347,7 +1414,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                     control.as_ref(),
                     &target_thread.canonical_path,
                     "timed out waiting for subtree close coordination; an earlier close remains active",
-                ));
+                ).await);
             }
         };
         let close_admission = control.begin_close(target_thread.canonical_path.clone())?;
@@ -1363,7 +1430,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                     control.as_ref(),
                     &target_thread.canonical_path,
                     "timed out waiting for in-flight agent spawn reservations",
-                ));
+                ).await);
             }
         }
         #[cfg(test)]
@@ -1372,7 +1439,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
             hook.release.notified().await;
         }
         let mut threads = control
-            .snapshot()?
+            .snapshot().await?
             .threads
             .into_iter()
             .filter(|thread| {
@@ -1391,7 +1458,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         });
 
         let Some(first_thread) = threads.first() else {
-            return control.snapshot();
+            return control.snapshot().await;
         };
         let failed_path = first_thread.canonical_path.clone();
         let runtime_manager = Arc::clone(&self.runtime_manager);
@@ -1416,12 +1483,12 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                 control.as_ref(),
                 &failed_path,
                 format!("background close task failed: {join_error}"),
-            )),
+            ).await),
             Err(_) => Err(close_subtree_error(
                 control.as_ref(),
                 &failed_path,
                 "timed out waiting for shutdown acknowledgement; subtree remains closing in background",
-            )),
+            ).await),
         }
     }
 }
@@ -2140,14 +2207,14 @@ mod tests {
         let partial = error.downcast_ref::<CloseSubtreeError>().unwrap();
         assert_eq!(partial.failed_path(), "/root/parent");
         assert!(partial
-            .snapshot()
+            .snapshot().await
             .threads
             .iter()
             .any(|thread| thread.thread_id == leaf.thread_id
                 && thread.status == AgentStatusV2::Shutdown));
         assert_ne!(
             partial
-                .snapshot()
+                .snapshot().await
                 .threads
                 .iter()
                 .find(|thread| thread.thread_id == parent.thread_id)
@@ -2987,7 +3054,7 @@ mod tests {
             .is_empty());
         assert!(!dispatch
             .control
-            .snapshot()
+            .snapshot().await
             .unwrap()
             .threads
             .iter()
