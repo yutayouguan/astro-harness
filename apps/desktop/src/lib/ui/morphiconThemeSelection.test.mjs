@@ -6,10 +6,6 @@ const preferencesCss = await readFile(
   new URL("../../styles/features/preferences.css", import.meta.url),
   "utf8",
 );
-const segmentedTokens = await readFile(
-  new URL("../../styles/tokens/component/segmented.css", import.meta.url),
-  "utf8",
-);
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -18,17 +14,21 @@ function rule(css, selector) {
   )?.groups?.body;
 }
 
-test("morphicon selection follows the local theme tone", () => {
+test("morphicon selection matches the appearance option card treatment", () => {
   const active = rule(preferencesCss, ".morphicon-segmented button.is-active");
+  const darkActive = rule(
+    preferencesCss,
+    'html[data-theme="dark"] .morphicon-segmented button.is-active',
+  );
 
   assert.ok(active, "missing Morphicon selected-state styles");
-  assert.match(active, /color:\s*var\(--seg-item-color-active\);/);
-  assert.match(active, /background:\s*var\(--seg-item-bg-active\);/);
-  assert.match(active, /box-shadow:\s*var\(--seg-item-shadow-active\);/);
+  assert.match(active, /var\(--tone-soft\) 70%/);
+  assert.match(active, /var\(--tone\) 36%/);
+  assert.match(active, /border-radius:\s*10px/);
+  assert.match(active, /font-weight:\s*650/);
+  assert.match(active, /inset 0 1px 0 rgba\(255, 255, 255, 0\.35\)/);
   assert.doesNotMatch(active, /var\(--ink\)\s+92%/);
-  assert.match(
-    segmentedTokens,
-    /:is\([\s\S]*?\.morphicon-segmented,[\s\S]*?\)\s*\{[\s\S]*?--seg-item-bg-active:/,
-    "Morphicon controls must inherit the shared tone-aware segmented recipe",
-  );
+  assert.ok(darkActive, "missing dark-theme Morphicon selected-state styles");
+  assert.match(darkActive, /var\(--tone-soft\) 55%/);
+  assert.match(darkActive, /var\(--tone\) 40%/);
 });
