@@ -246,31 +246,31 @@ pub enum RuntimeIoBindError {
 
 impl Session {
     /// 以随机 UUID 作为 session_id 创建 Agent 实例。
-    pub fn new(config: Config) -> anyhow::Result<Self> {
-        Self::with_session_id(config, Uuid::new_v4().to_string())
+    pub async fn new(config: Config) -> anyhow::Result<Self> {
+        Self::with_session_id(config, Uuid::new_v4().to_string()).await
     }
 
     /// 以指定 session_id 创建 Agent 实例，并注册全部内置工具。
     ///
     /// 初始化时 `tool_rounds` 与 `current_turn` 均为 0。
     /// 记忆侧使用当前活跃 Agent（[`MemoryManager::new`]）。
-    pub fn with_session_id(config: Config, session_id: String) -> anyhow::Result<Self> {
+    pub async fn with_session_id(config: Config, session_id: String) -> anyhow::Result<Self> {
         let memory = MemoryManager::new(config.memory_dir.clone())?;
-        Self::from_memory(config, session_id, memory)
+        Self::from_memory(config, session_id, memory).await
     }
 
     /// 以指定 `agent_id` 与 session_id 创建 Agent 实例（不依赖全局活跃 Agent）。
-    pub fn with_session_id_for_agent(
+    pub async fn with_session_id_for_agent(
         config: Config,
         session_id: String,
         agent_id: &str,
     ) -> anyhow::Result<Self> {
         let memory = MemoryManager::for_agent(config.memory_dir.clone(), agent_id)?;
-        Self::from_memory(config, session_id, memory)
+        Self::from_memory(config, session_id, memory).await
     }
 
     /// Construct a child agent runtime sharing the root Agent Graph control plane.
-    pub fn with_session_id_for_agent_thread(
+    pub async fn with_session_id_for_agent_thread(
         config: Config,
         session_id: String,
         agent_id: &str,
@@ -278,10 +278,10 @@ impl Session {
         agent_path: subagents::AgentPath,
     ) -> anyhow::Result<Self> {
         let memory = MemoryManager::for_agent(config.memory_dir.clone(), agent_id)?;
-        Self::from_memory_with_agent_control(config, session_id, memory, agent_control, agent_path)
+        Self::from_memory_with_agent_control(config, session_id, memory, agent_control, agent_path).await
     }
 
-    fn from_memory(
+    async fn from_memory(
         config: Config,
         session_id: String,
         memory: MemoryManager,
@@ -295,10 +295,10 @@ impl Session {
             memory,
             agent_control,
             subagents::AgentPath::root(),
-        )
+        ).await
     }
 
-    fn from_memory_with_agent_control(
+    async fn from_memory_with_agent_control(
         config: Config,
         session_id: String,
         mut memory: MemoryManager,
@@ -310,8 +310,8 @@ impl Session {
         let agent_id = memory.agent_id.clone();
         let sessions: Box<dyn ConversationStore> = Box::new(SessionStore::open_sessions_dir(
             &config.memory_dir.join("sessions"),
-        )?);
-        let history = hydrate_history(&*sessions, &session_id)?;
+        ).await?);
+        let history = hydrate_history(&*sessions, &session_id).await?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -1525,7 +1525,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let rollout_path = dir.path().join("ordered-events.jsonl");
         let rollout = RolloutRecorder::open(rollout_path.clone()).await.unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
         let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
         let first_persisted = Arc::new(tokio::sync::Barrier::new(2));
         let release_first = Arc::new(tokio::sync::Barrier::new(2));
@@ -1595,10 +1595,10 @@ mod tests {
         assert_eq!(turns, ["turn-a", "turn-b"]);
     }
 
-    #[test]
-    fn auxiliary_targets_falls_back_to_chat_credentials_when_nothing_set() {
+    #[tokio::test]
+    async fn auxiliary_targets_falls_back_to_chat_credentials_when_nothing_set() {
         let dir = TempDir::new().unwrap();
-        let agent = AgentLoop::new(test_config(&dir)).unwrap();
+        let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
         agent.set_chat_credentials("openai", "gpt-5.6", "key-1", "https://api.openai.com/v1");
 
         let targets = agent.auxiliary_targets(types::AuxiliaryTask::Dreaming);
@@ -1608,20 +1608,20 @@ mod tests {
         assert_eq!(targets[0].api_key, "key-1");
     }
 
-    #[test]
-    fn auxiliary_targets_falls_back_to_primary_chat_target_when_nothing_set() {
+    #[tokio::test]
+    async fn auxiliary_targets_falls_back_to_primary_chat_target_when_nothing_set() {
         let dir = TempDir::new().unwrap();
-        let agent = AgentLoop::new(test_config(&dir)).unwrap();
+        let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
         agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
 
         let targets = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
         assert_eq!(targets, vec![t("p0", "openai", "gpt-5.6")]);
     }
 
-    #[test]
-    fn auxiliary_targets_returns_configured_chain_for_matching_task() {
+    #[tokio::test]
+    async fn auxiliary_targets_returns_configured_chain_for_matching_task() {
         let dir = TempDir::new().unwrap();
-        let agent = AgentLoop::new(test_config(&dir)).unwrap();
+        let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
         agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
 
         let mut map = std::collections::HashMap::new();
@@ -1657,7 +1657,7 @@ mod tests {
     #[tokio::test]
     async fn new_task_context_snapshots_the_next_turn_ordinal() {
         let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
 
         let first = session.create_turn_context("turn-1".into()).await;
         assert_eq!(first.turn(), 1);
@@ -1670,7 +1670,7 @@ mod tests {
     #[tokio::test]
     async fn session_groups_mutable_runtime_state_behind_its_internal_lock() {
         let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
         let state = session.lock_state();
 
         assert_eq!(state.turn.current_turn(), 0);
@@ -1699,7 +1699,7 @@ mod tests {
         use std::sync::atomic::{AtomicBool, Ordering};
 
         let dir = TempDir::new().unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
         let barrier = Arc::new(tokio::sync::Barrier::new(3));
         let write_complete = Arc::new(AtomicBool::new(false));
         let writer = {
@@ -1745,7 +1745,7 @@ mod tests {
     #[tokio::test]
     async fn session_returns_owned_runtime_snapshots() {
         let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
         let project_root = dir.path().join("project");
         session.set_chat_credentials("openai", "gpt-5.6", "key", "https://example.test");
         session.set_project_root(Some(project_root.clone()));
@@ -1763,7 +1763,7 @@ mod tests {
     #[tokio::test]
     async fn session_dispatches_registered_non_mcp_dynamic_handler() {
         let dir = TempDir::new().unwrap();
-        let mut session = Session::new(test_config(&dir)).unwrap();
+        let mut session = Session::new(test_config(&dir)).await.unwrap();
         session.tool_registry_mut().register_dynamic(
             ToolEntry {
                 name: "custom_dynamic".to_string(),
@@ -1844,7 +1844,7 @@ mod tests {
     #[tokio::test]
     async fn clone_history_returns_an_owned_snapshot_through_arc() {
         let dir = TempDir::new().unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
         session.record_items(vec![Message::user("original")]).await;
 
         let mut snapshot = session.clone_history().await;
@@ -1858,7 +1858,7 @@ mod tests {
     #[tokio::test]
     async fn replace_history_replaces_the_session_state_snapshot() {
         let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
         session.record_items(vec![Message::user("discarded")]).await;
 
         session
@@ -1873,7 +1873,7 @@ mod tests {
     #[tokio::test]
     async fn conversation_write_lock_serializes_persistence_and_history() {
         let dir = TempDir::new().unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
         let write_guard = session.conversation_write_lock.lock().await;
         let writer = {
             let session = Arc::clone(&session);
@@ -1885,6 +1885,7 @@ mod tests {
             .services
             .sessions
             .get_messages(session.session_id())
+            .await
             .unwrap()
             .is_empty());
         assert!(session.clone_history().await.is_empty());
@@ -1896,6 +1897,7 @@ mod tests {
                 .services
                 .sessions
                 .get_messages(session.session_id())
+                .await
                 .unwrap()
                 .len(),
             1

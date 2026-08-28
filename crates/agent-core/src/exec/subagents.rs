@@ -72,7 +72,7 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(
         let pending = session
             .services
             .agent_control
-            .drain_mailbox(&session.services.agent_path)?;
+            .drain_mailbox(&session.services.agent_path).await?;
         if pending.is_empty() {
             return Ok(total);
         }
@@ -90,7 +90,7 @@ async fn drain_mailbox_batch_at_safe_boundary(
     }
     let control = Arc::clone(&session.services.agent_control);
     let path = session.services.agent_path.clone();
-    let messages = control.drain_mailbox(&path)?;
+    let messages = control.drain_mailbox(&path).await?;
     if messages.is_empty() {
         return Ok(MailboxDrainOutcome::default());
     }
@@ -102,7 +102,7 @@ async fn drain_mailbox_batch_at_safe_boundary(
     let persisted_through = session
         .services
         .sessions
-        .get_messages(session.session_id())?
+        .get_messages(session.session_id()).await?
         .iter()
         .filter_map(|message| {
             message
@@ -136,7 +136,7 @@ async fn drain_mailbox_batch_at_safe_boundary(
         .take_while(|message| message.sequence <= through_sequence)
         .count();
     let marker = format!("{MAILBOX_FINISH_PREFIX}{through_sequence}");
-    let durable = session.ensure_durable_turn_input_marker(&marker)?;
+    let durable = session.ensure_durable_turn_input_marker(&marker).await?;
     let in_memory = runtime_history
         .iter()
         .any(|message| message.compressed_content.as_deref() == Some(marker.as_str()));
@@ -176,7 +176,7 @@ async fn drain_mailbox_batch_at_safe_boundary(
         client_message_id: None,
     };
     if !durable {
-        session.persist_turn_input(&input, Some(&marker), Some(&marker))?;
+        session.persist_turn_input(&input, Some(&marker), Some(&marker)).await?;
     }
     if session.cancel_signal().is_cancelled() {
         anyhow::bail!("agent turn interrupted after durable mailbox history write");
@@ -190,7 +190,7 @@ async fn drain_mailbox_batch_at_safe_boundary(
     if session.cancel_signal().is_cancelled() {
         anyhow::bail!("agent turn interrupted after in-memory mailbox history write");
     }
-    control.ack_mailbox(&path, through_sequence)?;
+    control.ack_mailbox(&path, through_sequence).await?;
     Ok(MailboxDrainOutcome {
         delivered,
         delivered_steer_ids,

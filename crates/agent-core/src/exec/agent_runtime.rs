@@ -225,7 +225,7 @@ impl StartTurnOwnerGuard<'_> {
         drop(self.permit.take());
     }
 
-    fn persist_dropped_owner_terminal(&self, close_requested: bool) -> anyhow::Result<()> {
+    async fn persist_dropped_owner_terminal(&self, close_requested: bool) -> anyhow::Result<()> {
         let owns_turn = self
             .manager
             .active_turn_matches(&self.thread_id, &self.turn_id)?;

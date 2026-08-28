@@ -103,9 +103,9 @@ where
 pub async fn maybe_generate_session_title(
     job: TitleGenerationJob,
 ) -> anyhow::Result<Option<TitleChangedNotify>> {
-    let store = open_store(&job.memory_dir)?;
+    let store = open_store(&job.memory_dir).await?;
     let meta = store
-        .get_session(&job.session_id)?
+        .get_session(&job.session_id).await?
         .ok_or_else(|| anyhow::anyhow!("session not found"))?;
     if meta
         .title
@@ -117,7 +117,7 @@ pub async fn maybe_generate_session_title(
         return Ok(None);
     }
 
-    let Some((user, assistant)) = store.first_turn_text(&job.session_id)? else {
+    let Some((user, assistant)) = store.first_turn_text(&job.session_id).await? else {
         return Ok(None);
     };
     drop(store);
@@ -146,8 +146,8 @@ pub async fn maybe_generate_session_title(
         return Ok(None);
     }
 
-    let store = open_store(&job.memory_dir)?;
-    let wrote = store.set_session_title_if_empty(&job.session_id, &title)?;
+    let store = open_store(&job.memory_dir).await?;
+    let wrote = store.set_session_title_if_empty(&job.session_id, &title).await?;
     if !wrote {
         info!(
             session = %job.session_id,
@@ -163,9 +163,9 @@ pub async fn maybe_generate_session_title(
     }))
 }
 
-fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionStore> {
+async fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionStore> {
     memory::ensure_workspace(memory_dir)?;
-    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).await
 }
 
 async fn complete_title_chat(target: &types::ChatTarget, prompt: &str) -> anyhow::Result<String> {

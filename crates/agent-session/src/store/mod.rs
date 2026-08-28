@@ -288,6 +288,7 @@ impl SessionStore {
     }
 }
 
+#[async_trait::async_trait]
 impl crate::ConversationStore for SessionStore {
     #[allow(refining_impl_trait)]
     async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {

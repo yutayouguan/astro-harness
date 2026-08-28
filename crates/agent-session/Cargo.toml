@@ -14,6 +14,7 @@ tokio = { version = "1", features = ["sync"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+async-trait = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

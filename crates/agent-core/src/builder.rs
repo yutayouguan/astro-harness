@@ -201,12 +201,12 @@ impl AgentBuilder {
     }
 
     /// 构建可运行的 [`AgentLoop`] 与对应规格。
-    pub fn build(self) -> anyhow::Result<(AgentLoop, BuiltAgentSpec)> {
-        self.build_with_session_id(uuid::Uuid::new_v4().to_string())
+    pub async fn build(self) -> anyhow::Result<(AgentLoop, BuiltAgentSpec)> {
+        self.build_with_session_id(uuid::Uuid::new_v4().to_string()).await
     }
 
     /// 使用指定 `session_id` 构建 [`AgentLoop`] 并完成配置注入。
-    pub fn build_with_session_id(
+    pub async fn build_with_session_id(
         self,
         session_id: String,
     ) -> anyhow::Result<(AgentLoop, BuiltAgentSpec)> {
@@ -225,7 +225,7 @@ impl AgentBuilder {
         {
             config.static_override = Some(spec.static_context.clone());
         }
-        let agent = AgentLoop::with_session_id(config, session_id)?;
+        let agent = AgentLoop::with_session_id(config, session_id).await?;
         Ok((agent, spec))
     }
 }

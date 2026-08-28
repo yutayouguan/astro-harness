@@ -10,7 +10,12 @@ pub use home::EnsureWorkspaceReport;
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     let mut report = home::ensure_workspace(base)?;
 
-    let _ = SessionStore::open_sessions_dir(&base.join("sessions"))?;
+    let sessions_dir = base.join("sessions");
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            SessionStore::open_sessions_dir(&sessions_dir).await
+        })
+    })?;
 
     let bundled = skills::seed_bundled_into(base);
     for name in &bundled.installed {

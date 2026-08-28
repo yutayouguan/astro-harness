@@ -98,7 +98,7 @@ pub fn register(registry: &mut ToolRegistry) {
 crate::submit_builtin_tool! {
     register: register,
     names: ["file_ops"],
-    sync_ctx: dispatch,
+    async_ctx: dispatch,
 }
 
 /// 把写入 memory 工作区的文件登记为本会话产物（关联 session_id），
@@ -110,7 +110,7 @@ crate::submit_builtin_tool! {
 /// 拼绝对路径，与 reconcile 扫盘（`walkdir(memory_dir)`）及媒体登记的路径形态一致；
 /// 若改用 `resolve_safe` 得到的 canonicalize 结果，遇到含符号链接的记忆根目录会与
 /// reconcile 产生两条不同 path 的记录（一条已关联、一条未关联）。
-fn register_workspace_artifact(ctx: &ToolContext<'_>, rel: &str) {
+async fn register_workspace_artifact(ctx: &ToolContext<'_>, rel: &str) {
     if ctx.project_root.is_some() || ctx.session_id.trim().is_empty() {
         return;
     }
@@ -118,16 +118,15 @@ fn register_workspace_artifact(ctx: &ToolContext<'_>, rel: &str) {
     let Some(path) = abs.to_str() else {
         return;
     };
-    if let Ok(db) = artifacts::open_default(&ctx.memory_dir) {
+    if let Ok(db) = artifacts::open_default(&ctx.memory_dir).await {
         let agent_id = ctx.agent_id();
-        // 垃圾/系统文件名会被 register 自行拒绝；失败不影响写入主流程。
         let _ = db.register(
             path,
             artifacts::ArtifactSource::AgentWrite,
             Some(&ctx.session_id),
             None,
             Some(&agent_id),
-        );
+        ).await;
     }
 }
 
@@ -154,7 +153,7 @@ fn maybe_html_sidecar(text: String, rel: &str) -> types::ToolOutput {
 ///
 /// 路径经 `resolve_safe` 解析；`write`/`append`/`mkdir`/`move`/`copy` 会自动创建父目录。
 /// `read` / `list` / `search` 有字节或条目上限。
-pub fn dispatch(
+pub async fn dispatch(
     ctx: &ToolContext<'_>,
     args: &serde_json::Value,
 ) -> anyhow::Result<types::ToolOutput> {
@@ -202,7 +201,7 @@ pub fn dispatch(
             // resolve_safe 已拒绝越界 symlink；写前再确认最终路径仍在沙箱根
             reaffirm_within(&full, root)?;
             std::fs::write(&full, content.as_bytes())?;
-            register_workspace_artifact(ctx, &rel);
+            register_workspace_artifact(ctx, &rel).await;
             Ok(maybe_html_sidecar(format!("已写入 {rel}"), &rel))
         }
         "append" => {
@@ -219,7 +218,7 @@ pub fn dispatch(
                 .append(true)
                 .open(&full)?;
             f.write_all(content.as_bytes())?;
-            register_workspace_artifact(ctx, &rel);
+            register_workspace_artifact(ctx, &rel).await;
             Ok(maybe_html_sidecar(format!("已追加 {rel}"), &rel))
         }
         "list" => list_dir_capped(

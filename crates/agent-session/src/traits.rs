@@ -11,8 +11,8 @@ use crate::{BillingDelta, NewMessage, ScrolledMessage, SearchHit, StoredMessage}
 /// Postgres、远程 API 或纯内存 mock。
 ///
 /// 要求 `Send`（`AgentLoop` 通过 `tokio::spawn` 跨线程移交），不要求 `Sync`。
-#[allow(async_fn_in_trait)]
-pub trait ConversationStore: Send {
+#[async_trait::async_trait]
+pub trait ConversationStore: Send + Sync {
     // ── 消息 CRUD ──
 
     /// 追加一条消息到会话。返回新消息的自增 id。

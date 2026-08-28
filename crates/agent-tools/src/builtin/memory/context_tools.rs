@@ -112,13 +112,13 @@ pub fn register(registry: &mut ToolRegistry) {
 }
 
 /// 分发 `search` / `pin_context`。
-pub fn dispatch(
+pub async fn dispatch(
     ctx: &ToolContext<'_>,
     name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
     match name {
-        "context_search" => dispatch_search(ctx, args),
+        "context_search" => dispatch_search(ctx, args).await,
         "pin_context" => dispatch_pin(ctx, args),
         other => anyhow::bail!("未知上下文工具: {other}"),
     }
@@ -127,10 +127,10 @@ pub fn dispatch(
 crate::submit_builtin_tool! {
     register: register,
     names: ["context_search", "pin_context"],
-    sync_named: dispatch,
+    async_named: dispatch,
 }
 
-fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+async fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: SearchArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("search 参数无效: {e}"))?;
     let query = parsed.query.trim();
@@ -148,6 +148,7 @@ fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::R
         let hits = ctx
             .sessions
             .search_messages(query, None, None, limit as i64)
+            .await
             .unwrap_or_default();
         if hits.is_empty() {
             sections.push("## session\n（无匹配）".to_string());
@@ -187,9 +188,9 @@ fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::R
     }
 
     if want_knowledge {
-        match artifacts::KnowledgeDb::open_default() {
+        match artifacts::KnowledgeDb::open_default().await {
             Ok(db) => {
-                let rows = db.search(query, limit).unwrap_or_default();
+                let rows = db.search(query, limit).await.unwrap_or_default();
                 if rows.is_empty() {
                     sections.push("## knowledge\n（无匹配）".to_string());
                 } else {

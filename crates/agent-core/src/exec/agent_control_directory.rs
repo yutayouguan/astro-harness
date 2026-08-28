@@ -12,7 +12,7 @@ const DEFAULT_LIMITS: Limits = Limits {
     max_running: 8,
 };
 
-type StoreFactory = dyn Fn(&Path) -> anyhow::Result<AgentGraphStore> + Send + Sync;
+type StoreFactory = dyn Fn(&Path) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<AgentGraphStore>> + Send>> + Send + Sync;
 
 /// 进程级 AgentControl 单例目录，按 root session 去重并弱引用缓存。
 pub struct AgentControlDirectory {
@@ -26,20 +26,21 @@ impl AgentControlDirectory {
         static DIRECTORY: OnceLock<AgentControlDirectory> = OnceLock::new();
         DIRECTORY.get_or_init(|| AgentControlDirectory {
             controls: Mutex::new(HashMap::new()),
-            store_factory: Arc::new(|path| AgentGraphStore::open(path.to_path_buf())),
+            store_factory: Arc::new(|path| Box::pin(AgentGraphStore::open(path.to_path_buf()))),
         })
     }
 
     /// 打开或复用根会话的 AgentControl（默认 db 路径），含崩溃恢复。
-    pub fn open_root(&self, root_session_id: &str) -> anyhow::Result<Arc<AgentControl>> {
+    pub async fn open_root(&self, root_session_id: &str) -> anyhow::Result<Arc<AgentControl>> {
         self.open_root_at(
             root_session_id,
             &home::default_memory_dir().join("subagents-v2.db"),
         )
+        .await
     }
 
     /// 在指定 db 路径打开或复用 AgentControl，清理残留预约并恢复中断线程。
-    pub fn open_root_at(
+    pub async fn open_root_at(
         &self,
         root_session_id: &str,
         graph_db_path: &Path,
@@ -58,10 +59,10 @@ impl AgentControlDirectory {
             return Ok(control);
         }
 
-        let store = (self.store_factory)(&graph_db_path)?;
-        store.cleanup_pending_reservations(root_session_id)?;
-        store.recover_running_as_interrupted(root_session_id)?;
-        let control = AgentControl::open(root_session_id.to_string(), store, DEFAULT_LIMITS)?;
+        let store = (self.store_factory)(&graph_db_path).await?;
+        store.cleanup_pending_reservations(root_session_id).await?;
+        store.recover_running_as_interrupted(root_session_id).await?;
+        let control = AgentControl::open(root_session_id.to_string(), store, DEFAULT_LIMITS).await?;
         controls.insert(key, Arc::downgrade(&control));
         Ok(control)
     }
@@ -120,22 +121,26 @@ mod tests {
         AgentControlDirectory {
             controls: Mutex::new(HashMap::new()),
             store_factory: Arc::new(move |_| {
-                opens.fetch_add(1, Ordering::SeqCst);
-                Ok(store.clone())
+                let opens = opens.clone();
+                let store = store.clone();
+                Box::pin(async move {
+                    opens.fetch_add(1, Ordering::SeqCst);
+                    Ok(store)
+                })
             }),
         }
     }
 
-    #[test]
-    fn returns_one_live_control_per_root_and_rebuilds_expired_weak() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn returns_one_live_control_per_root_and_rebuilds_expired_weak() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("agents.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("agents.db")).await.unwrap();
         let opens = Arc::new(AtomicUsize::new(0));
         let directory = directory(store, Arc::clone(&opens));
 
-        let first = directory.open_root("root-a").unwrap();
-        let same = directory.open_root("root-a").unwrap();
-        let other = directory.open_root("root-b").unwrap();
+        let first = directory.open_root("root-a").await.unwrap();
+        let same = directory.open_root("root-a").await.unwrap();
+        let other = directory.open_root("root-b").await.unwrap();
 
         assert!(Arc::ptr_eq(&first, &same));
         assert!(!Arc::ptr_eq(&first, &other));
@@ -151,7 +156,7 @@ mod tests {
         assert!(old.upgrade().is_none());
         assert!(directory.get("root-a").is_none());
 
-        let rebuilt = directory.open_root("root-a").unwrap();
+        let rebuilt = directory.open_root("root-a").await.unwrap();
         assert_eq!(rebuilt.root_thread_id(), "root-a");
         assert_eq!(opens.load(Ordering::SeqCst), 3);
     }

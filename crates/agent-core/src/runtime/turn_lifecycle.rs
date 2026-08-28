@@ -363,7 +363,8 @@ impl Session {
             &self.session_id,
             self.config.recent_turns,
             fts_keywords,
-        )?;
+        )
+        .await?;
         self.lock_state().compression.last_recalled_context = format_recalled_context(&recalled);
 
         self.increment_turn().await;
@@ -575,7 +576,7 @@ impl Session {
             &self.services.agent_path,
             message_id.clone(),
             payload,
-        ) {
+        ).await {
             running.1.retract_input(&message_id);
             return Err(error);
         }
@@ -625,13 +626,13 @@ impl Session {
 
     pub(crate) async fn record_turn_input(&self, input: TurnInput) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.persist_turn_input(&input, None, None)?;
+        self.persist_turn_input(&input, None, None).await?;
         self.record_turn_input_in_memory_unlocked(&input, None)
             .await;
         Ok(())
     }
 
-    pub(crate) fn persist_turn_input(
+    pub(crate) async fn persist_turn_input(
         &self,
         input: &TurnInput,
         finish_reason: Option<&str>,
@@ -644,7 +645,8 @@ impl Session {
         } = input;
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri")?;
+            .ensure_session(&self.session_id, "tauri")
+            .await?;
         let media_assets: Vec<types::MediaAsset> = image_data_urls
             .iter()
             .map(|url| url.trim())
@@ -663,13 +665,16 @@ impl Session {
         } else {
             Some(serde_json::to_string(&media_assets)?)
         };
-        self.services.sessions.append_message(NewMessage {
-            content: Some(content),
-            compressed_content: memory_marker,
-            media_json: media_json.as_deref(),
-            finish_reason,
-            ..NewMessage::empty(&self.session_id, "user")
-        })?;
+        self.services
+            .sessions
+            .append_message(NewMessage {
+                content: Some(content),
+                compressed_content: memory_marker,
+                media_json: media_json.as_deref(),
+                finish_reason,
+                ..NewMessage::empty(&self.session_id, "user")
+            })
+            .await?;
         #[cfg(test)]
         if let Some(hook) = self
             .services
@@ -714,8 +719,8 @@ impl Session {
         }
     }
 
-    pub(crate) fn ensure_durable_turn_input_marker(&self, marker: &str) -> anyhow::Result<bool> {
-        let messages = self.services.sessions.get_messages(&self.session_id)?;
+    pub(crate) async fn ensure_durable_turn_input_marker(&self, marker: &str) -> anyhow::Result<bool> {
+        let messages = self.services.sessions.get_messages(&self.session_id).await?;
         let Some(message) = messages.iter().find(|message| {
             message.role == "user"
                 && (message.finish_reason.as_deref() == Some(marker)
@@ -726,7 +731,8 @@ impl Session {
         if message.compressed_content.as_deref() != Some(marker) {
             self.services
                 .sessions
-                .update_message_compressed_content(message.id, Some(marker))?;
+                .update_message_compressed_content(message.id, Some(marker))
+                .await?;
         }
         Ok(true)
     }

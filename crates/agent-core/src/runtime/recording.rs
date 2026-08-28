@@ -25,11 +25,11 @@ impl AgentLoop {
     ) -> anyhow::Result<()> {
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri")?;
+            .ensure_session(&self.session_id, "tauri").await?;
         if self
             .services
             .sessions
-            .get_messages(&self.session_id)?
+            .get_messages(&self.session_id).await?
             .last()
             .is_some_and(|message| message.role == "user")
         {
@@ -37,7 +37,7 @@ impl AgentLoop {
                 content: Some(content),
                 finish_reason: Some(finish_reason),
                 ..NewMessage::empty(&self.session_id, "assistant")
-            })?;
+            }).await?;
         }
         if self
             .clone_history()
@@ -51,10 +51,10 @@ impl AgentLoop {
     }
 
     /// 确保会话行存在（不存在则按 `source` 创建）。
-    pub fn ensure_session(&self, source: &str) -> anyhow::Result<()> {
+    pub async fn ensure_session(&self, source: &str) -> anyhow::Result<()> {
         self.services
             .sessions
-            .ensure_session(&self.session_id, source)
+            .ensure_session(&self.session_id, source).await
     }
 
     /// 将 assistant 纯文本回复写入记忆与会话镜像。
@@ -84,14 +84,14 @@ impl AgentLoop {
             types::message::google_thought_signature_from_details(&reasoning_details);
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri")?;
+            .ensure_session(&self.session_id, "tauri").await?;
         self.services.sessions.append_message(NewMessage {
             content: Some(content),
             tool_calls: tool_calls_json,
             reasoning,
             reasoning_details: reasoning_details.clone(),
             ..NewMessage::empty(&self.session_id, "assistant")
-        })?;
+        }).await?;
         let msg = match tool_calls {
             Some(calls) if !calls.is_empty() => Message::assistant_with_tools(content, calls),
             _ => Message::assistant(content),
@@ -133,13 +133,13 @@ impl AgentLoop {
     }
 
     /// 工具执行后回写最近一条 assistant 的 timeline/surfaces（避免历史丢 A2UI 卡）。
-    pub fn patch_last_assistant_timeline(
+    pub async fn patch_last_assistant_timeline(
         &self,
         reasoning_details: serde_json::Value,
     ) -> anyhow::Result<()> {
         self.services
             .sessions
-            .patch_last_assistant_reasoning_details(&self.session_id, &reasoning_details)
+            .patch_last_assistant_reasoning_details(&self.session_id, &reasoning_details).await
     }
 
     /// 将 user 角色消息写入记忆与会话镜像。
@@ -151,11 +151,11 @@ impl AgentLoop {
         let _write_guard = self.conversation_write_lock.lock().await;
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri")?;
+            .ensure_session(&self.session_id, "tauri").await?;
         self.services.sessions.append_message(NewMessage {
             content: Some(content),
             ..NewMessage::empty(&self.session_id, "user")
-        })?;
+        }).await?;
         self.record_items_unlocked(vec![Message::user(content)]);
         Ok(())
     }
@@ -169,11 +169,11 @@ impl AgentLoop {
     ///
     /// 否则这些文件仅在文件空间 `reconcile` 扫盘时以 `session_id=None` 补登记，
     /// 导致「会话中生成的文件」被归入「未关联会话」。
-    fn register_media_artifacts(&self, media: &[types::MediaAsset], msg_id: i64) {
+    async fn register_media_artifacts(&self, media: &[types::MediaAsset], msg_id: i64) {
         if media.is_empty() {
             return;
         }
-        let db = match artifacts::open_default(self.memory_dir()) {
+        let db = match artifacts::open_default(self.memory_dir()).await {
             Ok(db) => db,
             Err(e) => {
                 tracing::debug!(error = %e, "open artifacts db failed; skip media register");
@@ -198,7 +198,7 @@ impl AgentLoop {
                 Some(&session_id),
                 Some(&message_id),
                 Some(&agent_id),
-            ) {
+            ).await {
                 tracing::debug!(error = %e, path, "register media artifact failed");
             }
         }
@@ -220,14 +220,14 @@ impl AgentLoop {
         };
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri")?;
+            .ensure_session(&self.session_id, "tauri").await?;
         let msg_id = self.services.sessions.append_message(NewMessage {
             content: Some(content),
             tool_call_id,
             tool_name,
             media_json: media_owned.as_deref(),
             ..NewMessage::empty(&self.session_id, "tool")
-        })?;
+        }).await?;
 
         self.register_media_artifacts(&media, msg_id);
 
@@ -241,6 +241,7 @@ impl AgentLoop {
                         .services
                         .sessions
                         .update_message_compressed_content(msg_id, Some(&view))
+                        .await
                         .is_ok()
                     {
                         spill_view = Some(view);
