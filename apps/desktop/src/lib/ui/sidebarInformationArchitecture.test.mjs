@@ -74,7 +74,6 @@ test("project and recent actions stay with the section they affect", () => {
 test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   const primaryActions = rule(projectStyles, ".sidebar-primary-actions");
   const newChat = rule(projectStyles, ".sidebar-new-chat");
-  const newChatHover = rule(projectStyles, ".sidebar-new-chat:hover");
   const newChatActive = rule(projectStyles, ".sidebar-new-chat:active");
   const groupLabel = rule(projectStyles, ".sidebar-group-label");
   const activeNav = rule(projectStyles, ".sidebar-feature-tab.is-active::before");
@@ -99,8 +98,11 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.match(newChat, /min-height:\s*40px;/);
   assert.match(newChat, /font-size:\s*14px;/);
   assert.match(newChat, /0 3px 9px/, "new chat should use a restrained surface shadow");
-  assert.ok(newChatHover, "missing new-chat hover styles");
-  assert.match(newChatHover, /0 4px 11px/, "hover should not make the action float prominently");
+  assert.match(
+    projectStyles,
+    /\.sidebar-new-chat:hover\s*\{[\s\S]*?0 4px 11px/,
+    "hover should not make the action float prominently",
+  );
   assert.ok(newChatActive, "missing new-chat pressed feedback");
   assert.match(newChatActive, /scale\(0\.985\)/);
   assert.match(newChat, /backdrop-filter:/, "new chat should retain the glass material");
