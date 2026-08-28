@@ -1,5 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Archive, ChevronRight, MoreVertical, Pin, Plus } from "lucide-react";
+import {
+  Archive,
+  ChevronRight,
+  Cpu,
+  Layers2,
+  MessageSquare,
+  MoreVertical,
+  Pin,
+  Plus,
+  Wrench,
+} from "lucide-react";
 import type { CSSProperties } from "react";
 import ProjectFolderIcon from "../components/chat/ProjectFolderIcon";
 import SessionStatusIcon from "../components/chat/SessionStatusIcon";
@@ -103,6 +113,39 @@ function SidebarSessionStates() {
   );
 }
 
+function SettingsMenu() {
+  const items = [
+    { label: "对话", Icon: MessageSquare },
+    { label: "上下文与压缩", Icon: Layers2 },
+    { label: "模型配置", Icon: Cpu, active: true },
+    { label: "工具", Icon: Wrench },
+  ];
+
+  return (
+    <main className="app-shell" data-tone="pink" style={{ minHeight: "100vh" }}>
+      <div className="body-row">
+        <aside
+          className="sidebar is-open is-pinned is-labels"
+          style={{ "--sidebar-w-wide": "280px" } as CSSProperties}
+        >
+          <div className="sidebar-settings-nav">
+            {items.map(({ label, Icon, active }) => (
+              <button
+                key={label}
+                type="button"
+                className={`settings-sidebar-item ${active ? "is-active" : ""}`}
+              >
+                <Icon size={18} strokeWidth={1.6} aria-hidden />
+                <span className="sidebar-item-label">{label}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
 const meta = {
   id: "sidebar-session-states",
   title: "Shell/Sidebar Session States",
@@ -116,3 +159,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const SettingsNavigation: Story = {
+  render: () => <SettingsMenu />,
+};
