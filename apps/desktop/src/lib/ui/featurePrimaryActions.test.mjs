@@ -19,20 +19,22 @@ const cronStyles = await readFile(
   "utf8",
 );
 
-test("workflow title and creation actions form the left toolbar group", () => {
+test("workflow creation actions form the left toolbar group without a visible title", () => {
   assert.match(
     loopPanel,
-    /className="loop-toolbar-start"[\s\S]*?page\.loop\.title[\s\S]*?loop-create-group[\s\S]*?loop\.create[\s\S]*?loop\.templateTitle/,
+    /className="loop-toolbar-start"[\s\S]*?loop-create-group[\s\S]*?loop\.create[\s\S]*?loop\.templateTitle/,
   );
+  assert.doesNotMatch(loopPanel, /className="loop-toolbar-title"/);
   assert.match(loopStyles, /\.loop-toolbar-start\s*\{[\s\S]*?display:\s*flex;/);
   assert.match(loopStyles, /\.loop-toolbar-end\s*\{[\s\S]*?margin-left:\s*auto;/);
 });
 
-test("scheduled task title and creation actions form the left toolbar group", () => {
+test("scheduled task creation actions form the left toolbar group without a visible title", () => {
   assert.match(
     cronPanel,
-    /className="cron-toolbar-start"[\s\S]*?page\.cron\.title[\s\S]*?cron-create-group[\s\S]*?cron\.create[\s\S]*?cron\.createFromTemplate/,
+    /className="cron-toolbar-start"[\s\S]*?cron-create-group[\s\S]*?cron\.create[\s\S]*?cron\.createFromTemplate/,
   );
+  assert.doesNotMatch(cronPanel, /className="cron-toolbar-title"/);
   assert.match(cronPanel, /aria-expanded=\{showTemplates\}/);
   assert.match(cronPanel, /className="cron-template-picker"/);
   assert.match(cronStyles, /\.cron-toolbar-start\s*\{[\s\S]*?display:\s*flex;/);

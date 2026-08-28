@@ -1306,7 +1306,6 @@ export default function CronPanel({
       <section className="cron-pane">
         <div className="cron-toolbar">
           <div className="cron-toolbar-start">
-            <h1 className="cron-toolbar-title">{t("page.cron.title")}</h1>
             <div className="cron-create-group">
               <button
                 type="button"

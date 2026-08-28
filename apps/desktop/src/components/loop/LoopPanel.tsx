@@ -559,7 +559,6 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       {/* ── Toolbar ── */}
       <div className="loop-toolbar">
         <div className="loop-toolbar-start">
-          <h1 className="loop-toolbar-title">{t("page.loop.title")}</h1>
           <div className="loop-create-group">
             <button className="loop-btn loop-btn--primary" onClick={handleCreate}>
               <Plus size={14} />
