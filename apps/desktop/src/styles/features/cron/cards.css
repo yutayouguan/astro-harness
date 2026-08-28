@@ -57,6 +57,14 @@ html[data-theme="dark"] .cron-card {
     var(--glass-rim);
 }
 
+.cron-card.is-detail-open {
+  border-color: color-mix(in srgb, var(--tone) 52%, var(--glass-border));
+  box-shadow:
+    0 8px 24px color-mix(in srgb, var(--tone) 12%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 12%, transparent),
+    var(--glass-rim);
+}
+
 .cron-card.is-disabled {
   opacity: 1;
 }
@@ -124,6 +132,47 @@ html[data-theme="dark"] .cron-card-glyph {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.cron-card-actions-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cron-card-detail-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    border-color 0.14s ease,
+    background 0.14s ease,
+    transform 0.14s ease;
+}
+
+.cron-card-detail-btn:hover,
+.cron-card-detail-btn:focus-visible {
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 22%, transparent);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  outline: none;
+}
+
+.cron-card-detail-btn svg {
+  transition: transform 0.14s ease;
+}
+
+.cron-card-detail-btn:hover svg {
+  transform: translateX(1px);
 }
 
 .cron-more {
@@ -521,5 +570,9 @@ html[data-theme="dark"] .cron-card-meta-tag.is-model {
   .cron-card:hover {
     transform: none;
   }
-}
 
+  .cron-card-detail-btn,
+  .cron-card-detail-btn svg {
+    transition: none;
+  }
+}

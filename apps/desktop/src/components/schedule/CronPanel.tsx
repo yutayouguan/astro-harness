@@ -9,6 +9,7 @@ import {
   CalendarClock,
   CalendarPlus,
   CheckCircle2,
+  ChevronRight,
   CircleAlert,
   Clock3,
   Eye,
@@ -24,6 +25,7 @@ import {
   LoaderCircle,
   MessageSquareText,
   Newspaper,
+  Pause,
   Phone,
   Server,
   Stethoscope,
@@ -473,6 +475,9 @@ export default function CronPanel({
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [detailRuns, setDetailRuns] = useState<CronRunDto[]>([]);
   const [detailRunsLoading, setDetailRunsLoading] = useState(false);
+  const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
+  const [drawerJobRuns, setDrawerJobRuns] = useState<CronRunDto[]>([]);
+  const [drawerJobRunsLoading, setDrawerJobRunsLoading] = useState(false);
 
   const [filterJobId, setFilterJobId] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
@@ -572,6 +577,25 @@ export default function CronPanel({
     }
   }, []);
 
+  const loadDrawerJobRuns = useCallback(async (jobId: string) => {
+    if (!isTauri()) {
+      setDrawerJobRuns([]);
+      return;
+    }
+    setDrawerJobRunsLoading(true);
+    try {
+      const runs = await invoke<CronRunDto[]>("list_cron_job_runs", {
+        id: jobId,
+      });
+      setDrawerJobRuns(runs);
+    } catch (err) {
+      setError(String(err));
+      setDrawerJobRuns([]);
+    } finally {
+      setDrawerJobRunsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!active) return;
     void loadJobs();
@@ -658,6 +682,10 @@ export default function CronPanel({
     () => filteredJobs.find((j) => j.id === selectedDetailId) ?? null,
     [filteredJobs, selectedDetailId],
   );
+  const drawerJob = useMemo(
+    () => jobs.find((job) => job.id === drawerJobId) ?? null,
+    [jobs, drawerJobId],
+  );
 
   useEffect(() => {
     if (jobsView !== "detail") return;
@@ -675,6 +703,12 @@ export default function CronPanel({
     if (jobsView !== "detail" || !selectedDetailId) return;
     void loadDetailRuns(selectedDetailId);
   }, [jobsView, selectedDetailId, loadDetailRuns]);
+
+  useEffect(() => {
+    if (!drawerJobId) return;
+    setDrawerJobRuns([]);
+    void loadDrawerJobRuns(drawerJobId);
+  }, [drawerJobId, loadDrawerJobRuns]);
 
   const providerName = useCallback(
     (id: string | null) => {
@@ -746,6 +780,9 @@ export default function CronPanel({
       if (jobsView === "detail" && selectedDetailId === job.id) {
         void loadDetailRuns(job.id);
       }
+      if (drawerJobId === job.id) {
+        void loadDrawerJobRuns(job.id);
+      }
       if (activeTab === "history") {
         void loadHistoryRuns();
       }
@@ -776,6 +813,10 @@ export default function CronPanel({
       }
       if (selectedDetailId === job.id) {
         setSelectedDetailId(null);
+      }
+      if (drawerJobId === job.id) {
+        setDrawerJobId(null);
+        setDrawerJobRuns([]);
       }
       await loadJobs();
       if (activeTab === "history") {
@@ -809,9 +850,13 @@ export default function CronPanel({
         setDrawerMessages([]);
       }
       setDetailRuns((prev) => prev.filter((r) => r.id !== run.id));
+      setDrawerJobRuns((prev) => prev.filter((r) => r.id !== run.id));
       setHistoryRuns((prev) => prev.filter((r) => r.id !== run.id));
       if (jobsView === "detail" && selectedDetailId === run.job_id) {
         void loadDetailRuns(run.job_id);
+      }
+      if (drawerJobId === run.job_id) {
+        void loadDrawerJobRuns(run.job_id);
       }
       if (activeTab === "history") {
         void loadHistoryRuns();
@@ -831,6 +876,12 @@ export default function CronPanel({
     setDrawerMessages([]);
     setDrawerRun(run);
   }, []);
+
+  const openJobDrawer = useCallback((job: CronJobDto) => {
+    closeMenu();
+    setDrawerJobRuns([]);
+    setDrawerJobId(job.id);
+  }, [closeMenu]);
 
   // 执行记录抽屉：轮询 run 状态 + session 历史（对齐 Tracing 步骤）
   useEffect(() => {
@@ -924,7 +975,9 @@ export default function CronPanel({
         <article
           key={job.id}
           role="listitem"
-          className={`cron-card ${job.enabled ? "is-enabled" : "is-disabled"}`}
+          className={`cron-card ${job.enabled ? "is-enabled" : "is-disabled"} ${
+            drawerJobId === job.id ? "is-detail-open" : ""
+          }`}
           style={{ animationDelay: `${0.04 + index * 0.05}s` }}
         >
           <header className="cron-card-top">
@@ -942,7 +995,18 @@ export default function CronPanel({
                 {job.enabled ? t("cron.statusOn") : t("cron.statusOff")}
               </span>
             </div>
-            {renderJobActions(job)}
+            <div className="cron-card-actions-cluster">
+              {renderJobActions(job)}
+              <button
+                type="button"
+                className="cron-card-detail-btn"
+                onClick={() => openJobDrawer(job)}
+                title={t("cron.view.detail")}
+                aria-label={`${t("cron.view.detail")}: ${job.title}`}
+              >
+                <ChevronRight size={17} strokeWidth={2.4} aria-hidden />
+              </button>
+            </div>
           </header>
           <p className="cron-card-task">{job.task}</p>
           <div className="cron-card-meta">
@@ -1507,6 +1571,149 @@ export default function CronPanel({
           </div>,
           document.body,
         )}
+
+      {drawerJob && (
+        <Drawer
+          open
+          onClose={() => setDrawerJobId(null)}
+          size="lg"
+          backdropStyle={{
+            background: "transparent",
+            backdropFilter: "none",
+            WebkitBackdropFilter: "none",
+          }}
+          className="cron-job-drawer"
+          aria-labelledby="cron-job-drawer-title"
+        >
+          <header className="cron-job-drawer-head">
+            <div className="cron-job-drawer-heading">
+              <span className="cron-job-drawer-icon" aria-hidden>
+                <IconCronGlyph width={19} height={19} />
+              </span>
+              <div>
+                <h2 id="cron-job-drawer-title" className="cron-job-drawer-title">
+                  {drawerJob.title}
+                </h2>
+                <span
+                  className={`cron-card-status ${
+                    drawerJob.enabled ? "is-on" : "is-off"
+                  }`}
+                >
+                  {drawerJob.enabled
+                    ? t("cron.statusOn")
+                    : t("cron.statusOff")}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="cron-dialog-close"
+              onClick={() => setDrawerJobId(null)}
+              aria-label={t("cron.cancel")}
+            >
+              <X size={17} strokeWidth={2.4} aria-hidden />
+            </button>
+          </header>
+
+          <div className="cron-job-drawer-body">
+            <section className="cron-job-overview-card">
+              <div className="cron-job-overview-row">
+                <CalendarClock size={15} strokeWidth={2.1} aria-hidden />
+                <span>{formatScheduleLabel(drawerJob.schedule, locale)}</span>
+              </div>
+              <div className="cron-job-overview-row is-task">
+                <MessageSquareText size={15} strokeWidth={2.1} aria-hidden />
+                <span>{drawerJob.task}</span>
+              </div>
+              <div className="cron-job-overview-row">
+                {drawerJob.show_in_chat ? (
+                  <Eye size={15} strokeWidth={2.1} aria-hidden />
+                ) : (
+                  <EyeOff size={15} strokeWidth={2.1} aria-hidden />
+                )}
+                <span>
+                  {t("cron.detail.showInChat")}: {drawerJob.show_in_chat ? t("cron.yes") : t("cron.no")}
+                </span>
+              </div>
+            </section>
+
+            <div className="cron-job-drawer-actions">
+              <button
+                type="button"
+                className="cron-job-drawer-action"
+                onClick={() => {
+                  setEditingJob(drawerJob);
+                  setShowCreate(true);
+                }}
+              >
+                <IconEdit width={15} height={15} />
+                <span>{t("cron.edit")}</span>
+              </button>
+              <button
+                type="button"
+                className="cron-job-drawer-action"
+                disabled={busyId === drawerJob.id}
+                onClick={() => void toggleEnabled(drawerJob)}
+              >
+                {drawerJob.enabled ? (
+                  <Pause size={15} strokeWidth={2.2} aria-hidden />
+                ) : (
+                  <CheckCircle2 size={15} strokeWidth={2.2} aria-hidden />
+                )}
+                <span>
+                  {drawerJob.enabled ? t("cron.pause") : t("cron.resume")}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="cron-job-drawer-action is-primary"
+                disabled={busyId === drawerJob.id}
+                onClick={() => void runNow(drawerJob)}
+              >
+                <IconPlay width={15} height={15} />
+                <span>{t("cron.runNow")}</span>
+              </button>
+            </div>
+
+            <section className="cron-job-drawer-history">
+              <div className="cron-job-drawer-section-head">
+                <h3>
+                  <History size={14} strokeWidth={2.2} aria-hidden />
+                  {t("cron.detail.recentRuns")}
+                </h3>
+                <span>{drawerJobRuns.length}</span>
+              </div>
+              {drawerJobRunsLoading ? (
+                <p className="cron-loading">{t("workspace.loading")}</p>
+              ) : drawerJobRuns.length === 0 ? (
+                <p className="cron-history-empty">{t("cron.history.empty")}</p>
+              ) : (
+                <ul className="cron-job-drawer-run-list">
+                  {drawerJobRuns.slice(0, 30).map((run) => (
+                    <li key={run.id}>
+                      <button
+                        type="button"
+                        className="cron-job-drawer-run"
+                        onClick={() => openRunDrawer(run)}
+                      >
+                        <span className="cron-job-drawer-run-main">
+                          <strong>{run.summary || run.title}</strong>
+                          <small>{formatLastRun(run.fired_at, locale)}</small>
+                        </span>
+                        <span className={`cron-status-pill is-${runStatusKind(run.status)}`}>
+                          <RunStatusIcon status={run.status} />
+                          {runStatusLabel(run.status)}
+                        </span>
+                        <ChevronRight size={15} strokeWidth={2.2} aria-hidden />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        </Drawer>
+      )}
 
       {drawerRun && (
         <Drawer

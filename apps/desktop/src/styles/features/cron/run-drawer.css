@@ -1,10 +1,280 @@
-/* Run log drawer */
+/* Task details + run log drawers */
+.cron-job-drawer,
 .cron-run-drawer {
   width: min(480px, 92vw);
   height: 100%;
   display: flex;
   flex-direction: column;
   padding: 0;
+}
+
+.cron-job-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--chip-border);
+  flex-shrink: 0;
+}
+
+.cron-job-drawer-heading {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.cron-job-drawer-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--tone);
+  border: 1px solid color-mix(in srgb, var(--tone) 20%, transparent);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+}
+
+.cron-job-drawer-title {
+  margin: 0 0 7px;
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 720;
+  line-height: 1.25;
+  letter-spacing: -0.018em;
+}
+
+.cron-job-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cron-job-overview-card {
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.12)), color-mix(in srgb, var(--glass-panel) 72%, transparent);
+  box-shadow: var(--glass-rim);
+}
+
+.cron-job-overview-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 14px;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  font-weight: 560;
+  line-height: 1.5;
+}
+
+.cron-job-overview-row + .cron-job-overview-row {
+  border-top: 1px solid color-mix(in srgb, var(--chip-border) 82%, transparent);
+}
+
+.cron-job-overview-row svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--tone);
+}
+
+.cron-job-overview-row.is-task {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.cron-job-drawer-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.cron-job-drawer-action {
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  border-radius: 13px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.12)), color-mix(in srgb, var(--glass-panel) 68%, transparent);
+  box-shadow: var(--glass-rim);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    transform 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease,
+    background 0.14s ease;
+}
+
+.cron-job-drawer-action:hover:not(:disabled),
+.cron-job-drawer-action:focus-visible {
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 28%, transparent);
+  background: color-mix(in srgb, var(--tone) 9%, var(--glass-panel));
+  outline: none;
+}
+
+.cron-job-drawer-action:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.cron-job-drawer-action.is-primary {
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 30%, transparent);
+  background: color-mix(in srgb, var(--tone) 12%, var(--glass-panel));
+}
+
+.cron-job-drawer-action:disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+}
+
+.cron-job-drawer-history {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cron-job-drawer-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.cron-job-drawer-section-head h3 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.cron-job-drawer-section-head h3 svg {
+  color: var(--tone);
+}
+
+.cron-job-drawer-section-head > span {
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-mute);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cron-job-drawer-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cron-job-drawer-run {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 10px 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--ink-mute);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    border-color 0.14s ease,
+    background 0.14s ease;
+}
+
+.cron-job-drawer-run:hover,
+.cron-job-drawer-run:focus-visible {
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 18%, transparent);
+  background: color-mix(in srgb, var(--tone) 7%, transparent);
+  outline: none;
+}
+
+.cron-job-drawer-run-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cron-job-drawer-run-main strong,
+.cron-job-drawer-run-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cron-job-drawer-run-main strong {
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.cron-job-drawer-run-main small {
+  color: var(--ink-mute);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-theme="dark"] .cron-job-overview-card,
+html[data-theme="dark"] .cron-job-drawer-action {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)), rgba(8, 6, 18, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+@media (max-width: 520px) {
+  .cron-job-drawer-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .cron-job-drawer-run {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .cron-job-drawer-run > svg {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cron-job-drawer-action,
+  .cron-job-drawer-run {
+    transition: none;
+  }
 }
 
 .cron-run-drawer-head {
