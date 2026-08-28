@@ -41,7 +41,7 @@ type Props = {
 };
 
 /**
- * Codex-style Side Chat：复用完整 ChatView 与 useChatSession 能力，
+ * Side Chat：复用完整 ChatView 与 useChatSession 能力，
  * 但关闭浏览器端快照持久化，由父级在关闭时删除 ephemeral backend session。
  */
 export default function SideChatPanel({

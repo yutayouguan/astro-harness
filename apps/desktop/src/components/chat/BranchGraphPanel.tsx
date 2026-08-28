@@ -40,7 +40,7 @@ type Props = {
   onPrefillInput?: (text: string) => void;
 };
 
-/** Codex `last_turn_id` / `before_turn_id` 两种分叉边界。 */
+/** `last_turn_id` / `before_turn_id` 两种分叉边界。 */
 type ForkBoundary = "through_turn" | "before_turn";
 type ForkOperation = ForkBoundary | "side";
 

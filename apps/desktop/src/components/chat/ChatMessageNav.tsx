@@ -39,7 +39,7 @@ const PAD_TOP = 10;
 const MAX_SCALE = 1.52;
 /** 影响半径：配合间距做更柔和的鱼眼 */
 const RANGE = 72;
-/** 参考 Codex 的单张问答摘要卡，不叠放邻近预览。 */
+/** 单张问答摘要卡，不叠放邻近预览。 */
 const LABEL_MAX = 1;
 
 type TipModel = {

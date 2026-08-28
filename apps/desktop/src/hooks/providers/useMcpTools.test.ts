@@ -27,7 +27,7 @@ test("imports stdio and Streamable HTTP servers", () => {
   );
 });
 
-test("preserves Codex timeout field names", () => {
+test("preserves timeout field names", () => {
   const [server] = parseMcpJson(
     JSON.stringify({
       mcpServers: {
@@ -40,7 +40,7 @@ test("preserves Codex timeout field names", () => {
   assert.equal(server.toolTimeoutSecs, 91);
 });
 
-test("preserves Codex environment credential references", () => {
+test("preserves environment credential references", () => {
   const servers = parseMcpJson(
     JSON.stringify({
       mcpServers: {
@@ -90,7 +90,7 @@ test("preserves required, cwd and allow/deny policy", () => {
   assert.equal(isMcpToolEnabled(server, "unknown"), false);
 });
 
-test("preserves Codex server and per-tool approval modes", () => {
+test("preserves server and per-tool approval modes", () => {
   const [server] = parseMcpJson(
     JSON.stringify({
       mcpServers: {

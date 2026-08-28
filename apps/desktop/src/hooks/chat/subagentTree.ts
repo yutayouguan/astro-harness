@@ -40,8 +40,8 @@ export type AgentThreadMessage = {
   reasoning: string | null;
   reasoningContent: string | null;
   reasoningDetails: unknown | null;
-  codexReasoningItems: unknown | null;
-  codexMessageItems: unknown | null;
+  reasoningItems: unknown | null;
+  messageItems: unknown | null;
   mediaJson: string | null;
 };
 
@@ -251,9 +251,9 @@ export function normalizeAgentThreadMessage(value: unknown): AgentThreadMessage 
       "reasoning content",
     ),
     reasoningDetails: message.reasoningDetails ?? message.reasoning_details ?? null,
-    codexReasoningItems:
-      message.codexReasoningItems ?? message.codex_reasoning_items ?? null,
-    codexMessageItems: message.codexMessageItems ?? message.codex_message_items ?? null,
+    reasoningItems:
+      message.reasoningItems ?? message.codex_reasoning_items ?? null,
+    messageItems: message.messageItems ?? message.codex_message_items ?? null,
     mediaJson: nullableString(message.mediaJson ?? message.media_json, "media json"),
   };
 }
