@@ -3630,9 +3630,9 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
   margin-top: 2px;
-  padding: 14px 0 8px;
+  padding: 4px 0;
   -webkit-mask-image: linear-gradient(
     to right,
     transparent 0%,
@@ -3694,6 +3694,8 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 .chat-welcome-marquee {
   width: 100%;
   overflow: hidden;
+  /* 为卡片悬停抬升和阴影保留垂直空间，避免被每行的滚动裁剪边界切掉。 */
+  padding-block: 10px 14px;
 }
 
 .chat-welcome-marquee-track {
