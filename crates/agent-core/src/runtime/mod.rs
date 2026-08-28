@@ -1514,7 +1514,7 @@ impl Session {
     // ── Prompt context persistence ──────────────────────────
 
     /// Return a clone of the current prompt context event history.
-    pub fn prompt_context_history(
+    pub(crate) fn prompt_context_history(
         &self,
     ) -> Vec<crate::prompt::context_state::PromptContextEvent> {
         self.lock_state().prompt_context_history.clone()

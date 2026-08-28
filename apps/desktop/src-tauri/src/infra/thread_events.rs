@@ -43,13 +43,6 @@ fn session_status_registry() -> &'static std::sync::Mutex<HashMap<String, Sessio
     REGISTRY.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
 
-pub(crate) fn session_status_snapshot() -> Vec<SessionStatusChangedDto> {
-    session_status_registry()
-        .lock()
-        .map(|statuses| statuses.values().cloned().collect())
-        .unwrap_or_default()
-}
-
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SessionEventDto {

@@ -6,16 +6,25 @@ use session::SessionStore;
 
 pub use home::EnsureWorkspaceReport;
 
+fn initialize_session_store(sessions_dir: &Path) -> anyhow::Result<()> {
+    let sessions_dir = sessions_dir.to_path_buf();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        runtime.block_on(SessionStore::open_sessions_dir(&sessions_dir))?;
+        Ok::<(), anyhow::Error>(())
+    })
+    .join()
+    .map_err(|_| anyhow::anyhow!("session store initialization thread panicked"))?
+}
+
 /// 完整首次引导：home 目录脚手架 + 会话库 + 内置技能播种。
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     let mut report = home::ensure_workspace(base)?;
 
     let sessions_dir = base.join("sessions");
-    tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async {
-            SessionStore::open_sessions_dir(&sessions_dir).await
-        })
-    })?;
+    initialize_session_store(&sessions_dir)?;
 
     let bundled = skills::seed_bundled_into(base);
     for name in &bundled.installed {
@@ -59,5 +68,14 @@ mod tests {
             .iter()
             .any(|f| f == "skills/storyboard-video/SKILL.md"));
         assert!(dir.path().join("skills/create-agent/SKILL.md").is_file());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn ensure_workspace_is_safe_inside_a_current_thread_runtime() {
+        let dir = TempDir::new().unwrap();
+
+        ensure_workspace(dir.path()).unwrap();
+
+        assert!(dir.path().join("sessions").join("state.db").is_file());
     }
 }

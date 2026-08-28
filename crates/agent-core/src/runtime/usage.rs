@@ -117,7 +117,7 @@ pub(crate) async fn apply_llm_usage_dual_write(
     if let Some(meta) = meta_json {
         event.meta_json = Some(meta);
     }
-    UsageDb::try_record(event);
+    UsageDb::try_record(event).await;
     let Some(sid) = ctx.session_id else {
         return;
     };

@@ -27,44 +27,6 @@ use crate::runtime::{Config, Session};
 
 type ActiveRootSession = Session;
 
-/// Bridge an async future into a synchronous context.
-/// Works with both multi-thread and current-thread Tokio runtimes.
-fn sync_bridge<F, T>(fut: F) -> T
-where
-    F: std::future::Future<Output = T> + Send,
-    T: Send,
-{
-    match tokio::runtime::Handle::try_current() {
-        Ok(handle)
-            if matches!(
-                handle.runtime_flavor(),
-                tokio::runtime::RuntimeFlavor::MultiThread
-            ) =>
-        {
-            tokio::task::block_in_place(|| handle.block_on(fut))
-        }
-        Ok(_) => std::thread::scope(|scope| {
-            scope
-                .spawn(|| {
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .expect("failed to build sync bridge runtime");
-                    rt.block_on(fut)
-                })
-                .join()
-                .expect("sync bridge thread panicked")
-        }),
-        Err(_) => {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to build sync bridge runtime");
-            rt.block_on(fut)
-        }
-    }
-}
-
 #[derive(Default)]
 struct ActiveRootSessionRegistry {
     sessions: Mutex<HashMap<(PathBuf, String), Weak<ActiveRootSession>>>,
