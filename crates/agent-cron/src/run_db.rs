@@ -144,10 +144,10 @@ impl CronRunDb {
         Ok(db)
     }
 
-    /// 打开默认 `~/.astro/cron/cron.db`
+    /// 打开默认 `~/.astro/data/cron.db`
     pub fn open_default() -> anyhow::Result<Self> {
-        let root = crate::cron_dir();
-        Self::new(cron_db_path(&root))
+        let data = home::default_memory_dir().join("data");
+        Self::new(cron_db_path(&data))
     }
 
     /// 数据库文件路径

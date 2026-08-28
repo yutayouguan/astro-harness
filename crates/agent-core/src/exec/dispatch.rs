@@ -902,7 +902,7 @@ fn fork_parent_session(
     child_session_id: &str,
     fork_turns: &Option<String>,
 ) -> anyhow::Result<ForkedSessionGuard> {
-    let sessions_dir = memory_dir.join("sessions");
+    let sessions_dir = memory_dir.join("data");
     let sessions = session::SessionStore::open_sessions_dir(&sessions_dir)?;
     let recent_turns = parse_fork_turns(fork_turns.as_deref())?;
     sessions.fork_session_recent_turns(
@@ -962,7 +962,7 @@ fn validate_recovered_runtime_setup(
     thread: &subagents::AgentThreadV2,
     runtime: &SpawnRuntimeV2Request,
 ) -> anyhow::Result<()> {
-    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))?;
+    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))?;
     let stored = sessions
         .get_session(&thread.session_id)?
         .with_context(|| format!("child session {:?} is unavailable", thread.session_id))?;
@@ -1243,7 +1243,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
     ) -> anyhow::Result<AgentThreadDetailV2> {
         let control = self.control(root_session_id)?;
         let thread = control.resolve_desktop_target(target)?;
-        let messages = session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions"))?
+        let messages = session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))?
             .get_messages(&thread.session_id)?
             .into_iter()
             .map(|message| AgentThreadMessageV2 {
@@ -1766,8 +1766,7 @@ mod tests {
         let memory_dir = dir.path().join("memory");
         let dispatch = dispatch(&dir);
         let child = committed_child(&dispatch, "worker");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions
             .ensure_session(&child.session_id, "agent-thread")
             .unwrap();
@@ -1858,8 +1857,7 @@ mod tests {
     async fn desktop_cold_followup_recovers_from_exact_live_root_session() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -2084,8 +2082,7 @@ mod tests {
     async fn desktop_close_partial_failure_keeps_parent_open_and_retryable() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let bus = Arc::new(hooks::PluginHookBus::new());
         let stopped_paths = Arc::new(Mutex::new(Vec::<String>::new()));
@@ -2203,8 +2200,7 @@ mod tests {
     async fn desktop_close_active_runtime_waits_for_shutdown_ack_and_cleanup() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(pending_chat());
@@ -2251,8 +2247,7 @@ mod tests {
     async fn close_timeout_after_terminate_keeps_admission_closed_until_runner_ack() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(pending_chat());
@@ -2303,11 +2298,11 @@ mod tests {
         let manager = Arc::new(AgentRuntimeManager::default());
         let mut dispatch_a = dispatch_for_root(&dir_a, "root-a", Arc::clone(&manager));
         let dispatch_b = dispatch_for_root(&dir_b, "root-b", Arc::clone(&manager));
-        session::SessionStore::open_sessions_dir(&memory_a.join("sessions"))
+        session::SessionStore::open_sessions_dir(&memory_a.join("data"))
             .unwrap()
             .ensure_session("root-a", "test")
             .unwrap();
-        session::SessionStore::open_sessions_dir(&memory_b.join("sessions"))
+        session::SessionStore::open_sessions_dir(&memory_b.join("data"))
             .unwrap()
             .ensure_session("root-b", "test")
             .unwrap();
@@ -2365,8 +2360,7 @@ mod tests {
     async fn same_root_close_lock_wait_is_bounded_by_the_caller_deadline() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(pending_chat());
@@ -2418,8 +2412,7 @@ mod tests {
     async fn caller_cancellation_after_starting_close_keeps_background_convergence_owner() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -2484,8 +2477,7 @@ mod tests {
     async fn close_retries_after_old_generation_completes_before_atomic_signal() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let provider_entered = Arc::new(tokio::sync::Notify::new());
         let provider_release = Arc::new(tokio::sync::Notify::new());
@@ -2566,8 +2558,7 @@ mod tests {
     async fn close_rejects_previously_admitted_handoff_without_starting_a_new_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(pending_chat());
@@ -2634,8 +2625,7 @@ mod tests {
     async fn close_cancels_starting_followup_without_missing_its_state_change() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -2701,8 +2691,7 @@ mod tests {
     async fn cancelled_close_after_terminate_keeps_admission_closed_until_runner_ack() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(pending_chat());
@@ -2739,8 +2728,7 @@ mod tests {
     async fn leaf_timeout_never_requests_parent_shutdown_before_leaf_ack() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut root_dispatch = dispatch(&dir);
         root_dispatch.chat_override = Some(pending_chat());
@@ -2880,8 +2868,7 @@ mod tests {
     async fn desktop_interrupt_is_ack_driven_and_reports_previous_status() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(pending_chat());
@@ -3126,8 +3113,7 @@ mod tests {
     async fn desktop_followup_reuses_runtime_manager_handoff() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -3176,8 +3162,7 @@ mod tests {
     async fn spawn_commits_only_after_preflight_and_starts_the_turn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -3209,8 +3194,7 @@ mod tests {
     async fn spawn_start_hook_fires_once_after_acceptance_and_not_for_followup() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -3268,8 +3252,7 @@ mod tests {
     async fn subagent_stop_keep_going_continues_the_same_turn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -3315,8 +3298,7 @@ mod tests {
     async fn stop_hook_observes_each_terminal_turn_and_close_does_not_duplicate_it() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -3384,8 +3366,7 @@ mod tests {
     async fn interrupted_and_errored_turns_emit_stop_at_turn_end_not_close() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         let bus = Arc::new(hooks::PluginHookBus::new());
@@ -3477,8 +3458,7 @@ mod tests {
     async fn spawn_preflight_failure_rolls_back_path_row_edge_and_runtime_request() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let dispatch = dispatch(&dir);
         let bus = Arc::new(hooks::PluginHookBus::new());
@@ -3539,8 +3519,7 @@ mod tests {
     async fn spawn_accepts_durable_start_even_when_provider_errors_immediately() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(immediate_error_chat());
@@ -3578,8 +3557,7 @@ mod tests {
     async fn runtime_admission_failure_rolls_back_committed_pending_spawn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let graph = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
         let control = AgentControl::open(
@@ -3631,8 +3609,7 @@ mod tests {
     async fn startup_status_failure_removes_forked_session_and_all_spawn_state() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         sessions
             .append_message(session::NewMessage {
@@ -3680,8 +3657,7 @@ mod tests {
     async fn cancelling_spawn_before_startup_acceptance_rolls_back_every_artifact() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         sessions
             .append_message(session::NewMessage {
@@ -3793,8 +3769,7 @@ mod tests {
     async fn cancelling_spawn_after_permit_before_turn_started_releases_identity() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("must not survive cancellation"));
@@ -3884,8 +3859,7 @@ mod tests {
     async fn interrupt_waits_for_runner_ack_and_returns_previous_status() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(pending_chat());
@@ -4405,8 +4379,7 @@ mod tests {
     async fn active_followup_returns_after_queue_admission_before_turn_completion() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
@@ -4454,8 +4427,7 @@ mod tests {
     async fn active_followup_consumed_at_sampling_boundary_does_not_start_empty_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
@@ -4571,8 +4543,7 @@ mod tests {
             "name = \"reviewer\"\ndescription = \"review\"\ndeveloper_instructions = \"review\"\nmodel = \"openai:original-model\"\n",
         )
         .unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut initial = dispatch(&dir);
         initial.chat_override = Some(scripted_chat("initial"));
@@ -4695,8 +4666,7 @@ mod tests {
     async fn cold_followup_rejects_missing_descriptor_provider_without_ghosts() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut initial = dispatch(&dir);
         initial.chat_override = Some(scripted_chat("initial"));
@@ -4767,8 +4737,7 @@ mod tests {
     async fn migrated_v2_child_reports_legacy_recovery_boundary_without_ghosts() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut initial = dispatch(&dir);
         initial.chat_override = Some(scripted_chat("initial"));
@@ -4841,8 +4810,7 @@ mod tests {
     async fn cold_followup_recovers_trusted_descriptor_from_early_v3_schema() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut initial = dispatch(&dir);
         initial.chat_override = Some(scripted_chat("initial"));
@@ -4933,8 +4901,7 @@ mod tests {
     async fn spawn_rejects_cross_provider_model_without_matching_credentials() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let dispatch = dispatch(&dir);
         let mut request = spawn_request(&memory_dir);
@@ -4995,8 +4962,7 @@ mod tests {
             "name = \"leaf\"\ndescription = \"leaf\"\ndeveloper_instructions = \"leaf\"\n[[skills.config]]\npath = \"skills/leaf/SKILL.md\"\nenabled = true\n",
         )
         .unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut initial = dispatch(&dir);
         initial.chat_override = Some(scripted_chat("done"));
@@ -5096,8 +5062,7 @@ mod tests {
     async fn cold_followup_rejects_sibling_runtime_material_without_ghosts() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut initial = dispatch(&dir);
         initial.chat_override = Some(scripted_chat("done"));
@@ -5194,8 +5159,7 @@ mod tests {
     async fn followup_retry_delivers_old_marker_and_new_message_in_order() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let captured = Arc::new(Mutex::new(Vec::new()));
         let mut dispatch = dispatch(&dir);
@@ -5326,8 +5290,7 @@ mod tests {
     async fn followup_at_terminal_cleanup_is_handed_off_to_a_new_turn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
@@ -5453,8 +5416,7 @@ mod tests {
     async fn idle_followup_reports_runtime_start_failure_instead_of_triggered_success() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         drop(sessions);
         let mut dispatch = dispatch(&dir);
@@ -5538,8 +5500,7 @@ mod tests {
     async fn concurrent_cold_followups_recover_once_and_share_one_starting_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -5639,8 +5600,7 @@ mod tests {
     async fn post_claim_setup_failure_is_shared_cleaned_and_retryable() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -5731,8 +5691,7 @@ mod tests {
     async fn canceling_idle_followup_caller_does_not_cancel_manager_owned_start() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -5808,8 +5767,7 @@ mod tests {
     async fn terminal_handoff_keeps_starting_slot_visible_to_third_followup() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
@@ -5940,8 +5898,7 @@ mod tests {
     async fn shutdown_rejects_pending_followup_without_starting_a_new_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(pending_chat());
@@ -6008,8 +5965,7 @@ mod tests {
     async fn followup_rechecks_shutdown_atomically_before_enqueue_and_admission() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(pending_chat());

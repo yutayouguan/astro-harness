@@ -181,9 +181,9 @@ pub struct UsageDb {
     path: PathBuf,
 }
 
-/// 默认数据库路径：`{ASTRO_MEMORY_DIR|~/.astro}/usage.db`
+/// 默认数据库路径：`{ASTRO_MEMORY_DIR|~/.astro}/data/usage.db`
 pub fn usage_db_path() -> PathBuf {
-    home::default_memory_dir().join("usage.db")
+    home::default_memory_dir().join("data").join("usage.db")
 }
 
 /// UTC 边界格式化为 `YYYY-MM-DDTHH:MM:SSZ`，便于与事件 `ts` 做字典序比较

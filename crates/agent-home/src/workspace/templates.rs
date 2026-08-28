@@ -200,7 +200,9 @@ pub(crate) const TEMPLATE_MEMORY: &str = r#"# MEMORY.md — 长期精炼记忆
 pub(crate) const ENSURED_DIRS: &[&str] = &[
     "workspace",
     "agents",
-    "sessions",
+    "data",
+    "memory",
+    "sessions/rollouts",
     "skills",
     "cron",
     "cron/output",
@@ -218,7 +220,7 @@ pub(crate) const STATE_FILES: &[(&str, &str)] = &[
     ("skills-enabled.json", "{\n}\n"),
     ("tools-enabled.json", "{\n}\n"),
     ("models.json", "{\n  \"providers\": {}\n}\n"),
-    ("dreaming.json", "{\n  \"enabled\": false\n}\n"),
+    ("memory/dreaming.json", "{\n  \"enabled\": false\n}\n"),
     ("cron/jobs.json", "{\n  \"jobs\": []\n}\n"),
     ("active-agent.json", "{\n  \"id\": \"workspace\"\n}\n"),
 ];

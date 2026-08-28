@@ -59,7 +59,7 @@ impl DecisionEntry {
 }
 
 fn learning_dir(base: &Path) -> PathBuf {
-    base.join("learning")
+    base.join("memory").join("learning")
 }
 
 /// `{base}/learning/decisions.jsonl`

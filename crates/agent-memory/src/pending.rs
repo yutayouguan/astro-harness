@@ -64,9 +64,9 @@ mod memory_target_serde {
     }
 }
 
-/// `{base}/pending/memory`
+/// `{base}/memory/pending`
 pub fn pending_dir(base: &Path) -> PathBuf {
-    base.join("pending").join("memory")
+    base.join("memory").join("pending")
 }
 
 fn pending_path(base: &Path, id: &str) -> PathBuf {

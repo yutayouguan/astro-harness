@@ -23,7 +23,9 @@ const ERROR_MAX_TOKENS: usize = 900;
 const APPROX_BYTES_PER_TOKEN: usize = 4;
 
 fn v2_default_db_path() -> PathBuf {
-    home::default_memory_dir().join("subagents-v2.db")
+    home::default_memory_dir()
+        .join("data")
+        .join("subagents-v2.db")
 }
 
 /// 已持久化的线程状态事件（含序号和时间戳）。

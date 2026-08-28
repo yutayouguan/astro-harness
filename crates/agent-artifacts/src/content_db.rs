@@ -54,7 +54,7 @@ impl KnowledgeDb {
 
     pub fn open_default() -> anyhow::Result<Self> {
         let path = home::default_memory_dir()
-            .join("sessions")
+            .join("data")
             .join("knowledge.db");
         Self::open(path)
     }

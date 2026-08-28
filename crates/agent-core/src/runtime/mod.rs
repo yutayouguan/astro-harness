@@ -310,7 +310,7 @@ impl Session {
         memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
         let sessions: Box<dyn ConversationStore> = Box::new(SessionStore::open_sessions_dir(
-            &config.memory_dir.join("sessions"),
+            &config.memory_dir.join("data"),
         )?);
         let history = hydrate_history(&*sessions, &session_id)?;
         let mut tool_registry = ToolRegistry::new();

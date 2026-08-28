@@ -108,9 +108,9 @@ pub struct ArtifactDb {
     path: PathBuf,
 }
 
-/// 默认数据库路径：`{memory_dir}/sessions/artifacts.db`
+/// 默认数据库路径：`{memory_dir}/data/artifacts.db`
 pub fn artifacts_db_path(memory_dir: &Path) -> PathBuf {
-    memory_dir.join("sessions").join("artifacts.db")
+    memory_dir.join("data").join("artifacts.db")
 }
 
 fn db_has_agent_id_column(path: &Path) -> anyhow::Result<bool> {

@@ -184,7 +184,7 @@ fn truncate(value: &str, max_chars: usize) -> String {
 }
 
 fn audit_dir(base: &Path) -> PathBuf {
-    base.join("audit")
+    base.join("memory").join("audit")
 }
 
 pub fn permission_audit_path(base: &Path) -> PathBuf {

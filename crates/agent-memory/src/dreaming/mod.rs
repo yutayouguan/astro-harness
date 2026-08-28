@@ -26,8 +26,8 @@ use home::{
     agent_workspace_dir, daily_memory_path, list_agents, list_daily_memory_dates, AgentInfo,
 };
 
-/// 入梦全局状态文件：`{base}/dreaming.json`
-const STATE_FILE: &str = "dreaming.json";
+/// 入梦全局状态文件：`{base}/memory/dreaming.json`
+const STATE_FILE: &str = "memory/dreaming.json";
 /// 单次最多处理的日记天数
 const MAX_DIARIES_PER_RUN: usize = 7;
 /// 送入模型的日记总字符上限（粗略）
@@ -223,12 +223,7 @@ fn rotate_baselines(dir: &Path) {
     };
     let mut files: Vec<_> = entries
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map(|ext| ext == "md")
-                .unwrap_or(false)
-        })
+        .filter(|e| e.path().extension().map(|ext| ext == "md").unwrap_or(false))
         .collect();
     files.sort_by_key(|e| std::cmp::Reverse(e.file_name()));
     for old in files.into_iter().skip(MAX_BASELINES) {
@@ -260,7 +255,11 @@ fn simple_unified_diff(before: &str, after: &str) -> String {
             }
         }
     }
-    if has_diff { out } else { String::new() }
+    if has_diff {
+        out
+    } else {
+        String::new()
+    }
 }
 
 /// 检测 MEMORY.md 是否被外部修改（hash 不一致），更新 polluted 标记。

@@ -38,8 +38,7 @@ use crate::{
 
 fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
-        .map_err(|e| e.to_string())
+    session::SessionStore::open_sessions_dir(&memory_dir.join("data")).map_err(|e| e.to_string())
 }
 
 fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {

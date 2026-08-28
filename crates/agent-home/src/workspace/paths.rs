@@ -102,6 +102,21 @@ pub fn default_memory_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".astro"))
 }
 
+/// 数据库目录：`{base}/data/`（state.db、usage.db、subagents 等）
+pub fn data_dir(base: &Path) -> PathBuf {
+    base.join("data")
+}
+
+/// 会话 rollout 目录：`{base}/sessions/rollouts/`
+pub fn rollouts_dir(base: &Path) -> PathBuf {
+    base.join("sessions").join("rollouts")
+}
+
+/// 记忆子系统目录：`{base}/memory/`（dreaming、audit、pending、learning）
+pub fn memory_subsystem_dir(base: &Path) -> PathBuf {
+    base.join("memory")
+}
+
 /// 解析 Agent 工作区路径。
 ///
 /// - `default`（默认）→ `{base}/workspace`（目录名保持 `workspace` 不变）
@@ -276,6 +291,7 @@ pub fn list_daily_memory_dates(workspace: &Path) -> Vec<String> {
 /// 确保基础目录结构存在（仅创建目录，不初始化 SQLite 数据库）。
 ///
 /// 适用于轻量工具（MCP 配置读写、日志初始化等），不需要完整工作区初始化。
+/// 包含自动迁移：根级散落的 DB → `data/`，记忆相关文件 → `memory/`。
 pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(base)?;
     fs::create_dir_all(base.join("agents"))?;
@@ -286,7 +302,42 @@ pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
     if old_config.is_dir() && !new_config.exists() {
         let _ = fs::rename(&old_config, &new_config);
     }
+
+    // 迁移：根级 DB → data/
+    let data_dir = base.join("data");
+    migrate_file(base, "usage.db", &data_dir);
+    migrate_file(base, "subagents-v2.db", &data_dir);
+    migrate_file(&base.join("sessions"), "state.db", &data_dir);
+    migrate_file(&base.join("sessions"), "artifacts.db", &data_dir);
+    migrate_file(&base.join("sessions"), "knowledge.db", &data_dir);
+    migrate_file(&base.join("cron"), "cron.db", &data_dir);
+
+    // 迁移：记忆相关 → memory/
+    let memory_dir = base.join("memory");
+    migrate_file(base, "dreaming.json", &memory_dir);
+    migrate_dir(base, "audit", &memory_dir);
+    migrate_dir(base, "learning", &memory_dir);
+    migrate_dir(base, "pending", &memory_dir);
+
     Ok(())
+}
+
+fn migrate_file(old_parent: &Path, name: &str, new_parent: &Path) {
+    let old = old_parent.join(name);
+    let new = new_parent.join(name);
+    if old.is_file() && !new.exists() {
+        let _ = fs::create_dir_all(new_parent);
+        let _ = fs::rename(&old, &new);
+    }
+}
+
+fn migrate_dir(old_parent: &Path, name: &str, new_parent: &Path) {
+    let old = old_parent.join(name);
+    let new = new_parent.join(name);
+    if old.is_dir() && !new.exists() {
+        let _ = fs::create_dir_all(new_parent);
+        let _ = fs::rename(&old, &new);
+    }
 }
 
 /// 确保默认工作区基础目录存在（不初始化 SQLite）。
