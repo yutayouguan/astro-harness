@@ -32,13 +32,13 @@
   border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.35));
   border-radius: 12px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(255, 255, 255, 0.13));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 50%, rgba(255, 255, 255, 0.04));
   box-shadow:
-    0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+    0 3px 9px color-mix(in srgb, var(--tone, transparent) 5%, rgba(15, 23, 42, 0.035)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.16));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.16));
   color: color-mix(in srgb, var(--ink) 94%, transparent);
   font: inherit;
   font-size: 14px;
@@ -73,13 +73,13 @@
 
 @media (hover: hover) and (pointer: fine) {
   .sidebar-new-chat:hover {
-    border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.35));
+    border-color: color-mix(in srgb, var(--tone, #64748b) 24%, rgba(255, 255, 255, 0.28));
     background:
-      linear-gradient(155deg, rgba(255, 255, 255, 0.37) 0%, rgba(255, 255, 255, 0.14) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
+      linear-gradient(155deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 100%),
+      color-mix(in srgb, var(--tone-soft, transparent) 62%, transparent);
     box-shadow:
-      0 10px 22px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.42);
+      0 4px 11px color-mix(in srgb, var(--tone, #64748b) 7%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22);
     color: var(--tone, var(--ink));
   }
 }
@@ -87,26 +87,29 @@
 html[data-theme="dark"] .sidebar-new-chat {
   border-color: color-mix(in srgb, var(--tone, #94a3b8) 24%, rgba(255, 255, 255, 0.1));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(8, 6, 18, 0.5));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 42%, rgba(8, 6, 18, 0.48));
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 4px 12px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   color: color-mix(in srgb, #fff 12%, var(--tone, var(--ink-soft)));
 }
 
 @media (hover: hover) and (pointer: fine) {
   html[data-theme="dark"] .sidebar-new-chat:hover {
-    border-color: color-mix(in srgb, var(--tone, #94a3b8) 38%, rgba(255, 255, 255, 0.14));
+    border-color: color-mix(in srgb, var(--tone, #94a3b8) 32%, rgba(255, 255, 255, 0.12));
     background:
-      linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 50%, rgba(8, 6, 18, 0.45));
+      linear-gradient(155deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%),
+      color-mix(in srgb, var(--tone-soft, transparent) 54%, rgba(8, 6, 18, 0.44));
+    box-shadow:
+      0 5px 14px rgba(0, 0, 0, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
     color: color-mix(in srgb, #fff 18%, var(--tone, var(--ink)));
   }
 }
 
 .sidebar-new-chat:active {
-  transform: scale(0.97);
+  transform: scale(0.985);
 }
 
 .sidebar-new-chat:focus-visible {
