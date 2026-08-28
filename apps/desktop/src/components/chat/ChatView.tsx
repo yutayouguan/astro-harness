@@ -3015,28 +3015,16 @@ export default function ChatView({
                 >
                   {(() => {
                     const Meta = modeMeta[chatMode];
-                    const ModeIcon = Meta.Icon;
-                    const ApprovalMeta = approvalMeta[approvalMode];
-                    const ApprovalIcon = ApprovalMeta.Icon;
+                    const Icon = Meta.Icon;
                     return (
                       <>
-                        {/* Wide: text pill */}
-                        <span className="composer-pill-wide">
-                          <ModeIcon size={15} strokeWidth={2.2} />
-                          <span className="composer-mode-pill-label">{Meta.label}</span>
-                          <span className="composer-policy-separator" aria-hidden>·</span>
-                          <span className="composer-policy-approval">{ApprovalMeta.label}</span>
-                          <ChevronDown size={14} strokeWidth={2} />
+                        <Icon size={15} strokeWidth={2.2} />
+                        <span>{Meta.label}</span>
+                        <span className="composer-policy-separator" aria-hidden>·</span>
+                        <span className="composer-policy-approval">
+                          {approvalMeta[approvalMode].label}
                         </span>
-                        {/* Narrow: icon-only stack */}
-                        <span className="composer-pill-narrow" aria-hidden>
-                          <span className="composer-pill-icon composer-pill-icon--mode">
-                            <ModeIcon size={14} strokeWidth={2.2} />
-                          </span>
-                          <span className="composer-pill-icon composer-pill-icon--approval">
-                            <ApprovalIcon size={12} strokeWidth={2.2} />
-                          </span>
-                        </span>
+                        <ChevronDown size={14} strokeWidth={2} />
                       </>
                     );
                   })()}
