@@ -1,7 +1,7 @@
 //! Project 实体 CRUD（v19）。
 
+use agent_db::sqlx::{self, Row};
 use anyhow::{anyhow, Result};
-use rusqlite::params;
 
 use super::SessionStore;
 
@@ -19,72 +19,52 @@ pub struct Project {
 
 impl SessionStore {
     /// 按 position 升序列出所有项目（含 roots）。
-    pub fn list_projects(&self) -> Result<Vec<Project>> {
-        let mut stmt = self.conn.prepare(
+    pub async fn list_projects(&self) -> Result<Vec<Project>> {
+        let rows = sqlx::query(
             "SELECT id, name, icon, position, created_at, updated_at
              FROM projects ORDER BY position ASC",
-        )?;
-        let rows: Vec<(String, String, Option<String>, i64, String, String)> = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        drop(stmt);
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         let mut projects = Vec::with_capacity(rows.len());
-        for (id, name, icon, position, created_at, updated_at) in rows {
-            let roots = self.load_project_roots(&id)?;
+        for r in rows {
+            let id: String = r.get(0);
+            let roots = self.load_project_roots(&id).await?;
             projects.push(Project {
                 id,
-                name,
-                icon,
+                name: r.get(1),
+                icon: r.get(2),
                 roots,
-                position,
-                created_at,
-                updated_at,
+                position: r.get(3),
+                created_at: r.get(4),
+                updated_at: r.get(5),
             });
         }
         Ok(projects)
     }
 
     /// 按 id 读取单个项目。
-    pub fn get_project(&self, id: &str) -> Result<Option<Project>> {
-        let row: Option<(String, String, Option<String>, i64, String, String)> = self
-            .conn
-            .query_row(
-                "SELECT id, name, icon, position, created_at, updated_at
-                 FROM projects WHERE id = ?1",
-                params![id],
-                |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                        row.get(5)?,
-                    ))
-                },
-            )
-            .optional()?;
+    pub async fn get_project(&self, id: &str) -> Result<Option<Project>> {
+        let row = sqlx::query(
+            "SELECT id, name, icon, position, created_at, updated_at
+             FROM projects WHERE id = ?1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
         match row {
-            Some((id, name, icon, position, created_at, updated_at)) => {
-                let roots = self.load_project_roots(&id)?;
+            Some(r) => {
+                let pid: String = r.get(0);
+                let roots = self.load_project_roots(&pid).await?;
                 Ok(Some(Project {
-                    id,
-                    name,
-                    icon,
+                    id: pid,
+                    name: r.get(1),
+                    icon: r.get(2),
                     roots,
-                    position,
-                    created_at,
-                    updated_at,
+                    position: r.get(3),
+                    created_at: r.get(4),
+                    updated_at: r.get(5),
                 }))
             }
             None => Ok(None),
@@ -92,126 +72,136 @@ impl SessionStore {
     }
 
     /// 按 root 路径查找项目（精确匹配）。
-    pub fn find_project_by_root(&self, path: &str) -> Result<Option<Project>> {
-        let project_id: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT project_id FROM project_roots WHERE path = ?1 LIMIT 1",
-                params![path],
-                |row| row.get(0),
-            )
-            .optional()?;
-        match project_id {
-            Some(pid) => self.get_project(&pid),
+    pub async fn find_project_by_root(&self, path: &str) -> Result<Option<Project>> {
+        let row = sqlx::query("SELECT project_id FROM project_roots WHERE path = ?1 LIMIT 1")
+            .bind(path)
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => self.get_project(&r.get::<String, _>(0)).await,
             None => Ok(None),
         }
     }
 
     /// 创建新项目。
-    pub fn create_project(&self, name: &str, roots: &[&str]) -> Result<Project> {
+    pub async fn create_project(&self, name: &str, roots: &[&str]) -> Result<Project> {
         let id = uuid::Uuid::new_v4().simple().to_string();
-        let next_pos: i64 = self.conn.query_row(
+        let next_pos: i64 = sqlx::query(
             "SELECT COALESCE(MAX(position), -1) + 1 FROM projects",
-            [],
-            |row| row.get(0),
-        )?;
-        self.conn.execute(
-            "INSERT INTO projects (id, name, position) VALUES (?1, ?2, ?3)",
-            params![id, name, next_pos],
-        )?;
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .get(0);
+        sqlx::query("INSERT INTO projects (id, name, position) VALUES (?1, ?2, ?3)")
+            .bind(&id)
+            .bind(name)
+            .bind(next_pos)
+            .execute(&self.pool)
+            .await?;
         for root in roots {
-            self.conn.execute(
+            sqlx::query(
                 "INSERT OR IGNORE INTO project_roots (project_id, path) VALUES (?1, ?2)",
-                params![id, *root],
-            )?;
+            )
+            .bind(&id)
+            .bind(*root)
+            .execute(&self.pool)
+            .await?;
         }
-        self.get_project(&id)?
+        self.get_project(&id)
+            .await?
             .ok_or_else(|| anyhow!("project just created but not found"))
     }
 
     /// 更新项目名称、图标和/或 roots。
-    pub fn update_project(
+    pub async fn update_project(
         &self,
         id: &str,
         name: Option<&str>,
         icon: Option<Option<&str>>,
         roots: Option<&[&str]>,
     ) -> Result<Project> {
-        if self.get_project(id)?.is_none() {
+        if self.get_project(id).await?.is_none() {
             anyhow::bail!("update_project: project not found");
         }
-        let tx = self.conn.unchecked_transaction()?;
+        let mut tx = self.pool.begin().await?;
         if let Some(name) = name {
-            tx.execute(
+            sqlx::query(
                 "UPDATE projects SET name = ?1, updated_at = datetime('now') WHERE id = ?2",
-                params![name, id],
-            )?;
+            )
+            .bind(name)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
         }
         if let Some(icon_val) = icon {
-            tx.execute(
+            sqlx::query(
                 "UPDATE projects SET icon = ?1, updated_at = datetime('now') WHERE id = ?2",
-                params![icon_val, id],
-            )?;
+            )
+            .bind(icon_val)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
         }
         if let Some(roots) = roots {
-            tx.execute(
-                "DELETE FROM project_roots WHERE project_id = ?1",
-                params![id],
-            )?;
+            sqlx::query("DELETE FROM project_roots WHERE project_id = ?1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
             for root in roots {
-                tx.execute(
+                sqlx::query(
                     "INSERT INTO project_roots (project_id, path) VALUES (?1, ?2)",
-                    params![id, *root],
-                )?;
+                )
+                .bind(id)
+                .bind(*root)
+                .execute(&mut *tx)
+                .await?;
             }
             if name.is_none() {
-                tx.execute(
+                sqlx::query(
                     "UPDATE projects SET updated_at = datetime('now') WHERE id = ?1",
-                    params![id],
-                )?;
+                )
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
             }
         }
-        tx.commit()?;
-        self.get_project(id)?
+        tx.commit().await?;
+        self.get_project(id)
+            .await?
             .ok_or_else(|| anyhow!("project not found after update"))
     }
 
     /// 删除项目，返回孤儿会话 ID 列表（原先关联到该项目的会话）。
-    pub fn delete_project(&self, id: &str) -> Result<Vec<String>> {
-        let tx = self.conn.unchecked_transaction()?;
-        // 收集将要变成孤儿的会话 ID
-        let mut stmt = tx.prepare(
-            "SELECT id FROM sessions WHERE project_id = ?1",
-        )?;
-        let orphans: Vec<String> = stmt
-            .query_map(params![id], |row| row.get(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        drop(stmt);
-        // 解除会话关联
-        tx.execute(
-            "UPDATE sessions SET project_id = NULL WHERE project_id = ?1",
-            params![id],
-        )?;
+    pub async fn delete_project(&self, id: &str) -> Result<Vec<String>> {
+        let mut tx = self.pool.begin().await?;
+        let rows = sqlx::query("SELECT id FROM sessions WHERE project_id = ?1")
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await?;
+        let orphans: Vec<String> = rows.iter().map(|r| r.get(0)).collect();
+        sqlx::query("UPDATE sessions SET project_id = NULL WHERE project_id = ?1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
         // project_roots 由 ON DELETE CASCADE 自动清理
-        let changed = tx.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
-        if changed == 0 {
+        let result = sqlx::query("DELETE FROM projects WHERE id = ?1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        if result.rows_affected() == 0 {
             anyhow::bail!("delete_project: project not found");
         }
-        tx.commit()?;
+        tx.commit().await?;
         Ok(orphans)
     }
 
     /// 移动项目到 `before_id` 之前；`before_id` 为 `None` 时移到末尾。
-    pub fn move_project(&self, id: &str, before_id: Option<&str>) -> Result<()> {
-        let tx = self.conn.unchecked_transaction()?;
-        // 读取全部 project id 按 position 排序
-        let mut stmt = tx.prepare(
-            "SELECT id FROM projects ORDER BY position ASC",
-        )?;
-        let mut ids: Vec<String> = stmt
-            .query_map([], |row| row.get(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        drop(stmt);
+    pub async fn move_project(&self, id: &str, before_id: Option<&str>) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        let rows = sqlx::query("SELECT id FROM projects ORDER BY position ASC")
+            .fetch_all(&mut *tx)
+            .await?;
+        let mut ids: Vec<String> = rows.iter().map(|r| r.get(0)).collect();
 
         // 移除目标
         let orig_pos = ids.iter().position(|x| x == id);
@@ -234,131 +224,158 @@ impl SessionStore {
 
         // 重写 position
         for (pos, pid) in ids.iter().enumerate() {
-            tx.execute(
-                "UPDATE projects SET position = ?1 WHERE id = ?2",
-                params![pos as i64, pid],
-            )?;
+            sqlx::query("UPDATE projects SET position = ?1 WHERE id = ?2")
+                .bind(pos as i64)
+                .bind(pid)
+                .execute(&mut *tx)
+                .await?;
         }
-        tx.commit()?;
+        tx.commit().await?;
         Ok(())
     }
 
     /// 将会话关联到项目。
-    pub fn assign_session_to_project(&self, session_id: &str, project_id: &str) -> Result<()> {
-        let changed = self.conn.execute(
+    pub async fn assign_session_to_project(
+        &self,
+        session_id: &str,
+        project_id: &str,
+    ) -> Result<()> {
+        let result = sqlx::query(
             "UPDATE sessions SET project_id = ?1 WHERE id = ?2",
-            params![project_id, session_id],
-        )?;
-        if changed == 0 {
+        )
+        .bind(project_id)
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
             anyhow::bail!("assign_session_to_project: session not found");
         }
         Ok(())
     }
 
     /// 解除会话的项目关联。
-    pub fn unassign_session_from_project(&self, session_id: &str) -> Result<()> {
-        self.conn.execute(
-            "UPDATE sessions SET project_id = NULL WHERE id = ?1",
-            params![session_id],
-        )?;
+    pub async fn unassign_session_from_project(&self, session_id: &str) -> Result<()> {
+        sqlx::query("UPDATE sessions SET project_id = NULL WHERE id = ?1")
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
     // ---- internal ----
 
-    fn load_project_roots(&self, project_id: &str) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
+    async fn load_project_roots(&self, project_id: &str) -> Result<Vec<String>> {
+        let rows = sqlx::query(
             "SELECT path FROM project_roots WHERE project_id = ?1 ORDER BY path",
-        )?;
-        let roots = stmt
-            .query_map(params![project_id], |row| row.get(0))?
-            .collect::<Result<Vec<String>, _>>()?;
+        )
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let roots = rows.iter().map(|r| r.get(0)).collect();
         Ok(roots)
     }
 }
-
-use rusqlite::OptionalExtension;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::store::SessionStore;
 
-    fn open_memory() -> SessionStore {
-        SessionStore::open(std::path::Path::new(":memory:")).unwrap()
+    async fn test_store() -> (tempfile::TempDir, SessionStore) {
+        let dir = tempfile::TempDir::new().unwrap();
+        let store = SessionStore::open(&dir.path().join("state.db"))
+            .await
+            .unwrap();
+        (dir, store)
     }
 
-    #[test]
-    fn create_and_list_projects() {
-        let store = open_memory();
-        let p1 = store.create_project("My App", &["/home/user/my-app"]).unwrap();
+    #[tokio::test]
+    async fn create_and_list_projects() {
+        let (_dir, store) = test_store().await;
+        let p1 = store
+            .create_project("My App", &["/home/user/my-app"])
+            .await
+            .unwrap();
         assert_eq!(p1.name, "My App");
         assert_eq!(p1.roots, vec!["/home/user/my-app"]);
         assert_eq!(p1.position, 0);
 
-        let p2 = store.create_project("Backend", &["/home/user/backend"]).unwrap();
+        let p2 = store
+            .create_project("Backend", &["/home/user/backend"])
+            .await
+            .unwrap();
         assert_eq!(p2.position, 1);
 
-        let all = store.list_projects().unwrap();
+        let all = store.list_projects().await.unwrap();
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].name, "My App");
         assert_eq!(all[1].name, "Backend");
     }
 
-    #[test]
-    fn update_project_name_and_roots() {
-        let store = open_memory();
-        let p = store.create_project("Old Name", &["/a"]).unwrap();
+    #[tokio::test]
+    async fn update_project_name_and_roots() {
+        let (_dir, store) = test_store().await;
+        let p = store.create_project("Old Name", &["/a"]).await.unwrap();
         let updated = store
             .update_project(&p.id, Some("New Name"), None, Some(&["/a", "/b"]))
+            .await
             .unwrap();
         assert_eq!(updated.name, "New Name");
         assert_eq!(updated.roots.len(), 2);
     }
 
-    #[test]
-    fn delete_project_returns_orphans() {
-        let store = open_memory();
-        let p = store.create_project("Test", &["/test"]).unwrap();
-        store.ensure_session("s1", "tauri").unwrap();
-        store.assign_session_to_project("s1", &p.id).unwrap();
-        let orphans = store.delete_project(&p.id).unwrap();
+    #[tokio::test]
+    async fn delete_project_returns_orphans() {
+        let (_dir, store) = test_store().await;
+        let p = store.create_project("Test", &["/test"]).await.unwrap();
+        store.ensure_session("s1", "tauri").await.unwrap();
+        store
+            .assign_session_to_project("s1", &p.id)
+            .await
+            .unwrap();
+        let orphans = store.delete_project(&p.id).await.unwrap();
         assert_eq!(orphans, vec!["s1"]);
-        assert!(store.list_projects().unwrap().is_empty());
+        assert!(store.list_projects().await.unwrap().is_empty());
     }
 
-    #[test]
-    fn move_project_reorders() {
-        let store = open_memory();
-        let a = store.create_project("A", &[]).unwrap();
-        let b = store.create_project("B", &[]).unwrap();
-        let c = store.create_project("C", &[]).unwrap();
+    #[tokio::test]
+    async fn move_project_reorders() {
+        let (_dir, store) = test_store().await;
+        let a = store.create_project("A", &[]).await.unwrap();
+        let b = store.create_project("B", &[]).await.unwrap();
+        let c = store.create_project("C", &[]).await.unwrap();
         // 把 C 移到 A 前面 → C A B
-        store.move_project(&c.id, Some(&a.id)).unwrap();
-        let all = store.list_projects().unwrap();
+        store.move_project(&c.id, Some(&a.id)).await.unwrap();
+        let all = store.list_projects().await.unwrap();
         assert_eq!(all[0].name, "C");
         assert_eq!(all[1].name, "A");
         assert_eq!(all[2].name, "B");
     }
 
-    #[test]
-    fn assign_and_unassign_session() {
-        let store = open_memory();
-        let p = store.create_project("Proj", &["/proj"]).unwrap();
-        store.ensure_session("s1", "tauri").unwrap();
-        store.assign_session_to_project("s1", &p.id).unwrap();
-        store.unassign_session_from_project("s1").unwrap();
+    #[tokio::test]
+    async fn assign_and_unassign_session() {
+        let (_dir, store) = test_store().await;
+        let p = store.create_project("Proj", &["/proj"]).await.unwrap();
+        store.ensure_session("s1", "tauri").await.unwrap();
+        store
+            .assign_session_to_project("s1", &p.id)
+            .await
+            .unwrap();
+        store.unassign_session_from_project("s1").await.unwrap();
         // 不应 panic
     }
 
-    #[test]
-    fn find_project_by_root() {
-        let store = open_memory();
-        let p = store.create_project("WebApp", &["/code/web"]).unwrap();
-        let found = store.find_project_by_root("/code/web").unwrap();
+    #[tokio::test]
+    async fn find_project_by_root() {
+        let (_dir, store) = test_store().await;
+        let p = store
+            .create_project("WebApp", &["/code/web"])
+            .await
+            .unwrap();
+        let found = store.find_project_by_root("/code/web").await.unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, p.id);
-        let miss = store.find_project_by_root("/nonexistent").unwrap();
+        let miss = store.find_project_by_root("/nonexistent").await.unwrap();
         assert!(miss.is_none());
     }
 }

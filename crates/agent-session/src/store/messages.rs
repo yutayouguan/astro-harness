@@ -1,16 +1,13 @@
 //! 富消息读写。
 
+use agent_db::sqlx::{self, Row};
 use anyhow::Result;
-use rusqlite::{params, OptionalExtension, Transaction};
 use serde_json::Value;
 
-use super::{
-    is_unique_constraint, json_from_db, json_to_db, now_epoch_secs, truncate_chars, NewMessage,
-    SessionStore, StoredMessage,
-};
+use super::{json_from_db, json_to_db, now_epoch_secs, truncate_chars, NewMessage, SessionStore, StoredMessage};
 
-pub(crate) fn insert_message_row(
-    tx: &Transaction<'_>,
+pub(crate) async fn insert_message_row(
+    executor: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
     msg: NewMessage<'_>,
     timestamp: f64,
 ) -> Result<i64> {
@@ -18,7 +15,7 @@ pub(crate) fn insert_message_row(
     let reasoning_details = json_to_db(&msg.reasoning_details)?;
     let codex_reasoning_items = json_to_db(&msg.codex_reasoning_items)?;
     let codex_message_items = json_to_db(&msg.codex_message_items)?;
-    tx.execute(
+    let result = sqlx::query(
         "INSERT INTO messages (
             session_id, role, content, compressed_content,
             tool_call_id, tool_calls, tool_name,
@@ -32,53 +29,55 @@ pub(crate) fn insert_message_row(
             ?11, ?12, ?13,
             ?14, ?15, ?16
          )",
-        params![
-            msg.session_id,
-            msg.role,
-            msg.content,
-            msg.compressed_content,
-            msg.tool_call_id,
-            tool_calls,
-            msg.tool_name,
-            timestamp,
-            msg.token_count,
-            msg.finish_reason,
-            msg.reasoning,
-            msg.reasoning_content,
-            reasoning_details,
-            codex_reasoning_items,
-            codex_message_items,
-            msg.media_json,
-        ],
-    )?;
-    Ok(tx.last_insert_rowid())
+    )
+    .bind(msg.session_id)
+    .bind(msg.role)
+    .bind(msg.content)
+    .bind(msg.compressed_content)
+    .bind(msg.tool_call_id)
+    .bind(tool_calls)
+    .bind(msg.tool_name)
+    .bind(timestamp)
+    .bind(msg.token_count)
+    .bind(msg.finish_reason)
+    .bind(msg.reasoning)
+    .bind(msg.reasoning_content)
+    .bind(reasoning_details)
+    .bind(codex_reasoning_items)
+    .bind(codex_message_items)
+    .bind(msg.media_json)
+    .execute(executor)
+    .await?;
+    Ok(result.last_insert_rowid())
 }
 
 impl SessionStore {
     /// 追加一条富消息，并递增 `sessions.message_count`（`role=tool` 时同时 `tool_call_count++`）。
-    pub fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
-        self.assert_session_writable(msg.session_id)?;
+    pub async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
+        self.assert_session_writable(msg.session_id).await?;
         let session_id = msg.session_id;
         let is_tool = msg.role == "tool";
-        let tx = self.conn.unchecked_transaction()?;
-        let id = insert_message_row(&tx, msg, now_epoch_secs()?)?;
+        let mut tx = self.pool.begin().await?;
+        let id = insert_message_row(&mut *tx, msg, now_epoch_secs()?).await?;
 
         if is_tool {
-            tx.execute(
+            sqlx::query(
                 "UPDATE sessions
                  SET message_count = message_count + 1,
                      tool_call_count = tool_call_count + 1
                  WHERE id = ?1",
-                params![session_id],
-            )?;
+            )
+            .bind(session_id)
+            .execute(&mut *tx)
+            .await?;
         } else {
-            tx.execute(
-                "UPDATE sessions SET message_count = message_count + 1 WHERE id = ?1",
-                params![session_id],
-            )?;
+            sqlx::query("UPDATE sessions SET message_count = message_count + 1 WHERE id = ?1")
+                .bind(session_id)
+                .execute(&mut *tx)
+                .await?;
         }
 
-        tx.commit()?;
+        tx.commit().await?;
         Ok(id)
     }
 
@@ -86,29 +85,28 @@ impl SessionStore {
     /// 跨全部会话取「带结构化媒体」的消息 `(session_id, message_id, media_json)`。
     ///
     /// 供 artifacts 回填：把历史生成文件关联回来源会话。单条查询，开销低。
-    pub fn media_messages(&self) -> Result<Vec<(String, i64, String)>> {
-        let mut stmt = self.conn.prepare(
+    pub async fn media_messages(&self) -> Result<Vec<(String, i64, String)>> {
+        let rows = sqlx::query(
             "SELECT session_id, id, media_json
              FROM messages
              WHERE media_json IS NOT NULL AND media_json != ''
              ORDER BY id ASC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })?;
+        )
+        .fetch_all(&self.pool)
+        .await?;
         let mut out = Vec::new();
         for row in rows {
-            out.push(row?);
+            out.push((
+                row.get::<String, _>(0),
+                row.get::<i64, _>(1),
+                row.get::<String, _>(2),
+            ));
         }
         Ok(out)
     }
 
-    pub fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
-        let mut stmt = self.conn.prepare(
+    pub async fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
+        let rows = sqlx::query(
             "SELECT id, session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
                     reasoning, reasoning_content, reasoning_details,
@@ -116,107 +114,71 @@ impl SessionStore {
              FROM messages
              WHERE session_id = ?1
              ORDER BY timestamp ASC, id ASC",
-        )?;
-        let rows = stmt.query_map(params![session_id], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, Option<String>>(3)?,
-                row.get::<_, Option<String>>(4)?,
-                row.get::<_, Option<String>>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, f64>(8)?,
-                row.get::<_, Option<i64>>(9)?,
-                row.get::<_, Option<String>>(10)?,
-                row.get::<_, Option<String>>(11)?,
-                row.get::<_, Option<String>>(12)?,
-                row.get::<_, Option<String>>(13)?,
-                row.get::<_, Option<String>>(14)?,
-                row.get::<_, Option<String>>(15)?,
-                row.get::<_, Option<String>>(16)?,
-            ))
-        })?;
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await?;
 
         let mut out = Vec::new();
         for row in rows {
-            let (
-                id,
-                session_id,
-                role,
-                content,
-                compressed_content,
-                tool_call_id,
-                tool_calls_raw,
-                tool_name,
-                timestamp,
-                token_count,
-                finish_reason,
-                reasoning,
-                reasoning_content,
-                reasoning_details_raw,
-                codex_reasoning_items_raw,
-                codex_message_items_raw,
-                media_json,
-            ) = row?;
+            let tool_calls_raw: Option<String> = row.get::<Option<String>, _>(6);
+            let reasoning_details_raw: Option<String> = row.get::<Option<String>, _>(13);
+            let codex_reasoning_items_raw: Option<String> = row.get::<Option<String>, _>(14);
+            let codex_message_items_raw: Option<String> = row.get::<Option<String>, _>(15);
             out.push(StoredMessage {
-                id,
-                session_id,
-                role,
-                content,
-                compressed_content,
-                tool_call_id,
+                id: row.get::<i64, _>(0),
+                session_id: row.get::<String, _>(1),
+                role: row.get::<String, _>(2),
+                content: row.get::<Option<String>, _>(3),
+                compressed_content: row.get::<Option<String>, _>(4),
+                tool_call_id: row.get::<Option<String>, _>(5),
                 tool_calls: json_from_db(tool_calls_raw)?,
-                tool_name,
-                timestamp,
-                token_count,
-                finish_reason,
-                reasoning,
-                reasoning_content,
+                tool_name: row.get::<Option<String>, _>(7),
+                timestamp: row.get::<f64, _>(8),
+                token_count: row.get::<Option<i64>, _>(9),
+                finish_reason: row.get::<Option<String>, _>(10),
+                reasoning: row.get::<Option<String>, _>(11),
+                reasoning_content: row.get::<Option<String>, _>(12),
                 reasoning_details: json_from_db(reasoning_details_raw)?,
                 codex_reasoning_items: json_from_db(codex_reasoning_items_raw)?,
                 codex_message_items: json_from_db(codex_message_items_raw)?,
-                media_json,
+                media_json: row.get::<Option<String>, _>(16),
             });
         }
         Ok(out)
     }
 
     /// 为指定消息写入 provider 视图或内部交付标记；原始 `content` 不变。
-    pub fn update_message_compressed_content(
+    pub async fn update_message_compressed_content(
         &self,
         message_id: i64,
         compressed_content: Option<&str>,
     ) -> Result<()> {
-        self.conn.execute(
-            "UPDATE messages SET compressed_content = ?1 WHERE id = ?2",
-            params![compressed_content, message_id],
-        )?;
+        sqlx::query("UPDATE messages SET compressed_content = ?1 WHERE id = ?2")
+            .bind(compressed_content)
+            .bind(message_id)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
     /// 回写本会话最近一条 assistant 的 `reasoning_details`（保留其它键，覆盖 timeline/surfaces）。
     ///
     /// 工具循环在 assistant 落盘之后才会 `upsert_surface`；若不回写，历史恢复会丢 A2UI 卡片。
-    pub fn patch_last_assistant_reasoning_details(
+    pub async fn patch_last_assistant_reasoning_details(
         &self,
         session_id: &str,
         details: &Value,
     ) -> Result<()> {
-        // 该列可能为 SQL NULL：闭包按 Option<String> 读，避免 NULL 触发
-        // "Invalid column type Null"（.optional() 仅处理「无行」，不处理「列为 NULL」）。
-        let existing: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT reasoning_details FROM messages
+        let existing: Option<String> = sqlx::query(
+            "SELECT reasoning_details FROM messages
              WHERE session_id = ?1 AND role = 'assistant'
              ORDER BY id DESC LIMIT 1",
-                params![session_id],
-                |row| row.get::<_, Option<String>>(0),
-            )
-            .optional()?
-            .flatten();
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .and_then(|row| row.get::<Option<String>, _>(0));
         let mut obj = match existing.as_deref().map(serde_json::from_str::<Value>) {
             Some(Ok(Value::Object(m))) => m,
             _ => serde_json::Map::new(),
@@ -227,22 +189,25 @@ impl SessionStore {
             }
         }
         let json = serde_json::to_string(&Value::Object(obj))?;
-        self.conn.execute(
+        sqlx::query(
             "UPDATE messages SET reasoning_details = ?1
              WHERE id = (
                SELECT id FROM messages
                WHERE session_id = ?2 AND role = 'assistant'
                ORDER BY id DESC LIMIT 1
              )",
-            params![json, session_id],
-        )?;
+        )
+        .bind(&json)
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
     /// 将源会话消息复制到新会话（含 tool 行），截止到第 `keep_chat_bubbles` 个 user/assistant 气泡。
     ///
     /// 新会话写入 `parent_session_id = source_id`，便于谱系追溯。`keep_chat_bubbles == 0` 时仅创建空会话。
-    pub fn fork_session(
+    pub async fn fork_session(
         &self,
         source_id: &str,
         new_id: &str,
@@ -251,24 +216,25 @@ impl SessionStore {
         if source_id == new_id {
             anyhow::bail!("fork_session: source and target session ids must differ");
         }
-        if self.get_session(new_id)?.is_some() {
+        if self.get_session(new_id).await?.is_some() {
             anyhow::bail!("fork_session: target session already exists");
         }
 
-        let parent = self.get_session(source_id)?;
+        let parent = self.get_session(source_id).await?;
         let model = parent.as_ref().and_then(|p| p.model.clone());
-        self.create_session(new_id, "tauri", model.as_deref(), None, Some(source_id))?;
+        self.create_session(new_id, "tauri", model.as_deref(), None, Some(source_id))
+            .await?;
 
         if keep_chat_bubbles == 0 {
             return Ok(());
         }
 
-        let messages = self.get_messages(source_id)?;
+        let messages = self.get_messages(source_id).await?;
         let Some(end) = end_inclusive_for_bubbles(&messages, keep_chat_bubbles) else {
             return Ok(());
         };
 
-        let tx = self.conn.unchecked_transaction()?;
+        let mut tx = self.pool.begin().await?;
         let mut message_count = 0i64;
         let mut tool_call_count = 0i64;
         for m in &messages[..=end] {
@@ -276,7 +242,7 @@ impl SessionStore {
             let reasoning_details = json_to_db(&m.reasoning_details)?;
             let codex_reasoning_items = json_to_db(&m.codex_reasoning_items)?;
             let codex_message_items = json_to_db(&m.codex_message_items)?;
-            tx.execute(
+            sqlx::query(
                 "INSERT INTO messages (
                     session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
@@ -288,44 +254,48 @@ impl SessionStore {
                     ?11, ?12, ?13,
                     ?14, ?15, ?16
                  )",
-                params![
-                    new_id,
-                    m.role,
-                    m.content,
-                    m.compressed_content,
-                    m.tool_call_id,
-                    tool_calls,
-                    m.tool_name,
-                    m.timestamp,
-                    m.token_count,
-                    m.finish_reason,
-                    m.reasoning,
-                    m.reasoning_content,
-                    reasoning_details,
-                    codex_reasoning_items,
-                    codex_message_items,
-                    m.media_json,
-                ],
-            )?;
+            )
+            .bind(new_id)
+            .bind(&m.role)
+            .bind(&m.content)
+            .bind(&m.compressed_content)
+            .bind(&m.tool_call_id)
+            .bind(&tool_calls)
+            .bind(&m.tool_name)
+            .bind(m.timestamp)
+            .bind(m.token_count)
+            .bind(&m.finish_reason)
+            .bind(&m.reasoning)
+            .bind(&m.reasoning_content)
+            .bind(&reasoning_details)
+            .bind(&codex_reasoning_items)
+            .bind(&codex_message_items)
+            .bind(&m.media_json)
+            .execute(&mut *tx)
+            .await?;
             message_count += 1;
             if m.role == "tool" {
                 tool_call_count += 1;
             }
         }
-        tx.execute(
+        sqlx::query(
             "UPDATE sessions
              SET message_count = ?1, tool_call_count = ?2
              WHERE id = ?3",
-            params![message_count, tool_call_count, new_id],
-        )?;
-        tx.commit()?;
+        )
+        .bind(message_count)
+        .bind(tool_call_count)
+        .bind(new_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
 
         if let Some(title) = parent
             .and_then(|p| p.title)
             .filter(|t| !t.trim().is_empty())
         {
             let branched = format!("{title} · branch");
-            let _ = self.set_session_title(new_id, &branched);
+            let _ = self.set_session_title(new_id, &branched).await;
         }
 
         Ok(())
@@ -337,7 +307,7 @@ impl SessionStore {
     /// `None` copies the full history. `Some(0)` creates an empty child
     /// session. A positive value starts at the Nth user row counted from the
     /// end, so assistant/tool rows belonging to that user turn remain intact.
-    pub fn fork_session_recent_turns(
+    pub async fn fork_session_recent_turns(
         &self,
         source_id: &str,
         new_id: &str,
@@ -346,123 +316,166 @@ impl SessionStore {
         if source_id == new_id {
             anyhow::bail!("fork_session_recent_turns: source and target session ids must differ");
         }
-        let tx = self.conn.unchecked_transaction()?;
-        let parent = tx
-            .query_row(
-                "SELECT model, title FROM sessions WHERE id = ?1",
-                params![source_id],
-                |row| {
-                    Ok((
-                        row.get::<_, Option<String>>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                    ))
-                },
-            )
-            .optional()?
+        let mut tx = self.pool.begin().await?;
+        let parent_row = sqlx::query("SELECT model, title FROM sessions WHERE id = ?1")
+            .bind(source_id)
+            .fetch_optional(&mut *tx)
+            .await?
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "fork_session_recent_turns: source session not found: {source_id:?}"
                 )
             })?;
-        let target_exists = tx.query_row(
+        let parent: (Option<String>, Option<String>) = (
+            parent_row.get::<Option<String>, _>(0),
+            parent_row.get::<Option<String>, _>(1),
+        );
+        let target_exists: bool = sqlx::query(
             "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
-            params![new_id],
-            |row| row.get::<_, bool>(0),
-        )?;
+        )
+        .bind(new_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .get::<bool, _>(0);
         if target_exists {
             anyhow::bail!("fork_session_recent_turns: target session already exists");
         }
-        tx.execute(
+        sqlx::query(
             "INSERT INTO sessions (id, source, model, parent_session_id, started_at)
              VALUES (?1, 'tauri', ?2, ?3, ?4)",
-            params![new_id, parent.0, source_id, now_epoch_secs()?],
-        )?;
+        )
+        .bind(new_id)
+        .bind(&parent.0)
+        .bind(source_id)
+        .bind(now_epoch_secs()?)
+        .execute(&mut *tx)
+        .await?;
 
-        let copy_sql = "INSERT INTO messages (
-                session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                timestamp, token_count, finish_reason,
-                reasoning, reasoning_content, reasoning_details,
-                codex_reasoning_items, codex_message_items, media_json
-             )
-             SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                    timestamp, token_count, finish_reason,
-                    reasoning, reasoning_content, reasoning_details,
-                    codex_reasoning_items, codex_message_items, media_json
-             FROM messages
-             WHERE session_id = ?2";
         match recent_turns {
             Some(0) => {}
             None => {
-                tx.execute(
-                    &format!("{copy_sql} ORDER BY timestamp ASC, id ASC"),
-                    params![new_id, source_id],
-                )?;
+                sqlx::query(
+                    "INSERT INTO messages (
+                        session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                        timestamp, token_count, finish_reason,
+                        reasoning, reasoning_content, reasoning_details,
+                        codex_reasoning_items, codex_message_items, media_json
+                     )
+                     SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                            timestamp, token_count, finish_reason,
+                            reasoning, reasoning_content, reasoning_details,
+                            codex_reasoning_items, codex_message_items, media_json
+                     FROM messages
+                     WHERE session_id = ?2
+                     ORDER BY timestamp ASC, id ASC",
+                )
+                .bind(new_id)
+                .bind(source_id)
+                .execute(&mut *tx)
+                .await?;
             }
             Some(turns) => {
                 let offset = i64::try_from(turns - 1).unwrap_or(i64::MAX);
-                let boundary = tx
-                    .query_row(
-                        "SELECT timestamp, id
+                let boundary = sqlx::query(
+                    "SELECT timestamp, id
+                     FROM messages
+                     WHERE session_id = ?1 AND role = 'user'
+                     ORDER BY timestamp DESC, id DESC
+                     LIMIT 1 OFFSET ?2",
+                )
+                .bind(source_id)
+                .bind(offset)
+                .fetch_optional(&mut *tx)
+                .await?;
+                if let Some(brow) = boundary {
+                    let timestamp: f64 = brow.get::<f64, _>(0);
+                    let message_id: i64 = brow.get::<i64, _>(1);
+                    sqlx::query(
+                        "INSERT INTO messages (
+                            session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                            timestamp, token_count, finish_reason,
+                            reasoning, reasoning_content, reasoning_details,
+                            codex_reasoning_items, codex_message_items, media_json
+                         )
+                         SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                                timestamp, token_count, finish_reason,
+                                reasoning, reasoning_content, reasoning_details,
+                                codex_reasoning_items, codex_message_items, media_json
                          FROM messages
-                         WHERE session_id = ?1 AND role = 'user'
-                         ORDER BY timestamp DESC, id DESC
-                         LIMIT 1 OFFSET ?2",
-                        params![source_id, offset],
-                        |row| Ok((row.get::<_, f64>(0)?, row.get::<_, i64>(1)?)),
+                         WHERE session_id = ?2
+                         AND (timestamp > ?3 OR (timestamp = ?3 AND id >= ?4))
+                         ORDER BY timestamp ASC, id ASC",
                     )
-                    .optional()?;
-                if let Some((timestamp, message_id)) = boundary {
-                    tx.execute(
-                        &format!(
-                            "{copy_sql}
-                             AND (timestamp > ?3 OR (timestamp = ?3 AND id >= ?4))
-                             ORDER BY timestamp ASC, id ASC"
-                        ),
-                        params![new_id, source_id, timestamp, message_id],
-                    )?;
+                    .bind(new_id)
+                    .bind(source_id)
+                    .bind(timestamp)
+                    .bind(message_id)
+                    .execute(&mut *tx)
+                    .await?;
                 } else {
-                    tx.execute(
-                        &format!("{copy_sql} ORDER BY timestamp ASC, id ASC"),
-                        params![new_id, source_id],
-                    )?;
+                    sqlx::query(
+                        "INSERT INTO messages (
+                            session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                            timestamp, token_count, finish_reason,
+                            reasoning, reasoning_content, reasoning_details,
+                            codex_reasoning_items, codex_message_items, media_json
+                         )
+                         SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                                timestamp, token_count, finish_reason,
+                                reasoning, reasoning_content, reasoning_details,
+                                codex_reasoning_items, codex_message_items, media_json
+                         FROM messages
+                         WHERE session_id = ?2
+                         ORDER BY timestamp ASC, id ASC",
+                    )
+                    .bind(new_id)
+                    .bind(source_id)
+                    .execute(&mut *tx)
+                    .await?;
                 }
             }
         }
-        let (message_count, tool_call_count) = tx.query_row(
+        let counts_row = sqlx::query(
             "SELECT COUNT(*), SUM(CASE WHEN role = 'tool' THEN 1 ELSE 0 END)
              FROM messages WHERE session_id = ?1",
-            params![new_id],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, Option<i64>>(1)?.unwrap_or(0),
-                ))
-            },
-        )?;
-        tx.execute(
+        )
+        .bind(new_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let message_count: i64 = counts_row.get::<i64, _>(0);
+        let tool_call_count: i64 = counts_row.get::<Option<i64>, _>(1).unwrap_or(0);
+        sqlx::query(
             "UPDATE sessions
              SET message_count = ?1, tool_call_count = ?2
              WHERE id = ?3",
-            params![message_count, tool_call_count, new_id],
-        )?;
+        )
+        .bind(message_count)
+        .bind(tool_call_count)
+        .bind(new_id)
+        .execute(&mut *tx)
+        .await?;
         if let Some(title) = parent.1.filter(|title| !title.trim().is_empty()) {
             let branched = format!("{title} · branch");
-            if let Err(error) = tx.execute(
-                "UPDATE sessions SET title = ?1 WHERE id = ?2",
-                params![branched, new_id],
-            ) {
-                if !is_unique_constraint(&error) {
-                    return Err(error.into());
+            let result = sqlx::query("UPDATE sessions SET title = ?1 WHERE id = ?2")
+                .bind(&branched)
+                .bind(new_id)
+                .execute(&mut *tx)
+                .await;
+            match result {
+                Ok(_) => {}
+                Err(err) if super::is_unique_constraint(&err) => {
+                    let suffix: String = new_id.chars().take(8).collect();
+                    let unique = format!("{} · {}", truncate_chars(&branched, 60), suffix);
+                    sqlx::query("UPDATE sessions SET title = ?1 WHERE id = ?2")
+                        .bind(&unique)
+                        .bind(new_id)
+                        .execute(&mut *tx)
+                        .await?;
                 }
-                let suffix: String = new_id.chars().take(8).collect();
-                let unique = format!("{} · {}", truncate_chars(&branched, 60), suffix);
-                tx.execute(
-                    "UPDATE sessions SET title = ?1 WHERE id = ?2",
-                    params![unique, new_id],
-                )?;
+                Err(err) => return Err(err.into()),
             }
         }
-        tx.commit()?;
+        tx.commit().await?;
 
         Ok(())
     }
@@ -470,49 +483,51 @@ impl SessionStore {
     /// 将本会话截断到第 `keep_chat_bubbles` 个 user/assistant 气泡（含其后紧跟的 tool 行）。
     ///
     /// `keep_chat_bubbles == 0` 时删除全部消息。会话不存在时返回错误。用于编辑重发 / 再生前对齐 DB。
-    pub fn truncate_session_to_bubbles(
+    pub async fn truncate_session_to_bubbles(
         &self,
         session_id: &str,
         keep_chat_bubbles: usize,
     ) -> Result<()> {
-        if self.get_session(session_id)?.is_none() {
+        if self.get_session(session_id).await?.is_none() {
             anyhow::bail!("truncate_session_to_bubbles: session not found");
         }
 
-        let messages = self.get_messages(session_id)?;
-        let tx = self.conn.unchecked_transaction()?;
+        let messages = self.get_messages(session_id).await?;
+        let mut tx = self.pool.begin().await?;
 
         if keep_chat_bubbles == 0 || messages.is_empty() {
-            tx.execute(
-                "DELETE FROM messages WHERE session_id = ?1",
-                params![session_id],
-            )?;
-            tx.execute(
+            sqlx::query("DELETE FROM messages WHERE session_id = ?1")
+                .bind(session_id)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query(
                 "UPDATE sessions
                  SET message_count = 0, tool_call_count = 0
                  WHERE id = ?1",
-                params![session_id],
-            )?;
-            tx.commit()?;
+            )
+            .bind(session_id)
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
             return Ok(());
         }
 
         let Some(end) = end_inclusive_for_bubbles(&messages, keep_chat_bubbles) else {
-            // 气泡不足 keep 时视为已满足前缀，无需删尾
-            tx.commit()?;
+            tx.commit().await?;
             return Ok(());
         };
 
         if end + 1 >= messages.len() {
-            tx.commit()?;
+            tx.commit().await?;
             return Ok(());
         }
 
         let last_kept_id = messages[end].id;
-        tx.execute(
-            "DELETE FROM messages WHERE session_id = ?1 AND id > ?2",
-            params![session_id, last_kept_id],
-        )?;
+        sqlx::query("DELETE FROM messages WHERE session_id = ?1 AND id > ?2")
+            .bind(session_id)
+            .bind(last_kept_id)
+            .execute(&mut *tx)
+            .await?;
 
         let mut message_count = 0i64;
         let mut tool_call_count = 0i64;
@@ -522,13 +537,17 @@ impl SessionStore {
                 tool_call_count += 1;
             }
         }
-        tx.execute(
+        sqlx::query(
             "UPDATE sessions
              SET message_count = ?1, tool_call_count = ?2
              WHERE id = ?3",
-            params![message_count, tool_call_count, session_id],
-        )?;
-        tx.commit()?;
+        )
+        .bind(message_count)
+        .bind(tool_call_count)
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -536,15 +555,20 @@ impl SessionStore {
     ///
     /// 被删 assistant 之后的连续 `tool` 行一并删除。`start >= end` 时为 no-op。
     /// 用于 UI 中部「删除消息」与 DB 对齐。
-    pub fn remove_chat_bubbles(&self, session_id: &str, start: usize, end: usize) -> Result<()> {
-        if self.get_session(session_id)?.is_none() {
+    pub async fn remove_chat_bubbles(
+        &self,
+        session_id: &str,
+        start: usize,
+        end: usize,
+    ) -> Result<()> {
+        if self.get_session(session_id).await?.is_none() {
             anyhow::bail!("remove_chat_bubbles: session not found");
         }
         if start >= end {
             return Ok(());
         }
 
-        let messages = self.get_messages(session_id)?;
+        let messages = self.get_messages(session_id).await?;
         if messages.is_empty() {
             return Ok(());
         }
@@ -554,9 +578,12 @@ impl SessionStore {
             return Ok(());
         }
 
-        let tx = self.conn.unchecked_transaction()?;
+        let mut tx = self.pool.begin().await?;
         for id in &ids {
-            tx.execute("DELETE FROM messages WHERE id = ?1", params![id])?;
+            sqlx::query("DELETE FROM messages WHERE id = ?1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
         }
 
         let remaining = messages
@@ -565,18 +592,22 @@ impl SessionStore {
             .collect::<Vec<_>>();
         let message_count = remaining.len() as i64;
         let tool_call_count = remaining.iter().filter(|m| m.role == "tool").count() as i64;
-        tx.execute(
+        sqlx::query(
             "UPDATE sessions
              SET message_count = ?1, tool_call_count = ?2
              WHERE id = ?3",
-            params![message_count, tool_call_count, session_id],
-        )?;
-        tx.commit()?;
+        )
+        .bind(message_count)
+        .bind(tool_call_count)
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
         Ok(())
     }
 
     /// 结束旧会话并拆出子会话：摘要消息 + 最近 `keep_tail_bubbles` 轮（含 tool）。
-    pub fn compact_and_split(
+    pub async fn compact_and_split(
         &self,
         old_id: &str,
         new_id: &str,
@@ -584,13 +615,14 @@ impl SessionStore {
         keep_tail_bubbles: usize,
     ) -> Result<()> {
         self.compact_and_split_if_unchanged(old_id, new_id, summary_text, keep_tail_bubbles, None)
+            .await
     }
 
     /// 与 [`Self::compact_and_split`] 相同，但在提交前校验源会话最后一条消息未变化。
     ///
     /// `expected_last_message_id` 来自生成摘要前的快照；不匹配时整个事务回滚，
     /// 避免用过期摘要结束仍在写入的会话。
-    pub fn compact_and_split_if_unchanged(
+    pub async fn compact_and_split_if_unchanged(
         &self,
         old_id: &str,
         new_id: &str,
@@ -602,13 +634,14 @@ impl SessionStore {
             anyhow::bail!("compact_and_split: session ids must differ");
         }
         let parent = self
-            .get_session(old_id)?
+            .get_session(old_id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("compact_and_split: source session not found"))?;
         if parent.ended_at.is_some() {
             anyhow::bail!("compact_and_split: source session already ended");
         }
 
-        let messages = self.get_messages(old_id)?;
+        let messages = self.get_messages(old_id).await?;
         let observed_last_message_id = messages.last().map(|message| message.id);
         if expected_last_message_id.is_some()
             && observed_last_message_id != expected_last_message_id
@@ -622,54 +655,64 @@ impl SessionStore {
             .as_deref()
             .filter(|title| !title.trim().is_empty())
             .map(|title| format!("{title} · continued"));
-        let tx = self.conn.unchecked_transaction()?;
+        let mut tx = self.pool.begin().await?;
 
-        let target_exists: bool = tx.query_row(
+        let target_exists: bool = sqlx::query(
             "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
-            params![new_id],
-            |row| row.get(0),
-        )?;
+        )
+        .bind(new_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .get::<bool, _>(0);
         if target_exists {
             anyhow::bail!("compact_and_split: target session already exists");
         }
 
-        let current_last_message_id: Option<i64> = tx.query_row(
-            "SELECT MAX(id) FROM messages WHERE session_id = ?1",
-            params![old_id],
-            |row| row.get(0),
-        )?;
+        let current_last_message_id: Option<i64> =
+            sqlx::query("SELECT MAX(id) FROM messages WHERE session_id = ?1")
+                .bind(old_id)
+                .fetch_one(&mut *tx)
+                .await?
+                .get::<Option<i64>, _>(0);
         if current_last_message_id != observed_last_message_id {
             anyhow::bail!("compact_and_split: source session changed while preparing transaction");
         }
 
-        let changed = tx.execute(
+        let changed = sqlx::query(
             "UPDATE sessions
              SET ended_at = ?1, end_reason = 'compacted'
              WHERE id = ?2 AND ended_at IS NULL",
-            params![now, old_id],
-        )?;
-        if changed != 1 {
+        )
+        .bind(now)
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await?;
+        if changed.rows_affected() != 1 {
             anyhow::bail!("compact_and_split: source session already ended");
         }
 
-        tx.execute(
+        sqlx::query(
             "INSERT INTO sessions (
                 id, source, title, model, parent_session_id, started_at
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                new_id,
-                parent.source,
-                continued_title,
-                parent.model,
-                old_id,
-                now,
-            ],
-        )?;
-        tx.execute(
+        )
+        .bind(new_id)
+        .bind(&parent.source)
+        .bind(&continued_title)
+        .bind(&parent.model)
+        .bind(old_id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
             "INSERT INTO messages (session_id, role, content, timestamp)
              VALUES (?1, 'user', ?2, ?3)",
-            params![new_id, summary_text, now],
-        )?;
+        )
+        .bind(new_id)
+        .bind(summary_text)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
 
         let mut message_count = 1i64;
         let mut tool_call_count = 0i64;
@@ -680,9 +723,8 @@ impl SessionStore {
                     let reasoning_details = json_to_db(&m.reasoning_details)?;
                     let codex_reasoning_items = json_to_db(&m.codex_reasoning_items)?;
                     let codex_message_items = json_to_db(&m.codex_message_items)?;
-                    // 摘要按当前时间写入；尾部需重排 timestamp，确保显示在摘要之后。
                     let timestamp = now + (i + 1) as f64 * 0.001;
-                    tx.execute(
+                    sqlx::query(
                         "INSERT INTO messages (
                             session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                             timestamp, token_count, finish_reason,
@@ -694,25 +736,25 @@ impl SessionStore {
                             ?11, ?12, ?13,
                             ?14, ?15, ?16
                          )",
-                        params![
-                            new_id,
-                            m.role,
-                            m.content,
-                            m.compressed_content,
-                            m.tool_call_id,
-                            tool_calls,
-                            m.tool_name,
-                            timestamp,
-                            m.token_count,
-                            m.finish_reason,
-                            m.reasoning,
-                            m.reasoning_content,
-                            reasoning_details,
-                            codex_reasoning_items,
-                            codex_message_items,
-                            m.media_json,
-                        ],
-                    )?;
+                    )
+                    .bind(new_id)
+                    .bind(&m.role)
+                    .bind(&m.content)
+                    .bind(&m.compressed_content)
+                    .bind(&m.tool_call_id)
+                    .bind(&tool_calls)
+                    .bind(&m.tool_name)
+                    .bind(timestamp)
+                    .bind(m.token_count)
+                    .bind(&m.finish_reason)
+                    .bind(&m.reasoning)
+                    .bind(&m.reasoning_content)
+                    .bind(&reasoning_details)
+                    .bind(&codex_reasoning_items)
+                    .bind(&codex_message_items)
+                    .bind(&m.media_json)
+                    .execute(&mut *tx)
+                    .await?;
                     message_count += 1;
                     if m.role == "tool" {
                         tool_call_count += 1;
@@ -721,20 +763,24 @@ impl SessionStore {
             }
         }
 
-        tx.execute(
+        sqlx::query(
             "UPDATE sessions
              SET message_count = ?1, tool_call_count = ?2
              WHERE id = ?3",
-            params![message_count, tool_call_count, new_id],
-        )?;
-        tx.commit()?;
+        )
+        .bind(message_count)
+        .bind(tool_call_count)
+        .bind(new_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
 
         Ok(())
     }
 
     /// 重建 OpenAI conversation 形状（assistant 带 `tool_calls` / `reasoning*`）。
-    pub fn get_messages_as_conversation(&self, session_id: &str) -> Result<Vec<Value>> {
-        let messages = self.get_messages(session_id)?;
+    pub async fn get_messages_as_conversation(&self, session_id: &str) -> Result<Vec<Value>> {
+        let messages = self.get_messages(session_id).await?;
         let mut out = Vec::with_capacity(messages.len());
         for m in messages {
             let mut obj = serde_json::Map::new();
@@ -822,7 +868,6 @@ fn end_inclusive_for_bubbles(messages: &[StoredMessage], keep: usize) -> Option<
             _ => {}
         }
     }
-    // 气泡不足 keep：整段都算前缀
     Some(messages.len() - 1)
 }
 
@@ -855,7 +900,6 @@ fn message_ids_in_bubble_range(messages: &[StoredMessage], start: usize, end: us
                 i += 1;
             }
             "tool" => {
-                // 孤立 tool（无前缀 assistant）按不计入气泡，但若落在已选区间尾随已被吞
                 i += 1;
             }
             _ => {

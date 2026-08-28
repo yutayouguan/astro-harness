@@ -103,7 +103,7 @@ pub async fn serve(
     }
 
     // 后台 cron ticker：独立 current_thread 运行时。
-    // AgentLoop / SessionStore（rusqlite RefCell）不是 Send，不能进多线程 tokio::spawn。
+    // AgentLoop / SessionStore 不是 Send，不能进多线程 tokio::spawn。
     std::thread::Builder::new()
         .name("astro-cron".into())
         .spawn(|| {

@@ -1,6 +1,6 @@
 //! 后台 cron ticker：认领到期任务并调用 `agent::exec::cron`。
 //!
-//! 注意：`rusqlite::Connection` 不可跨 `.await`，故先同步 `claim_due` 再异步执行。
+//! 凭据解析后异步认领到期任务并执行。
 //!
 //! 凭据解析：读 `providers.json` + **仅环境变量** API Key（无 keyring；GUI 手动跑走 Tauri）。
 

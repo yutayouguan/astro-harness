@@ -1692,6 +1692,8 @@ mod tests {
 
     use tokio::sync::watch;
 
+    use agent_db::sqlx::{self, Row};
+
     use crate::streaming::ChatOverride;
 
     use super::{
@@ -2082,17 +2084,22 @@ mod tests {
                 false,
             )
             .unwrap();
-        let graph = rusqlite::Connection::open(dir.path().join("agents.db")).unwrap();
-        graph
-            .execute_batch(
-                "CREATE TRIGGER fail_mailbox_ack
-                 BEFORE UPDATE OF delivery_state ON agent_mailbox
-                 WHEN NEW.delivery_state = 'delivered'
-                 BEGIN
-                   SELECT RAISE(ABORT, 'injected mailbox ack failure');
-                 END;",
-            )
-            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", dir.path().join("agents.db").display()),
+        )
+        .await
+        .unwrap();
+        sqlx::raw_sql(
+            "CREATE TRIGGER fail_mailbox_ack
+             BEFORE UPDATE OF delivery_state ON agent_mailbox
+             WHEN NEW.delivery_state = 'delivered'
+             BEGIN
+               SELECT RAISE(ABORT, 'injected mailbox ack failure');
+             END;",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
         let mut first = request(
             Arc::clone(&control),
             thread.clone(),
@@ -2360,8 +2367,12 @@ mod tests {
                 ..session::NewMessage::empty(&thread.session_id, "user")
             })
             .unwrap();
-        let raw = rusqlite::Connection::open(&state_path).unwrap();
-        raw.execute_batch(&format!(
+        let raw_pool = agent_db::sqlx::SqlitePool::connect(
+            &format!("sqlite:{}", state_path.display()),
+        )
+        .await
+        .unwrap();
+        sqlx::raw_sql(&format!(
             "CREATE TRIGGER fail_interrupted_boundary
              BEFORE INSERT ON messages
              WHEN NEW.session_id = '{}' AND NEW.role = 'assistant'
@@ -2371,6 +2382,8 @@ mod tests {
              END;",
             thread.session_id.replace('\'', "''")
         ))
+        .execute(&raw_pool)
+        .await
         .unwrap();
 
         let recovered = crate::exec::agent_control_directory::AgentControlDirectory::global()

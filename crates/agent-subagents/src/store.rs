@@ -1,12 +1,10 @@
-//! 子 Agent 图存储层：线程、邮箱、状态事件的 SQLite 持久化。
-
 use std::path::{Path, PathBuf};
-#[cfg(test)]
 use std::time::Duration;
 
 use anyhow::{bail, Context};
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{params, types::Type, Connection, OptionalExtension, TransactionBehavior};
+use agent_db::sqlx::{self, Row};
+use agent_db::SqlitePool;
 use serde::{Deserialize, Serialize};
 
 use crate::mailbox::{self, MailboxMessage, NewMailboxMessage};
@@ -16,9 +14,22 @@ use crate::{
     AgentTreeSnapshotV2, MailboxKind, RunnerEvent, ThreadReservation,
 };
 
-const V2_THREAD_SELECT: &str =
-    "thread_id, root_thread_id, parent_thread_id, canonical_path, task_name,
-     agent_type, session_id, status_kind, status_payload, created_at, updated_at";
+const V2_THREAD_BY_ID_SQL: &str =
+    "SELECT thread_id, root_thread_id, parent_thread_id, canonical_path, task_name,
+     agent_type, session_id, status_kind, status_payload, created_at, updated_at
+     FROM agent_threads WHERE thread_id = ?1";
+const V2_THREAD_BY_ROOT_PATH_SQL: &str =
+    "SELECT thread_id, root_thread_id, parent_thread_id, canonical_path, task_name,
+     agent_type, session_id, status_kind, status_payload, created_at, updated_at
+     FROM agent_threads WHERE root_thread_id = ?1 AND canonical_path = ?2";
+const V2_THREADS_BY_ROOT_SQL: &str =
+    "SELECT thread_id, root_thread_id, parent_thread_id, canonical_path, task_name,
+     agent_type, session_id, status_kind, status_payload, created_at, updated_at
+     FROM agent_threads WHERE root_thread_id = ?1 ORDER BY canonical_path";
+const V2_THREAD_ROOT_SELECT_SQL: &str =
+    "SELECT thread_id, root_thread_id, parent_thread_id, canonical_path, task_name,
+     agent_type, session_id, status_kind, status_payload, created_at, updated_at
+     FROM agent_threads WHERE root_thread_id = ?1 AND canonical_path = '/root'";
 const ERROR_MAX_TOKENS: usize = 900;
 const APPROX_BYTES_PER_TOKEN: usize = 4;
 
@@ -26,7 +37,6 @@ fn v2_default_db_path() -> PathBuf {
     home::default_memory_dir().join("subagents-v2.db")
 }
 
-/// 已持久化的线程状态事件（含序号和时间戳）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StoredStatusEvent {
     pub sequence: i64,
@@ -37,71 +47,63 @@ pub struct StoredStatusEvent {
     pub created_at: String,
 }
 
-/// 子 Agent 图的 SQLite 存储句柄（WAL 模式）。
 #[derive(Debug, Clone)]
 pub struct AgentGraphStore {
+    pool: SqlitePool,
     path: PathBuf,
 }
 
 impl AgentGraphStore {
-    /// 打开数据库并执行 schema 迁移。
-    pub fn open(path: PathBuf) -> anyhow::Result<Self> {
-        let store = Self { path };
-        let mut conn = store.connect()?;
-        migration::migrate(&mut conn)
-            .with_context(|| format!("migrate agent graph at {}", store.path.display()))?;
-        Ok(store)
+    pub async fn open(path: PathBuf) -> anyhow::Result<Self> {
+        let pool = open_pool(&path).await?;
+        migration::migrate(&pool)
+            .await
+            .with_context(|| format!("migrate agent graph at {}", path.display()))?;
+        Ok(Self { pool, path })
     }
 
-    pub fn open_default_v2() -> anyhow::Result<Self> {
-        Self::open(v2_default_db_path())
+    pub async fn open_default_v2() -> anyhow::Result<Self> {
+        Self::open(v2_default_db_path()).await
     }
 
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    fn connect(&self) -> anyhow::Result<Connection> {
-        let conn = types::open_wal(&self.path)?;
-        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
-        Ok(conn)
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 
-    pub fn schema_version(&self) -> anyhow::Result<i32> {
-        migration::schema_version(&self.connect()?)
+    pub async fn schema_version(&self) -> anyhow::Result<i32> {
+        migration::schema_version(&self.pool).await
     }
 
-    /// 确保根线程存在，不存在则创建（幂等）。
-    pub fn ensure_root_thread(&self, root_thread_id: &str) -> anyhow::Result<AgentThreadV2> {
+    pub async fn ensure_root_thread(&self, root_thread_id: &str) -> anyhow::Result<AgentThreadV2> {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let mut conn = self.connect()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut tx = self.pool.begin().await?;
         let timestamp = now();
         let status = AgentStatusV2::Running;
-        tx.execute(
+        sqlx::query(
             "INSERT INTO agent_threads (
                 thread_id, root_thread_id, parent_thread_id, canonical_path,
                 task_name, agent_type, session_id, status_kind, status_payload,
                 last_status_sequence, created_at, updated_at
              ) VALUES (?1, ?1, NULL, '/root', 'root', 'root', ?1, ?2, ?3, 0, ?4, ?4)
              ON CONFLICT DO NOTHING",
-            params![
-                root_thread_id,
-                status_kind_str(status.kind()),
-                serde_json::to_string(&status)?,
-                timestamp,
-            ],
-        )?;
-        let root = tx
-            .query_row(
-                &format!(
-                    "SELECT {V2_THREAD_SELECT} FROM agent_threads
-                     WHERE root_thread_id = ?1 AND canonical_path = '/root'"
-                ),
-                [root_thread_id],
-                v2_thread_from_row,
-            )
-            .optional()?
+        )
+        .bind(root_thread_id)
+        .bind(status_kind_str(status.kind()))
+        .bind(serde_json::to_string(&status)?)
+        .bind(&timestamp)
+        .execute(&mut *tx)
+        .await?;
+        let root = sqlx::query(V2_THREAD_ROOT_SELECT_SQL)
+            .bind(root_thread_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .as_ref()
+            .map(v2_thread_from_row)
+            .transpose()?
             .with_context(|| {
                 format!("root agent row for thread {root_thread_id:?} could not be ensured")
             })?;
@@ -112,235 +114,233 @@ impl AgentGraphStore {
         {
             bail!("existing root agent row does not match root thread {root_thread_id:?}");
         }
-        tx.commit()?;
+        tx.commit().await?;
         Ok(root)
     }
 
-    /// 持久化一个 PendingInit 状态的线程预留及其派生边。
-    pub fn reserve_thread(&self, reservation: &ThreadReservation) -> anyhow::Result<AgentThreadV2> {
+    pub async fn reserve_thread(
+        &self,
+        reservation: &ThreadReservation,
+    ) -> anyhow::Result<AgentThreadV2> {
         validate_reservation(reservation)?;
-        let mut conn = self.connect()?;
-        let tx = conn.transaction()?;
+        let mut tx = self.pool.begin().await?;
         let timestamp = now();
         let status = AgentStatusV2::PendingInit;
-        tx.execute(
+        sqlx::query(
             "INSERT INTO agent_threads (
                 thread_id, root_thread_id, parent_thread_id, canonical_path,
                 task_name, agent_type, session_id, status_kind, status_payload,
                 last_status_sequence, created_at, updated_at
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?10)",
-            params![
-                reservation.thread_id,
-                reservation.root_thread_id,
-                reservation.parent_thread_id,
-                reservation.canonical_path.as_str(),
-                reservation.task_name,
-                reservation.agent_type,
-                reservation.session_id,
-                status_kind_str(status.kind()),
-                serde_json::to_string(&status)?,
-                timestamp,
-            ],
-        )?;
-        tx.execute(
+        )
+        .bind(&reservation.thread_id)
+        .bind(&reservation.root_thread_id)
+        .bind(&reservation.parent_thread_id)
+        .bind(reservation.canonical_path.as_str())
+        .bind(&reservation.task_name)
+        .bind(&reservation.agent_type)
+        .bind(&reservation.session_id)
+        .bind(status_kind_str(status.kind()))
+        .bind(serde_json::to_string(&status)?)
+        .bind(&timestamp)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
             "INSERT INTO agent_spawn_edges (
                 parent_thread_id, child_thread_id, edge_state, created_at, closed_at
              ) VALUES (?1, ?2, 'open', ?3, NULL)",
-            params![
-                reservation.parent_thread_id,
-                reservation.thread_id,
-                timestamp,
-            ],
-        )?;
-        let thread = query_v2_thread_by_id(&tx, &reservation.thread_id)?
+        )
+        .bind(&reservation.parent_thread_id)
+        .bind(&reservation.thread_id)
+        .bind(&timestamp)
+        .execute(&mut *tx)
+        .await?;
+        let thread = query_v2_thread_by_id(&mut *tx, &reservation.thread_id)
+            .await?
             .context("reserved agent thread is missing")?;
-        tx.commit()?;
+        tx.commit().await?;
         Ok(thread)
     }
 
-    /// 记录线程的运行时描述符（模型、推理力度）。
-    pub fn record_runtime_descriptor(
+    pub async fn record_runtime_descriptor(
         &self,
         descriptor: &AgentRuntimeDescriptorV2,
     ) -> anyhow::Result<()> {
         require_non_empty("thread_id", &descriptor.thread_id)?;
-        self.connect()?.execute(
+        sqlx::query(
             "INSERT INTO agent_runtime_descriptors (
                  thread_id, model, reasoning_effort, recovery_state
              ) VALUES (?1, ?2, ?3, 'available')",
-            params![
-                descriptor.thread_id,
-                descriptor.model,
-                descriptor.reasoning_effort,
-            ],
-        )?;
+        )
+        .bind(&descriptor.thread_id)
+        .bind(&descriptor.model)
+        .bind(&descriptor.reasoning_effort)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    pub fn runtime_descriptor(
+    pub async fn runtime_descriptor(
         &self,
         thread_id: &str,
     ) -> anyhow::Result<Option<AgentRuntimeDescriptorV2>> {
         require_non_empty("thread_id", thread_id)?;
-        let row = self
-            .connect()?
-            .query_row(
-                "SELECT thread_id, model, reasoning_effort, recovery_state
-                 FROM agent_runtime_descriptors WHERE thread_id = ?1",
-                [thread_id],
-                |row| {
-                    Ok((
-                        AgentRuntimeDescriptorV2 {
-                            thread_id: row.get(0)?,
-                            model: row.get(1)?,
-                            reasoning_effort: row.get(2)?,
-                        },
-                        row.get::<_, String>(3)?,
-                    ))
-                },
-            )
-            .optional()?;
+        let row = sqlx::query(
+            "SELECT thread_id, model, reasoning_effort, recovery_state
+             FROM agent_runtime_descriptors WHERE thread_id = ?1",
+        )
+        .bind(thread_id)
+        .fetch_optional(&self.pool)
+        .await?;
         match row {
-            Some((_, state)) if state == "legacy_unavailable" => {
-                Err(crate::LegacyRuntimeDescriptorUnavailable.into())
+            Some(ref r) => {
+                let recovery_state: String = r.get("recovery_state");
+                if recovery_state == "legacy_unavailable" {
+                    Err(crate::LegacyRuntimeDescriptorUnavailable.into())
+                } else {
+                    Ok(Some(AgentRuntimeDescriptorV2 {
+                        thread_id: r.get("thread_id"),
+                        model: r.get("model"),
+                        reasoning_effort: r.get("reasoning_effort"),
+                    }))
+                }
             }
-            Some((descriptor, _)) => Ok(Some(descriptor)),
             None => Ok(None),
         }
     }
 
-    /// 回滚 PendingInit 状态的线程预留，删除线程和派生边。
-    pub fn rollback_pending_thread(&self, thread_id: &str) -> anyhow::Result<()> {
+    pub async fn rollback_pending_thread(&self, thread_id: &str) -> anyhow::Result<()> {
         require_non_empty("thread_id", thread_id)?;
-        let mut conn = self.connect()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let status_kind = tx
-            .query_row(
-                "SELECT status_kind FROM agent_threads WHERE thread_id = ?1",
-                [thread_id],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?
+        let mut tx = self.pool.begin().await?;
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT status_kind FROM agent_threads WHERE thread_id = ?1",
+        )
+        .bind(thread_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let status_kind = row
+            .map(|(s,)| s)
             .with_context(|| format!("unknown agent thread {thread_id:?}"))?;
         if status_kind != "pending_init" {
             bail!(
                 "cannot roll back agent thread {thread_id:?}: expected pending_init, found {status_kind}"
             );
         }
-        tx.execute(
-            "DELETE FROM agent_spawn_edges WHERE child_thread_id = ?1",
-            [thread_id],
-        )?;
-        tx.execute(
-            "DELETE FROM agent_threads WHERE thread_id = ?1",
-            [thread_id],
-        )?;
-        tx.commit()?;
+        sqlx::query("DELETE FROM agent_spawn_edges WHERE child_thread_id = ?1")
+            .bind(thread_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM agent_threads WHERE thread_id = ?1")
+            .bind(thread_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
         Ok(())
     }
 
-    /// Roll back the single durable TurnStarted written before a spawn caller
-    /// accepted ownership. No terminal or later-generation event may exist.
-    pub(crate) fn rollback_unaccepted_started_thread(
+    pub(crate) async fn rollback_unaccepted_started_thread(
         &self,
         thread_id: &str,
         turn_id: &str,
     ) -> anyhow::Result<()> {
         require_non_empty("thread_id", thread_id)?;
         require_non_empty("turn_id", turn_id)?;
-        let mut conn = self.connect()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let status_kind = tx
-            .query_row(
-                "SELECT status_kind FROM agent_threads WHERE thread_id = ?1",
-                [thread_id],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?
+        let mut tx = self.pool.begin().await?;
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT status_kind FROM agent_threads WHERE thread_id = ?1",
+        )
+        .bind(thread_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let status_kind = row
+            .map(|(s,)| s)
             .with_context(|| format!("unknown agent thread {thread_id:?}"))?;
         anyhow::ensure!(
             status_kind == "running",
             "cannot roll back unaccepted agent thread {thread_id:?}: expected running, found {status_kind}"
         );
-        let events = {
-            let mut stmt = tx.prepare(
-                "SELECT event_kind, source_turn_id
-                 FROM agent_status_events
-                 WHERE thread_id = ?1
-                 ORDER BY sequence",
-            )?;
-            let rows = stmt
-                .query_map([thread_id], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            rows
-        };
+        let events = sqlx::query(
+            "SELECT event_kind, source_turn_id
+             FROM agent_status_events
+             WHERE thread_id = ?1
+             ORDER BY sequence",
+        )
+        .bind(thread_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        let event_pairs: Vec<(String, Option<String>)> = events
+            .iter()
+            .map(|r| (r.get("event_kind"), r.get("source_turn_id")))
+            .collect();
         anyhow::ensure!(
-            events.as_slice() == [("turn_started".to_string(), Some(turn_id.to_string()))],
+            event_pairs.as_slice()
+                == [("turn_started".to_string(), Some(turn_id.to_string()))],
             "cannot roll back unaccepted agent thread {thread_id:?}: durable event history advanced"
         );
-        tx.execute(
-            "DELETE FROM agent_status_events WHERE thread_id = ?1",
-            [thread_id],
-        )?;
-        tx.execute(
-            "DELETE FROM agent_spawn_edges WHERE child_thread_id = ?1",
-            [thread_id],
-        )?;
-        tx.execute(
-            "DELETE FROM agent_threads WHERE thread_id = ?1",
-            [thread_id],
-        )?;
-        tx.commit()?;
+        sqlx::query("DELETE FROM agent_status_events WHERE thread_id = ?1")
+            .bind(thread_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM agent_spawn_edges WHERE child_thread_id = ?1")
+            .bind(thread_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM agent_threads WHERE thread_id = ?1")
+            .bind(thread_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
         Ok(())
     }
 
-    /// 批量清理指定根线程下所有 PendingInit 状态的预留。
-    pub fn cleanup_pending_reservations(&self, root_thread_id: &str) -> anyhow::Result<usize> {
+    pub async fn cleanup_pending_reservations(
+        &self,
+        root_thread_id: &str,
+    ) -> anyhow::Result<usize> {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let mut conn = self.connect()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        tx.execute(
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
             "DELETE FROM agent_spawn_edges
              WHERE child_thread_id IN (
                  SELECT thread_id FROM agent_threads
                  WHERE root_thread_id = ?1 AND status_kind = 'pending_init'
              )",
-            [root_thread_id],
-        )?;
-        let removed = tx.execute(
+        )
+        .bind(root_thread_id)
+        .execute(&mut *tx)
+        .await?;
+        let result = sqlx::query(
             "DELETE FROM agent_threads
              WHERE root_thread_id = ?1 AND status_kind = 'pending_init'",
-            [root_thread_id],
-        )?;
-        tx.commit()?;
-        Ok(removed)
+        )
+        .bind(root_thread_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(result.rows_affected() as usize)
     }
 
-    /// Recover child turns that were durably Running when their process died.
-    /// Recovery records a terminal interruption for the last started turn and
-    /// never attempts to replay provider or tool side effects.
-    pub fn recover_running_as_interrupted(&self, root_thread_id: &str) -> anyhow::Result<usize> {
+    pub async fn recover_running_as_interrupted(
+        &self,
+        root_thread_id: &str,
+    ) -> anyhow::Result<usize> {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let running = {
-            let conn = self.connect()?;
-            let mut stmt = conn.prepare(
-                "SELECT thread_id FROM agent_threads
-                 WHERE root_thread_id = ?1
-                   AND parent_thread_id IS NOT NULL
-                   AND status_kind = 'running'
-                 ORDER BY canonical_path",
-            )?;
-            let rows = stmt
-                .query_map([root_thread_id], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            rows
-        };
+        let rows = sqlx::query(
+            "SELECT thread_id FROM agent_threads
+             WHERE root_thread_id = ?1
+               AND parent_thread_id IS NOT NULL
+               AND status_kind = 'running'
+             ORDER BY canonical_path",
+        )
+        .bind(root_thread_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let running: Vec<String> = rows.iter().map(|r| r.get("thread_id")).collect();
 
         for thread_id in &running {
             let turn_id = self
-                .status_events(thread_id)?
+                .status_events(thread_id)
+                .await?
                 .into_iter()
                 .rev()
                 .find_map(|event| match event.event {
@@ -354,21 +354,26 @@ impl AgentGraphStore {
                     turn_id,
                     reason: "runtime recovered after process interruption".into(),
                 },
-            )?;
+            )
+            .await?;
         }
         Ok(running.len())
     }
 
-    pub fn validate_pending_reservation(&self, expected: &AgentThreadV2) -> anyhow::Result<()> {
+    pub async fn validate_pending_reservation(
+        &self,
+        expected: &AgentThreadV2,
+    ) -> anyhow::Result<()> {
         require_non_empty("thread_id", &expected.thread_id)?;
-        let mut conn = self.connect()?;
-        let tx = conn.transaction()?;
-        let durable = query_v2_thread_by_id(&tx, &expected.thread_id)?.with_context(|| {
-            format!(
-                "durable pending reservation {:?} is missing",
-                expected.thread_id
-            )
-        })?;
+        let mut tx = self.pool.begin().await?;
+        let durable = query_v2_thread_by_id(&mut *tx, &expected.thread_id)
+            .await?
+            .with_context(|| {
+                format!(
+                    "durable pending reservation {:?} is missing",
+                    expected.thread_id
+                )
+            })?;
         if durable.root_thread_id != expected.root_thread_id
             || durable.parent_thread_id != expected.parent_thread_id
             || durable.canonical_path != expected.canonical_path
@@ -382,14 +387,13 @@ impl AgentGraphStore {
                 expected.thread_id
             );
         }
-        let edge = tx
-            .query_row(
-                "SELECT parent_thread_id, edge_state
-                 FROM agent_spawn_edges WHERE child_thread_id = ?1",
-                [&expected.thread_id],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-            )
-            .optional()?;
+        let edge: Option<(String, String)> = sqlx::query_as(
+            "SELECT parent_thread_id, edge_state
+             FROM agent_spawn_edges WHERE child_thread_id = ?1",
+        )
+        .bind(&expected.thread_id)
+        .fetch_optional(&mut *tx)
+        .await?;
         if edge.as_ref().is_none_or(|(parent_thread_id, state)| {
             Some(parent_thread_id.as_str()) != expected.parent_thread_id.as_deref()
                 || state != "open"
@@ -399,62 +403,55 @@ impl AgentGraphStore {
                 expected.thread_id
             );
         }
-        tx.commit()?;
+        tx.commit().await?;
         Ok(())
     }
 
-    pub fn get_thread(&self, thread_id: &str) -> anyhow::Result<Option<AgentThreadV2>> {
+    pub async fn get_thread(&self, thread_id: &str) -> anyhow::Result<Option<AgentThreadV2>> {
         require_non_empty("thread_id", thread_id)?;
-        query_v2_thread_by_id(&self.connect()?, thread_id)
+        query_v2_thread_by_id(&self.pool, thread_id).await
     }
 
-    pub fn get_by_path(
+    pub async fn get_by_path(
         &self,
         root_thread_id: &str,
         path: &AgentPath,
     ) -> anyhow::Result<Option<AgentThreadV2>> {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let conn = self.connect()?;
-        conn.query_row(
-            &format!(
-                "SELECT {V2_THREAD_SELECT} FROM agent_threads
-                 WHERE root_thread_id = ?1 AND canonical_path = ?2"
-            ),
-            params![root_thread_id, path.as_str()],
-            v2_thread_from_row,
-        )
-        .optional()
-        .map_err(Into::into)
+        let row = sqlx::query(V2_THREAD_BY_ROOT_PATH_SQL)
+            .bind(root_thread_id)
+            .bind(path.as_str())
+            .fetch_optional(&self.pool)
+            .await?;
+        row.as_ref().map(v2_thread_from_row).transpose()
     }
 
-    pub fn apply_status_event(
+    pub async fn apply_status_event(
         &self,
         thread_id: &str,
         event: RunnerEvent,
     ) -> anyhow::Result<AgentThreadV2> {
-        self.apply_status_event_with_after_read(thread_id, event, || {})
+        self.apply_status_event_with_after_read(thread_id, event, std::future::ready(()))
+            .await
     }
 
-    fn apply_status_event_with_after_read<F>(
+    async fn apply_status_event_with_after_read<Fut: std::future::Future<Output = ()>>(
         &self,
         thread_id: &str,
         event: RunnerEvent,
-        after_read: F,
-    ) -> anyhow::Result<AgentThreadV2>
-    where
-        F: FnOnce(),
-    {
+        after_read: Fut,
+    ) -> anyhow::Result<AgentThreadV2> {
         require_non_empty("thread_id", thread_id)?;
-        let mut conn = self.connect()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let existing = query_v2_thread_by_id(&tx, thread_id)?
+        let mut tx = self.pool.begin().await?;
+        let existing = query_v2_thread_by_id(&mut *tx, thread_id)
+            .await?
             .with_context(|| format!("unknown agent thread {thread_id:?}"))?;
-        after_read();
+        after_read.await;
 
         if existing.status == AgentStatusV2::Shutdown
             && matches!(event, RunnerEvent::RuntimeTerminated)
         {
-            tx.commit()?;
+            tx.commit().await?;
             return Ok(existing);
         }
 
@@ -463,118 +460,138 @@ impl AgentGraphStore {
         let event_kind = event_kind(&event);
         let source_turn_id = source_turn_id(&event);
         let timestamp = now();
-        tx.execute(
+        let result = sqlx::query(
             "INSERT INTO agent_status_events (
                 thread_id, event_kind, payload, source_turn_id, created_at
              ) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                thread_id,
-                event_kind,
-                serde_json::to_string(&event)?,
-                source_turn_id,
-                timestamp,
-            ],
-        )?;
-        let sequence = tx.last_insert_rowid();
-        tx.execute(
+        )
+        .bind(thread_id)
+        .bind(event_kind)
+        .bind(serde_json::to_string(&event)?)
+        .bind(source_turn_id)
+        .bind(&timestamp)
+        .execute(&mut *tx)
+        .await?;
+        let sequence = result.last_insert_rowid();
+        sqlx::query(
             "UPDATE agent_threads
              SET status_kind = ?2,
                  status_payload = ?3,
                  last_status_sequence = ?4,
                  updated_at = ?5
              WHERE thread_id = ?1",
-            params![
-                thread_id,
-                status_kind_str(status.kind()),
-                serde_json::to_string(&status)?,
-                sequence,
-                timestamp,
-            ],
-        )?;
+        )
+        .bind(thread_id)
+        .bind(status_kind_str(status.kind()))
+        .bind(serde_json::to_string(&status)?)
+        .bind(sequence)
+        .bind(&timestamp)
+        .execute(&mut *tx)
+        .await?;
         if matches!(event, RunnerEvent::RuntimeTerminated) && existing.parent_thread_id.is_some() {
-            let updated_edges = tx.execute(
+            let edge_result = sqlx::query(
                 "UPDATE agent_spawn_edges
                  SET edge_state = 'closed', closed_at = COALESCE(closed_at, ?2)
                  WHERE child_thread_id = ?1",
-                params![thread_id, timestamp],
-            )?;
-            if updated_edges != 1 {
+            )
+            .bind(thread_id)
+            .bind(&timestamp)
+            .execute(&mut *tx)
+            .await?;
+            if edge_result.rows_affected() != 1 {
                 bail!("missing spawn edge for terminated agent thread {thread_id:?}");
             }
         }
         if let Some(notification) = parent_notification {
-            mailbox::enqueue_in_transaction(&tx, &notification)?;
+            mailbox::enqueue_in_transaction(&mut tx, &notification).await?;
         }
-        let thread =
-            query_v2_thread_by_id(&tx, thread_id)?.context("updated agent thread is missing")?;
-        tx.commit()?;
+        let thread = query_v2_thread_by_id(&mut *tx, thread_id)
+            .await?
+            .context("updated agent thread is missing")?;
+        tx.commit().await?;
         Ok(thread)
     }
 
-    pub fn status_events(&self, thread_id: &str) -> anyhow::Result<Vec<StoredStatusEvent>> {
+    pub async fn status_events(
+        &self,
+        thread_id: &str,
+    ) -> anyhow::Result<Vec<StoredStatusEvent>> {
         require_non_empty("thread_id", thread_id)?;
-        let conn = self.connect()?;
-        let mut stmt = conn.prepare(
+        let rows = sqlx::query(
             "SELECT sequence, thread_id, event_kind, payload, source_turn_id, created_at
              FROM agent_status_events
              WHERE thread_id = ?1
              ORDER BY sequence",
-        )?;
-        let events = stmt
-            .query_map([thread_id], stored_status_event_from_row)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(events)
+        )
+        .bind(thread_id)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter()
+            .map(stored_status_event_from_row)
+            .collect()
     }
 
-    pub fn enqueue(&self, message: &NewMailboxMessage) -> anyhow::Result<MailboxMessage> {
-        mailbox::enqueue(&mut self.connect()?, message)
+    pub async fn enqueue(
+        &self,
+        message: &NewMailboxMessage,
+    ) -> anyhow::Result<MailboxMessage> {
+        mailbox::enqueue(&self.pool, message).await
     }
 
-    pub fn pending_for(&self, recipient: &str, after: i64) -> anyhow::Result<Vec<MailboxMessage>> {
-        mailbox::pending_for(&self.connect()?, recipient, after)
+    pub async fn pending_for(
+        &self,
+        recipient: &str,
+        after: i64,
+    ) -> anyhow::Result<Vec<MailboxMessage>> {
+        mailbox::pending_for(&self.pool, recipient, after).await
     }
 
-    pub fn mark_delivered(&self, recipient: &str, through_sequence: i64) -> anyhow::Result<()> {
-        mailbox::mark_delivered(&mut self.connect()?, recipient, through_sequence)
+    pub async fn mark_delivered(
+        &self,
+        recipient: &str,
+        through_sequence: i64,
+    ) -> anyhow::Result<()> {
+        mailbox::mark_delivered(&self.pool, recipient, through_sequence).await
     }
 
-    pub(crate) fn delete_pending_mailbox_message(&self, message_id: &str) -> anyhow::Result<()> {
-        mailbox::delete_pending(&self.connect()?, message_id)
+    pub(crate) async fn delete_pending_mailbox_message(
+        &self,
+        message_id: &str,
+    ) -> anyhow::Result<()> {
+        mailbox::delete_pending(&self.pool, message_id).await
     }
 
-    pub fn snapshot(&self, root_thread_id: &str) -> anyhow::Result<AgentTreeSnapshotV2> {
-        self.snapshot_with_after_threads(root_thread_id, || {})
-    }
-
-    fn snapshot_with_after_threads<F>(
+    pub async fn snapshot(
         &self,
         root_thread_id: &str,
-        after_threads: F,
-    ) -> anyhow::Result<AgentTreeSnapshotV2>
-    where
-        F: FnOnce(),
-    {
+    ) -> anyhow::Result<AgentTreeSnapshotV2> {
+        self.snapshot_with_after_threads(root_thread_id, std::future::ready(()))
+            .await
+    }
+
+    async fn snapshot_with_after_threads<Fut: std::future::Future<Output = ()>>(
+        &self,
+        root_thread_id: &str,
+        after_threads: Fut,
+    ) -> anyhow::Result<AgentTreeSnapshotV2> {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let mut conn = self.connect()?;
-        let tx = conn.transaction()?;
-        let threads = {
-            let mut stmt = tx.prepare(&format!(
-                "SELECT {V2_THREAD_SELECT} FROM agent_threads
-                 WHERE root_thread_id = ?1
-                 ORDER BY canonical_path"
-            ))?;
-            let rows = stmt
-                .query_map([root_thread_id], v2_thread_from_row)?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            rows
-        };
-        after_threads();
-        let activity_sequence: i64 = tx.query_row(
+        let mut tx = self.pool.begin().await?;
+        let rows = sqlx::query(V2_THREADS_BY_ROOT_SQL)
+            .bind(root_thread_id)
+            .fetch_all(&mut *tx)
+            .await?;
+        let threads = rows
+            .iter()
+            .map(v2_thread_from_row)
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        after_threads.await;
+        let (activity_sequence,): (i64,) = sqlx::query_as(
             "SELECT COALESCE(MAX(last_status_sequence), 0)
              FROM agent_threads WHERE root_thread_id = ?1",
-            [root_thread_id],
-            |row| row.get(0),
-        )?;
+        )
+        .bind(root_thread_id)
+        .fetch_one(&mut *tx)
+        .await?;
         let snapshot = AgentTreeSnapshotV2 {
             root_thread_id: root_thread_id.to_string(),
             threads,
@@ -582,46 +599,45 @@ impl AgentGraphStore {
                 format!("invalid negative status activity sequence {activity_sequence}")
             })?,
         };
-        tx.commit()?;
+        tx.commit().await?;
         Ok(snapshot)
     }
 
-    pub fn close_edge(&self, child_thread_id: &str) -> anyhow::Result<()> {
+    pub async fn close_edge(&self, child_thread_id: &str) -> anyhow::Result<()> {
         require_non_empty("child_thread_id", child_thread_id)?;
-        let mut conn = self.connect()?;
-        let tx = conn.transaction()?;
-        tx.execute(
+        sqlx::query(
             "UPDATE agent_spawn_edges
              SET edge_state = 'closed', closed_at = COALESCE(closed_at, ?2)
              WHERE child_thread_id = ?1",
-            params![child_thread_id, now()],
-        )?;
-        tx.commit()?;
+        )
+        .bind(child_thread_id)
+        .bind(now())
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    pub fn edge_state(&self, child_thread_id: &str) -> anyhow::Result<Option<String>> {
+    pub async fn edge_state(&self, child_thread_id: &str) -> anyhow::Result<Option<String>> {
         require_non_empty("child_thread_id", child_thread_id)?;
-        self.connect()?
-            .query_row(
-                "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
-                [child_thread_id],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(Into::into)
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
+        )
+        .bind(child_thread_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(s,)| s))
     }
 
-    pub fn list_historical_threads(&self) -> anyhow::Result<Vec<HistoricalAgentThread>> {
-        migration::list_historical_threads(&self.connect()?)
+    pub async fn list_historical_threads(&self) -> anyhow::Result<Vec<HistoricalAgentThread>> {
+        migration::list_historical_threads(&self.pool).await
     }
 
-    pub fn list_historical_messages(
+    pub async fn list_historical_messages(
         &self,
         legacy_thread_id: &str,
     ) -> anyhow::Result<Vec<HistoricalAgentMessage>> {
         require_non_empty("legacy_thread_id", legacy_thread_id)?;
-        migration::list_historical_messages(&self.connect()?, legacy_thread_id)
+        migration::list_historical_messages(&self.pool, legacy_thread_id).await
     }
 }
 
@@ -656,72 +672,67 @@ fn require_non_empty(label: &str, value: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn query_v2_thread_by_id(
-    conn: &Connection,
+async fn query_v2_thread_by_id<'e, E>(
+    executor: E,
     thread_id: &str,
-) -> anyhow::Result<Option<AgentThreadV2>> {
-    conn.query_row(
-        &format!("SELECT {V2_THREAD_SELECT} FROM agent_threads WHERE thread_id = ?1"),
-        [thread_id],
-        v2_thread_from_row,
-    )
-    .optional()
-    .map_err(Into::into)
+) -> anyhow::Result<Option<AgentThreadV2>>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let row = sqlx::query(V2_THREAD_BY_ID_SQL)
+        .bind(thread_id)
+        .fetch_optional(executor)
+        .await?;
+    row.as_ref().map(v2_thread_from_row).transpose()
 }
 
-fn v2_thread_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentThreadV2> {
-    let canonical_path = row.get::<_, String>(3)?;
-    let status_kind = row.get::<_, String>(7)?;
-    let status_payload = row.get::<_, String>(8)?;
-    let status = serde_json::from_str::<AgentStatusV2>(&status_payload)
-        .map_err(|error| sql_conversion_error(8, Type::Text, error))?;
+fn v2_thread_from_row(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<AgentThreadV2> {
+    let canonical_path: String = row.get("canonical_path");
+    let status_kind: String = row.get("status_kind");
+    let status_payload: String = row.get("status_payload");
+    let status: AgentStatusV2 = serde_json::from_str(&status_payload)
+        .with_context(|| format!("invalid status_payload: {status_payload}"))?;
     if status_kind != status_kind_str(status.kind()) {
-        return Err(sql_conversion_error(
-            8,
-            Type::Text,
-            format!(
-                "status kind {status_kind:?} does not match payload kind {:?}",
-                status.kind()
-            ),
-        ));
+        bail!(
+            "status kind {status_kind:?} does not match payload kind {:?}",
+            status.kind()
+        );
     }
     Ok(AgentThreadV2 {
-        thread_id: row.get(0)?,
-        root_thread_id: row.get(1)?,
-        parent_thread_id: row.get(2)?,
+        thread_id: row.get("thread_id"),
+        root_thread_id: row.get("root_thread_id"),
+        parent_thread_id: row.get("parent_thread_id"),
         canonical_path: AgentPath::parse(&canonical_path)
-            .map_err(|error| sql_conversion_error(3, Type::Text, error))?,
-        task_name: row.get(4)?,
-        agent_type: row.get(5)?,
-        session_id: row.get(6)?,
+            .map_err(|e| anyhow::anyhow!("invalid canonical_path: {e}"))?,
+        task_name: row.get("task_name"),
+        agent_type: row.get("agent_type"),
+        session_id: row.get("session_id"),
         status,
-        created_at: row.get(9)?,
-        updated_at: row.get(10)?,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
     })
 }
 
-fn stored_status_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredStatusEvent> {
-    let stored_event_kind = row.get::<_, String>(2)?;
-    let payload = row.get::<_, String>(3)?;
-    let event = serde_json::from_str::<RunnerEvent>(&payload)
-        .map_err(|error| sql_conversion_error(3, Type::Text, error))?;
+fn stored_status_event_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> anyhow::Result<StoredStatusEvent> {
+    let stored_event_kind: String = row.get("event_kind");
+    let payload: String = row.get("payload");
+    let event: RunnerEvent = serde_json::from_str(&payload)
+        .with_context(|| format!("invalid event payload: {payload}"))?;
     if stored_event_kind != event_kind(&event) {
-        return Err(sql_conversion_error(
-            3,
-            Type::Text,
-            format!(
-                "event kind {stored_event_kind:?} does not match payload kind {:?}",
-                event_kind(&event)
-            ),
-        ));
+        bail!(
+            "event kind {stored_event_kind:?} does not match payload kind {:?}",
+            event_kind(&event)
+        );
     }
     Ok(StoredStatusEvent {
-        sequence: row.get(0)?,
-        thread_id: row.get(1)?,
+        sequence: row.get("sequence"),
+        thread_id: row.get("thread_id"),
         event_kind: stored_event_kind,
         event,
-        source_turn_id: row.get(4)?,
-        created_at: row.get(5)?,
+        source_turn_id: row.get("source_turn_id"),
+        created_at: row.get("created_at"),
     })
 }
 
@@ -788,8 +799,6 @@ fn final_parent_notification(
     })
 }
 
-/// Match Codex's terminal-error truncation: retain an even byte-budgeted
-/// prefix and suffix on UTF-8 boundaries and report the omitted token estimate.
 fn truncate_terminal_error(message: &str) -> String {
     let max_bytes = ERROR_MAX_TOKENS.saturating_mul(APPROX_BYTES_PER_TOKEN);
     if message.len() <= max_bytes {
@@ -855,12 +864,33 @@ fn source_turn_id(event: &RunnerEvent) -> Option<&str> {
     }
 }
 
-fn sql_conversion_error(
-    column: usize,
-    value_type: Type,
-    error: impl Into<Box<dyn std::error::Error + Send + Sync>>,
-) -> rusqlite::Error {
-    rusqlite::Error::FromSqlConversionFailure(column, value_type, error.into())
+async fn open_pool(path: &Path) -> anyhow::Result<SqlitePool> {
+    use agent_db::sqlx::sqlite::{
+        SqliteAutoVacuum, SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions,
+        SqliteSynchronous,
+    };
+    use agent_db::sqlx::ConnectOptions;
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let opts = SqliteConnectOptions::new()
+        .filename(path)
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal)
+        .auto_vacuum(SqliteAutoVacuum::Incremental)
+        .busy_timeout(Duration::from_secs(5))
+        .pragma("foreign_keys", "1")
+        .log_statements(tracing::log::LevelFilter::Debug)
+        .log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_secs(1));
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(4)
+        .acquire_timeout(Duration::from_secs(10))
+        .connect_with(opts)
+        .await?;
+    Ok(pool)
 }
 
 fn now() -> String {
@@ -869,9 +899,6 @@ fn now() -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::mpsc;
-    use std::thread;
-
     use super::*;
     use crate::{AgentPath, AgentStatusV2, RunnerEvent, ThreadReservation};
 
@@ -892,13 +919,16 @@ mod tests {
         assert_eq!(v2_default_db_path().file_name().unwrap(), "subagents-v2.db");
     }
 
-    #[test]
-    fn runtime_descriptor_round_trips_without_credentials_and_cascades_on_rollback() {
+    #[tokio::test]
+    async fn runtime_descriptor_round_trips_without_credentials_and_cascades_on_rollback() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
-        store.ensure_root_thread("root-thread").unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
+        store.ensure_root_thread("root-thread").await.unwrap();
         store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
         let descriptor = AgentRuntimeDescriptorV2 {
             thread_id: "child".into(),
@@ -906,28 +936,37 @@ mod tests {
             reasoning_effort: Some("high".into()),
         };
 
-        store.record_runtime_descriptor(&descriptor).unwrap();
-        assert_eq!(store.runtime_descriptor("child").unwrap(), Some(descriptor));
+        store.record_runtime_descriptor(&descriptor).await.unwrap();
+        assert_eq!(
+            store.runtime_descriptor("child").await.unwrap(),
+            Some(descriptor)
+        );
 
-        store.rollback_pending_thread("child").unwrap();
-        assert!(store.runtime_descriptor("child").unwrap().is_none());
+        store.rollback_pending_thread("child").await.unwrap();
+        assert!(store.runtime_descriptor("child").await.unwrap().is_none());
     }
 
-    #[test]
-    fn runner_events_atomically_update_projection_and_append_status_activity() {
+    #[tokio::test]
+    async fn runner_events_atomically_update_projection_and_append_status_activity() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         let thread = store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
         assert_eq!(thread.status, AgentStatusV2::PendingInit);
 
         let started = RunnerEvent::TurnStarted {
             turn_id: "turn-1".into(),
         };
-        let running = store.apply_status_event("child", started.clone()).unwrap();
+        let running = store
+            .apply_status_event("child", started.clone())
+            .await
+            .unwrap();
         assert_eq!(running.status, AgentStatusV2::Running);
-        let events = store.status_events("child").unwrap();
+        let events = store.status_events("child").await.unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event, started);
 
@@ -960,18 +999,21 @@ mod tests {
             (RunnerEvent::RuntimeTerminated, AgentStatusV2::Shutdown),
         ];
         for (event, expected) in cases {
-            let projected = store.apply_status_event("child", event).unwrap();
+            let projected = store.apply_status_event("child", event).await.unwrap();
             assert_eq!(projected.status, expected);
         }
-        assert_eq!(store.status_events("child").unwrap().len(), 5);
+        assert_eq!(store.status_events("child").await.unwrap().len(), 5);
     }
 
-    #[test]
-    fn each_terminal_turn_enqueues_one_idempotent_parent_result() {
+    #[tokio::test]
+    async fn each_terminal_turn_enqueues_one_idempotent_parent_result() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
 
         store
@@ -982,8 +1024,9 @@ mod tests {
                     reason: "paused".into(),
                 },
             )
+            .await
             .unwrap();
-        assert!(store.pending_for("root-thread", 0).unwrap().is_empty());
+        assert!(store.pending_for("root-thread", 0).await.unwrap().is_empty());
 
         store
             .apply_status_event(
@@ -993,13 +1036,15 @@ mod tests {
                     last_message: "first answer".into(),
                 },
             )
+            .await
             .unwrap();
-        let first = store.pending_for("root-thread", 0).unwrap();
+        let first = store.pending_for("root-thread", 0).await.unwrap();
         assert_eq!(first.len(), 1);
         assert_eq!(first[0].kind, MailboxKind::Result);
         assert!(first[0].payload.ends_with("Payload:\nfirst answer"));
         store
             .mark_delivered("root-thread", first[0].sequence)
+            .await
             .unwrap();
 
         store
@@ -1009,6 +1054,7 @@ mod tests {
                     turn_id: "turn-2".into(),
                 },
             )
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1018,6 +1064,7 @@ mod tests {
                     message: "later failure".into(),
                 },
             )
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1027,8 +1074,9 @@ mod tests {
                     message: "later failure".into(),
                 },
             )
+            .await
             .unwrap();
-        let second = store.pending_for("root-thread", 0).unwrap();
+        let second = store.pending_for("root-thread", 0).await.unwrap();
         assert_eq!(second.len(), 1);
         assert_eq!(second[0].message_id, "agent-final:child:turn-2");
         assert!(second[0].payload.ends_with(
@@ -1036,17 +1084,21 @@ mod tests {
         ));
         store
             .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .await
             .unwrap();
 
-        assert_eq!(store.pending_for("root-thread", 0).unwrap(), second);
+        assert_eq!(store.pending_for("root-thread", 0).await.unwrap(), second);
     }
 
-    #[test]
-    fn final_notification_failure_rolls_back_status_and_event_atomically() {
+    #[tokio::test]
+    async fn final_notification_failure_rolls_back_status_and_event_atomically() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
         store
             .enqueue(&NewMailboxMessage {
@@ -1058,6 +1110,7 @@ mod tests {
                 payload: "conflict".into(),
                 trigger_turn: false,
             })
+            .await
             .unwrap();
 
         let error = store
@@ -1068,21 +1121,25 @@ mod tests {
                     last_message: "must be atomic".into(),
                 },
             )
+            .await
             .unwrap_err();
         assert!(error.to_string().contains("immutable contents"));
         assert_eq!(
-            store.get_thread("child").unwrap().unwrap().status,
+            store.get_thread("child").await.unwrap().unwrap().status,
             AgentStatusV2::PendingInit
         );
-        assert!(store.status_events("child").unwrap().is_empty());
+        assert!(store.status_events("child").await.unwrap().is_empty());
     }
 
-    #[test]
-    fn final_notification_payloads_cover_error_and_shutdown() {
+    #[tokio::test]
+    async fn final_notification_payloads_cover_error_and_shutdown() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         let child = store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
 
         let errored = final_parent_notification(
@@ -1101,12 +1158,15 @@ mod tests {
         assert!(shutdown.payload.ends_with("Payload:\nAgent shut down."));
     }
 
-    #[test]
-    fn direct_shutdown_after_interrupt_notifies_parent_once() {
+    #[tokio::test]
+    async fn direct_shutdown_after_interrupt_notifies_parent_once() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1116,23 +1176,28 @@ mod tests {
                     reason: "cancelled".into(),
                 },
             )
+            .await
             .unwrap();
         store
             .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .await
             .unwrap();
 
-        let pending = store.pending_for("root-thread", 0).unwrap();
+        let pending = store.pending_for("root-thread", 0).await.unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].message_id, "agent-final:child:shutdown");
         assert!(pending[0].payload.ends_with("Payload:\nAgent shut down."));
     }
 
-    #[test]
-    fn final_error_payload_is_safely_bounded() {
+    #[tokio::test]
+    async fn final_error_payload_is_safely_bounded() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         let child = store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
         let head = "HEAD-中文-🚀";
         let tail = "TAIL-DIAGNOSTIC-尾部-🚨";
@@ -1158,32 +1223,39 @@ mod tests {
         assert!(truncated.contains(&format!("…{removed_tokens} tokens truncated…")));
     }
 
-    #[test]
-    fn runtime_terminated_atomically_projects_shutdown_and_closes_edge() {
+    #[tokio::test]
+    async fn runtime_terminated_atomically_projects_shutdown_and_closes_edge() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
 
         let terminated = store
             .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .await
             .unwrap();
 
         assert_eq!(terminated.status, AgentStatusV2::Shutdown);
         assert_eq!(
-            store.edge_state("child").unwrap().as_deref(),
+            store.edge_state("child").await.unwrap().as_deref(),
             Some("closed")
         );
     }
 
-    #[test]
-    fn restart_recovery_preserves_turn_identity_and_is_idempotent() {
+    #[tokio::test]
+    async fn restart_recovery_preserves_turn_identity_and_is_idempotent() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
-        store.ensure_root_thread("root-thread").unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
+        store.ensure_root_thread("root-thread").await.unwrap();
         store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1192,23 +1264,31 @@ mod tests {
                     turn_id: "durable-turn".into(),
                 },
             )
+            .await
             .unwrap();
 
         assert_eq!(
-            store.recover_running_as_interrupted("root-thread").unwrap(),
+            store
+                .recover_running_as_interrupted("root-thread")
+                .await
+                .unwrap(),
             1
         );
         assert_eq!(
-            store.recover_running_as_interrupted("root-thread").unwrap(),
+            store
+                .recover_running_as_interrupted("root-thread")
+                .await
+                .unwrap(),
             0
         );
         assert_eq!(
-            store.get_thread("child").unwrap().unwrap().status,
+            store.get_thread("child").await.unwrap().unwrap().status,
             AgentStatusV2::Interrupted
         );
         assert_eq!(
             store
                 .status_events("child")
+                .await
                 .unwrap()
                 .into_iter()
                 .map(|event| event.event)
@@ -1225,106 +1305,99 @@ mod tests {
         );
     }
 
-    #[test]
-    fn runtime_terminated_is_idempotent_after_shutdown() {
+    #[tokio::test]
+    async fn runtime_terminated_is_idempotent_after_shutdown() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
-        store.ensure_root_thread("root-thread").unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
+        store.ensure_root_thread("root-thread").await.unwrap();
         store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
 
         store
             .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .await
             .unwrap();
         store
             .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .await
             .unwrap();
 
-        assert_eq!(store.status_events("child").unwrap().len(), 1);
+        assert_eq!(store.status_events("child").await.unwrap().len(), 1);
         assert_eq!(
-            store.edge_state("child").unwrap().as_deref(),
+            store.edge_state("child").await.unwrap().as_deref(),
             Some("closed")
         );
     }
 
-    #[test]
-    fn runtime_terminated_missing_child_edge_rolls_back_status_transaction() {
+    #[tokio::test]
+    async fn runtime_terminated_missing_child_edge_rolls_back_status_transaction() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
-        store
-            .reserve_thread(&reservation("child", "/root/child"))
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
             .unwrap();
         store
-            .connect()
-            .unwrap()
-            .execute(
-                "DELETE FROM agent_spawn_edges WHERE child_thread_id = 'child'",
-                [],
-            )
+            .reserve_thread(&reservation("child", "/root/child"))
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM agent_spawn_edges WHERE child_thread_id = 'child'")
+            .execute(store.pool())
+            .await
             .unwrap();
 
         let error = store
             .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .await
             .unwrap_err();
 
         assert!(error.to_string().contains("spawn edge"));
         assert_eq!(
-            store.get_thread("child").unwrap().unwrap().status,
+            store.get_thread("child").await.unwrap().unwrap().status,
             AgentStatusV2::PendingInit
         );
-        assert!(store.status_events("child").unwrap().is_empty());
+        assert!(store.status_events("child").await.unwrap().is_empty());
     }
 
-    #[test]
-    fn concurrent_status_writer_does_not_invalidate_first_transaction_snapshot() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_status_writers_produce_correct_sequence() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
 
-        let (writer_result_tx, writer_result_rx) = mpsc::channel();
-        let mut writer_handle = None;
-        let mut early_writer_result = None;
-        let first_result = store.apply_status_event_with_after_read(
-            "child",
-            RunnerEvent::TurnStarted {
-                turn_id: "first-turn".into(),
-            },
-            || {
-                let writer = store.clone();
-                let (writer_started_tx, writer_started_rx) = mpsc::channel();
-                writer_handle = Some(thread::spawn(move || {
-                    writer_started_tx.send(()).unwrap();
-                    let result = writer.apply_status_event(
-                        "child",
-                        RunnerEvent::TurnStarted {
-                            turn_id: "second-turn".into(),
-                        },
-                    );
-                    writer_result_tx.send(result).unwrap();
-                }));
-                writer_started_rx
-                    .recv_timeout(Duration::from_secs(1))
-                    .unwrap();
-                early_writer_result = writer_result_rx
-                    .recv_timeout(Duration::from_millis(100))
-                    .ok();
-            },
-        );
-
-        let second_result = early_writer_result.unwrap_or_else(|| {
-            writer_result_rx
-                .recv_timeout(Duration::from_secs(2))
-                .unwrap()
+        let store2 = store.clone();
+        let second_writer = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+            store2
+                .apply_status_event(
+                    "child",
+                    RunnerEvent::TurnStarted {
+                        turn_id: "second-turn".into(),
+                    },
+                )
+                .await
         });
-        writer_handle.unwrap().join().unwrap();
+        let first_result = store
+            .apply_status_event(
+                "child",
+                RunnerEvent::TurnStarted {
+                    turn_id: "first-turn".into(),
+                },
+            )
+            .await;
         first_result.unwrap();
-        second_result.unwrap();
+        second_writer.await.unwrap().unwrap();
 
         let source_turn_ids = store
             .status_events("child")
+            .await
             .unwrap()
             .into_iter()
             .map(|event| event.source_turn_id.unwrap())
@@ -1332,28 +1405,29 @@ mod tests {
         assert_eq!(source_turn_ids, vec!["first-turn", "second-turn"]);
     }
 
-    #[test]
-    fn rollback_only_removes_pending_reservation_and_spawn_edge() {
+    #[tokio::test]
+    async fn rollback_only_removes_pending_reservation_and_spawn_edge() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("pending", "/root/pending"))
+            .await
             .unwrap();
-        store.rollback_pending_thread("pending").unwrap();
-        assert!(store.get_thread("pending").unwrap().is_none());
-        let pending_edges: i64 = store
-            .connect()
-            .unwrap()
-            .query_row(
-                "SELECT COUNT(*) FROM agent_spawn_edges WHERE child_thread_id = 'pending'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
+        store.rollback_pending_thread("pending").await.unwrap();
+        assert!(store.get_thread("pending").await.unwrap().is_none());
+        let (pending_edges,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_spawn_edges WHERE child_thread_id = 'pending'",
+        )
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
         assert_eq!(pending_edges, 0);
 
         store
             .reserve_thread(&reservation("running", "/root/running"))
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1362,21 +1436,28 @@ mod tests {
                     turn_id: "turn".into(),
                 },
             )
+            .await
             .unwrap();
-        let error = store.rollback_pending_thread("running").unwrap_err();
+        let error = store
+            .rollback_pending_thread("running")
+            .await
+            .unwrap_err();
         assert!(error.to_string().contains("pending_init"));
         assert_eq!(
-            store.get_thread("running").unwrap().unwrap().status,
+            store.get_thread("running").await.unwrap().unwrap().status,
             AgentStatusV2::Running
         );
     }
 
-    #[test]
-    fn rollback_unaccepted_start_requires_exact_matching_started_generation() {
+    #[tokio::test]
+    async fn rollback_unaccepted_start_requires_exact_matching_started_generation() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("accepted", "/root/accepted"))
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1385,15 +1466,18 @@ mod tests {
                     turn_id: "turn-1".into(),
                 },
             )
+            .await
             .unwrap();
         store
             .rollback_unaccepted_started_thread("accepted", "turn-1")
+            .await
             .unwrap();
-        assert!(store.get_thread("accepted").unwrap().is_none());
-        assert!(store.status_events("accepted").unwrap().is_empty());
+        assert!(store.get_thread("accepted").await.unwrap().is_none());
+        assert!(store.status_events("accepted").await.unwrap().is_empty());
 
         store
             .reserve_thread(&reservation("advanced", "/root/advanced"))
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1402,6 +1486,7 @@ mod tests {
                     turn_id: "turn-2".into(),
                 },
             )
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1411,27 +1496,33 @@ mod tests {
                     last_message: "done".into(),
                 },
             )
+            .await
             .unwrap();
         let error = store
             .rollback_unaccepted_started_thread("advanced", "turn-2")
+            .await
             .unwrap_err();
         assert!(
             error.to_string().contains("expected running")
                 || error.to_string().contains("advanced")
         );
-        assert!(store.get_thread("advanced").unwrap().is_some());
-        assert_eq!(store.status_events("advanced").unwrap().len(), 2);
+        assert!(store.get_thread("advanced").await.unwrap().is_some());
+        assert_eq!(store.status_events("advanced").await.unwrap().len(), 2);
     }
 
-    #[test]
-    fn cleanup_pending_reservations_is_root_scoped_and_preserves_started_threads() {
+    #[tokio::test]
+    async fn cleanup_pending_reservations_is_root_scoped_and_preserves_started_threads() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("pending", "/root/pending"))
+            .await
             .unwrap();
         store
             .reserve_thread(&reservation("running", "/root/running"))
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1440,77 +1531,84 @@ mod tests {
                     turn_id: "turn".into(),
                 },
             )
+            .await
             .unwrap();
         let mut other_root = reservation("other-pending", "/root/pending");
         other_root.root_thread_id = "other-root".into();
         other_root.parent_thread_id = "other-root".into();
-        store.reserve_thread(&other_root).unwrap();
+        store.reserve_thread(&other_root).await.unwrap();
 
         assert_eq!(
-            store.cleanup_pending_reservations("root-thread").unwrap(),
+            store
+                .cleanup_pending_reservations("root-thread")
+                .await
+                .unwrap(),
             1
         );
-        assert!(store.get_thread("pending").unwrap().is_none());
+        assert!(store.get_thread("pending").await.unwrap().is_none());
         assert_eq!(
-            store.get_thread("running").unwrap().unwrap().status,
+            store.get_thread("running").await.unwrap().unwrap().status,
             AgentStatusV2::Running
         );
-        assert!(store.get_thread("other-pending").unwrap().is_some());
-        let pending_edge_count: i64 = store
-            .connect()
-            .unwrap()
-            .query_row(
-                "SELECT COUNT(*) FROM agent_spawn_edges WHERE child_thread_id = 'pending'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
+        assert!(store.get_thread("other-pending").await.unwrap().is_some());
+        let (pending_edge_count,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM agent_spawn_edges WHERE child_thread_id = 'pending'",
+        )
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
         assert_eq!(pending_edge_count, 0);
     }
 
-    #[test]
-    fn pending_reservation_validation_requires_matching_row_and_open_edge() {
+    #[tokio::test]
+    async fn pending_reservation_validation_requires_matching_row_and_open_edge() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         let expected = store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
 
-        store.validate_pending_reservation(&expected).unwrap();
+        store
+            .validate_pending_reservation(&expected)
+            .await
+            .unwrap();
 
         let mut wrong_root = expected.clone();
         wrong_root.root_thread_id = "wrong-root".into();
         assert!(store
             .validate_pending_reservation(&wrong_root)
+            .await
             .unwrap_err()
             .to_string()
             .contains("does not match"));
 
-        store
-            .connect()
-            .unwrap()
-            .execute(
-                "DELETE FROM agent_spawn_edges WHERE child_thread_id = 'child'",
-                [],
-            )
+        sqlx::query("DELETE FROM agent_spawn_edges WHERE child_thread_id = 'child'")
+            .execute(store.pool())
+            .await
             .unwrap();
         assert!(store
             .validate_pending_reservation(&expected)
+            .await
             .unwrap_err()
             .to_string()
             .contains("open spawn edge"));
     }
 
-    #[test]
-    fn snapshot_sorts_canonical_paths_and_has_stable_status_cursor() {
+    #[tokio::test]
+    async fn snapshot_sorts_canonical_paths_and_has_stable_status_cursor() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("subagents-v2.db");
-        let store = AgentGraphStore::open(path.clone()).unwrap();
+        let store = AgentGraphStore::open(path.clone()).await.unwrap();
         store
             .reserve_thread(&reservation("z-thread", "/root/z_task"))
+            .await
             .unwrap();
         store
             .reserve_thread(&reservation("a-thread", "/root/a_task"))
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1519,6 +1617,7 @@ mod tests {
                     turn_id: "turn-z".into(),
                 },
             )
+            .await
             .unwrap();
         store
             .apply_status_event(
@@ -1527,9 +1626,10 @@ mod tests {
                     turn_id: "turn-a".into(),
                 },
             )
+            .await
             .unwrap();
 
-        let snapshot = store.snapshot("root-thread").unwrap();
+        let snapshot = store.snapshot("root-thread").await.unwrap();
         let paths = snapshot
             .threads
             .iter()
@@ -1540,6 +1640,7 @@ mod tests {
         assert_eq!(
             store
                 .get_by_path("root-thread", &AgentPath::parse("/root/a_task").unwrap())
+                .await
                 .unwrap()
                 .unwrap()
                 .thread_id,
@@ -1547,55 +1648,69 @@ mod tests {
         );
         drop(store);
 
-        let reopened = AgentGraphStore::open(path).unwrap();
+        let reopened = AgentGraphStore::open(path).await.unwrap();
         assert_eq!(
-            reopened.snapshot("root-thread").unwrap().activity_sequence,
+            reopened
+                .snapshot("root-thread")
+                .await
+                .unwrap()
+                .activity_sequence,
             snapshot.activity_sequence
         );
     }
 
-    #[test]
-    fn snapshot_projection_and_cursor_share_one_read_transaction() {
+    #[tokio::test]
+    async fn snapshot_projection_and_cursor_share_one_read_transaction() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("child", "/root/child"))
+            .await
             .unwrap();
 
+        let store2 = store.clone();
         let snapshot = store
-            .snapshot_with_after_threads("root-thread", || {
-                store
+            .snapshot_with_after_threads("root-thread", async move {
+                store2
                     .apply_status_event(
                         "child",
                         RunnerEvent::TurnStarted {
                             turn_id: "concurrent-turn".into(),
                         },
                     )
+                    .await
                     .unwrap();
             })
+            .await
             .unwrap();
 
         assert_eq!(snapshot.threads[0].status, AgentStatusV2::PendingInit);
         assert_eq!(snapshot.activity_sequence, 0);
-        let current = store.snapshot("root-thread").unwrap();
+        let current = store.snapshot("root-thread").await.unwrap();
         assert_eq!(current.threads[0].status, AgentStatusV2::Running);
         assert_eq!(current.activity_sequence, 1);
     }
 
-    #[test]
-    fn root_path_is_unique_and_close_edge_is_idempotent() {
+    #[tokio::test]
+    async fn root_path_is_unique_and_close_edge_is_idempotent() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         store
             .reserve_thread(&reservation("first", "/root/task"))
+            .await
             .unwrap();
         assert!(store
             .reserve_thread(&reservation("second", "/root/task"))
+            .await
             .is_err());
-        store.close_edge("first").unwrap();
-        store.close_edge("first").unwrap();
+        store.close_edge("first").await.unwrap();
+        store.close_edge("first").await.unwrap();
         assert_eq!(
-            store.get_thread("first").unwrap().unwrap().status,
+            store.get_thread("first").await.unwrap().unwrap().status,
             AgentStatusV2::PendingInit
         );
     }

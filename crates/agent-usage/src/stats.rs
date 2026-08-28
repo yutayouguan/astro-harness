@@ -1,15 +1,9 @@
-//! 按 Agent 聚合的工具集与技能调用计数。
-//!
-//! 统计数据持久化于 `~/.astro/agents/{id}/usage-stats.json`，供前端展示用量摘要。
-//! 工具名经 [`tool_name_to_toolset`](home::tool_name_to_toolset) 归并为工具集计数；
-//! `skills` 工具若携带 `skill_id` 参数则额外累加技能维度。
-
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 
 use home::tool_name_to_toolset;
 use home::{
@@ -17,44 +11,32 @@ use home::{
     DEFAULT_AGENT_ID,
 };
 
-/// 单 Agent 的工具集与技能调用计数快照（可序列化）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentUsageStats {
-    /// 工具集 id → 调用次数（与前端 `AGENT_TOOLS` / `tools-enabled` 对齐）。
     #[serde(default)]
     pub tools: HashMap<String, u64>,
-    /// 技能名 → 调用次数（仅 `skills` 工具且带 `skill_id` 时累加）。
     #[serde(default)]
     pub skills: HashMap<String, u64>,
 }
 
-/// 面向 API 的用量摘要，含合计字段与 Agent 标识。
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentUsageSummary {
-    /// 目标 Agent 标识（已规范化）。
     pub agent_id: String,
-    /// 全部工具集调用次数之和。
     pub tool_total: u64,
-    /// 全部技能调用次数之和。
     pub skill_total: u64,
-    /// 各工具集明细计数。
     pub tools: HashMap<String, u64>,
-    /// 各技能明细计数。
     pub skills: HashMap<String, u64>,
 }
 
 impl AgentUsageStats {
-    /// 返回 `tools` 映射中所有计数的总和。
     pub fn tool_total(&self) -> u64 {
         self.tools.values().copied().sum()
     }
 
-    /// 返回 `skills` 映射中所有计数的总和。
     pub fn skill_total(&self) -> u64 {
         self.skills.values().copied().sum()
     }
 
-    /// 转换为带合计字段的 [`AgentUsageSummary`]，消耗 `self`。
     pub fn into_summary(self, agent_id: String) -> AgentUsageSummary {
         AgentUsageSummary {
             tool_total: self.tool_total(),
@@ -66,14 +48,12 @@ impl AgentUsageStats {
     }
 }
 
-/// 返回指定 Agent 的 `usage-stats.json` 路径。
 fn usage_path(agent_id: &str) -> PathBuf {
     let base = default_memory_dir();
     let id = normalize_agent_id(agent_id);
     agent_config_dir(&base, &id).join("usage-stats.json")
 }
 
-/// 规范化 Agent 键：`None`、空白、`"default"` 均映射为 [`DEFAULT_AGENT_ID`]。
 fn normalize_key(agent_id: Option<&str>) -> String {
     match agent_id.map(str::trim).filter(|s| !s.is_empty()) {
         Some("default") => DEFAULT_AGENT_ID.to_string(),
@@ -82,7 +62,6 @@ fn normalize_key(agent_id: Option<&str>) -> String {
     }
 }
 
-/// 从磁盘加载用量统计；文件不存在或解析失败时返回默认值。
 pub fn load_usage_stats(agent_id: Option<&str>) -> AgentUsageStats {
     let id = normalize_key(agent_id);
     let path = usage_path(&id);
@@ -95,7 +74,6 @@ pub fn load_usage_stats(agent_id: Option<&str>) -> AgentUsageStats {
         .unwrap_or_default()
 }
 
-/// 原子写入用量统计（临时文件 + `rename`）。
 pub fn save_usage_stats(agent_id: Option<&str>, stats: &AgentUsageStats) -> anyhow::Result<()> {
     ensure_default_workspace_dirs()?;
     let id = normalize_key(agent_id);
@@ -109,31 +87,20 @@ pub fn save_usage_stats(agent_id: Option<&str>, stats: &AgentUsageStats) -> anyh
     Ok(())
 }
 
-/// 加载并转换为 [`AgentUsageSummary`]，供前端/API 直接返回。
 pub fn get_usage_summary(agent_id: Option<&str>) -> AgentUsageSummary {
     let id = normalize_key(agent_id);
     load_usage_stats(Some(&id)).into_summary(id)
 }
 
-/// 记录一次工具调用并写盘；进程内通过互斥锁串行化，避免并发丢计数。
-///
-/// 工具名归并为工具集后 `tools` 计数 +1；若为 `skills` 且 `args.skill_id` 非空，
-/// 则对应 `skills` 条目亦 +1。
-///
-/// 成功写 JSON 后双写 `usage.db`：`kind=tool`（工具集 id）；skills 再写 `kind=skill`。
-/// MCP 工具（`mcp__` 前缀）只更新 JSON，事件由 Agent loop 写 `kind=mcp`。
-///
-/// `session_id` / `turn_id` 写入 usage 事件，便于 Tracing 按会话与 turn 串联工具调用。
-pub fn record_tool_call(
+pub async fn record_tool_call(
     agent_id: &str,
     tool_name: &str,
     args: &serde_json::Value,
     session_id: Option<&str>,
     turn_id: Option<&str>,
 ) -> anyhow::Result<()> {
-    // 串行化写盘，避免并发丢计数
-    static LOCK: Mutex<()> = Mutex::new(());
-    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    static LOCK: Mutex<()> = Mutex::const_new(());
+    let _guard = LOCK.lock().await;
 
     let id = normalize_key(Some(agent_id));
     let mut stats = load_usage_stats(Some(&id));
@@ -187,7 +154,8 @@ pub fn record_tool_call(
             billing_base_url: None,
             billing_mode: None,
             meta_json: Some(serde_json::json!({ "tool": tool_name }).to_string()),
-        });
+        })
+        .await;
         if tool_name == "skills" {
             if let Some(skill_id) = args
                 .get("skill_id")
@@ -216,7 +184,8 @@ pub fn record_tool_call(
                     billing_base_url: None,
                     billing_mode: None,
                     meta_json: None,
-                });
+                })
+                .await;
             }
         }
     }
@@ -231,8 +200,8 @@ mod tests {
 
     use home::test_env::AstroMemoryDirGuard;
 
-    #[test]
-    fn records_toolset_and_skill_counts() {
+    #[tokio::test]
+    async fn records_toolset_and_skill_counts() {
         let dir = tempfile::tempdir().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
 
@@ -243,6 +212,7 @@ mod tests {
             Some("sess-1"),
             None,
         )
+        .await
         .unwrap();
         record_tool_call(
             "workspace",
@@ -251,6 +221,7 @@ mod tests {
             Some("sess-1"),
             None,
         )
+        .await
         .unwrap();
         record_tool_call(
             "workspace",
@@ -259,6 +230,7 @@ mod tests {
             Some("sess-1"),
             None,
         )
+        .await
         .unwrap();
 
         let summary = get_usage_summary(Some("workspace"));
@@ -269,14 +241,15 @@ mod tests {
         assert_eq!(summary.tool_total, 3);
 
         let insights = crate::UsageDb::open_default()
+            .await
             .unwrap()
             .query_insights(crate::UsageInsightsQuery {
                 period: crate::UsagePeriod::Month,
                 as_of: None,
                 agent_id: Some(home::DEFAULT_AGENT_ID.into()),
             })
+            .await
             .unwrap();
-        // tool 事件进入 KPI calls，skill 维度不重复增加。
         assert_eq!(insights.kpis.calls, 3);
         assert!(insights
             .rankings
@@ -295,8 +268,8 @@ mod tests {
             .any(|r| r.kind == "tool" && r.name == "web_search"));
     }
 
-    #[test]
-    fn skills_without_skill_id_only_bumps_toolset() {
+    #[tokio::test]
+    async fn skills_without_skill_id_only_bumps_toolset() {
         let dir = tempfile::tempdir().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
 
@@ -307,6 +280,7 @@ mod tests {
             None,
             None,
         )
+        .await
         .unwrap();
         let summary = get_usage_summary(Some("workspace"));
         assert_eq!(summary.tools.get("skills").copied().unwrap_or(0), 1);
@@ -314,8 +288,8 @@ mod tests {
         assert_eq!(summary.skill_total, 0);
     }
 
-    #[test]
-    fn records_tool_event_with_turn_id() {
+    #[tokio::test]
+    async fn records_tool_event_with_turn_id() {
         let dir = tempfile::tempdir().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
 
@@ -326,17 +300,16 @@ mod tests {
             Some("sess-turn"),
             Some("turn-42"),
         )
+        .await
         .unwrap();
 
-        let path = crate::db::usage_db_path();
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        let turn: Option<String> = conn
-            .query_row(
-                "SELECT turn_id FROM usage_events WHERE kind = 'tool' AND session_id = 'sess-turn'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
+        let db = crate::UsageDb::open_default().await.unwrap();
+        let (turn,): (Option<String>,) = agent_db::sqlx::query_as(
+            "SELECT turn_id FROM usage_events WHERE kind = 'tool' AND session_id = 'sess-turn'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
         assert_eq!(turn.as_deref(), Some("turn-42"));
     }
 }

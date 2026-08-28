@@ -1,11 +1,9 @@
-//! Agent 线程间持久化邮箱消息的入队、投递与回滚。
-
 use anyhow::{bail, Context};
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{params, types::Type, Connection, Transaction};
+use agent_db::sqlx::{self, Row};
+use agent_db::SqlitePool;
 use serde::{Deserialize, Serialize};
 
-/// 邮箱消息类型：普通消息、追加、转向、结果、状态。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MailboxKind {
@@ -16,7 +14,6 @@ pub enum MailboxKind {
     Status,
 }
 
-/// 待入队的邮箱消息（含幂等键）。
 #[derive(Debug, Clone)]
 pub struct NewMailboxMessage {
     pub message_id: String,
@@ -28,7 +25,6 @@ pub struct NewMailboxMessage {
     pub trigger_turn: bool,
 }
 
-/// 已持久化的邮箱消息（含自增序号）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MailboxMessage {
     pub sequence: i64,
@@ -46,61 +42,62 @@ struct PersistedMailboxMessage {
     idempotency_key: String,
 }
 
-/// 将消息入队到收件人邮箱，支持幂等重试。
-pub(crate) fn enqueue(
-    conn: &mut Connection,
+pub(crate) async fn enqueue(
+    pool: &SqlitePool,
     message: &NewMailboxMessage,
 ) -> anyhow::Result<MailboxMessage> {
-    let tx = conn.transaction()?;
-    let stored = enqueue_in_transaction(&tx, message)?;
-    tx.commit()?;
+    let mut tx = pool.begin().await?;
+    let stored = enqueue_in_transaction(&mut tx, message).await?;
+    tx.commit().await?;
     Ok(stored)
 }
 
-pub(crate) fn enqueue_in_transaction(
-    tx: &Transaction<'_>,
+pub(crate) async fn enqueue_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     message: &NewMailboxMessage,
 ) -> anyhow::Result<MailboxMessage> {
     validate(message)?;
-    let inserted = tx.execute(
+    let result = sqlx::query(
         "INSERT INTO agent_mailbox (
             message_id, idempotency_key, sender_thread_id, recipient_thread_id,
             kind, payload, trigger_turn, delivery_state, created_at, delivered_at
          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending', ?8, NULL)
          ON CONFLICT(idempotency_key) DO NOTHING",
-        params![
-            message.message_id,
-            message.idempotency_key,
-            message.sender_thread_id,
-            message.recipient_thread_id,
-            message.kind.as_str(),
-            message.payload,
-            message.trigger_turn,
-            now(),
-        ],
-    )?;
+    )
+    .bind(&message.message_id)
+    .bind(&message.idempotency_key)
+    .bind(&message.sender_thread_id)
+    .bind(&message.recipient_thread_id)
+    .bind(message.kind.as_str())
+    .bind(&message.payload)
+    .bind(message.trigger_turn)
+    .bind(now())
+    .execute(&mut **tx)
+    .await?;
 
-    let stored = if inserted == 1 {
-        let sequence = tx.last_insert_rowid();
-        load_by_sequence(tx, sequence)?.context("inserted mailbox row is missing")?
+    let stored = if result.rows_affected() == 1 {
+        let sequence = result.last_insert_rowid();
+        load_by_sequence(&mut **tx, sequence)
+            .await?
+            .context("inserted mailbox row is missing")?
     } else {
-        load_by_idempotency_key(tx, &message.idempotency_key)?
+        load_by_idempotency_key(&mut **tx, &message.idempotency_key)
+            .await?
             .context("idempotent mailbox row is missing")?
     };
     ensure_same_immutable_contents(&stored, message)?;
     Ok(stored.message)
 }
 
-/// 查询指定收件人在给定序号之后的所有待投递消息。
-pub(crate) fn pending_for(
-    conn: &Connection,
+pub(crate) async fn pending_for(
+    pool: &SqlitePool,
     recipient: &str,
     after: i64,
 ) -> anyhow::Result<Vec<MailboxMessage>> {
     if recipient.trim().is_empty() {
         bail!("mailbox recipient_thread_id must not be empty");
     }
-    let mut stmt = conn.prepare(
+    let rows = sqlx::query(
         "SELECT sequence, message_id, sender_thread_id, recipient_thread_id,
                 CASE WHEN idempotency_key LIKE 'main-steer:%' THEN 'steer' ELSE kind END,
                 payload, trigger_turn
@@ -109,47 +106,52 @@ pub(crate) fn pending_for(
            AND delivery_state = 'pending'
            AND sequence > ?2
          ORDER BY sequence",
-    )?;
-    let messages = stmt
-        .query_map(params![recipient, after], mailbox_message_from_row)?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(messages)
+    )
+    .bind(recipient)
+    .bind(after)
+    .fetch_all(pool)
+    .await?;
+    rows.iter()
+        .map(mailbox_message_from_row)
+        .collect()
 }
 
-/// 将收件人在指定序号及之前的待投递消息标记为已投递。
-pub(crate) fn mark_delivered(
-    conn: &mut Connection,
+pub(crate) async fn mark_delivered(
+    pool: &SqlitePool,
     recipient: &str,
     through_sequence: i64,
 ) -> anyhow::Result<()> {
     if recipient.trim().is_empty() {
         bail!("mailbox recipient_thread_id must not be empty");
     }
-    let tx = conn.transaction()?;
-    tx.execute(
+    sqlx::query(
         "UPDATE agent_mailbox
          SET delivery_state = 'delivered', delivered_at = ?3
          WHERE recipient_thread_id = ?1
            AND sequence <= ?2
            AND delivery_state = 'pending'",
-        params![recipient, through_sequence, now()],
-    )?;
-    tx.commit()?;
+    )
+    .bind(recipient)
+    .bind(through_sequence)
+    .bind(now())
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
-/// 删除指定 ID 的待投递消息（用于回滚）。
-pub(crate) fn delete_pending(conn: &Connection, message_id: &str) -> anyhow::Result<()> {
+pub(crate) async fn delete_pending(pool: &SqlitePool, message_id: &str) -> anyhow::Result<()> {
     if message_id.trim().is_empty() {
         bail!("mailbox message_id must not be empty");
     }
-    let deleted = conn.execute(
+    let result = sqlx::query(
         "DELETE FROM agent_mailbox
          WHERE message_id = ?1 AND delivery_state = 'pending'",
-        [message_id],
-    )?;
+    )
+    .bind(message_id)
+    .execute(pool)
+    .await?;
     anyhow::ensure!(
-        deleted == 1,
+        result.rows_affected() == 1,
         "pending mailbox message {message_id:?} could not be rolled back"
     );
     Ok(())
@@ -212,77 +214,72 @@ fn ensure_same_immutable_contents(
     Ok(())
 }
 
-fn load_by_sequence(
-    conn: &Connection,
+async fn load_by_sequence(
+    conn: &mut sqlx::SqliteConnection,
     sequence: i64,
-) -> rusqlite::Result<Option<PersistedMailboxMessage>> {
-    use rusqlite::OptionalExtension;
-    conn.query_row(
+) -> anyhow::Result<Option<PersistedMailboxMessage>> {
+    let row = sqlx::query(
         "SELECT sequence, message_id, idempotency_key, sender_thread_id,
                 recipient_thread_id,
                 CASE WHEN idempotency_key LIKE 'main-steer:%' THEN 'steer' ELSE kind END,
                 payload, trigger_turn
          FROM agent_mailbox WHERE sequence = ?1",
-        [sequence],
-        persisted_mailbox_message_from_row,
     )
-    .optional()
+    .bind(sequence)
+    .fetch_optional(&mut *conn)
+    .await?;
+    row.as_ref().map(persisted_mailbox_message_from_row).transpose()
 }
 
-fn load_by_idempotency_key(
-    conn: &Connection,
+async fn load_by_idempotency_key(
+    conn: &mut sqlx::SqliteConnection,
     key: &str,
-) -> rusqlite::Result<Option<PersistedMailboxMessage>> {
-    use rusqlite::OptionalExtension;
-    conn.query_row(
+) -> anyhow::Result<Option<PersistedMailboxMessage>> {
+    let row = sqlx::query(
         "SELECT sequence, message_id, idempotency_key, sender_thread_id,
                 recipient_thread_id,
                 CASE WHEN idempotency_key LIKE 'main-steer:%' THEN 'steer' ELSE kind END,
                 payload, trigger_turn
          FROM agent_mailbox WHERE idempotency_key = ?1",
-        [key],
-        persisted_mailbox_message_from_row,
     )
-    .optional()
+    .bind(key)
+    .fetch_optional(&mut *conn)
+    .await?;
+    row.as_ref().map(persisted_mailbox_message_from_row).transpose()
 }
 
 fn persisted_mailbox_message_from_row(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<PersistedMailboxMessage> {
-    let kind = parse_kind(row.get::<_, String>(5)?, 5)?;
+    row: &sqlx::sqlite::SqliteRow,
+) -> anyhow::Result<PersistedMailboxMessage> {
+    let kind_str: String = row.get(5);
+    let kind = MailboxKind::parse(&kind_str)
+        .with_context(|| format!("unknown mailbox kind {kind_str:?}"))?;
     Ok(PersistedMailboxMessage {
         message: MailboxMessage {
-            sequence: row.get(0)?,
-            message_id: row.get(1)?,
-            sender_thread_id: row.get(3)?,
-            recipient_thread_id: row.get(4)?,
+            sequence: row.get(0),
+            message_id: row.get(1),
+            sender_thread_id: row.get(3),
+            recipient_thread_id: row.get(4),
             kind,
-            payload: row.get(6)?,
-            trigger_turn: row.get(7)?,
+            payload: row.get(6),
+            trigger_turn: row.get(7),
         },
-        idempotency_key: row.get(2)?,
+        idempotency_key: row.get(2),
     })
 }
 
-fn mailbox_message_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MailboxMessage> {
+fn mailbox_message_from_row(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<MailboxMessage> {
+    let kind_str: String = row.get(4);
+    let kind = MailboxKind::parse(&kind_str)
+        .with_context(|| format!("unknown mailbox kind {kind_str:?}"))?;
     Ok(MailboxMessage {
-        sequence: row.get(0)?,
-        message_id: row.get(1)?,
-        sender_thread_id: row.get(2)?,
-        recipient_thread_id: row.get(3)?,
-        kind: parse_kind(row.get::<_, String>(4)?, 4)?,
-        payload: row.get(5)?,
-        trigger_turn: row.get(6)?,
-    })
-}
-
-fn parse_kind(value: String, column: usize) -> rusqlite::Result<MailboxKind> {
-    MailboxKind::parse(&value).ok_or_else(|| {
-        rusqlite::Error::FromSqlConversionFailure(
-            column,
-            Type::Text,
-            format!("unknown mailbox kind {value:?}").into(),
-        )
+        sequence: row.get(0),
+        message_id: row.get(1),
+        sender_thread_id: row.get(2),
+        recipient_thread_id: row.get(3),
+        kind,
+        payload: row.get(5),
+        trigger_turn: row.get(6),
     })
 }
 
@@ -306,92 +303,117 @@ mod tests {
         }
     }
 
-    #[test]
-    fn enqueue_persists_and_idempotent_retry_returns_original_row() {
+    #[tokio::test]
+    async fn enqueue_persists_and_idempotent_retry_returns_original_row() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("subagents.db");
-        let store = AgentGraphStore::open(path.clone()).unwrap();
+        let store = AgentGraphStore::open(path.clone()).await.unwrap();
 
         let first = store
             .enqueue(&message("message-1", "key-1", "recipient"))
+            .await
             .unwrap();
         let retry = store
             .enqueue(&message("message-1", "key-1", "recipient"))
+            .await
             .unwrap();
         assert_eq!(retry, first);
         drop(store);
 
-        let reopened = AgentGraphStore::open(path).unwrap();
-        assert_eq!(reopened.pending_for("recipient", 0).unwrap(), vec![first]);
+        let reopened = AgentGraphStore::open(path).await.unwrap();
+        assert_eq!(
+            reopened.pending_for("recipient", 0).await.unwrap(),
+            vec![first]
+        );
     }
 
-    #[test]
-    fn idempotency_key_rejects_different_immutable_contents() {
+    #[tokio::test]
+    async fn idempotency_key_rejects_different_immutable_contents() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents.db"))
+            .await
+            .unwrap();
         store
             .enqueue(&message("message-1", "same-key", "recipient"))
+            .await
             .unwrap();
         let mut changed = message("message-2", "same-key", "recipient");
         changed.payload = "different".into();
 
-        let error = store.enqueue(&changed).unwrap_err();
-        assert!(error.to_string().contains("idempotency"));
-        assert_eq!(store.pending_for("recipient", 0).unwrap().len(), 1);
+        let error = store.enqueue(&changed).await.unwrap_err();
+        assert!(error.to_string().contains("immutable contents"));
+        assert_eq!(store.pending_for("recipient", 0).await.unwrap().len(), 1);
     }
 
-    #[test]
-    fn pending_messages_are_sequence_ordered_and_delivery_is_recipient_scoped() {
+    #[tokio::test]
+    async fn pending_messages_are_sequence_ordered_and_delivery_is_recipient_scoped() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents.db"))
+            .await
+            .unwrap();
         let first = store
             .enqueue(&message("message-1", "key-1", "recipient"))
+            .await
             .unwrap();
         let second = store
             .enqueue(&message("message-2", "key-2", "recipient"))
+            .await
             .unwrap();
         let other = store
             .enqueue(&message("message-3", "key-3", "other"))
+            .await
             .unwrap();
 
         assert_eq!(
-            store.pending_for("recipient", 0).unwrap(),
+            store.pending_for("recipient", 0).await.unwrap(),
             vec![first.clone(), second.clone()]
         );
         assert_eq!(
-            store.pending_for("recipient", first.sequence).unwrap(),
+            store
+                .pending_for("recipient", first.sequence)
+                .await
+                .unwrap(),
             vec![second.clone()]
         );
-        store.mark_delivered("recipient", first.sequence).unwrap();
-        assert_eq!(store.pending_for("recipient", 0).unwrap(), vec![second]);
-        assert_eq!(store.pending_for("other", 0).unwrap(), vec![other]);
+        store
+            .mark_delivered("recipient", first.sequence)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.pending_for("recipient", 0).await.unwrap(),
+            vec![second]
+        );
+        assert_eq!(store.pending_for("other", 0).await.unwrap(), vec![other]);
     }
 
-    #[test]
-    fn legacy_main_steer_followup_rows_project_as_steer() {
+    #[tokio::test]
+    async fn legacy_main_steer_followup_rows_project_as_steer() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("subagents.db");
-        let store = AgentGraphStore::open(path.clone()).unwrap();
-        let conn = rusqlite::Connection::open(path).unwrap();
-        conn.execute(
+        let store = AgentGraphStore::open(path.clone()).await.unwrap();
+        let pool = store.pool();
+        agent_db::sqlx::query(
             "INSERT INTO agent_mailbox (
                 message_id, idempotency_key, sender_thread_id, recipient_thread_id,
                 kind, payload, trigger_turn, delivery_state, created_at, delivered_at
              ) VALUES ('legacy-steer', 'main-steer:legacy-steer', 'root', 'root',
                        'followup', 'resume', 1, 'pending', 'now', NULL)",
-            [],
         )
+        .execute(pool)
+        .await
         .unwrap();
 
-        let pending = store.pending_for("root", 0).unwrap();
+        let pending = store.pending_for("root", 0).await.unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].kind, MailboxKind::Steer);
     }
 
-    #[test]
-    fn enqueue_rejects_empty_identifiers_before_persisting() {
+    #[tokio::test]
+    async fn enqueue_rejects_empty_identifiers_before_persisting() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("subagents.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents.db"))
+            .await
+            .unwrap();
         for invalid in [
             NewMailboxMessage {
                 message_id: String::new(),
@@ -410,7 +432,7 @@ mod tests {
                 ..message("message", "key-d", "recipient")
             },
         ] {
-            assert!(store.enqueue(&invalid).is_err());
+            assert!(store.enqueue(&invalid).await.is_err());
         }
     }
 }

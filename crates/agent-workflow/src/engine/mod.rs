@@ -53,7 +53,7 @@ pub async fn execute_workflow(
         &workflow.name,
         trigger_type,
         &started_at,
-    )?;
+    ).await?;
 
     let timeout_secs = workflow
         .variables
@@ -85,7 +85,7 @@ pub async fn execute_workflow(
                 None,
                 output_str.as_deref(),
                 res.steps_executed as i64,
-            )?;
+            ).await?;
         }
         Err(e) => {
             run_db.finish_run(
@@ -95,12 +95,12 @@ pub async fn execute_workflow(
                 Some(&e.to_string()),
                 None,
                 0,
-            )?;
+            ).await?;
         }
     }
 
     // 自动清理旧记录（保留最近 500 条）
-    if let Err(e) = run_db.prune_old_runs(500) {
+    if let Err(e) = run_db.prune_old_runs(500).await {
         tracing::warn!("清理旧运行记录失败: {e}");
     }
 
@@ -176,7 +176,7 @@ async fn execute_inner_with_depth(
                 &format!("{:?}", node.node_type),
                 &node.label,
                 &step_started,
-            ));
+            ).await);
             if matches!(
                 node.node_type,
                 NodeType::RunLoop | NodeType::CustomLoop | NodeType::Loop
@@ -247,7 +247,7 @@ async fn execute_inner_with_depth(
                             &step_finished,
                             out_str.as_deref(),
                             None
-                        ));
+                        ).await);
                     }
                     Ok(NodeResult::Branch(active_handles)) => {
                         ctx.set_node_output(
@@ -266,7 +266,7 @@ async fn execute_inner_with_depth(
                             &step_finished,
                             Some(&format!("branches: {:?}", active_handles)),
                             None
-                        ));
+                        ).await);
                     }
                     Ok(NodeResult::Filtered) => {
                         mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
@@ -276,7 +276,7 @@ async fn execute_inner_with_depth(
                             &step_finished,
                             Some("filtered"),
                             None
-                        ));
+                        ).await);
                     }
                     Ok(NodeResult::Approved) => {
                         ctx.set_node_output(node_id, serde_json::json!({ "approved": true }));
@@ -286,7 +286,7 @@ async fn execute_inner_with_depth(
                             &step_finished,
                             Some("approved"),
                             None
-                        ));
+                        ).await);
                     }
                     Ok(NodeResult::PendingApproval { prompt }) => {
                         log_db_err!(run_db.finish_step_log(
@@ -298,7 +298,7 @@ async fn execute_inner_with_depth(
                                     .to_string()
                             ),
                             None
-                        ));
+                        ).await);
                         return Ok(WorkflowRunResult {
                             run_id: run_id.to_string(),
                             status: "pending_approval".to_string(),
@@ -325,7 +325,7 @@ async fn execute_inner_with_depth(
                                     &step_finished,
                                     None,
                                     Some(&err_msg)
-                                ));
+                                ).await);
                             }
                             "fallback" => {
                                 let fb = fallback_value.unwrap_or(serde_json::json!(null));
@@ -337,7 +337,7 @@ async fn execute_inner_with_depth(
                                     &step_finished,
                                     fb_str.as_deref(),
                                     Some(&err_msg)
-                                ));
+                                ).await);
                             }
                             _ => {
                                 log_db_err!(run_db.finish_step_log(
@@ -346,7 +346,7 @@ async fn execute_inner_with_depth(
                                     &step_finished,
                                     None,
                                     Some(&err_msg)
-                                ));
+                                ).await);
                                 return Err(WorkflowError::NodeExecFailed {
                                     node_id: node_id.to_string(),
                                     label: node.label.clone(),
@@ -408,7 +408,7 @@ async fn execute_inner_with_depth(
                         &step_finished,
                         out_str.as_deref(),
                         None
-                    ));
+                    ).await);
                 }
                 Err(e) => {
                     let err_msg = e.to_string();
@@ -426,7 +426,7 @@ async fn execute_inner_with_depth(
                                 &step_finished,
                                 None,
                                 Some(&err_msg)
-                            ));
+                            ).await);
                         }
                         "fallback" => {
                             let fb = node
@@ -442,7 +442,7 @@ async fn execute_inner_with_depth(
                                 &step_finished,
                                 fb_str.as_deref(),
                                 Some(&err_msg)
-                            ));
+                            ).await);
                         }
                         _ => {
                             log_db_err!(run_db.finish_step_log(
@@ -451,7 +451,7 @@ async fn execute_inner_with_depth(
                                 &step_finished,
                                 None,
                                 Some(&err_msg)
-                            ));
+                            ).await);
                             return Err(WorkflowError::NodeExecFailed {
                                 node_id: node_id.to_string(),
                                 label: node.label.clone(),
@@ -468,7 +468,7 @@ async fn execute_inner_with_depth(
                         &step_finished,
                         Some(&format!("{:?}", other)),
                         None
-                    ));
+                    ).await);
                 }
             }
         }
@@ -525,7 +525,7 @@ fn execute_sub_workflow<'a>(
             &sub_wf.name,
             "sub_workflow",
             &started_at
-        ));
+        ).await);
 
         let result = execute_inner_with_depth(&sub_wf, input, &sub_run_id, run_db, depth + 1).await;
 
@@ -543,7 +543,7 @@ fn execute_sub_workflow<'a>(
                     None,
                     out_str.as_deref(),
                     res.steps_executed as i64
-                ));
+                ).await);
                 Ok(NodeResult::Success(res.output.clone().unwrap_or(
                     serde_json::json!({"sub_workflow": workflow_id}),
                 )))
@@ -557,7 +557,7 @@ fn execute_sub_workflow<'a>(
                     Some(&err_msg),
                     None,
                     0
-                ));
+                ).await);
                 Err(WorkflowError::NodeExecFailed {
                     node_id: workflow_id.to_string(),
                     label: format!("子工作流 {}", workflow_id),
@@ -636,7 +636,7 @@ async fn execute_loop_body(loop_node: &WorkflowNode, lc: &mut LoopContext<'_>) -
                 &format!("{:?}", body_node.node_type),
                 &body_node.label,
                 &step_started
-            ));
+            ).await);
 
             let result = executor.execute(body_node, lc.ctx).await;
             let step_finished = Local::now().to_rfc3339();
@@ -652,7 +652,7 @@ async fn execute_loop_body(loop_node: &WorkflowNode, lc: &mut LoopContext<'_>) -
                         &step_finished,
                         out_str.as_deref(),
                         None
-                    ));
+                    ).await);
                 }
                 Ok(other) => {
                     log_db_err!(lc.run_db.finish_step_log(
@@ -661,7 +661,7 @@ async fn execute_loop_body(loop_node: &WorkflowNode, lc: &mut LoopContext<'_>) -
                         &step_finished,
                         Some(&format!("{:?}", other)),
                         None
-                    ));
+                    ).await);
                 }
                 Err(e) => {
                     log_db_err!(lc.run_db.finish_step_log(
@@ -670,7 +670,7 @@ async fn execute_loop_body(loop_node: &WorkflowNode, lc: &mut LoopContext<'_>) -
                         &step_finished,
                         None,
                         Some(&e.to_string())
-                    ));
+                    ).await);
                     return Err(WorkflowError::NodeExecFailed {
                         node_id: body_id.to_string(),
                         label: body_node.label.clone(),

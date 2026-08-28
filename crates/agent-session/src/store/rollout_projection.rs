@@ -2,8 +2,8 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use agent_db::sqlx::{self, Row};
 use anyhow::{Context, Result};
-use rusqlite::params;
 use serde_json::Value;
 use types::message::{merge_google_thought_signature, Message, MessageContent, Role};
 use types::{MediaAsset, MediaKind, MediaRef};
@@ -27,7 +27,7 @@ struct ProjectedMessage {
 ///
 /// Session metadata and every other session remain untouched. Deletion, insertion, counter
 /// replacement, and creation of a missing session are committed atomically.
-pub fn rebuild_messages_from_rollout(
+pub async fn rebuild_messages_from_rollout(
     store: &SessionStore,
     session_id: &str,
     items: &[agent_rollout::RolloutItem],
@@ -44,22 +44,26 @@ pub fn rebuild_messages_from_rollout(
     .context("rollout tool message count overflow")?;
     let now = now_epoch_secs()?;
 
-    let tx = store.conn.unchecked_transaction()?;
-    tx.execute(
+    let mut tx = store.pool.begin().await?;
+    sqlx::query(
         "INSERT INTO sessions (id, source, started_at)
          VALUES (?1, 'rollout', ?2)
          ON CONFLICT(id) DO NOTHING",
-        params![session_id, now],
-    )?;
-    let projection_started_at = tx.query_row(
-        "SELECT started_at FROM sessions WHERE id = ?1",
-        params![session_id],
-        |row| row.get::<_, f64>(0),
-    )?;
-    tx.execute(
-        "DELETE FROM messages WHERE session_id = ?1",
-        params![session_id],
-    )?;
+    )
+    .bind(session_id)
+    .bind(now)
+    .execute(&mut *tx)
+    .await?;
+    let projection_started_at: f64 =
+        sqlx::query("SELECT started_at FROM sessions WHERE id = ?1")
+            .bind(session_id)
+            .fetch_one(&mut *tx)
+            .await?
+            .get(0);
+    sqlx::query("DELETE FROM messages WHERE session_id = ?1")
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
     for (index, message) in projected.into_iter().enumerate() {
         let timestamp = projection_started_at + index as f64 * 0.000_001;
         let row = NewMessage {
@@ -79,15 +83,19 @@ pub fn rebuild_messages_from_rollout(
             codex_message_items: None,
             media_json: message.media_json.as_deref(),
         };
-        insert_message_row(&tx, row, timestamp)?;
+        insert_message_row(&mut *tx, row, timestamp).await?;
     }
-    tx.execute(
+    sqlx::query(
         "UPDATE sessions
          SET message_count = ?1, tool_call_count = ?2
          WHERE id = ?3",
-        params![message_count, tool_call_count, session_id],
-    )?;
-    tx.commit()?;
+    )
+    .bind(message_count)
+    .bind(tool_call_count)
+    .bind(session_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 

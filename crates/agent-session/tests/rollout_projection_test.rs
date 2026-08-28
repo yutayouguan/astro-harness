@@ -43,23 +43,24 @@ fn rich_rollout() -> Vec<RolloutItem> {
     ]
 }
 
-#[test]
-fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
+#[tokio::test]
+async fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     let items = rich_rollout();
 
-    session::store::rebuild_messages_from_rollout(&store, "thread-1", &items).unwrap();
+    session::store::rebuild_messages_from_rollout(&store, "thread-1", &items).await.unwrap();
     let first_timestamps = store
         .get_messages("thread-1")
+        .await
         .unwrap()
         .into_iter()
         .map(|message| message.timestamp)
         .collect::<Vec<_>>();
     std::thread::sleep(std::time::Duration::from_millis(2));
-    session::store::rebuild_messages_from_rollout(&store, "thread-1", &items).unwrap();
+    session::store::rebuild_messages_from_rollout(&store, "thread-1", &items).await.unwrap();
 
-    let messages = store.get_messages("thread-1").unwrap();
+    let messages = store.get_messages("thread-1").await.unwrap();
     assert_eq!(messages.len(), 3);
     assert_eq!(
         messages
@@ -109,26 +110,28 @@ fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
         serde_json::from_str(messages[2].media_json.as_deref().unwrap()).unwrap();
     assert_eq!(tool_media[0].workspace_path(), Some("generated/result.png"));
 
-    let session = store.get_session("thread-1").unwrap().unwrap();
+    let session = store.get_session("thread-1").await.unwrap().unwrap();
     assert_eq!(session.source, "rollout");
     assert_eq!(session.message_count, 3);
     assert_eq!(session.tool_call_count, 1);
 }
 
-#[test]
-fn rebuild_only_replaces_the_target_session_projection() {
+#[tokio::test]
+async fn rebuild_only_replaces_the_target_session_projection() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.ensure_session("thread-1", "existing").unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+    store.ensure_session("thread-1", "existing").await.unwrap();
     store
         .set_session_title("thread-1", "Keep this title")
+        .await
         .unwrap();
-    store.ensure_session("thread-2", "test").unwrap();
+    store.ensure_session("thread-2", "test").await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("other session survives"),
             ..NewMessage::empty("thread-2", "user")
         })
+        .await
         .unwrap();
 
     session::store::rebuild_messages_from_rollout(
@@ -136,10 +139,11 @@ fn rebuild_only_replaces_the_target_session_projection() {
         "thread-1",
         &[RolloutItem::ResponseItem(Message::user("replacement"))],
     )
+    .await
     .unwrap();
 
     assert_eq!(
-        store.get_messages("thread-2").unwrap()[0]
+        store.get_messages("thread-2").await.unwrap()[0]
             .content
             .as_deref(),
         Some("other session survives")
@@ -147,39 +151,47 @@ fn rebuild_only_replaces_the_target_session_projection() {
     assert_eq!(
         store
             .get_session("thread-2")
+            .await
             .unwrap()
             .unwrap()
             .message_count,
         1
     );
-    let target = store.get_session("thread-1").unwrap().unwrap();
+    let target = store.get_session("thread-1").await.unwrap().unwrap();
     assert_eq!(target.title.as_deref(), Some("Keep this title"));
     assert_eq!(target.source, "existing");
     assert_eq!(target.message_count, 1);
 }
 
-#[test]
-fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
+#[tokio::test]
+async fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.ensure_session("thread-1", "test").unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+    store.ensure_session("thread-1", "test").await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("original projection"),
             ..NewMessage::empty("thread-1", "user")
         })
+        .await
         .unwrap();
-    rusqlite::Connection::open(store.db_path())
-        .unwrap()
-        .execute_batch(
-            "CREATE TRIGGER reject_projection_insert
-             BEFORE INSERT ON messages
-             WHEN NEW.content = 'reject-me'
-             BEGIN
-                 SELECT RAISE(ABORT, 'projection insert rejected');
-             END;",
-        )
-        .unwrap();
+    let raw = agent_db::SqlitePool::connect(
+        &format!("sqlite:{}?mode=rwc", store.db_path().display()),
+    )
+    .await
+    .unwrap();
+    agent_db::sqlx::raw_sql(
+        "CREATE TRIGGER reject_projection_insert
+         BEFORE INSERT ON messages
+         WHEN NEW.content = 'reject-me'
+         BEGIN
+             SELECT RAISE(ABORT, 'projection insert rejected');
+         END;",
+    )
+    .execute(&raw)
+    .await
+    .unwrap();
+    raw.close().await;
 
     let result = session::store::rebuild_messages_from_rollout(
         &store,
@@ -188,13 +200,14 @@ fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
             RolloutItem::ResponseItem(Message::assistant("partial replacement")),
             RolloutItem::ResponseItem(Message::tool("reject-me")),
         ],
-    );
+    )
+    .await;
     assert!(result.is_err());
 
-    let messages = store.get_messages("thread-1").unwrap();
+    let messages = store.get_messages("thread-1").await.unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].content.as_deref(), Some("original projection"));
-    let session = store.get_session("thread-1").unwrap().unwrap();
+    let session = store.get_session("thread-1").await.unwrap().unwrap();
     assert_eq!(session.message_count, 1);
     assert_eq!(session.tool_call_count, 0);
 
@@ -202,15 +215,16 @@ fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
         &store,
         "thread-new",
         &[RolloutItem::ResponseItem(Message::user("reject-me"))],
-    );
+    )
+    .await;
     assert!(missing_session_result.is_err());
-    assert!(store.get_session("thread-new").unwrap().is_none());
+    assert!(store.get_session("thread-new").await.unwrap().is_none());
 }
 
-#[test]
-fn duplicate_tool_call_ids_bind_results_in_rollout_order() {
+#[tokio::test]
+async fn duplicate_tool_call_ids_bind_results_in_rollout_order() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     let call = |name: &str| ToolCall {
         id: "duplicate-id".into(),
         name: name.into(),
@@ -228,18 +242,18 @@ fn duplicate_tool_call_ids_bind_results_in_rollout_order() {
         RolloutItem::ResponseItem(Message::tool_with_id("missing-id", "unmatched")),
     ];
 
-    session::store::rebuild_messages_from_rollout(&store, "thread-tools", &items).unwrap();
+    session::store::rebuild_messages_from_rollout(&store, "thread-tools", &items).await.unwrap();
 
-    let messages = store.get_messages("thread-tools").unwrap();
+    let messages = store.get_messages("thread-tools").await.unwrap();
     assert_eq!(messages[1].tool_name.as_deref(), Some("tool-a"));
     assert_eq!(messages[3].tool_name.as_deref(), Some("tool-b"));
     assert_eq!(messages[4].tool_name, None);
 }
 
-#[test]
-fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplicated() {
+#[tokio::test]
+async fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplicated() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
     let parts_only = Message {
         role: Role::User,
         content: MessageContent::Parts(vec![
@@ -267,9 +281,10 @@ fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplicated() 
             RolloutItem::ResponseItem(redundant),
         ],
     )
+    .await
     .unwrap();
 
-    let messages = store.get_messages("thread-media").unwrap();
+    let messages = store.get_messages("thread-media").await.unwrap();
     let media: Vec<MediaAsset> =
         serde_json::from_str(messages[0].media_json.as_deref().unwrap()).unwrap();
     assert_eq!(media.len(), 3);
@@ -322,20 +337,22 @@ fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplicated() 
         "thread-invalid-media",
         &[RolloutItem::ResponseItem(invalid)],
     )
+    .await
     .is_err());
-    assert!(store.get_session("thread-invalid-media").unwrap().is_none());
+    assert!(store.get_session("thread-invalid-media").await.unwrap().is_none());
 }
 
-#[test]
-fn invalid_adjacent_roles_are_rejected_before_projection_mutation() {
+#[tokio::test]
+async fn invalid_adjacent_roles_are_rejected_before_projection_mutation() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.ensure_session("thread-existing", "test").unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+    store.ensure_session("thread-existing", "test").await.unwrap();
     store
         .append_message(NewMessage {
             content: Some("original"),
             ..NewMessage::empty("thread-existing", "user")
         })
+        .await
         .unwrap();
 
     let existing_result = session::store::rebuild_messages_from_rollout(
@@ -346,14 +363,16 @@ fn invalid_adjacent_roles_are_rejected_before_projection_mutation() {
             RolloutItem::ResponseItem(Message::system("filtered")),
             RolloutItem::ResponseItem(Message::user("second")),
         ],
-    );
+    )
+    .await;
     assert!(existing_result.is_err());
-    let messages = store.get_messages("thread-existing").unwrap();
+    let messages = store.get_messages("thread-existing").await.unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].content.as_deref(), Some("original"));
     assert_eq!(
         store
             .get_session("thread-existing")
+            .await
             .unwrap()
             .unwrap()
             .message_count,
@@ -367,7 +386,8 @@ fn invalid_adjacent_roles_are_rejected_before_projection_mutation() {
             RolloutItem::ResponseItem(Message::assistant("first")),
             RolloutItem::ResponseItem(Message::assistant("second")),
         ],
-    );
+    )
+    .await;
     assert!(new_result.is_err());
-    assert!(store.get_session("thread-new-invalid").unwrap().is_none());
+    assert!(store.get_session("thread-new-invalid").await.unwrap().is_none());
 }

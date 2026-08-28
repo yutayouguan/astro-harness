@@ -1,4 +1,4 @@
-//! 单库会话存储（schema v17）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
+//! 单库会话存储（schema v19）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
 mod messages;
 pub mod projects;
@@ -7,12 +7,14 @@ mod schema;
 mod search;
 mod sessions;
 
+use agent_db::sqlx::{self, Row};
+use agent_db::{AstroDb, DbSpec, SqlitePool};
 use anyhow::{anyhow, Context, Result};
-use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use types::SqliteStore;
+
+const DB_SPEC: DbSpec = DbSpec::new("session", "state.db");
 
 pub use rollout_projection::rebuild_messages_from_rollout;
 pub use schema::SCHEMA_VERSION;
@@ -223,16 +225,15 @@ pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
 
 /// 单库会话存储：元数据、富消息行与消息级 FTS。
 pub struct SessionStore {
-    pub(crate) conn: Connection,
+    pub(crate) pool: SqlitePool,
     path: PathBuf,
 }
 
 impl SessionStore {
     /// 打开或创建 `state.db`。schema 低于 [`SCHEMA_VERSION`] 时进行增量迁移。
-    pub fn open(path: &Path) -> Result<Self> {
+    pub async fn open(path: &Path) -> Result<Self> {
         if path.exists() {
-            let version = peek_schema_version(path).unwrap_or(0);
-            // v13→v17 为 additive（ALTER / 数据清洗），可就地升级，不必丢历史。
+            let version = peek_schema_version(path).await.unwrap_or(0);
             let additive_only = (13..SCHEMA_VERSION).contains(&version);
             if version < SCHEMA_VERSION && !additive_only {
                 tracing::warn!(
@@ -245,28 +246,28 @@ impl SessionStore {
                 tracing::debug!(version, target = SCHEMA_VERSION, "session state.db opened");
             }
         }
-        let conn = types::open_wal(path)
+        let parent = path.parent().unwrap_or(Path::new("."));
+        let db = AstroDb::new(parent);
+        let pool = db.open_pool(&DB_SPEC).await
             .with_context(|| format!("open session store at {}", path.display()))?;
-        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
         let store = Self {
-            conn,
+            pool,
             path: path.to_path_buf(),
         };
-        store.migrate_schema()?;
-        // FTS 触发器自愈。
-        store.repair_messages_fts_if_needed()?;
-        // 补齐「有 messages、无 sessions 行」的孤儿会话。
-        store.backfill_sessions_from_messages()?;
+        store.migrate_schema().await?;
+        store.repair_messages_fts_if_needed().await?;
+        store.backfill_sessions_from_messages().await?;
         Ok(store)
     }
 
     /// 打开 `sessions_dir/state.db`；若存在旁路旧 `sessions.db` 则删除（不导入）。
-    pub fn open_sessions_dir(sessions_dir: &Path) -> Result<Self> {
+    pub async fn open_sessions_dir(sessions_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(sessions_dir)
             .with_context(|| format!("create sessions dir {}", sessions_dir.display()))?;
         discard_sidecar_sessions_db(sessions_dir);
-        let store = Self::open(&sessions_dir.join("state.db"))?;
-        store.backfill_sessions_from_messages()?;
+        let store = Self::open(&sessions_dir.join("state.db")).await?;
+        store.backfill_sessions_from_messages().await?;
         Ok(store)
     }
 
@@ -276,108 +277,118 @@ impl SessionStore {
     }
 
     /// 读取当前 `schema_version` 表中的版本号。
-    pub fn schema_version(&self) -> Result<i32> {
-        let version: Option<i32> = self
-            .conn
-            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
-                row.get(0)
-            })
-            .optional()?;
-        version.ok_or_else(|| anyhow!("schema_version table is empty"))
+    pub async fn schema_version(&self) -> Result<i32> {
+        let row = sqlx::query("SELECT version FROM schema_version LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => Ok(r.get::<i32, _>(0)),
+            None => Err(anyhow!("schema_version table is empty")),
+        }
     }
 }
 
 impl crate::ConversationStore for SessionStore {
-    fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
-        SessionStore::append_message(self, msg)
+    #[allow(refining_impl_trait)]
+    async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
+        SessionStore::append_message(self, msg).await
     }
 
-    fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
-        SessionStore::get_messages(self, session_id)
+    #[allow(refining_impl_trait)]
+    async fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
+        SessionStore::get_messages(self, session_id).await
     }
 
-    fn update_message_compressed_content(
+    #[allow(refining_impl_trait)]
+    async fn update_message_compressed_content(
         &self,
         message_id: i64,
         compressed: Option<&str>,
     ) -> Result<()> {
-        SessionStore::update_message_compressed_content(self, message_id, compressed)
+        SessionStore::update_message_compressed_content(self, message_id, compressed).await
     }
 
-    fn patch_last_assistant_reasoning_details(
+    #[allow(refining_impl_trait)]
+    async fn patch_last_assistant_reasoning_details(
         &self,
         session_id: &str,
         details: &Value,
     ) -> Result<()> {
-        SessionStore::patch_last_assistant_reasoning_details(self, session_id, details)
+        SessionStore::patch_last_assistant_reasoning_details(self, session_id, details).await
     }
 
-    fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
-        SessionStore::ensure_session(self, id, source)
+    #[allow(refining_impl_trait)]
+    async fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
+        SessionStore::ensure_session(self, id, source).await
     }
 
-    fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
-        SessionStore::update_session_billing(self, id, d)
+    #[allow(refining_impl_trait)]
+    async fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
+        SessionStore::update_session_billing(self, id, d).await
     }
 
-    fn recent_messages(
+    #[allow(refining_impl_trait)]
+    async fn recent_messages(
         &self,
         session_id: &str,
         limit: usize,
     ) -> Result<Vec<crate::ScrolledMessage>> {
-        SessionStore::recent_messages(self, session_id, limit)
+        SessionStore::recent_messages(self, session_id, limit).await
     }
 
-    fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
-        SessionStore::recall_message_ids(self, session_id, query, limit)
+    #[allow(refining_impl_trait)]
+    async fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
+        SessionStore::recall_message_ids(self, session_id, query, limit).await
     }
 
-    fn scroll_context_window(
+    #[allow(refining_impl_trait)]
+    async fn scroll_context_window(
         &self,
         session_id: &str,
         around_message_id: i64,
         window_size: i64,
     ) -> Result<Vec<crate::ScrolledMessage>> {
-        SessionStore::scroll_context_window(self, session_id, around_message_id, window_size)
+        SessionStore::scroll_context_window(self, session_id, around_message_id, window_size).await
     }
 
-    fn search_messages(
+    #[allow(refining_impl_trait)]
+    async fn search_messages(
         &self,
         query: &str,
         source_filter: Option<&str>,
         role_filter: Option<&str>,
         limit: i64,
     ) -> Result<Vec<SearchHit>> {
-        SessionStore::search_messages(self, query, source_filter, role_filter, limit)
+        SessionStore::search_messages(self, query, source_filter, role_filter, limit).await
     }
 }
 
-impl SqliteStore for SessionStore {
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn migrate(&self) -> anyhow::Result<()> {
-        self.migrate_schema()
+impl types::SqliteStore for SessionStore {
+    fn pool(&self) -> &types::SqlitePool {
+        &self.pool
     }
 }
 
 /// 读取已有库的 schema 版本；无法读取时视为 0。
-fn peek_schema_version(path: &Path) -> Result<i32> {
-    let conn = Connection::open(path)?;
-    let has: bool = conn.query_row(
+async fn peek_schema_version(path: &Path) -> Result<i32> {
+    let url = format!("sqlite:{}?mode=ro", path.display());
+    let pool = SqlitePool::connect(&url).await?;
+    let has: bool = sqlx::query(
         "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_version'",
-        [],
-        |row| row.get(0),
-    )?;
+    )
+    .fetch_one(&pool)
+    .await
+    .map(|r| r.get::<bool, _>(0))
+    .unwrap_or(false);
     if !has {
+        pool.close().await;
         return Ok(0);
     }
-    let version: Option<i32> = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
-            row.get(0)
-        })
-        .optional()?;
+    let version: Option<i32> = sqlx::query("SELECT version FROM schema_version LIMIT 1")
+        .fetch_optional(&pool)
+        .await?
+        .map(|r| r.get::<i32, _>(0));
+    pool.close().await;
     Ok(version.unwrap_or(0))
 }
 
@@ -387,11 +398,11 @@ fn discard_sidecar_sessions_db(sessions_dir: &Path) {
     types::delete_sqlite_files(&base);
 }
 
-pub(crate) fn is_unique_constraint(err: &rusqlite::Error) -> bool {
+pub(crate) fn is_unique_constraint(err: &sqlx::Error) -> bool {
     match err {
-        rusqlite::Error::SqliteFailure(e, _) => {
-            e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
-        }
+        sqlx::Error::Database(e) => e
+            .code()
+            .map_or(false, |c| c == "2067"),
         _ => false,
     }
 }
@@ -418,7 +429,6 @@ pub(crate) fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<Chat
             if id.is_empty() {
                 return None;
             }
-            // OpenAI 形状可能是 name 在顶层，或 function.name
             let title = tc
                 .get("name")
                 .and_then(|v| v.as_str())
@@ -554,7 +564,6 @@ pub(crate) fn attach_tool_output(
             return;
         }
     }
-    // 无匹配 skeleton：按顺序挂到第一个尚无 output 的 activity，或追加。
     if let Some(act) = assistant.activities.iter_mut().find(|a| a.output.is_none()) {
         if let Some(cid) = call_id {
             act.id = cid.to_string();

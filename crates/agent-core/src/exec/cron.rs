@@ -273,7 +273,7 @@ pub async fn execute_job(
 ///
 /// # Send
 ///
-/// `Session`/`SessionStore` 含 rusqlite `RefCell`，内部 future 非 Send。
+/// `Session`/`SessionStore` 内部 future 非 Send。
 /// 本函数经 `spawn_blocking` + 单 worker multi-thread runtime 隔离，对外返回 Send future，
 /// 可供 Tauri command / 多线程 runtime 直接 `.await`。
 pub async fn execute_job_with_roots(

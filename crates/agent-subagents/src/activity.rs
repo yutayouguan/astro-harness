@@ -1,6 +1,7 @@
 //! Agent 活动事件总线：发布、订阅与等待线程生命周期变更。
 
 use std::collections::{BTreeSet, VecDeque};
+use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
@@ -127,7 +128,7 @@ impl ActivityBus {
     /// Wait for activity that is visible to the Codex V2 model wait tool.
     /// Spawn/start noise is deliberately skipped; durable mailbox delivery,
     /// final lifecycle changes, and main-task steering wake the caller.
-    pub(crate) async fn wait_model_after<F>(
+    pub(crate) async fn wait_model_after<F, Fut>(
         &self,
         cursor: ActivityCursor,
         wait_timeout: Duration,
@@ -136,14 +137,15 @@ impl ActivityBus {
         mut durable_activity: F,
     ) -> anyhow::Result<Option<ModelWaitSignal>>
     where
-        F: FnMut() -> anyhow::Result<DurableModelState>,
+        F: FnMut() -> Fut,
+        Fut: Future<Output = anyhow::Result<DurableModelState>>,
     {
         let mut rx = self.tx.subscribe();
         if let Some(signal) = self.first_model_after(
             cursor,
             caller_thread_id,
             caller_is_root,
-            durable_activity()?,
+            durable_activity().await?,
         ) {
             return Ok(Some(signal));
         }
@@ -158,7 +160,7 @@ impl ActivityBus {
                         cursor,
                         caller_thread_id,
                         caller_is_root,
-                        durable_activity()?,
+                        durable_activity().await?,
                     ) {
                         return Ok(Some(signal));
                     }

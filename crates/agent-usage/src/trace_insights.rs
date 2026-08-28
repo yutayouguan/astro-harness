@@ -90,14 +90,16 @@ pub struct TraceInsightsQuery {
 }
 
 /// 查询 Tracing 洞察（会话列表 + 含 I/O 的调用链）
-pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsights> {
+pub async fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsights> {
     let (start, end) = period_window(q.period, q.as_of.as_deref())?;
     let agent = q.agent_id.filter(|s| !s.is_empty());
-    let db = UsageDb::open_default()?;
-    let summaries = db.list_trace_sessions(&start, &end, agent.as_deref(), TRACE_LIST_LIMIT)?;
+    let db = UsageDb::open_default().await?;
+    let summaries = db
+        .list_trace_sessions(&start, &end, agent.as_deref(), TRACE_LIST_LIMIT)
+        .await?;
 
     let sessions_dir = default_memory_dir().join("sessions");
-    let store = SessionStore::open_sessions_dir(&sessions_dir).ok();
+    let store = SessionStore::open_sessions_dir(&sessions_dir).await.ok();
 
     let mut traces = Vec::with_capacity(summaries.len());
     let mut kpi = TraceKpis {
@@ -106,9 +108,9 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
     };
 
     for s in summaries {
-        let usage_rows = db.list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT)?;
+        let usage_rows = db.list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT).await?;
         let (mut events, preview_title) = if let Some(store) = store.as_ref() {
-            match spans_from_chat_history(store, &s.session_id, &s.agent_id) {
+            match spans_from_chat_history(store, &s.session_id, &s.agent_id).await {
                 Ok(built) if !built.0.is_empty() => built,
                 _ => (
                     usage_rows_to_events(&usage_rows, &s.agent_id),
@@ -123,7 +125,7 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
         };
         // 与会话列表保持同一标题真源：优先 sessions.title；
         // 旧会话尚未生成标题时，才回退首条用户消息预览。
-        let title = resolved_trace_title(store.as_ref(), &s.session_id, preview_title);
+        let title = resolved_trace_title(store.as_ref(), &s.session_id, preview_title).await;
 
         merge_usage_into_spans(&mut events, &usage_rows);
         propagate_turn_ids(&mut events);
@@ -156,16 +158,19 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
     Ok(TraceInsights { kpis: kpi, traces })
 }
 
-fn resolved_trace_title(
+async fn resolved_trace_title(
     store: Option<&SessionStore>,
     session_id: &str,
     preview_title: String,
 ) -> String {
-    store
-        .and_then(|store| store.get_session(session_id).ok().flatten())
-        .and_then(|session| session.title)
-        .filter(|title| !title.trim().is_empty())
-        .unwrap_or(preview_title)
+    if let Some(store) = store {
+        if let Ok(Some(session)) = store.get_session(session_id).await {
+            if let Some(title) = session.title.filter(|t| !t.trim().is_empty()) {
+                return title;
+            }
+        }
+    }
+    preview_title
 }
 
 fn usage_rows_to_events(
@@ -201,12 +206,12 @@ fn usage_rows_to_events(
 ///
 /// 不使用 `build_chat_history`，因为它会合并连续 assistant 气泡，导致工具循环中的
 /// 多次 LLM 调用被压成一条，输入、输出和耗时也无法逐次对应。
-fn spans_from_chat_history(
+async fn spans_from_chat_history(
     store: &SessionStore,
     session_id: &str,
     agent_id: &str,
 ) -> anyhow::Result<(Vec<TraceEvent>, String)> {
-    let messages = store.get_messages(session_id)?;
+    let messages = store.get_messages(session_id).await?;
     if messages.is_empty() {
         return Ok((Vec::new(), String::new()));
     }
@@ -561,27 +566,28 @@ mod tests {
         }
     }
 
-    #[test]
-    fn trace_title_prefers_stored_session_title() {
+    #[tokio::test]
+    async fn trace_title_prefers_stored_session_title() {
         let dir = TempDir::new().unwrap();
-        let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-        store.ensure_session("s-title", "test").unwrap();
+        let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+        store.ensure_session("s-title", "test").await.unwrap();
         store
             .set_session_title("s-title", "云南采菌子女孩")
+            .await
             .unwrap();
 
         assert_eq!(
-            resolved_trace_title(Some(&store), "s-title", "首条用户消息".into()),
+            resolved_trace_title(Some(&store), "s-title", "首条用户消息".into()).await,
             "云南采菌子女孩"
         );
         assert_eq!(
-            resolved_trace_title(Some(&store), "missing", "首条用户消息".into()),
+            resolved_trace_title(Some(&store), "missing", "首条用户消息".into()).await,
             "首条用户消息"
         );
     }
 
-    #[test]
-    fn propagate_turn_ids_fills_user_and_tool_before_llm() {
+    #[tokio::test]
+    async fn propagate_turn_ids_fills_user_and_tool_before_llm() {
         let mut events = vec![
             TraceEvent {
                 id: "u1".into(),
@@ -641,11 +647,11 @@ mod tests {
         assert_eq!(events[2].turn_id.as_deref(), Some("turn-abc"));
     }
 
-    #[test]
-    fn list_trace_events_includes_turn_id() {
+    #[tokio::test]
+    async fn list_trace_events_includes_turn_id() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("usage.db");
-        let db = UsageDb::new(path).unwrap();
+        let db = UsageDb::new(path).await.unwrap();
         db.insert(NewUsageEvent {
             ts: "2026-07-14T12:00:00Z".into(),
             kind: "llm".into(),
@@ -668,17 +674,18 @@ mod tests {
             billing_mode: None,
             meta_json: None,
         })
+        .await
         .unwrap();
-        let rows = db.list_trace_events("sess-1", 50).unwrap();
+        let rows = db.list_trace_events("sess-1", 50).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].turn_id.as_deref(), Some("turn-abc"));
     }
 
-    #[test]
-    fn traces_group_by_session_and_order_events() {
+    #[tokio::test]
+    async fn traces_group_by_session_and_order_events() {
         let dir = TempDir::new().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
-        let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+        let db = UsageDb::new(dir.path().join("usage.db")).await.unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:00Z",
             kind: "llm",
@@ -690,6 +697,7 @@ mod tests {
             total_tokens: 15,
             cost_usd: 0.01,
         }))
+        .await
         .unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:01Z",
@@ -702,6 +710,7 @@ mod tests {
             total_tokens: 0,
             cost_usd: 0.0,
         }))
+        .await
         .unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T11:00:00Z",
@@ -714,6 +723,7 @@ mod tests {
             total_tokens: 2,
             cost_usd: 0.0,
         }))
+        .await
         .unwrap();
 
         let insights = query_trace_insights(TraceInsightsQuery {
@@ -721,6 +731,7 @@ mod tests {
             as_of: Some("2026-07-13T12:00:00Z".into()),
             agent_id: None,
         })
+        .await
         .unwrap();
         assert_eq!(insights.kpis.traces, 2);
         assert_eq!(insights.kpis.events, 3);
@@ -736,21 +747,25 @@ mod tests {
         assert_eq!(s1.events[1].kind, "tool");
     }
 
-    #[test]
-    fn chat_history_builds_io_chain_and_merges_llm_usage() {
+    #[tokio::test]
+    async fn chat_history_builds_io_chain_and_merges_llm_usage() {
         let dir = TempDir::new().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
 
         let sessions = dir.path().join("sessions");
         std::fs::create_dir_all(&sessions).unwrap();
-        let store = SessionStore::open(&sessions.join("state.db")).unwrap();
-        store.ensure_session("s-io", "test").unwrap();
-        store.set_session_title("s-io", "云南采菌子女孩").unwrap();
+        let store = SessionStore::open(&sessions.join("state.db")).await.unwrap();
+        store.ensure_session("s-io", "test").await.unwrap();
+        store
+            .set_session_title("s-io", "云南采菌子女孩")
+            .await
+            .unwrap();
         store
             .append_message(NewMessage {
                 content: Some("帮我查天气"),
                 ..NewMessage::empty("s-io", "user")
             })
+            .await
             .unwrap();
         store
             .append_message(NewMessage {
@@ -765,6 +780,7 @@ mod tests {
                 }])),
                 ..NewMessage::empty("s-io", "assistant")
             })
+            .await
             .unwrap();
         store
             .append_message(NewMessage {
@@ -773,6 +789,7 @@ mod tests {
                 tool_name: Some("web_search"),
                 ..NewMessage::empty("s-io", "tool")
             })
+            .await
             .unwrap();
         store
             .append_message(NewMessage {
@@ -780,9 +797,10 @@ mod tests {
                 reasoning: Some("先搜索再回答"),
                 ..NewMessage::empty("s-io", "assistant")
             })
+            .await
             .unwrap();
 
-        let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+        let db = UsageDb::new(dir.path().join("usage.db")).await.unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:00Z",
             kind: "llm",
@@ -794,8 +812,8 @@ mod tests {
             total_tokens: 140,
             cost_usd: 0.02,
         }))
+        .await
         .unwrap();
-        // 第二轮 assistant 也对应一条 llm usage
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:05Z",
             kind: "llm",
@@ -807,6 +825,7 @@ mod tests {
             total_tokens: 70,
             cost_usd: 0.01,
         }))
+        .await
         .unwrap();
 
         let insights = query_trace_insights(TraceInsightsQuery {
@@ -814,6 +833,7 @@ mod tests {
             as_of: Some("2026-07-13T12:00:00Z".into()),
             agent_id: None,
         })
+        .await
         .unwrap();
         let tr = insights
             .traces

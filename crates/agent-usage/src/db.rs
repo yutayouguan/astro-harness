@@ -1,24 +1,13 @@
-//! 用量事件库：SQLite 持久化与按月/季/年聚合查询。
-//!
-//! 职责：
-//! - 在 `~/.astro/usage.db` 记录 tool / skill / mcp / cron / llm 用量事件
-//! - 提供 insert、try_record 与按 period / agent 的洞察聚合
-//!
-//! 不变量：
-//! - KPI `calls` 仅统计 `kind IN ('tool','mcp','cron','llm')`；`skill` 不计入 calls
-//! - 时间窗为半开区间 `[start, end)`（UTC RFC3339）
-//! - 使用 WAL 模式；`id` 为主键 UUID
-
 use chrono::{Datelike, SecondsFormat, TimeZone, Utc};
-use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-/// `usage.db` schema 版本；v3→v4 使用 ADD COLUMN 非破坏性迁移。
+use agent_db::sqlx::{self, AssertSqlSafe, Row};
+use agent_db::{AstroDb, DbSpec, SqlitePool};
+
 pub const USAGE_SCHEMA_VERSION: i32 = 4;
 
-/// 建表 DDL（`usage_events` 及 ts / agent / kind 索引）
 const DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS usage_events (
     id TEXT PRIMARY KEY,
@@ -48,17 +37,15 @@ CREATE INDEX IF NOT EXISTS idx_usage_agent_ts ON usage_events(agent_id, ts);
 CREATE INDEX IF NOT EXISTS idx_usage_kind_name_ts ON usage_events(kind, name, ts);
 "#;
 
-/// KPI `calls` 计入的 kind 集合（`skill` 除外）
+const DB_SPEC: DbSpec = DbSpec::new("usage", "usage.db");
+
 const CALLS_KIND_SQL: &str = "CASE WHEN kind IN ('tool','mcp','cron','llm') THEN 1 ELSE 0 END";
 
-/// KPI `cost_usd` 聚合：排除 `cost_status='unknown'`
 const COST_SUM_SQL: &str =
-    "CASE WHEN cost_status IS NULL OR cost_status IN ('estimated','included') THEN cost_usd ELSE 0 END";
+    "CASE WHEN cost_status IS NULL OR cost_status IN ('estimated','included') THEN cost_usd ELSE 0.0 END";
 
-/// 将 ISO8601（含 `T` / `Z`）规范为 SQLite `datetime` 可解析形式
 const TS_NORM_SQL: &str = "replace(replace(ts, 'T', ' '), 'Z', '')";
 
-/// 洞察时间粒度
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum UsagePeriod {
@@ -67,7 +54,6 @@ pub enum UsagePeriod {
     Year,
 }
 
-/// 插入用量事件时的输入（不含 id，由 DB 生成）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewUsageEvent {
     pub ts: String,
@@ -92,7 +78,6 @@ pub struct NewUsageEvent {
     pub meta_json: Option<String>,
 }
 
-/// KPI 汇总
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct UsageKpis {
     pub calls: i64,
@@ -101,7 +86,6 @@ pub struct UsageKpis {
     pub active_agents: i64,
 }
 
-/// 时间序列上的一个桶
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UsageSeriesPoint {
     pub bucket: String,
@@ -110,7 +94,6 @@ pub struct UsageSeriesPoint {
     pub cost_usd: f64,
 }
 
-/// 排行榜单项
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UsageRankItem {
     pub kind: String,
@@ -120,7 +103,6 @@ pub struct UsageRankItem {
     pub cost_usd: f64,
 }
 
-/// 多维排行
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct UsageRankings {
     pub by_kind: Vec<UsageRankItem>,
@@ -128,7 +110,6 @@ pub struct UsageRankings {
     pub by_model: Vec<UsageRankItem>,
 }
 
-/// Tracing：会话级聚合行
 #[derive(Debug, Clone)]
 pub struct TraceSessionRow {
     pub session_id: String,
@@ -140,7 +121,6 @@ pub struct TraceSessionRow {
     pub cost_usd: f64,
 }
 
-/// Tracing：单事件行
 #[derive(Debug, Clone)]
 pub struct TraceEventRow {
     pub id: String,
@@ -155,43 +135,34 @@ pub struct TraceEventRow {
     pub turn_id: Option<String>,
 }
 
-/// 洞察查询完整结果
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct UsageInsights {
     pub kpis: UsageKpis,
     pub series: Vec<UsageSeriesPoint>,
     pub rankings: UsageRankings,
-    /// `kind=llm` 且 `cost_status='unknown'` 的事件数
     pub unpriced_llm_events: i64,
 }
 
-/// 洞察查询参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageInsightsQuery {
     pub period: UsagePeriod,
-    /// 锚定时刻（RFC3339）；缺省为当前 UTC
     pub as_of: Option<String>,
-    /// 按 Agent 过滤；`None` 表示全部
     pub agent_id: Option<String>,
 }
 
-/// 用量事件 SQLite 访问层
 pub struct UsageDb {
-    conn: Connection,
+    pool: SqlitePool,
     path: PathBuf,
 }
 
-/// 默认数据库路径：`{ASTRO_MEMORY_DIR|~/.astro}/usage.db`
 pub fn usage_db_path() -> PathBuf {
     home::default_memory_dir().join("usage.db")
 }
 
-/// UTC 边界格式化为 `YYYY-MM-DDTHH:MM:SSZ`，便于与事件 `ts` 做字典序比较
 fn fmt_utc_bound(dt: chrono::DateTime<Utc>) -> String {
     dt.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
-/// 时间窗与分桶格式：`[start, end)` UTC RFC3339 + strftime 格式
 fn period_bounds(
     period: UsagePeriod,
     as_of: &chrono::DateTime<Utc>,
@@ -255,15 +226,12 @@ fn parse_as_of(as_of: Option<&str>) -> anyhow::Result<chrono::DateTime<Utc>> {
     }
 }
 
-/// 返回 period 半开区间 `[start, end)` 的 RFC3339 UTC 字符串（与 query_insights 一致）。
 pub fn period_window(period: UsagePeriod, as_of: Option<&str>) -> anyhow::Result<(String, String)> {
     let as_of_dt = parse_as_of(as_of)?;
     let (start, end, _) = period_bounds(period, &as_of_dt);
     Ok((start, end))
 }
 
-/// 将事件时间戳规范为 `…Z`（秒精度），以便与 `period_bounds` 做字典序比较。
-/// 解析失败时保留原字符串。
 fn normalize_event_ts(ts: &str) -> String {
     match chrono::DateTime::parse_from_rfc3339(ts) {
         Ok(dt) => dt
@@ -273,7 +241,6 @@ fn normalize_event_ts(ts: &str) -> String {
     }
 }
 
-/// 生成 `[start, end)` 内全部时间桶标签（日或月）
 fn all_buckets(start: &str, end: &str, fmt: &str) -> anyhow::Result<Vec<String>> {
     let start_dt = chrono::DateTime::parse_from_rfc3339(start)?.with_timezone(&Utc);
     let end_dt = chrono::DateTime::parse_from_rfc3339(end)?.with_timezone(&Utc);
@@ -309,41 +276,38 @@ fn all_buckets(start: &str, end: &str, fmt: &str) -> anyhow::Result<Vec<String>>
     Ok(out)
 }
 
-fn open_and_init(path: &Path) -> anyhow::Result<Connection> {
-    let conn = types::open_wal(path)?;
-    conn.execute_batch(DDL)?;
-    conn.execute_batch(&format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION};"))?;
-    Ok(conn)
-}
-
 impl types::SqliteStore for UsageDb {
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// `new()` 已在打开时完成迁移；此处幂等校准 `user_version`。
-    fn migrate(&self) -> anyhow::Result<()> {
-        self.conn
-            .execute_batch(&format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION};"))?;
-        Ok(())
+    fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 }
 
 impl UsageDb {
-    /// 打开或创建数据库；v3→v4 非破坏性迁移，仅 version<3 或新库时重建
-    pub fn new(path: PathBuf) -> anyhow::Result<Self> {
+    pub async fn new(path: PathBuf) -> anyhow::Result<Self> {
+        let parent = path.parent().unwrap_or(Path::new(".")).to_path_buf();
         let exists = path.exists();
+
         let version = if exists {
-            let conn = Connection::open(&path)?;
-            conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i32>(0))?
+            let db = AstroDb::new(&parent);
+            let temp_pool = db.open_pool(&DB_SPEC).await?;
+            let (v,): (i32,) = sqlx::query_as("PRAGMA user_version")
+                .fetch_one(&temp_pool)
+                .await?;
+            temp_pool.close().await;
+            v
         } else {
             0
         };
 
         if !exists || version == 0 {
             types::delete_sqlite_files(&path);
-            let conn = open_and_init(&path)?;
-            return Ok(Self { conn, path });
+            let db = AstroDb::new(&parent);
+            let pool = db.open_pool(&DB_SPEC).await?;
+            sqlx::query(DDL).execute(&pool).await?;
+            sqlx::raw_sql(AssertSqlSafe(format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION}")))
+                .execute(&pool)
+                .await?;
+            return Ok(Self { pool, path });
         }
 
         if version > USAGE_SCHEMA_VERSION {
@@ -355,43 +319,55 @@ impl UsageDb {
         if version < 3 {
             tracing::warn!(version, "usage.db too old; rebuilding");
             types::delete_sqlite_files(&path);
-            let conn = open_and_init(&path)?;
-            return Ok(Self { conn, path });
+            let db = AstroDb::new(&parent);
+            let pool = db.open_pool(&DB_SPEC).await?;
+            sqlx::query(DDL).execute(&pool).await?;
+            sqlx::raw_sql(AssertSqlSafe(format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION}")))
+                .execute(&pool)
+                .await?;
+            return Ok(Self { pool, path });
         }
 
-        let conn = types::open_wal(&path)?;
+        let db = AstroDb::new(&parent);
+        let pool = db.open_pool(&DB_SPEC).await?;
+
         if version < 4 {
-            let has_turn: bool = {
-                let mut stmt = conn.prepare("PRAGMA table_info(usage_events)")?;
-                let names: Vec<String> = stmt
-                    .query_map([], |r| r.get::<_, String>(1))?
-                    .filter_map(|x| x.ok())
-                    .collect();
-                names.iter().any(|n| n == "turn_id")
-            };
+            let rows = sqlx::query("PRAGMA table_info(usage_events)")
+                .fetch_all(&pool)
+                .await?;
+            let has_turn = rows.iter().any(|r| {
+                let name: String = r.get(1usize);
+                name == "turn_id"
+            });
             if !has_turn {
-                conn.execute("ALTER TABLE usage_events ADD COLUMN turn_id TEXT", [])?;
+                sqlx::query("ALTER TABLE usage_events ADD COLUMN turn_id TEXT")
+                    .execute(&pool)
+                    .await?;
             }
-            conn.execute_batch(&format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION};"))?;
+            sqlx::raw_sql(AssertSqlSafe(format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION}")))
+                .execute(&pool)
+                .await?;
         }
-        Ok(Self { conn, path })
+
+        Ok(Self { pool, path })
     }
 
-    /// 打开默认 `~/.astro/usage.db`
-    pub fn open_default() -> anyhow::Result<Self> {
-        Self::new(usage_db_path())
+    pub async fn open_default() -> anyhow::Result<Self> {
+        Self::new(usage_db_path()).await
     }
 
-    /// 数据库文件路径（供 [`SqliteStore`] 等对齐接口使用）
     pub fn db_path(&self) -> &Path {
         &self.path
     }
 
-    /// 插入一条用量事件，返回新 id
-    pub fn insert(&self, row: NewUsageEvent) -> anyhow::Result<String> {
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
+    pub async fn insert(&self, row: NewUsageEvent) -> anyhow::Result<String> {
         let id = Uuid::new_v4().to_string();
         let ts = normalize_event_ts(&row.ts);
-        self.conn.execute(
+        sqlx::query(
             "INSERT INTO usage_events (
                 id, ts, kind, name, agent_id, session_id, turn_id,
                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
@@ -399,77 +375,88 @@ impl UsageDb {
                 cost_status, cost_source, pricing_version,
                 billing_provider, billing_base_url, billing_mode, meta_json
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
-            params![
-                id,
-                ts,
-                row.kind,
-                row.name,
-                row.agent_id,
-                row.session_id,
-                row.turn_id,
-                row.input_tokens,
-                row.output_tokens,
-                row.cache_read_tokens,
-                row.cache_write_tokens,
-                row.reasoning_tokens,
-                row.total_tokens,
-                row.cost_usd,
-                row.cost_status,
-                row.cost_source,
-                row.pricing_version,
-                row.billing_provider,
-                row.billing_base_url,
-                row.billing_mode,
-                row.meta_json,
-            ],
-        )?;
+        )
+        .bind(&id)
+        .bind(&ts)
+        .bind(&row.kind)
+        .bind(&row.name)
+        .bind(&row.agent_id)
+        .bind(&row.session_id)
+        .bind(&row.turn_id)
+        .bind(row.input_tokens)
+        .bind(row.output_tokens)
+        .bind(row.cache_read_tokens)
+        .bind(row.cache_write_tokens)
+        .bind(row.reasoning_tokens)
+        .bind(row.total_tokens)
+        .bind(row.cost_usd)
+        .bind(&row.cost_status)
+        .bind(&row.cost_source)
+        .bind(&row.pricing_version)
+        .bind(&row.billing_provider)
+        .bind(&row.billing_base_url)
+        .bind(&row.billing_mode)
+        .bind(&row.meta_json)
+        .execute(&self.pool)
+        .await?;
         Ok(id)
     }
 
-    /// 尽力写入：打开默认库并 insert；失败只记日志，不向上抛
-    pub fn try_record(row: NewUsageEvent) {
-        match Self::open_default().and_then(|db| db.insert(row).map(|_| ())) {
-            Ok(()) => {}
-            Err(e) => tracing::warn!("usage_db try_record failed: {e:#}"),
+    pub async fn try_record(row: NewUsageEvent) {
+        let result = async {
+            let db = Self::open_default().await?;
+            db.insert(row).await?;
+            Ok::<(), anyhow::Error>(())
+        }
+        .await;
+        if let Err(e) = result {
+            tracing::warn!("usage_db try_record failed: {e:#}");
         }
     }
 
-    /// 按 period / agent 聚合洞察（KPI + 序列 + 排行）
-    pub fn query_insights(&self, q: UsageInsightsQuery) -> anyhow::Result<UsageInsights> {
+    pub async fn query_insights(&self, q: UsageInsightsQuery) -> anyhow::Result<UsageInsights> {
         let as_of = parse_as_of(q.as_of.as_deref())?;
         let (start, end, bucket_fmt) = period_bounds(q.period, &as_of);
         let agent_id = q.agent_id.filter(|s| !s.is_empty());
         Ok(UsageInsights {
-            kpis: self.query_kpis(&start, &end, agent_id.as_deref())?,
-            series: self.query_series(&start, &end, bucket_fmt, agent_id.as_deref())?,
+            kpis: self
+                .query_kpis(&start, &end, agent_id.as_deref())
+                .await?,
+            series: self
+                .query_series(&start, &end, bucket_fmt, agent_id.as_deref())
+                .await?,
             rankings: UsageRankings {
-                by_kind: self.query_rank_by_kind(&start, &end, agent_id.as_deref())?,
-                by_agent: self.query_rank_by_agent(&start, &end, agent_id.as_deref())?,
-                by_model: self.query_rank_by_model(&start, &end, agent_id.as_deref())?,
+                by_kind: self
+                    .query_rank_by_kind(&start, &end, agent_id.as_deref())
+                    .await?,
+                by_agent: self
+                    .query_rank_by_agent(&start, &end, agent_id.as_deref())
+                    .await?,
+                by_model: self
+                    .query_rank_by_model(&start, &end, agent_id.as_deref())
+                    .await?,
             },
-            unpriced_llm_events: self.query_unpriced_llm_events(
-                &start,
-                &end,
-                agent_id.as_deref(),
-            )?,
+            unpriced_llm_events: self
+                .query_unpriced_llm_events(&start, &end, agent_id.as_deref())
+                .await?,
         })
     }
 
-    fn agent_filter_sql(agent_id: Option<&str>) -> (&'static str, Option<&str>) {
+    fn agent_filter_sql(agent_id: Option<&str>) -> &'static str {
         if agent_id.is_some() {
-            (" AND agent_id = ?3", agent_id)
+            " AND agent_id = ?3"
         } else {
-            ("", None)
+            ""
         }
     }
 
-    fn query_kpis(
+    async fn query_kpis(
         &self,
         start: &str,
         end: &str,
         agent_id: Option<&str>,
     ) -> anyhow::Result<UsageKpis> {
-        let (agent_clause, _) = Self::agent_filter_sql(agent_id);
+        let agent_clause = Self::agent_filter_sql(agent_id);
         let sql = format!(
             "SELECT
                 COALESCE(SUM({CALLS_KIND_SQL}), 0),
@@ -479,37 +466,27 @@ impl UsageDb {
              FROM usage_events
              WHERE ts >= ?1 AND ts < ?2{agent_clause}"
         );
-        let mut stmt = self.conn.prepare(&sql)?;
-        let kpis = if let Some(aid) = agent_id {
-            stmt.query_row(params![start, end, aid], |r| {
-                Ok(UsageKpis {
-                    calls: r.get(0)?,
-                    tokens: r.get(1)?,
-                    cost_usd: r.get(2)?,
-                    active_agents: r.get(3)?,
-                })
-            })?
-        } else {
-            stmt.query_row(params![start, end], |r| {
-                Ok(UsageKpis {
-                    calls: r.get(0)?,
-                    tokens: r.get(1)?,
-                    cost_usd: r.get(2)?,
-                    active_agents: r.get(3)?,
-                })
-            })?
-        };
-        Ok(kpis)
+        let mut query = sqlx::query(AssertSqlSafe(sql)).bind(start).bind(end);
+        if let Some(aid) = agent_id {
+            query = query.bind(aid);
+        }
+        let row = query.fetch_one(&self.pool).await?;
+        Ok(UsageKpis {
+            calls: row.get(0),
+            tokens: row.get(1),
+            cost_usd: row.get(2),
+            active_agents: row.get(3),
+        })
     }
 
-    fn query_series(
+    async fn query_series(
         &self,
         start: &str,
         end: &str,
         bucket_fmt: &str,
         agent_id: Option<&str>,
     ) -> anyhow::Result<Vec<UsageSeriesPoint>> {
-        let (agent_clause, _) = Self::agent_filter_sql(agent_id);
+        let agent_clause = Self::agent_filter_sql(agent_id);
         let sql = format!(
             "SELECT
                 strftime('{bucket_fmt}', {TS_NORM_SQL}) AS bucket,
@@ -521,26 +498,19 @@ impl UsageDb {
              GROUP BY bucket
              ORDER BY bucket"
         );
-        let mut stmt = self.conn.prepare(&sql)?;
-        let map_row = |r: &rusqlite::Row<'_>| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, i64>(1)?,
-                r.get::<_, i64>(2)?,
-                r.get::<_, f64>(3)?,
-            ))
-        };
-        let rows: Vec<(String, i64, i64, f64)> = if let Some(aid) = agent_id {
-            stmt.query_map(params![start, end, aid], map_row)?
-                .collect::<Result<Vec<_>, _>>()?
-        } else {
-            stmt.query_map(params![start, end], map_row)?
-                .collect::<Result<Vec<_>, _>>()?
-        };
+        let mut query = sqlx::query(AssertSqlSafe(sql)).bind(start).bind(end);
+        if let Some(aid) = agent_id {
+            query = query.bind(aid);
+        }
+        let rows = query.fetch_all(&self.pool).await?;
+        let db_rows: Vec<(String, i64, i64, f64)> = rows
+            .iter()
+            .map(|r| (r.get(0), r.get(1), r.get(2), r.get(3)))
+            .collect();
 
         let mut by_bucket: std::collections::BTreeMap<String, (i64, i64, f64)> =
             std::collections::BTreeMap::new();
-        for (bucket, calls, tokens, cost) in rows {
+        for (bucket, calls, tokens, cost) in db_rows {
             if !bucket.is_empty() {
                 by_bucket.insert(bucket, (calls, tokens, cost));
             }
@@ -559,14 +529,13 @@ impl UsageDb {
         Ok(series)
     }
 
-    /// 统一维度排行：tool / skill / mcp / cron
-    fn query_rank_by_kind(
+    async fn query_rank_by_kind(
         &self,
         start: &str,
         end: &str,
         agent_id: Option<&str>,
     ) -> anyhow::Result<Vec<UsageRankItem>> {
-        let (agent_clause, _) = Self::agent_filter_sql(agent_id);
+        let agent_clause = Self::agent_filter_sql(agent_id);
         let sql = format!(
             "SELECT kind, name,
                 COUNT(*) AS calls,
@@ -580,17 +549,16 @@ impl UsageDb {
              ORDER BY calls DESC, kind, name
              LIMIT 50"
         );
-        self.query_rank_items(&sql, start, end, agent_id)
+        self.query_rank_items(sql, start, end, agent_id).await
     }
 
-    /// 按 Agent 排行（仅 `kind = llm`，用于模型用量洞察）
-    fn query_rank_by_agent(
+    async fn query_rank_by_agent(
         &self,
         start: &str,
         end: &str,
         agent_id: Option<&str>,
     ) -> anyhow::Result<Vec<UsageRankItem>> {
-        let (agent_clause, _) = Self::agent_filter_sql(agent_id);
+        let agent_clause = Self::agent_filter_sql(agent_id);
         let sql = format!(
             "SELECT 'agent' AS kind, agent_id AS name,
                 COUNT(*) AS calls,
@@ -604,17 +572,16 @@ impl UsageDb {
              ORDER BY calls DESC, name
              LIMIT 50"
         );
-        self.query_rank_items(&sql, start, end, agent_id)
+        self.query_rank_items(sql, start, end, agent_id).await
     }
 
-    /// 按模型排行（`kind = llm`）
-    fn query_rank_by_model(
+    async fn query_rank_by_model(
         &self,
         start: &str,
         end: &str,
         agent_id: Option<&str>,
     ) -> anyhow::Result<Vec<UsageRankItem>> {
-        let (agent_clause, _) = Self::agent_filter_sql(agent_id);
+        let agent_clause = Self::agent_filter_sql(agent_id);
         let sql = format!(
             "SELECT kind, name,
                 COUNT(*) AS calls,
@@ -628,16 +595,16 @@ impl UsageDb {
              ORDER BY calls DESC, name
              LIMIT 50"
         );
-        self.query_rank_items(&sql, start, end, agent_id)
+        self.query_rank_items(sql, start, end, agent_id).await
     }
 
-    fn query_unpriced_llm_events(
+    async fn query_unpriced_llm_events(
         &self,
         start: &str,
         end: &str,
         agent_id: Option<&str>,
     ) -> anyhow::Result<i64> {
-        let (agent_clause, _) = Self::agent_filter_sql(agent_id);
+        let agent_clause = Self::agent_filter_sql(agent_id);
         let sql = format!(
             "SELECT COUNT(*)
              FROM usage_events
@@ -646,17 +613,15 @@ impl UsageDb {
                AND cost_status = 'unknown'
                {agent_clause}"
         );
-        let mut stmt = self.conn.prepare(&sql)?;
-        let count = if let Some(aid) = agent_id {
-            stmt.query_row(params![start, end, aid], |r| r.get(0))?
-        } else {
-            stmt.query_row(params![start, end], |r| r.get(0))?
-        };
+        let mut query = sqlx::query_as::<_, (i64,)>(AssertSqlSafe(sql)).bind(start).bind(end);
+        if let Some(aid) = agent_id {
+            query = query.bind(aid);
+        }
+        let (count,) = query.fetch_one(&self.pool).await?;
         Ok(count)
     }
 
-    /// 按 session 聚合近期 Trace 摘要
-    pub fn list_trace_sessions(
+    pub async fn list_trace_sessions(
         &self,
         start: &str,
         end: &str,
@@ -686,30 +651,26 @@ impl UsageDb {
              ORDER BY MAX(ts) DESC
              LIMIT {limit}"
         );
-        let mut stmt = self.conn.prepare(&sql)?;
-        let map = |r: &rusqlite::Row<'_>| {
-            Ok(TraceSessionRow {
-                session_id: r.get(0)?,
-                agent_id: r.get(1)?,
-                started_at: r.get(2)?,
-                ended_at: r.get(3)?,
-                event_count: r.get(4)?,
-                tokens: r.get(5)?,
-                cost_usd: r.get(6)?,
+        let mut query = sqlx::query(AssertSqlSafe(sql)).bind(start).bind(end);
+        if let Some(aid) = agent_id {
+            query = query.bind(aid);
+        }
+        let rows = query.fetch_all(&self.pool).await?;
+        Ok(rows
+            .iter()
+            .map(|r| TraceSessionRow {
+                session_id: r.get(0),
+                agent_id: r.get(1),
+                started_at: r.get(2),
+                ended_at: r.get(3),
+                event_count: r.get(4),
+                tokens: r.get(5),
+                cost_usd: r.get(6),
             })
-        };
-        let rows = if let Some(aid) = agent_id {
-            stmt.query_map(params![start, end, aid], map)?
-                .collect::<Result<Vec<_>, _>>()?
-        } else {
-            stmt.query_map(params![start, end], map)?
-                .collect::<Result<Vec<_>, _>>()?
-        };
-        Ok(rows)
+            .collect())
     }
 
-    /// 单会话事件时间线
-    pub fn list_trace_events(
+    pub async fn list_trace_events(
         &self,
         session_id: &str,
         limit: usize,
@@ -722,51 +683,49 @@ impl UsageDb {
              ORDER BY ts ASC, rowid ASC
              LIMIT {limit}"
         );
-        let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt
-            .query_map(params![session_id], |r| {
-                Ok(TraceEventRow {
-                    id: r.get(0)?,
-                    ts: r.get(1)?,
-                    kind: r.get(2)?,
-                    name: r.get(3)?,
-                    agent_id: r.get(4)?,
-                    input_tokens: r.get(5)?,
-                    output_tokens: r.get(6)?,
-                    total_tokens: r.get(7)?,
-                    cost_usd: r.get(8)?,
-                    turn_id: r.get(9)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(rows)
+        let rows = sqlx::query(AssertSqlSafe(sql))
+            .bind(session_id)
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| TraceEventRow {
+                id: r.get(0),
+                ts: r.get(1),
+                kind: r.get(2),
+                name: r.get(3),
+                agent_id: r.get(4),
+                input_tokens: r.get(5),
+                output_tokens: r.get(6),
+                total_tokens: r.get(7),
+                cost_usd: r.get(8),
+                turn_id: r.get(9),
+            })
+            .collect())
     }
 
-    fn query_rank_items(
+    async fn query_rank_items(
         &self,
-        sql: &str,
+        sql: String,
         start: &str,
         end: &str,
         agent_id: Option<&str>,
     ) -> anyhow::Result<Vec<UsageRankItem>> {
-        let mut stmt = self.conn.prepare(sql)?;
-        let map_row = |r: &rusqlite::Row<'_>| {
-            Ok(UsageRankItem {
-                kind: r.get(0)?,
-                name: r.get(1)?,
-                calls: r.get(2)?,
-                tokens: r.get(3)?,
-                cost_usd: r.get(4)?,
+        let mut query = sqlx::query(AssertSqlSafe(sql)).bind(start).bind(end);
+        if let Some(aid) = agent_id {
+            query = query.bind(aid);
+        }
+        let rows = query.fetch_all(&self.pool).await?;
+        Ok(rows
+            .iter()
+            .map(|r| UsageRankItem {
+                kind: r.get(0),
+                name: r.get(1),
+                calls: r.get(2),
+                tokens: r.get(3),
+                cost_usd: r.get(4),
             })
-        };
-        let rows = if let Some(aid) = agent_id {
-            stmt.query_map(params![start, end, aid], map_row)?
-                .collect::<Result<Vec<_>, _>>()?
-        } else {
-            stmt.query_map(params![start, end], map_row)?
-                .collect::<Result<Vec<_>, _>>()?
-        };
-        Ok(rows)
+            .collect())
     }
 }
 
@@ -775,17 +734,16 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[test]
-    fn usage_db_impls_sqlite_store() {
+    #[tokio::test]
+    async fn usage_db_impls_sqlite_store() {
         use types::SqliteStore;
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("usage.db");
-        let db = UsageDb::new(path.clone()).unwrap();
-        assert_eq!(SqliteStore::path(&db), path.as_path());
-        SqliteStore::migrate(&db).unwrap();
-        let ver: i32 = db
-            .conn
-            .query_row("PRAGMA user_version", [], |r| r.get(0))
+        let db = UsageDb::new(path).await.unwrap();
+        let pool = SqliteStore::pool(&db);
+        let (ver,): (i32,) = sqlx::query_as("PRAGMA user_version")
+            .fetch_one(pool)
+            .await
             .unwrap();
         assert_eq!(ver, USAGE_SCHEMA_VERSION);
     }
@@ -832,10 +790,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn skill_rows_do_not_inflate_calls() {
+    #[tokio::test]
+    async fn skill_rows_do_not_inflate_calls() {
         let dir = TempDir::new().unwrap();
-        let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+        let db = UsageDb::new(dir.path().join("usage.db")).await.unwrap();
         db.insert(zero_event(
             "2026-07-13T02:00:00Z",
             "tool",
@@ -843,6 +801,7 @@ mod tests {
             "workspace",
             0,
         ))
+        .await
         .unwrap();
         db.insert(zero_event(
             "2026-07-13T02:00:01Z",
@@ -851,6 +810,7 @@ mod tests {
             "workspace",
             0,
         ))
+        .await
         .unwrap();
         let insights = db
             .query_insights(UsageInsightsQuery {
@@ -858,21 +818,21 @@ mod tests {
                 as_of: Some("2026-07-13T12:00:00Z".into()),
                 agent_id: None,
             })
+            .await
             .unwrap();
         assert_eq!(insights.kpis.calls, 1);
         assert_eq!(insights.rankings.by_kind.len(), 2);
-        // 仅 llm 进入 by_agent；此处只有 tool/skill
         assert!(insights.rankings.by_agent.is_empty());
     }
 
-    #[test]
-    fn normalize_offset_ts_on_insert_counts_in_z_bounds() {
+    #[tokio::test]
+    async fn normalize_offset_ts_on_insert_counts_in_z_bounds() {
         assert_eq!(
             normalize_event_ts("2026-07-01T00:00:00+00:00"),
             "2026-07-01T00:00:00Z"
         );
         let dir = TempDir::new().unwrap();
-        let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+        let db = UsageDb::new(dir.path().join("usage.db")).await.unwrap();
         db.insert(zero_event(
             "2026-07-01T00:00:00+00:00",
             "tool",
@@ -880,6 +840,7 @@ mod tests {
             "workspace",
             0,
         ))
+        .await
         .unwrap();
         let insights = db
             .query_insights(UsageInsightsQuery {
@@ -887,14 +848,15 @@ mod tests {
                 as_of: Some("2026-07-13T12:00:00Z".into()),
                 agent_id: None,
             })
+            .await
             .unwrap();
         assert_eq!(insights.kpis.calls, 1);
     }
 
-    #[test]
-    fn by_agent_only_counts_llm() {
+    #[tokio::test]
+    async fn by_agent_only_counts_llm() {
         let dir = TempDir::new().unwrap();
-        let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+        let db = UsageDb::new(dir.path().join("usage.db")).await.unwrap();
         db.insert(zero_event(
             "2026-07-13T02:00:00Z",
             "skill",
@@ -902,6 +864,7 @@ mod tests {
             "skill-only",
             10,
         ))
+        .await
         .unwrap();
         db.insert(zero_event(
             "2026-07-13T02:00:01Z",
@@ -910,6 +873,7 @@ mod tests {
             "workspace",
             0,
         ))
+        .await
         .unwrap();
         db.insert(NewUsageEvent {
             ts: "2026-07-13T02:00:02Z".into(),
@@ -933,6 +897,7 @@ mod tests {
             billing_mode: None,
             meta_json: None,
         })
+        .await
         .unwrap();
         let insights = db
             .query_insights(UsageInsightsQuery {
@@ -940,6 +905,7 @@ mod tests {
                 as_of: Some("2026-07-13T12:00:00Z".into()),
                 agent_id: None,
             })
+            .await
             .unwrap();
         assert_eq!(insights.rankings.by_agent.len(), 1);
         assert_eq!(insights.rankings.by_agent[0].name, "default");
