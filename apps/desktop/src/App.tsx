@@ -1333,7 +1333,7 @@ export default function App() {
             </>
           ) : featureNav ? (
             <>
-              {featureNav !== "cron" && featureNav !== "loop" && (
+              {featureNav !== "cron" && featureNav !== "loop" && featureNav !== "skills" && (
                 <div className="content-header">
                   <div className="content-heading">
                     <div className="page-title-block">

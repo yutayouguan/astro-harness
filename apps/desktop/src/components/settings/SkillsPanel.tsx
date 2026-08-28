@@ -2962,17 +2962,6 @@ export default function SkillsPanel({
       >
       {primaryTab === "skills" && (scope !== "global" || personalTab === "installed") && (
         <section className="skills-pane" role="tabpanel">
-          <header className="skills-pane-head">
-            <div>
-              <h2>{t(`plugins.scopeTitle.${scope}` as MessageKey)}</h2>
-              <p>
-                {t(`plugins.scopeSub.${scope}` as MessageKey)
-                  .replace("{count}", String(enabledCount))
-                  .replace("{total}", String(installed.length))}
-              </p>
-            </div>
-          </header>
-
           {error && <p className="skills-error">{error}</p>}
 
           {viewMode === "detail" ? (
