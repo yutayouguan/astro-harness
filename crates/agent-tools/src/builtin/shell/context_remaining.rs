@@ -7,7 +7,7 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the `get_context_remaining` tool (no parameters).
+/// `get_context_remaining` 工具的参数（无参数）。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct GetContextRemainingArgs {}
 

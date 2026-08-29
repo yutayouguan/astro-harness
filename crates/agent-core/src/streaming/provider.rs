@@ -92,8 +92,8 @@ impl ProviderStreamer {
             .unwrap_or_else(|| self.base_config.model.clone())
     }
 
-    /// Sample with stable instructions and durable role-bearing context history kept distinct.
-    /// Native tool schemas stay in the separate `tools` argument.
+    /// 使用稳定指令采样，同时保持持久化的角色上下文历史独立分离。
+    /// 原生工具 schema 保留在独立的 `tools` 参数中。
     pub(crate) async fn stream_chat_with_contract(
         &self,
         prompt: &crate::prompt::PromptContract,

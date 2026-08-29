@@ -252,8 +252,8 @@ mod tests {
 
     #[tokio::test]
     async fn probe_keeps_error_chunk_when_content_already_present() {
-        // In the new model, a single chunk can only be one variant.
-        // Simulate: a text chunk followed by an error chunk.
+        // 在新模型中，单个 chunk 只能是一种变体。
+        // 模拟：一个文本 chunk 后跟一个错误 chunk。
         let stream: CompletionStream = Box::pin(stream::iter(vec![
             Ok(StreamChunk::Text("partial".into())),
             Ok(StreamChunk::Error("mid-stream".into())),

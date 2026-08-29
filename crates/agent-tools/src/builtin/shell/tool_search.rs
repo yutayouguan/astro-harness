@@ -12,12 +12,12 @@ fn default_limit() -> usize {
     10
 }
 
-/// Arguments for the `tool_search` tool.
+/// `tool_search` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ToolSearchArgs {
-    /// Search query: matched against tool name and description using BM25 ranking.
+    /// 搜索查询：使用 BM25 排名匹配工具名称和描述。
     pub query: String,
-    /// Maximum number of results to return (default 10).
+    /// 返回的最大结果数（默认 10）。
     #[serde(default = "default_limit")]
     pub limit: usize,
 }
@@ -52,7 +52,7 @@ struct ToolSearchEntry {
 }
 
 impl ToolSearchEntry {
-    /// Codex-compatible loadable function schema returned by `tool_search`.
+    /// `tool_search` 返回的 Codex 兼容可加载函数 schema。
     fn loadable_spec(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "function",

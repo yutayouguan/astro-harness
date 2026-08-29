@@ -72,6 +72,83 @@ pub struct ToolRegistry {
     activated_deferred: std::collections::HashSet<String>,
 }
 
+fn namespace_child_name(entry: &ToolEntry) -> String {
+    entry
+        .name
+        .strip_prefix(&format!("{}_", entry.namespace))
+        .or_else(|| entry.name.strip_prefix(&format!("{}.", entry.namespace)))
+        .unwrap_or(&entry.name)
+        .to_string()
+}
+
+fn entry_api_spec(entry: &ToolEntry, defer_loading: bool) -> serde_json::Value {
+    if entry.name == "tool_search" {
+        return serde_json::json!({
+            "type": "tool_search",
+            "execution": "client",
+            "description": entry.description,
+            "parameters": crate::schema::sanitize_tool_schema(entry.schema.clone()),
+        });
+    }
+    if let Some(format) = &entry.freeform_format {
+        return serde_json::json!({
+            "type": "custom",
+            "name": entry.name,
+            "description": entry.description,
+            "defer_loading": defer_loading.then_some(true),
+            "format": format,
+        });
+    }
+    serde_json::json!({
+        "type": "function",
+        "name": entry.name,
+        "description": entry.description,
+        "strict": false,
+        "defer_loading": defer_loading.then_some(true),
+        "parameters": crate::schema::sanitize_tool_schema(entry.schema.clone()),
+    })
+}
+
+fn api_specs(entries: impl IntoIterator<Item = &'_ ToolEntry>) -> Vec<serde_json::Value> {
+    let mut plain = Vec::new();
+    let mut namespaces = std::collections::BTreeMap::<String, Vec<serde_json::Value>>::new();
+    for entry in entries {
+        let defer_loading = entry.exposure.is_deferred();
+        if entry.namespace.is_empty() {
+            plain.push((entry.name.clone(), entry_api_spec(entry, defer_loading)));
+            continue;
+        }
+
+        let mut child = entry_api_spec(entry, defer_loading);
+        if let Some(object) = child.as_object_mut() {
+            object.insert(
+                "name".to_string(),
+                serde_json::json!(namespace_child_name(entry)),
+            );
+        }
+        namespaces
+            .entry(entry.namespace.clone())
+            .or_default()
+            .push(child);
+    }
+    plain.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut specs: Vec<_> = plain.into_iter().map(|(_, spec)| spec).collect();
+    specs.extend(namespaces.into_iter().map(|(name, mut tools)| {
+        tools.sort_by(|left, right| {
+            left.get("name")
+                .and_then(serde_json::Value::as_str)
+                .cmp(&right.get("name").and_then(serde_json::Value::as_str))
+        });
+        serde_json::json!({
+            "type": "namespace",
+            "name": name,
+            "description": format!("Tools in the {name} namespace."),
+            "tools": tools,
+        })
+    }));
+    specs
+}
+
 impl ToolRegistry {
     /// 创建空注册表。
     pub fn new() -> Self {
@@ -254,7 +331,7 @@ impl ToolRegistry {
             .collect()
     }
 
-    /// 将可用工具序列化为 OpenAI 风格的 `tools` / `functions` API 载荷。
+    /// 将可用工具序列化为 Responses API 原生工具载荷。
     ///
     /// 每个条目的 `parameters` 会经 [`crate::schema::sanitize_tool_schema`] 清理，
     /// 确保不含 `$ref`、`$defs` 等厂商不友好结构。
@@ -262,44 +339,20 @@ impl ToolRegistry {
     /// **非 Direct 工具不包含在返回列表中**，仅在 `tool_search`
     /// 发现后通过 `activate_deferred` 标记为 Direct 才会出现在后续调用中。
     pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        self.available_tools()
-            .iter()
-            .filter(|e| e.exposure.is_direct()) // 仅注入 Direct 工具
-            .map(|e| {
-                let mut func = serde_json::json!({
-                    "name": e.name,
-                    "description": e.description,
-                    "parameters": crate::schema::sanitize_tool_schema(e.schema.clone()),
-                });
-                if !e.namespace.is_empty() {
-                    func.as_object_mut()
-                        .unwrap()
-                        .insert("namespace".to_string(), serde_json::json!(e.namespace));
-                }
-                serde_json::json!({
-                    "type": "function",
-                    "function": func,
-                })
-            })
-            .collect()
+        api_specs(
+            self.available_tools()
+                .into_iter()
+                .filter(|entry| entry.exposure.is_direct()),
+        )
     }
 
     /// 返回全部工具的 API schema（包括 Deferred 但排除 Hidden），供 `tool_search` 等搜索使用。
     pub fn all_tool_schemas_including_deferred(&self) -> Vec<serde_json::Value> {
-        self.available_tools()
-            .iter()
-            .filter(|e| !e.exposure.is_hidden())
-            .map(|e| {
-                serde_json::json!({
-                    "type": "function",
-                    "function": {
-                        "name": e.name,
-                        "description": e.description,
-                        "parameters": crate::schema::sanitize_tool_schema(e.schema.clone()),
-                    }
-                })
-            })
-            .collect()
+        api_specs(
+            self.available_tools()
+                .into_iter()
+                .filter(|entry| !entry.exposure.is_hidden()),
+        )
     }
 
     /// 激活指定的延迟加载工具，使其在后续 `schemas_for_api` 中可见。

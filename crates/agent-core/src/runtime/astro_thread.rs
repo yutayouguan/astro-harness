@@ -9,7 +9,7 @@ use super::submission_loop::submission_loop;
 use super::{RuntimeIoBindError, Session};
 use crate::streaming::ChatOverride;
 
-/// Stable handle for submitting work to one session's long-lived task.
+/// 向单个会话长生命周期任务提交工作的稳定句柄。
 pub struct AstroThread {
     session: Arc<Session>,
     io: SessionIo,

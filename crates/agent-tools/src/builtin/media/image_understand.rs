@@ -17,18 +17,18 @@ use crate::context::{ImageGenCreds, ToolContext};
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the `image_understand` tool.
+/// `image_understand` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ImageUnderstandArgs {
-    /// Workspace-relative paths or http(s) URLs (primary field).
+    /// 工作区相对路径或 http(s) URL（主字段）。
     #[serde(default)]
     pub image_urls: Option<Vec<String>>,
-    /// Legacy single-image field; merged into image_urls when set.
+    /// 旧版单图片字段；设置时合并到 image_urls。
     #[serde(default)]
     pub image_url: Option<String>,
     #[serde(default)]
     pub prompt: Option<String>,
-    /// describe | detect | segment; default describe.
+    /// describe | detect | segment；默认 describe。
     #[serde(default)]
     pub mode: Option<String>,
 }

@@ -103,8 +103,8 @@ fn auto_patterns() -> &'static [(Regex, &'static str)] {
     })
 }
 
-/// Returns true when the command contains shell syntax whose runtime value
-/// cannot be treated as the literal source text used by approval rules.
+/// 当命令包含 shell 动态语法时返回 true——此时运行时实际值
+/// 不能视为审批规则所用的字面源文本。
 fn contains_dynamic_shell_words(command: &str) -> bool {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Quote {

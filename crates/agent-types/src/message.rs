@@ -313,11 +313,11 @@ impl Message {
         }
     }
 
-    /// Text visible to model-facing semantic consumers.
+    /// 面向模型的语义消费者可见的文本。
     ///
-    /// Only tool results may substitute their compressed provider view. Other
-    /// roles can reuse `compressed_content` as internal metadata, so their
-    /// semantic content must always come from `content`.
+    /// 只有工具结果可以用压缩后的 provider 视图替代原文。其他
+    /// role 可能将 `compressed_content` 用作内部元数据，因此其
+    /// 语义内容必须始终来自 `content`。
     pub fn provider_view_text(&self) -> Cow<'_, str> {
         if self.role == Role::Tool {
             if let Some(compressed) = self

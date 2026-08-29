@@ -37,7 +37,7 @@ pub(crate) struct TurnCancelled;
 
 /// 任务类型枚举：Regular / Review / Compact。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // ReviewTask and CompactTask land in the next Phase B batch.
+#[allow(dead_code)] // ReviewTask 和 CompactTask 在下一批 Phase B 中落地。
 pub enum TaskKind {
     Regular,
     Review,
@@ -304,7 +304,7 @@ impl Session {
         active_turn.start(task, cancellation_token, turn_context, completion, handle)
     }
 
-    /// Wait until the exact turn's full task lifecycle has completed.
+    /// 等待指定 turn 的完整任务生命周期结束。
     pub async fn wait_for_task(&self, turn_id: &str) {
         let completion = self.task_completions.lock().await.get(turn_id).cloned();
         if let Some(completion) = completion {
@@ -422,7 +422,7 @@ impl Session {
         }
     }
 
-    /// Cooperatively abort the active task and wait for its lifecycle to finish.
+    /// 协作式中止活跃任务，并等待其生命周期结束。
     pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) -> anyhow::Result<()> {
         let _admission = self.task_admission.lock().await;
         self.abort_all_tasks_inner(reason).await

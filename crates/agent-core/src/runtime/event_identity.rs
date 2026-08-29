@@ -1,9 +1,7 @@
-//! Stable bounded identities for the serialized event protocol.
+//! 序列化事件协议的稳定有界标识。
 //!
-//! Provider/session raw identifiers remain authoritative for model history,
-//! tool result correlation, and internal exact-turn routing. Only event-facing
-//! copies are bounded here, preventing adversarial identifiers from defeating
-//! the durable/live event payload cap.
+//! Provider/session 原始标识符仍为模型历史、工具结果关联和内部精确轮次路由的权威来源。
+//! 此处仅对事件侧的副本进行有界截断，防止恶意标识符突破持久化/实时事件载荷上限。
 
 use std::fmt::Write;
 
@@ -80,8 +78,8 @@ fn normalize_turn_item(item: &mut TurnItem) {
     }
 }
 
-/// Normalize all typed correlation fields before persistence/live delivery.
-/// Returns the event-facing turn id used by the outer [`agent_protocol::Event`].
+/// 在持久化/实时分发前规范化所有类型化的关联字段。
+/// 返回外层 [`agent_protocol::Event`] 使用的事件侧 turn id。
 pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> String {
     let turn_id = event_turn_id(raw_turn_id);
     match msg {

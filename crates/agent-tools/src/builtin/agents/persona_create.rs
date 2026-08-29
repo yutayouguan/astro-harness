@@ -12,37 +12,37 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Persona / preference profile fields for AGENT / IDENTITY / SOUL / USER templates.
+/// AGENT / IDENTITY / SOUL / USER 模板的人设 / 偏好字段。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
 pub struct AgentProfileArgs {
     #[serde(default)]
     pub background: Option<String>,
     #[serde(default)]
     pub style: Option<String>,
-    /// Primary ways to help the user.
+    /// 帮助用户的主要方式。
     #[serde(default)]
     pub focus: Option<String>,
     #[serde(default)]
     pub avoid: Option<String>,
-    /// How to address the user.
+    /// 如何称呼用户。
     #[serde(default)]
     pub call_me: Option<String>,
     #[serde(default)]
     pub preferences: Option<String>,
 }
 
-/// Arguments for the `persona_create` tool.
+/// `persona_create` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PersonaCreateArgs {
-    /// Display name (any language; may collide; decoupled from immutable id).
+    /// 显示名称（任意语言；可重名；与不可变 id 解耦）。
     pub name: String,
-    /// Optional explicit id (advanced / tests). Default `{slug}--{hex12}` from name.
+    /// 可选的显式 id（高级用法 / 测试）。默认由 name 生成 `{slug}--{hex12}`。
     #[serde(default)]
     pub id: Option<String>,
-    /// Switch to this agent after create (updates ASTRO_WORKSPACE / MEMORY); default `false`.
+    /// 创建后切换到此 agent（更新 ASTRO_WORKSPACE / MEMORY）；默认 `false`。
     #[serde(default)]
     pub activate: Option<bool>,
-    /// Copy global tool gates into `agents/{id}/config.json` as a starting point; default `true`.
+    /// 将全局工具开关复制到 `agents/{id}/config.json` 作为起点；默认 `true`。
     #[serde(default)]
     pub inherit_config: Option<bool>,
     #[serde(default)]

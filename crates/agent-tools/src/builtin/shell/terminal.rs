@@ -13,28 +13,28 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the unified `terminal` tool.
+/// 统一 `terminal` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TerminalArgs {
-    /// `run` (default) | `list` | `status` | `wait` | `kill`.
+    /// `run`（默认）| `list` | `status` | `wait` | `kill`。
     #[serde(default)]
     pub action: Option<String>,
-    /// Shell command (required for `run`).
+    /// Shell 命令（`run` 时必需）。
     #[serde(default)]
     pub command: Option<String>,
-    /// Optional workspace-relative working subdirectory (`run`).
+    /// 可选的工作区相对子目录（`run` 时使用）。
     #[serde(default)]
     pub cwd: Option<String>,
-    /// Timeout seconds: `run` default 60 max 900; `wait` default 30 max 600.
+    /// 超时秒数：`run` 默认 60 上限 900；`wait` 默认 30 上限 600。
     #[serde(default)]
     pub timeout_secs: Option<u64>,
-    /// If true with `run`, start background job and return id immediately.
+    /// `run` 时设为 true 则在后台启动任务并立即返回 id。
     #[serde(default)]
     pub background: Option<bool>,
-    /// Job id for `status` / `wait` / `kill`.
+    /// 任务 id，用于 `status` / `wait` / `kill`。
     #[serde(default)]
     pub id: Option<String>,
-    /// Byte offset for `status` / `wait` output paging.
+    /// `status` / `wait` 输出分页的字节偏移量。
     #[serde(default)]
     pub offset: Option<usize>,
 }

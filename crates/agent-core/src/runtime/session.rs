@@ -42,8 +42,8 @@ fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Opti
                 } else {
                     Message::user_with_images(&content, &image_urls)
                 };
-                // `user_with_images` is only the compatibility content-parts adapter. The
-                // authoritative media column retains every kind/reference and richer metadata.
+                // `user_with_images` 仅是兼容性 content-parts 适配器。
+                // 权威的 media 列保留了所有 kind/reference 及更丰富的元数据。
                 msg.media = media;
                 msg
             }

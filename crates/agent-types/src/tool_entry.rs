@@ -89,34 +89,34 @@ pub enum ExecApprovalRequirement {
     Forbidden,
 }
 
-/// Tool-level preference for process sandbox selection.
+/// 工具级别的进程沙箱选择偏好。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SandboxablePreference {
-    /// Let the orchestrator select a sandbox from the active permission profile.
+    /// 让编排器根据当前权限配置自动选择沙箱。
     Auto,
-    /// Require a platform sandbox even when the ambient profile is unrestricted.
+    /// 即使环境权限配置不受限，也强制要求平台沙箱。
     Require,
-    /// This tool does not launch a process through the command sandbox.
+    /// 此工具不通过命令沙箱启动进程。
     #[default]
     Forbid,
 }
 
-/// Tool visibility level for LLM context injection.
+/// 工具在 LLM 上下文注入中的可见性级别。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolExposure {
-    /// Always injected into LLM tools parameter.
+    /// 始终注入 LLM 的 tools 参数。
     #[default]
     Direct,
-    /// Not injected; discoverable via tool_search, callable once discovered.
+    /// 不注入；可通过 tool_search 发现，发现后可调用。
     Deferred,
-    /// Completely hidden from LLM and tool_search. Internal use only.
+    /// 对 LLM 和 tool_search 完全隐藏，仅供内部使用。
     Hidden,
-    /// Deferred but only surfaced to the model, not the user.
+    /// 延迟加载，但仅对模型可见，不对用户展示。
     DeferredModelOnly,
-    /// Direct but only surfaced to the model, not the user.
+    /// 直接注入，但仅对模型可见，不对用户展示。
     DirectModelOnly,
-    /// Only available in code mode.
+    /// 仅在 code mode 下可用。
     CodeModeOnly,
 }
 

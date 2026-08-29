@@ -1,9 +1,9 @@
-//! Prompt contract.
+//! Prompt 契约。
 //!
-//! A model request has three independent layers:
-//! - stable base instructions;
-//! - role-bearing dynamic context;
-//! - native tool schemas (owned by the request pipeline, never rendered here).
+//! 模型请求包含三个独立层：
+//! - 稳定的基础指令；
+//! - 带角色的动态上下文；
+//! - 原生工具 schema（由请求管线持有，不在此处渲染）。
 
 use providers::types::message::Message as ProviderMessage;
 use serde::{Deserialize, Serialize};
@@ -41,16 +41,16 @@ pub struct PromptContextSection {
     pub content: String,
 }
 
-/// Provider-facing prompt data excluding native tool schemas.
+/// 面向 Provider 的 prompt 数据，不含原生工具 schema。
 #[derive(Debug, Clone, Default)]
 pub struct PromptContract {
-    /// Stable instructions sent through the provider's dedicated instructions/system field.
+    /// 通过 Provider 专用的 instructions/system 字段发送的稳定指令。
     pub base_instructions: String,
-    /// Dynamic context kept as explicit developer/user messages.
+    /// 以显式 developer/user 消息保持的动态上下文。
     pub context: Vec<ProviderMessage>,
-    /// Stable source identities used to render model-visible world-state diffs.
+    /// 稳定的 source 标识，用于渲染模型可见的 world-state diff。
     pub context_sections: Vec<PromptContextSection>,
-    /// Exact per-source character usage after the shared budget is applied.
+    /// 共享预算分配后各 source 的精确字符用量。
     pub usage: PromptContractUsage,
 }
 
@@ -72,8 +72,8 @@ impl PromptContract {
         }
     }
 
-    /// Compatibility rendering for diagnostics and callers that still expose a flat prompt.
-    /// The sampling path must use [`Self::context`] so role boundaries are preserved.
+    /// 兼容性渲染，供诊断和仍暴露扁平 prompt 的调用方使用。
+    /// 采样路径必须使用 [`Self::context`] 以保留角色边界。
     pub fn flattened(&self) -> String {
         let mut layers = Vec::new();
         if !self.base_instructions.trim().is_empty() {
@@ -93,15 +93,15 @@ impl PromptContract {
     }
 }
 
-/// Dynamic runtime fragments assigned to explicit provider roles.
+/// 分配到显式 Provider 角色的动态运行时片段。
 pub struct RuntimePromptLayers<'a> {
-    /// Stable tool-use behavior, sent with the base instructions.
+    /// 稳定的工具使用行为说明，随基础指令一起发送。
     pub base_guidance: &'a str,
-    /// Turn-varying developer policy such as the current interaction mode.
+    /// 每轮变化的 developer 策略，如当前交互模式。
     pub developer_guidance: &'a str,
-    /// Contextual current time; follows the contextual-user-message model.
+    /// 上下文化的当前时间；遵循 contextual-user-message 模型。
     pub timestamp: &'a str,
-    /// Server-provided MCP usage instructions.
+    /// 服务端提供的 MCP 使用说明。
     pub mcp_instructions: &'a str,
 }
 
@@ -146,7 +146,7 @@ impl RoleBuffer {
         });
     }
 
-    /// Render after allocation so budget priority and instruction precedence remain independent.
+    /// 在分配之后渲染，使预算优先级和指令顺序保持独立。
     fn render(mut self, source_order: &[&str]) -> RenderedRole {
         self.sources.sort_by_key(|source| {
             source_order
@@ -188,11 +188,11 @@ fn titled(title: &str, body: &str) -> String {
     }
 }
 
-/// Assemble the canonical three-layer prompt contract with exact post-budget diagnostics.
+/// 组装规范的三层 prompt 契约，并附精确的预算后诊断信息。
 ///
-/// Allocation priority is independent from provider message order. This lets high-priority
-/// project and hook context reserve budget before optional Skills/MCP guidance while the final
-/// request still emits one developer message before one contextual user message.
+/// 分配优先级与 Provider 消息顺序独立。这使得高优先级的项目和 hook 上下文
+/// 可在可选的 Skills/MCP 指引之前预留预算，而最终请求仍按一条 developer 消息
+/// 在一条上下文 user 消息之前的顺序发出。
 pub(crate) fn assemble_prompt_contract_with_usage(
     budget: &mut ContextBudget,
     static_ctx: &StaticContext,
@@ -234,7 +234,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     let mut developer = RoleBuffer::default();
     let mut user = RoleBuffer::default();
 
-    // Trust/priority order. Output role order is assembled separately below.
+    // 信任/优先级顺序。输出的角色顺序在下方单独组装。
     base.allocate(budget, &soul);
     base.allocate(budget, &identity);
     base.allocate(budget, &tool_guidance);
@@ -251,8 +251,8 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     user.allocate(budget, &dynamic);
 
     let base = base.render(&["soul", "identity", "tool_guidance"]);
-    // Render capabilities before the active collaboration mode so the mode can override
-    // general usage guidance without losing its earlier budget reservation.
+    // 在活跃协作模式之前渲染能力说明，以便模式可以覆盖通用使用指引
+    // 而不丢失其先前的预算预留。
     let developer = developer.render(&["skills", "mcp", "mode"]);
     let user = user.render(&[
         "agents",
@@ -299,10 +299,9 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     }
 }
 
-/// Assemble the canonical three-layer prompt contract.
+/// 组装规范的三层 prompt 契约。
 ///
-/// Native tool schemas are deliberately absent: callers pass them independently to the
-/// completion request.
+/// 原生工具 schema 被有意省略：调用方将其独立传递给补全请求。
 pub fn assemble_prompt_contract(
     budget: &mut ContextBudget,
     static_ctx: &StaticContext,

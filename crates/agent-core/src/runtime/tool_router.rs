@@ -1,4 +1,4 @@
-//! Sampling-step tool routing snapshot.
+//! 采样步骤级工具路由快照。
 
 use std::collections::HashMap;
 use std::fmt;
@@ -17,11 +17,10 @@ struct ToolRoute {
     approval_requirement: types::ExecApprovalRequirement,
 }
 
-/// Immutable registry projection paired with the specs visible to one model request.
+/// 不可变的注册表投影，与单次模型请求可见的工具规格配对。
 ///
-/// `routes` is the callable set for the step and is a superset of
-/// `model_visible_specs`: deferred tools are not advertised to the model but stay
-/// callable once `tool_search` surfaces them.
+/// `routes` 是该步骤的可调用集合，是 `model_visible_specs` 的超集：
+/// deferred 工具不向模型通告，但一旦 `tool_search` 发现它们即可调用。
 pub(crate) struct ToolRouter {
     routes: HashMap<String, ToolRoute>,
     model_visible_specs: Arc<[serde_json::Value]>,

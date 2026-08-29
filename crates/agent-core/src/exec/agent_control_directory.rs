@@ -52,7 +52,7 @@ impl AgentControlDirectory {
         let graph_db_path = normalize_graph_db_path(graph_db_path)?;
         let key = (graph_db_path.clone(), root_session_id.to_string());
 
-        // Check for existing control — drop the guard before any .await.
+        // 检查是否已有 control——在 .await 之前释放锁。
         {
             let controls = self
                 .controls
@@ -63,13 +63,13 @@ impl AgentControlDirectory {
             }
         }
 
-        // Async work outside the lock.
+        // 在锁外执行异步操作。
         let store = (self.store_factory)(&graph_db_path).await?;
         store.cleanup_pending_reservations(root_session_id).await?;
         store.recover_running_as_interrupted(root_session_id).await?;
         let control = AgentControl::open(root_session_id.to_string(), store, DEFAULT_LIMITS).await?;
 
-        // Re-acquire the lock to insert (or return a concurrently created one).
+        // 重新获取锁以插入（或返回并发创建的实例）。
         let mut controls = self
             .controls
             .lock()

@@ -1,12 +1,11 @@
-//! Mid-run tool result compression inspired by Agno's `CompressionManager`.
+//! 运行中工具结果压缩，灵感来自 Agno 的 `CompressionManager`。
 //!
-//! The invariant is important: `Message::content` and the DB `content` column keep
-//! the original tool output, while `compressed_content` is only the provider-facing
-//! view used on subsequent model calls.
+//! 关键不变量：`Message::content` 和数据库 `content` 列始终保留原始工具输出，
+//! 而 `compressed_content` 仅作为后续模型调用时的 Provider 视图。
 //!
-//! Primary path (async, in `AgentLoop::maintain_tool_context`): prune → LLM per-tool
-//! summary via `tool_llm_compress` → head/tail fallback. This module owns the staged
-//! thresholds, thrashing guard, and head/tail heuristic.
+//! 主路径（异步，在 `AgentLoop::maintain_tool_context` 中）：prune → 通过
+//! `tool_llm_compress` 进行逐条 LLM 摘要 → head/tail 兜底。本模块拥有分阶段
+//! 阈值、抖动防护和 head/tail 截断启发式逻辑。
 
 use memory::CompressionConfig;
 use types::message::{Message, Role};
@@ -205,8 +204,7 @@ impl ToolCompressionManager {
 
         let char_count = trimmed.chars().count();
         if char_count <= stage.max_compressed_chars {
-            // Still mark it as compressed when the threshold fires, so the same tool
-            // row is not repeatedly reconsidered in later rounds.
+            // 阈值触发时仍标记为已压缩，避免同一条工具结果在后续轮次被反复重新评估。
             return Some(trimmed.to_string());
         }
 
@@ -323,7 +321,7 @@ pub struct ContextMaintenanceResult {
     pub occupancy_after: f32,
     pub thrashing_disabled: bool,
     pub recommend_session_compact: bool,
-    /// A PreCompact/PostCompact hook requested that the active turn stop.
+    /// PreCompact/PostCompact hook 请求当前活跃回合停止。
     pub hook_stopped: bool,
 }
 
@@ -353,7 +351,7 @@ pub fn prune_tool_view(tool_name: Option<&str>, spill_rel: Option<&str>) -> Stri
     types::make_prune_view(tool_name, spill_rel)
 }
 
-// ── CompressionPolicy trait ────────────────────────────────────────────
+// ── CompressionPolicy trait（压缩策略） ──────────────────────────────────
 
 /// 单条需要压缩的工具消息描述。
 #[derive(Debug, Clone)]

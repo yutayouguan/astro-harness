@@ -314,7 +314,7 @@ impl AgentLoop {
         layers
     }
 
-    /// Turn-varying developer policy plus contextual timestamp.
+    /// 随 Turn 变化的开发者策略与上下文时间戳。
     async fn system_prompt_runtime_context(&self) -> (&'static str, String) {
         let developer_guidance = self.interaction_mode().await.system_guidance();
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");

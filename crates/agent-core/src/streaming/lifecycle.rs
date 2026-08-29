@@ -1,4 +1,4 @@
-//! Unified turn-event helpers for the model/tool loop.
+//! 模型/工具循环的统一 turn 事件辅助函数。
 
 use std::sync::Arc;
 
@@ -13,19 +13,17 @@ use crate::runtime::event_identity::{event_turn_id, normalize_event_msg};
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::{Session, TurnContext};
 
-/// MCP event result cap: keep the model/history copy
-/// untouched while preventing a single durable/live event from carrying
-/// multi-megabyte inline payloads.
+/// MCP 事件结果上限：保持模型/历史副本不变，同时防止单个持久/实时事件
+/// 携带多兆字节的内联负载。
 pub(crate) const TOOL_COMPLETED_EVENT_MAX_BYTES: usize = 1024 * 1024;
 
-/// Persist an event before delivering it to live consumers.
+/// 在将事件投递给实时消费者之前先持久化。
 pub(crate) async fn emit(session: &Session, turn_context: &TurnContext, msg: EventMsg) {
     session.send_event(turn_context.sub_id(), msg).await;
 }
 
-/// Send an event whose protocol-facing identities were normalized while its
-/// bounded payload copy was constructed. This deliberately skips a second
-/// identity projection while retaining raw-turn tap routing.
+/// 发送一个在构建有界负载副本时已完成协议侧身份归一化的事件。
+/// 刻意跳过第二次身份投影，同时保留原始 turn tap 路由。
 pub(crate) async fn emit_prepared(session: &Session, turn_context: &TurnContext, msg: EventMsg) {
     session
         .send_prepared_event(turn_context.sub_id(), msg)
@@ -157,14 +155,12 @@ fn truncated_tool_completed_event(
     )
 }
 
-/// Build the completed tool event copy under the 1 MiB durable/live cap.
+/// 在 1 MiB 持久/实时上限内构建已完成的工具事件副本。
 ///
-/// The original tool output has already been recorded before this helper is
-/// called. Inline data URLs are never copied into an oversized event; stable
-/// workspace/remote references are retained when they fit. The preview budget
-/// is chosen against the fully serialized live and JSONL rollout envelopes,
-/// so JSON escaping, wrapper overhead, and the record newline count toward the
-/// cap.
+/// 在调用此辅助函数之前，原始工具输出已经被记录。内联 data URL 不会被复制到
+/// 超大事件中；当空间允许时保留稳定的工作区/远程引用。预览预算基于完整序列化后的
+/// 实时和 JSONL rollout 信封计算，因此 JSON 转义、包装开销和记录换行符
+/// 都计入上限。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bounded_tool_completed_event(
     turn_id: &str,
@@ -252,10 +248,9 @@ pub(crate) fn bounded_tool_completed_event(
         );
     }
 
-    // Final hard-stop fallback. Event-facing identities are already capped, so
-    // a null-arguments/no-media marker has a small, deterministic upper bound.
-    // The assertion prevents an oversized event from ever reaching dispatch if
-    // that invariant is changed later.
+    // 最终硬停兜底。事件侧身份已被截断，因此 null-arguments/no-media 标记
+    // 具有小且确定的上界。此断言防止超大事件到达分发环节（即使将来
+    // 该不变量被改变）。
     if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES {
         event_arguments = serde_json::Value::Null;
         stable_media_omitted = stable_media_omitted.saturating_add(stable_media.len());
@@ -545,7 +540,7 @@ pub(crate) async fn emit_subagent_activity(
     .await;
 }
 
-/// Best-effort dual write of LLM usage to usage.db and the session bill.
+/// 尽力双写 LLM 用量到 usage.db 和会话账单。
 pub(super) async fn record_llm_usage(
     session: &Arc<Session>,
     streamer: &ProviderStreamer,

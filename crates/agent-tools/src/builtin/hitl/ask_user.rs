@@ -33,28 +33,28 @@ pub enum AskUserMode {
     Location,
 }
 
-/// One question step in `question` mode.
+/// `question` 模式下的单个提问步骤。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AskQuestion {
-    /// Answer key; defaults to `q0` / `q1` …
+    /// 回答键名；默认 `q0` / `q1` ...
     #[serde(default)]
     pub id: Option<String>,
     pub question: String,
-    /// Preset options; empty means free-text input only.
+    /// 预设选项；为空表示仅自由文本输入。
     #[serde(default)]
     pub options: Vec<String>,
 }
 
-/// Arguments for the `ask_user` tool.
+/// `ask_user` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AskUserArgs {
-    /// `question` | `confirm` | `location`. Omit only when unambiguous (question vs confirm).
+    /// `question` | `confirm` | `location`。仅当无歧义时可省略（question vs confirm）。
     #[serde(default)]
     pub mode: Option<AskUserMode>,
-    /// Question mode: one or more steps.
+    /// question 模式：一个或多个步骤。
     #[serde(default)]
     pub questions: Vec<AskQuestion>,
-    /// Wizard title (question) or confirmation card title (confirm).
+    /// 向导标题（question）或确认卡标题（confirm）。
     #[serde(default)]
     pub title: Option<String>,
     /// Confirm mode only: body text.

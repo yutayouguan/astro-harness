@@ -25,20 +25,20 @@ const DOWNLOAD_TIMEOUT_SECS: u64 = 60;
 /// 远程音频下载的字节数上限（25 MiB），适用于 `Content-Length` 预检与累计字节数双重校验。
 const MAX_AUDIO_DOWNLOAD_BYTES: u64 = 25 * 1024 * 1024;
 
-/// Arguments for the `audio_understand` tool.
+/// `audio_understand` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AudioUnderstandArgs {
-    /// Workspace-relative path, http(s) audio URL, or YouTube URL.
+    /// 工作区相对路径、http(s) 音频 URL 或 YouTube URL。
     pub audio_url: String,
     #[serde(default)]
     pub prompt: Option<String>,
-    /// describe | transcribe; default describe.
+    /// describe | transcribe；默认 describe。
     #[serde(default)]
     pub mode: Option<String>,
-    /// Optional time-window start MM:SS.
+    /// 可选时间窗口起始 MM:SS。
     #[serde(default)]
     pub start: Option<String>,
-    /// Optional time-window end MM:SS.
+    /// 可选时间窗口结束 MM:SS。
     #[serde(default)]
     pub end: Option<String>,
 }

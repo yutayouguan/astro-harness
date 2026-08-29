@@ -7,12 +7,12 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the `request_plugin_install` tool.
+/// `request_plugin_install` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct RequestPluginInstallArgs {
-    /// The skill/plugin identifier to install.
+    /// 要安装的 skill/plugin 标识符。
     pub skill_id: String,
-    /// Optional reason for requesting the installation.
+    /// 请求安装的可选理由。
     #[serde(default)]
     pub reason: Option<String>,
 }

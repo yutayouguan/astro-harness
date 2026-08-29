@@ -8,7 +8,7 @@ use crate::streaming::multi_turn::{run_turn, RunTurnArgs};
 
 use super::{SessionTask, SessionTaskResult, TaskKind, TurnCancelled, TurnInput};
 
-/// Standard model-and-tool turn.
+/// 标准的模型与工具 turn。
 pub(crate) struct RegularTask {
     args: RunTurnArgs,
 }

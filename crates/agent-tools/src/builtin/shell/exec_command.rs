@@ -20,46 +20,44 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the unified `exec_command` tool.
+/// 统一 `exec_command` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ExecCommandArgs {
-    /// `run` (default) | `list` | `status` | `wait` | `kill`.
+    /// `run`（默认）| `list` | `status` | `wait` | `kill`。
     #[serde(default)]
     pub action: Option<String>,
-    /// Shell command (required for `run`).
+    /// Shell 命令（`run` 时必需）。
     #[serde(default)]
     pub command: Option<String>,
-    /// Optional workspace-relative working subdirectory (`run`).
+    /// 可选的工作区相对子目录（`run` 时使用）。
     #[serde(default)]
     pub cwd: Option<String>,
-    /// Timeout seconds: `run` default 60 max 900; `wait` default 30 max 600.
+    /// 超时秒数：`run` 默认 60 上限 900；`wait` 默认 30 上限 600。
     #[serde(default)]
     pub timeout_secs: Option<u64>,
-    /// If true with `run`, start background job and return id immediately.
+    /// `run` 时设为 true 则在后台启动任务并立即返回 id。
     #[serde(default)]
     pub background: Option<bool>,
-    /// Job id for `status` / `wait` / `kill`.
+    /// 任务 id，用于 `status` / `wait` / `kill`。
     #[serde(default)]
     pub id: Option<String>,
-    /// Byte offset for `status` / `wait` output paging.
+    /// `status` / `wait` 输出分页的字节偏移量。
     #[serde(default)]
     pub offset: Option<usize>,
 
-    // ── session management parameters (stub) ──────────────────────────
-    /// Maximum time in milliseconds to wait before returning a session ID
-    /// for a still-running command. Commands that finish sooner return
-    /// immediately. Defaults to 10000 ms; effective range 250-30000 ms.
+    // ── 会话管理参数（stub）──────────────────────────
+    /// 返回 session ID 前的最长等待毫秒数，适用于仍在运行的命令。
+    /// 提前完成的命令会立即返回。
+    /// 默认 10000 ms；有效范围 250-30000 ms。
     #[serde(default)]
     pub yield_time_ms: Option<i64>,
-    /// Output token budget. Defaults to 10000 tokens; larger requests may
-    /// be capped by policy.
+    /// 输出 token 预算。默认 10000 token；更大的请求可能被策略截断。
     #[serde(default)]
     pub max_output_tokens: Option<usize>,
-    /// True allocates a PTY for the command; false or omitted uses plain pipes.
+    /// 设为 true 时为命令分配 PTY；false 或省略则使用普通管道。
     #[serde(default)]
     pub tty: Option<bool>,
-    /// Working directory for the command (alias for `cwd`). Defaults to
-    /// the project root or workspace.
+    /// 命令的工作目录（`cwd` 的别名）。默认为项目根目录或工作区。
     #[serde(default)]
     pub workdir: Option<String>,
 }

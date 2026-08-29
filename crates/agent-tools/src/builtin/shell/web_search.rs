@@ -17,11 +17,11 @@ const USER_AGENT: &str = concat!(
     "Chrome/122.0.0.0 Safari/537.36"
 );
 
-/// Arguments for the `web_search` tool.
+/// `web_search` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct WebSearchArgs {
     pub query: String,
-    /// Max results (1–10, default 5).
+    /// 最大结果数（1–10，默认 5）。
     #[serde(default)]
     pub max_results: Option<u32>,
 }

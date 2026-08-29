@@ -1,8 +1,7 @@
-//! Task-bound Chromium browser automation.
+//! 任务绑定的 Chromium 浏览器自动化。
 //!
-//! Each chat session owns at most one isolated headless Chromium process. Tool
-//! results are structured JSON so the desktop can render a live preview while
-//! the model receives the same DOM snapshot and action result.
+//! 每个聊天会话最多拥有一个隔离的无头 Chromium 进程。工具返回结构化 JSON，
+//! 桌面端可渲染实时预览，同时模型接收相同的 DOM 快照和操作结果。
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -33,69 +32,69 @@ const MAX_SNAPSHOT_CHARS: usize = 20_000;
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct BrowserOpenArgs {
-    /// Public http(s) URL, or a loopback URL for a local development server.
+    /// 公开的 http(s) URL，或本地开发服务器的回环地址 URL。
     pub url: String,
-    /// Maximum time to wait for DOM readiness.
+    /// 等待 DOM 就绪的最大时间。
     #[serde(default)]
     pub wait_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Default)]
 pub struct BrowserSnapshotArgs {
-    /// Capture and refresh the preview screenshot (default true).
+    /// 捕获并刷新预览截图（默认 true）。
     #[serde(default)]
     pub screenshot: Option<bool>,
-    /// Maximum time to wait for DOM readiness.
+    /// 等待 DOM 就绪的最大时间。
     #[serde(default)]
     pub wait_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct BrowserClickArgs {
-    /// CSS selector. Prefer selectors returned by browser_snapshot.
+    /// CSS 选择器。优先使用 browser_snapshot 返回的选择器。
     #[serde(default)]
     pub selector: Option<String>,
-    /// Visible label fallback when no stable selector is available.
+    /// 当没有稳定选择器时，使用可见标签文本作为回退。
     #[serde(default)]
     pub text: Option<String>,
-    /// Declared intent, used by the approval layer for state-changing actions.
+    /// 声明的操作意图，审批层据此判断是否为状态变更操作。
     #[serde(default)]
     pub intent: BrowserActionIntent,
-    /// Wait after the click before taking the next snapshot.
+    /// 点击后等待多久再获取下一次快照。
     #[serde(default)]
     pub wait_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct BrowserTypeArgs {
-    /// CSS selector for the input, textarea, select, or editable element.
+    /// 目标 input、textarea、select 或可编辑元素的 CSS 选择器。
     pub selector: String,
-    /// Text to enter. Passwords, OTPs, tokens, and payment data must never be supplied.
+    /// 要输入的文本。禁止输入密码、OTP、token 和支付数据。
     pub text: String,
-    /// Declared intent, used by the approval layer for sensitive submissions.
+    /// 声明的操作意图，审批层据此判断是否为敏感提交。
     #[serde(default)]
     pub intent: BrowserActionIntent,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Default)]
 pub struct BrowserScrollArgs {
-    /// Horizontal scroll delta in CSS pixels.
+    /// 水平滚动增量，单位为 CSS 像素。
     #[serde(default)]
     pub x: Option<i64>,
-    /// Vertical scroll delta in CSS pixels (default 600).
+    /// 垂直滚动增量，单位为 CSS 像素（默认 600）。
     #[serde(default)]
     pub y: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Default)]
 pub struct BrowserWaitArgs {
-    /// CSS selector to wait for.
+    /// 要等待的 CSS 选择器。
     #[serde(default)]
     pub selector: Option<String>,
-    /// Visible text to wait for when no selector is supplied.
+    /// 未提供选择器时，等待出现的可见文本。
     #[serde(default)]
     pub text: Option<String>,
-    /// Maximum wait in milliseconds (default 8000, max 30000).
+    /// 最大等待时间（毫秒），默认 8000，上限 30000。
     #[serde(default)]
     pub timeout_ms: Option<u64>,
 }
@@ -103,12 +102,12 @@ pub struct BrowserWaitArgs {
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum BrowserActionIntent {
-    /// Inspection, navigation, test controls, and other reversible actions.
+    /// 检查、导航、测试控件等可逆操作。
     #[default]
     ReadOnly,
-    /// A form submission or action that changes remote state.
+    /// 表单提交或会改变远程状态的操作。
     StateChanging,
-    /// Login, permission, publishing, deleting, purchasing, or other sensitive action.
+    /// 登录、授权、发布、删除、购买等敏感操作。
     Sensitive,
 }
 
@@ -138,8 +137,8 @@ impl BrowserActionIntent {
     }
 }
 
-/// Conservatively classify browser calls that need a user/guardian review.
-/// All clicks and typing are state-changing unless a sensitive target is detected.
+/// 保守地分类需要用户/监护人审查的浏览器调用。
+/// 所有点击和输入操作默认为状态变更，除非检测到敏感目标。
 pub fn approval_class(name: &str, args: &Value) -> Option<BrowserApprovalClass> {
     if !matches!(name, "browser_click" | "browser_type") {
         return None;
@@ -196,8 +195,8 @@ pub fn approval_class(name: &str, args: &Value) -> Option<BrowserApprovalClass> 
     Some(BrowserApprovalClass::StateChanging)
 }
 
-/// Re-check the live target before applying a remembered approval. This prevents
-/// a generic selector from hiding a sensitive button or input from the policy.
+/// 在应用已记忆的审批前重新检查实际目标。防止通用选择器掩盖策略
+/// 应捕获的敏感按钮或输入框。
 pub async fn effective_approval_class(
     session_id: &str,
     name: &str,

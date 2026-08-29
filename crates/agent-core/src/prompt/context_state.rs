@@ -1,8 +1,8 @@
-//! Durable baseline for role-bearing prompt context.
+//! 带角色的 prompt 上下文持久化基线。
 //!
-//! Stable base instructions and native tool schemas deliberately stay outside this state. The
-//! payload mirrors the world-state contract: the first snapshot is full, later changes are
-//! patches, and unchanged state produces no rollout item.
+//! 稳定的基础指令和原生工具 schema 被有意排除在此状态之外。
+//! 负载遵循 world-state 契约：首次快照为全量，后续变更为增量补丁，
+//! 未改变的状态不产生 rollout 条目。
 
 use agent_rollout::RolloutItem;
 use serde::Serialize;
@@ -45,7 +45,7 @@ pub(crate) struct RestoredPromptContext {
     pub(crate) history: Vec<PromptContextEvent>,
 }
 
-/// Provider-only context emitted immediately before a specific user message ordinal.
+/// 仅供 Provider 使用的上下文，在特定用户消息序号之前注入。
 #[derive(Debug, Clone)]
 pub(crate) struct PromptContextEvent {
     pub(crate) before_user: usize,
@@ -164,10 +164,10 @@ fn role_text(
     (!body.is_empty()).then_some(body)
 }
 
-/// Render model-visible changes between two persisted snapshots.
+/// 渲染两个持久化快照之间模型可见的变更。
 ///
-/// Version 2 snapshots diff stable source ids. Version 1 snapshots fall back to replacing the
-/// changed role as one unit so rollouts written by the previous release remain resumable.
+/// Version 2 快照按稳定 source id 进行 diff。Version 1 快照回退为整体替换已变更的角色，
+/// 以确保旧版本写入的 rollout 仍可恢复。
 pub(crate) fn model_updates(
     previous: Option<&Value>,
     current: &Value,
@@ -224,10 +224,10 @@ pub(crate) fn rollout_update(
     })))
 }
 
-/// Replay full snapshots and patches, returning the latest prompt-context baseline.
+/// 重放全量快照和增量补丁，返回最新的 prompt-context 基线。
 ///
-/// Unknown legacy `WorldState` payloads are ignored. A well-formed full snapshot without this
-/// namespace clears the baseline, matching the replacement semantics of a full world state.
+/// 未知的遗留 `WorldState` 负载会被忽略。格式正确但不含本命名空间的全量快照
+/// 会清除基线，与全量 world state 的替换语义一致。
 pub(crate) fn restore(items: &[RolloutItem]) -> RestoredPromptContext {
     let mut restored = RestoredPromptContext::default();
     let mut user_count = 0usize;
@@ -253,8 +253,8 @@ pub(crate) fn restore(items: &[RolloutItem]) -> RestoredPromptContext {
         let Some(state) = payload.get("state").and_then(Value::as_object) else {
             continue;
         };
-        // Version 2 rollouts carry the exact insertion point. Older rollouts wrote the state
-        // immediately after the current user input, so the preceding user is the safe fallback.
+        // Version 2 rollout 携带精确的插入位置。旧版 rollout 在当前用户输入之后
+        // 立即写入状态，因此前一个用户消息位置是安全的回退值。
         let before_user = payload
             .get("before_user")
             .and_then(Value::as_u64)

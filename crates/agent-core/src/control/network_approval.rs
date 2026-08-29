@@ -1,8 +1,7 @@
-//! Session-scoped network host approval service.
+//! 会话级网络主机审批服务。
 //!
-//! Manages per-session allow/deny caches for managed network proxy decisions.
-//! Each session owns one service instance through `SessionServices`; caches are
-//! never shared across sessions.
+//! 管理受管网络代理决策的 per-session 允许/拒绝缓存。
+//! 每个 session 通过 `SessionServices` 持有一个服务实例；缓存不跨会话共享。
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -10,7 +9,7 @@ use std::sync::Mutex;
 use tokio::sync::oneshot;
 use types::{NetworkApprovalContext, NetworkApprovalProtocol};
 
-/// Cache key for resolved host approval decisions.
+/// 已决主机审批决定的缓存 key。
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct HostApprovalKey {
     pub profile_id: String,
@@ -30,7 +29,7 @@ impl HostApprovalKey {
     }
 }
 
-/// Key for deduplicating concurrent pending approval requests.
+/// 用于去重并发待审批请求的 key。
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PendingHostApprovalKey {
     pub profile_id: String,
@@ -38,7 +37,7 @@ pub struct PendingHostApprovalKey {
     pub protocol: NetworkApprovalProtocol,
 }
 
-/// The scope of an approval decision.
+/// 审批决定的作用范围。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApprovalScope {
     Once,
@@ -46,20 +45,20 @@ pub enum ApprovalScope {
     Persistent,
 }
 
-/// The decision rendered by a reviewer for a pending approval.
+/// 审阅者对待审批请求做出的决定。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PendingApprovalDecision {
     Allow(ApprovalScope),
     Deny,
 }
 
-/// Waiters that are parked on a pending approval.
+/// 等待待审批结果的 waiter 集合。
 struct PendingHostApproval {
     waiters: Vec<oneshot::Sender<PendingApprovalDecision>>,
     generation: u64,
 }
 
-/// Handle given to the reviewer; dropping it without resolving fails all waiters closed.
+/// 交给审阅者的句柄；未 resolve 就 drop 会将所有 waiter 标记为拒绝。
 pub struct PendingHostApprovalOwner {
     key: PendingHostApprovalKey,
     generation: u64,
@@ -84,7 +83,7 @@ impl Drop for PendingHostApprovalOwner {
 }
 
 impl PendingHostApprovalOwner {
-    /// Resolve this pending approval with a decision.
+    /// 以指定决定解决此待审批请求。
     pub fn resolve(self, decision: PendingApprovalDecision) {
         if let Some(inner) = self.service.upgrade() {
             let mut pending = inner.pending.lock().unwrap_or_else(|e| e.into_inner());
@@ -132,7 +131,7 @@ impl PendingHostApprovalKey {
     }
 }
 
-/// Cached decision result.
+/// 已缓存的决定结果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CachedDecision {
     Allowed,
@@ -146,9 +145,9 @@ struct NetworkApprovalServiceInner {
     generation: Mutex<u64>,
 }
 
-/// Session-scoped network approval service.
+/// 会话级网络审批服务。
 ///
-/// Not `Clone` — each session owns exactly one through `SessionServices`.
+/// 不可 `Clone` — 每个 session 通过 `SessionServices` 恰好持有一个实例。
 pub struct NetworkApprovalService {
     inner: std::sync::Arc<NetworkApprovalServiceInner>,
 }
@@ -171,9 +170,9 @@ impl NetworkApprovalService {
         }
     }
 
-    /// Check if this host has already been approved or denied in this session.
+    /// 检查该主机在本次会话中是否已被批准或拒绝。
     ///
-    /// Deny cache takes priority over allow cache.
+    /// 拒绝缓存优先于允许缓存。
     pub fn cached_decision(&self, key: &HostApprovalKey) -> Option<CachedDecision> {
         let profile_key = HostApprovalKey {
             port: 0,
@@ -200,12 +199,10 @@ impl NetworkApprovalService {
         None
     }
 
-    /// Begin a pending approval or join an existing one for the same key.
+    /// 发起待审批请求，或加入已有的同 key 审批。
     ///
-    /// Returns `Ok((owner, None))` if this is the first request for the key —
-    /// the caller is the reviewer and owns the `PendingHostApprovalOwner`.
-    /// Returns `Ok((waiter_rx, Some(rx)))` if another request is already pending —
-    /// the caller parks on the receiver.
+    /// 如果是该 key 的首个请求，返回 `Owner` — 调用方是审阅者，持有 `PendingHostApprovalOwner`。
+    /// 如果已有其它请求在等待，返回 `Joined` — 调用方通过 receiver 等待共享决定。
     pub fn begin_or_join(&self, pending_key: PendingHostApprovalKey) -> BeginResult {
         let mut pending = self.inner.pending.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -241,10 +238,10 @@ impl NetworkApprovalService {
         BeginResult::Owner(owner)
     }
 
-    /// Persist a network domain amendment and update the session cache on success.
+    /// 持久化网络域名修订并在成功时更新会话缓存。
     ///
-    /// Only succeeds for exact hosts on custom leaf profiles. On failure the
-    /// session cache is not modified — fail-closed.
+    /// 仅对自定义叶子 profile 的精确主机生效。失败时不修改
+    /// 会话缓存 — fail-closed。
     pub fn persist_amendment(
         &self,
         memory_dir: &std::path::Path,
@@ -280,11 +277,11 @@ impl NetworkApprovalService {
     }
 }
 
-/// Result of `begin_or_join`.
+/// `begin_or_join` 的返回结果。
 pub enum BeginResult {
-    /// Caller is the first requester and owns the approval.
+    /// 调用方是首个请求者，拥有审批控制权。
     Owner(PendingHostApprovalOwner),
-    /// Another request is pending; await the receiver for the shared decision.
+    /// 已有其它请求在等待；通过 receiver 等待共享决定。
     Joined(oneshot::Receiver<PendingApprovalDecision>),
 }
 
@@ -357,7 +354,7 @@ mod tests {
     fn deny_cache_takes_priority_over_allow_cache() {
         let service = NetworkApprovalService::new();
 
-        // First allow
+        // 先允许
         let result = service.begin_or_join(test_pending_key("conflict.example.com"));
         match result {
             BeginResult::Owner(o) => {
@@ -366,7 +363,7 @@ mod tests {
             _ => panic!("expected owner"),
         }
 
-        // Then deny
+        // 再拒绝
         let result = service.begin_or_join(test_pending_key("conflict.example.com"));
         match result {
             BeginResult::Owner(o) => o.resolve(PendingApprovalDecision::Deny),
@@ -433,7 +430,7 @@ mod tests {
         let service = NetworkApprovalService::new();
         let key = test_pending_key("regen.example.com");
 
-        // Generation 1: create and drop
+        // 第 1 代：创建并 drop
         let result1 = service.begin_or_join(key.clone());
         let owner1 = match result1 {
             BeginResult::Owner(o) => o,
@@ -441,7 +438,7 @@ mod tests {
         };
         drop(owner1);
 
-        // Generation 2: new owner should work
+        // 第 2 代：新 owner 应正常工作
         let result2 = service.begin_or_join(key.clone());
         let owner2 = match result2 {
             BeginResult::Owner(o) => o,

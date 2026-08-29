@@ -25,26 +25,26 @@ const RAW_MAX_BYTES: usize = 12_000;
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum WebFetchMode {
-    /// Extract readable text from HTML (default).
+    /// 从 HTML 提取可读文本（默认）。
     #[default]
     Text,
-    /// Return raw HTTP body as-is (no HTML stripping, no redirects).
+    /// 原样返回 HTTP body（不剥离 HTML，不跟随重定向）。
     Raw,
 }
 
-/// Arguments for the `web_fetch` tool.
+/// `web_fetch` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct WebFetchArgs {
-    /// Single URL (mutually exclusive with `urls`; `urls` wins if both set).
+    /// 单个 URL（与 `urls` 互斥；同时设置时 `urls` 优先）。
     #[serde(default)]
     pub url: Option<String>,
-    /// Multiple URLs (max 5, text mode only).
+    /// 多个 URL（最多 5 个，仅 text 模式）。
     #[serde(default)]
     pub urls: Option<Vec<String>>,
-    /// Max characters of body text per URL (default 12000, hard cap 48000, text mode only).
+    /// 每个 URL 的正文最大字符数（默认 12000，硬上限 48000，仅 text 模式）。
     #[serde(default)]
     pub max_chars: Option<usize>,
-    /// Fetch mode: "text" (default, HTML stripped) or "raw" (original body, no redirects).
+    /// 抓取模式："text"（默认，剥离 HTML）或 "raw"（原始 body，不跟随重定向）。
     #[serde(default)]
     pub mode: WebFetchMode,
 }

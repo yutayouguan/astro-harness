@@ -1,9 +1,8 @@
-//! Session-wide mutable runtime state.
+//! 会话级可变运行时状态。
 //!
-//! This boundary follows the `SessionState` pattern: mutable state that survives
-//! across sampling steps lives together, while the active task registry remains
-//! directly on [`super::Session`]. [`super::Session`] owns this container behind
-//! a short-lived mutex so callers never expose references tied to a state guard.
+//! 本边界遵循 `SessionState` 模式：跨采样步骤存活的可变状态聚合在一起，
+//! 而活跃任务注册表则直接保留在 [`super::Session`] 上。[`super::Session`]
+//! 通过短生命周期互斥锁持有本容器，确保调用方不会暴露与状态守卫绑定的引用。
 
 use serde_json::Value;
 use std::path::PathBuf;
@@ -12,7 +11,7 @@ use types::message::Message;
 
 use super::{compression_state, model_ctx, turn_budget, StepContext, TurnContext};
 
-/// Persistent mutable state previously stored directly on [`super::Session`].
+/// 此前直接存储在 [`super::Session`] 上的持久化可变状态。
 pub(crate) struct SessionState {
     pub(crate) history: Vec<Message>,
     pub(crate) pending_session_start_source: Option<String>,
@@ -21,9 +20,9 @@ pub(crate) struct SessionState {
     pub(crate) turn: turn_budget::TurnState,
     pub(crate) pending_inject_context: Option<String>,
     pub(crate) pending_learning_nudge: Option<String>,
-    /// Latest durable role-bearing context baseline used for WorldState diffing.
+    /// 用于 WorldState 差分比较的最新持久化角色上下文基线。
     pub(crate) prompt_context_snapshot: Option<Value>,
-    /// Model-visible initial context plus source-level updates, kept outside chat storage.
+    /// 模型可见的初始上下文及源级别更新，保存在聊天存储之外。
     pub(crate) prompt_context_history: Vec<crate::prompt::context_state::PromptContextEvent>,
     pub(crate) interaction_mode: types::InteractionMode,
     pub(crate) current_turn_context: Option<Arc<TurnContext>>,

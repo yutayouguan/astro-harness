@@ -1,4 +1,4 @@
-//! Non-blocking, user-visible progress messages for an active turn.
+//! 非阻塞、用户可见的进度消息，用于活跃回合。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ const ASYNC_USER_MESSAGE_MARKER: &str = "astro_async_user_message";
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct SendUserMessageAsyncArgs {
-    /// Concise acknowledgment, progress update, or blocking question shown to the user.
+    /// 简洁的确认、进度更新或阻塞性问题，展示给用户。
     pub message: String,
 }
 

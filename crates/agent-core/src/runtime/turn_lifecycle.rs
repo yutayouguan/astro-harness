@@ -1,4 +1,4 @@
-//! Session turn lifecycle: input persistence, memory recall, prompt assembly, and hooks.
+//! Session turn 生命周期：输入持久化、记忆召回、prompt 组装与 hooks。
 
 use session::{build_conversation_context, format_recalled_context, ConversationStore, NewMessage};
 use types::message::Message;
@@ -233,11 +233,11 @@ impl Session {
         Ok(TurnInputSubmission::Steered { turn_id })
     }
 
-    /// Prepare initial task input for the first sampling request.
+    /// 为首次采样请求准备初始任务输入。
     ///
-    /// Production paths call this from [`crate::tasks::RegularTask`]. The
-    /// public `start_or_steer_turn*` methods remain compatibility adapters for
-    /// callers that have not yet moved input ownership into `SessionTask`.
+    /// 生产路径从 [`crate::tasks::RegularTask`] 调用此方法。公开的
+    /// `start_or_steer_turn*` 方法作为兼容适配器保留，供尚未将输入
+    /// 所有权迁移到 `SessionTask` 的调用方使用。
     pub(crate) async fn prepare_turn(&self, input: &[TurnInput]) -> anyhow::Result<TurnResult> {
         anyhow::ensure!(!input.is_empty(), "regular turn requires initial input");
         let client_message_ids = input
@@ -297,9 +297,8 @@ impl Session {
             .await
     }
 
-    /// Prepare a follow-up whose durable mailbox input is persisted with its
-    /// sequence marker before sampling. Retries converge on the existing
-    /// marker and therefore never append a duplicate user message.
+    /// 准备后续轮次，其持久化邮箱输入在采样前与序列标记一起持久化。
+    /// 重试会收敛到已有标记，因此不会追加重复的用户消息。
     pub(crate) async fn prepare_mailbox_turn(&self) -> anyhow::Result<TurnResult> {
         self.cancel.reset();
         if self.is_budget_exhausted().await {
@@ -451,8 +450,8 @@ impl Session {
         } else {
             ::hooks::SESSION_START
         };
-        // SubagentStart is emitted only for the child startup admission. A
-        // resumed/follow-up turn is represented by its own SubagentStop.
+        // SubagentStart 仅在子 agent 启动准入时触发。恢复/后续轮次
+        // 由各自的 SubagentStop 表示。
         let context = if subagent.is_some() && source != "startup" {
             None
         } else if subagent.is_some() {
@@ -516,7 +515,7 @@ impl Session {
         Self::apply_admission_outcome(::hooks::USER_PROMPT_SUBMIT, outcome)
     }
 
-    /// Queue user input for the active regular task.
+    /// 将用户输入排入活跃的常规任务队列。
     pub async fn steer_input(
         &self,
         user_message: &str,
@@ -526,7 +525,7 @@ impl Session {
             .await
     }
 
-    /// Queue user input only when the expected active turn still owns the session.
+    /// 仅当预期的活跃 turn 仍持有会话时，将用户输入排入队列。
     pub async fn steer_input_for_turn(
         &self,
         user_message: &str,
@@ -772,7 +771,7 @@ impl Session {
             .expect("turn input memory-write hook mutex poisoned") = hook;
     }
 
-    /// Compatibility adapter for callers not yet migrated to current naming.
+    /// 兼容适配器，供尚未迁移到当前命名的调用方使用。
     #[deprecated(note = "use start_or_steer_turn")]
     pub async fn run_turn(
         &self,
@@ -782,7 +781,7 @@ impl Session {
         self.start_or_steer_turn(user_message, submission_id).await
     }
 
-    /// Compatibility adapter for callers not yet migrated to current naming.
+    /// 兼容适配器，供尚未迁移到当前命名的调用方使用。
     #[deprecated(note = "use start_or_steer_turn_with_images")]
     pub async fn run_turn_with_images(
         &self,

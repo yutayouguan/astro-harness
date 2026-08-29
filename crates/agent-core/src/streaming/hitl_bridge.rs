@@ -197,8 +197,8 @@ async fn park_astro_hitl_resolution(
     Some(resolution)
 }
 
-/// Network host approval request parameters.
-#[allow(dead_code)] // wired in Task 5 of inline-managed-network-approval
+/// 网络主机审批请求参数。
+#[allow(dead_code)] // 在 inline-managed-network-approval 的 Task 5 中接入
 pub(crate) struct NetworkApprovalRequest {
     pub host: String,
     pub protocol: String,
@@ -207,18 +207,17 @@ pub(crate) struct NetworkApprovalRequest {
     pub command_preview: Option<String>,
 }
 
-/// Result of a network approval HITL interaction.
-#[allow(dead_code)] // wired in Task 5 of inline-managed-network-approval
+/// 网络审批 HITL 交互的结果。
+#[allow(dead_code)] // 在 inline-managed-network-approval 的 Task 5 中接入
 pub(crate) struct NetworkApprovalOutcome {
     pub decision: crate::control::network_approval::PendingApprovalDecision,
     pub status: String,
 }
 
-/// Show a network host approval surface and wait for the user to decide.
+/// 弹出网络主机审批界面，等待用户决定。
 ///
-/// Returns the scoped decision (once/session/persistent/deny) or `None` if the
-/// event channel is closed.
-#[allow(dead_code)] // wired in Task 5 of inline-managed-network-approval
+/// 返回带作用域的决定（once/session/persistent/deny），若事件通道关闭则返回 `None`。
+#[allow(dead_code)] // 在 inline-managed-network-approval 的 Task 5 中接入
 pub(crate) async fn park_network_approval(
     gate: &Arc<HitlGate>,
     session: &Session,
@@ -472,7 +471,7 @@ mod event_tests {
             }
         });
 
-        // Cancel instead of resolving — simulates gate cancellation
+        // 取消而非解决 — 模拟 gate 取消
         tokio::time::sleep(Duration::from_millis(50)).await;
         gate.cancel_all().await;
 

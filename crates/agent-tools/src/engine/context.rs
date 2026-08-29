@@ -45,7 +45,7 @@ pub struct ToolContext<'a> {
     pub execution: Option<Arc<dyn crate::AgentThreadDispatch>>,
     /// 当前会话的权限 profile；子 Agent 缺省继承，可由 custom agent 收紧。
     pub permission_profile: Option<String>,
-    /// Ephemeral custom-agent skill enable/disable layer.
+    /// 临时的自定义 Agent skill 启用/禁用层。
     pub skill_config_overrides: &'a [(PathBuf, bool)],
     /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
@@ -55,14 +55,14 @@ pub struct ToolContext<'a> {
     ///
     /// 该值只存在于本次 `ToolContext` 生命周期，不会持久化或扩大到后续工具调用。
     pub workspace_write_grant: bool,
-    /// Current attempt-scoped sandbox policy selected by the orchestrator.
+    /// 当前 attempt 级别的沙箱策略，由 orchestrator 选择。
     ///
-    /// Only the orchestrator may set this for initial or escalated attempts.
-    /// It is never persisted or inherited by later tool calls.
+    /// 仅 orchestrator 可为初始或升级的 attempt 设置此值。
+    /// 不会持久化，也不会被后续工具调用继承。
     pub sandbox_policy: Option<sandbox::SandboxPolicy>,
-    /// Current attempt-scoped managed proxy lease.
+    /// 当前 attempt 级别的受管代理租约。
     ///
-    /// The lease keeps the listener alive through sandbox setup and process execution.
+    /// 该租约在沙箱设置和进程执行期间保持 listener 存活。
     pub managed_network: Option<Arc<network_proxy::StartedNetworkProxy>>,
     /// 当前模型上下文窗口总容量（token 数）；由 AgentLoop 注入，`None` 表示未知。
     pub context_window: Option<u64>,
@@ -121,10 +121,9 @@ impl<'a> ToolContext<'a> {
         )
     }
 
-    /// Prepare the managed network environment for a child process.
+    /// 为子进程准备受管网络环境。
     ///
-    /// Returns `None` when no managed proxy is active for this attempt, meaning
-    /// the caller should not alter the child environment for network proxying.
+    /// 当前 attempt 无活跃的受管代理时返回 `None`，表示调用方无需为网络代理修改子进程环境。
     pub fn prepare_managed_network_env(
         &self,
         env: std::collections::HashMap<String, String>,
@@ -134,10 +133,9 @@ impl<'a> ToolContext<'a> {
             .map(|started| started.proxy().prepare(env))
     }
 
-    /// Drain the managed proxy's blocked-request queue and return the latest denial.
+    /// 排空受管代理的被拦截请求队列，返回最近一次拒绝记录。
     ///
-    /// The queue is drained per attempt; `.pop()` reports the most recent denial
-    /// deterministically when a process made several blocked requests.
+    /// 队列按 attempt 排空；当进程发起多次被拦截请求时，`.pop()` 确定性地返回最近的拒绝记录。
     pub fn take_managed_network_denial(&self) -> Option<types::NetworkPolicyDecisionPayload> {
         self.managed_network
             .as_ref()?

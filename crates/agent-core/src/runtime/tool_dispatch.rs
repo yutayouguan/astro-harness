@@ -14,7 +14,7 @@ use super::{AgentLoop, StepContext, ToolInvocation};
 pub enum ToolCallError {
     /// 用户或上层触发了取消。
     Cancelled,
-    /// A sandboxed process was denied and retains its structured output for retry.
+    /// 沙箱进程被拒绝，保留其结构化输出以供重试。
     SandboxDenied(sandbox::SandboxErr),
     /// 工具深度耗尽。
     DepthExhausted(super::turn_budget::MaxDepthError),
@@ -220,7 +220,7 @@ impl AgentLoop {
         )
     }
 
-    /// Execute one call against the exact sampling step that advertised it.
+    /// 针对发布该工具的确切采样步骤执行一次调用。
     pub(crate) fn handle_tool_invocation(
         self: &Arc<Self>,
         invocation: ToolInvocation,
@@ -228,7 +228,7 @@ impl AgentLoop {
         self.handle_tool_invocation_with_once_grants(invocation, ToolExecutionGrants::default())
     }
 
-    /// Execute one step-bound invocation with grants scoped to this attempt.
+    /// 执行一次绑定到采样步骤的调用，授权范围限于本次尝试。
     pub(crate) fn handle_tool_invocation_with_once_grants(
         self: &Arc<Self>,
         invocation: ToolInvocation,

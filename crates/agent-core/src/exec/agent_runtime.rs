@@ -24,12 +24,11 @@ pub struct RunAgentTurnRequest {
     pub runtime: SpawnRuntimeV2Request,
     pub memory_dir: PathBuf,
     pub chat_override: Option<ChatOverride>,
-    /// Follow-up turns obtain their user input from the durable mailbox at the
-    /// first sampling boundary instead of duplicating it as an initial input.
+    /// 后续轮次在首个采样边界从持久化邮箱获取用户输入，
+    /// 而非将其作为初始输入重复传入。
     pub consume_mailbox: bool,
-    /// Independent admission acknowledgement used by spawn.  It is published
-    /// once TurnStarted is durable and the active runtime handle is registered;
-    /// terminal turn completion is deliberately not part of this protocol.
+    /// spawn 使用的独立准入确认。在 TurnStarted 持久化且活跃运行时句柄
+    /// 注册完成后发布；终态 turn 完成有意不属于此协议。
     pub(super) startup_tx: Option<watch::Sender<Option<Result<(), String>>>>,
     pub(super) startup_accept_rx: Option<tokio::sync::oneshot::Receiver<()>>,
     pub(super) unaccepted_spawn_cleanup: Option<Arc<UnacceptedSpawnCleanup>>,
@@ -284,14 +283,14 @@ impl Drop for StartTurnOwnerGuard<'_> {
         }
         let close_requested = self.runtime_control.is_closed();
 
-        // Bridge async-from-sync: persist_dropped_owner_terminal uses async
-        // DB methods (status_events, record_runner_event, session store).
-        // We run them on a separate std thread so Handle::block_on does not
-        // panic from inside the tokio runtime.
+        // 同步中桥接异步：persist_dropped_owner_terminal 使用了异步 DB 方法
+        // （status_events、record_runner_event、session store）。
+        // 在独立的 std 线程上运行，避免在 tokio 运行时内部调用
+        // Handle::block_on 导致 panic。
         let durable_result =
             if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                // SAFETY: std::thread::scope blocks until the spawned thread
-                // finishes, so all borrows from `self` remain valid.
+                // 安全性：std::thread::scope 会阻塞直到衍生线程结束，
+                // 因此 `self` 的所有借用始终有效。
                 std::thread::scope(|s| {
                     s.spawn(|| {
                         handle.block_on(
@@ -401,8 +400,8 @@ pub struct AgentRuntimeManager {
 }
 
 impl AgentRuntimeManager {
-    /// Process-wide active-turn manager. Thread ids are globally unique and
-    /// every session under one Agent Tree must observe the same acknowledgements.
+    /// 进程级活跃 turn 管理器。Thread id 全局唯一，
+    /// 同一 Agent Tree 下的所有 session 必须观察到相同的确认信号。
     pub fn global() -> Arc<Self> {
         static MANAGER: OnceLock<Arc<AgentRuntimeManager>> = OnceLock::new();
         Arc::clone(MANAGER.get_or_init(|| Arc::new(AgentRuntimeManager::default())))
@@ -787,8 +786,8 @@ impl AgentRuntimeManager {
         expect_terminal_ack("interruption", termination, AgentStatusV2::Interrupted)
     }
 
-    /// Interrupt the active generation when one exists. Idle, completed, and
-    /// not-yet-started threads are idempotent no-ops at the V2 tool boundary.
+    /// 存在活跃生成时中断之。空闲、已完成和尚未启动的线程
+    /// 在 V2 工具边界处为幂等空操作。
     pub async fn interrupt_active_if_any(&self, thread_id: &str) -> anyhow::Result<()> {
         let RuntimeTerminationState::Running {
             control,
@@ -812,10 +811,9 @@ impl AgentRuntimeManager {
         Ok(())
     }
 
-    /// Advance one thread close until it is either complete, has atomically
-    /// cancelled a Starting slot, or has synchronously sent a termination signal.  The
-    /// caller can safely transfer its subtree admission guard only after the
-    /// `TerminationRequested` result is returned.
+    /// 推进单个线程关闭，直到完成、原子取消 Starting 槽位、
+    /// 或同步发送终止信号。调用方只有在返回 `TerminationRequested`
+    /// 结果后才能安全转移其子树准入守卫。
     pub(super) async fn begin_close_thread(
         &self,
         control: &subagents::AgentControl,
@@ -839,10 +837,10 @@ impl AgentRuntimeManager {
                     return Ok(CloseThreadStart::Complete);
                 }
 
-                // No live runner exists to acknowledge shutdown. The durable
-                // RuntimeTerminated event is the acknowledgement for this idle
-                // generation and atomically closes its spawn edge. Reapplying
-                // it to Shutdown also clears a stale runtime handle.
+                // 不存在活跃运行器来确认关闭。持久化的
+                // RuntimeTerminated 事件即为此空闲代际的确认，
+                // 并原子关闭其 spawn 边。重新应用到 Shutdown 状态
+                // 还会清除过期的 runtime handle。
                 if let Err(error) =
                     control.record_runner_event(thread_id, RunnerEvent::RuntimeTerminated).await
                 {
@@ -907,10 +905,9 @@ impl AgentRuntimeManager {
             .unwrap_or_default()
     }
 
-    /// Atomically decide whether a durable follow-up must start immediately or
-    /// be handed off from the current active generation.  The first caller for
-    /// an active turn owns the handoff; concurrent callers join its shared
-    /// result, so one next turn can consume every ordered mailbox message.
+    /// 原子决定持久化 follow-up 是立即启动还是由当前活跃代际交接。
+    /// 活跃 turn 的第一个调用方拥有交接权；并发调用方加入其共享
+    /// 结果，使一个后续 turn 能消费所有有序邮箱消息。
     pub(super) fn request_or_start_followup(
         &self,
         thread_id: &str,
@@ -1595,9 +1592,9 @@ async fn run_request(
         Arc::clone(&request.control),
         request.thread.canonical_path.clone(),
     ).await?;
-    // Runner events choose the semantic boundary kind only. Whether a boundary
-    // is needed is derived idempotently from the hydrated and durable history,
-    // so a failed repair remains retryable after it records TurnErrored.
+    // Runner 事件仅选择语义边界类型。是否需要边界由
+    // 水合后的持久化历史幂等推导，因此失败的修复在记录
+    // TurnErrored 后仍可重试。
     if prior_turn_was_interrupted {
         session.ensure_assistant_interrupted_boundary().await?;
     } else {

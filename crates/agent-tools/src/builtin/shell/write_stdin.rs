@@ -15,19 +15,19 @@ fn default_max_output_tokens() -> usize {
     10000
 }
 
-/// Arguments for the `write_stdin` tool.
+/// `write_stdin` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct WriteStdinArgs {
-    /// ID of the running exec_command session.
+    /// 运行中的 exec_command 会话 ID。
     pub session_id: u64,
-    /// Bytes to write to stdin. Empty or omitted = poll without writing.
+    /// 写入 stdin 的内容。为空或省略时 = 仅轮询不写入。
     #[serde(default)]
     pub chars: Option<String>,
-    /// Wait time in ms before yielding output.
-    /// Non-empty writes default to 250 ms; empty polls default to 5000 ms.
+    /// 返回输出前的等待时间（毫秒）。
+    /// 非空写入默认 250 ms；空轮询默认 5000 ms。
     #[serde(default = "default_yield_time_ms")]
     pub yield_time_ms: i64,
-    /// Output token budget. Defaults to 10000.
+    /// 输出 token 预算。默认 10000。
     #[serde(default = "default_max_output_tokens")]
     pub max_output_tokens: usize,
 }

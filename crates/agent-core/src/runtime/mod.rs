@@ -93,9 +93,9 @@ pub struct Config {
     pub context_budget_chars: usize,
     /// 可选的静态上下文覆盖，用于测试或自定义 prompt。
     pub static_override: Option<StaticContext>,
-    /// Per-session memory write policy (Codex-style thread memory mode).
+    /// 每会话记忆写入策略（Codex 风格线程记忆模式）。
     pub thread_memory_mode: types::ThreadMemoryMode,
-    /// Controls how the compact token limit is measured (total vs body-after-prefix).
+    /// 控制 compact token 上限的度量方式（总量 vs 前缀之后的正文）。
     pub compact_scope: types::CompactTokenLimitScope,
 }
 
@@ -133,9 +133,9 @@ impl Config {
     }
 }
 
-/// Session runtime: owns conversation state, memory, tools, and provider credentials.
+/// Session 运行时：拥有对话状态、记忆、工具与 Provider 凭证。
 ///
-/// Input enters through `start_or_steer_turn`; a `SessionTask` owns the model/tool loop.
+/// 输入通过 `start_or_steer_turn` 进入；`SessionTask` 拥有模型/工具循环。
 pub struct Session {
     pub(crate) config: Config,
     pub(crate) session_id: String,
@@ -143,11 +143,11 @@ pub struct Session {
     pub(crate) workspace_dir: PathBuf,
 
     // ── 提取的子结构体 ──────────────────────────────────────
-    /// Codex-style session-wide mutable runtime state.
+    /// Codex 风格的会话级可变运行时状态。
     pub(crate) state: StdMutex<session_state::SessionState>,
-    /// Serializes persisted conversation writes with their in-memory history mirror.
+    /// 序列化持久化对话写入及其内存历史镜像。
     pub(crate) conversation_write_lock: TokioMutex<()>,
-    /// Serializes SessionStart/UserPromptSubmit admission in submission order.
+    /// 按提交顺序序列化 SessionStart/UserPromptSubmit 准入。
     pub(crate) admission_lock: TokioMutex<()>,
 
     // ── 会话级服务与注册表 ──────────────────────────
@@ -155,9 +155,9 @@ pub struct Session {
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
 
     // ── 注入的依赖 ─────────────────────────────────────────
-    /// Shared Plugin/Gateway/Shell hook runtime.
+    /// 共享的 Plugin/Gateway/Shell hook 运行时。
     hook_runtime: StdMutex<Arc<::hooks::HookRuntime>>,
-    /// Child-thread identity used to route Codex subagent lifecycle hooks.
+    /// 子线程身份标识，用于路由 Codex subagent 生命周期 hooks。
     subagent_hook_context: StdMutex<Option<SubagentHookContext>>,
     subagent_stop_turns: StdMutex<HashSet<String>>,
     /// First-class subagent thread dispatcher.

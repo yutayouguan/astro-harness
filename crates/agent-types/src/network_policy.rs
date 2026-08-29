@@ -1,4 +1,4 @@
-//! Structured decisions emitted by the managed subprocess network boundary.
+//! 受管子进程网络边界产生的结构化决策。
 
 use serde::{Deserialize, Serialize};
 
@@ -47,7 +47,7 @@ pub struct NetworkPolicyAmendment {
     pub action: NetworkPolicyRuleAction,
 }
 
-/// Payload attached to a sandbox denial by a managed proxy.
+/// 受管代理拒绝沙箱请求时附带的载荷。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkPolicyDecisionPayload {

@@ -19,7 +19,7 @@ pub mod prompt;
 pub mod runtime;
 /// 流式补全与多轮流式迭代抽象。
 pub mod streaming;
-/// Session task lifecycle.
+/// Session 任务生命周期。
 pub(crate) mod tasks;
 /// 助手回合时间线（astro_timeline_v1）。
 pub mod timeline;

@@ -64,19 +64,19 @@ impl Drop for ChildPermit {
 /// 单个用户 turn 内所有采样步骤共享的不可变上下文。
 #[derive(Debug)]
 pub struct TurnContext {
-    /// Stable identifier for the active turn.
+    /// 活跃 turn 的稳定标识符。
     pub(crate) sub_id: String,
-    /// One-based user-turn ordinal within the session.
+    /// 会话内从 1 开始的用户轮次序号。
     pub(crate) turn: usize,
-    /// Interaction mode admitted when the turn started.
+    /// turn 开始时准入的交互模式。
     pub(crate) mode: types::InteractionMode,
-    /// Permission profile admitted when the turn started.
+    /// turn 开始时准入的权限配置。
     pub(crate) permission_profile: Option<String>,
-    /// Project root admitted when the turn started.
+    /// turn 开始时准入的项目根路径。
     pub(crate) project_root: Option<PathBuf>,
-    /// All writable project roots admitted when the turn started.
+    /// turn 开始时准入的所有可写项目根路径。
     pub(crate) workspace_roots: Vec<PathBuf>,
-    /// User input steered into the active task, consumed before the next sampling request.
+    /// 注入活跃任务的用户输入，在下一次采样请求前被消费。
     input_state: Mutex<TurnInputState>,
     input_notify: Notify,
     child_tracker: Arc<ChildTracker>,
@@ -296,7 +296,7 @@ impl TurnContext {
         self.input_notify.notify_waiters();
     }
 
-    /// Atomically close steering only when neither queue nor an admission is pending.
+    /// 仅当队列和准入均无待处理时，原子地关闭输入引导。
     #[cfg(test)]
     pub(crate) fn close_if_no_pending_input(&self) -> bool {
         let mut state = self
@@ -343,7 +343,7 @@ impl TurnContext {
         }
     }
 
-    /// Test helper retaining the original queue-only assertion surface.
+    /// 测试辅助方法，保留原始的仅队列断言接口。
     #[cfg(test)]
     pub(crate) async fn take_pending_input_or_close(&self) -> Vec<QueuedTurnInput> {
         match self.wait_for_terminal_input().await {

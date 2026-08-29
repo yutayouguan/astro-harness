@@ -21,39 +21,39 @@ use crate::schema::schema_for_args;
 
 const MAX_VIDEO_BYTES: usize = 20 * 1024 * 1024;
 
-/// `image_gen` tool args.
+/// `image_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ImageGenArgs {
-    /// Detailed image prompt (required): subject, setting, composition, lighting, materials, style, mood—not a short summary. Pass thinking drafts verbatim.
+    /// 详细图片提示词（必填）：主题、场景、构图、光线、材质、风格、氛围——不要简短概述。可直接传递思考草稿。
     pub prompt: String,
-    /// Short title for the filename; default "Image".
+    /// 文件名短标题；默认 "Image"。
     #[serde(default)]
     pub title: Option<String>,
-    /// Aspect ratio when the user asks (e.g. 16:9). Common: `1:1` / `16:9` / `9:16` / `4:3` / `3:4`.
+    /// 用户指定的宽高比（如 16:9）。常用：`1:1` / `16:9` / `9:16` / `4:3` / `3:4`。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// Resolution tier when the user asks: `0.5K` / `1K` / `2K` / `4K` (uppercase K).
+    /// 用户指定的分辨率档位：`0.5K` / `1K` / `2K` / `4K`（大写 K）。
     #[serde(default)]
     pub image_size: Option<String>,
-    /// Reference image workspace paths (max 14).
+    /// 参考图片工作区路径（最多 14 张）。
     #[serde(default)]
     pub reference_images: Option<Vec<String>>,
-    /// Previous Interactions session id (multi-turn edit).
+    /// 上一次 Interactions 会话 ID（多轮编辑）。
     #[serde(default)]
     pub previous_interaction_id: Option<String>,
-    /// Enable Google Search grounding.
+    /// 启用 Google Search grounding。
     #[serde(default)]
     pub google_search: bool,
-    /// Enable image search (requires `google_search=true`).
+    /// 启用图片搜索（需 `google_search=true`）。
     #[serde(default)]
     pub image_search: bool,
-    /// Thinking depth: `minimal` / `high`.
+    /// 思考深度：`minimal` / `high`。
     #[serde(default)]
     pub thinking_level: Option<String>,
-    /// External video URL (mutually exclusive with `video`).
+    /// 外部视频 URL（与 `video` 互斥）。
     #[serde(default)]
     pub video_uri: Option<String>,
-    /// Workspace-relative generated video path (mutually exclusive with `video_uri`).
+    /// 工作区相对的生成视频路径（与 `video_uri` 互斥）。
     #[serde(default)]
     pub video: Option<String>,
 }

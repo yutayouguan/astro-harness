@@ -48,7 +48,7 @@ const MAX_VERIFY_ATTEMPTS: usize = 2;
 /// 模型只返回思考/推理内容而没有文本回复时，允许的最大重试次数。
 const MAX_THINKING_ONLY_RETRIES: usize = 1;
 
-/// Per-index buffer that delays argument events until the provider call id is known.
+/// 按 index 的缓冲区，延迟参数事件直到 provider call id 已知。
 #[derive(Default)]
 struct PendingToolArgumentEvents {
     item_id: Option<String>,
@@ -103,7 +103,7 @@ pub(crate) struct MultiTurnInstallError {
     pub(crate) message: String,
 }
 
-/// Canonical Thread-event execution seam used by integration tests and adapters.
+/// 集成测试和适配器使用的规范 Thread 事件执行接缝。
 #[doc(hidden)]
 pub struct ThreadTurnEventArgs {
     pub session: Arc<Session>,
@@ -161,7 +161,7 @@ pub(crate) async fn install_multi_turn_task(
     })
 }
 
-/// Canonical Thread-event execution seam used by integration tests and adapters.
+/// 集成测试和适配器使用的规范 Thread 事件执行接缝。
 #[doc(hidden)]
 pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
     let ThreadTurnEventArgs {
@@ -216,7 +216,7 @@ pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
     }
 }
 
-/// Prepared-turn convenience seam for existing lifecycle tests.
+/// 为现有生命周期测试提供的预构建 turn 便捷接缝。
 #[doc(hidden)]
 pub async fn run_multi_turn_events_with_chat_fn(
     session: Arc<Session>,
@@ -438,7 +438,7 @@ async fn finish_task_cancelled(
     Err(TurnCancelled.into())
 }
 
-/// Regular turn loop shared by foreground and background adapters.
+/// 前台和后台适配器共享的常规 turn 循环。
 pub(crate) async fn run_turn(
     args: RunTurnArgs,
     cancellation_token: CancellationToken,
@@ -866,7 +866,7 @@ pub(crate) async fn run_turn(
             .await;
         }
 
-        // `Stop` hook.
+        // `Stop` 钩子。
         if calls.is_empty() {
             let verify_outcome = {
                 let agent = session.as_ref();

@@ -19,10 +19,10 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
     )
 }
 
-/// Convert a three-layer prompt contract plus durable history into provider input.
+/// 将三层 prompt 契约加持久化历史转换为 Provider 输入。
 ///
-/// The stable base is emitted as the dedicated system/instructions item, followed by
-/// role-bearing dynamic context. Native tool schemas are supplied separately by the caller.
+/// 稳定基础指令作为专用 system/instructions 条目发出，随后是带角色的动态上下文。
+/// 原生工具 schema 由调用方单独提供。
 pub fn to_provider_messages_with_context(
     prompt: &crate::prompt::PromptContract,
     session: &[Message],
@@ -34,7 +34,7 @@ pub fn to_provider_messages_with_context(
     to_provider_messages_with_context_history(prompt, &history, session)
 }
 
-/// Convert stable instructions, durable provider-only context history, and chat history.
+/// 转换稳定指令、持久化的 Provider 专用上下文历史和聊天历史。
 pub(crate) fn to_provider_messages_with_context_history(
     prompt: &crate::prompt::PromptContract,
     prompt_context: &[crate::prompt::context_state::PromptContextEvent],
@@ -91,7 +91,7 @@ pub(crate) fn to_provider_messages_with_context_history(
             Role::Assistant => {
                 let mut content_parts = Vec::new();
 
-                // Thinking / reasoning
+                // 推理 / reasoning
                 if let Some(reasoning) = &message.reasoning {
                     content_parts.push(AssistantContent::Thinking {
                         text: reasoning.clone(),
@@ -104,13 +104,13 @@ pub(crate) fn to_provider_messages_with_context_history(
                     });
                 }
 
-                // Text content
+                // 文本内容
                 let text = message.content_text();
                 if !text.is_empty() {
                     content_parts.push(AssistantContent::Text { text });
                 }
 
-                // Tool calls
+                // 工具调用
                 if let Some(ref calls) = message.tool_calls {
                     for c in calls {
                         content_parts.push(AssistantContent::ToolCall(ProviderToolCall {
@@ -133,7 +133,7 @@ pub(crate) fn to_provider_messages_with_context_history(
             }
             Role::User => {
                 let mut parts = build_user_parts(message);
-                // Merge media assets
+                // 合并媒体资产
                 parts = merge_media_user_parts(parts, &message.media);
                 messages.push(ProviderMessage::User { content: parts });
             }
@@ -147,7 +147,7 @@ pub(crate) fn to_provider_messages_with_context_history(
     messages
 }
 
-/// Build user content parts from a session message.
+/// 从会话消息构建用户内容部分。
 fn build_user_parts(message: &Message) -> Vec<UserContent> {
     match &message.content {
         MessageContent::Text(s) => {

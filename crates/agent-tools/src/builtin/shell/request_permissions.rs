@@ -7,43 +7,43 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Network permission request.
+/// 网络权限请求。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct NetworkPermission {
-    /// True requests network access; false or omitted requests none.
+    /// true 表示请求网络访问；false 或省略表示不请求。
     #[serde(default)]
     pub enabled: bool,
 }
 
-/// Filesystem permission request.
+/// 文件系统权限请求。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct FileSystemPermission {
-    /// Absolute paths to grant read access.
+    /// 授予读取权限的绝对路径。
     #[serde(default)]
     pub read: Vec<String>,
-    /// Absolute paths to grant write access.
+    /// 授予写入权限的绝对路径。
     #[serde(default)]
     pub write: Vec<String>,
 }
 
-/// Permission profile requested by the model.
+/// 模型请求的权限配置。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PermissionRequest {
-    /// Network access request.
+    /// 网络访问请求。
     #[serde(default)]
     pub network: Option<NetworkPermission>,
-    /// Filesystem access request.
+    /// 文件系统访问请求。
     #[serde(default)]
     pub file_system: Option<FileSystemPermission>,
 }
 
-/// Arguments for the `request_permissions` tool.
+/// `request_permissions` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct RequestPermissionsArgs {
-    /// Optional short explanation for why additional permissions are needed.
+    /// 可选的简短说明，解释为何需要额外权限。
     #[serde(default)]
     pub reason: Option<String>,
-    /// The permissions being requested.
+    /// 请求的权限。
     pub permissions: PermissionRequest,
 }
 

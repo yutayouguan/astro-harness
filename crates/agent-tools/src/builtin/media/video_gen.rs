@@ -14,67 +14,67 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// `video_gen` tool args.
+/// `video_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct VideoGenArgs {
-    /// Detailed shot prompt (required): subject/action, camera, setting, lighting, style, mood—not a short summary. Pass thinking drafts verbatim.
+    /// 详细镜头提示词（必填）：主体/动作、镜头、场景、光线、风格、氛围——不要简短概述。可直接传递思考草稿。
     pub prompt: String,
-    /// Short title for the filename; default "Video".
+    /// 文件名短标题；默认 "Video"。
     #[serde(default)]
     pub title: Option<String>,
-    /// Aspect ratio, e.g. `16:9` / `9:16` / `1:1` / `4:3`.
+    /// 宽高比，如 `16:9` / `9:16` / `1:1` / `4:3`。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// Duration in seconds. MiniMax H3: 4-15; legacy: 6 or 10. (forced to 8 for extend/refs/last_frame/1080p/4K on Google Veo).
+    /// 时长（秒）。MiniMax H3：4-15；旧版：6 或 10。（Google Veo 在 extend/refs/last_frame/1080p/4K 时强制为 8）。
     #[serde(default)]
     pub duration_seconds: Option<u32>,
-    /// Output resolution: MiniMax H3: `768P` / `2K`; legacy: `720P` / `768P` / `1080P`; Google: `720p` / `1080p` / `4K`.
+    /// 输出分辨率：MiniMax H3：`768P` / `2K`；旧版：`720P` / `768P` / `1080P`；Google：`720p` / `1080p` / `4K`。
     #[serde(default)]
     pub resolution: Option<String>,
-    /// Negative prompt (optional; ignored by native Veo).
+    /// 负面提示词（可选；原生 Veo 忽略）。
     #[serde(default)]
     pub negative_prompt: Option<String>,
-    /// Visual style: `cinematic` / `creative` (ignored by native Veo).
+    /// 视觉风格：`cinematic` / `creative`（原生 Veo 忽略）。
     #[serde(default)]
     pub style: Option<String>,
-    /// Extend from workspace video path (preferred for next shots).
+    /// 从工作区视频路径续拍（推荐用于后续镜头）。
     #[serde(default)]
     pub extend_video: Option<String>,
     #[serde(default)]
     pub extend_video_uri: Option<String>,
-    /// Extend from prior operation id.
+    /// 从先前操作 ID 续拍。
     #[serde(default)]
     pub extend_video_id: Option<String>,
-    /// Reference image paths (Google Veo: max 3; MiniMax H3: max 9).
+    /// 参考图片路径（Google Veo：最多 3 张；MiniMax H3：最多 9 张）。
     #[serde(default)]
     pub reference_images: Option<Vec<String>>,
-    /// Single reference image path (merged into reference_images).
+    /// 单张参考图片路径（合并到 reference_images）。
     #[serde(default)]
     pub reference_image: Option<String>,
-    /// First-frame image path (image-to-video / interpolation).
+    /// 首帧图片路径（图生视频/插值）。
     #[serde(default)]
     pub image: Option<String>,
-    /// Last-frame image path (requires `image`).
+    /// 尾帧图片路径（需同时提供 `image`）。
     #[serde(default)]
     pub last_frame: Option<String>,
-    /// Person generation: `allow_adult` / `allow_all` / `dont_allow`.
+    /// 人物生成：`allow_adult` / `allow_all` / `dont_allow`。
     #[serde(default)]
     pub person_generation: Option<String>,
     #[serde(default)]
     pub seed: Option<i64>,
-    /// Subject reference image path (MiniMax legacy S2V: character consistency).
+    /// 主体参考图片路径（MiniMax 旧版 S2V：角色一致性）。
     #[serde(default)]
     pub subject_reference_image: Option<String>,
-    /// Disable prompt optimization (MiniMax: more precise control).
+    /// 禁用提示词优化（MiniMax：更精确控制）。
     #[serde(default)]
     pub disable_prompt_optimizer: Option<bool>,
-    /// Reference video paths/URLs (MiniMax H3 only, max 3, each 2-15s).
+    /// 参考视频路径/URL（仅 MiniMax H3，最多 3 个，每个 2-15s）。
     #[serde(default)]
     pub reference_videos: Option<Vec<String>>,
-    /// Reference audio paths/URLs (MiniMax H3 only, max 3, each 2-15s).
+    /// 参考音频路径/URL（仅 MiniMax H3，最多 3 个，每个 2-15s）。
     #[serde(default)]
     pub reference_audios: Option<Vec<String>>,
-    /// Enable H3 Context-IR prompt enhancement before generation (MiniMax H3 only).
+    /// 生成前启用 H3 Context-IR 提示词增强（仅 MiniMax H3）。
     #[serde(default)]
     pub enhance_prompt: Option<bool>,
 }

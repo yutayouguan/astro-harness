@@ -16,7 +16,7 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Soft sandbox limits applied via `setrlimit` on Unix after fork / before exec.
+/// Unix 下 fork 后 exec 前通过 `setrlimit` 施加的软沙箱限制。
 const RLIM_CPU_SECS: u64 = 30;
 const RLIM_AS_BYTES: u64 = 512 * 1024 * 1024;
 const RLIM_FSIZE_BYTES: u64 = 32 * 1024 * 1024;
@@ -24,17 +24,17 @@ const RLIM_NOFILE: u64 = 64;
 // 注意：不设置 RLIMIT_NPROC。该限制按「用户」计数而非进程树；
 // 桌面环境宿主已有大量进程时，过低的 NPROC 会让子进程立刻 fork 失败。
 
-/// Environment variable names kept for the child process.
+/// 保留给子进程的环境变量名。
 const SAFE_ENV_KEYS: &[&str] = &[
     "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR", "TMP",
     "TEMP", "SHELL", "PWD",
 ];
 
-/// Arguments for the `code_exec` tool.
+/// `code_exec` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct CodeExecArgs {
     pub code: String,
-    /// Language: `python` (default) / `javascript`|`js` / `shell`|`bash`. Unknown languages error.
+    /// 语言：`python`（默认）/ `javascript`|`js` / `shell`|`bash`。未知语言会报错。
     #[serde(default)]
     pub language: Option<String>,
 }
@@ -79,10 +79,10 @@ fn is_sensitive_env_key(key: &str) -> bool {
     NEEDLES.iter().any(|n| upper.contains(n))
 }
 
-/// Build a scrubbed environment for code execution.
+/// 构建代码执行的净化环境。
 ///
-/// Starts empty, copies only allowlisted keys from the parent, and never copies
-/// keys whose names look like secrets.
+/// 从空 env 开始，仅从父进程拷贝白名单中的 key，
+/// 且永不拷贝名称疑似密钥的 key。
 pub(crate) fn scrubbed_env(
     parent: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,
 ) -> HashMap<String, String> {
@@ -117,7 +117,7 @@ fn apply_unix_rlimits() {
     }
 }
 
-/// RAII helper so temp scripts are removed on timeout / early return too.
+/// RAII 辅助结构，确保临时脚本在超时或提前返回时也会被清理。
 struct TempScript(PathBuf);
 
 impl Drop for TempScript {

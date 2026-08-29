@@ -233,8 +233,8 @@ fn model_visible_status(status: &subagents::AgentStatusV2) -> serde_json::Value 
 }
 
 fn model_visible_spawn_output(result: &subagents::SpawnAgentV2Result) -> anyhow::Result<String> {
-    // V2 defaults `hide_spawn_agent_metadata` to true. Astro exposes the
-    // same default contract and keeps internal thread/session ids off-model.
+    // V2 默认 `hide_spawn_agent_metadata` 为 true。Astro 遵循相同的默认契约，
+    // 不向模型暴露内部 thread/session id。
     Ok(serde_json::to_string(&serde_json::json!({
         "task_name": result.thread.canonical_path.as_str()
     }))?)

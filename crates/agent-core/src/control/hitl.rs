@@ -262,7 +262,7 @@ impl HitlRegistry {
             .insert(gate.session_id().to_string(), gate);
     }
 
-    /// Atomically replace one session gate from a cancellation-safe synchronous commit.
+    /// 原子替换一个 session 闸门，用于取消安全的同步提交。
     pub fn replace_for_admission(&self, gate: Arc<HitlGate>) -> Option<Arc<HitlGate>> {
         self.inner
             .write()
