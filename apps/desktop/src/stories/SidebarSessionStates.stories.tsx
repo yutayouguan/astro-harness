@@ -9,13 +9,15 @@ import {
   MoreVertical,
   Pin,
   Plus,
+  Settings2,
   Wrench,
 } from "lucide-react";
 import { useState, type CSSProperties } from "react";
 import ProjectFolderIcon from "../components/chat/ProjectFolderIcon";
 import SidebarSessionList from "../components/chat/SidebarSessionList";
 import SessionStatusIcon from "../components/chat/SessionStatusIcon";
-import { IconNewChat } from "../components/icons/NavIcons";
+import { AstroLogoMark } from "../components/icons/AstroLogoMark";
+import { IconCron, IconLoop, IconNewChat, IconPlugin } from "../components/icons/NavIcons";
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import { DialogProvider } from "../hooks/ui/DialogContext";
 import ExpandableSearch from "../components/ui/ExpandableSearch";
@@ -82,10 +84,17 @@ function SidebarSessionStates() {
           className="sidebar is-open is-pinned is-labels"
           style={{ "--sidebar-w-wide": "280px" } as CSSProperties}
         >
+          <div className="sidebar-brand">
+            <div className="sidebar-logo" aria-hidden>
+              <AstroLogoMark width={26} height={26} />
+            </div>
+            <div className="sidebar-brand-text">Astro Agent</div>
+          </div>
           <div className="sidebar-primary-actions">
             <button type="button" className="sidebar-new-chat">
               <IconNewChat width={18} height={18} strokeWidth={1.8} />
               <span className="sidebar-item-label">新对话</span>
+              <kbd className="sidebar-new-chat-shortcut" aria-hidden>⌘N</kbd>
             </button>
             <ExpandableSearch
               value={query}
@@ -94,6 +103,19 @@ function SidebarSessionStates() {
               className="sidebar-session-search sidebar-global-search"
             />
           </div>
+          <div className="sidebar-group-label">工作台</div>
+          <nav className="sidebar-feature-tabs" aria-label="自动化与扩展">
+            {[
+              { label: "定时任务", Icon: IconCron },
+              { label: "智能流程", Icon: IconLoop },
+              { label: "插件", Icon: IconPlugin },
+            ].map(({ label, Icon }) => (
+              <button key={label} type="button" className="sidebar-feature-tab">
+                <Icon width={18} height={18} strokeWidth={1.8} />
+                <span className="sidebar-item-label">{label}</span>
+              </button>
+            ))}
+          </nav>
           <div className="sidebar-projects">
             <div className="sidebar-collapsible-section">
               <button type="button" className="sidebar-section-toggle" aria-expanded>
@@ -101,14 +123,6 @@ function SidebarSessionStates() {
                 <ChevronRight className="sidebar-section-chevron is-expanded" size={12} aria-hidden />
               </button>
               <div className="sidebar-section-actions">
-                <button
-                  type="button"
-                  className="sidebar-session-filter-btn is-on"
-                  title="已归档"
-                  aria-pressed="true"
-                >
-                  <Archive size={14} strokeWidth={1.8} aria-hidden />
-                </button>
                 <button type="button" className="sidebar-add-btn" title="新建">
                   <Plus size={14} aria-hidden />
                 </button>
@@ -130,12 +144,34 @@ function SidebarSessionStates() {
                 </button>
               </div>
             </div>
+            <div className="sidebar-collapsible-section">
+              <button type="button" className="sidebar-section-toggle" aria-expanded>
+                <span className="sidebar-section-title">最近</span>
+                <ChevronRight className="sidebar-section-chevron is-expanded" size={12} aria-hidden />
+              </button>
+              <div className="sidebar-section-actions">
+                <button
+                  type="button"
+                  className="sidebar-session-filter-btn"
+                  title="已归档"
+                  aria-pressed="false"
+                >
+                  <Archive size={14} strokeWidth={1.8} aria-hidden />
+                </button>
+              </div>
+            </div>
             <div className="sidebar-sessions is-global">
               <SessionRow title="统一聊天 AI 卡片样式" status="running" />
               <SessionRow title="美化 AI 回答面板" status="running" />
               <SessionRow title="输入框的上下文量显示按钮呢" status="idle" unread />
               <SessionRow title="已读的历史任务" status="idle" time="2 天前" />
             </div>
+          </div>
+          <div className="sidebar-footer">
+            <button type="button" className="sidebar-settings-btn">
+              <Settings2 size={18} strokeWidth={1.8} aria-hidden />
+              <span className="sidebar-item-label">偏好设置</span>
+            </button>
           </div>
         </aside>
       </div>

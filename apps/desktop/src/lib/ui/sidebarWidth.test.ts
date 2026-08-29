@@ -10,6 +10,7 @@ import {
 } from "./sidebarWidth.ts";
 
 test("parses the stored project sidebar width safely", () => {
+  assert.equal(SIDEBAR_DEFAULT_WIDTH, 280);
   assert.equal(parseStoredSidebarWidth(null), SIDEBAR_DEFAULT_WIDTH);
   assert.equal(parseStoredSidebarWidth("invalid"), SIDEBAR_DEFAULT_WIDTH);
   assert.equal(parseStoredSidebarWidth("320"), 320);

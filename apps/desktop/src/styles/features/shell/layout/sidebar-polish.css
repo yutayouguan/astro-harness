@@ -1,0 +1,360 @@
+/* Left navigation hierarchy and density. Kept as the final shell-layout layer so the
+   sidebar has one deliberate visual contract instead of scattered specificity fixes. */
+
+.sidebar {
+  font-optical-sizing: auto;
+}
+
+.sidebar.is-pinned {
+  border-right-color: color-mix(in srgb, var(--ink) 9%, var(--glass-edge));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 34%),
+    color-mix(in srgb, var(--sidebar-pinned-bg) 80%, var(--bg-base) 20%);
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, #fff 26%, transparent),
+    10px 0 30px rgba(15, 23, 42, 0.035);
+  backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1))) saturate(1.22);
+  -webkit-backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1))) saturate(1.22);
+}
+
+html[data-theme="dark"] .sidebar.is-pinned {
+  border-right-color: color-mix(in srgb, #fff 10%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    color-mix(in srgb, var(--sidebar-pinned-bg) 86%, var(--bg-base) 14%);
+  box-shadow:
+    inset -1px 0 0 rgba(255, 255, 255, 0.045),
+    12px 0 34px rgba(0, 0, 0, 0.12);
+}
+
+.sidebar::before {
+  opacity: 0.5;
+}
+
+.sidebar.is-labels {
+  padding-inline: 12px;
+}
+
+.sidebar.is-labels .sidebar-brand {
+  gap: 9px;
+  padding: 0 8px 11px;
+}
+
+.sidebar-logo {
+  width: 28px;
+  height: 28px;
+}
+
+.sidebar-logo svg {
+  width: 22px;
+  height: 22px;
+}
+
+.sidebar-brand-text {
+  font-size: 14.5px;
+  font-weight: 720;
+  letter-spacing: -0.018em;
+}
+
+.sidebar-primary-actions {
+  gap: 8px;
+  margin: 0 8px 15px;
+}
+
+.sidebar-new-chat {
+  min-height: 42px;
+  padding-inline: 11px 9px;
+  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 15%, var(--glass-edge));
+  border-radius: 11px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.16), transparent 72%),
+    color-mix(in srgb, var(--tone-soft, transparent) 76%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 3px 10px color-mix(in srgb, var(--tone, transparent) 5%, transparent);
+  font-size: 13.5px;
+  font-weight: 620;
+}
+
+.sidebar.is-labels .sidebar-new-chat .sidebar-item-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-new-chat-shortcut {
+  display: none;
+  flex: 0 0 auto;
+  min-width: 25px;
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--glass-strong) 72%, transparent);
+  color: color-mix(in srgb, var(--ink-mute) 82%, transparent);
+  font: 600 10px/1.2 system-ui, sans-serif;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.sidebar.is-labels .sidebar-new-chat-shortcut {
+  display: inline-block;
+}
+
+.sidebar-global-search .expandable-search-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 3px 10px color-mix(in srgb, var(--tone, transparent) 5%, transparent);
+}
+
+.sidebar-group-label,
+.sidebar-section-title {
+  color: color-mix(in srgb, var(--ink-mute) 88%, var(--ink));
+  font-size: 11.5px;
+  font-weight: 680;
+  line-height: 1.3;
+  letter-spacing: 0.035em;
+}
+
+.sidebar-group-label {
+  margin: 0 12px 6px;
+}
+
+.sidebar-feature-tabs {
+  gap: 1px;
+  margin: 0 8px 12px;
+  padding-bottom: 12px;
+}
+
+.sidebar-feature-tab {
+  min-height: 38px;
+  gap: 9px;
+  padding-inline: 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 540;
+}
+
+.sidebar-feature-tab svg {
+  opacity: 0.76;
+}
+
+.sidebar-feature-tab:hover {
+  border-color: color-mix(in srgb, var(--ink) 5%, transparent);
+  background: color-mix(in srgb, var(--ink) 5.5%, transparent);
+}
+
+.sidebar-feature-tab.is-active {
+  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 14%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 11%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
+  font-weight: 620;
+}
+
+.sidebar-feature-tab.is-active::before {
+  display: none;
+}
+
+.sidebar-projects {
+  gap: 2px;
+  padding-inline: 8px;
+}
+
+.sidebar-collapsible-section {
+  min-height: 30px;
+  padding: 7px 4px 4px;
+}
+
+.sidebar-section-header {
+  padding: 7px 4px 4px;
+}
+
+.sidebar-section-toggle {
+  gap: 5px;
+  padding: 3px 4px;
+}
+
+.sidebar-section-chevron {
+  opacity: 0.42;
+}
+
+.sidebar-section-actions {
+  gap: 3px;
+}
+
+.sidebar-collapsible-section:is(:hover, :focus-within) .sidebar-section-chevron {
+  opacity: 0.72;
+}
+
+.sidebar-add-btn,
+.sidebar-session-filter-btn,
+.sidebar-session-search .expandable-search-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.sidebar-project {
+  gap: 1px;
+}
+
+.sidebar-project-header {
+  min-height: 36px;
+  gap: 3px;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  transition:
+    transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.sidebar-project-name {
+  min-height: 32px;
+  gap: 9px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  font-weight: 520;
+}
+
+.sidebar-project-name:hover {
+  background: color-mix(in srgb, var(--ink) 4.5%, transparent);
+}
+
+.sidebar-project.is-active > .sidebar-project-header {
+  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 13%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
+}
+
+.sidebar-project.is-active > .sidebar-project-header::before {
+  display: none;
+}
+
+.sidebar-project.is-active > .sidebar-project-header .sidebar-project-name {
+  color: color-mix(in srgb, var(--tone, var(--tone-blue)) 76%, var(--ink));
+  font-weight: 620;
+}
+
+.sidebar-sessions {
+  gap: 1px;
+}
+
+.sidebar-session-item {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+
+.sidebar-session-item:hover {
+  border-color: color-mix(in srgb, var(--ink) 5%, transparent);
+  background: color-mix(in srgb, var(--ink) 5.5%, transparent);
+  transform: none;
+}
+
+.sidebar-session-item.is-active {
+  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+}
+
+.sidebar-session-main {
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 9px;
+  font-size: 13px;
+  font-weight: 460;
+  line-height: 1.3;
+}
+
+.sidebar-session-item.is-active .sidebar-session-main {
+  font-weight: 610;
+}
+
+.sidebar-session-time {
+  font-size: 10.5px;
+  opacity: 0.64;
+}
+
+.sidebar-session-expand {
+  min-height: 30px;
+  padding: 6px 9px;
+  font-size: 11.5px;
+  font-weight: 560;
+}
+
+.sidebar-session-expand:hover {
+  background: color-mix(in srgb, var(--ink) 4.5%, transparent);
+}
+
+.sidebar-footer {
+  padding: 10px 8px 0;
+}
+
+.sidebar-footer::before {
+  left: 4px;
+  right: 4px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ink) 9%, transparent) 18%,
+    color-mix(in srgb, var(--ink) 9%, transparent) 82%,
+    transparent
+  );
+}
+
+.sidebar-settings-btn {
+  min-height: 38px;
+  gap: 10px;
+  padding-inline: 10px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 540;
+}
+
+.sidebar-new-chat:active,
+.sidebar-feature-tab:active,
+.sidebar-project-header:active,
+.sidebar-session-item:active,
+.sidebar-settings-btn:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar.is-pinned {
+    background: var(--bg1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .sidebar.is-pinned,
+  .sidebar-feature-tab.is-active,
+  .sidebar-project.is-active > .sidebar-project-header,
+  .sidebar-session-item.is-active {
+    border-color: color-mix(in srgb, var(--ink) 34%, transparent);
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar.is-labels {
+    padding-inline: 9px;
+  }
+
+  .sidebar.is-labels .sidebar-brand,
+  .sidebar-primary-actions,
+  .sidebar-feature-tabs,
+  .sidebar-footer {
+    margin-inline: 4px;
+  }
+
+  .sidebar-projects {
+    padding-inline: 4px;
+  }
+}

@@ -978,6 +978,7 @@ export default function App() {
                 >
                   <IconNewChat width={18} height={18} strokeWidth={1.8} />
                   <span className="sidebar-item-label">{t("sidebar.newChat")}</span>
+                  <kbd className="sidebar-new-chat-shortcut" aria-hidden>⌘N</kbd>
                 </button>
                 <ExpandableSearch
                   value={sessionQuery}

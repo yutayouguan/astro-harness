@@ -1,6 +1,6 @@
 /** Project sidebar sizing rules shared by the shell hook and focused tests. */
 export const SIDEBAR_WIDTH_KEY = "astro.sidebarWidth";
-export const SIDEBAR_DEFAULT_WIDTH = 220;
+export const SIDEBAR_DEFAULT_WIDTH = 280;
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 420;
 export const SIDEBAR_MIN_CONTENT_WIDTH = 440;
