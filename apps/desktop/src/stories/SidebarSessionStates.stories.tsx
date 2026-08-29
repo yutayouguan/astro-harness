@@ -1,3 +1,4 @@
+import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Archive,
@@ -12,11 +13,24 @@ import {
 } from "lucide-react";
 import { useState, type CSSProperties } from "react";
 import ProjectFolderIcon from "../components/chat/ProjectFolderIcon";
+import SidebarSessionList from "../components/chat/SidebarSessionList";
 import SessionStatusIcon from "../components/chat/SessionStatusIcon";
 import { IconNewChat } from "../components/icons/NavIcons";
+import { MorphiconProvider } from "../hooks/app/useMorphicons";
+import { DialogProvider } from "../hooks/ui/DialogContext";
 import ExpandableSearch from "../components/ui/ExpandableSearch";
 import { useBeautifyTips } from "../hooks/ui/useBeautifyTips";
 import { LocaleProvider } from "../i18n/LocaleContext";
+import type { RecentSessionDto } from "../types";
+
+const menuSessions = Array.from({ length: 5 }, (_, index) => ({
+  sessionId: `menu-session-${index + 1}`,
+  summary: `生成一张党政风格的 PPT 封面背景 ${index + 1}`,
+  createdAt: new Date(Date.now() - index * 3_600_000).toISOString(),
+  endReason: null,
+  archivedAt: null,
+  pinnedAt: null,
+})) satisfies RecentSessionDto[];
 
 function SessionRow({
   title,
@@ -162,11 +176,52 @@ function SettingsMenu() {
   );
 }
 
+function SessionMenuNearBottom() {
+  return (
+    <main className="app-shell" data-tone="blue" style={{ width: 620, height: 540 }}>
+      <div className="body-row">
+        <aside
+          className="sidebar is-open is-pinned is-labels"
+          style={{ "--sidebar-w-wide": "360px" } as CSSProperties}
+        >
+          <div style={{ marginTop: "auto" }}>
+            <SidebarSessionList
+              activeSessionId="menu-session-5"
+              sessionStatuses={{}}
+              projectId={null}
+              query=""
+              listKind="active"
+              onOpenSession={() => {}}
+            />
+          </div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
 const meta = {
   id: "sidebar-session-states",
   title: "Shell/Sidebar Session States",
   component: SidebarSessionStates,
-  decorators: [(Story) => <LocaleProvider><Story /></LocaleProvider>],
+  beforeEach: () => {
+    mockIPC((command) => {
+      if (command === "list_sessions") return menuSessions;
+      return null;
+    });
+    return () => clearMocks();
+  },
+  decorators: [
+    (Story) => (
+      <LocaleProvider>
+        <MorphiconProvider>
+          <DialogProvider>
+            <Story />
+          </DialogProvider>
+        </MorphiconProvider>
+      </LocaleProvider>
+    ),
+  ],
   parameters: {
     controls: { disable: true },
   },
@@ -179,4 +234,8 @@ export const Default: Story = {};
 
 export const SettingsNavigation: Story = {
   render: () => <SettingsMenu />,
+};
+
+export const SessionMenuNearBottomEdge: Story = {
+  render: () => <SessionMenuNearBottom />,
 };

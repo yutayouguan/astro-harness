@@ -1,6 +1,13 @@
 // 侧栏会话列表：按项目分组或全局搜索结果，含全部会话操作。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -40,6 +47,12 @@ import type { MessageKey } from "../../i18n/messages";
 import type { RecentSessionDto } from "../../types";
 import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import { visibleSessionTitle } from "../../lib/chat/sessionTitle";
+import {
+  clampPopover,
+  measurePopoverSize,
+  pointAnchor,
+  resolveClipBoundsAt,
+} from "../../lib/ui/clampPopover";
 import SessionStatusIcon, {
   resolveSessionStatus,
   type SessionActivityStatus,
@@ -203,6 +216,38 @@ export default function SidebarSessionList({
 
   const [sessionMenu, setSessionMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!sessionMenu) return;
+    const el = menuRef.current;
+    if (!el) return;
+
+    const positionMenu = () => {
+      const size = measurePopoverSize(el);
+      const bounds = resolveClipBoundsAt(sessionMenu.x, sessionMenu.y);
+      const spaceBelow = bounds.bottom - 8 - sessionMenu.y;
+      const spaceAbove = sessionMenu.y - bounds.top - 8;
+      const placement =
+        size.height > spaceBelow && spaceAbove > spaceBelow ? "above" : "below";
+      const pos = clampPopover({
+        anchorRect: pointAnchor(sessionMenu.x, sessionMenu.y),
+        popoverSize: size,
+        bounds,
+        preferAlign: "start",
+        placement,
+        gap: 0,
+        pad: 8,
+      });
+      el.style.left = `${pos.left}px`;
+      el.style.top = `${pos.top}px`;
+      el.style.maxHeight = `${pos.maxHeight}px`;
+      el.style.overflowY = pos.maxHeight < size.height ? "auto" : "";
+    };
+
+    positionMenu();
+    window.addEventListener("resize", positionMenu);
+    return () => window.removeEventListener("resize", positionMenu);
+  }, [sessionMenu]);
 
   useEffect(() => {
     if (!sessionMenu) return;

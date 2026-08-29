@@ -168,6 +168,29 @@ test("session activity uses trailing status and hover-revealed tools", () => {
   assert.match(sessionList, /delete el\.dataset\.scrollable;/);
 });
 
+test("session action menu stays inside the app viewport", () => {
+  assert.match(sessionList, /useLayoutEffect\(\(\) => \{/);
+  assert.match(sessionList, /const size = measurePopoverSize\(el\);/);
+  assert.match(
+    sessionList,
+    /anchorRect:\s*pointAnchor\(sessionMenu\.x, sessionMenu\.y\)/,
+  );
+  assert.match(
+    sessionList,
+    /const bounds = resolveClipBoundsAt\(sessionMenu\.x, sessionMenu\.y\);/,
+  );
+  assert.match(
+    sessionList,
+    /size\.height > spaceBelow && spaceAbove > spaceBelow \? "above" : "below"/,
+  );
+  assert.match(sessionList, /placement,/);
+  assert.match(sessionList, /el\.style\.maxHeight = `\$\{pos\.maxHeight\}px`;/);
+  assert.match(
+    sessionList,
+    /el\.style\.overflowY = pos\.maxHeight < size\.height \? "auto" : "";/,
+  );
+});
+
 test("archive filter and tips keep optical alignment with glass fallbacks", () => {
   const archiveButton = rule(projectStyles, ".sidebar-session-filter-btn");
   const archiveIcon = rule(projectStyles, ".sidebar-session-filter-btn > svg");
