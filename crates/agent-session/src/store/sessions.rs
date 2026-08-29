@@ -55,8 +55,15 @@ impl SessionStore {
     ) -> Result<()> {
         let started_at = now_epoch_secs()?;
         sqlx::query(
-            "INSERT INTO sessions (id, source, model, user_id, parent_session_id, started_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO sessions (
+                id, source, model, user_id, parent_session_id, started_at,
+                branch_kind, branch_inherited_turn_count, branch_created_at
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6,
+                CASE WHEN ?5 IS NULL THEN NULL ELSE 'fork' END,
+                CASE WHEN ?5 IS NULL THEN NULL ELSE 0 END,
+                CASE WHEN ?5 IS NULL THEN NULL ELSE ?6 END
+             )",
         )
         .bind(id)
         .bind(source)

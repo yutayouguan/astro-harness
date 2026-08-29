@@ -1,6 +1,6 @@
 # session
 
-会话持久化层：单库 `SessionStore`（SQLite WAL，schema v17）管理 sessions、messages、FTS5 全文检索与上下文召回。与精炼记忆（`MEMORY.md`）无关。
+会话持久化层：单库 `SessionStore`（SQLite WAL，schema v20）管理 sessions、messages、FTS5 全文检索与上下文召回。与精炼记忆（`MEMORY.md`）无关。
 
 ## 核心职责
 
@@ -8,7 +8,7 @@
 - **会话生命周期** -- 创建/获取/重命名/归档/删除会话，列表与筛选，账单累加与快照
 - **FTS5 全文检索** -- 自动维护 FTS 索引，支持按关键词搜索历史消息（`SearchHit`）
 - **上下文召回** -- `build_conversation_context()` 在 turn >= recent_turns 时触发 FTS 召回，返回 `ScrolledMessage` 序列
-- **Schema 迁移** -- 从任意旧版本增量迁移到 v17，不丢数据
+- **严格 Schema** -- 新库直接创建 v20；已有数据库必须与当前版本完全一致
 - **抽象接口** -- `ConversationStore` trait 允许替换后端（Postgres / 远程 API / 内存 mock）
 - **Rollout 投影** -- `rebuild_messages_from_rollout()` 从 rollout 数据重建消息序列
 
@@ -18,7 +18,7 @@
 |------|------|
 | `lib.rs` | 公共 re-exports |
 | `store/mod.rs` | `SessionStore` 主结构体、`BillingDelta` / `SessionBillingRow` / `NewMessage` / `StoredMessage` / `StoredSession` 等核心 DTO |
-| `store/schema.rs` | Schema 定义与增量迁移（v1 -> v17），DDL、索引、FTS5 虚表 |
+| `store/schema.rs` | 当前 schema 初始化与版本校验、DDL、索引、FTS5 虚表 |
 | `store/messages.rs` | 消息 CRUD impl：append / get / update / patch / delete，FTS 同步 |
 | `store/sessions.rs` | 会话 CRUD impl：create / get / list / rename / archive / billing |
 | `store/search.rs` | FTS5 搜索实现：`search_messages()` / `SearchHit` / 相关性排序 |

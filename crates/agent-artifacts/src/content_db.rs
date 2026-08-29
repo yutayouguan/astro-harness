@@ -52,11 +52,12 @@ fn row_to_content(r: &sqlx::sqlite::SqliteRow) -> ContentRow {
 impl KnowledgeDb {
     pub async fn open(path: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let path = path.into();
+        let exists = path.exists();
         let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
         let pool = db.open_pool(&DB_SPEC).await?;
         sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
         let kdb = Self { pool, path };
-        kdb.apply_migrate().await?;
+        kdb.initialize_schema(exists).await?;
         Ok(kdb)
     }
 
@@ -71,19 +72,26 @@ impl KnowledgeDb {
         &self.path
     }
 
-    async fn apply_migrate(&self) -> anyhow::Result<()> {
+    async fn initialize_schema(&self, exists: bool) -> anyhow::Result<()> {
         let (ver,): (i32,) = sqlx::query_as("PRAGMA user_version")
             .fetch_one(&self.pool)
             .await
             .unwrap_or((0,));
-        if ver < SCHEMA_VERSION {
-            sqlx::query(DDL).execute(&self.pool).await?;
-            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                "PRAGMA user_version = {SCHEMA_VERSION}"
-            )))
-            .execute(&self.pool)
-            .await?;
+        if exists {
+            if ver != SCHEMA_VERSION {
+                anyhow::bail!(
+                    "unsupported knowledge.db schema version {ver}; expected {SCHEMA_VERSION}"
+                );
+            }
+            return Ok(());
         }
+
+        sqlx::query(DDL).execute(&self.pool).await?;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "PRAGMA user_version = {SCHEMA_VERSION}"
+        )))
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 

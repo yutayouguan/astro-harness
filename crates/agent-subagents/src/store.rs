@@ -8,7 +8,7 @@ use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::mailbox::{self, MailboxMessage, NewMailboxMessage};
-use crate::migration::{self, HistoricalAgentMessage, HistoricalAgentThread};
+use crate::migration;
 use crate::{
     AgentPath, AgentRuntimeDescriptorV2, AgentStatusKind, AgentStatusV2, AgentThreadV2,
     AgentTreeSnapshotV2, MailboxKind, RunnerEvent, ThreadReservation,
@@ -56,9 +56,9 @@ pub struct AgentGraphStore {
 impl AgentGraphStore {
     pub async fn open(path: PathBuf) -> anyhow::Result<Self> {
         let pool = open_pool(&path).await?;
-        migration::migrate(&pool)
+        migration::initialize(&pool)
             .await
-            .with_context(|| format!("migrate agent graph at {}", path.display()))?;
+            .with_context(|| format!("initialize agent graph at {}", path.display()))?;
         Ok(Self { pool, path })
     }
 
@@ -170,8 +170,8 @@ impl AgentGraphStore {
         require_non_empty("thread_id", &descriptor.thread_id)?;
         sqlx::query(
             "INSERT INTO agent_runtime_descriptors (
-                 thread_id, model, reasoning_effort, recovery_state
-             ) VALUES (?1, ?2, ?3, 'available')",
+                 thread_id, model, reasoning_effort
+             ) VALUES (?1, ?2, ?3)",
         )
         .bind(&descriptor.thread_id)
         .bind(&descriptor.model)
@@ -187,27 +187,17 @@ impl AgentGraphStore {
     ) -> anyhow::Result<Option<AgentRuntimeDescriptorV2>> {
         require_non_empty("thread_id", thread_id)?;
         let row = sqlx::query(
-            "SELECT thread_id, model, reasoning_effort, recovery_state
+            "SELECT thread_id, model, reasoning_effort
              FROM agent_runtime_descriptors WHERE thread_id = ?1",
         )
         .bind(thread_id)
         .fetch_optional(&self.pool)
         .await?;
-        match row {
-            Some(ref r) => {
-                let recovery_state: String = r.get("recovery_state");
-                if recovery_state == "legacy_unavailable" {
-                    Err(crate::LegacyRuntimeDescriptorUnavailable.into())
-                } else {
-                    Ok(Some(AgentRuntimeDescriptorV2 {
-                        thread_id: r.get("thread_id"),
-                        model: r.get("model"),
-                        reasoning_effort: r.get("reasoning_effort"),
-                    }))
-                }
-            }
-            None => Ok(None),
-        }
+        Ok(row.as_ref().map(|r| AgentRuntimeDescriptorV2 {
+            thread_id: r.get("thread_id"),
+            model: r.get("model"),
+            reasoning_effort: r.get("reasoning_effort"),
+        }))
     }
 
     pub async fn rollback_pending_thread(&self, thread_id: &str) -> anyhow::Result<()> {
@@ -613,18 +603,6 @@ impl AgentGraphStore {
                 .fetch_optional(&self.pool)
                 .await?;
         Ok(row.map(|(s,)| s))
-    }
-
-    pub async fn list_historical_threads(&self) -> anyhow::Result<Vec<HistoricalAgentThread>> {
-        migration::list_historical_threads(&self.pool).await
-    }
-
-    pub async fn list_historical_messages(
-        &self,
-        legacy_thread_id: &str,
-    ) -> anyhow::Result<Vec<HistoricalAgentMessage>> {
-        require_non_empty("legacy_thread_id", legacy_thread_id)?;
-        migration::list_historical_messages(&self.pool, legacy_thread_id).await
     }
 }
 

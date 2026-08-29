@@ -392,7 +392,6 @@ impl SessionStore {
                 parent_turn_index: metadata.parent_turn_index,
                 inherited_turn_count: metadata.inherited_turn_count,
                 branch_created_at: session.branch_created_at,
-                legacy_metadata: metadata.legacy,
                 orphaned,
                 turns,
             });
@@ -409,7 +408,7 @@ impl SessionStore {
         })
     }
 
-    pub(crate) async fn write_legacy_fork_metadata(
+    pub(crate) async fn write_fork_metadata_from_messages(
         &self,
         source_id: &str,
         target_id: &str,
@@ -430,19 +429,18 @@ impl SessionStore {
                 parent_message_id: anchor.map(|turn| turn.user_message_id),
                 parent_turn_index: anchor.map(|turn| turn.index),
                 inherited_turn_count: i64::try_from(completed.len()).unwrap_or(i64::MAX),
-                legacy: false,
             },
         )
         .await
     }
 
-    pub(crate) async fn infer_and_write_fork_metadata(
+    pub(crate) async fn infer_and_write_branch_metadata(
         &self,
         source_id: &str,
         target_id: &str,
         kind: BranchKind,
     ) -> Result<()> {
-        let inferred = infer_legacy_metadata(
+        let inferred = infer_branch_metadata(
             &self.get_messages(source_id).await?,
             &self.get_messages(target_id).await?,
         );
@@ -500,30 +498,27 @@ impl SessionStore {
         if session.parent_session_id.is_none() {
             return Ok(ResolvedBranchMetadata::default());
         }
-        if session.branch_parent_message_id.is_some()
-            || session.branch_parent_turn_index.is_some()
-            || session.branch_inherited_turn_count.is_some()
+        if session.branch_kind.is_some()
+            && session.branch_inherited_turn_count.is_some()
+            && session.branch_created_at.is_some()
         {
             return Ok(ResolvedBranchMetadata {
                 parent_message_id: session.branch_parent_message_id,
                 parent_turn_index: session.branch_parent_turn_index,
                 inherited_turn_count: session.branch_inherited_turn_count.unwrap_or(0),
-                legacy: false,
             });
         }
-        let Some(parent_id) = session
-            .parent_session_id
-            .as_ref()
-            .filter(|id| sessions.contains_key(*id))
-        else {
-            return Ok(ResolvedBranchMetadata {
-                legacy: true,
-                ..ResolvedBranchMetadata::default()
-            });
+        let parent_id = session.parent_session_id.as_deref().unwrap_or_default();
+        let parent_state = if sessions.contains_key(parent_id) {
+            "present"
+        } else {
+            "missing"
         };
-        let parent_messages = self.get_messages(parent_id).await?;
-        let child_messages = self.get_messages(&session.id).await?;
-        Ok(infer_legacy_metadata(&parent_messages, &child_messages))
+        anyhow::bail!(
+            "session {:?} has parent {:?} ({parent_state}) but no canonical branch metadata",
+            session.id,
+            parent_id
+        )
     }
 }
 
@@ -532,7 +527,6 @@ struct ResolvedBranchMetadata {
     parent_message_id: Option<i64>,
     parent_turn_index: Option<i64>,
     inherited_turn_count: i64,
-    legacy: bool,
 }
 
 async fn copy_prefix_through_turn(
@@ -695,17 +689,14 @@ fn turn_spans(messages: &[StoredMessage]) -> Vec<TurnSpan> {
         .collect()
 }
 
-fn infer_legacy_metadata(
+fn infer_branch_metadata(
     parent_messages: &[StoredMessage],
     child_messages: &[StoredMessage],
 ) -> ResolvedBranchMetadata {
     let parent_turns = turn_spans(parent_messages);
     let child_turns = turn_spans(child_messages);
     let Some(first_child) = child_turns.first() else {
-        return ResolvedBranchMetadata {
-            legacy: true,
-            ..ResolvedBranchMetadata::default()
-        };
+        return ResolvedBranchMetadata::default();
     };
 
     let mut best: Option<(usize, usize)> = None;
@@ -723,10 +714,7 @@ fn infer_legacy_metadata(
         }
     }
     let Some((parent_start, matched)) = best.filter(|(_, matched)| *matched > 0) else {
-        return ResolvedBranchMetadata {
-            legacy: true,
-            ..ResolvedBranchMetadata::default()
-        };
+        return ResolvedBranchMetadata::default();
     };
     let inherited = child_turns[..matched]
         .iter()
@@ -740,7 +728,6 @@ fn infer_legacy_metadata(
         parent_message_id: anchor.map(|turn| turn.user_message_id),
         parent_turn_index: anchor.map(|turn| turn.index),
         inherited_turn_count: i64::try_from(inherited).unwrap_or(i64::MAX),
-        legacy: true,
     }
 }
 

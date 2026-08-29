@@ -252,8 +252,6 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                     preview: String::new(),
                     status: if is_ephemeral {
                         "ephemeral".into()
-                    } else if session_node.legacy_metadata {
-                        "legacy".into()
                     } else {
                         "idle".into()
                     },

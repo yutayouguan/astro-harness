@@ -286,75 +286,26 @@ impl UsageDb {
     pub async fn new(path: PathBuf) -> anyhow::Result<Self> {
         let parent = path.parent().unwrap_or(Path::new(".")).to_path_buf();
         let exists = path.exists();
-
-        let version = if exists {
-            let db = AstroDb::new(&parent);
-            let temp_pool = db.open_pool(&DB_SPEC).await?;
-            let (v,): (i32,) = sqlx::query_as("PRAGMA user_version")
-                .fetch_one(&temp_pool)
-                .await?;
-            temp_pool.close().await;
-            v
-        } else {
-            0
-        };
-
-        if !exists || version == 0 {
-            types::delete_sqlite_files(&path);
-            let db = AstroDb::new(&parent);
-            let pool = db.open_pool(&DB_SPEC).await?;
-            sqlx::query(DDL).execute(&pool).await?;
-            sqlx::raw_sql(AssertSqlSafe(format!(
-                "PRAGMA user_version = {USAGE_SCHEMA_VERSION}"
-            )))
-            .execute(&pool)
-            .await?;
-            return Ok(Self { pool, path });
-        }
-
-        if version > USAGE_SCHEMA_VERSION {
-            anyhow::bail!(
-                "usage.db schema version {version} is newer than supported {USAGE_SCHEMA_VERSION}"
-            );
-        }
-
-        if version < 3 {
-            tracing::warn!(version, "usage.db too old; rebuilding");
-            types::delete_sqlite_files(&path);
-            let db = AstroDb::new(&parent);
-            let pool = db.open_pool(&DB_SPEC).await?;
-            sqlx::query(DDL).execute(&pool).await?;
-            sqlx::raw_sql(AssertSqlSafe(format!(
-                "PRAGMA user_version = {USAGE_SCHEMA_VERSION}"
-            )))
-            .execute(&pool)
-            .await?;
-            return Ok(Self { pool, path });
-        }
-
         let db = AstroDb::new(&parent);
         let pool = db.open_pool(&DB_SPEC).await?;
-
-        if version < 4 {
-            let rows = sqlx::query("PRAGMA table_info(usage_events)")
-                .fetch_all(&pool)
-                .await?;
-            let has_turn = rows.iter().any(|r| {
-                let name: String = r.get(1usize);
-                name == "turn_id"
-            });
-            if !has_turn {
-                sqlx::query("ALTER TABLE usage_events ADD COLUMN turn_id TEXT")
-                    .execute(&pool)
-                    .await?;
-            }
+        if !exists {
+            sqlx::query(DDL).execute(&pool).await?;
             sqlx::raw_sql(AssertSqlSafe(format!(
                 "PRAGMA user_version = {USAGE_SCHEMA_VERSION}"
             )))
             .execute(&pool)
             .await?;
+            return Ok(Self { pool, path });
         }
 
+        let (version,): (i32,) = sqlx::query_as("PRAGMA user_version")
+            .fetch_one(&pool)
+            .await?;
+        if version != USAGE_SCHEMA_VERSION {
+            anyhow::bail!(
+                "unsupported usage.db schema version {version}; expected {USAGE_SCHEMA_VERSION}"
+            );
+        }
         Ok(Self { pool, path })
     }
 

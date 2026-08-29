@@ -52,7 +52,7 @@ pub use permissions::{
     PermissionsConfig, SandboxMode, SessionPermissions, DANGER_FULL_ACCESS_PROFILE,
     READ_ONLY_PROFILE, WORKSPACE_PROFILE,
 };
-pub use sqlite::{delete_sqlite_files, AstroDb, DbSpec, SqlitePool, SqliteStore};
+pub use sqlite::{AstroDb, DbSpec, SqlitePool, SqliteStore};
 pub use title::sanitize_title;
 pub use tool_spill::{
     is_externalized_view, make_prune_view, make_spill_view, spill_path_for_prompt,

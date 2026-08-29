@@ -3,9 +3,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context};
-use tracing::warn;
-
 /// 默认 Agent 的 id（存储在 DB 和协议层）。
 pub const DEFAULT_AGENT_ID: &str = "default";
 
@@ -331,10 +328,10 @@ pub fn list_daily_memory_dates(workspace: &Path) -> Vec<String> {
 /// 确保基础目录结构存在（仅创建目录，不初始化 SQLite 数据库）。
 ///
 /// 适用于轻量工具（MCP 配置读写、日志初始化等），不需要完整工作区初始化。
-/// 包含自动迁移：根级散落的 DB → `data/`，记忆相关文件 → `memory/`。
 pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(base)?;
     fs::create_dir_all(base.join("agents"))?;
+    fs::create_dir_all(data_dir(base))?;
     // 迁移：旧版本默认 Agent 配置目录为 agents/workspace，
     // 新版本改为 agents/default 以避免与工作区内容目录 workspace/ 歧义。
     let old_config = base.join("agents").join(DEFAULT_AGENT_ID);
@@ -342,24 +339,6 @@ pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
     if old_config.is_dir() && !new_config.exists() {
         let _ = fs::rename(&old_config, &new_config);
     }
-
-    // 迁移：旧 SQLite 位置 → canonical data/。主库和 WAL/SHM 必须作为一组迁移。
-    // 若旧库和 canonical 库同时存在，保留两者并以 canonical 库为准：
-    // 这里是所有功能共用的目录初始化，不应让单个库的可恢复迁移冲突阻断整个应用。
-    let database_dir = data_dir(base);
-    migrate_sqlite_family(base, USAGE_DB_FILENAME, &database_dir)?;
-    migrate_sqlite_family(base, SUBAGENTS_DB_FILENAME, &database_dir)?;
-    migrate_sqlite_family(&base.join("sessions"), SESSION_DB_FILENAME, &database_dir)?;
-    migrate_sqlite_family(&base.join("sessions"), ARTIFACTS_DB_FILENAME, &database_dir)?;
-    migrate_sqlite_family(&base.join("sessions"), KNOWLEDGE_DB_FILENAME, &database_dir)?;
-    migrate_sqlite_family(&base.join("cron"), CRON_RUN_DB_FILENAME, &database_dir)?;
-    // `cron.db` 是早期运行记录文件名；迁移时同时收敛到当前文件名。
-    migrate_sqlite_family_as(
-        &base.join("cron"),
-        "cron.db",
-        &database_dir,
-        CRON_RUN_DB_FILENAME,
-    )?;
 
     // 迁移：记忆相关 → memory/
     let memory_dir = base.join("memory");
@@ -369,81 +348,6 @@ pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
     migrate_dir(base, "pending", &memory_dir);
 
     Ok(())
-}
-
-fn migrate_sqlite_family(old_parent: &Path, name: &str, new_parent: &Path) -> anyhow::Result<()> {
-    migrate_sqlite_family_as(old_parent, name, new_parent, name)
-}
-
-fn migrate_sqlite_family_as(
-    old_parent: &Path,
-    old_name: &str,
-    new_parent: &Path,
-    new_name: &str,
-) -> anyhow::Result<()> {
-    let old = old_parent.join(old_name);
-    if !old.is_file() {
-        return Ok(());
-    }
-
-    let new = new_parent.join(new_name);
-    if new.exists() {
-        warn!(
-            legacy = %old.display(),
-            canonical = %new.display(),
-            "legacy SQLite database was preserved because the canonical database already exists"
-        );
-        return Ok(());
-    }
-
-    fs::create_dir_all(new_parent).with_context(|| {
-        format!(
-            "create canonical database directory {}",
-            new_parent.display()
-        )
-    })?;
-
-    let mut family = Vec::with_capacity(3);
-    for suffix in ["-wal", "-shm"] {
-        let old_sidecar = sqlite_sidecar_path(&old, suffix);
-        if old_sidecar.is_file() {
-            let new_sidecar = sqlite_sidecar_path(&new, suffix);
-            if new_sidecar.exists() {
-                bail!(
-                    "refusing to migrate SQLite sidecar {} because target {} already exists",
-                    old_sidecar.display(),
-                    new_sidecar.display()
-                );
-            }
-            family.push((old_sidecar, new_sidecar));
-        }
-    }
-    // 主库最后移动：即使进程在 sidecar 迁移期间退出，canonical 主库也不会以半成品出现。
-    family.push((old.clone(), new.clone()));
-
-    let mut moved: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(family.len());
-    for (source, target) in family {
-        if let Err(error) = fs::rename(&source, &target) {
-            for (moved_source, moved_target) in moved.iter().rev() {
-                let _ = fs::rename(moved_target, moved_source);
-            }
-            return Err(error).with_context(|| {
-                format!(
-                    "migrate SQLite file {} to {}",
-                    source.display(),
-                    target.display()
-                )
-            });
-        }
-        moved.push((source, target));
-    }
-    Ok(())
-}
-
-fn sqlite_sidecar_path(path: &Path, suffix: &str) -> PathBuf {
-    let mut value = path.as_os_str().to_os_string();
-    value.push(suffix);
-    PathBuf::from(value)
 }
 
 fn migrate_file(old_parent: &Path, name: &str, new_parent: &Path) {
@@ -484,58 +388,6 @@ mod tests {
         assert_eq!(artifacts_db_path(base), expected.join("artifacts.db"));
         assert_eq!(knowledge_db_path(base), expected.join("knowledge.db"));
         assert_eq!(cron_run_db_path(base), expected.join("cron_v1.db"));
-    }
-
-    #[test]
-    fn workspace_dir_migration_moves_sqlite_family() {
-        let dir = TempDir::new().unwrap();
-        let legacy = dir.path().join("sessions/state.db");
-        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
-        fs::write(&legacy, b"db").unwrap();
-        fs::write(sqlite_sidecar_path(&legacy, "-wal"), b"wal").unwrap();
-        fs::write(sqlite_sidecar_path(&legacy, "-shm"), b"shm").unwrap();
-
-        ensure_workspace_dirs(dir.path()).unwrap();
-
-        let canonical = session_db_path(dir.path());
-        assert_eq!(fs::read(&canonical).unwrap(), b"db");
-        assert_eq!(
-            fs::read(sqlite_sidecar_path(&canonical, "-wal")).unwrap(),
-            b"wal"
-        );
-        assert_eq!(
-            fs::read(sqlite_sidecar_path(&canonical, "-shm")).unwrap(),
-            b"shm"
-        );
-        assert!(!legacy.exists());
-    }
-
-    #[test]
-    fn workspace_dir_migration_preserves_split_brain_without_blocking_startup() {
-        let dir = TempDir::new().unwrap();
-        let legacy = dir.path().join("usage.db");
-        let canonical = usage_db_path(dir.path());
-        fs::create_dir_all(canonical.parent().unwrap()).unwrap();
-        fs::write(&legacy, b"legacy").unwrap();
-        fs::write(&canonical, b"canonical").unwrap();
-
-        ensure_workspace_dirs(dir.path()).unwrap();
-
-        assert_eq!(fs::read(&legacy).unwrap(), b"legacy");
-        assert_eq!(fs::read(&canonical).unwrap(), b"canonical");
-    }
-
-    #[test]
-    fn workspace_dir_migration_renames_legacy_cron_database() {
-        let dir = TempDir::new().unwrap();
-        let legacy = dir.path().join("cron/cron.db");
-        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
-        fs::write(&legacy, b"cron").unwrap();
-
-        ensure_workspace_dirs(dir.path()).unwrap();
-
-        assert!(!legacy.exists());
-        assert_eq!(fs::read(cron_run_db_path(dir.path())).unwrap(), b"cron");
     }
 
     #[test]

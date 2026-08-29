@@ -53,14 +53,6 @@ fn command_error(operation: &str, error: anyhow::Error) -> String {
         );
         return "Open or resume the root task before following up this Agent Thread.".into();
     }
-    if error
-        .downcast_ref::<subagents::LegacyRuntimeDescriptorUnavailable>()
-        .is_some()
-    {
-        tracing::warn!(operation, "legacy Agent Thread cannot be recovered safely");
-        return "This Agent Thread predates safe recovery. Create a new Agent Thread to continue."
-            .into();
-    }
     tracing::warn!(operation, "desktop Agent Thread command failed");
     format!("{operation} failed")
 }
@@ -192,17 +184,5 @@ mod tests {
         );
         assert!(!error.contains("secret"));
         assert!(!error.contains("user-private"));
-    }
-
-    #[test]
-    fn legacy_descriptor_error_is_actionable_without_runtime_details() {
-        let error = command_error(
-            "follow up agent thread",
-            anyhow::Error::new(subagents::LegacyRuntimeDescriptorUnavailable),
-        );
-        assert_eq!(
-            error,
-            "This Agent Thread predates safe recovery. Create a new Agent Thread to continue."
-        );
     }
 }

@@ -229,14 +229,14 @@ impl SessionStore {
             .await?;
 
         if keep_chat_bubbles == 0 {
-            self.write_legacy_fork_metadata(source_id, new_id, &[], BranchKind::Fork)
+            self.write_fork_metadata_from_messages(source_id, new_id, &[], BranchKind::Fork)
                 .await?;
             return Ok(());
         }
 
         let messages = self.get_messages(source_id).await?;
         let Some(end) = end_inclusive_for_bubbles(&messages, keep_chat_bubbles) else {
-            self.write_legacy_fork_metadata(source_id, new_id, &messages, BranchKind::Fork)
+            self.write_fork_metadata_from_messages(source_id, new_id, &messages, BranchKind::Fork)
                 .await?;
             return Ok(());
         };
@@ -304,7 +304,7 @@ impl SessionStore {
             let branched = format!("{title} · branch");
             let _ = self.set_session_title(new_id, &branched).await;
         }
-        self.write_legacy_fork_metadata(source_id, new_id, &messages[..=end], BranchKind::Fork)
+        self.write_fork_metadata_from_messages(source_id, new_id, &messages[..=end], BranchKind::Fork)
             .await?;
 
         Ok(())
@@ -484,7 +484,7 @@ impl SessionStore {
             }
         }
         tx.commit().await?;
-        self.infer_and_write_fork_metadata(source_id, new_id, BranchKind::Agent)
+        self.infer_and_write_branch_metadata(source_id, new_id, BranchKind::Agent)
             .await?;
 
         Ok(())

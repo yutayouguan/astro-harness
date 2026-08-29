@@ -70,6 +70,10 @@ async fn reconcile_skips_ds_store() {
         .execute(&pool)
         .await
         .unwrap();
+        sqlx::query("PRAGMA user_version = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
         pool.close().await;
     }
 

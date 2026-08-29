@@ -107,7 +107,7 @@ pub(crate) const TEMPLATE_AGENTS: &str = r#"# AGENTS.md — 本记忆空间的�
 - **长期精炼：** `MEMORY.md` — 跨会话稳定事实与决策（提炼后的结论）
 - **每日记忆：** `memory/YYYY-MM-DD.md` — 当日流水与事件
 - **用户档案：** `USER.md` — 称呼、背景、协作偏好
-- **会话检索：** `~/.astro/sessions/`（全局会话库）
+- **会话检索：** `~/.astro/data/state.db`（全局会话库）
 
 想记住的事必须写入文件。「心里记一下」撑不过重启。
 

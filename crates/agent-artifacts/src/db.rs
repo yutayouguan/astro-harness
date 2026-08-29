@@ -28,6 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON artifacts(agent_id, created_at
 "#;
 
 const DB_SPEC: DbSpec = DbSpec::new("artifacts", "artifacts.db");
+const SCHEMA_VERSION: i32 = 1;
 
 const MEMORY_TEMPLATES: &[&str] = &[
     "IDENTITY.md",
@@ -85,25 +86,6 @@ pub struct ArtifactDb {
 
 pub fn artifacts_db_path(memory_dir: &Path) -> PathBuf {
     home::artifacts_db_path(memory_dir)
-}
-
-async fn db_has_agent_id_column(path: &Path) -> anyhow::Result<bool> {
-    let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
-    let pool = db.open_pool(&DB_SPEC).await?;
-    let (has_table,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='artifacts'",
-    )
-    .fetch_one(&pool)
-    .await?;
-    if has_table == 0 {
-        pool.close().await;
-        return Ok(true);
-    }
-    let rows: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info('artifacts')")
-        .fetch_all(&pool)
-        .await?;
-    pool.close().await;
-    Ok(rows.iter().any(|(name,)| name == "agent_id"))
 }
 
 pub async fn open_default(memory_dir: &Path) -> anyhow::Result<ArtifactDb> {
@@ -185,12 +167,26 @@ fn row_to_artifact(r: &sqlx::sqlite::SqliteRow) -> ArtifactRow {
 
 impl ArtifactDb {
     pub async fn new(path: PathBuf) -> anyhow::Result<Self> {
-        if path.exists() && !db_has_agent_id_column(&path).await? {
-            types::delete_sqlite_files(&path);
-        }
+        let exists = path.exists();
         let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
         let pool = db.open_pool(&DB_SPEC).await?;
-        sqlx::query(DDL).execute(&pool).await?;
+        if exists {
+            let (version,): (i32,) = sqlx::query_as("PRAGMA user_version")
+                .fetch_one(&pool)
+                .await?;
+            if version != SCHEMA_VERSION {
+                anyhow::bail!(
+                    "unsupported artifacts.db schema version {version}; expected {SCHEMA_VERSION}"
+                );
+            }
+        } else {
+            sqlx::query(DDL).execute(&pool).await?;
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "PRAGMA user_version = {SCHEMA_VERSION}"
+            )))
+            .execute(&pool)
+            .await?;
+        }
         Ok(Self { pool, path })
     }
 
@@ -516,7 +512,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn discards_db_without_agent_id_column() {
+    async fn rejects_unversioned_database() {
         let root = TempDir::new().unwrap();
         let db_path = artifacts_db_path(root.path());
         let database_dir = db_path.parent().unwrap();
@@ -544,33 +540,15 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-            sqlx::query(
-                "INSERT INTO artifacts (id, path, name, category, size, source)
-                 VALUES ('old', '/tmp/old.txt', 'old.txt', 'doc', 1, 'reconcile')",
-            )
-            .execute(&pool)
-            .await
-            .unwrap();
             pool.close().await;
         }
 
-        let db = ArtifactDb::new(db_path).await.unwrap();
-        assert!(db.get_by_path("/tmp/old.txt").await.unwrap().is_none());
-        let uploads = root.path().join("uploads");
-        fs::create_dir_all(&uploads).unwrap();
-        let file = uploads.join("a.txt");
-        fs::write(&file, b"hi").unwrap();
-        let row = db
-            .register(
-                file.to_str().unwrap(),
-                ArtifactSource::Reconcile,
-                None,
-                None,
-                None,
-            )
+        let error = ArtifactDb::new(db_path)
             .await
-            .unwrap();
-        assert_eq!(row.agent_id, "default");
+            .err()
+            .expect("unversioned database must be rejected")
+            .to_string();
+        assert!(error.contains("unsupported artifacts.db schema version 0"));
     }
 
     #[tokio::test]

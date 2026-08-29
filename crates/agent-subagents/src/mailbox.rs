@@ -1,7 +1,7 @@
-use anyhow::{bail, Context};
-use chrono::{SecondsFormat, Utc};
 use agent_db::sqlx::{self, Row};
 use agent_db::SqlitePool;
+use anyhow::{bail, Context};
+use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -98,8 +98,7 @@ pub(crate) async fn pending_for(
         bail!("mailbox recipient_thread_id must not be empty");
     }
     let rows = sqlx::query(
-        "SELECT sequence, message_id, sender_thread_id, recipient_thread_id,
-                CASE WHEN idempotency_key LIKE 'main-steer:%' THEN 'steer' ELSE kind END,
+        "SELECT sequence, message_id, sender_thread_id, recipient_thread_id, kind,
                 payload, trigger_turn
          FROM agent_mailbox
          WHERE recipient_thread_id = ?1
@@ -111,9 +110,7 @@ pub(crate) async fn pending_for(
     .bind(after)
     .fetch_all(pool)
     .await?;
-    rows.iter()
-        .map(mailbox_message_from_row)
-        .collect()
+    rows.iter().map(mailbox_message_from_row).collect()
 }
 
 pub(crate) async fn mark_delivered(
@@ -220,15 +217,16 @@ async fn load_by_sequence(
 ) -> anyhow::Result<Option<PersistedMailboxMessage>> {
     let row = sqlx::query(
         "SELECT sequence, message_id, idempotency_key, sender_thread_id,
-                recipient_thread_id,
-                CASE WHEN idempotency_key LIKE 'main-steer:%' THEN 'steer' ELSE kind END,
+                recipient_thread_id, kind,
                 payload, trigger_turn
          FROM agent_mailbox WHERE sequence = ?1",
     )
     .bind(sequence)
     .fetch_optional(&mut *conn)
     .await?;
-    row.as_ref().map(persisted_mailbox_message_from_row).transpose()
+    row.as_ref()
+        .map(persisted_mailbox_message_from_row)
+        .transpose()
 }
 
 async fn load_by_idempotency_key(
@@ -237,15 +235,16 @@ async fn load_by_idempotency_key(
 ) -> anyhow::Result<Option<PersistedMailboxMessage>> {
     let row = sqlx::query(
         "SELECT sequence, message_id, idempotency_key, sender_thread_id,
-                recipient_thread_id,
-                CASE WHEN idempotency_key LIKE 'main-steer:%' THEN 'steer' ELSE kind END,
+                recipient_thread_id, kind,
                 payload, trigger_turn
          FROM agent_mailbox WHERE idempotency_key = ?1",
     )
     .bind(key)
     .fetch_optional(&mut *conn)
     .await?;
-    row.as_ref().map(persisted_mailbox_message_from_row).transpose()
+    row.as_ref()
+        .map(persisted_mailbox_message_from_row)
+        .transpose()
 }
 
 fn persisted_mailbox_message_from_row(
@@ -384,28 +383,6 @@ mod tests {
             vec![second]
         );
         assert_eq!(store.pending_for("other", 0).await.unwrap(), vec![other]);
-    }
-
-    #[tokio::test]
-    async fn legacy_main_steer_followup_rows_project_as_steer() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("subagents.db");
-        let store = AgentGraphStore::open(path.clone()).await.unwrap();
-        let pool = store.pool();
-        agent_db::sqlx::query(
-            "INSERT INTO agent_mailbox (
-                message_id, idempotency_key, sender_thread_id, recipient_thread_id,
-                kind, payload, trigger_turn, delivery_state, created_at, delivered_at
-             ) VALUES ('legacy-steer', 'main-steer:legacy-steer', 'root', 'root',
-                       'followup', 'resume', 1, 'pending', 'now', NULL)",
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-
-        let pending = store.pending_for("root", 0).await.unwrap();
-        assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].kind, MailboxKind::Steer);
     }
 
     #[tokio::test]

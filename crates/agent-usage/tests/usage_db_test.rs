@@ -48,164 +48,7 @@ fn zero_billing_event(e: ZeroBillingEvent<'_>) -> NewUsageEvent {
 }
 
 #[tokio::test]
-async fn migrated_legacy_usage_database_remains_visible() {
-    let dir = TempDir::new().unwrap();
-    let legacy_path = dir.path().join("usage.db");
-    let legacy = UsageDb::new(legacy_path.clone()).await.unwrap();
-    legacy
-        .insert(zero_billing_event(ZeroBillingEvent {
-            ts: "2026-08-29T00:00:00Z",
-            kind: "tool",
-            name: "legacy-tool",
-            agent_id: "default",
-            session_id: None,
-            input_tokens: 0,
-            output_tokens: 0,
-            total_tokens: 0,
-            cost_usd: 0.0,
-            meta_json: None,
-        }))
-        .await
-        .unwrap();
-    legacy.pool().close().await;
-    drop(legacy);
-
-    home::ensure_workspace_dirs(dir.path()).unwrap();
-
-    let canonical_path = home::usage_db_path(dir.path());
-    let canonical = UsageDb::new(canonical_path.clone()).await.unwrap();
-    let (count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM usage_events WHERE name = 'legacy-tool'",
-    )
-    .fetch_one(canonical.pool())
-    .await
-    .unwrap();
-    assert_eq!(count, 1);
-    assert!(!legacy_path.exists());
-    assert_eq!(canonical.db_path(), canonical_path);
-}
-
-#[tokio::test]
-async fn migrate_v3_to_v4_keeps_rows_and_adds_turn_id() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("usage.db");
-
-    {
-        let spec = DbSpec::new("setup", "usage.db");
-        let db = AstroDb::new(dir.path());
-        let pool = db.open_pool(&spec).await.unwrap();
-        sqlx::query(
-            r#"
-            CREATE TABLE usage_events (
-                id TEXT PRIMARY KEY,
-                ts TEXT NOT NULL,
-                kind TEXT NOT NULL,
-                name TEXT NOT NULL,
-                agent_id TEXT NOT NULL,
-                session_id TEXT,
-                input_tokens INTEGER NOT NULL DEFAULT 0,
-                output_tokens INTEGER NOT NULL DEFAULT 0,
-                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-                cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-                reasoning_tokens INTEGER NOT NULL DEFAULT 0,
-                total_tokens INTEGER NOT NULL DEFAULT 0,
-                cost_usd REAL NOT NULL DEFAULT 0,
-                cost_status TEXT,
-                cost_source TEXT,
-                pricing_version TEXT,
-                billing_provider TEXT,
-                billing_base_url TEXT,
-                billing_mode TEXT,
-                meta_json TEXT
-            );
-            "#,
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        sqlx::query("PRAGMA user_version = 3")
-            .execute(&pool)
-            .await
-            .unwrap();
-        sqlx::query(
-            "INSERT INTO usage_events (id, ts, kind, name, agent_id, total_tokens, cost_usd)
-             VALUES ('old1', '2026-01-01T00:00:00Z', 'llm', 'm', 'a', 10, 0.0)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        pool.close().await;
-    }
-
-    let db = usage::UsageDb::new(path.clone()).await.unwrap();
-
-    let _db2 = usage::UsageDb::new(path.clone()).await.unwrap();
-    let _db3 = usage::UsageDb::new(path.clone()).await.unwrap();
-
-    let (ver,): (i32,) = sqlx::query_as("PRAGMA user_version")
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
-    assert_eq!(ver, USAGE_SCHEMA_VERSION);
-
-    let (old_turn,): (Option<String>,) =
-        sqlx::query_as("SELECT turn_id FROM usage_events WHERE id = 'old1'")
-            .fetch_one(db.pool())
-            .await
-            .unwrap();
-    assert_eq!(old_turn, None);
-
-    let id = db
-        .insert(usage::NewUsageEvent {
-            ts: "2026-07-14T00:00:00Z".into(),
-            kind: "llm".into(),
-            name: "m2".into(),
-            agent_id: "a".into(),
-            session_id: Some("s1".into()),
-            turn_id: Some("turn-abc".into()),
-            input_tokens: 1,
-            output_tokens: 2,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-            reasoning_tokens: 0,
-            total_tokens: 3,
-            cost_usd: 0.0,
-            cost_status: None,
-            cost_source: None,
-            pricing_version: None,
-            billing_provider: None,
-            billing_base_url: None,
-            billing_mode: None,
-            meta_json: None,
-        })
-        .await
-        .unwrap();
-    assert!(!id.is_empty());
-
-    let (ver2,): (i32,) = sqlx::query_as("PRAGMA user_version")
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
-    assert_eq!(ver2, USAGE_SCHEMA_VERSION);
-
-    let (turn,): (Option<String>,) =
-        sqlx::query_as("SELECT turn_id FROM usage_events WHERE id = ?1")
-            .bind(&id)
-            .fetch_one(db.pool())
-            .await
-            .unwrap();
-    assert_eq!(turn.as_deref(), Some("turn-abc"));
-
-    let (old_ok,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM usage_events WHERE id = 'old1'")
-            .fetch_one(db.pool())
-            .await
-            .unwrap();
-    assert_eq!(old_ok, 1);
-}
-
-#[tokio::test]
-async fn usage_db_rejects_newer_schema_version() {
+async fn usage_db_rejects_noncurrent_schema_version() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("usage.db");
     {
@@ -235,7 +78,9 @@ async fn usage_db_rejects_newer_schema_version() {
         pool.close().await;
     }
     let err = usage::UsageDb::new(path).await.err().expect("expected Err");
-    assert!(err.to_string().contains("newer than supported"));
+    assert!(err
+        .to_string()
+        .contains("unsupported usage.db schema version 5"));
 }
 
 #[test]
@@ -417,95 +262,6 @@ async fn offset_timestamp_normalized_and_counted_in_month() {
     assert_eq!(insights.kpis.calls, 1);
 }
 
-#[tokio::test]
-async fn usage_db_rebuilds_incompatible_schema_and_ignores_unknown_cost() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("usage.db");
-    {
-        let spec = DbSpec::new("setup", "usage.db");
-        let db = AstroDb::new(dir.path());
-        let pool = db.open_pool(&spec).await.unwrap();
-        sqlx::query(
-            "CREATE TABLE usage_events (
-                id TEXT PRIMARY KEY, ts TEXT, kind TEXT, name TEXT, agent_id TEXT,
-                session_id TEXT, prompt_tokens INTEGER, completion_tokens INTEGER,
-                total_tokens INTEGER, cost_usd REAL, meta_json TEXT
-             )",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO usage_events VALUES ('1','2026-07-01T00:00:00Z','llm','m','a',NULL,1,1,2,9.9,NULL)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        pool.close().await;
-    }
-    let db = usage::UsageDb::new(path.clone()).await.unwrap();
-    let q = usage::UsageInsightsQuery {
-        period: usage::UsagePeriod::Year,
-        as_of: Some("2026-07-13T00:00:00Z".into()),
-        agent_id: None,
-    };
-    let insights = db.query_insights(q.clone()).await.unwrap();
-    assert_eq!(insights.kpis.calls, 0);
-
-    db.insert(usage::NewUsageEvent {
-        ts: "2026-07-10T12:00:00Z".into(),
-        kind: "llm".into(),
-        name: "m".into(),
-        agent_id: "a".into(),
-        session_id: None,
-        turn_id: None,
-        input_tokens: 10,
-        output_tokens: 5,
-        cache_read_tokens: 0,
-        cache_write_tokens: 0,
-        reasoning_tokens: 0,
-        total_tokens: 15,
-        cost_usd: 0.0,
-        cost_status: Some("unknown".into()),
-        cost_source: Some("none".into()),
-        pricing_version: None,
-        billing_provider: None,
-        billing_base_url: None,
-        billing_mode: None,
-        meta_json: None,
-    })
-    .await
-    .unwrap();
-    db.insert(usage::NewUsageEvent {
-        ts: "2026-07-10T13:00:00Z".into(),
-        kind: "llm".into(),
-        name: "m2".into(),
-        agent_id: "a".into(),
-        session_id: None,
-        turn_id: None,
-        input_tokens: 10,
-        output_tokens: 5,
-        cache_read_tokens: 0,
-        cache_write_tokens: 0,
-        reasoning_tokens: 0,
-        total_tokens: 15,
-        cost_usd: 1.25,
-        cost_status: Some("estimated".into()),
-        cost_source: Some("official_docs_snapshot".into()),
-        pricing_version: Some("test".into()),
-        billing_provider: Some("openai".into()),
-        billing_base_url: None,
-        billing_mode: None,
-        meta_json: None,
-    })
-    .await
-    .unwrap();
-    let insights = db.query_insights(q).await.unwrap();
-    assert!((insights.kpis.cost_usd - 1.25).abs() < 1e-9);
-    assert_eq!(insights.kpis.tokens, 30);
-    assert_eq!(insights.unpriced_llm_events, 1);
-}
-
 #[test]
 fn estimate_usage_cost_official_snapshot_and_unknown() {
     use usage::{estimate_usage_cost, CostStatus, UsageTokens};
@@ -519,20 +275,20 @@ fn estimate_usage_cost_official_snapshot_and_unknown() {
     let r = estimate_usage_cost("gpt-4o-mini", &usage, Some("openai"), None, None);
     assert_eq!(r.status, CostStatus::Estimated);
     assert!(r.amount_usd.unwrap() > 0.0);
-    let unk = estimate_usage_cost(
+    let unknown = estimate_usage_cost(
         "totally-unknown-model-xyz",
         &usage,
         Some("custom"),
         Some("http://localhost:9"),
         None,
     );
-    assert_eq!(unk.status, CostStatus::Unknown);
-    assert!(unk.amount_usd.is_none() || unk.amount_usd == Some(0.0));
+    assert_eq!(unknown.status, CostStatus::Unknown);
+    assert!(unknown.amount_usd.is_none() || unknown.amount_usd == Some(0.0));
 }
 
 #[test]
 fn estimate_usage_cost_reads_openrouter_cache_file() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     use usage::{estimate_usage_cost, CostStatus, UsageTokens};
     let dir = tempfile::tempdir().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
@@ -550,14 +306,14 @@ fn estimate_usage_cost_reads_openrouter_cache_file() {
         request_count: 1,
         ..Default::default()
     };
-    let r = estimate_usage_cost(
+    let result = estimate_usage_cost(
         "test/or-model",
         &usage,
         Some("openrouter"),
         Some("https://openrouter.ai/api/v1"),
         None,
     );
-    assert_eq!(r.status, CostStatus::Estimated);
-    assert!((r.amount_usd.unwrap() - 3.0).abs() < 1e-6);
+    assert_eq!(result.status, CostStatus::Estimated);
+    assert!((result.amount_usd.unwrap() - 3.0).abs() < 1e-6);
     std::env::remove_var("ASTRO_MEMORY_DIR");
 }

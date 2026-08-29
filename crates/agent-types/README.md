@@ -35,7 +35,7 @@
 | `network_policy.rs` | `NetworkPolicyDecision` / `NetworkApprovalProtocol` / `NetworkPolicyAmendment` |
 | `approval.rs` | `ApprovalAction` / `ApprovalDecision` / `ApprovalMode` — 通用审批枚举 |
 | `media.rs` | `MediaAsset` / `MediaKind` / `MediaRef` — 媒体资产与 sidecar 提取 |
-| `sqlite.rs` | `open_wal` / `SqliteStore` trait / `delete_sqlite_files` — SQLite WAL 打开协议 |
+| `sqlite.rs` | `AstroDb` / `SqliteStore` — SQLite WAL 打开协议 |
 | `text.rs` | `truncate_utf8` / `truncate_chars` / `truncate_tool_result` — 文本截断工具 |
 | `title.rs` | `sanitize_title` — 会话标题清洗 |
 | `error.rs` | 统一错误类型 |

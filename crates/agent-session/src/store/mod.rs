@@ -1,4 +1,4 @@
-//! 单库会话存储（schema v19）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
+//! 单库会话存储：sessions、富 messages 与 FTS5。
 
 mod branches;
 mod messages;
@@ -286,7 +286,6 @@ pub struct SessionLineageNode {
     pub parent_message_id: Option<i64>,
     pub parent_turn_index: Option<i64>,
     pub inherited_turn_count: i64,
-    pub legacy_metadata: bool,
     pub branch_created_at: Option<f64>,
     pub orphaned: bool,
     pub turns: Vec<SessionTurnNode>,
@@ -309,22 +308,8 @@ pub struct SessionStore {
 }
 
 impl SessionStore {
-    /// 打开或创建 `state.db`。schema 低于 [`SCHEMA_VERSION`] 时进行增量迁移。
+    /// 打开或创建 `state.db`。已有数据库必须匹配当前 schema。
     pub async fn open(path: &Path) -> Result<Self> {
-        if path.exists() {
-            let version = peek_schema_version(path).await.unwrap_or(0);
-            let additive_only = (13..SCHEMA_VERSION).contains(&version);
-            if version < SCHEMA_VERSION && !additive_only {
-                tracing::warn!(
-                    version,
-                    target = SCHEMA_VERSION,
-                    "session state.db outdated; discarding prior chat history"
-                );
-                types::delete_sqlite_files(path);
-            } else {
-                tracing::debug!(version, target = SCHEMA_VERSION, "session state.db opened");
-            }
-        }
         let parent = path.parent().unwrap_or(Path::new("."));
         let db = AstroDb::new(parent);
         let pool = db.open_pool(&DB_SPEC).await
@@ -334,20 +319,15 @@ impl SessionStore {
             pool,
             path: path.to_path_buf(),
         };
-        store.migrate_schema().await?;
-        store.repair_messages_fts_if_needed().await?;
-        store.backfill_sessions_from_messages().await?;
+        store.initialize_schema().await?;
         Ok(store)
     }
 
-    /// 打开 `database_dir/state.db`；若存在旁路旧 `sessions.db` 则删除（不导入）。
+    /// 打开 `database_dir/state.db`。
     pub async fn open_sessions_dir(database_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(database_dir)
             .with_context(|| format!("create session database dir {}", database_dir.display()))?;
-        discard_sidecar_sessions_db(database_dir);
-        let store = Self::open(&database_dir.join("state.db")).await?;
-        store.backfill_sessions_from_messages().await?;
-        Ok(store)
+        Self::open(&database_dir.join("state.db")).await
     }
 
     /// 数据库文件路径
@@ -448,35 +428,6 @@ impl types::SqliteStore for SessionStore {
     fn pool(&self) -> &types::SqlitePool {
         &self.pool
     }
-}
-
-/// 读取已有库的 schema 版本；无法读取时视为 0。
-async fn peek_schema_version(path: &Path) -> Result<i32> {
-    let url = format!("sqlite:{}?mode=ro", path.display());
-    let pool = SqlitePool::connect(&url).await?;
-    let has: bool = sqlx::query(
-        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_version'",
-    )
-    .fetch_one(&pool)
-    .await
-    .map(|r| r.get::<bool, _>(0))
-    .unwrap_or(false);
-    if !has {
-        pool.close().await;
-        return Ok(0);
-    }
-    let version: Option<i32> = sqlx::query("SELECT version FROM schema_version LIMIT 1")
-        .fetch_optional(&pool)
-        .await?
-        .map(|r| r.get::<i32, _>(0));
-    pool.close().await;
-    Ok(version.unwrap_or(0))
-}
-
-/// 删除旁路旧 `sessions.db`（不再导入）。
-fn discard_sidecar_sessions_db(sessions_dir: &Path) {
-    let base = sessions_dir.join("sessions.db");
-    types::delete_sqlite_files(&base);
 }
 
 pub(crate) fn is_unique_constraint(err: &sqlx::Error) -> bool {
