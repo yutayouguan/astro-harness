@@ -9,7 +9,7 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 - `register_all()` 一次性收集并注册全部内置工具
 - 统一分发入口 `dispatch_tool`：查表路由到对应 handler
 - 命令审批系统：危险命令分类、allowlist 匹配、hardline 阻断
-- 交互模式门禁：按 `InteractionMode`（Agent/Plan/Ask）过滤可用工具 schema
+- 交互模式门禁：按 `InteractionMode`（Agent/Plan）过滤可用工具 schema
 - 工具目录与 schema 清洗：`builtin_catalog` / `sanitize_tool_schema`
 - 路径安全：`resolve_safe` 防止路径穿越
 - 沙箱集成：`SandboxAuditMetadata` 审计元数据
@@ -102,7 +102,7 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 2. **handler 完备性**：每个注册的 metadata 工具必须有对应 dispatch handler（由测试强制）
 3. **schema 清洗**：所有工具 schema 在发往 LLM 前必须经过 `sanitize_tool_schema` 处理
 4. **路径安全**：文件操作工具必须通过 `resolve_safe` 验证路径不穿越工作区
-5. **交互模式门禁**：Plan/Ask 模式下写类工具不可见；`filter_schemas` 负责过滤
+5. **交互模式门禁**：Plan 模式下写类工具不可见；`filter_schemas` 负责过滤
 
 ## 测试
 

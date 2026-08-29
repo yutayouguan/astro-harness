@@ -1208,9 +1208,14 @@ impl AstroServiceImpl {
         if req.context_window > 0 {
             session.set_context_window(req.context_window);
         }
-        session
-            .set_interaction_mode(types::InteractionMode::parse(&req.interaction_mode))
-            .await;
+        let interaction_mode =
+            types::InteractionMode::parse(&req.interaction_mode).ok_or_else(|| {
+                Status::invalid_argument(format!(
+                    "unsupported interaction_mode: {}",
+                    req.interaction_mode.trim().to_ascii_lowercase()
+                ))
+            })?;
+        session.set_interaction_mode(interaction_mode).await;
         session.set_project_root(
             (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim())),
         );
@@ -3307,7 +3312,7 @@ mod tests {
                         move |session| async move {
                             second_setup_started.store(true, Ordering::SeqCst);
                             session
-                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .set_interaction_mode(tools::InteractionMode::Agent)
                                 .await;
                             session.set_temperature(1.4);
                         },
@@ -3330,7 +3335,7 @@ mod tests {
         let first = first.await.unwrap();
         let second = second.await.unwrap();
         assert_eq!(first, (tools::InteractionMode::Plan, 0.2));
-        assert_eq!(second, (tools::InteractionMode::Ask, 1.4));
+        assert_eq!(second, (tools::InteractionMode::Agent, 1.4));
     }
 
     #[tokio::test]
@@ -3362,7 +3367,7 @@ mod tests {
                         move |session| async move {
                             session.set_temperature(0.2);
                             session
-                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .set_interaction_mode(tools::InteractionMode::Plan)
                                 .await;
                             setup_applied.notify_one();
                         },
@@ -3455,7 +3460,7 @@ mod tests {
                         move |session| async move {
                             session.set_temperature(0.2);
                             session
-                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .set_interaction_mode(tools::InteractionMode::Plan)
                                 .await;
                         },
                         move || async move { spawn_pending_turn(launch_session).await },
@@ -3477,7 +3482,7 @@ mod tests {
         assert_eq!(session.temperature(), 0.2);
         assert_eq!(
             session.interaction_mode().await,
-            tools::InteractionMode::Ask
+            tools::InteractionMode::Plan
         );
         assert!(!session.cancel_signal().is_cancelled());
 

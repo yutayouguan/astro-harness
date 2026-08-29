@@ -399,8 +399,9 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         .trim()
         .to_ascii_lowercase();
     let interaction_mode = match interaction_mode.as_str() {
-        "plan" | "ask" => interaction_mode,
-        _ => "agent".to_string(),
+        "" | "agent" => "agent".to_string(),
+        "plan" => interaction_mode,
+        other => return Err(format!("unsupported interaction_mode: {other}")),
     };
     let project_root = project_root.unwrap_or_default().trim().to_string();
 

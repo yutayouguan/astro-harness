@@ -244,12 +244,13 @@ async fn system_prompt_includes_interaction_mode_guidance() {
     );
 
     agent
-        .set_interaction_mode(tools::InteractionMode::Ask)
+        .set_interaction_mode(tools::InteractionMode::Agent)
         .await;
-    let ask_prompt = agent.build_system_prompt().await;
+    let agent_prompt = agent.build_system_prompt().await;
     assert!(
-        ask_prompt.contains("Interaction mode: Ask") && ask_prompt.contains("交互模式：Ask"),
-        "Ask guidance missing from system prompt:\n{ask_prompt}"
+        agent_prompt.contains("Interaction mode: Agent")
+            && agent_prompt.contains("交互模式：Agent"),
+        "Agent guidance missing from system prompt:\n{agent_prompt}"
     );
 
     // 估算层与真实组装共用同源 guidance+timestamp

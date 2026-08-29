@@ -441,16 +441,13 @@ fn validate_chat_request(chat: &proto::ChatRequest) -> Result<ValidatedChatReque
             "use_memory=false is not supported by the Thread runtime",
         ));
     }
-    let interaction_mode = match chat.interaction_mode.trim().to_ascii_lowercase().as_str() {
-        "" | "agent" => types::InteractionMode::Agent,
-        "plan" => types::InteractionMode::Plan,
-        "ask" => types::InteractionMode::Ask,
-        other => {
-            return Err(Status::invalid_argument(format!(
-                "unsupported interaction_mode: {other}"
-            )))
-        }
-    };
+    let interaction_mode =
+        types::InteractionMode::parse(&chat.interaction_mode).ok_or_else(|| {
+            Status::invalid_argument(format!(
+                "unsupported interaction_mode: {}",
+                chat.interaction_mode.trim().to_ascii_lowercase()
+            ))
+        })?;
     if let Some(temperature) = chat.temperature {
         if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
             return Err(Status::invalid_argument(
@@ -670,6 +667,13 @@ mod tests {
                 .expect("known mode")
                 .interaction_mode,
             types::InteractionMode::Plan
+        );
+        chat.interaction_mode = "ask".into();
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("removed ask mode must fail")
+                .code(),
+            tonic::Code::InvalidArgument
         );
     }
 

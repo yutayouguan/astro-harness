@@ -7,7 +7,7 @@
 - 定义统一消息模型（`Message`）与角色枚举，供所有 crate 共享对话数据结构
 - 提供工具元数据类型（`ToolEntry` / `ToolSpec` / `ToolName`）与 MCP 工具注解
 - 封装 LLM 凭证（`ModelCredentials`）、聊天目标（`ChatTarget`）与辅助任务目标链
-- 定义交互模式枚举（`InteractionMode`：Agent / Plan / Ask）
+- 定义交互模式枚举（`InteractionMode`：Agent / Plan）
 - 提供权限配置体系（`PermissionProfile` / `SandboxMode` / `SessionPermissions`）
 - 封装 tool call 解析与累积器（`ToolCallAccumulator` / `ToolCallDelta`）
 - 实现 tool spill 机制：超大工具结果落盘，provider 视图用 stub 替代
@@ -30,7 +30,7 @@
 | `auxiliary_target.rs` | `AuxiliaryTask` 枚举（Dreaming/Compaction/SmartApproval/TitleGen/ToolCompress）与目标链 |
 | `credentials.rs` | `ModelCredentials` / `ImageGenCreds` / `ImageGenParts` / `ImageGenTargets` |
 | `model_spec.rs` | `ModelSpec` / `ModelRole` — Agno 风格模型声明 |
-| `interaction_mode.rs` | `InteractionMode` 枚举：Agent / Plan / Ask |
+| `interaction_mode.rs` | `InteractionMode` 枚举：Agent / Plan |
 | `permissions.rs` | `PermissionProfile` / `SandboxMode` / `SessionPermissions` / `PermissionsConfig` — 权限体系 |
 | `network_policy.rs` | `NetworkPolicyDecision` / `NetworkApprovalProtocol` / `NetworkPolicyAmendment` |
 | `approval.rs` | `ApprovalAction` / `ApprovalDecision` / `ApprovalMode` — 通用审批枚举 |
@@ -52,7 +52,7 @@
 - `ToolEntry` — 工具元数据：name / description / schema / needs_confirmation / mcp_approval
 - `ToolCallAccumulator` — 原生流式 tool_call_delta 累积器；自由文本不参与工具识别
 - `ToolOutput` — 工具结果封装，支持文本与结构化输出
-- `InteractionMode` — 交互模式：`Agent`（全功能）/ `Plan`（只读规划）/ `Ask`（问答）
+- `InteractionMode` — 交互模式：`Agent`（全功能，包含纯问答）/ `Plan`（只读规划）
 - `PermissionProfile` — 权限配置集：预设（read-only / workspace / danger）或自定义
 - `SandboxMode` — 沙箱模式：`ReadOnly` / `WorkspaceWrite` / `DangerFullAccess`
 - `open_wal(path)` — 以 WAL 模式打开 SQLite，统一 busy_timeout 与 journal 配置

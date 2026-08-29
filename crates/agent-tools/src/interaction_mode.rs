@@ -1,10 +1,10 @@
-//! 聊天交互模式（Agent / Plan / Ask）的工具能力档。
+//! 聊天交互模式（Agent / Plan）的工具能力档。
 //!
 //! 交互模式下的工具可见性过滤。
 
 pub use types::InteractionMode;
 
-/// Plan / Ask 下明确允许的工具名（其余非 MCP 默认拒绝；MCP 默认拒绝）。
+/// Plan 下明确允许的工具名（其余非 MCP 默认拒绝；MCP 默认拒绝）。
 /// `memory` 全写，不在此列；`skills` / `todo` 另有 action 级限制。
 const READONLY_ALLOW: &[&str] = &[
     "web_search",
@@ -19,7 +19,7 @@ const READONLY_ALLOW: &[&str] = &[
     "skills", // action 级仅 list/load/view/curate
     "ask_user",
     "send_user_message_async",
-    "todo", // Ask 模式下硬拦
+    "todo",
     "switch_mode",
     "present",
 ];
@@ -33,9 +33,6 @@ pub fn tool_visible_in_mode(mode: InteractionMode, name: &str) -> bool {
         return true;
     }
     if name.starts_with("mcp__") {
-        return false;
-    }
-    if mode == InteractionMode::Ask && name == "todo" {
         return false;
     }
     if name == "memory" || name == "pin_context" {
@@ -65,12 +62,6 @@ pub fn check_tool_call(
             "[blocked by {} mode] `{name}` writes persistent memory/context. Call switch_mode(to=\"agent\") if needed.",
             mode.as_str()
         ));
-    }
-    if mode == InteractionMode::Ask && name == "todo" {
-        return Err(
-            "[blocked by ask mode] todo writes checklist files. Stay read-only, or switch to Plan/Agent."
-                .into(),
-        );
     }
     if !READONLY_ALLOW.contains(&name) {
         return Err(format!(
@@ -163,13 +154,6 @@ mod tests {
     }
 
     #[test]
-    fn ask_blocks_todo() {
-        assert!(check_tool_call(InteractionMode::Ask, "todo", &json!({ "title": "t" }),).is_err());
-        assert!(!tool_visible_in_mode(InteractionMode::Ask, "todo"));
-        assert!(tool_visible_in_mode(InteractionMode::Plan, "todo"));
-    }
-
-    #[test]
     fn system_guidance_mentions_mode() {
         assert!(InteractionMode::Agent.system_guidance().contains("Agent"));
         assert!(InteractionMode::Agent
@@ -179,13 +163,8 @@ mod tests {
         assert!(InteractionMode::Plan
             .system_guidance()
             .contains("explicit user approval"));
-        assert!(InteractionMode::Ask.system_guidance().contains("Ask"));
         // 中英并列，避免英文 UI 丢失指引
-        for mode in [
-            InteractionMode::Agent,
-            InteractionMode::Plan,
-            InteractionMode::Ask,
-        ] {
+        for mode in [InteractionMode::Agent, InteractionMode::Plan] {
             let g = mode.system_guidance();
             assert!(
                 g.contains("Interaction mode:") && g.contains("交互模式："),

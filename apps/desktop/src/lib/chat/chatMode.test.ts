@@ -8,7 +8,6 @@ import {
 
 test("legacy multitask mode migrates to agent", () => {
   assert.equal(normalizeStoredChatMode("multitask"), "agent");
-  assert.equal(normalizeStoredChatMode("ask"), "agent");
   assert.equal(normalizeStoredChatMode("agent"), "agent");
   assert.equal(normalizeStoredChatMode("plan"), "plan");
 });

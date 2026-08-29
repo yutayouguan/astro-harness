@@ -1459,7 +1459,7 @@ impl Session {
         self.lock_state().model_ctx.set_context_window(window);
     }
 
-    /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
+    /// 设置本轮交互模式（Plan 启用只读工具门禁）。
     pub async fn set_interaction_mode(&self, mode: types::InteractionMode) {
         self.lock_state().interaction_mode = mode;
     }
