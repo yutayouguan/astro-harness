@@ -4,6 +4,9 @@
   .loop-node-palette {
     width: 180px;
   }
+  .loop-collapse-toggle--palette-close {
+    left: 180px;
+  }
   .loop-config-panel {
     width: 320px;
   }
@@ -25,11 +28,17 @@
   .loop-editor-name-display {
     max-width: 140px;
   }
+  .loop-editor-save-state {
+    display: none;
+  }
 }
 
 @media (max-width: 700px) {
   .loop-node-palette {
     width: 150px;
+  }
+  .loop-collapse-toggle--palette-close {
+    left: 150px;
   }
   .loop-config-panel {
     width: 280px;
