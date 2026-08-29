@@ -689,7 +689,7 @@ mod tests {
     async fn traces_group_by_session_and_order_events() {
         let dir = TempDir::new().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
-        let db = UsageDb::new(dir.path().join("usage.db")).await.unwrap();
+        let db = UsageDb::open_default().await.unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:00Z",
             kind: "llm",
@@ -756,7 +756,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
 
-        let sessions = dir.path().join("sessions");
+        let sessions = data_dir(dir.path());
         std::fs::create_dir_all(&sessions).unwrap();
         let store = SessionStore::open(&sessions.join("state.db"))
             .await
@@ -806,7 +806,7 @@ mod tests {
             .await
             .unwrap();
 
-        let db = UsageDb::new(dir.path().join("usage.db")).await.unwrap();
+        let db = UsageDb::open_default().await.unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:00Z",
             kind: "llm",

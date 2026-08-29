@@ -30,6 +30,28 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON artifacts(agent_id, created_at
 const DB_SPEC: DbSpec = DbSpec::new("artifacts", "artifacts.db");
 const SCHEMA_VERSION: i32 = 1;
 
+async fn has_user_tables(pool: &SqlitePool) -> anyhow::Result<bool> {
+    let (count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sqlite_master
+         WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count > 0)
+}
+
+async fn validate_current_schema(pool: &SqlitePool) -> anyhow::Result<()> {
+    sqlx::query(
+        "SELECT id, path, name, category, mime, size, source, session_id,
+                message_id, agent_id, created_at, updated_at, missing
+         FROM artifacts LIMIT 0",
+    )
+    .execute(pool)
+    .await
+    .context("artifact database schema marker is current but artifacts table is incomplete")?;
+    Ok(())
+}
+
 const MEMORY_TEMPLATES: &[&str] = &[
     "IDENTITY.md",
     "USER.md",
@@ -167,26 +189,30 @@ fn row_to_artifact(r: &sqlx::sqlite::SqliteRow) -> ArtifactRow {
 
 impl ArtifactDb {
     pub async fn new(path: PathBuf) -> anyhow::Result<Self> {
-        let exists = path.exists();
         let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
-        let pool = db.open_pool(&DB_SPEC).await?;
-        if exists {
-            let (version,): (i32,) = sqlx::query_as("PRAGMA user_version")
-                .fetch_one(&pool)
-                .await?;
-            if version != SCHEMA_VERSION {
-                anyhow::bail!(
-                    "unsupported artifacts.db schema version {version}; expected {SCHEMA_VERSION}"
-                );
-            }
-        } else {
-            sqlx::query(DDL).execute(&pool).await?;
-            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                "PRAGMA user_version = {SCHEMA_VERSION}"
-            )))
-            .execute(&pool)
+        let pool = db.open_pool_at_path(&DB_SPEC, &path).await?;
+        let (version,): (i32,) = sqlx::query_as("PRAGMA user_version")
+            .fetch_one(&pool)
             .await?;
+        if version == SCHEMA_VERSION {
+            validate_current_schema(&pool).await?;
+            return Ok(Self { pool, path });
         }
+        if version != 0 || has_user_tables(&pool).await? {
+            anyhow::bail!(
+                "unsupported artifacts.db schema version {version}; expected {SCHEMA_VERSION}"
+            );
+        }
+
+        let mut tx = pool.begin().await?;
+        sqlx::raw_sql(DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "PRAGMA user_version = {SCHEMA_VERSION}"
+        )))
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        validate_current_schema(&pool).await?;
         Ok(Self { pool, path })
     }
 
@@ -549,6 +575,49 @@ mod tests {
             .expect("unversioned database must be rejected")
             .to_string();
         assert!(error.contains("unsupported artifacts.db schema version 0"));
+    }
+
+    #[tokio::test]
+    async fn initializes_precreated_empty_database_file() {
+        let root = TempDir::new().unwrap();
+        let db_path = artifacts_db_path(root.path());
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        std::fs::File::create(&db_path).unwrap();
+
+        let db = ArtifactDb::new(db_path).await.unwrap();
+        let (version,): (i32,) = sqlx::query_as("PRAGMA user_version")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[tokio::test]
+    async fn rejects_current_marker_with_incomplete_schema() {
+        let root = TempDir::new().unwrap();
+        let db_path = artifacts_db_path(root.path());
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        let pool = sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", db_path.display()))
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE artifacts (id TEXT PRIMARY KEY)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "PRAGMA user_version = {SCHEMA_VERSION}"
+        )))
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+
+        let error = ArtifactDb::new(db_path)
+            .await
+            .err()
+            .expect("incomplete current schema must be rejected")
+            .to_string();
+        assert!(error.contains("artifacts table is incomplete"), "{error}");
     }
 
     #[tokio::test]

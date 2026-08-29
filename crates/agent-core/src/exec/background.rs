@@ -422,7 +422,7 @@ mod tests {
     async fn agent_thread_interrupt_cancels_unified_engine() {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
-        let agent = Session::with_session_id(config, "background-cancel".into()).unwrap();
+        let agent = Session::with_session_id(config, "background-cancel".into()).await.unwrap();
         let session = Arc::new(agent);
         let control = Arc::new(subagents::AgentThreadControl::default());
         let target = ChatTarget {
@@ -459,7 +459,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
         let session =
-            Arc::new(Session::with_session_id(config, "background-replace".into()).unwrap());
+            Arc::new(Session::with_session_id(config, "background-replace".into()).await.unwrap());
         let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
         let old_run = tokio::spawn(run_multi_turn_events_with_chat_fn(
             Arc::clone(&session),
@@ -515,7 +515,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
         let session =
-            Arc::new(Session::with_session_id(config, "background-shutdown".into()).unwrap());
+            Arc::new(Session::with_session_id(config, "background-shutdown".into()).await.unwrap());
         session.begin_runtime_shutdown();
 
         let result = tokio::time::timeout(
@@ -543,7 +543,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
         let session =
-            Arc::new(Session::with_session_id(config, "structured-install-error".into()).unwrap());
+            Arc::new(Session::with_session_id(config, "structured-install-error".into()).await.unwrap());
         session.begin_runtime_shutdown();
 
         let error = match install_multi_turn_task(ThreadTurnTaskArgs {

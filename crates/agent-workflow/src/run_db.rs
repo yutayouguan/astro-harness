@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
 use agent_db::sqlx::{self, Row};
 use agent_db::{AstroDb, DbSpec, SqlitePool};
+use anyhow::Result;
 
 const DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS workflow_runs (
@@ -106,7 +106,7 @@ fn row_to_step(r: &sqlx::sqlite::SqliteRow) -> WorkflowStepLogRow {
 impl WorkflowRunDb {
     pub async fn new(path: PathBuf) -> Result<Self> {
         let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
-        let pool = db.open_pool(&DB_SPEC).await?;
+        let pool = db.open_pool_at_path(&DB_SPEC, &path).await?;
         sqlx::query(DDL).execute(&pool).await?;
         Ok(Self { pool })
     }
@@ -171,7 +171,11 @@ impl WorkflowRunDb {
         Ok(row)
     }
 
-    pub async fn list_runs(&self, workflow_id: Option<&str>, limit: i64) -> Result<Vec<WorkflowRunRow>> {
+    pub async fn list_runs(
+        &self,
+        workflow_id: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<WorkflowRunRow>> {
         let rows = sqlx::query(
             "SELECT * FROM workflow_runs
              WHERE (?1 IS NULL OR workflow_id = ?1)
@@ -246,15 +250,14 @@ impl WorkflowRunDb {
     }
 
     pub async fn list_step_logs(&self, run_id: &str) -> Result<Vec<WorkflowStepLogRow>> {
-        let rows = sqlx::query(
-            "SELECT * FROM workflow_step_logs WHERE run_id=?1 ORDER BY started_at",
-        )
-        .bind(run_id)
-        .fetch_all(&self.pool)
-        .await?
-        .iter()
-        .map(row_to_step)
-        .collect();
+        let rows =
+            sqlx::query("SELECT * FROM workflow_step_logs WHERE run_id=?1 ORDER BY started_at")
+                .bind(run_id)
+                .fetch_all(&self.pool)
+                .await?
+                .iter()
+                .map(row_to_step)
+                .collect();
         Ok(rows)
     }
 
@@ -291,7 +294,9 @@ mod tests {
     #[tokio::test]
     async fn run_lifecycle() {
         let dir = tempfile::tempdir().unwrap();
-        let db = WorkflowRunDb::new(dir.path().join("workflow.db")).await.unwrap();
+        let db = WorkflowRunDb::new(dir.path().join("workflow.db"))
+            .await
+            .unwrap();
 
         db.insert_run(
             "r1",
@@ -324,5 +329,15 @@ mod tests {
 
         db.delete_run("r1").await.unwrap();
         assert!(db.get_run("r1").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn opens_the_exact_requested_filename() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("custom-workflow.db");
+        let _db = WorkflowRunDb::new(path.clone()).await.unwrap();
+
+        assert!(path.is_file());
+        assert!(!dir.path().join(DB_SPEC.filename).exists());
     }
 }

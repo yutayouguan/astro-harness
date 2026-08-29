@@ -1,5 +1,6 @@
 use agent_db::sqlx::{self, Row};
 use agent_db::{AstroDb, DbSpec, SqlitePool};
+use anyhow::Context;
 use std::path::{Path, PathBuf};
 use types::SqliteStore;
 use uuid::Uuid;
@@ -24,6 +25,28 @@ CREATE VIRTUAL TABLE IF NOT EXISTS contents_fts USING fts5(
 "#;
 
 const DB_SPEC: DbSpec = DbSpec::new("knowledge", "knowledge.db");
+
+async fn has_user_tables(pool: &SqlitePool) -> anyhow::Result<bool> {
+    let (count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sqlite_master
+         WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count > 0)
+}
+
+async fn validate_current_schema(pool: &SqlitePool) -> anyhow::Result<()> {
+    sqlx::query("SELECT id, title, path, status, created_at, updated_at FROM contents LIMIT 0")
+        .execute(pool)
+        .await
+        .context("knowledge database schema marker is current but contents table is incomplete")?;
+    sqlx::query("SELECT title, body, content_id FROM contents_fts LIMIT 0")
+        .execute(pool)
+        .await
+        .context("knowledge database schema marker is current but contents_fts is incomplete")?;
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContentRow {
@@ -52,12 +75,11 @@ fn row_to_content(r: &sqlx::sqlite::SqliteRow) -> ContentRow {
 impl KnowledgeDb {
     pub async fn open(path: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let path = path.into();
-        let exists = path.exists();
         let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
-        let pool = db.open_pool(&DB_SPEC).await?;
+        let pool = db.open_pool_at_path(&DB_SPEC, &path).await?;
         sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
         let kdb = Self { pool, path };
-        kdb.initialize_schema(exists).await?;
+        kdb.initialize_schema().await?;
         Ok(kdb)
     }
 
@@ -72,27 +94,28 @@ impl KnowledgeDb {
         &self.path
     }
 
-    async fn initialize_schema(&self, exists: bool) -> anyhow::Result<()> {
+    async fn initialize_schema(&self) -> anyhow::Result<()> {
         let (ver,): (i32,) = sqlx::query_as("PRAGMA user_version")
             .fetch_one(&self.pool)
-            .await
-            .unwrap_or((0,));
-        if exists {
-            if ver != SCHEMA_VERSION {
-                anyhow::bail!(
-                    "unsupported knowledge.db schema version {ver}; expected {SCHEMA_VERSION}"
-                );
-            }
-            return Ok(());
+            .await?;
+        if ver == SCHEMA_VERSION {
+            return validate_current_schema(&self.pool).await;
+        }
+        if ver != 0 || has_user_tables(&self.pool).await? {
+            anyhow::bail!(
+                "unsupported knowledge.db schema version {ver}; expected {SCHEMA_VERSION}"
+            );
         }
 
-        sqlx::query(DDL).execute(&self.pool).await?;
+        let mut tx = self.pool.begin().await?;
+        sqlx::raw_sql(DDL).execute(&mut *tx).await?;
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "PRAGMA user_version = {SCHEMA_VERSION}"
         )))
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
-        Ok(())
+        tx.commit().await?;
+        validate_current_schema(&self.pool).await
     }
 
     pub async fn register(
@@ -304,5 +327,46 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ver, SCHEMA_VERSION);
+    }
+
+    #[tokio::test]
+    async fn initializes_precreated_empty_database_file() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("knowledge.db");
+        std::fs::File::create(&path).unwrap();
+
+        let db = KnowledgeDb::open(&path).await.unwrap();
+        let (version,): (i32,) = sqlx::query_as("PRAGMA user_version")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[tokio::test]
+    async fn rejects_current_marker_with_incomplete_schema() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("knowledge.db");
+        let pool = sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", path.display()))
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE contents (id TEXT PRIMARY KEY)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "PRAGMA user_version = {SCHEMA_VERSION}"
+        )))
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+
+        let error = KnowledgeDb::open(path)
+            .await
+            .err()
+            .expect("incomplete current schema must be rejected")
+            .to_string();
+        assert!(error.contains("contents table is incomplete"), "{error}");
     }
 }

@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS agent_runtime_descriptors (
 
 pub(crate) async fn initialize(pool: &SqlitePool) -> anyhow::Result<()> {
     match read_schema_version(pool).await? {
-        Some(SCHEMA_VERSION) => return Ok(()),
+        Some(SCHEMA_VERSION) => return validate_current_schema(pool).await,
         Some(version) => {
             bail!("unsupported subagent graph schema version {version}; expected {SCHEMA_VERSION}")
         }
@@ -97,7 +97,7 @@ pub(crate) async fn initialize(pool: &SqlitePool) -> anyhow::Result<()> {
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    Ok(())
+    validate_current_schema(pool).await
 }
 
 pub(crate) async fn schema_version(pool: &SqlitePool) -> anyhow::Result<i32> {
@@ -135,6 +135,49 @@ async fn has_domain_tables(pool: &SqlitePool) -> anyhow::Result<bool> {
         }
     }
     Ok(false)
+}
+
+async fn validate_current_schema(pool: &SqlitePool) -> anyhow::Result<()> {
+    sqlx::query(
+        "SELECT thread_id, root_thread_id, parent_thread_id, canonical_path,
+                task_name, agent_type, session_id, status_kind, status_payload,
+                last_status_sequence, created_at, updated_at
+         FROM agent_threads LIMIT 0",
+    )
+    .execute(pool)
+    .await
+    .context("subagent schema marker is current but agent_threads is incomplete")?;
+    sqlx::query(
+        "SELECT parent_thread_id, child_thread_id, edge_state, created_at, closed_at
+         FROM agent_spawn_edges LIMIT 0",
+    )
+    .execute(pool)
+    .await
+    .context("subagent schema marker is current but agent_spawn_edges is incomplete")?;
+    sqlx::query(
+        "SELECT sequence, message_id, idempotency_key, sender_thread_id,
+                recipient_thread_id, kind, payload, trigger_turn, delivery_state,
+                created_at, delivered_at
+         FROM agent_mailbox LIMIT 0",
+    )
+    .execute(pool)
+    .await
+    .context("subagent schema marker is current but agent_mailbox is incomplete")?;
+    sqlx::query(
+        "SELECT sequence, thread_id, event_kind, payload, source_turn_id, created_at
+         FROM agent_status_events LIMIT 0",
+    )
+    .execute(pool)
+    .await
+    .context("subagent schema marker is current but agent_status_events is incomplete")?;
+    sqlx::query(
+        "SELECT thread_id, model, reasoning_effort
+         FROM agent_runtime_descriptors LIMIT 0",
+    )
+    .execute(pool)
+    .await
+    .context("subagent schema marker is current but runtime descriptors are incomplete")?;
+    Ok(())
 }
 
 async fn table_exists(pool: &SqlitePool, table: &str) -> anyhow::Result<bool> {
@@ -215,5 +258,22 @@ mod tests {
             error.contains("unsupported subagent graph schema version 4"),
             "{error}"
         );
+    }
+
+    #[tokio::test]
+    async fn rejects_current_marker_with_incomplete_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = open_fixture_pool(&dir.path().join("subagents-v2.db")).await;
+        sqlx::query("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO schema_meta(key, value) VALUES ('schema_version', '5')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let error = initialize(&pool).await.unwrap_err().to_string();
+        assert!(error.contains("agent_threads is incomplete"), "{error}");
     }
 }

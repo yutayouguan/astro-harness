@@ -1271,7 +1271,7 @@ mod tests {
     async fn steer_ack_is_emitted_only_after_db_and_memory_recording() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Arc::new(Session::with_session_id(config, "steer-ack".into()).unwrap());
+        let session = Arc::new(Session::with_session_id(config, "steer-ack".into()).await.unwrap());
         session.set_current_turn_id("turn-steer-ack").await;
         let events = session.subscribe_turn_events("turn-steer-ack").await;
         let memory_recorded = Arc::new(AtomicBool::new(false));
@@ -1299,7 +1299,7 @@ mod tests {
     async fn steer_write_failure_does_not_emit_ack() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Arc::new(Session::with_session_id(config, "steer-no-ack".into()).unwrap());
+        let session = Arc::new(Session::with_session_id(config, "steer-no-ack".into()).await.unwrap());
         session.set_current_turn_id("turn-steer-no-ack").await;
         let events = session.subscribe_turn_events("turn-steer-no-ack").await;
         session.set_turn_input_after_db_write_hook(Some(Arc::new(|| {
@@ -1319,7 +1319,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
         let session =
-            Arc::new(Session::with_session_id(config, "durable-steer-no-ack".into()).unwrap());
+            Arc::new(Session::with_session_id(config, "durable-steer-no-ack".into()).await.unwrap());
         let turn_context = Arc::new(TurnContext::new(
             "turn-durable-steer-no-ack".into(),
             1,
@@ -1339,7 +1339,7 @@ mod tests {
             .services
             .agent_control
             .persist_main_steer_with_id(&session.services.agent_path, message_id, payload)
-            .unwrap();
+            .await.unwrap();
         let events = session
             .subscribe_turn_events("turn-durable-steer-no-ack")
             .await;

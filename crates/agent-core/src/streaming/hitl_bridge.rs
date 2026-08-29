@@ -295,7 +295,7 @@ mod event_tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "hitl-event-test".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         let turn_context = session.create_turn_context("turn-1".into()).await;
         let gate = HitlGate::new("hitl-event-test");
@@ -354,7 +354,7 @@ mod event_tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 format!("net-approval-{scope}"),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         let turn_context = session.create_turn_context("turn-1".into()).await;
         let gate = HitlGate::new(format!("net-approval-{scope}"));
@@ -444,7 +444,7 @@ mod event_tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "net-timeout".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         let turn_context = session.create_turn_context("turn-1".into()).await;
         let gate = HitlGate::new("net-timeout");

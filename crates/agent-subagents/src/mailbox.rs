@@ -46,7 +46,7 @@ pub(crate) async fn enqueue(
     pool: &SqlitePool,
     message: &NewMailboxMessage,
 ) -> anyhow::Result<MailboxMessage> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let stored = enqueue_in_transaction(&mut tx, message).await?;
     tx.commit().await?;
     Ok(stored)

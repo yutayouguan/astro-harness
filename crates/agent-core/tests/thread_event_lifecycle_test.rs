@@ -195,7 +195,7 @@ async fn prepare_failure_emits_one_error_and_complete_with_error() {
     let rollout = RolloutRecorder::open(dir.path().join("prepare-failure.jsonl"))
         .await
         .unwrap();
-    let session = Arc::new(Session::with_session_id(config, "prepare-failure".into()).unwrap());
+    let session = Arc::new(Session::with_session_id(config, "prepare-failure".into()).await.unwrap());
     let thread = agent::AstroThread::spawn(session, rollout).unwrap();
     let (_submission_id, submitted) = thread
         .submit_turn(

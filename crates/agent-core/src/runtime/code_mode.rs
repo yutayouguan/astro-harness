@@ -516,10 +516,10 @@ mod tests {
         .unwrap();
         let cwd = std::env::current_dir().unwrap();
         let cell_id = service.execute(&source, &[], &cwd).await.unwrap();
-        assert!(matches!(
-            next(&service, &cell_id).await,
-            RuntimeEvent::Store { .. }
-        ));
+        let RuntimeEvent::Store { key, value } = next(&service, &cell_id).await else {
+            panic!("expected store event")
+        };
+        service.update_store(key, value).await;
         assert!(matches!(
             next(&service, &cell_id).await,
             RuntimeEvent::Content { value, .. } if value == "before"

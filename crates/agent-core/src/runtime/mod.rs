@@ -1593,19 +1593,15 @@ impl Session {
     }
 
     /// 在 mid-run 压缩后重置 prompt 上下文历史，仅保留压缩摘要作为新基线。
-    pub async fn rebase_prompt_context_after_compaction(&self, summary_text: &str) {
-        // 从摘要构建最小 prompt 契约以创建新快照。
-        let rebased_prompt =
-            crate::prompt::PromptContract::from_base_instructions(summary_text);
-        let rebased_context = rebased_prompt.context.clone();
-        let rebased_snapshot =
-            match crate::prompt::context_state::snapshot(&rebased_prompt) {
-                Ok(s) => s,
-                Err(err) => {
-                    tracing::warn!(%err, "failed to create rebased prompt context snapshot");
-                    return;
-                }
-            };
+    pub async fn rebase_prompt_context_after_compaction(&self, _summary_text: &str) {
+        // 压缩只会替换对话历史，不应丢失当前的动态 prompt 上下文。
+        // 将最新快照重新锚定到压缩后的第 0 个用户边界。
+        let Some(rebased_snapshot) = self.lock_state().prompt_context_snapshot.clone() else {
+            return;
+        };
+        let rebased_context =
+            crate::prompt::context_state::snapshot_messages(&rebased_snapshot)
+                .unwrap_or_default();
         {
             let mut state = self.lock_state();
             state.prompt_context_snapshot = Some(rebased_snapshot.clone());

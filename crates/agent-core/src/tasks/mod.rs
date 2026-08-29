@@ -680,7 +680,7 @@ mod tests {
             crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
             "locked-active-turn".into(),
         )
-        .unwrap();
+        .await.unwrap();
 
         let active_turn = session.active_turn.lock().await;
         assert!(active_turn.is_none());
@@ -742,7 +742,7 @@ mod tests {
                 crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
                 "abort-task-test".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         let turn_context = session.create_turn_context("turn-abort".into()).await;
         let started = Arc::new(Notify::new());
@@ -770,7 +770,7 @@ mod tests {
                 crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
                 "install-bind-abort-race".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         let context = session
             .create_turn_context("turn-install-bind-race".into())
@@ -891,7 +891,7 @@ mod tests {
             .unwrap();
         let session = Arc::new(
             Session::with_session_id(Config::with_defaults(dir.path().to_path_buf()), name.into())
-                .unwrap(),
+                .await.unwrap(),
         );
         let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
         (dir, session, thread)
@@ -1300,9 +1300,10 @@ mod tests {
         }
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn abort_forces_run_then_bounds_hook_and_emits_one_terminal() {
         let (_dir, session, thread) = task_test_thread("bounded-abort-test").await;
+        tokio::time::pause();
         let run_dropped = Arc::new(AtomicBool::new(false));
         let hook_called = Arc::new(AtomicBool::new(false));
         let hook_saw_run_dropped = Arc::new(AtomicBool::new(false));
@@ -1969,7 +1970,7 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "concurrent-spawn-admission".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         let active_turn_guard = session.active_turn.lock().await;
 

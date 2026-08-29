@@ -300,7 +300,7 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "submission-loop-test".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         let started = Arc::new(Notify::new());
         let context = session.create_turn_context("turn-1".into()).await;

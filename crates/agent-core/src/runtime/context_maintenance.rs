@@ -261,7 +261,7 @@ mod tests {
         let session = AgentLoop::new(super::super::Config::with_defaults(
             dir.path().to_path_buf(),
         ))
-        .unwrap();
+        .await.unwrap();
         session.record_user_message("run tool").await.unwrap();
         session
             .record_assistant_message_with_tools(

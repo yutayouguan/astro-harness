@@ -104,7 +104,7 @@ fn row_to_cron_run(r: &sqlx::sqlite::SqliteRow) -> CronRunRow {
 impl CronRunDb {
     pub async fn new(path: PathBuf) -> anyhow::Result<Self> {
         let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
-        let pool = db.open_pool(&DB_SPEC).await?;
+        let pool = db.open_pool_at_path(&DB_SPEC, &path).await?;
         sqlx::query(DDL).execute(&pool).await?;
         Ok(Self { pool, path })
     }
@@ -345,5 +345,16 @@ mod tests {
         assert!(db.delete(&id).await.unwrap());
         assert!(db.get(&id).await.unwrap().is_none());
         assert!(!db.delete(&id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn opens_the_exact_requested_filename() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("custom-cron.db");
+        let db = CronRunDb::new(path.clone()).await.unwrap();
+
+        assert_eq!(db.db_path(), path.as_path());
+        assert!(path.is_file());
+        assert!(!dir.path().join(DB_SPEC.filename).exists());
     }
 }

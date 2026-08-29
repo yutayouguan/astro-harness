@@ -142,7 +142,7 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "prompt-context-first".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         let first_thread = AstroThread::spawn(
             Arc::clone(&first_session),
@@ -179,7 +179,7 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "prompt-context-resumed".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         resumed_session.restore_prompt_context_from_rollout(&initial_items);
         assert_eq!(resumed_session.prompt_context_history().len(), 1);
@@ -204,8 +204,8 @@ mod tests {
             .await;
         let context_history = resumed_session.prompt_context_history();
         assert_eq!(context_history.len(), 2);
-        assert_eq!(context_history[0].before_user, 0);
-        assert_eq!(context_history[1].before_user, 1);
+        assert_eq!(context_history[0].before_user, 1);
+        assert_eq!(context_history[1].before_user, 2);
         assert!(context_history[1].messages[0]
             .text_content()
             .contains("second"));
@@ -243,7 +243,7 @@ mod tests {
             Config::with_defaults(dir.path().to_path_buf()),
             "prompt-context-after-compaction".into(),
         )
-        .unwrap();
+        .await.unwrap();
         after_compaction.restore_prompt_context_from_rollout(&rebased_items);
         let compacted_history = after_compaction.prompt_context_history();
         assert_eq!(compacted_history.len(), 1);
@@ -258,7 +258,7 @@ mod tests {
     async fn public_handle_observes_shutdown_and_closed_event_stream() {
         let dir = TempDir::new().unwrap();
         let session =
-            Arc::new(Session::new(Config::with_defaults(dir.path().to_path_buf())).unwrap());
+            Arc::new(Session::new(Config::with_defaults(dir.path().to_path_buf())).await.unwrap());
         let thread =
             AstroThread::spawn(Arc::clone(&session), recorder(&dir, "first.jsonl").await).unwrap();
         let mut statuses = thread.subscribe_status();
@@ -287,7 +287,7 @@ mod tests {
     async fn second_spawn_returns_already_bound_and_preserves_first_thread() {
         let dir = TempDir::new().unwrap();
         let session =
-            Arc::new(Session::new(Config::with_defaults(dir.path().to_path_buf())).unwrap());
+            Arc::new(Session::new(Config::with_defaults(dir.path().to_path_buf())).await.unwrap());
         let first =
             AstroThread::spawn(Arc::clone(&session), recorder(&dir, "first.jsonl").await).unwrap();
         let rejected_recorder = recorder(&dir, "rejected.jsonl").await;
@@ -311,7 +311,7 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "actor-model-loop".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         session.set_chat_targets(vec![types::ChatTarget {
             provider_id: "scripted".into(),
@@ -381,7 +381,7 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "actor-hitl-loop".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         session.set_chat_targets(vec![types::ChatTarget {
             provider_id: "scripted".into(),

@@ -81,7 +81,7 @@ impl AgentGraphStore {
 
     pub async fn ensure_root_thread(&self, root_thread_id: &str) -> anyhow::Result<AgentThreadV2> {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let timestamp = now();
         let status = AgentStatusV2::Running;
         sqlx::query(
@@ -124,7 +124,7 @@ impl AgentGraphStore {
         reservation: &ThreadReservation,
     ) -> anyhow::Result<AgentThreadV2> {
         validate_reservation(reservation)?;
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let timestamp = now();
         let status = AgentStatusV2::PendingInit;
         sqlx::query(
@@ -202,7 +202,7 @@ impl AgentGraphStore {
 
     pub async fn rollback_pending_thread(&self, thread_id: &str) -> anyhow::Result<()> {
         require_non_empty("thread_id", thread_id)?;
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let row: Option<(String,)> =
             sqlx::query_as("SELECT status_kind FROM agent_threads WHERE thread_id = ?1")
                 .bind(thread_id)
@@ -235,7 +235,7 @@ impl AgentGraphStore {
     ) -> anyhow::Result<()> {
         require_non_empty("thread_id", thread_id)?;
         require_non_empty("turn_id", turn_id)?;
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let row: Option<(String,)> =
             sqlx::query_as("SELECT status_kind FROM agent_threads WHERE thread_id = ?1")
                 .bind(thread_id)
@@ -287,7 +287,7 @@ impl AgentGraphStore {
         root_thread_id: &str,
     ) -> anyhow::Result<usize> {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         sqlx::query(
             "DELETE FROM agent_spawn_edges
              WHERE child_thread_id IN (
@@ -354,7 +354,7 @@ impl AgentGraphStore {
         expected: &AgentThreadV2,
     ) -> anyhow::Result<()> {
         require_non_empty("thread_id", &expected.thread_id)?;
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let durable = query_v2_thread_by_id(&mut *tx, &expected.thread_id)
             .await?
             .with_context(|| {
@@ -431,7 +431,7 @@ impl AgentGraphStore {
         after_read: Fut,
     ) -> anyhow::Result<AgentThreadV2> {
         require_non_empty("thread_id", thread_id)?;
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let existing = query_v2_thread_by_id(&mut *tx, thread_id)
             .await?
             .with_context(|| format!("unknown agent thread {thread_id:?}"))?;
@@ -553,7 +553,7 @@ impl AgentGraphStore {
         after_threads: Fut,
     ) -> anyhow::Result<AgentTreeSnapshotV2> {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let rows = sqlx::query(V2_THREADS_BY_ROOT_SQL)
             .bind(root_thread_id)
             .fetch_all(&mut *tx)

@@ -312,7 +312,9 @@ impl SessionStore {
     pub async fn open(path: &Path) -> Result<Self> {
         let parent = path.parent().unwrap_or(Path::new("."));
         let db = AstroDb::new(parent);
-        let pool = db.open_pool(&DB_SPEC).await
+        let pool = db
+            .open_pool_at_path(&DB_SPEC, path)
+            .await
             .with_context(|| format!("open session store at {}", path.display()))?;
         sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
         let store = Self {
@@ -345,7 +347,6 @@ impl SessionStore {
             None => Err(anyhow!("schema_version table is empty")),
         }
     }
-
 }
 
 #[async_trait::async_trait]
@@ -398,7 +399,12 @@ impl crate::ConversationStore for SessionStore {
     }
 
     #[allow(refining_impl_trait)]
-    async fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
+    async fn recall_message_ids(
+        &self,
+        session_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<i64>> {
         SessionStore::recall_message_ids(self, session_id, query, limit).await
     }
 
@@ -432,9 +438,7 @@ impl types::SqliteStore for SessionStore {
 
 pub(crate) fn is_unique_constraint(err: &sqlx::Error) -> bool {
     match err {
-        sqlx::Error::Database(e) => e
-            .code()
-            .map_or(false, |c| c == "2067"),
+        sqlx::Error::Database(e) => e.code().map_or(false, |c| c == "2067"),
         _ => false,
     }
 }

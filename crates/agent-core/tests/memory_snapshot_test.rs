@@ -10,7 +10,7 @@ async fn snapshot_frozen_within_session() {
         AgentConfig::with_defaults(dir.path().to_path_buf()),
         "freeze-session".into(),
     )
-    .unwrap();
+    .await.unwrap();
 
     let marker = "唯一冻结条目-aurora-xyz-991";
     let wrote = agent

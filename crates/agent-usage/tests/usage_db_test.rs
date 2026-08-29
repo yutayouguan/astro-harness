@@ -83,6 +83,47 @@ async fn usage_db_rejects_noncurrent_schema_version() {
         .contains("unsupported usage.db schema version 5"));
 }
 
+#[tokio::test]
+async fn usage_db_initializes_precreated_empty_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("usage.db");
+    std::fs::File::create(&path).unwrap();
+
+    let db = UsageDb::new(path).await.unwrap();
+    let (version,): (i32,) = sqlx::query_as("PRAGMA user_version")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(version, USAGE_SCHEMA_VERSION);
+}
+
+#[tokio::test]
+async fn usage_db_rejects_current_marker_with_incomplete_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("usage.db");
+    let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", path.display()))
+        .await
+        .unwrap();
+    sqlx::query("CREATE TABLE usage_events (id TEXT PRIMARY KEY)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "PRAGMA user_version = {USAGE_SCHEMA_VERSION}"
+    )))
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.close().await;
+
+    let error = UsageDb::new(path)
+        .await
+        .err()
+        .expect("incomplete current schema must be rejected")
+        .to_string();
+    assert!(error.contains("usage_events is incomplete"), "{error}");
+}
+
 #[test]
 fn usage_db_path_under_memory_dir() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());

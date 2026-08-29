@@ -1,7 +1,7 @@
 //! SessionStore 当前 schema 与初始化。
 
 use agent_db::sqlx;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 use super::SessionStore;
 
@@ -140,41 +140,64 @@ impl SessionStore {
     pub(crate) async fn initialize_schema(&self) -> Result<()> {
         let current = self.read_schema_version_or_zero().await?;
         if current == SCHEMA_VERSION {
-            return Ok(());
+            return self.validate_current_schema().await;
         }
-        if current != 0
-            || self.table_exists("sessions").await?
-            || self.table_exists("messages").await?
-        {
+        if current != 0 || self.has_user_tables().await? {
             bail!(
                 "unsupported session database schema version {current}; expected {SCHEMA_VERSION}"
             );
         }
 
-        sqlx::raw_sql(SCHEMA_DDL).execute(&self.pool).await?;
-        sqlx::raw_sql(MESSAGES_FTS_DDL).execute(&self.pool).await?;
-        self.stamp_schema_version().await?;
-        Ok(())
-    }
-
-    pub(crate) async fn stamp_schema_version(&self) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::raw_sql(SCHEMA_DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(MESSAGES_FTS_DDL).execute(&mut *tx).await?;
         sqlx::query("DELETE FROM schema_version")
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         sqlx::query("INSERT INTO schema_version (version) VALUES (?1)")
             .bind(SCHEMA_VERSION)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
-        Ok(())
+        tx.commit().await?;
+        self.validate_current_schema().await
     }
 
-    pub(crate) async fn table_exists(&self, name: &str) -> Result<bool> {
-        let (count,): (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1")
-                .bind(name)
-                .fetch_one(&self.pool)
-                .await?;
+    async fn has_user_tables(&self) -> Result<bool> {
+        let (count,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+        )
+        .fetch_one(&self.pool)
+        .await?;
         Ok(count > 0)
+    }
+
+    async fn validate_current_schema(&self) -> Result<()> {
+        sqlx::query(
+            "SELECT id, project_id, branch_kind, branch_parent_message_id,
+                    branch_parent_turn_index, branch_inherited_turn_count, branch_created_at
+             FROM sessions LIMIT 0",
+        )
+        .execute(&self.pool)
+        .await
+        .context("session database schema marker is current but sessions table is incomplete")?;
+        sqlx::query(
+            "SELECT id, compressed_content, media_json, reasoning_details,
+                    reasoning_items, message_items
+             FROM messages LIMIT 0",
+        )
+        .execute(&self.pool)
+        .await
+        .context("session database schema marker is current but messages table is incomplete")?;
+        sqlx::query("SELECT rowid FROM messages_fts LIMIT 0")
+            .execute(&self.pool)
+            .await
+            .context("session database schema marker is current but FTS tables are incomplete")?;
+        sqlx::query("SELECT rowid FROM messages_fts_trigram LIMIT 0")
+            .execute(&self.pool)
+            .await
+            .context("session database schema marker is current but FTS tables are incomplete")?;
+        Ok(())
     }
 
     pub(crate) async fn read_schema_version_or_zero(&self) -> Result<i32> {

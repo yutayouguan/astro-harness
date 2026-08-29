@@ -55,7 +55,6 @@ dependencies = [
  "types",
  "usage",
  "uuid",
- "worktree",
 ]
 
 [[package]]
@@ -278,7 +277,6 @@ dependencies = [
  "uuid",
  "window-vibrancy 0.8.0",
  "workflow",
- "worktree",
 ]
 
 [[package]]
@@ -8421,16 +8419,6 @@ dependencies = [
  "tracing",
  "types",
  "url",
- "uuid",
-]
-
-[[package]]
-name = "worktree"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "tempfile",
- "tracing",
  "uuid",
 ]
 

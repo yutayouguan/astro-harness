@@ -1,3 +1,4 @@
+use anyhow::Context;
 use chrono::{Datelike, SecondsFormat, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -45,6 +46,30 @@ const COST_SUM_SQL: &str =
     "CASE WHEN cost_status IS NULL OR cost_status IN ('estimated','included') THEN cost_usd ELSE 0.0 END";
 
 const TS_NORM_SQL: &str = "replace(replace(ts, 'T', ' '), 'Z', '')";
+
+async fn has_user_tables(pool: &SqlitePool) -> anyhow::Result<bool> {
+    let (count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sqlite_master
+         WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count > 0)
+}
+
+async fn validate_current_schema(pool: &SqlitePool) -> anyhow::Result<()> {
+    sqlx::query(
+        "SELECT id, ts, kind, name, agent_id, session_id, turn_id,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                reasoning_tokens, total_tokens, cost_usd, cost_status, cost_source,
+                pricing_version, billing_provider, billing_base_url, billing_mode, meta_json
+         FROM usage_events LIMIT 0",
+    )
+    .execute(pool)
+    .await
+    .context("usage database schema marker is current but usage_events is incomplete")?;
+    Ok(())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -285,27 +310,31 @@ impl types::SqliteStore for UsageDb {
 impl UsageDb {
     pub async fn new(path: PathBuf) -> anyhow::Result<Self> {
         let parent = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        let exists = path.exists();
         let db = AstroDb::new(&parent);
-        let pool = db.open_pool(&DB_SPEC).await?;
-        if !exists {
-            sqlx::query(DDL).execute(&pool).await?;
-            sqlx::raw_sql(AssertSqlSafe(format!(
-                "PRAGMA user_version = {USAGE_SCHEMA_VERSION}"
-            )))
-            .execute(&pool)
-            .await?;
-            return Ok(Self { pool, path });
-        }
+        let pool = db.open_pool_at_path(&DB_SPEC, &path).await?;
 
         let (version,): (i32,) = sqlx::query_as("PRAGMA user_version")
             .fetch_one(&pool)
             .await?;
-        if version != USAGE_SCHEMA_VERSION {
+        if version == USAGE_SCHEMA_VERSION {
+            validate_current_schema(&pool).await?;
+            return Ok(Self { pool, path });
+        }
+        if version != 0 || has_user_tables(&pool).await? {
             anyhow::bail!(
                 "unsupported usage.db schema version {version}; expected {USAGE_SCHEMA_VERSION}"
             );
         }
+
+        let mut tx = pool.begin().await?;
+        sqlx::raw_sql(DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(AssertSqlSafe(format!(
+            "PRAGMA user_version = {USAGE_SCHEMA_VERSION}"
+        )))
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        validate_current_schema(&pool).await?;
         Ok(Self { pool, path })
     }
 

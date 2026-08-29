@@ -677,30 +677,44 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let cleanup_thread = thread.clone();
         let unaccepted_cleanup = Arc::new(UnacceptedSpawnCleanup::new(move |turn_id| {
             cleanup_requests.remove(&cleanup_thread.thread_id);
-            let graph_result = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(
-                    cleanup_control.finalize_unaccepted_spawn(&cleanup_thread, turn_id),
-                )
+            std::thread::scope(|scope| {
+                scope
+                    .spawn(|| {
+                        let runtime = tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .map_err(anyhow::Error::from)?;
+                        let graph_result = runtime
+                            .block_on(cleanup_control.finalize_unaccepted_spawn(
+                                &cleanup_thread,
+                                turn_id,
+                            ))
+                            .map_err(|error| {
+                                error.context("spawn graph and identity rollback")
+                            });
+                        let mut owned_session = ForkedSessionGuard {
+                            sessions_dir: sessions_dir.clone(),
+                            child_session_id: child_session_id.clone(),
+                            parent_session_id: parent_session_id.clone(),
+                            armed: true,
+                        };
+                        let session_result = runtime
+                            .block_on(owned_session.rollback())
+                            .map_err(|error| error.context("child session rollback"));
+                        match (graph_result, session_result) {
+                            (Ok(()), Ok(())) => Ok(()),
+                            (Err(graph), Ok(())) => Err(graph),
+                            (Ok(()), Err(session)) => Err(session),
+                            (Err(graph), Err(session)) => Err(anyhow::anyhow!(
+                                "{graph:#}; child session rollback failed: {session:#}"
+                            )),
+                        }
+                    })
+                    .join()
+                    .unwrap_or_else(|_| {
+                        Err(anyhow::anyhow!("unaccepted spawn cleanup thread panicked"))
+                    })
             })
-            .map_err(|error| error.context("spawn graph and identity rollback"));
-            let mut owned_session = ForkedSessionGuard {
-                sessions_dir: sessions_dir.clone(),
-                child_session_id: child_session_id.clone(),
-                parent_session_id: parent_session_id.clone(),
-                armed: true,
-            };
-            let session_result = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(owned_session.rollback())
-            })
-            .map_err(|error| error.context("child session rollback"));
-            match (graph_result, session_result) {
-                (Ok(()), Ok(())) => Ok(()),
-                (Err(graph), Ok(())) => Err(graph),
-                (Ok(()), Err(session)) => Err(session),
-                (Err(graph), Err(session)) => Err(anyhow::anyhow!(
-                    "{graph:#}; child session rollback failed: {session:#}"
-                )),
-            }
         }));
         let mut startup_guard = SpawnStartupGuard {
             cleanup: Arc::clone(&unaccepted_cleanup),
@@ -765,13 +779,13 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let (message, admission) = self.control.enqueue_followup_with_admission(
             &self.current_path,
             request.request,
-            |target| {
+            |target| async move {
                 let stored = match self.runtime_requests.get(&target.thread_id)? {
                     Some(stored) => stored,
                     None => {
-                        let recovered = futures::executor::block_on(
-                            self.recover_runtime_request(target, request.runtime.as_ref()),
-                        )?;
+                        let recovered = self
+                            .recover_runtime_request(&target, request.runtime.as_ref())
+                            .await?;
                         self.runtime_requests
                             .get_or_insert(&target.thread_id, recovered)?
                     }
@@ -1468,20 +1482,21 @@ mod tests {
 
     use agent_db::sqlx;
 
-    fn dispatch(dir: &tempfile::TempDir) -> DefaultAgentThreadDispatch {
+    async fn dispatch(dir: &tempfile::TempDir) -> DefaultAgentThreadDispatch {
         dispatch_for_root(
             dir,
             "root-session",
             Arc::new(AgentRuntimeManager::default()),
         )
+        .await
     }
 
-    fn dispatch_for_root(
+    async fn dispatch_for_root(
         dir: &tempfile::TempDir,
         root_thread_id: &str,
         runtime_manager: Arc<AgentRuntimeManager>,
     ) -> DefaultAgentThreadDispatch {
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap();
         let control = AgentControl::open(
             root_thread_id.into(),
             store,
@@ -1491,7 +1506,7 @@ mod tests {
                 max_running: 2,
             },
         )
-        .unwrap();
+        .await.unwrap();
         DefaultAgentThreadDispatch::for_test(
             control,
             AgentPath::root(),
@@ -1500,16 +1515,16 @@ mod tests {
         )
     }
 
-    fn committed_child(
+    async fn committed_child(
         dispatch: &DefaultAgentThreadDispatch,
         name: &str,
     ) -> subagents::AgentThreadV2 {
         let reservation = dispatch
             .control
             .reserve_spawn(&AgentPath::root(), name)
-            .unwrap();
+            .await.unwrap();
         let thread = reservation.thread().clone();
-        reservation.commit().unwrap();
+        reservation.commit().await.unwrap();
         thread
     }
 
@@ -1686,6 +1701,7 @@ mod tests {
                             index: 0,
                             id: "list-agents-call".into(),
                             name: "list_agents".into(),
+                            signature: None,
                         }),
                         Ok(StreamChunk::ToolCallDelta {
                             index: 0,
@@ -1790,19 +1806,19 @@ mod tests {
     async fn desktop_read_returns_complete_session_store_timeline() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let dispatch = dispatch(&dir);
-        let child = committed_child(&dispatch, "worker");
+        let dispatch = dispatch(&dir).await;
+        let child = committed_child(&dispatch, "worker").await;
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
         sessions
             .ensure_session(&child.session_id, "agent-thread")
-            .unwrap();
+            .await.unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("user task"),
                 ..session::NewMessage::empty(&child.session_id, "user")
             })
-            .unwrap();
+            .await.unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("calling tool"),
@@ -1816,7 +1832,7 @@ mod tests {
                 media_json: Some(r#"[{"kind":"image","path":"artifact.png"}]"#),
                 ..session::NewMessage::empty(&child.session_id, "assistant")
             })
-            .unwrap();
+            .await.unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("tool output"),
@@ -1824,7 +1840,7 @@ mod tests {
                 tool_name: Some("terminal"),
                 ..session::NewMessage::empty(&child.session_id, "tool")
             })
-            .unwrap();
+            .await.unwrap();
 
         let detail = desktop_control(&dispatch, &memory_dir)
             .read_thread("root-session", "/root/worker")
@@ -1851,8 +1867,8 @@ mod tests {
     async fn desktop_cold_followup_requires_active_parent_context_without_queuing() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let dispatch = dispatch(&dir);
-        let child = committed_child(&dispatch, "worker");
+        let dispatch = dispatch(&dir).await;
+        let child = committed_child(&dispatch, "worker").await;
 
         let error = desktop_control(&dispatch, &memory_dir)
             .followup(
@@ -1870,7 +1886,7 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&child.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
         assert!(dispatch
             .runtime_requests
@@ -1885,9 +1901,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let request = spawn_request(&memory_dir);
         let root_material = request.runtime.clone();
@@ -1905,7 +1921,7 @@ mod tests {
                 Config::with_defaults(memory_dir.clone()),
                 "root-session".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         register_active_root_session(&memory_dir, "root-session", &root_session).unwrap();
         root_session.set_chat_targets(root_material.chat_targets);
@@ -1925,7 +1941,7 @@ mod tests {
             tokio::task::yield_now().await;
         }
 
-        let messages = sessions.get_messages(&child.session_id).unwrap();
+        let messages = sessions.get_messages(&child.session_id).await.unwrap();
         assert_eq!(
             messages
                 .iter()
@@ -1941,12 +1957,14 @@ mod tests {
     async fn live_root_lookup_revalidates_arc_identity_after_replacement() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let make_session = |api_key: &str, permission: &str| {
+        let make_session = |api_key: &'static str, permission: &'static str| {
+            let memory_dir = memory_dir.clone();
+            async move {
             let session = Session::with_session_id(
-                Config::with_defaults(memory_dir.clone()),
+                Config::with_defaults(memory_dir),
                 "root-session".into(),
             )
-            .unwrap();
+            .await.unwrap();
             session.set_chat_targets(vec![types::ChatTarget {
                 provider_id: "openai".into(),
                 backend_id: "openai".into(),
@@ -1957,9 +1975,10 @@ mod tests {
             }]);
             session.set_permission_profile(Some(permission.into()));
             Arc::new(session)
+            }
         };
-        let old = make_session("old-key-must-not-win", types::DANGER_FULL_ACCESS_PROFILE);
-        let replacement = make_session("replacement-key", types::READ_ONLY_PROFILE);
+        let old = make_session("old-key-must-not-win", types::DANGER_FULL_ACCESS_PROFILE).await;
+        let replacement = make_session("replacement-key", types::READ_ONLY_PROFILE).await;
         register_active_root_session(&memory_dir, "root-session", &old).unwrap();
 
         let lookup_memory_dir = memory_dir.clone();
@@ -1990,8 +2009,8 @@ mod tests {
     async fn desktop_close_subtree_is_leaf_first_idempotent_and_root_safe() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
         dispatch
             .control
             .record_runner_event(
@@ -2001,13 +2020,13 @@ mod tests {
                     last_message: "parent done".into(),
                 },
             )
-            .unwrap();
+            .await.unwrap();
         let reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "child")
-            .unwrap();
+            .await.unwrap();
         let child = reservation.thread().clone();
-        reservation.commit().unwrap();
+        reservation.commit().await.unwrap();
         dispatch
             .control
             .record_runner_event(
@@ -2017,7 +2036,7 @@ mod tests {
                     reason: "stopped".into(),
                 },
             )
-            .unwrap();
+            .await.unwrap();
         let desktop = desktop_control(&dispatch, &memory_dir);
 
         let first = desktop
@@ -2041,7 +2060,7 @@ mod tests {
             dispatch
                 .control
                 .status_events(&parent.thread_id)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             2
         );
@@ -2049,7 +2068,7 @@ mod tests {
             dispatch
                 .control
                 .status_events(&child.thread_id)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             2
         );
@@ -2088,7 +2107,7 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&child.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
 
         let root_close = desktop
@@ -2111,8 +2130,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
         let bus = Arc::new(hooks::PluginHookBus::new());
         let stopped_paths = Arc::new(Mutex::new(Vec::<String>::new()));
         let observed = Arc::clone(&stopped_paths);
@@ -2120,7 +2139,7 @@ mod tests {
             observed.lock().unwrap().push(payload.detail.clone());
             hooks::HookOutcome::Continue
         });
-        let mut dispatch = dispatch(&dir);
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let mut parent_request = request_with_hook_bus(&memory_dir, Arc::clone(&bus));
         parent_request.request.task_name = "parent".into();
@@ -2172,14 +2191,14 @@ mod tests {
         let partial = error.downcast_ref::<CloseSubtreeError>().unwrap();
         assert_eq!(partial.failed_path(), "/root/parent");
         assert!(partial
-            .snapshot().await
+            .snapshot()
             .threads
             .iter()
             .any(|thread| thread.thread_id == leaf.thread_id
                 && thread.status == AgentStatusV2::Shutdown));
         assert_ne!(
             partial
-                .snapshot().await
+                .snapshot()
                 .threads
                 .iter()
                 .find(|thread| thread.thread_id == parent.thread_id)
@@ -2204,8 +2223,9 @@ mod tests {
             .unwrap()
             .is_some());
 
-        graph
-            .execute_batch("DROP TRIGGER fail_parent_shutdown;")
+        sqlx::raw_sql("DROP TRIGGER fail_parent_shutdown;")
+            .execute(&pool)
+            .await
             .unwrap();
         let retried = desktop
             .close_subtree("root-session", "/root/parent")
@@ -2231,9 +2251,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -2265,7 +2285,7 @@ mod tests {
             dispatch
                 .control
                 .status_events(&spawned.thread.thread_id)
-                .unwrap()
+                .await.unwrap()
                 .into_iter()
                 .map(|event| event.event)
                 .filter(|event| matches!(event, RunnerEvent::RuntimeTerminated))
@@ -2279,9 +2299,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -2311,14 +2331,14 @@ mod tests {
             .control
             .is_path_closing(&spawned.thread.canonical_path)
             .unwrap());
-        assert_close_admission_rejects_new_work(&dispatch, &spawned.thread);
+        assert_close_admission_rejects_new_work(&dispatch, &spawned.thread).await;
 
         terminal_hook.release.notify_one();
         wait_for_shutdown_and_barrier_release(&dispatch, &spawned.thread).await;
         assert!(dispatch
             .control
             .reserve_spawn(&spawned.thread.canonical_path, "too_late")
-            .is_err());
+            .await.is_err());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -2328,22 +2348,22 @@ mod tests {
         let memory_a = dir_a.path().join("memory");
         let memory_b = dir_b.path().join("memory");
         let manager = Arc::new(AgentRuntimeManager::default());
-        let mut dispatch_a = dispatch_for_root(&dir_a, "root-a", Arc::clone(&manager));
-        let dispatch_b = dispatch_for_root(&dir_b, "root-b", Arc::clone(&manager));
-        session::SessionStore::open_sessions_dir(&memory_a.join("sessions"))
-            .unwrap()
+        let mut dispatch_a = dispatch_for_root(&dir_a, "root-a", Arc::clone(&manager)).await;
+        let dispatch_b = dispatch_for_root(&dir_b, "root-b", Arc::clone(&manager)).await;
+        session::SessionStore::open_sessions_dir(&memory_a.join("data"))
+            .await.unwrap()
             .ensure_session("root-a", "test")
-            .unwrap();
-        session::SessionStore::open_sessions_dir(&memory_b.join("sessions"))
-            .unwrap()
+            .await.unwrap();
+        session::SessionStore::open_sessions_dir(&memory_b.join("data"))
+            .await.unwrap()
             .ensure_session("root-b", "test")
-            .unwrap();
+            .await.unwrap();
         dispatch_a.chat_override = Some(pending_chat());
         let worker_a = AgentThreadDispatch::spawn_agent(&dispatch_a, spawn_request(&memory_a))
             .await
             .unwrap()
             .thread;
-        let worker_b = committed_child(&dispatch_b, "worker");
+        let worker_b = committed_child(&dispatch_b, "worker").await;
         let terminal_hook = super::super::agent_runtime::AckSubscribeHook {
             entered: Arc::new(tokio::sync::Notify::new()),
             release: Arc::new(tokio::sync::Notify::new()),
@@ -2393,9 +2413,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let worker = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -2446,9 +2466,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
@@ -2512,11 +2532,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
         let provider_entered = Arc::new(tokio::sync::Notify::new());
         let provider_release = Arc::new(tokio::sync::Notify::new());
-        let mut dispatch = dispatch(&dir);
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(gated_scripted_chat(
             Arc::clone(&provider_entered),
             Arc::clone(&provider_release),
@@ -2594,9 +2614,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
@@ -2621,7 +2641,7 @@ mod tests {
             while dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .unwrap()
+                .await.unwrap()
                 .is_empty()
             {
                 tokio::task::yield_now().await;
@@ -2650,7 +2670,7 @@ mod tests {
             dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             1
         );
@@ -2662,9 +2682,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
@@ -2729,9 +2749,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -2756,7 +2776,7 @@ mod tests {
             .control
             .is_path_closing(&spawned.thread.canonical_path)
             .unwrap());
-        assert_close_admission_rejects_new_work(&dispatch, &spawned.thread);
+        assert_close_admission_rejects_new_work(&dispatch, &spawned.thread).await;
 
         terminal_hook.release.notify_one();
         wait_for_shutdown_and_barrier_release(&dispatch, &spawned.thread).await;
@@ -2767,9 +2787,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut root_dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut root_dispatch = dispatch(&dir).await;
         root_dispatch.chat_override = Some(pending_chat());
         let parent = AgentThreadDispatch::spawn_agent(&root_dispatch, spawn_request(&memory_dir))
             .await
@@ -2817,7 +2837,7 @@ mod tests {
             root_dispatch
                 .control
                 .resolve_desktop_target(parent.canonical_path.as_str())
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -2835,19 +2855,20 @@ mod tests {
             root_dispatch
                 .control
                 .resolve_desktop_target(leaf.canonical_path.as_str())
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
     }
 
-    fn assert_close_admission_rejects_new_work(
+    async fn assert_close_admission_rejects_new_work(
         dispatch: &DefaultAgentThreadDispatch,
         thread: &AgentThreadV2,
     ) {
         assert!(dispatch
             .control
             .reserve_spawn(&thread.canonical_path, "blocked_child")
+            .await
             .is_err());
         assert!(dispatch
             .control
@@ -2859,6 +2880,7 @@ mod tests {
                 },
                 false,
             )
+            .await
             .is_err());
         assert!(dispatch
             .control
@@ -2868,13 +2890,14 @@ mod tests {
                     target: thread.canonical_path.to_string(),
                     message: "trigger turn".into(),
                 },
-                |_| Ok(()),
+                |_| async { Ok(()) },
             )
+            .await
             .is_err());
         assert!(dispatch
             .control
             .drain_mailbox(&thread.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
     }
 
@@ -2887,7 +2910,7 @@ mod tests {
                 let current = dispatch
                     .control
                     .resolve_desktop_target(thread.canonical_path.as_str())
-                    .unwrap();
+                    .await.unwrap();
                 if current.status == AgentStatusV2::Shutdown
                     && !dispatch
                         .control
@@ -2908,9 +2931,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -2934,8 +2957,8 @@ mod tests {
     async fn concurrent_desktop_close_callers_share_idempotent_shutdown() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let dispatch = dispatch(&dir);
-        let child = committed_child(&dispatch, "worker");
+        let dispatch = dispatch(&dir).await;
+        let child = committed_child(&dispatch, "worker").await;
         let desktop = Arc::new(desktop_control(&dispatch, &memory_dir));
 
         let (first, second) = tokio::join!(
@@ -2949,7 +2972,7 @@ mod tests {
             dispatch
                 .control
                 .status_events(&child.thread_id)
-                .unwrap()
+                .await.unwrap()
                 .into_iter()
                 .filter(|event| matches!(event.event, RunnerEvent::RuntimeTerminated))
                 .count(),
@@ -2961,14 +2984,14 @@ mod tests {
     async fn close_barrier_rejects_spawn_send_and_followup_under_prefix() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
         let child_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "child")
-            .unwrap();
+            .await.unwrap();
         let child = child_reservation.thread().clone();
-        child_reservation.commit().unwrap();
+        child_reservation.commit().await.unwrap();
         let hook = super::super::agent_runtime::AckSubscribeHook {
             entered: Arc::new(tokio::sync::Notify::new()),
             release: Arc::new(tokio::sync::Notify::new()),
@@ -2985,11 +3008,11 @@ mod tests {
         assert!(dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "late_child")
-            .is_err());
+            .await.is_err());
         assert!(dispatch
             .control
             .reserve_spawn(&child.canonical_path, "late_grandchild")
-            .is_err());
+            .await.is_err());
         assert!(dispatch
             .control
             .enqueue_message(
@@ -3000,7 +3023,7 @@ mod tests {
                 },
                 false,
             )
-            .is_err());
+            .await.is_err());
         assert!(dispatch
             .control
             .enqueue_followup_with_admission(
@@ -3009,13 +3032,13 @@ mod tests {
                     target: parent.canonical_path.to_string(),
                     message: "trigger turn".into(),
                 },
-                |_| Ok(()),
+                |_| async { Ok(()) },
             )
-            .is_err());
+            .await.is_err());
         assert!(dispatch
             .control
             .drain_mailbox(&parent.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
         assert!(!dispatch
             .control
@@ -3038,12 +3061,12 @@ mod tests {
     async fn close_waits_for_preexisting_spawn_reservation_then_closes_committed_child() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
         let reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "late_child")
-            .unwrap();
+            .await.unwrap();
         let late_child = reservation.thread().clone();
         let desktop = Arc::new(desktop_control(&dispatch, &memory_dir));
         let close = tokio::spawn({
@@ -3064,7 +3087,7 @@ mod tests {
         .unwrap();
         assert!(!close.is_finished());
 
-        reservation.commit().unwrap();
+        reservation.commit().await.unwrap();
         let snapshot = close.await.unwrap().unwrap();
         assert_eq!(
             snapshot
@@ -3081,20 +3104,20 @@ mod tests {
     async fn shutdown_parent_rejects_new_spawn_without_pending_artifacts() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
         desktop_control(&dispatch, &memory_dir)
             .close_subtree("root-session", "/root/parent")
             .await
             .unwrap();
-        let before = dispatch.control.snapshot().unwrap();
+        let before = dispatch.control.snapshot().await.unwrap();
 
         assert!(dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "after_shutdown")
-            .is_err());
+            .await.is_err());
 
-        assert_eq!(dispatch.control.snapshot().unwrap(), before);
+        assert_eq!(dispatch.control.snapshot().await.unwrap(), before);
         let pool = agent_db::sqlx::SqlitePool::connect(
             &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
         ).await.unwrap();
@@ -3109,8 +3132,8 @@ mod tests {
     async fn cancelled_close_releases_prefix_admission_barrier() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
         let hook = super::super::agent_runtime::AckSubscribeHook {
             entered: Arc::new(tokio::sync::Notify::new()),
             release: Arc::new(tokio::sync::Notify::new()),
@@ -3133,14 +3156,14 @@ mod tests {
         dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "allowed_after_cancel")
-            .unwrap()
+            .await.unwrap()
             .abort()
-            .unwrap();
+            .await.unwrap();
         assert_ne!(
             dispatch
                 .control
                 .resolve_desktop_target(parent.canonical_path.as_str())
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -3151,9 +3174,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -3185,13 +3208,13 @@ mod tests {
             dispatch
                 .control
                 .resolve_desktop_target("/root/worker")
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Completed { .. }
         ));
         assert!(sessions
             .get_messages(&spawned.thread.session_id)
-            .unwrap()
+            .await.unwrap()
             .iter()
             .any(|message| message.content.as_deref() == Some("desktop continuation")));
     }
@@ -3201,9 +3224,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
 
         let result = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
@@ -3216,7 +3239,7 @@ mod tests {
             let current = dispatch
                 .control
                 .list_agents(&AgentPath::root(), Some("worker"))
-                .unwrap()
+                .await.unwrap()
                 .into_iter()
                 .find(|thread| thread.thread_id == result.thread.thread_id)
                 .unwrap();
@@ -3234,9 +3257,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
         bus.register(hooks::SUBAGENT_START, |_| panic!("injected hook panic"));
@@ -3293,9 +3316,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
         let stop_count = Arc::new(AtomicUsize::new(0));
@@ -3320,7 +3343,7 @@ mod tests {
         }
 
         assert_eq!(stop_count.load(Ordering::SeqCst), 2);
-        let messages = sessions.get_messages(&spawned.thread.session_id).unwrap();
+        let messages = sessions.get_messages(&spawned.thread.session_id).await.unwrap();
         assert_eq!(
             messages
                 .iter()
@@ -3340,9 +3363,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
         bus.register(hooks::SUBAGENT_STOP, |_| panic!("injected hook panic"));
@@ -3374,7 +3397,7 @@ mod tests {
             dispatch
                 .control
                 .resolve_desktop_target("/root/worker")
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Completed { .. }
         ));
@@ -3409,9 +3432,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         let bus = Arc::new(hooks::PluginHookBus::new());
         let stop_count = Arc::new(AtomicUsize::new(0));
         let observed = Arc::clone(&stop_count);
@@ -3437,7 +3460,7 @@ mod tests {
             dispatch
                 .control
                 .resolve_desktop_target("/root/worker")
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Errored { .. }
         ));
@@ -3502,9 +3525,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let dispatch = dispatch(&dir).await;
         let bus = Arc::new(hooks::PluginHookBus::new());
         let start_count = Arc::new(AtomicUsize::new(0));
         let observed = Arc::clone(&start_count);
@@ -3524,7 +3547,7 @@ mod tests {
             dispatch
                 .control
                 .list_agents(&AgentPath::root(), None)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             1
         );
@@ -3551,7 +3574,7 @@ mod tests {
         assert_eq!(
             sessions
                 .list_sessions(session::SessionListFilter::Active, 10)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             1
         );
@@ -3562,9 +3585,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(immediate_error_chat());
 
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
@@ -3578,7 +3601,7 @@ mod tests {
             .is_some());
         assert!(sessions
             .get_session(&spawned.thread.session_id)
-            .unwrap()
+            .await.unwrap()
             .is_some());
         while dispatch
             .runtime_manager
@@ -3590,7 +3613,7 @@ mod tests {
             dispatch
                 .control
                 .resolve_target(&AgentPath::root(), "worker")
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Errored { .. }
         ));
@@ -3601,9 +3624,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let graph = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let graph = AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap();
         let control = AgentControl::open(
             "root-session".into(),
             graph.clone(),
@@ -3613,7 +3636,7 @@ mod tests {
                 max_running: 0,
             },
         )
-        .unwrap();
+        .await.unwrap();
         let mut dispatch = DefaultAgentThreadDispatch::for_test(
             Arc::clone(&control),
             AgentPath::root(),
@@ -3638,12 +3661,12 @@ mod tests {
             "{error:#}"
         );
         assert_eq!(control.identity_count().unwrap(), 0);
-        assert_eq!(graph.snapshot("root-session").unwrap().threads.len(), 1);
+        assert_eq!(graph.snapshot("root-session").await.unwrap().threads.len(), 1);
         assert_eq!(start_count.load(Ordering::SeqCst), 0);
         assert_eq!(
             sessions
                 .list_sessions(session::SessionListFilter::Active, 10)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             1
         );
@@ -3654,15 +3677,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("parent history"),
                 ..session::NewMessage::empty("root-session", "user")
             })
-            .unwrap();
-        let dispatch = dispatch(&dir);
+            .await.unwrap();
+        let dispatch = dispatch(&dir).await;
         dispatch
             .runtime_manager
             .set_start_status_failure(Some("injected startup status failure"));
@@ -3683,15 +3706,15 @@ mod tests {
         assert_eq!(
             sessions
                 .list_sessions(session::SessionListFilter::Active, 10)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             1
         );
-        let parent = sessions.get_session("root-session").unwrap().unwrap();
+        let parent = sessions.get_session("root-session").await.unwrap().unwrap();
         assert_eq!(parent.parent_session_id, None);
         assert_eq!(parent.message_count, 1);
         assert_eq!(
-            sessions.get_messages("root-session").unwrap()[0]
+            sessions.get_messages("root-session").await.unwrap()[0]
                 .content
                 .as_deref(),
             Some("parent history")
@@ -3703,15 +3726,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("parent history"),
                 ..session::NewMessage::empty("root-session", "user")
             })
-            .unwrap();
-        let mut dispatch = dispatch(&dir);
+            .await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("must not survive cancellation"));
         let hook = super::super::agent_runtime::AckSubscribeHook {
             entered: Arc::new(tokio::sync::Notify::new()),
@@ -3744,7 +3767,7 @@ mod tests {
         let child = dispatch
             .control
             .list_agents(&AgentPath::root(), Some("worker"))
-            .unwrap()
+            .await.unwrap()
             .into_iter()
             .find(|thread| thread.canonical_path.as_str() == "/root/worker")
             .unwrap();
@@ -3765,7 +3788,7 @@ mod tests {
             dispatch
                 .control
                 .list_agents(&AgentPath::root(), None)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             1
         );
@@ -3793,8 +3816,8 @@ mod tests {
             .runtime_handle(&child.thread_id)
             .unwrap()
             .is_none());
-        assert!(sessions.get_session(&child.session_id).unwrap().is_none());
-        assert_eq!(sessions.get_messages("root-session").unwrap().len(), 1);
+        assert!(sessions.get_session(&child.session_id).await.unwrap().is_none());
+        assert_eq!(sessions.get_messages("root-session").await.unwrap().len(), 1);
         assert_eq!(start_count.load(Ordering::SeqCst), 0);
 
         let retried = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
@@ -3814,9 +3837,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("must not survive cancellation"));
         let hook = super::super::agent_runtime::AckSubscribeHook {
             entered: Arc::new(tokio::sync::Notify::new()),
@@ -3835,7 +3858,7 @@ mod tests {
         let child = dispatch
             .control
             .list_agents(&AgentPath::root(), Some("worker"))
-            .unwrap()
+            .await.unwrap()
             .into_iter()
             .find(|thread| thread.canonical_path.as_str() == "/root/worker")
             .unwrap();
@@ -3867,7 +3890,7 @@ mod tests {
             .runtime_handle(&child.thread_id)
             .unwrap()
             .is_none());
-        assert!(sessions.get_session(&child.session_id).unwrap().is_none());
+        assert!(sessions.get_session(&child.session_id).await.unwrap().is_none());
         let pool = agent_db::sqlx::SqlitePool::connect(
             &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
         ).await.unwrap();
@@ -3899,9 +3922,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -3931,8 +3954,8 @@ mod tests {
     #[tokio::test]
     async fn interrupt_completed_thread_is_an_idempotent_noop() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let child = committed_child(&dispatch, "worker");
+        let dispatch = dispatch(&dir).await;
+        let child = committed_child(&dispatch, "worker").await;
         dispatch
             .control
             .record_runner_event(
@@ -3942,7 +3965,7 @@ mod tests {
                     last_message: "done".into(),
                 },
             )
-            .unwrap();
+            .await.unwrap();
 
         let result = AgentThreadDispatch::interrupt_agent(
             &dispatch,
@@ -3964,8 +3987,8 @@ mod tests {
     #[tokio::test]
     async fn wait_observes_mailbox_activity_already_pending_at_call_time() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let child = committed_child(&dispatch, "worker");
+        let dispatch = dispatch(&dir).await;
+        let child = committed_child(&dispatch, "worker").await;
         let child_dispatch = dispatch_for_thread(&dispatch, &child);
         AgentThreadDispatch::send_message(
             &dispatch,
@@ -3996,9 +4019,9 @@ mod tests {
     #[tokio::test]
     async fn wait_mailbox_scope_is_the_recipient_not_root_or_sibling() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let alpha = committed_child(&dispatch, "alpha");
-        let beta = committed_child(&dispatch, "beta");
+        let dispatch = dispatch(&dir).await;
+        let alpha = committed_child(&dispatch, "alpha").await;
+        let beta = committed_child(&dispatch, "beta").await;
         let alpha_dispatch = dispatch_for_thread(&dispatch, &alpha);
         let beta_dispatch = dispatch_for_thread(&dispatch, &beta);
 
@@ -4026,7 +4049,7 @@ mod tests {
         dispatch
             .control
             .persist_main_steer(&AgentPath::root(), "new root input".into())
-            .unwrap();
+            .await.unwrap();
         dispatch.control.notify_main_steer();
         let root_result = tokio::time::timeout(Duration::from_millis(100), root_wait.as_mut())
             .await
@@ -4074,15 +4097,15 @@ mod tests {
     #[tokio::test]
     async fn wait_final_status_is_visible_only_to_the_direct_parent() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
-        let sibling = committed_child(&dispatch, "sibling");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
+        let sibling = committed_child(&dispatch, "sibling").await;
         let leaf_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "leaf")
-            .unwrap();
+            .await.unwrap();
         let leaf = leaf_reservation.thread().clone();
-        leaf_reservation.commit().unwrap();
+        leaf_reservation.commit().await.unwrap();
         let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
         let sibling_dispatch = dispatch_for_thread(&dispatch, &sibling);
 
@@ -4095,7 +4118,7 @@ mod tests {
                     last_message: "leaf done".into(),
                 },
             )
-            .unwrap();
+            .await.unwrap();
 
         let parent_result = AgentThreadDispatch::wait_agent(
             &parent_dispatch,
@@ -4125,13 +4148,13 @@ mod tests {
     #[tokio::test]
     async fn wait_main_steer_is_visible_only_to_root() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let child = committed_child(&dispatch, "worker");
+        let dispatch = dispatch(&dir).await;
+        let child = committed_child(&dispatch, "worker").await;
         let child_dispatch = dispatch_for_thread(&dispatch, &child);
         dispatch
             .control
             .persist_main_steer(&AgentPath::root(), "new root input".into())
-            .unwrap();
+            .await.unwrap();
         dispatch.control.notify_main_steer();
 
         let root_result = AgentThreadDispatch::wait_agent(
@@ -4160,8 +4183,8 @@ mod tests {
     #[tokio::test]
     async fn concurrent_waits_share_the_same_relevant_wakeup() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let child = committed_child(&dispatch, "worker");
+        let dispatch = dispatch(&dir).await;
+        let child = committed_child(&dispatch, "worker").await;
         let child_dispatch = dispatch_for_thread(&dispatch, &child);
 
         let first = AgentThreadDispatch::wait_agent(
@@ -4201,22 +4224,22 @@ mod tests {
     #[tokio::test]
     async fn runtime_terminated_wakes_only_the_direct_parent() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
-        let sibling = committed_child(&dispatch, "sibling");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
+        let sibling = committed_child(&dispatch, "sibling").await;
         let leaf_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "leaf")
-            .unwrap();
+            .await.unwrap();
         let leaf = leaf_reservation.thread().clone();
-        leaf_reservation.commit().unwrap();
+        leaf_reservation.commit().await.unwrap();
         let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
         let sibling_dispatch = dispatch_for_thread(&dispatch, &sibling);
 
         dispatch
             .control
             .record_runner_event(&leaf.thread_id, RunnerEvent::RuntimeTerminated)
-            .unwrap();
+            .await.unwrap();
 
         let parent_result = AgentThreadDispatch::wait_agent(
             &parent_dispatch,
@@ -4246,14 +4269,14 @@ mod tests {
     #[tokio::test]
     async fn concurrent_waits_observe_an_already_pending_final_result() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
         let leaf_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "leaf")
-            .unwrap();
+            .await.unwrap();
         let leaf = leaf_reservation.thread().clone();
-        leaf_reservation.commit().unwrap();
+        leaf_reservation.commit().await.unwrap();
         let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
         dispatch
             .control
@@ -4264,11 +4287,11 @@ mod tests {
                     last_message: "done".into(),
                 },
             )
-            .unwrap();
+            .await.unwrap();
         let pending = dispatch
             .control
             .drain_mailbox(&parent.canonical_path)
-            .unwrap();
+            .await.unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].kind, subagents::MailboxKind::Result);
 
@@ -4298,14 +4321,14 @@ mod tests {
     #[tokio::test]
     async fn each_followup_turn_completion_notifies_parent_after_prior_ack() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
         let leaf_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "leaf")
-            .unwrap();
+            .await.unwrap();
         let leaf = leaf_reservation.thread().clone();
-        leaf_reservation.commit().unwrap();
+        leaf_reservation.commit().await.unwrap();
         let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
 
         dispatch
@@ -4317,7 +4340,7 @@ mod tests {
                     last_message: "first".into(),
                 },
             )
-            .unwrap();
+            .await.unwrap();
         let first_wait = AgentThreadDispatch::wait_agent(
             &parent_dispatch,
             WaitAgentV2Request {
@@ -4330,12 +4353,12 @@ mod tests {
         let first = dispatch
             .control
             .drain_mailbox(&parent.canonical_path)
-            .unwrap();
+            .await.unwrap();
         assert_eq!(first.len(), 1);
         dispatch
             .control
             .ack_mailbox(&parent.canonical_path, first[0].sequence)
-            .unwrap();
+            .await.unwrap();
 
         dispatch
             .control
@@ -4345,7 +4368,7 @@ mod tests {
                     turn_id: "turn-2".into(),
                 },
             )
-            .unwrap();
+            .await.unwrap();
         dispatch
             .control
             .record_runner_event(
@@ -4355,7 +4378,7 @@ mod tests {
                     last_message: "second".into(),
                 },
             )
-            .unwrap();
+            .await.unwrap();
         let second_wait = AgentThreadDispatch::wait_agent(
             &parent_dispatch,
             WaitAgentV2Request {
@@ -4368,7 +4391,7 @@ mod tests {
         let second = dispatch
             .control
             .drain_mailbox(&parent.canonical_path)
-            .unwrap();
+            .await.unwrap();
         assert_eq!(second.len(), 1);
         assert_eq!(
             second[0].message_id,
@@ -4379,14 +4402,14 @@ mod tests {
     #[tokio::test]
     async fn acknowledged_steer_event_does_not_stale_wake_root() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
+        let dispatch = dispatch(&dir).await;
         let root = AgentPath::root();
         let steer = dispatch
             .control
             .persist_main_steer(&root, "already consumed".into())
-            .unwrap();
+            .await.unwrap();
         dispatch.control.notify_main_steer();
-        dispatch.control.ack_mailbox(&root, steer.sequence).unwrap();
+        dispatch.control.ack_mailbox(&root, steer.sequence).await.unwrap();
 
         let mut wait = Box::pin(AgentThreadDispatch::wait_agent(
             &dispatch,
@@ -4420,9 +4443,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
         dispatch.chat_override = Some(gated_first_turn_chat(
@@ -4469,9 +4492,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
         let saw_followup = Arc::new(AtomicBool::new(false));
@@ -4508,12 +4531,12 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
         let events = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .unwrap();
+            .await.unwrap();
         assert_eq!(
             events
                 .iter()
@@ -4529,8 +4552,8 @@ mod tests {
     #[tokio::test]
     async fn send_message_is_queue_only_and_followup_uses_trigger_semantics() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let child = committed_child(&dispatch, "worker");
+        let dispatch = dispatch(&dir).await;
+        let child = committed_child(&dispatch, "worker").await;
 
         let sent = AgentThreadDispatch::send_message(
             &dispatch,
@@ -4559,7 +4582,7 @@ mod tests {
         let mailbox = dispatch
             .control
             .drain_mailbox(&child.canonical_path)
-            .unwrap();
+            .await.unwrap();
         assert_eq!(mailbox.len(), 1);
         assert!(!mailbox[0].trigger_turn);
     }
@@ -4586,9 +4609,9 @@ mod tests {
         )
         .unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut initial = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut initial = dispatch(&dir).await;
         initial.chat_override = Some(scripted_chat("initial"));
         let mut spawn = spawn_request(&memory_dir);
         spawn.request.agent_type = Some("reviewer".into());
@@ -4622,7 +4645,7 @@ mod tests {
             initial
                 .control
                 .runtime_descriptor(&child.thread_id)
-                .unwrap()
+                .await.unwrap()
                 .unwrap()
                 .model
                 .as_deref(),
@@ -4636,14 +4659,14 @@ mod tests {
 
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 2,
             },
         )
-        .unwrap();
+        .await.unwrap();
         let mut recovered = DefaultAgentThreadDispatch::for_test(
             control,
             AgentPath::root(),
@@ -4695,7 +4718,7 @@ mod tests {
             stored.runtime.chat_targets[0].base_url,
             "https://openai-current.invalid"
         );
-        let messages = sessions.get_messages(&child.session_id).unwrap();
+        let messages = sessions.get_messages(&child.session_id).await.unwrap();
         assert_eq!(
             messages
                 .iter()
@@ -4710,9 +4733,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut initial = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut initial = dispatch(&dir).await;
         initial.chat_override = Some(scripted_chat("initial"));
         let mut spawn = spawn_request(&memory_dir);
         spawn.request.model = Some("openai:pinned-model".into());
@@ -4735,14 +4758,14 @@ mod tests {
         }];
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 2,
             },
         )
-        .unwrap();
+        .await.unwrap();
         let recovered = DefaultAgentThreadDispatch::for_test(
             control,
             AgentPath::root(),
@@ -4767,7 +4790,7 @@ mod tests {
         assert!(recovered
             .control
             .drain_mailbox(&child.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
         assert!(recovered
             .runtime_requests
@@ -4782,9 +4805,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let dispatch = dispatch(&dir).await;
         let mut request = spawn_request(&memory_dir);
         request.request.model = Some("openai:pinned-model".into());
         request.runtime.chat_targets = vec![types::ChatTarget {
@@ -4806,7 +4829,7 @@ mod tests {
             dispatch
                 .control
                 .list_agents(&AgentPath::root(), None)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             1
         );
@@ -4844,9 +4867,9 @@ mod tests {
         )
         .unwrap();
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut initial = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut initial = dispatch(&dir).await;
         initial.chat_override = Some(scripted_chat("done"));
         let mut parent_request = spawn_request(&memory_dir);
         parent_request.request.task_name = "parent".into();
@@ -4895,14 +4918,14 @@ mod tests {
 
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 2,
             },
         )
-        .unwrap();
+        .await.unwrap();
         let mut recovered = DefaultAgentThreadDispatch::for_test(
             control,
             AgentPath::root(),
@@ -4945,9 +4968,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut initial = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut initial = dispatch(&dir).await;
         initial.chat_override = Some(scripted_chat("done"));
 
         let mut alpha_request = spawn_request(&memory_dir);
@@ -4995,14 +5018,14 @@ mod tests {
 
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 2,
             },
         )
-        .unwrap();
+        .await.unwrap();
         let mut recovered = DefaultAgentThreadDispatch::for_test(
             control,
             alpha.canonical_path.clone(),
@@ -5028,7 +5051,7 @@ mod tests {
         assert!(recovered
             .control
             .drain_mailbox(&leaf.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
         assert!(recovered
             .runtime_requests
@@ -5043,10 +5066,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
         let captured = Arc::new(Mutex::new(Vec::new()));
-        let mut dispatch = dispatch(&dir);
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(capturing_chat(Arc::clone(&captured), Some(1)));
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -5104,7 +5127,7 @@ mod tests {
             dispatch
                 .control
                 .resolve_target(&AgentPath::root(), "worker")
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Errored { ref message }
                 if message.contains("injected provider failure")
@@ -5113,11 +5136,11 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
         let child_users = sessions
             .get_messages(&spawned.thread.session_id)
-            .unwrap()
+            .await.unwrap()
             .into_iter()
             .filter(|message| message.role == "user")
             .filter_map(|message| message.content)
@@ -5175,9 +5198,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
         dispatch.chat_override = Some(gated_first_turn_chat(
@@ -5240,7 +5263,7 @@ mod tests {
                 let queued = dispatch
                     .control
                     .drain_mailbox(&spawned.thread.canonical_path)
-                    .unwrap();
+                    .await.unwrap();
                 if queued.len() == 2 {
                     break queued;
                 }
@@ -5263,7 +5286,7 @@ mod tests {
                 let starts = dispatch
                     .control
                     .status_events(&spawned.thread.thread_id)
-                    .unwrap()
+                    .await.unwrap()
                     .into_iter()
                     .filter(|event| {
                         matches!(event.event, subagents::RunnerEvent::TurnStarted { .. })
@@ -5281,7 +5304,7 @@ mod tests {
             while !dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .unwrap()
+                .await.unwrap()
                 .is_empty()
             {
                 tokio::task::yield_now().await;
@@ -5291,7 +5314,7 @@ mod tests {
         .expect("second generation must consume the admitted mailbox batch");
         assert!(sessions
             .get_messages(&spawned.thread.session_id)
-            .unwrap()
+            .await.unwrap()
             .iter()
             .any(|message| message.content.as_deref() == Some(expected_combined_input.as_str())));
         dispatch.runtime_manager.set_before_cleanup_hook(None);
@@ -5302,10 +5325,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
         drop(sessions);
-        let mut dispatch = dispatch(&dir);
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -5375,7 +5398,7 @@ mod tests {
             dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             2,
             "failed start must leave durable follow-up retryable"
@@ -5387,9 +5410,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
         let spawn = spawn_request(&memory_dir);
@@ -5470,7 +5493,7 @@ mod tests {
         let starts = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .unwrap()
+            .await.unwrap()
             .into_iter()
             .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
             .count();
@@ -5479,7 +5502,7 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
     }
 
@@ -5488,9 +5511,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
@@ -5547,7 +5570,7 @@ mod tests {
             dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             2
         );
@@ -5571,7 +5594,7 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
     }
 
@@ -5580,9 +5603,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
@@ -5624,7 +5647,7 @@ mod tests {
                 let starts = dispatch
                     .control
                     .status_events(&spawned.thread.thread_id)
-                    .unwrap()
+                    .await.unwrap()
                     .into_iter()
                     .filter(|event| {
                         matches!(event.event, subagents::RunnerEvent::TurnStarted { .. })
@@ -5645,7 +5668,7 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
         dispatch
             .runtime_manager
@@ -5657,9 +5680,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
         dispatch.chat_override = Some(gated_first_then_pending_chat(
@@ -5707,7 +5730,7 @@ mod tests {
             while dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .unwrap()
+                .await.unwrap()
                 .len()
                 != 1
             {
@@ -5745,7 +5768,7 @@ mod tests {
             while dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .unwrap()
+                .await.unwrap()
                 .len()
                 != 2
             {
@@ -5765,7 +5788,7 @@ mod tests {
         let starts = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .unwrap()
+            .await.unwrap()
             .into_iter()
             .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
             .count();
@@ -5789,9 +5812,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
@@ -5815,7 +5838,7 @@ mod tests {
             while dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .unwrap()
+                .await.unwrap()
                 .is_empty()
             {
                 tokio::task::yield_now().await;
@@ -5834,7 +5857,7 @@ mod tests {
         let starts = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .unwrap()
+            .await.unwrap()
             .into_iter()
             .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
             .count();
@@ -5846,7 +5869,7 @@ mod tests {
             dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .unwrap()
+                .await.unwrap()
                 .len(),
             1
         );
@@ -5857,9 +5880,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session("root-session", "test").unwrap();
-        let mut dispatch = dispatch(&dir);
+            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        sessions.ensure_session("root-session", "test").await.unwrap();
+        let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let checked = Arc::new(tokio::sync::Notify::new());
         let resume = Arc::new(tokio::sync::Notify::new());
@@ -5896,12 +5919,12 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .unwrap()
+            .await.unwrap()
             .is_empty());
         let events = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .unwrap();
+            .await.unwrap();
         assert_eq!(
             events
                 .iter()
@@ -5916,7 +5939,7 @@ mod tests {
             dispatch
                 .control
                 .resolve_target(&AgentPath::root(), spawned.thread.canonical_path.as_ref())
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -5930,13 +5953,13 @@ mod tests {
     #[tokio::test]
     async fn list_defaults_to_entire_root_and_resolves_relative_prefix() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
+        let dispatch = dispatch(&dir).await;
+        let parent = committed_child(&dispatch, "parent").await;
         let reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "child")
-            .unwrap();
-        reservation.commit().unwrap();
+            .await.unwrap();
+        reservation.commit().await.unwrap();
 
         let all =
             AgentThreadDispatch::list_agents(&dispatch, ListAgentsV2Request { path_prefix: None })
@@ -5962,7 +5985,7 @@ mod tests {
     #[tokio::test]
     async fn interrupt_rejects_root_and_self_before_runtime_lookup() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
+        let dispatch = dispatch(&dir).await;
         let root_error = AgentThreadDispatch::interrupt_agent(
             &dispatch,
             InterruptAgentV2Request {
@@ -5973,7 +5996,7 @@ mod tests {
         .unwrap_err();
         assert!(root_error.to_string().contains("root agent"));
 
-        let child = committed_child(&dispatch, "worker");
+        let child = committed_child(&dispatch, "worker").await;
         let child_dispatch = DefaultAgentThreadDispatch {
             control: Arc::clone(&dispatch.control),
             current_path: child.canonical_path.clone(),
@@ -5998,7 +6021,7 @@ mod tests {
     #[tokio::test]
     async fn wait_result_has_only_message_and_timed_out_fields() {
         let dir = tempfile::tempdir().unwrap();
-        let dispatch = dispatch(&dir);
+        let dispatch = dispatch(&dir).await;
         let (result, ()) = tokio::join!(
             AgentThreadDispatch::wait_agent(
                 &dispatch,
@@ -6011,7 +6034,7 @@ mod tests {
                 dispatch
                     .control
                     .persist_main_steer(&AgentPath::root(), "new root input".into())
-                    .unwrap();
+                    .await.unwrap();
                 dispatch.control.notify_main_steer();
             }
         );

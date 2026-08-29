@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use sqlx::sqlite::{
-    SqliteAutoVacuum, SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions,
-    SqliteSynchronous,
+    SqliteAutoVacuum, SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous,
 };
 use sqlx::ConnectOptions;
 
@@ -73,6 +72,16 @@ impl AstroDb {
 
     pub async fn open_pool(&self, spec: &DbSpec) -> DbResult<SqlitePool> {
         let path = spec.path(&self.home);
+        self.open_pool_at_path(spec, &path).await
+    }
+
+    /// Open a pool for an explicit database path while retaining the shared
+    /// connection policy and the spec's label/connection limit.
+    ///
+    /// Stores whose public constructor accepts a full path must use this
+    /// method; deriving the filename from [`DbSpec`] would silently open a
+    /// sibling database when the caller supplied a non-default filename.
+    pub async fn open_pool_at_path(&self, spec: &DbSpec, path: &Path) -> DbResult<SqlitePool> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -146,17 +155,48 @@ mod tests {
         let spec = DbSpec::new("fts5", "fts5_v1.db");
         let pool = db.open_pool(&spec).await.unwrap();
 
-        sqlx::query("CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(title, body, tokenize='unicode61')")
-            .execute(&pool).await.unwrap();
-        sqlx::query("INSERT INTO docs(rowid, title, body) VALUES (1, 'Rust', 'Systems programming')")
-            .execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(title, body, tokenize='unicode61')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO docs(rowid, title, body) VALUES (1, 'Rust', 'Systems programming')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let rows: Vec<(String,)> = sqlx::query_as("SELECT title FROM docs WHERE docs MATCH 'rust'")
-            .fetch_all(&pool).await.unwrap();
+            .fetch_all(&pool)
+            .await
+            .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].0, "Rust");
 
         pool.close().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn open_pool_at_path_uses_the_exact_filename() {
+        let dir = std::env::temp_dir().join(format!("astro-db-exact-path-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = AstroDb::new(&dir);
+        let spec = DbSpec::new("custom", "default.db");
+        let exact = dir.join("custom.db");
+
+        let pool = db.open_pool_at_path(&spec, &exact).await.unwrap();
+        sqlx::query("CREATE TABLE marker(id INTEGER PRIMARY KEY)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+
+        assert!(exact.is_file());
+        assert!(!dir.join(spec.filename).exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

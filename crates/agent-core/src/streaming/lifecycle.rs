@@ -632,7 +632,7 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "event-helper-test".into(),
             )
-            .unwrap(),
+            .await.unwrap(),
         );
         let context = session.create_turn_context("turn-1".into()).await;
         (dir, session, context)

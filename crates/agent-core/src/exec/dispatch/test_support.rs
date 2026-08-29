@@ -129,16 +129,18 @@ fn lifecycle_hooks() -> (Arc<hooks::PluginHookBus>, Arc<Mutex<Vec<String>>>) {
 }
 
 impl LifecycleTestApp {
-    pub fn new(
+    pub async fn new(
         memory_dir: PathBuf,
         root_thread_id: impl Into<String>,
         script: Vec<ScriptedTurn>,
     ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(&memory_dir)?;
         let root_thread_id = root_thread_id.into();
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))?;
-        sessions.ensure_session(&root_thread_id, "acceptance-root")?;
-        let store = AgentGraphStore::open(home::subagents_db_path(&memory_dir))?;
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await?;
+        sessions
+            .ensure_session(&root_thread_id, "acceptance-root")
+            .await?;
+        let store = AgentGraphStore::open(home::subagents_db_path(&memory_dir)).await?;
         let control = AgentControl::open(
             root_thread_id.clone(),
             store,
@@ -147,7 +149,8 @@ impl LifecycleTestApp {
                 max_depth: 8,
                 max_running: 4,
             },
-        )?;
+        )
+        .await?;
         let (chat_override, provider_calls) = scripted_chat(script);
         let (hook_bus, hook_events) = lifecycle_hooks();
         Ok(Self {
@@ -163,9 +166,9 @@ impl LifecycleTestApp {
         })
     }
 
-    fn dispatch_at(&self, path: &str) -> anyhow::Result<DefaultAgentThreadDispatch> {
+    async fn dispatch_at(&self, path: &str) -> anyhow::Result<DefaultAgentThreadDispatch> {
         let path = AgentPath::parse(path).map_err(anyhow::Error::msg)?;
-        let thread = self.control.resolve_desktop_target(path.as_str())?;
+        let thread = self.control.resolve_desktop_target(path.as_str()).await?;
         Ok(DefaultAgentThreadDispatch {
             control: Arc::clone(&self.control),
             current_path: path,
@@ -207,7 +210,7 @@ impl LifecycleTestApp {
             runtime: self.parent_runtime_material(),
         };
         Ok(
-            AgentThreadDispatch::spawn_agent(&self.dispatch_at(parent)?, request)
+            AgentThreadDispatch::spawn_agent(&self.dispatch_at(parent).await?, request)
                 .await?
                 .thread,
         )
@@ -219,7 +222,7 @@ impl LifecycleTestApp {
         message: &str,
     ) -> anyhow::Result<MessageAgentV2Result> {
         AgentThreadDispatch::send_message(
-            &self.dispatch_at("/root")?,
+            &self.dispatch_at("/root").await?,
             MessageAgentV2Request {
                 target: target.into(),
                 message: message.into(),
@@ -234,7 +237,7 @@ impl LifecycleTestApp {
         message: &str,
     ) -> anyhow::Result<MessageAgentV2Result> {
         AgentThreadDispatch::followup_task(
-            &self.dispatch_at("/root")?,
+            &self.dispatch_at("/root").await?,
             FollowupAgentDispatchRequest {
                 request: MessageAgentV2Request {
                     target: target.into(),
@@ -272,7 +275,7 @@ impl LifecycleTestApp {
 
     pub async fn interrupt(&self, target: &str) -> anyhow::Result<InterruptAgentV2Result> {
         AgentThreadDispatch::interrupt_agent(
-            &self.dispatch_at("/root")?,
+            &self.dispatch_at("/root").await?,
             InterruptAgentV2Request {
                 target: target.into(),
             },
@@ -294,9 +297,13 @@ impl LifecycleTestApp {
             self.runtime_manager.active_count() == 0,
             "cannot restart test app with an active runtime"
         );
-        let store = AgentGraphStore::open(home::subagents_db_path(&self.memory_dir))?;
-        store.cleanup_pending_reservations(&self.root_thread_id)?;
-        store.recover_running_as_interrupted(&self.root_thread_id)?;
+        let store = AgentGraphStore::open(home::subagents_db_path(&self.memory_dir)).await?;
+        store
+            .cleanup_pending_reservations(&self.root_thread_id)
+            .await?;
+        store
+            .recover_running_as_interrupted(&self.root_thread_id)
+            .await?;
         self.control = AgentControl::open(
             self.root_thread_id.clone(),
             store,
@@ -305,15 +312,17 @@ impl LifecycleTestApp {
                 max_depth: 8,
                 max_running: 4,
             },
-        )?;
+        )
+        .await?;
         self.runtime_manager = Arc::new(AgentRuntimeManager::default());
         self.runtime_requests = Arc::new(RuntimeRequestRegistry::default());
         (self.chat_override, self.provider_calls) = scripted_chat(script);
         let previous_hook_events = Arc::clone(&self.hook_events);
         (self.hook_bus, self.hook_events) = lifecycle_hooks();
-        let sessions = session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))?;
+        let sessions =
+            session::SessionStore::open_sessions_dir(&self.memory_dir.join("data")).await?;
         anyhow::ensure!(
-            sessions.get_session(&self.root_thread_id)?.is_some(),
+            sessions.get_session(&self.root_thread_id).await?.is_some(),
             "root session disappeared during restart"
         );
         Ok(previous_hook_events)
@@ -326,7 +335,7 @@ impl LifecycleTestApp {
     ) -> anyhow::Result<()> {
         tokio::time::timeout(Duration::from_secs(3), async {
             loop {
-                let status = self.status(target)?;
+                let status = self.status(target).await?;
                 if status.kind() == expected {
                     return Ok::<_, anyhow::Error>(());
                 }
@@ -341,24 +350,30 @@ impl LifecycleTestApp {
         Ok(())
     }
 
-    pub fn status(&self, target: &str) -> anyhow::Result<AgentStatusV2> {
-        Ok(self.control.resolve_desktop_target(target)?.status)
+    pub async fn status(&self, target: &str) -> anyhow::Result<AgentStatusV2> {
+        Ok(self.control.resolve_desktop_target(target).await?.status)
     }
 
     pub fn is_running(&self, thread_id: &str) -> bool {
         self.runtime_manager.is_running(thread_id)
     }
 
-    pub fn pending_mailbox(&self, target: &str) -> anyhow::Result<usize> {
-        let thread = self.control.resolve_desktop_target(target)?;
-        Ok(self.control.drain_mailbox(&thread.canonical_path)?.len())
+    pub async fn pending_mailbox(&self, target: &str) -> anyhow::Result<usize> {
+        let thread = self.control.resolve_desktop_target(target).await?;
+        Ok(self
+            .control
+            .drain_mailbox(&thread.canonical_path)
+            .await?
+            .len())
     }
 
-    pub fn session_contents(&self, target: &str) -> anyhow::Result<Vec<String>> {
-        let thread = self.control.resolve_desktop_target(target)?;
+    pub async fn session_contents(&self, target: &str) -> anyhow::Result<Vec<String>> {
+        let thread = self.control.resolve_desktop_target(target).await?;
         Ok(
-            session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))?
-                .get_messages(&thread.session_id)?
+            session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))
+                .await?
+                .get_messages(&thread.session_id)
+                .await?
                 .into_iter()
                 .filter_map(|message| message.content)
                 .collect(),
@@ -389,14 +404,16 @@ impl LifecycleTestApp {
             .unwrap_or(usize::MAX)
     }
 
-    pub fn session_row_count(&self) -> anyhow::Result<usize> {
-        Ok(self.session_ids()?.len())
+    pub async fn session_row_count(&self) -> anyhow::Result<usize> {
+        Ok(self.session_ids().await?.len())
     }
 
-    pub fn session_ids(&self) -> anyhow::Result<Vec<String>> {
-        let sessions = session::SessionStore::open_sessions_dir(&self.memory_dir.join("data"))?;
+    pub async fn session_ids(&self) -> anyhow::Result<Vec<String>> {
+        let sessions =
+            session::SessionStore::open_sessions_dir(&self.memory_dir.join("data")).await?;
         Ok(sessions
-            .list_sessions(session::SessionListFilter::Active, 100)?
+            .list_sessions(session::SessionListFilter::Active, 100)
+            .await?
             .into_iter()
             .map(|session| session.id)
             .collect())
