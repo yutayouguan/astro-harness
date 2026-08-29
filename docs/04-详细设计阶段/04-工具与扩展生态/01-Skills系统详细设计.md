@@ -1,5 +1,7 @@
 # Skills 系统详细设计
 
+> **Harness 当前基线（2026-08-29）**：Skill 是可按需加载的 scaffold/能力包，由 `agent-skills` 管理安装、加载、注册表和备份。Skill frontmatter 的 `astro_tools` 只能 additive 放宽 toolset，不能跳过 StepContext、审批、sandbox 或 hooks。Skill 执行不隐式等于 subagent。
+
 > 版本：v2.0 | 日期：2026-08-10 | 状态：草稿
 > 对应需求：F-04 Skills 系统、F-12 自我进化引擎、F-23 插件生态、F-30 子 Agent 派生
 > 参考模型：Claude Code Skills Architecture

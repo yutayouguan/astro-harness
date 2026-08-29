@@ -2,6 +2,8 @@
 
 > 阶段：系统设计 | 状态：定稿 | 说明：58 个 Commands + 7 种流式事件
 
+> **当前 Harness 基线（2026-08-29）**：命令数量与旧事件枚举是历史快照。当前对话主链以 Thread `submit/resume/subscribe`、`agent-protocol::Op`、`EventMsg` 和 rollout + live boundary 为准；Tauri command 是桌面适配层，不是 Agent Harness 的事实源。
+
 ## 错误返回规范
 
 所有 Command 统一返回 `Result<T, AppError>`，前端收到的错误结构如下：

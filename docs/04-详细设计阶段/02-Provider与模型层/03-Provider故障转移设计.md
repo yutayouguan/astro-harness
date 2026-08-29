@@ -1,5 +1,7 @@
 # Provider 故障转移与网络恢复设计
 
+> **Harness 当前基线（2026-08-29）**：`Session.chat_targets` 保存 primary + 有界 fallback 链，只有在首个用户可见 chunk 前失败才能切换。五类 `AuxiliaryTask` 可配置独立目标链，缺省回退 primary。已输出部分内容后不做跨 Provider 拼接续写。
+
 > 版本：v2.0 | 更新日期：2026-08-28 | 状态：网络恢复待实施，显式 fallback 已实现
 >
 > 对应需求：F-02 Provider 管理、F-14 错误处理与容错、F-38 人工接管与执行控制

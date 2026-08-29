@@ -1,5 +1,7 @@
 # MCP 接入系统详细设计
 
+> **Harness 当前基线（2026-08-29）**：`McpHub` 是每 Agent 进程级连接池，工具以 `mcp__{server_id}__{tool_name}` 注册。当 `tool_search` 可用时默认 Deferred，否则回退 Direct；激活不等于授权。Server instructions 是不可信 dynamic context，MCP prompt/resource 不得被当作 system authority。
+
 > 阶段：详细设计  
 > 状态：已决策，分阶段实施  
 > 适用范围：Astro MCP Host/Client、桌面端 MCP 管理界面、工具注册与审批  

@@ -263,4 +263,3 @@ Graph、mailbox和状态投影持久化到 `subagents-v2.db`，真实对话时�
 - **历史参考**：仅用于解释决策演进，不能覆盖当前契约。
 
 `docs/superpowers/plans/`、`docs/superpowers/specs/` 和 `_v0.3规划/` 保留作为时点记录，不随当前 Harness 重写。当其与本文或当前源码冲突时，以当前源码、本文和对应详细设计为准。
-

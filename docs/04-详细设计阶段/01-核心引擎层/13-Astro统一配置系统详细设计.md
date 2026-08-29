@@ -1,5 +1,7 @@
 # Astro 统一配置系统详细设计
 
+> **Harness 定位（2026-08-29）**：配置是 Harness 的输入，不是可在 step 中任意变化的全局变量。Thread 设置、model context、interaction mode、tool gates、MCP 和 project trust 需在 turn/step 边界捕获快照。Astro 配置仅从 `~/.astro` 和可信项目 `.astro` 加载，不读取 `.codex` 作为运行配置。
+
 > 状态：已实现。Astro 对齐 Codex 的分层、项目发现、信任门控、来源追踪和请求快照语义，
 > 但使用 Astro 自有路径 `.astro/config.toml`，不会读取 `.codex`。
 

@@ -1,5 +1,7 @@
 # Agent Persona 与 System Prompt 注入设计
 
+> **Harness 当前基线（2026-08-29）**：当前 scaffold 契约是 `PromptContract { base_instructions, context, context_sections, usage }` + 用户输入 + 独立 `CompletionRequest.tools`。SOUL/MEMORY/USER/daily/recall/Skills/AGENTS/TOOLS/interaction guidance 作为有来源的 dynamic context 装配。本文其余固定 8 槽位和 `SystemPromptBuilder` 伪代码仅作历史设计。
+
 > 版本：v1.0 | 日期：2026-08-07 | 状态：草稿
 > 对应需求：F-11 Agent 人格配置（Persona）、M-13 Agent 人格配置模块
 

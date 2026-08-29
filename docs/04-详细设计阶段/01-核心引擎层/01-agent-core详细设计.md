@@ -1,5 +1,7 @@
 # agent-core 详细设计
 
+> **Agent Harness 当前基线（2026-08-29）**：`agent-core` 是 Harness 编排中心，当前核心对象是 `Session`（`AgentLoop` 为兼容别名）、`AstroThread`、`SessionTask`、`TurnContext` 和 `StepContext`。本文中 `build_chat_request/parse_response/execute_tool_calls` 纯函数式 Agent 及 Repository 归属的旧伪代码不是当前实现。以 [Agent Harness 执行外壳](14-Agent-Harness执行外壳详细设计.md) 和当前源码为准。
+
 > 阶段：详细设计 | 状态：草稿 | 说明：核心数据类型、run_agent_turn 编排循环、Repository 层、记忆子系统
 
 ## 1. Crate 职责边界

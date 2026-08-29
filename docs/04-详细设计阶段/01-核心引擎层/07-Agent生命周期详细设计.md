@@ -1,5 +1,7 @@
 # Agent 生命周期详细设计
 
+> **Harness 当前基线（2026-08-29）**：生命周期分为 Thread/Session/Task/Turn/Step/Attempt 六级。`AstroThread` 拥有长生命周期 submission loop，`Session` 只允许一个 active turn，`RegularTask` 驱动当前 turn，`StepContext` 冻结单次 sampling 边界。详见 [Agent Harness 执行外壳](14-Agent-Harness执行外壳详细设计.md)。
+
 > 版本：v2.29
 > 日期：2026-08-20
 > 状态：部分实现（事件恢复与 Phase A/B/D/E 已完成；Phase C/F 待续）

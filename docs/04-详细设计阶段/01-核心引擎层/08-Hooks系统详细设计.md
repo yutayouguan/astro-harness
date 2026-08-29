@@ -1,5 +1,7 @@
 # Hooks 系统详细设计
 
+> **Harness 当前基线（2026-08-29）**：当前是 Plugin/Gateway/Shell 三总线 `HookRuntime`。运行时事件使用 canonical 精确名称，核心结果为 Continue/Block/Modify/ReplaceText/InjectContext/KeepGoing。Hook 是 Harness 的可控扩展点，不替代工具审批、sandbox 或 rollout。旧 18 事件/HookRegistry/WASM 示例仅作历史设计。
+
 > 版本：v1.0 | 日期：2026-08-10 | 状态：草稿
 > 对应需求：F-14 扩展性与可组合管线
 > 上游文档：[02-agent-runtime详细设计.md](02-agent-runtime详细设计.md)（round_loop、工具执行流）

@@ -1,5 +1,7 @@
 # agent-runtime 详细设计
 
+> **Agent Harness 当前基线（2026-08-29）**：旧独立 `agent-runtime` crate/`round_loop` 设计已合并到 `agent-core::{runtime,tasks,streaming}`。入口是 `AstroThread -> submission_loop -> SessionTask::run -> streaming::multi_turn::run_turn`，不再以 `delegate_task`、Planner 或 HumanGuard 作为主状态机。以 [Agent Harness 执行外壳](14-Agent-Harness执行外壳详细设计.md) 为准。
+
 > 本文档由原 02-agent-runtime详细设计 和 34-agent-runtime执行引擎 合并而成
 
 ---

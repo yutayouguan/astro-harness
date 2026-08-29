@@ -1,5 +1,7 @@
 # agent-providers 详细设计
 
+> **Agent Harness 边界（2026-08-29）**：Provider 层不拥有 turn loop、工具权限或恢复策略。它接收带 `PromptContract` 投影、history 和 `Vec<ToolDefinition>` 的 `CompletionRequest`，输出统一 `StreamChunk`。Function/Freeform/Namespace/ToolSearch/WebSearch 必须在支持的 Provider 中原生传输，仅在不支持时按可保真语义降级。
+
 > 阶段：详细设计 | 状态：草稿 | 说明：各 Provider 客户端实现、ProviderRegistry 路由、流式响应
 
 ## 1. 架构概述

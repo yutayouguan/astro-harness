@@ -1,5 +1,7 @@
 # Codex 原生工具协议与 Code Mode 详细设计
 
+> **Harness 定位（2026-08-29）**：本文描述 Agent Harness 的 Tool + Environment 子系统。Model 只产生原生调用意图；工具发现、历史成对、V8 cell、真实执行、审批、沙箱和观测均由 Harness 负责。总体闭环见 [Agent Harness 执行外壳](../01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。
+
 > 阶段：详细设计
 >
 > 状态：已实现

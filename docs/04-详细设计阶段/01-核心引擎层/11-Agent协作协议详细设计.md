@@ -1,5 +1,7 @@
 # Agent 协作协议详细设计
 
+> **Harness 当前基线（2026-08-29）**：已落地的协作面是 V2 Agent Graph + durable mailbox + 六个模型工具。Debate/MapReduce/Voting/MessageBus 等高层协议只能在该基础上实现，当前无完整执行路径的部分统一标记为目标设计。
+
 > 版本：v1.0 | 日期：2026-08-12 | 状态：草稿
 > 对应需求：F-30 子 Agent 派生（扩展）、F-31 多 Agent 协作
 >

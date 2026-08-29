@@ -1,5 +1,7 @@
 # Tauri 桌面端详细设计
 
+> **Harness 边界（2026-08-29）**：Tauri 是 Harness 宿主/投影层，当前默认在进程内启动 `agent-server::run_embedded()`，通过 Thread RPC 提交 `Op`并消费 rollout + live 事件。AppState 不应复制 SessionTask、ToolRouter 或恢复状态机。
+
 > 阶段：详细设计 | 状态：草稿 | 说明：AppState 依赖注入容器、Registry 初始化与生命周期
 
 ## 1. AppState 设计
