@@ -6,6 +6,7 @@ import { DialogProvider } from "../hooks/ui/DialogContext";
 import { ChatMarkdown } from "../components/chat/ChatMarkdown";
 import MsgActivity from "../components/chat/MsgActivity";
 import MsgActivityGroup from "../components/chat/MsgActivityGroup";
+import MsgReasoning from "../components/chat/MsgReasoning";
 import { MsgTimeline, MsgTimelineStep } from "../components/chat/MsgTimeline";
 import ChatView, { MessageActions } from "../components/chat/ChatView";
 import type { ChatActivity, ChatMessage } from "../types";
@@ -79,6 +80,13 @@ function ChatAnswerPanel() {
           <div className="msg-stack">
             <article className="bubble assistant">
               <MsgTimeline>
+                <MsgTimelineStep kind="reasoning">
+                  <MsgReasoning
+                    reasoning="先梳理用户目标，再检查工具执行结果与当前任务进度。"
+                    active={false}
+                    durationSec={65}
+                  />
+                </MsgTimelineStep>
                 <MsgTimelineStep kind="tool">
                   <MsgActivityGroup
                     activities={groupedActivities}

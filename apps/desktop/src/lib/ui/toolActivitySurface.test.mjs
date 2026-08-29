@@ -8,19 +8,19 @@ async function source(path) {
   return readFile(new URL(path, root), "utf8");
 }
 
-test("collapsed tool activity reads as a rounded status row", async () => {
+test("reasoning and tool activity share one quiet status-row contract", async () => {
   const [index, css] = await Promise.all([
     source("styles/index.css"),
-    source("styles/features/chat/tool-activity-polish.css"),
+    source("styles/features/chat/activity-surfaces.css"),
   ]);
 
-  assert.match(index, /activity-groups\.css[\s\S]*tool-activity-polish\.css/);
-  assert.match(css, /> \.msg-activity \{/);
-  assert.match(css, /border-radius: 11px/);
-  assert.match(css, /min-height: 38px/);
+  assert.match(index, /tool-activity-polish\.css[\s\S]*activity-surfaces\.css/);
+  assert.match(css, /--activity-row-height: 36px/);
+  assert.match(css, /\.msg-reasoning,[\s\S]*> \.msg-activity \{/);
+  assert.match(css, /border-radius: var\(--activity-row-radius\)/);
   assert.match(
     css,
-    /msg-timeline-step:has\(> \.msg-timeline-body > \.msg-activity\)[\s\S]*padding-top: 10px/,
+    /\.msg-reasoning-toggle,[\s\S]*\.msg-activity-toggle,[\s\S]*\.msg-activity-summary[\s\S]*min-height: var\(--activity-row-height\)/,
   );
   assert.doesNotMatch(css, /border-radius: 999px/);
 });
@@ -42,11 +42,26 @@ test("grouped activity rows and reply icons share balanced alignment", async () 
 });
 
 test("expanded tool activity gains depth while running state avoids full-card glow", async () => {
-  const css = await source("styles/features/chat/tool-activity-polish.css");
+  const css = await source("styles/features/chat/activity-surfaces.css");
 
   assert.match(css, /> \.msg-activity\.is-open \{/);
   assert.match(css, /\.msg-activity\.is-open[\s\S]*\.msg-activity-collapse-inner/);
-  assert.match(css, /> \.msg-activity\.is-running \{[\s\S]*animation: none/);
+  assert.match(css, /\.msg-reasoning\.is-active \{[\s\S]*animation: none/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   assert.match(css, /prefers-reduced-transparency: reduce/);
+});
+
+test("tool parameters collapse independently and TODO status docks to the composer", async () => {
+  const [activity, progress, css] = await Promise.all([
+    source("components/chat/MsgActivity.tsx"),
+    source("components/chat/TodoProgress.tsx"),
+    source("styles/features/chat/activity-surfaces.css"),
+  ]);
+
+  assert.match(activity, /const \[inputOpen, setInputOpen\] = useState\(false\)/);
+  assert.match(activity, /className="msg-activity-io-disclosure"/);
+  assert.match(activity, /msg-activity-input-collapse/);
+  assert.match(progress, /className="todo-progress-current"/);
+  assert.match(css, /\.composer-shell \.todo-progress-float \{[\s\S]*align-self: flex-start/);
+  assert.match(css, /\.composer-shell \.todo-progress-popover \{[\s\S]*transform-origin: left bottom/);
 });

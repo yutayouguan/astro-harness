@@ -102,7 +102,8 @@ export default function MsgActivity({
       mediaItems
         .filter(
           (m) =>
-            !looksLikeRelativeLocalPath(m.path) || Boolean(mediaBaseDir?.trim()),
+            !looksLikeRelativeLocalPath(m.path) ||
+            Boolean(mediaBaseDir?.trim()),
         )
         .map((m) => ({
           ...m,
@@ -113,6 +114,7 @@ export default function MsgActivity({
   const hasMedia = previewMedia.length > 0;
   const canToggle = hasBody || hasMedia;
   const [open, setOpen] = useState(() => defaultOpen && canToggle);
+  const [inputOpen, setInputOpen] = useState(false);
   const running = activity.status === "running";
   const liveSec = useLiveElapsedSec(running, activity.at ?? null);
 
@@ -192,7 +194,7 @@ export default function MsgActivity({
         ) : (
           <div className="msg-activity-summary">{summary}</div>
         )}
-        {(hasMedia || input || output) ? (
+        {hasMedia || input || output ? (
           <div className="msg-activity-collapse">
             <div className="msg-activity-collapse-inner">
               {hasMedia ? (
@@ -210,16 +212,38 @@ export default function MsgActivity({
               {input || output ? (
                 <div className="msg-activity-io">
                   {input ? (
-                    <div className="msg-activity-io-block">
-                      <span className="msg-activity-io-label">
-                        {t("chat.activityInput")}
-                      </span>
-                      <div className="msg-activity-detail is-input">
-                        <ChatMarkdown
-                          content={input}
-                          compact
-                          mediaBaseDir={mediaBaseDir}
+                    <div className="msg-activity-io-block is-input">
+                      <button
+                        type="button"
+                        className="msg-activity-io-disclosure"
+                        aria-expanded={inputOpen}
+                        onClick={() => setInputOpen((value) => !value)}
+                      >
+                        <span className="msg-activity-io-label">
+                          {t("chat.activityInput")}
+                        </span>
+                        <MorphToggleIcon
+                          active={inputOpen}
+                          activeIcon={ChevronUpData}
+                          inactiveIcon={ChevronDownData}
+                          size={13}
+                          strokeWidth={1.8}
+                          className="msg-activity-io-chevron"
+                          aria-hidden
                         />
+                      </button>
+                      <div
+                        className={`msg-activity-input-collapse${inputOpen ? " is-open" : ""}`}
+                      >
+                        <div className="msg-activity-input-collapse-inner">
+                          <div className="msg-activity-detail is-input">
+                            <ChatMarkdown
+                              content={input}
+                              compact
+                              mediaBaseDir={mediaBaseDir}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ) : null}

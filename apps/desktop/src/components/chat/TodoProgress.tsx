@@ -29,6 +29,7 @@ export default function TodoProgress({ messages, onOpenFileReview }: Props) {
   const done = plan.items.filter((it) => it.done).length;
   const currentStep = done + 1;
   const allDone = done === total;
+  const currentItem = allDone ? plan.title : plan.items[done]?.text;
   const progressPct = Math.round((done / total) * 100);
   const progressStyle = {
     "--todo-progress": `${progressPct * 3.6}deg`,
@@ -73,6 +74,14 @@ export default function TodoProgress({ messages, onOpenFileReview }: Props) {
               ? `${total} / ${total} 步已完成`
               : `第 ${currentStep} / ${total} 步`}
           </span>
+          {currentItem ? (
+            <>
+              <span className="todo-progress-current-separator" aria-hidden>
+                ·
+              </span>
+              <span className="todo-progress-current">{currentItem}</span>
+            </>
+          ) : null}
         </button>
 
         {openPanel === "todo" && (

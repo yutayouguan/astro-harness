@@ -1,9 +1,14 @@
 /** 思考过程折叠块。 */
 import { useEffect, useRef, useState } from "react";
 import { Lightbulb } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useLiveElapsedSec } from "../../hooks/chat/useLiveElapsedSec";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 /** 思考过程折叠块入参 */
 type Props = {
@@ -44,25 +49,44 @@ export default function MsgReasoning({
   const liveStart = active ? (startedAtMs ?? localStart) : null;
   const liveSec = useLiveElapsedSec(active, liveStart);
 
-  const label =
-    active && durationSec == null
-      ? liveSec != null
-        ? t("chat.thinkingWithTime", { s: formatElapsedSec(liveSec) })
-        : t("chat.thinking")
-      : durationSec != null
-        ? t("chat.thinkingDoneWithTime", { s: formatElapsedSec(durationSec) })
-        : t("chat.thinkingDone");
+  const label = active ? t("chat.thinking") : t("chat.thinkingDone");
+  const elapsedSec = active ? liveSec : durationSec;
 
   return (
-    <div className={`msg-reasoning ${active ? "is-active" : ""} ${open ? "is-open" : ""}`}>
+    <div
+      className={`msg-reasoning ${active ? "is-active" : ""} ${open ? "is-open" : ""}`}
+    >
       <button
         type="button"
         className="msg-reasoning-toggle"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <Lightbulb size={15} strokeWidth={1.75} className="msg-reasoning-icon" aria-hidden />
+        <Lightbulb
+          size={15}
+          strokeWidth={1.75}
+          className="msg-reasoning-icon"
+          aria-hidden
+        />
         <span className="msg-reasoning-label">{label}</span>
+        {elapsedSec != null ? (
+          <span
+            className="msg-reasoning-duration"
+            aria-label={formatElapsedSec(elapsedSec)}
+          >
+            <span aria-hidden>·</span>
+            {formatElapsedSec(elapsedSec)}
+          </span>
+        ) : null}
+        <MorphToggleIcon
+          active={open}
+          activeIcon={ChevronUpData}
+          inactiveIcon={ChevronDownData}
+          size={14}
+          strokeWidth={1.75}
+          className="msg-reasoning-chevron"
+          aria-hidden
+        />
       </button>
       {open ? <pre className="msg-reasoning-body">{reasoning}</pre> : null}
     </div>
