@@ -1076,6 +1076,15 @@ export default function ChatView({
   }, []);
 
   const loadMentionSources = useCallback(async () => {
+    // 媒体预览只依赖本地工作区路径，不应被较重的 Agent 配置加载失败连带清空。
+    // 该命令不依赖 backend 会话，应用刚启动时也能先让 generated/... 可解析。
+    try {
+      const workspace = await invoke<string>("get_default_workspace_path");
+      const normalized = workspace.trim();
+      if (normalized) setMediaBaseDir(normalized);
+    } catch {
+      // 保留已有路径；后续 get_config 成功时仍会刷新。
+    }
     try {
       const cfg = await invoke<{
         workspace_dir: string;
@@ -1086,11 +1095,13 @@ export default function ChatView({
       setActiveAgentId(cfg.active_agent_id ?? null);
       const scopedId = agentId ?? cfg.active_agent_id;
       const scoped = cfg.agents?.find((a) => a.id === scopedId);
-      setMediaBaseDir(scoped?.path?.trim() || cfg.workspace_dir || null);
+      const configuredWorkspace =
+        scoped?.path?.trim() || cfg.workspace_dir?.trim();
+      if (configuredWorkspace) setMediaBaseDir(configuredWorkspace);
     } catch {
       setAgents([]);
       setActiveAgentId(null);
-      setMediaBaseDir(null);
+      // Agent 列表失败不影响已经解析出的媒体工作区。
     }
     try {
       const list = await invoke<InstalledSkill[]>("list_installed_skills");
