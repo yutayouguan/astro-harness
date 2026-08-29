@@ -50,7 +50,7 @@ pub struct SandboxHealth {
     pub detail: String,
 }
 
-/// Structured process result retained for sandbox-denial analysis and retry.
+/// 结构化进程结果，用于沙箱拒绝分析和重试。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecToolCallOutput {
     pub exit_code: i32,
@@ -84,8 +84,8 @@ impl ExecToolCallOutput {
     }
 }
 
-/// Conservative classifier for the retry gate: only a failed,
-/// sandboxed attempt with a known denial signal is eligible for escalation.
+/// 重试门控的保守分类器：仅当沙箱模式下执行失败且包含已知拒绝信号时，
+/// 才有资格提升权限重试。
 pub fn is_likely_sandbox_denied(sandbox_mode: SandboxMode, output: &ExecToolCallOutput) -> bool {
     if sandbox_mode == SandboxMode::DangerFullAccess || output.exit_code == 0 {
         return false;
@@ -118,8 +118,8 @@ pub fn is_likely_sandbox_denied(sandbox_mode: SandboxMode, output: &ExecToolCall
 pub struct SandboxPolicy {
     pub mode: SandboxMode,
     pub writable_roots: Vec<PathBuf>,
-    /// Restricted read roots. When non-empty, only these paths are readable;
-    /// when empty, the default `(allow file-read*)` grants full read access.
+    /// 受限读取根目录。非空时仅允许读取这些路径；
+    /// 为空时使用默认的 `(allow file-read*)` 授予完整读取权限。
     pub readable_roots: Vec<PathBuf>,
     pub network_access: bool,
     pub managed_network: Option<ManagedNetworkSandboxContext>,
@@ -151,11 +151,10 @@ impl SandboxPolicy {
         })
     }
 
-    /// Allow writes across the filesystem while keeping network policy independent.
+    /// 允许对整个文件系统的写入，同时保持网络策略独立。
     ///
-    /// Unlike [`SandboxMode::DangerFullAccess`], this policy still runs through the
-    /// platform sandbox, so `network_access = false` and protected workspace metadata
-    /// remain enforceable.
+    /// 与 [`SandboxMode::DangerFullAccess`] 不同，此策略仍通过平台沙箱执行，
+    /// 因此 `network_access = false` 和受保护的工作区元数据仍然可强制执行。
     pub fn unrestricted_file_system(
         execution_root: impl AsRef<Path>,
         network_access: bool,
@@ -173,10 +172,10 @@ impl SandboxPolicy {
         )
     }
 
-    /// Restrict file reads to only the specified roots.
+    /// 将文件读取限制为仅指定的根目录。
     ///
-    /// Platform-specific defaults (like `/usr`, `/bin`, `/dev`) are always readable.
-    /// When `roots` is empty, this is a no-op (full read remains).
+    /// 平台特定的默认路径（如 `/usr`、`/bin`、`/dev`）始终可读。
+    /// 当 `roots` 为空时，此操作无效（保持完整读取权限）。
     pub fn with_restricted_read(mut self, roots: Vec<PathBuf>) -> Self {
         self.readable_roots = roots;
         self
@@ -278,7 +277,7 @@ pub enum SandboxErr {
     BackendUnavailable(String),
 }
 
-/// Compatibility alias for the legacy public name.
+/// 兼容旧版公开名称的类型别名。
 pub type SandboxError = SandboxErr;
 
 #[derive(Debug, Clone, Default)]

@@ -14,7 +14,7 @@ const BWRAP_BINARY: &str = "bwrap";
 
 const PROTECTED_METADATA_DIRS: &[&str] = &[".git", ".agents", ".astro", ".codex"];
 
-/// Probe whether bubblewrap is available on the system.
+/// 探测系统上是否可用 bubblewrap。
 pub fn probe_bwrap() -> Option<String> {
     Command::new("which")
         .arg(BWRAP_BINARY)
@@ -31,27 +31,27 @@ pub fn probe_bwrap() -> Option<String> {
         })
 }
 
-/// Build a bwrap command wrapping the given program under the sandbox policy.
+/// 在沙箱策略下构建包裹指定程序的 bwrap 命令。
 pub fn bwrap_command(policy: &SandboxPolicy, program: &str) -> Command {
     let bwrap_path = probe_bwrap().unwrap_or_else(|| BWRAP_BINARY.to_string());
     let mut cmd = Command::new(bwrap_path);
 
-    // Global read-only root
+    // 全局只读根目录
     cmd.args(["--ro-bind", "/", "/"]);
 
-    // Minimal device tree
+    // 最小设备树
     cmd.args(["--dev", "/dev"]);
 
-    // Tmpfs for /tmp
+    // /tmp 使用 tmpfs
     cmd.args(["--tmpfs", "/tmp"]);
 
-    // Writable roots
+    // 可写根目录
     if policy.mode == SandboxMode::WorkspaceWrite {
         for root in &policy.writable_roots {
             let root_str = root.to_string_lossy();
             cmd.args(["--bind", &root_str, &root_str]);
 
-            // Protect metadata directories by re-mounting read-only
+            // 将元数据目录重新挂载为只读以保护它们
             for protected in PROTECTED_METADATA_DIRS {
                 let protected_path = root.join(protected);
                 if protected_path.exists() {
@@ -62,7 +62,7 @@ pub fn bwrap_command(policy: &SandboxPolicy, program: &str) -> Command {
         }
     }
 
-    // Process isolation
+    // 进程隔离
     cmd.args([
         "--unshare-user",
         "--unshare-pid",
@@ -73,12 +73,12 @@ pub fn bwrap_command(policy: &SandboxPolicy, program: &str) -> Command {
         "ALL",
     ]);
 
-    // Network isolation
+    // 网络隔离
     if let Some(managed_network) = &policy.managed_network {
         if !managed_network.allow_local_binding {
             cmd.arg("--unshare-net");
         }
-        // Inject proxy environment variables
+        // 注入代理环境变量
         for port in &managed_network.loopback_ports {
             let proxy_url = format!("http://127.0.0.1:{port}");
             cmd.args(["--setenv", "HTTP_PROXY", &proxy_url]);
@@ -93,21 +93,21 @@ pub fn bwrap_command(policy: &SandboxPolicy, program: &str) -> Command {
         cmd.arg("--unshare-net");
     }
 
-    // The actual command
+    // 实际执行的命令
     cmd.arg("--").arg(program);
 
     cmd
 }
 
-/// Build a tokio async command wrapping the given program under the sandbox policy.
+/// 在沙箱策略下构建包裹指定程序的 tokio 异步命令。
 pub fn bwrap_tokio_command(policy: &SandboxPolicy, program: &str) -> tokio::process::Command {
     let std_cmd = bwrap_command(policy, program);
     tokio::process::Command::from(std_cmd)
 }
 
-/// Check if a given exit code indicates a seccomp/signal-based denial.
+/// 检查给定的退出码是否表示 seccomp/信号导致的拒绝。
 pub fn is_seccomp_signal_exit(exit_code: i32) -> bool {
-    // SIGSYS = 31 on Linux; exit code = 128 + signal number
+    // Linux 上 SIGSYS = 31；退出码 = 128 + 信号编号
     exit_code == 128 + 31
 }
 

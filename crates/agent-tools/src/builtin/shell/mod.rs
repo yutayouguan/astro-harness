@@ -3,6 +3,7 @@
 pub mod apply_patch;
 pub mod browser;
 pub mod code_exec;
+pub mod code_mode;
 pub mod context_remaining;
 pub mod exec_command;
 pub mod jobs;

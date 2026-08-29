@@ -950,6 +950,267 @@ pub(crate) fn tool_may_require_permission(name: &str, args: &serde_json::Value) 
     }
 }
 
+#[derive(serde::Deserialize)]
+struct CodeModeWaitArgs {
+    cell_id: String,
+    #[serde(default = "default_code_mode_wait_ms")]
+    yield_time_ms: u64,
+    #[serde(default = "default_code_mode_max_tokens")]
+    max_tokens: usize,
+    #[serde(default)]
+    terminate: bool,
+}
+
+fn default_code_mode_wait_ms() -> u64 {
+    10_000
+}
+
+fn default_code_mode_max_tokens() -> usize {
+    10_000
+}
+
+fn code_mode_nested_tools(
+    session: &AgentLoop,
+) -> Vec<crate::runtime::code_mode::NestedToolMetadata> {
+    let registry = session
+        .services
+        .tool_registry
+        .read()
+        .expect("tool registry lock poisoned");
+    let mut by_identifier = std::collections::BTreeMap::new();
+    for entry in registry.available_tools() {
+        if matches!(entry.name.as_str(), "exec" | "wait" | "tool_search")
+            || entry.exposure.is_hidden()
+        {
+            continue;
+        }
+        let child_name = entry
+            .name
+            .strip_prefix(&format!("{}_", entry.namespace))
+            .or_else(|| entry.name.strip_prefix(&format!("{}.", entry.namespace)))
+            .unwrap_or(&entry.name);
+        let wire_name = if entry.namespace.is_empty() {
+            entry.name.clone()
+        } else {
+            format!("{}.{}", entry.namespace, child_name)
+        };
+        let name = crate::runtime::code_mode::normalize_identifier(&wire_name);
+        by_identifier.entry(name.clone()).or_insert_with(|| {
+            crate::runtime::code_mode::NestedToolMetadata {
+                name,
+                wire_name,
+                description: entry.description.clone(),
+            }
+        });
+    }
+    by_identifier.into_values().collect()
+}
+
+fn code_mode_nested_result(output: types::ToolOutput) -> serde_json::Value {
+    let (text, media) = output.into_parts();
+    if media.is_empty() {
+        return serde_json::from_str(&text).unwrap_or(serde_json::Value::String(text));
+    }
+    serde_json::json!({
+        "content": [{"type":"text","text":text}],
+        "media": media,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn drive_code_mode_cell(
+    session: &Arc<AgentLoop>,
+    step_context: Arc<StepContext>,
+    cell_id: &str,
+    yield_time_ms: u64,
+    max_tokens: usize,
+    pause: &Arc<PauseControl>,
+    turn_context: &TurnContext,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Result<types::ToolOutput, crate::runtime::ToolCallError> {
+    let started = std::time::Instant::now();
+    let deadline =
+        tokio::time::Instant::now() + std::time::Duration::from_millis(yield_time_ms.min(300_000));
+    let mut output = Vec::new();
+    let status = loop {
+        if pause.is_cancelled() {
+            let _ = session.services.code_mode.terminate(cell_id).await;
+            return Err(crate::runtime::ToolCallError::Cancelled);
+        }
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            break format!("Script running with cell ID {cell_id}");
+        }
+        match session
+            .services
+            .code_mode
+            .next_event(cell_id, remaining)
+            .await
+            .map_err(crate::runtime::ToolCallError::from)?
+        {
+            crate::runtime::code_mode::NextEvent::TimedOut => {
+                break format!("Script running with cell ID {cell_id}");
+            }
+            crate::runtime::code_mode::NextEvent::Closed(error) => {
+                session.services.code_mode.close(cell_id).await;
+                output.push(format!("Script error:\n{error}"));
+                break "Script failed".to_string();
+            }
+            crate::runtime::code_mode::NextEvent::Event(event) => match event {
+                crate::runtime::code_mode::RuntimeEvent::Content {
+                    kind,
+                    value,
+                    detail,
+                } => {
+                    let rendered = value
+                        .as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| value.to_string());
+                    if kind == "text" {
+                        output.push(rendered);
+                    } else {
+                        let detail = detail
+                            .map(|value| format!(", detail={value}"))
+                            .unwrap_or_default();
+                        output.push(format!("[{kind}{detail}] {rendered}"));
+                    }
+                }
+                crate::runtime::code_mode::RuntimeEvent::Store { key, value } => {
+                    session.services.code_mode.update_store(key, value).await;
+                }
+                crate::runtime::code_mode::RuntimeEvent::Yield => {
+                    break format!("Script running with cell ID {cell_id}");
+                }
+                crate::runtime::code_mode::RuntimeEvent::Result { error } => {
+                    session.services.code_mode.close(cell_id).await;
+                    if let Some(error) = error {
+                        output.push(format!("Script error:\n{error}"));
+                        break "Script failed".to_string();
+                    }
+                    break "Script completed".to_string();
+                }
+                crate::runtime::code_mode::RuntimeEvent::ToolCall { id, name, input } => {
+                    let result = if matches!(name.as_str(), "exec" | "wait") {
+                        Err("exec cannot invoke exec or wait as a nested tool".to_string())
+                    } else {
+                        let nested =
+                            types::ParsedToolCall::with_id(format!("exec-{id}"), name, input);
+                        match Box::pin(execute_tools_serial_inner(
+                            session,
+                            Arc::clone(&step_context),
+                            std::slice::from_ref(&nested),
+                            pause,
+                            turn_context,
+                            hitl_gate,
+                        ))
+                        .await
+                        {
+                            Some(mut values) => values
+                                .pop()
+                                .map(code_mode_nested_result)
+                                .ok_or_else(|| "nested tool returned no result".to_string()),
+                            None => return Err(crate::runtime::ToolCallError::Cancelled),
+                        }
+                    };
+                    session
+                        .services
+                        .code_mode
+                        .send_tool_result(cell_id, &id, result)
+                        .await
+                        .map_err(crate::runtime::ToolCallError::from)?;
+                }
+            },
+        }
+    };
+    let wall_time = ((started.elapsed().as_secs_f32() * 10.0).round()) / 10.0;
+    let body = crate::runtime::code_mode::truncate_output(output.join("\n"), max_tokens);
+    Ok(format!("{status}\nWall time {wall_time:.1} seconds\nOutput:\n{body}").into())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn execute_code_mode_tool(
+    session: &Arc<AgentLoop>,
+    step_context: Arc<StepContext>,
+    call: &types::ParsedToolCall,
+    pause: &Arc<PauseControl>,
+    turn_context: &TurnContext,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Result<types::ToolOutput, crate::runtime::ToolCallError> {
+    match call.name.as_str() {
+        "exec" => {
+            let source = call
+                .arguments
+                .as_str()
+                .or_else(|| {
+                    call.arguments
+                        .get("input")
+                        .and_then(serde_json::Value::as_str)
+                })
+                .ok_or_else(|| anyhow::anyhow!("exec expects raw JavaScript source text"))?;
+            let source =
+                crate::runtime::code_mode::parse_exec_source(source).map_err(anyhow::Error::msg)?;
+            let tools = code_mode_nested_tools(session);
+            let execution_root = step_context
+                .turn
+                .project_root()
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|| session.memory().workspace_dir.clone());
+            let cell_id = session
+                .services
+                .code_mode
+                .execute(&source, &tools, &execution_root)
+                .await
+                .map_err(crate::runtime::ToolCallError::from)?;
+            drive_code_mode_cell(
+                session,
+                step_context,
+                &cell_id,
+                source.yield_time_ms,
+                source.max_output_tokens,
+                pause,
+                turn_context,
+                hitl_gate,
+            )
+            .await
+        }
+        "wait" => {
+            let args: CodeModeWaitArgs = serde_json::from_value(call.arguments.clone())
+                .map_err(|error| anyhow::anyhow!("invalid wait arguments: {error}"))?;
+            if args.terminate {
+                let terminated = session
+                    .services
+                    .code_mode
+                    .terminate(&args.cell_id)
+                    .await
+                    .map_err(crate::runtime::ToolCallError::from)?;
+                return Ok(if terminated {
+                    "Script terminated\nWall time 0.0 seconds\nOutput:\n".into()
+                } else {
+                    format!("Code Mode cell not found: {}", args.cell_id).into()
+                });
+            }
+            session
+                .services
+                .code_mode
+                .resume(&args.cell_id)
+                .await
+                .map_err(crate::runtime::ToolCallError::from)?;
+            drive_code_mode_cell(
+                session,
+                step_context,
+                &args.cell_id,
+                args.yield_time_ms,
+                args.max_tokens,
+                pause,
+                turn_context,
+                hitl_gate,
+            )
+            .await
+        }
+        _ => unreachable!("not a Code Mode control tool"),
+    }
+}
+
 async fn preflight_browser_action(
     session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
@@ -1712,21 +1973,33 @@ async fn execute_tools_serial_inner(
                 }
             };
             let execution_started = std::time::Instant::now();
-            let executed = session.handle_tool_invocation_with_once_grants(
-                ToolInvocation {
-                    session: Arc::clone(session),
-                    step_context: Arc::clone(&step_context),
-                    cancellation_token: CancellationToken::new(),
-                    call_id: call.id.clone(),
-                    tool_name: call.name.clone(),
-                    payload: call.arguments.clone(),
-                },
-                ToolExecutionGrants {
-                    workspace_write: workspace_write_grant,
-                    sandbox_policy,
-                    managed_network: managed_network.clone(),
-                },
-            );
+            let executed = if matches!(call.name.as_str(), "exec" | "wait") {
+                execute_code_mode_tool(
+                    session,
+                    Arc::clone(&step_context),
+                    call,
+                    pause,
+                    turn_context,
+                    hitl_gate,
+                )
+                .await
+            } else {
+                session.handle_tool_invocation_with_once_grants(
+                    ToolInvocation {
+                        session: Arc::clone(session),
+                        step_context: Arc::clone(&step_context),
+                        cancellation_token: CancellationToken::new(),
+                        call_id: call.id.clone(),
+                        tool_name: call.name.clone(),
+                        payload: call.arguments.clone(),
+                    },
+                    ToolExecutionGrants {
+                        workspace_write: workspace_write_grant,
+                        sandbox_policy,
+                        managed_network: managed_network.clone(),
+                    },
+                )
+            };
             let execution_result = match &executed {
                 Ok(_) => "success",
                 Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",

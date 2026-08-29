@@ -37,6 +37,7 @@ use session_services::SessionServices;
 
 mod astro_thread;
 pub mod budget;
+pub(crate) mod code_mode;
 pub(crate) mod compression_state;
 mod context_maintenance;
 pub(crate) mod event_identity;

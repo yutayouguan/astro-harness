@@ -15,23 +15,23 @@ use types::SandboxMode;
 
 const PROTECTED_METADATA_DIRS: &[&str] = &[".git", ".agents", ".astro", ".codex"];
 
-/// Check if running on Windows (always true on Windows builds).
+/// 检查是否运行在 Windows 上（Windows 构建下始终返回 true）。
 pub fn probe_windows() -> bool {
     true
 }
 
-/// Build a command with Job Object process isolation and ACL enforcement.
+/// 构建具有 Job Object 进程隔离和 ACL 强制执行的命令。
 ///
-/// The command is spawned directly; Job Object assignment happens via
-/// `PROC_THREAD_ATTRIBUTE_JOB_LIST` at creation time (when available)
-/// or post-spawn `AssignProcessToJobObject`.
+/// 命令直接启动；Job Object 分配通过创建时的
+/// `PROC_THREAD_ATTRIBUTE_JOB_LIST`（可用时）或启动后的
+/// `AssignProcessToJobObject` 完成。
 pub fn windows_command(policy: &SandboxPolicy, program: &str) -> Command {
     let mut cmd = Command::new(program);
 
-    // Apply managed network proxy environment
+    // 应用受管网络代理环境变量
     inject_network_env(&mut cmd, policy);
 
-    // Apply offline markers to block common package managers from network
+    // 应用离线标记以阻止常见包管理器的网络访问
     if !policy.network_access && policy.managed_network.is_none() {
         cmd.env("NPM_CONFIG_OFFLINE", "true");
         cmd.env("CARGO_NET_OFFLINE", "true");
@@ -42,7 +42,7 @@ pub fn windows_command(policy: &SandboxPolicy, program: &str) -> Command {
     cmd
 }
 
-/// Build a tokio async command for Windows sandbox.
+/// 构建 Windows 沙箱的 tokio 异步命令。
 pub fn windows_tokio_command(policy: &SandboxPolicy, program: &str) -> tokio::process::Command {
     let std_cmd = windows_command(policy, program);
     tokio::process::Command::from(std_cmd)
@@ -72,12 +72,12 @@ fn inject_network_env(cmd: &mut Command, policy: &SandboxPolicy) {
     }
 }
 
-/// Apply ACL rules for workspace-write mode.
+/// 应用工作区写入模式的 ACL 规则。
 ///
-/// Grants write access to writable roots and denies write to protected
-/// metadata directories. Uses `icacls` for portability.
+/// 授予可写根目录的写入权限，并拒绝对受保护元数据目录的写入。
+/// 使用 `icacls` 以保证跨平台兼容。
 ///
-/// Returns Ok(()) on success, Err on any ACL application failure.
+/// 成功返回 Ok(())，任何 ACL 应用失败返回 Err。
 pub fn apply_workspace_acls(policy: &SandboxPolicy) -> anyhow::Result<()> {
     if policy.mode != SandboxMode::WorkspaceWrite {
         return Ok(());
@@ -95,7 +95,7 @@ pub fn apply_workspace_acls(policy: &SandboxPolicy) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Apply a deny-write ACL to a path using `icacls`.
+/// 使用 `icacls` 对路径应用拒绝写入的 ACL。
 fn deny_write_acl(path: &Path) -> anyhow::Result<()> {
     let output = Command::new("icacls")
         .arg(path.to_string_lossy().as_ref())
@@ -113,10 +113,10 @@ fn deny_write_acl(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Create a Job Object with kill-on-close semantics.
+/// 创建具有关闭即终止语义的 Job Object。
 ///
-/// Returns the raw handle. The caller must assign processes to it
-/// and close it when done.
+/// 返回原始句柄。调用者必须将进程分配给它，
+/// 并在完成后关闭。
 #[cfg(target_os = "windows")]
 pub fn create_job_object() -> anyhow::Result<windows_sys::Win32::Foundation::HANDLE> {
     use windows_sys::Win32::Foundation::*;
@@ -146,7 +146,7 @@ pub fn create_job_object() -> anyhow::Result<windows_sys::Win32::Foundation::HAN
     }
 }
 
-/// Assign a process to a Job Object.
+/// 将进程分配到 Job Object。
 #[cfg(target_os = "windows")]
 pub fn assign_process_to_job(
     job: windows_sys::Win32::Foundation::HANDLE,
@@ -164,34 +164,34 @@ pub fn assign_process_to_job(
     Ok(())
 }
 
-/// Full sandboxed spawn: apply ACLs, create Job Object, launch process.
+/// 完整沙箱化启动：应用 ACL、创建 Job Object、启动进程。
 ///
-/// This is the recommended entry point for sandboxed execution on Windows.
-/// Returns the child process and the job handle (must be kept alive until
-/// the child exits — dropping it kills the process tree).
+/// 这是 Windows 上沙箱化执行的推荐入口。
+/// 返回子进程和 job 句柄（必须保持存活直到子进程退出——
+/// 丢弃句柄会终止整个进程树）。
 #[cfg(target_os = "windows")]
 pub fn spawn_sandboxed(
     policy: &SandboxPolicy,
     program: &str,
     args: &[&str],
 ) -> anyhow::Result<(std::process::Child, windows_sys::Win32::Foundation::HANDLE)> {
-    // Step 1: Apply ACLs for metadata protection
+    // 步骤 1：应用 ACL 保护元数据
     apply_workspace_acls(policy)?;
 
-    // Step 2: Create Job Object
+    // 步骤 2：创建 Job Object
     let job = create_job_object()?;
 
-    // Step 3: Build and spawn the command
+    // 步骤 3：构建并启动命令
     let mut cmd = windows_command(policy, program);
     for arg in args {
         cmd.arg(arg);
     }
     let child = cmd.spawn()?;
 
-    // Step 4: Assign the child process to the job
-    // Note: ideally this uses PROC_THREAD_ATTRIBUTE_JOB_LIST for atomic
-    // assignment, but that requires CreateProcessAsUserW. For now, post-spawn
-    // assignment is used (there's a brief race window).
+    // 步骤 4：将子进程分配到 job
+    // 注意：理想情况下应使用 PROC_THREAD_ATTRIBUTE_JOB_LIST 进行原子分配，
+    // 但这需要 CreateProcessAsUserW。目前使用启动后分配
+    //（存在短暂的竞态窗口）。
     use windows_sys::Win32::System::Threading::OpenProcess;
     unsafe {
         let h_process = OpenProcess(
@@ -208,7 +208,7 @@ pub fn spawn_sandboxed(
     Ok((child, job))
 }
 
-/// Metadata about the workspace ACL setup for this policy.
+/// 此策略的工作区 ACL 设置元数据。
 pub struct WindowsAclSetup {
     pub writable_roots: Vec<PathBuf>,
     pub protected_dirs: &'static [&'static str],

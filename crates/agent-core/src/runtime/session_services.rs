@@ -19,6 +19,7 @@ pub(crate) struct SessionServices {
     pub(crate) compression_policy: Mutex<Box<dyn crate::compression::CompressionPolicy>>,
     pub(crate) memory: RwLock<memory::MemoryManager>,
     pub(crate) tool_registry: RwLock<tools::ToolRegistry>,
+    pub(crate) code_mode: crate::runtime::code_mode::CodeModeService,
     pub(crate) agent_control: Arc<subagents::AgentControl>,
     pub(crate) agent_path: subagents::AgentPath,
     #[allow(dead_code)] // wired in Task 4/5 of inline-managed-network-approval
@@ -43,6 +44,7 @@ impl SessionServices {
             compression_policy: Mutex::new(compression_policy),
             memory: RwLock::new(memory),
             tool_registry: RwLock::new(tool_registry),
+            code_mode: crate::runtime::code_mode::CodeModeService::default(),
             agent_control,
             agent_path,
             network_approval: crate::control::network_approval::NetworkApprovalService::new(),
