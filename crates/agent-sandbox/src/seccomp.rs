@@ -55,7 +55,7 @@ pub fn install_network_filter(mode: SeccompNetworkMode) -> io::Result<()> {
     Ok(())
 }
 
-// BPF instruction constructors
+// BPF 指令构造器
 #[cfg(target_os = "linux")]
 const fn bpf_stmt(code: u16, k: u32) -> libc::sock_filter {
     libc::sock_filter {
@@ -71,7 +71,7 @@ const fn bpf_jump(code: u16, k: u32, jt: u8, jf: u8) -> libc::sock_filter {
     libc::sock_filter { code, jt, jf, k }
 }
 
-// BPF opcodes
+// BPF 操作码
 #[cfg(target_os = "linux")]
 mod bpf {
     pub const LD_W_ABS: u16 = 0x20; // BPF_LD | BPF_W | BPF_ABS
@@ -82,9 +82,9 @@ mod bpf {
     pub const SECCOMP_RET_ERRNO: u32 = 0x0005_0000;
     pub const SECCOMP_RET_KILL_PROCESS: u32 = 0x8000_0000;
 
-    // seccomp_data offsets
-    pub const OFFSET_NR: u32 = 0; // syscall number
-    pub const OFFSET_ARCH: u32 = 4; // arch
+    // seccomp_data 偏移量
+    pub const OFFSET_NR: u32 = 0; // 系统调用号
+    pub const OFFSET_ARCH: u32 = 4; // 架构
 
     pub const AUDIT_ARCH_X86_64: u32 = 0xc000_003e;
     pub const AUDIT_ARCH_AARCH64: u32 = 0xc000_00b7;
@@ -92,7 +92,7 @@ mod bpf {
     pub const EPERM: u32 = 1;
 }
 
-/// Blocked syscalls for network isolation.
+/// 网络隔离需要阻止的系统调用。
 #[cfg(target_os = "linux")]
 fn network_syscalls() -> Vec<u32> {
     vec![
@@ -109,7 +109,7 @@ fn network_syscalls() -> Vec<u32> {
     ]
 }
 
-/// Always-blocked dangerous syscalls.
+/// 始终阻止的危险系统调用。
 #[cfg(target_os = "linux")]
 fn dangerous_syscalls() -> Vec<u32> {
     vec![
@@ -125,10 +125,10 @@ fn build_bpf_filter(mode: SeccompNetworkMode) -> Vec<libc::sock_filter> {
 
     let mut filter = Vec::new();
 
-    // Load architecture
+    // 加载架构
     filter.push(bpf_stmt(LD_W_ABS, OFFSET_ARCH));
 
-    // Check architecture (x86_64 or aarch64)
+    // 检查架构（x86_64 或 aarch64）
     let arch = if cfg!(target_arch = "x86_64") {
         AUDIT_ARCH_X86_64
     } else if cfg!(target_arch = "aarch64") {
@@ -137,20 +137,20 @@ fn build_bpf_filter(mode: SeccompNetworkMode) -> Vec<libc::sock_filter> {
         return vec![bpf_stmt(RET_K, SECCOMP_RET_ALLOW)];
     };
 
-    // If wrong arch, kill
+    // 架构不匹配则终止进程
     filter.push(bpf_jump(JMP_JEQ_K, arch, 1, 0));
     filter.push(bpf_stmt(RET_K, SECCOMP_RET_KILL_PROCESS));
 
-    // Load syscall number
+    // 加载系统调用号
     filter.push(bpf_stmt(LD_W_ABS, OFFSET_NR));
 
-    // Block dangerous syscalls (always)
+    // 阻止危险系统调用（始终生效）
     for nr in dangerous_syscalls() {
         filter.push(bpf_jump(JMP_JEQ_K, nr, 0, 1));
         filter.push(bpf_stmt(RET_K, SECCOMP_RET_ERRNO | EPERM));
     }
 
-    // Block network syscalls based on mode
+    // 根据模式阻止网络系统调用
     match mode {
         SeccompNetworkMode::Isolated => {
             for nr in network_syscalls() {
@@ -159,11 +159,11 @@ fn build_bpf_filter(mode: SeccompNetworkMode) -> Vec<libc::sock_filter> {
             }
         }
         SeccompNetworkMode::ProxyRouted => {
-            // Only block socket creation for AF_UNIX (domain=1)
-            // Allow AF_INET(2) and AF_INET6(10) for proxy bridge
-            // Note: full argument inspection requires SECCOMP_RET_USER_NOTIF;
-            // for v3 we block all socket() and let bwrap handle the bridge.
-            // This is a simplified version that blocks all non-allowed network.
+            // 仅阻止 AF_UNIX (domain=1) 的 socket 创建
+            // 允许 AF_INET(2) 和 AF_INET6(10) 用于代理桥接
+            // 注意：完整的参数检查需要 SECCOMP_RET_USER_NOTIF；
+            // v3 中我们阻止所有 socket() 并由 bwrap 处理桥接。
+            // 这是一个简化版本，阻止所有不允许的网络操作。
             for nr in network_syscalls() {
                 filter.push(bpf_jump(JMP_JEQ_K, nr, 0, 1));
                 filter.push(bpf_stmt(RET_K, SECCOMP_RET_ERRNO | EPERM));
@@ -171,7 +171,7 @@ fn build_bpf_filter(mode: SeccompNetworkMode) -> Vec<libc::sock_filter> {
         }
     }
 
-    // Default: allow
+    // 默认：允许
     filter.push(bpf_stmt(RET_K, SECCOMP_RET_ALLOW));
 
     filter

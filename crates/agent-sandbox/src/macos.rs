@@ -19,7 +19,7 @@ pub fn probe() -> bool {
     Path::new(SANDBOX_EXEC).is_file()
 }
 
-/// Build a tokio async command wrapping the program under the Seatbelt sandbox.
+/// 构建 tokio 异步命令，在 Seatbelt 沙箱下包装程序。
 pub fn seatbelt_tokio_command(policy: &SandboxPolicy, program: &str) -> tokio::process::Command {
     let mut command = tokio::process::Command::new(SANDBOX_EXEC);
     command.arg("-p").arg(seatbelt_profile(policy));
@@ -28,7 +28,7 @@ pub fn seatbelt_tokio_command(policy: &SandboxPolicy, program: &str) -> tokio::p
     command
 }
 
-/// Build a std sync command wrapping the program under the Seatbelt sandbox.
+/// 构建 std 同步命令，在 Seatbelt 沙箱下包装程序。
 pub fn seatbelt_std_command(policy: &SandboxPolicy, program: &str) -> std::process::Command {
     let mut command = std::process::Command::new(SANDBOX_EXEC);
     command.arg("-p").arg(seatbelt_profile(policy));
@@ -62,7 +62,7 @@ fn append_param_args(cmd: &mut impl SandboxExecArgs, policy: &SandboxPolicy) {
     }
 }
 
-/// Platform default readable paths for restricted-read mode.
+/// 受限读取模式下的平台默认可读路径。
 const RESTRICTED_READ_PLATFORM_DEFAULTS: &[&str] = &[
     "/usr",
     "/bin",
@@ -77,11 +77,11 @@ const RESTRICTED_READ_PLATFORM_DEFAULTS: &[&str] = &[
     "/Applications",
 ];
 
-/// Generate the SBPL profile string for the given sandbox policy.
+/// 根据给定的沙箱策略生成 SBPL profile 字符串。
 pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
     let mut profile = String::from(concat!("(version 1)\n", "(deny default)\n",));
 
-    // File read rules: restricted or full
+    // 文件读取规则：受限或完整
     if policy.readable_roots.is_empty() {
         profile.push_str("(allow file-read*)\n");
     } else {
@@ -93,7 +93,7 @@ pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
                 "(allow file-read* (subpath (param \"READABLE_ROOT_{i}\")))\n"
             ));
         }
-        // Writable roots are implicitly readable
+        // 可写根目录隐式可读
         for i in 0..policy.writable_roots.len() {
             profile.push_str(&format!(
                 "(allow file-read* (subpath (param \"WRITABLE_ROOT_{i}\")))\n"

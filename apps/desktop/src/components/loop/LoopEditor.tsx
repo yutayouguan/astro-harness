@@ -26,6 +26,7 @@ import {
   Play,
   Plus,
   History,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   ChevronDown as ChevronDownData,
@@ -381,6 +382,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [showCanvasSearch, setShowCanvasSearch] = useState(false);
   const [edgeType, setEdgeType] = useState<string>("smoothstep");
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
@@ -486,6 +489,15 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
 
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const closeMenu = (event: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node)) setShowMoreMenu(false);
+    };
+    window.addEventListener("pointerdown", closeMenu);
+    return () => window.removeEventListener("pointerdown", closeMenu);
+  }, [showMoreMenu]);
+
   const handleAutoLayout = useCallback(() => {
     pushSnapshot();
     const curNodes = reactFlowInstance.getNodes();
@@ -515,6 +527,27 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     setDirty(true);
     setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50);
   }, [reactFlowInstance, setNodes]);
+
+  const handleExportImage = useCallback(async () => {
+    try {
+      const container = document.querySelector<HTMLElement>(".loop-canvas-container .react-flow__viewport");
+      if (!container) { showToast("画布未就绪", { tone: "error" }); return; }
+      const svgEdges = container.closest(".react-flow")?.querySelector<SVGElement>("svg.react-flow__edges");
+      if (!svgEdges) { showToast("未找到连线元素", { tone: "error" }); return; }
+      const bbox = container.getBoundingClientRect();
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("width", String(bbox.width));
+      svg.setAttribute("height", String(bbox.height));
+      svg.setAttribute("viewBox", `0 0 ${bbox.width} ${bbox.height}`);
+      svg.appendChild(svgEdges.cloneNode(true));
+      const svgStr = new XMLSerializer().serializeToString(svg);
+      const fileName = `workflow-${name || "export"}-${Date.now()}.svg`;
+      const savedPath = await invoke<string>("export_loop_svg", { path: fileName, content: svgStr });
+      showToast(`${t("loop.exported")}: ${savedPath}`, { tone: "success" });
+    } catch (e) {
+      showToast(String(e), { tone: "error" });
+    }
+  }, [name, showToast, t]);
 
   // node action callbacks (injected into node data for toolbar buttons)
   const deleteNode = useCallback((nodeId: string) => {
@@ -560,7 +593,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   );
 
   // sidebar collapsed categories
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(NODE_CATEGORIES.map((category, index) => [category.key, index > 0])),
+  );
 
   // custom drag state (HTML5 drag-and-drop doesn't work in Tauri WKWebView)
   const [draggingType, setDraggingType] = useState<NodeType | null>(null);
@@ -871,6 +906,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     <div ref={editorRef} className={`loop-editor${fullscreen ? " loop-editor--fullscreen" : ""}`}>
       {/* ── Toolbar ── */}
       <div className="loop-editor-toolbar">
+        <div className="loop-editor-toolbar-lead">
         <button className="loop-icon-btn" onClick={async () => {
           if (dirty) {
             const ok = await confirm({ title: t("loop.unsavedTitle"), message: t("loop.unsavedMessage"), confirmLabel: t("loop.unsavedLeave"), variant: "danger" });
@@ -922,7 +958,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           onChange={(e) => { setDescription(e.target.value); setDirty(true); }}
           placeholder={t("loop.descPlaceholder")}
         />
-        <div className="loop-editor-toolbar-right">
+        </div>
+        <div className="loop-editor-toolbar-tools" aria-label={t("loop.canvasTools")}>
+          <div className="loop-editor-tool-group">
           <button
             className="loop-icon-btn"
             title={`${t("loop.undo")} (⌘Z)`}
@@ -937,7 +975,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           >
             <LOOP_ICON_MAP.Redo2 size={16} />
           </button>
-          <span className="loop-editor-toolbar-sep" />
+          </div>
+          <div className="loop-editor-tool-group">
           <button
             className={`loop-icon-btn${showAiAssistant ? " is-active" : ""}`}
             title={t("loop.aiAssistant")}
@@ -958,6 +997,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           >
             <LOOP_ICON_MAP.Variable size={16} />
           </button>
+          </div>
+          <div className="loop-editor-tool-group">
           <button
             className="loop-icon-btn"
             title={t("loop.autoLayout")}
@@ -988,52 +1029,45 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           >
             <LOOP_ICON_MAP.Maximize size={16} />
           </button>
-          <button
-            className="loop-icon-btn"
-            title={t("loop.exportImage")}
-            onClick={async () => {
-              try {
-                const container = document.querySelector<HTMLElement>(".loop-canvas-container .react-flow__viewport");
-                if (!container) { showToast("画布未就绪", { tone: "error" }); return; }
-                const svgEdges = container.closest(".react-flow")?.querySelector<SVGElement>("svg.react-flow__edges");
-                if (!svgEdges) { showToast("未找到连线元素", { tone: "error" }); return; }
-                const bbox = container.getBoundingClientRect();
-                const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-                svg.setAttribute("width", String(bbox.width));
-                svg.setAttribute("height", String(bbox.height));
-                svg.setAttribute("viewBox", `0 0 ${bbox.width} ${bbox.height}`);
-                svg.appendChild(svgEdges.cloneNode(true));
-                const svgStr = new XMLSerializer().serializeToString(svg);
-                const fileName = `workflow-${name || "export"}-${Date.now()}.svg`;
-                const savedPath = await invoke<string>("export_loop_svg", { path: fileName, content: svgStr });
-                showToast(`${t("loop.exported")}: ${savedPath}`, { tone: "success" });
-              } catch (e) {
-                showToast(String(e), { tone: "error" });
-              }
-            }}
-          >
-            <LOOP_ICON_MAP.Camera size={16} />
-          </button>
-          <button
-            className="loop-icon-btn"
-            title={t("loop.shortcuts")}
-            onClick={() => setShowShortcuts((v) => !v)}
-          >
-            <LOOP_ICON_MAP.Keyboard size={16} />
-          </button>
-          <button
-            className={`loop-icon-btn${fullscreen ? " is-active" : ""}`}
-            title={fullscreen ? t("loop.exitFullscreen") : t("loop.fullscreen")}
-            onClick={() => setFullscreen((v) => !v)}
-          >
-            <MorphToggleIcon
-              active={fullscreen}
-              activeIcon={Minimize2Data}
-              inactiveIcon={Maximize2Data}
-              size={16}
-              aria-hidden
-            />
-          </button>
+          </div>
+          <div className="loop-editor-more" ref={moreMenuRef}>
+            <button
+              className={`loop-icon-btn${showMoreMenu ? " is-active" : ""}`}
+              title={t("loop.moreActions")}
+              aria-haspopup="menu"
+              aria-expanded={showMoreMenu}
+              onClick={() => setShowMoreMenu((value) => !value)}
+            >
+              <MoreHorizontal size={17} />
+            </button>
+            {showMoreMenu && (
+              <div className="loop-editor-more-menu" role="menu">
+                <button role="menuitem" onClick={() => { void handleExportImage(); setShowMoreMenu(false); }}>
+                  <LOOP_ICON_MAP.Camera size={15} />
+                  <span>{t("loop.exportImage")}</span>
+                </button>
+                <button role="menuitem" onClick={() => { setShowShortcuts(true); setShowMoreMenu(false); }}>
+                  <LOOP_ICON_MAP.Keyboard size={15} />
+                  <span>{t("loop.shortcuts")}</span>
+                </button>
+                <button role="menuitem" onClick={() => { setFullscreen((value) => !value); setShowMoreMenu(false); }}>
+                  <MorphToggleIcon
+                    active={fullscreen}
+                    activeIcon={Minimize2Data}
+                    inactiveIcon={Maximize2Data}
+                    size={15}
+                    aria-hidden
+                  />
+                  <span>{fullscreen ? t("loop.exitFullscreen") : t("loop.fullscreen")}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="loop-editor-toolbar-actions">
+          <span className={`loop-editor-save-state${dirty ? " is-dirty" : ""}`}>
+            {dirty ? t("loop.statusUnsaved") : t("loop.saved")}
+          </span>
           <button
             className={`loop-icon-btn${showHistory ? " is-active" : ""}`}
             title={t("loop.history")}
@@ -1104,26 +1138,32 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         )}
         {paletteOpen && (
         <div className="loop-node-palette">
-          <div className="loop-palette-title">{t("loop.paletteTitle")}</div>
-          <input
-            className="loop-palette-search"
-            placeholder={t("loop.searchNodes")}
-            value={paletteSearch}
-            onChange={(e) => setPaletteSearch(e.target.value)}
-          />
+          <div className="loop-palette-top">
+            <div className="loop-palette-title">{t("loop.paletteTitle")}</div>
+            <label className="loop-palette-search-wrap">
+              <LOOP_ICON_MAP.Search size={14} aria-hidden />
+              <input
+                className="loop-palette-search"
+                placeholder={t("loop.searchNodes")}
+                value={paletteSearch}
+                onChange={(e) => setPaletteSearch(e.target.value)}
+              />
+            </label>
+          </div>
           {NODE_CATEGORIES.map((cat) => {
             const pq = paletteSearch.trim().toLowerCase();
             const items = getNodesByCategory(cat.key).filter(
               (m) => !pq || m.label.toLowerCase().includes(pq) || m.labelEn.toLowerCase().includes(pq) || m.type.includes(pq),
             );
             if (pq && items.length === 0) return null;
-            const isCollapsed = !!collapsed[cat.key];
+            const isCollapsed = pq ? false : !!collapsed[cat.key];
             const CatIcon = LOOP_ICON_MAP[cat.icon];
             return (
               <div key={cat.key} className={`loop-palette-group${!isCollapsed ? " is-open" : ""}`}>
                 <button
                   className="loop-palette-group-header"
                   onClick={() => toggleCategory(cat.key)}
+                  aria-expanded={!isCollapsed}
                 >
                   <MorphToggleIcon
                     active={!isCollapsed}
@@ -1134,6 +1174,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                   />
                   {CatIcon && <CatIcon size={14} className="loop-palette-cat-icon" />}
                   <span>{cat.label}</span>
+                  <span className="loop-palette-count">
+                    {items.filter((item) => item.type !== "custom_loop").length + (cat.key === "custom" ? savedLoops.length : 0)}
+                  </span>
                 </button>
                 {!isCollapsed && (
                   <div className="loop-palette-items">
@@ -1160,6 +1203,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                           <span>{meta.label}</span>
                           <button
                             className="loop-palette-item-plus"
+                            title={t("loop.addNode")}
+                            aria-label={`${t("loop.addNode")}: ${meta.label}`}
                             onClick={(e) => {
                               e.stopPropagation();
                               addNodeToCenter(meta.type);
@@ -1192,6 +1237,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                         <span>{lp.name}</span>
                         <button
                           className="loop-palette-item-plus"
+                          title={t("loop.addNode")}
+                          aria-label={`${t("loop.addNode")}: ${lp.name}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             addCustomLoopNode(lp.id, lp.name);
