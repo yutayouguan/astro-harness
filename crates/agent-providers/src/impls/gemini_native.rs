@@ -98,7 +98,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
             });
         }
 
-        // Tools → function_declarations
+        // 工具定义 → function_declarations
         if !request.tools.is_empty() {
             let function_tools = request
                 .tools
@@ -121,7 +121,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
             }
         }
 
-        // generationConfig
+        // 生成参数
         let mut gen = serde_json::Map::new();
         if let Some(temp) = request.temperature {
             gen.insert("temperature".into(), json!(temp));
@@ -132,7 +132,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
             }
         }
 
-        // thinkingConfig
+        // 推理配置
         if let Some(ref tc) = request.thinking {
             let budget = if tc.enabled {
                 match tc.effort.trim() {
@@ -153,7 +153,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
             body["generationConfig"] = Value::Object(gen);
         }
 
-        // additional_params merge
+        // 额外参数合并
         if let Some(extra) = request.additional_params.as_object() {
             if let Some(obj) = body.as_object_mut() {
                 for (k, v) in extra {
@@ -180,7 +180,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
     }
 }
 
-// ─── Message Conversion ──────────────────────────────────
+// ─── 消息转换 ──────────────────────────────────
 
 fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Vec<Value>) {
     use crate::types::message::*;
@@ -189,8 +189,7 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
 
     for m in messages {
         match m {
-            // Gemini exposes one system_instruction field, so developer context
-            // is lowered into that field without turning it into user content.
+            // Gemini 只有一个 system_instruction 字段；developer 角色降级到此字段。
             Message::System { content } | Message::Developer { content } => {
                 if !content.trim().is_empty() {
                     instruction_parts.push(content.clone());
@@ -286,7 +285,7 @@ fn inline_or_file_data(url: &str, mime_hint: &str) -> Value {
     json!({"text": format!("[media: {url}]")})
 }
 
-// ─── SSE Parsing ─────────────────────────────────────────
+// ─── SSE 解析 ─────────────────────────────────────────
 
 fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
     use crate::types::stream::{StreamChunk, Usage};
@@ -294,7 +293,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
         return Vec::new();
     };
 
-    // Error
+    // 错误
     if let Some(err) = v.get("error") {
         let msg = err
             .get("message")
@@ -316,7 +315,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
         if let Some(parts) = parts {
             let mut tool_index = 0u32;
             for part in parts {
-                // Thinking (thought: true)
+                // 推理过程（thought: true）
                 if part
                     .get("thought")
                     .and_then(|t| t.as_bool())
@@ -357,7 +356,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
                     continue;
                 }
 
-                // Text
+                // 文本内容
                 if let Some(text) = part
                     .get("text")
                     .and_then(|t| t.as_str())
@@ -368,7 +367,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
             }
         }
 
-        // Finish reason
+        // 结束原因
         if let Some(reason) = candidate
             .get("finishReason")
             .and_then(|f| f.as_str())
@@ -386,7 +385,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
         }
     }
 
-    // Usage from usageMetadata
+    // Token 用量（usageMetadata）
     if let Some(u) = v.get("usageMetadata") {
         let input = u
             .get("promptTokenCount")

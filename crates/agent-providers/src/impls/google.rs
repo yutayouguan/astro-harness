@@ -173,7 +173,7 @@ impl CompletionModel for InteractionsCompletionModel {
             body["system_instruction"] = json!(sys);
         }
 
-        // Tools
+        // 工具定义
         if !request.tools.is_empty() {
             let tools: Vec<Value> = request
                 .tools
@@ -193,7 +193,7 @@ impl CompletionModel for InteractionsCompletionModel {
             }
         }
 
-        // generation_config
+        // 生成参数
         let mut gen = serde_json::Map::new();
         if let Some(temp) = request.temperature {
             gen.insert("temperature".into(), json!(temp));
@@ -211,7 +211,7 @@ impl CompletionModel for InteractionsCompletionModel {
             body["generation_config"] = Value::Object(gen);
         }
 
-        // additional_params features
+        // 额外参数：Google 搜索、响应格式、安全设置
         if let Some(v) = request.additional_params.get("google_search") {
             if v.as_bool().unwrap_or(false) {
                 let tools = body.get_mut("tools").and_then(|t| t.as_array_mut());
@@ -229,8 +229,7 @@ impl CompletionModel for InteractionsCompletionModel {
             body["safety_settings"] = ss.clone();
         }
 
-        // additional_params merge — route sampling params into generation_config;
-        // skip params unsupported by Google Interactions API.
+        // 额外参数合并：采样参数路由到 generation_config；跳过 Interactions API 不支持的参数。
         if let Some(extra) = request.additional_params.as_object() {
             const GEN_CFG_KEYS: &[&str] = &["top_p", "top_k", "temperature"];
             const SKIP_KEYS: &[&str] = &[
@@ -241,7 +240,7 @@ impl CompletionModel for InteractionsCompletionModel {
                 "response_format",
                 "safety_settings",
             ];
-            // Phase 1: route generation_config params
+            // 阶段一：采样参数归入 generation_config
             for (k, v) in extra {
                 if GEN_CFG_KEYS.contains(&k.as_str()) {
                     if let Some(gc) = body
@@ -252,7 +251,7 @@ impl CompletionModel for InteractionsCompletionModel {
                     }
                 }
             }
-            // Phase 2: merge remaining top-level params
+            // 阶段二：剩余参数合并到顶层
             if let Some(obj) = body.as_object_mut() {
                 for (k, v) in extra {
                     if GEN_CFG_KEYS.contains(&k.as_str()) || SKIP_KEYS.contains(&k.as_str()) {
@@ -360,8 +359,7 @@ fn to_interactions_input(
         }
     }
     // system_instruction 是 interaction 级参数，续写时同样要重发。
-    // Interactions exposes one system_instruction field. Keep developer context
-    // instruction-scoped when lowering the richer internal role model.
+    // Interactions 只有一个 system_instruction 字段；内部的 developer 角色降级到此字段。
     let instruction_parts = messages
         .iter()
         .filter_map(|m| match m {
@@ -634,7 +632,7 @@ fn extract_interactions_delta(
     use crate::types::stream::StreamChunk;
     let event_type = v.get("event_type").and_then(|e| e.as_str()).unwrap_or("");
 
-    // interaction.created → extract interaction_id early
+    // interaction.created → 提前提取 interaction_id
     if event_type == "interaction.created" {
         let id = v
             .pointer("/interaction/id")
@@ -643,7 +641,7 @@ fn extract_interactions_delta(
         return Some(StreamChunk::InteractionId(id));
     }
 
-    // step events — route on event_type, not step/type
+    // step 事件 — 按 event_type 路由，而非 step/type
     let delta = v.get("delta");
 
     match event_type {
@@ -771,10 +769,9 @@ fn extract_interactions_delta(
     }
 }
 
-/// Interactions API may stream function arguments either as an object or as an
-/// already-encoded JSON string. Calling `Value::to_string()` on the latter adds
-/// another pair of quotes, so the accumulator eventually parses it as
-/// `Value::String` instead of the object expected by tool argument structs.
+/// Interactions API 的函数参数增量可能是 JSON 对象或已编码的 JSON 字符串。
+/// 对后者调用 `Value::to_string()` 会多加一层引号，导致累加器解析为
+/// `Value::String` 而非工具参数结构体期望的对象。
 fn interactions_arguments_delta(arguments: &Value) -> String {
     arguments
         .as_str()
@@ -1313,8 +1310,8 @@ mod tests {
         );
         assert!(step_done.is_empty());
 
-        // Gemini 3 may report the preceding thought step's index here. Bind the
-        // arguments to the active function_call item instead of creating an orphan slot.
+        // Gemini 3 可能在此报告前一个 thought step 的 index。将参数绑定到活跃的
+        // function_call 条目，而非创建孤立槽位。
         let arguments = parser.extract(
             r#"{"index":0,"delta":{"type":"arguments_delta","arguments":"{\"command\":\"pwd\"}"},"event_type":"step.delta"}"#,
         );

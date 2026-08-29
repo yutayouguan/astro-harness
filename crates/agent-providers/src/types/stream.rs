@@ -91,7 +91,7 @@ pub enum StreamChunk {
         index: u32,
         id: String,
         name: String,
-        /// Provider-owned opaque signature required for exact stateless replay.
+        /// Provider 持有的不透明签名，用于无状态精确重放。
         signature: Option<String>,
     },
     /// 工具调用参数增量。

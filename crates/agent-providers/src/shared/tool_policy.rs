@@ -1,4 +1,4 @@
-//! Provider-specific lowering for the shared native tool-selection contract.
+//! 工具选择策略下发 — 将统一的 `ToolChoice` 映射到各 provider 线路格式。
 
 use serde_json::{json, Value};
 

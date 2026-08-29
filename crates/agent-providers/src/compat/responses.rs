@@ -97,7 +97,7 @@ where
             }
         }
 
-        // Tools
+        // 工具定义
         if !request.tools.is_empty() {
             let tools: Vec<Value> = request
                 .tools
@@ -131,7 +131,7 @@ where
         // 厂商 hook
         self.ext_instance.finalize_responses_body(&mut body);
 
-        // additional_params
+        // 额外参数合并
         if let Some(extra) = request.additional_params.as_object() {
             if let Some(obj) = body.as_object_mut() {
                 for (k, v) in extra {

@@ -113,7 +113,7 @@ impl CompletionModel for AnthropicCompletionModel {
             body["system"] = system;
         }
 
-        // Extended Thinking
+        // 扩展推理
         if let Some(ref tc) = request.thinking {
             if tc.enabled {
                 let raw_budget = match tc.effort.trim() {
@@ -130,7 +130,7 @@ impl CompletionModel for AnthropicCompletionModel {
             }
         }
 
-        // Tools
+        // 工具定义
         if !request.tools.is_empty() {
             let tools: Vec<Value> = request
                 .tools
@@ -153,7 +153,7 @@ impl CompletionModel for AnthropicCompletionModel {
             body["tool_choice"] = tc.clone();
         }
 
-        // additional_params merge
+        // 额外参数合并
         if let Some(extra) = request.additional_params.as_object() {
             if let Some(obj) = body.as_object_mut() {
                 for (k, v) in extra {
@@ -186,7 +186,7 @@ impl CompletionModel for AnthropicCompletionModel {
     }
 }
 
-// ─── Message Conversion ──────────────────────────────────
+// ─── 消息转换 ──────────────────────────────────
 
 /// 公开供 token_count 等旧模块调用。
 pub fn to_anthropic_messages_public(messages: &[crate::types::Message]) -> (Value, Vec<Value>) {
@@ -208,9 +208,7 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
 
     for m in messages {
         match m {
-            // Anthropic has one top-level system channel. Preserve the internal
-            // developer boundary in the unified model, then lower both instruction
-            // roles into that channel for this provider.
+            // Anthropic 只有一个顶层 system 通道；内部的 developer 角色一并降级到此通道。
             Message::System { content } | Message::Developer { content } => {
                 if !system.is_empty() {
                     system.push_str("\n\n");
@@ -271,7 +269,7 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
     }
     flush(&mut pending_tool_results, &mut api_msgs);
 
-    // prompt caching on system + last user message
+    // Prompt 缓存：system 消息 + 最后一条 user 消息
     let system_value = if system.is_empty() {
         Value::Null
     } else {

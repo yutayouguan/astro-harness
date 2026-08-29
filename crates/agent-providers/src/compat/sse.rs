@@ -61,7 +61,7 @@ pub fn extract_openai_delta(data: &str) -> Vec<StreamChunk> {
         chunks.push(r);
     }
 
-    // text content
+    // 文本内容
     let content_str = choice
         .pointer("/delta/content")
         .or_else(|| choice.pointer("/message/content"))
@@ -73,7 +73,7 @@ pub fn extract_openai_delta(data: &str) -> Vec<StreamChunk> {
         chunks.push(StreamChunk::Text(s.to_string()));
     }
 
-    // tool_calls
+    // 工具调用
     parse_tool_deltas(choice, &mut chunks);
 
     // 纯空白 text 兜底（仅在无其他内容时保留，避免遮蔽 tool_calls）
@@ -85,7 +85,7 @@ pub fn extract_openai_delta(data: &str) -> Vec<StreamChunk> {
         }
     }
 
-    // finish_reason
+    // 结束原因
     if let Some(f) = choice
         .get("finish_reason")
         .and_then(|f| f.as_str())
@@ -96,7 +96,7 @@ pub fn extract_openai_delta(data: &str) -> Vec<StreamChunk> {
         });
     }
 
-    // usage
+    // Token 用量
     if let Some(u) = usage {
         chunks.push(StreamChunk::Usage(u));
     }
