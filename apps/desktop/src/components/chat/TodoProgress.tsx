@@ -1,60 +1,13 @@
-// 浮动 TODO 进度条：从聊天活动中提取最新计划，输入区上方展示折叠进度。
+// 输入框上方任务状态：悬停查看 TODO 清单与本轮文件改动。
 
-import { useMemo, useState } from "react";
-import { CheckCircle2, Circle, ListTodo } from "lucide-react";
-import {
-  ChevronDown as ChevronDownData,
-  ChevronUp as ChevronUpData,
-} from "lucide";
+import { useMemo, useState, type CSSProperties, type FocusEvent } from "react";
+import { CheckCircle2, Circle, Files, ListTodo } from "lucide-react";
 import type { ChatMessage } from "../../types";
-import { MorphToggleIcon } from "../icons/MorphIcon";
-
-export type TodoPlanItem = {
-  text: string;
-  done: boolean;
-};
-
-export type TodoPlan = {
-  title: string;
-  planId: string;
-  items: TodoPlanItem[];
-};
-
-// 扫描助手消息的 activities，提取最后一个 todo 工具调用的计划状态。
-export function extractLatestTodoPlan(
-  messages: ChatMessage[],
-): TodoPlan | null {
-  let latest: TodoPlan | null = null;
-
-  for (const m of messages) {
-    if (m.role !== "assistant" || !m.activities) continue;
-    for (const act of m.activities) {
-      if (act.title !== "todo" || !act.input) continue;
-      try {
-        const args = JSON.parse(act.input);
-        if (!Array.isArray(args.items) || args.items.length === 0) continue;
-        const items: TodoPlanItem[] = args.items.map(
-          (it: string | { text: string; done?: boolean }) => {
-            if (typeof it === "string") return { text: it, done: false };
-            return { text: it.text, done: Boolean(it.done) };
-          },
-        );
-        const planId =
-          args.plan_id ||
-          (act.output?.match(/([0-9]{8}-[a-f0-9]{6})/)?.[1] ?? "");
-        latest = {
-          title: args.title || "Todo",
-          planId,
-          items,
-        };
-      } catch {
-        /* 跳过格式异常 */
-      }
-    }
-  }
-
-  return latest;
-}
+import {
+  displayFileName,
+  extractFileChangeSummary,
+  extractLatestTodoPlan,
+} from "../../lib/chat/taskProgress";
 
 type Props = {
   messages: ChatMessage[];
@@ -62,7 +15,11 @@ type Props = {
 
 export default function TodoProgress({ messages }: Props) {
   const plan = useMemo(() => extractLatestTodoPlan(messages), [messages]);
-  const [expanded, setExpanded] = useState(false);
+  const fileChanges = useMemo(
+    () => extractFileChangeSummary(messages),
+    [messages],
+  );
+  const [openPanel, setOpenPanel] = useState<"todo" | "files" | null>(null);
 
   if (!plan || plan.items.length === 0) return null;
 
@@ -71,69 +28,165 @@ export default function TodoProgress({ messages }: Props) {
   const currentStep = done + 1;
   const allDone = done === total;
   const progressPct = Math.round((done / total) * 100);
+  const progressStyle = {
+    "--todo-progress": `${progressPct * 3.6}deg`,
+  } as CSSProperties;
+
+  const closeOnBlur = (event: FocusEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setOpenPanel(null);
+    }
+  };
 
   return (
-    <div className="todo-progress-float">
-      <button
-        type="button"
-        className="todo-progress-toggle"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((o) => !o)}
+    <div
+      className="todo-progress-float"
+      role="status"
+      aria-label={`TODO ${done}/${total}`}
+      onMouseLeave={() => setOpenPanel(null)}
+    >
+      <section
+        className="todo-progress-section is-todo"
+        onMouseEnter={() => setOpenPanel("todo")}
+        onBlur={closeOnBlur}
       >
-        <MorphToggleIcon
-          active={expanded}
-          activeIcon={ChevronUpData}
-          inactiveIcon={ChevronDownData}
-          size={14}
-          strokeWidth={2.2}
-          className="todo-progress-chevron"
-          aria-hidden
-        />
-        <ListTodo size={14} strokeWidth={2} aria-hidden />
-        <span className="todo-progress-summary">
-          {plan.title}
+        <button
+          type="button"
+          className="todo-progress-toggle"
+          aria-expanded={openPanel === "todo"}
+          aria-haspopup="dialog"
+          onClick={() =>
+            setOpenPanel((open) => (open === "todo" ? null : "todo"))
+          }
+        >
+          <span
+            className="todo-progress-ring"
+            style={progressStyle}
+            aria-hidden
+          >
+            <span />
+          </span>
           <span className="todo-progress-step">
             {allDone
-              ? `${total}/${total} 步已完成`
-              : `第 ${currentStep}/${total} 步`}
+              ? `${total} / ${total} 步已完成`
+              : `第 ${currentStep} / ${total} 步`}
           </span>
-        </span>
-        <span className="todo-progress-bar-wrap" aria-hidden>
-          <span
-            className={`todo-progress-bar-fill ${allDone ? "is-done" : ""}`}
-            style={{ width: `${progressPct}%` }}
-          />
-        </span>
-      </button>
+        </button>
 
-      {expanded && (
-        <ul className="todo-progress-list">
-          {plan.items.map((item, i) => (
-            <li
-              key={i}
-              className={`todo-progress-item ${item.done ? "is-done" : ""} ${
-                !item.done && i === done ? "is-current" : ""
-              }`}
+        {openPanel === "todo" && (
+          <div
+            className="todo-progress-popover is-todo"
+            role="dialog"
+            aria-label="TODO 列表"
+          >
+            <header className="todo-progress-popover-title">
+              <ListTodo size={14} strokeWidth={2} aria-hidden />
+              <span>{plan.title}</span>
+              <span>
+                {done}/{total}
+              </span>
+            </header>
+            <ul className="todo-progress-list">
+              {plan.items.map((item, i) => (
+                <li
+                  key={i}
+                  className={`todo-progress-item ${item.done ? "is-done" : ""} ${
+                    !item.done && i === done ? "is-current" : ""
+                  }`}
+                >
+                  {item.done ? (
+                    <CheckCircle2
+                      size={15}
+                      strokeWidth={2.2}
+                      className="todo-progress-icon is-check"
+                      aria-hidden
+                    />
+                  ) : (
+                    <Circle
+                      size={15}
+                      strokeWidth={2}
+                      className="todo-progress-icon"
+                      aria-hidden
+                    />
+                  )}
+                  <span className="todo-progress-item-text">{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      {fileChanges.items.length > 0 && (
+        <>
+          <span className="todo-progress-separator" aria-hidden>
+            ·
+          </span>
+          <section
+            className="todo-progress-section is-files"
+            onMouseEnter={() => setOpenPanel("files")}
+            onBlur={closeOnBlur}
+          >
+            <button
+              type="button"
+              className="todo-progress-toggle"
+              aria-expanded={openPanel === "files"}
+              aria-haspopup="dialog"
+              onClick={() =>
+                setOpenPanel((open) => (open === "files" ? null : "files"))
+              }
             >
-              {item.done ? (
-                <CheckCircle2
-                  size={15}
-                  strokeWidth={2.2}
-                  className="todo-progress-icon is-check"
-                  aria-hidden
-                />
-              ) : (
-                <Circle
-                  size={15}
-                  strokeWidth={2}
-                  className="todo-progress-icon"
-                  aria-hidden
-                />
+              <span>{fileChanges.items.length} 个文件已更改</span>
+              {fileChanges.additions > 0 && (
+                <span className="todo-progress-additions">
+                  +{fileChanges.additions.toLocaleString()}
+                </span>
               )}
-              <span className="todo-progress-item-text">{item.text}</span>
-            </li>
-          ))}
-        </ul>
+              {fileChanges.deletions > 0 && (
+                <span className="todo-progress-deletions">
+                  −{fileChanges.deletions.toLocaleString()}
+                </span>
+              )}
+            </button>
+
+            {openPanel === "files" && (
+              <div
+                className="todo-progress-popover is-files"
+                role="dialog"
+                aria-label="文件改动记录"
+              >
+                <header className="todo-progress-popover-title">
+                  <Files size={14} strokeWidth={2} aria-hidden />
+                  <span>文件改动</span>
+                  <span>{fileChanges.items.length}</span>
+                </header>
+                <ul className="todo-progress-file-list">
+                  {fileChanges.items.map((item) => (
+                    <li
+                      key={item.path}
+                      className="todo-progress-file-item"
+                      title={item.path}
+                    >
+                      <span>{displayFileName(item.path)}</span>
+                      <span className="todo-progress-file-stat">
+                        {item.additions > 0 && (
+                          <span className="todo-progress-additions">
+                            +{item.additions}
+                          </span>
+                        )}
+                        {item.deletions > 0 && (
+                          <span className="todo-progress-deletions">
+                            −{item.deletions}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        </>
       )}
     </div>
   );

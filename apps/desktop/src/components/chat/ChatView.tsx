@@ -2470,8 +2470,6 @@ export default function ChatView({
         </div>
       )}
 
-      <TodoProgress messages={messages} />
-
       <form
         ref={composerShellRef}
         className="composer-shell"
@@ -2481,6 +2479,7 @@ export default function ChatView({
           trySubmitComposer();
         }}
       >
+        <TodoProgress messages={messages} />
         {modeSwitchPrompt?.to === "agent" && (
           <div
             className="composer-queue composer-mode-switch"

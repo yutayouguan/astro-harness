@@ -542,16 +542,6 @@
     0 2px 8px rgba(var(--shadow-ink), 0.04);
 }
 
-.chat-pane.has-project-file > .todo-progress-float {
-  position: absolute;
-  z-index: 9;
-  right: 24px;
-  bottom: 132px;
-  left: 24px;
-  max-width: 760px;
-  margin: 0 auto;
-}
-
 @media (max-width: 760px) {
   .project-files-panel {
     position: absolute;

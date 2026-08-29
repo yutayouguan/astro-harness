@@ -143,6 +143,19 @@ test("composer overlay clearance follows the live composer height", () => {
   assert.match(chatView, /ref=\{composerShellRef\}/);
 });
 
+test("todo and file status stay inside the composer shell", () => {
+  const composerStart = chatView.indexOf('className="composer-shell"');
+  const progress = chatView.indexOf("<TodoProgress messages={messages} />");
+  const composerSurface = chatView.indexOf("composer composer--stacked");
+
+  assert.ok(composerStart >= 0, "missing composer shell");
+  assert.ok(progress > composerStart, "task progress must render inside composer shell");
+  assert.ok(
+    progress < composerSurface,
+    "task progress must render directly above the composer surface",
+  );
+});
+
 test("floating composer shares the sidebar glass material", () => {
   const composer = rule(chatStyles, ".composer");
   const focusedComposer = rule(chatStyles, ".composer:focus-within");

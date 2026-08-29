@@ -14,7 +14,10 @@ import {
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { ChatMessage } from "../../types";
-import { extractLatestTodoPlan, type TodoPlan } from "./TodoProgress";
+import {
+  extractLatestTodoPlan,
+  type TodoPlan,
+} from "../../lib/chat/taskProgress";
 
 type Props = {
   messages: ChatMessage[];
