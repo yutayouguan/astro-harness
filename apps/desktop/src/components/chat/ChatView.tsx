@@ -132,6 +132,7 @@ import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
+import type { FileChangeItem } from "../../lib/chat/taskProgress";
 import BrowserPreviewFloat from "./BrowserPreviewFloat";
 import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
 import {
@@ -337,6 +338,8 @@ type Props = {
   onChatModeChange: (mode: ChatWorkMode) => void;
   /** 打开右侧上下文面板 */
   onOpenContext: () => void;
+  /** 点击任务进度中的文件改动，打开工作区审查面板。 */
+  onOpenFileReview?: (file: FileChangeItem, files: FileChangeItem[]) => void;
   /** 简易上下文占用 0–100，用于按钮提示 */
   contextUsagePercent?: number | null;
   /** 本轮上下文分层占用快照；无则浮层空态 */
@@ -751,6 +754,7 @@ export default function ChatView({
   chatMode,
   onChatModeChange,
   onOpenContext,
+  onOpenFileReview,
   contextUsagePercent = null,
   contextUsage = null,
   contextWindow = 0,
@@ -2479,7 +2483,7 @@ export default function ChatView({
           trySubmitComposer();
         }}
       >
-        <TodoProgress messages={messages} />
+        <TodoProgress messages={messages} onOpenFileReview={onOpenFileReview} />
         {modeSwitchPrompt?.to === "agent" && (
           <div
             className="composer-queue composer-mode-switch"

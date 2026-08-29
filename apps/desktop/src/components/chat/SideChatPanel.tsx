@@ -6,6 +6,7 @@ import type { ChatDisplayPrefs } from "../../hooks/chat/useChatDisplayPrefs";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { ChatWorkMode } from "../../lib/chat/chatMode";
+import type { FileChangeItem } from "../../lib/chat/taskProgress";
 import { usagePercent } from "../../lib/chat/contextUsage";
 import type {
   ChatThinkingPrefs,
@@ -37,6 +38,7 @@ type Props = {
   onToggleThinking: () => void;
   onOpenMcpSettings: () => void;
   onOpenContext: () => void;
+  onOpenFileReview: (file: FileChangeItem, files: FileChangeItem[]) => void;
   onClose: () => void | Promise<void>;
 };
 
@@ -62,6 +64,7 @@ export default function SideChatPanel({
   onToggleThinking,
   onOpenMcpSettings,
   onOpenContext,
+  onOpenFileReview,
   onClose,
 }: Props) {
   const { t } = useI18n();
@@ -188,6 +191,7 @@ export default function SideChatPanel({
           chatMode={sideMode}
           onChatModeChange={setSideMode}
           onOpenContext={onOpenContext}
+          onOpenFileReview={onOpenFileReview}
           onRegenerateMessage={chat.regenerateMessage}
           onEditUserMessage={chat.editUserMessage}
           contextUsage={chat.contextUsage}

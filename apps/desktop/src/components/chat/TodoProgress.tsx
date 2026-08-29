@@ -7,13 +7,15 @@ import {
   displayFileName,
   extractFileChangeSummary,
   extractLatestTodoPlan,
+  type FileChangeItem,
 } from "../../lib/chat/taskProgress";
 
 type Props = {
   messages: ChatMessage[];
+  onOpenFileReview?: (file: FileChangeItem, files: FileChangeItem[]) => void;
 };
 
-export default function TodoProgress({ messages }: Props) {
+export default function TodoProgress({ messages, onOpenFileReview }: Props) {
   const plan = useMemo(() => extractLatestTodoPlan(messages), [messages]);
   const fileChanges = useMemo(
     () => extractFileChangeSummary(messages),
@@ -162,24 +164,30 @@ export default function TodoProgress({ messages }: Props) {
                 </header>
                 <ul className="todo-progress-file-list">
                   {fileChanges.items.map((item) => (
-                    <li
-                      key={item.path}
-                      className="todo-progress-file-item"
-                      title={item.path}
-                    >
-                      <span>{displayFileName(item.path)}</span>
-                      <span className="todo-progress-file-stat">
-                        {item.additions > 0 && (
-                          <span className="todo-progress-additions">
-                            +{item.additions}
-                          </span>
-                        )}
-                        {item.deletions > 0 && (
-                          <span className="todo-progress-deletions">
-                            −{item.deletions}
-                          </span>
-                        )}
-                      </span>
+                    <li key={item.path}>
+                      <button
+                        type="button"
+                        className="todo-progress-file-item"
+                        title={`审查 ${item.path}`}
+                        onClick={() => {
+                          setOpenPanel(null);
+                          onOpenFileReview?.(item, fileChanges.items);
+                        }}
+                      >
+                        <span>{displayFileName(item.path)}</span>
+                        <span className="todo-progress-file-stat">
+                          {item.additions > 0 && (
+                            <span className="todo-progress-additions">
+                              +{item.additions}
+                            </span>
+                          )}
+                          {item.deletions > 0 && (
+                            <span className="todo-progress-deletions">
+                              −{item.deletions}
+                            </span>
+                          )}
+                        </span>
+                      </button>
                     </li>
                   ))}
                 </ul>

@@ -1,14 +1,16 @@
-export type ChatRightDock = "project-files" | "side-chat" | "inspector";
+export type ChatRightDock = "project-files" | "side-chat" | "inspector" | "review";
 
 type ChatRightDockState = {
   projectFilesOpen: boolean;
   sideSessionOpen: boolean;
   inspectorOpen: boolean;
+  reviewOpen: boolean;
 };
 
 type ChatRightDockWidths = {
   projectFiles: number;
   inspector: number;
+  review: number;
   sideChat?: number;
 };
 
@@ -22,7 +24,9 @@ export function resolveChatRightDock({
   projectFilesOpen,
   sideSessionOpen,
   inspectorOpen,
+  reviewOpen,
 }: ChatRightDockState): ChatRightDock | null {
+  if (reviewOpen) return "review";
   if (projectFilesOpen) return "project-files";
   if (sideSessionOpen) return "side-chat";
   if (inspectorOpen) return "inspector";
@@ -37,5 +41,6 @@ export function chatRightDockWidth(
   if (dock === "project-files") return widths.projectFiles;
   if (dock === "side-chat") return widths.sideChat ?? CHAT_SIDE_PANEL_WIDTH;
   if (dock === "inspector") return widths.inspector;
+  if (dock === "review") return widths.review;
   return 0;
 }

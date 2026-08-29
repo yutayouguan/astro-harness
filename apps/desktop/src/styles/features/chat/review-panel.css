@@ -1,0 +1,338 @@
+.chat-review-panel {
+  --review-panel-width: min(880px, calc(100% - 20px));
+  position: absolute;
+  z-index: 26;
+  top: var(--chat-dock-inset, 6px);
+  right: var(--chat-dock-inset, 6px);
+  bottom: var(--chat-dock-inset, 6px);
+  width: var(--review-panel-width);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  border: var(--chat-dock-surface-border);
+  border-radius: var(--chat-dock-radius);
+  background:
+    radial-gradient(circle at 76% 8%, color-mix(in srgb, var(--tone-soft) 18%, transparent), transparent 34%),
+    color-mix(in srgb, var(--glass-panel) 84%, transparent);
+  box-shadow: 0 4px 18px rgba(var(--shadow-ink), 0.08);
+  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
+  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
+}
+
+.chat-review-header {
+  min-height: 48px;
+  padding: 8px 10px 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  background: color-mix(in srgb, var(--glass-panel) 24%, transparent);
+}
+
+.chat-review-title,
+.chat-review-header-actions,
+.chat-review-total,
+.chat-review-file-stat {
+  display: inline-flex;
+  align-items: center;
+}
+
+.chat-review-title {
+  min-width: 0;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+.chat-review-title > svg {
+  color: var(--tone);
+}
+
+.chat-review-total {
+  gap: 5px;
+  margin-left: 5px;
+  font: 500 12px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.chat-review-total b,
+.chat-review-file-stat b {
+  color: var(--success, #16a34a);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.chat-review-total em,
+.chat-review-file-stat em {
+  color: var(--danger, #dc2626);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.chat-review-header-actions {
+  gap: 5px;
+}
+
+.chat-review-header-actions button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 78%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--glass-panel) 42%, transparent);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.chat-review-header-actions button:hover {
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 34%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone-soft) 52%, transparent);
+}
+
+.chat-review-content {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 244px;
+}
+
+.chat-review-diff {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--page-bg) 42%, transparent);
+}
+
+.chat-review-file-header {
+  min-height: 43px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 68%, transparent);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.chat-review-file-header > svg {
+  flex: none;
+  color: var(--tone);
+}
+
+.chat-review-file-header > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-review-file-stat {
+  flex: none;
+  justify-content: flex-end;
+  gap: 5px;
+  font: 500 11.5px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.chat-review-code {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.chat-review-state {
+  min-height: 100%;
+  padding: 36px 24px;
+  display: grid;
+  place-content: center;
+  gap: 7px;
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.chat-review-state.is-error strong {
+  color: var(--danger, #dc2626);
+}
+
+.chat-review-state.is-error span {
+  max-width: 420px;
+  overflow-wrap: anywhere;
+}
+
+.chat-review-lines {
+  min-width: max-content;
+  padding: 8px 0 18px;
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.chat-review-line {
+  min-height: 20px;
+  display: grid;
+  grid-template-columns: 42px 42px minmax(360px, 1fr);
+  color: var(--ink);
+}
+
+.chat-review-line-number {
+  padding: 0 7px;
+  text-align: right;
+  color: var(--ink-muted);
+  user-select: none;
+  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 52%, transparent);
+}
+
+.chat-review-line code {
+  padding: 0 12px;
+  white-space: pre;
+  color: inherit;
+  font: inherit;
+}
+
+.chat-review-line.is-addition {
+  color: color-mix(in srgb, var(--success, #16a34a) 76%, var(--ink));
+  background: color-mix(in srgb, var(--success, #16a34a) 12%, transparent);
+}
+
+.chat-review-line.is-deletion {
+  color: color-mix(in srgb, var(--danger, #dc2626) 78%, var(--ink));
+  background: color-mix(in srgb, var(--danger, #dc2626) 10%, transparent);
+}
+
+.chat-review-line.is-hunk {
+  margin: 6px 0;
+  color: color-mix(in srgb, var(--tone) 76%, var(--ink));
+  background: color-mix(in srgb, var(--tone-soft) 44%, transparent);
+}
+
+.chat-review-line.is-meta {
+  color: var(--ink-muted);
+}
+
+.chat-review-line.is-hunk .chat-review-line-number,
+.chat-review-line.is-meta .chat-review-line-number {
+  border-right-color: transparent;
+}
+
+.chat-review-files {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  background: color-mix(in srgb, var(--glass-panel) 38%, transparent);
+}
+
+.chat-review-files-title {
+  min-height: 43px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 68%, transparent);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.chat-review-file-list {
+  padding: 7px;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-review-file-list > button {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 7px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background 130ms ease, border-color 130ms ease, color 130ms ease;
+}
+
+.chat-review-file-list > button:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.chat-review-file-list > button.is-selected {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--tone) 20%, transparent);
+  background: color-mix(in srgb, var(--tone-soft) 58%, transparent);
+}
+
+.chat-review-file-list > button > svg {
+  flex: none;
+  color: var(--tone);
+}
+
+.chat-review-file-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-review-file-copy strong,
+.chat-review-file-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-review-file-copy strong {
+  font-size: 12px;
+  font-weight: 580;
+}
+
+.chat-review-file-copy small {
+  color: var(--ink-muted);
+  font-size: 10.5px;
+}
+
+@media (max-width: 760px) {
+  .chat-review-panel {
+    --review-panel-width: calc(100% - 12px);
+  }
+
+  .chat-review-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chat-review-files {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    width: min(240px, calc(100% - 16px));
+    max-height: 42%;
+    border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(var(--shadow-ink), 0.1);
+    backdrop-filter: blur(18px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-review-header-actions button,
+  .chat-review-file-list > button {
+    transition: none;
+  }
+}

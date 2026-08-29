@@ -54,6 +54,7 @@
 @import "./features/chat/drawers.css" layer(features);
 @import "./features/chat/emoji-picker.css" layer(features);
 @import "./features/chat/right-panel.css" layer(features);
+@import "./features/chat/review-panel.css" layer(features);
 @import "./features/chat/side-chat.css" layer(features);
 @import "./features/chat/project-files.css" layer(features);
 @import "./features/chat/browser-preview.css" layer(features);

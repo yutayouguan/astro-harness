@@ -14,6 +14,7 @@ import { AnimatePresence } from "framer-motion";
 
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel, { type ChatRightTab } from "./components/chat/ChatRightPanel";
+import ChatReviewPanel from "./components/chat/ChatReviewPanel";
 import SideChatPanel from "./components/chat/SideChatPanel";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
 import ProjectEditDialog from "./components/chat/ProjectEditDialog";
@@ -87,6 +88,7 @@ import {
   type ChatWorkMode,
 } from "./lib/chat/chatMode";
 import type { SlashAction } from "./lib/chat/composerCommands";
+import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import {
   resolveContextWindow,
@@ -131,6 +133,7 @@ import type {
 } from "./types";
 
 const ACTIVE_PROJECT_KEY = "astro.activeProjectId";
+const CHAT_REVIEW_PANEL_WIDTH = 880;
 
 export default function App() {
   // ── Theme / i18n / prefs ──────────────────────────────────────────────────
@@ -306,6 +309,10 @@ export default function App() {
   );
   const [sideSessionId, setSideSessionId] = useState<string | null>(null);
   const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(null);
+  const [reviewState, setReviewState] = useState<{
+    files: FileChangeItem[];
+    selectedPath: string;
+  } | null>(null);
 
   const closeSideChat = useCallback(async () => {
     const sideId = sideSessionId;
@@ -319,6 +326,7 @@ export default function App() {
 
   const openChatRightDock = useCallback(
     (tab?: ChatRightTab) => {
+      setReviewState(null);
       projectFiles.setPanelOpen(false);
       if (sideSessionId) void closeSideChat();
       if (tab) setChatRightTab(tab);
@@ -347,6 +355,7 @@ export default function App() {
       return;
     }
     setChatRightOpen(false);
+    setReviewState(null);
     if (sideSessionId) void closeSideChat();
     projectFiles.setPanelOpen(true);
   }, [
@@ -374,6 +383,7 @@ export default function App() {
         newSessionId: null,
       });
       projectFiles.setPanelOpen(false);
+      setReviewState(null);
       setSideSessionId(id);
       setSideHostSessionId(chat.sessionId);
       setChatRightOpen(false);
@@ -390,6 +400,20 @@ export default function App() {
     showTransientToast,
     sideSessionId,
   ]);
+
+  const openFileReview = useCallback(
+    (file: FileChangeItem, files: FileChangeItem[]) => {
+      projectFiles.setPanelOpen(false);
+      setChatRightOpen(false);
+      if (sideSessionId) void closeSideChat();
+      setReviewState({ files, selectedPath: file.path });
+    },
+    [closeSideChat, projectFiles.setPanelOpen, setChatRightOpen, sideSessionId],
+  );
+
+  useEffect(() => {
+    setReviewState(null);
+  }, [activeProjectId, chat.sessionId]);
 
   const projectPanelWasOpenRef = useRef(false);
   useEffect(() => {
@@ -821,11 +845,13 @@ export default function App() {
     projectFilesOpen: projectFiles.panelOpen,
     sideSessionOpen: Boolean(sideSessionId),
     inspectorOpen: chat.chatRightOpen,
+    reviewOpen: reviewState != null,
   });
   const hasChatRightDock = activeChatRightDock !== null;
   const chatHeaderRightOffset = chatRightDockWidth(activeChatRightDock, {
     projectFiles: projectFilesWidth,
     inspector: chatRightPanelWidth,
+    review: CHAT_REVIEW_PANEL_WIDTH,
   });
 
   useEffect(() => {
@@ -1542,7 +1568,7 @@ export default function App() {
               </div>
               <div className="page-body page-body--chat">
                 <div
-                  className={`chat-layout-with-right${activeChatRightDock === "project-files" ? " has-project-files" : ""}${activeChatRightDock === "side-chat" ? " has-side-chat" : ""}${activeChatRightDock === "inspector" ? " has-chat-right" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
+                  className={`chat-layout-with-right${activeChatRightDock === "project-files" ? " has-project-files" : ""}${activeChatRightDock === "side-chat" ? " has-side-chat" : ""}${activeChatRightDock === "inspector" ? " has-chat-right" : ""}${activeChatRightDock === "review" ? " has-review" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
                   style={{
                     "--project-files-current-width": `${projectFilesWidth}px`,
                   } as CSSProperties}
@@ -1639,6 +1665,7 @@ export default function App() {
                       onOpenContext={() => {
                         openChatRightDock("context");
                       }}
+                      onOpenFileReview={openFileReview}
                       onRegenerateMessage={regenerateMessage}
                       onEditUserMessage={editUserMessage}
                       onBranchMessage={(id) => void branchMessage(id)}
@@ -1693,6 +1720,7 @@ export default function App() {
                           setNav("skills");
                         }}
                         onOpenContext={() => openChatRightDock("context")}
+                        onOpenFileReview={openFileReview}
                         onClose={closeSideChat}
                       />
                     )}
@@ -1727,6 +1755,20 @@ export default function App() {
                         onOpenMemory={() => openSettingsTab("memory")}
                         onOpenSkills={() => setNav("skills")}
                         onWidthChange={setChatRightPanelWidth}
+                      />
+                    )}
+                    {activeChatRightDock === "review" && reviewState && (
+                      <ChatReviewPanel
+                        key="chat-review"
+                        projectId={activeProjectId}
+                        files={reviewState.files}
+                        selectedPath={reviewState.selectedPath}
+                        onSelectPath={(selectedPath) =>
+                          setReviewState((current) =>
+                            current ? { ...current, selectedPath } : current,
+                          )
+                        }
+                        onClose={() => setReviewState(null)}
                       />
                     )}
                   </AnimatePresence>
