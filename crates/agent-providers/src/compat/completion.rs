@@ -15,6 +15,24 @@ use super::sse::extract_openai_delta;
 use crate::traits::{CompletionModel, FromClient, ProviderClient, ProviderExt};
 use crate::types::{CompletionRequest, CompletionStream};
 
+fn openai_chat_function_tools(tools: &[crate::types::message::ToolDefinition]) -> Vec<Value> {
+    tools
+        .iter()
+        .flat_map(|tool| tool.function_definitions())
+        .map(|tool| {
+            json!({
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                    "strict": tool.strict,
+                }
+            })
+        })
+        .collect()
+}
+
 /// Thinking 请求格式 — 厂商如何将统一 `thinking_config` 映射到线路字段。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThinkingFormat {
@@ -223,22 +241,7 @@ where
         }
 
         if Ext::SUPPORTS_TOOLS && !request.tools.is_empty() {
-            let tools: Vec<Value> = request
-                .tools
-                .iter()
-                .flat_map(|tool| tool.function_definitions())
-                .map(|tool| {
-                    json!({
-                        "type": "function",
-                        "function": {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "parameters": tool.parameters,
-                            "strict": tool.strict,
-                        }
-                    })
-                })
-                .collect();
+            let tools = openai_chat_function_tools(&request.tools);
             if !tools.is_empty() {
                 body["tools"] = Value::Array(tools);
                 body["tool_choice"] = json!("auto");
@@ -294,6 +297,31 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::message::{
+        FunctionToolDefinition, NamespaceToolDefinition, ToolDefinition, ToolNamespaceDefinition,
+    };
+
+    #[test]
+    fn namespace_tools_use_function_compatible_names() {
+        let tools =
+            openai_chat_function_tools(&[ToolDefinition::Namespace(ToolNamespaceDefinition {
+                name: "cron".into(),
+                description: "Scheduled jobs".into(),
+                tools: vec![NamespaceToolDefinition::Function(FunctionToolDefinition {
+                    name: "list".into(),
+                    description: "List scheduled jobs".into(),
+                    parameters: json!({"type": "object"}),
+                    strict: false,
+                    defer_loading: None,
+                })],
+            })]);
+
+        let name = tools[0]["function"]["name"].as_str().unwrap();
+        assert_eq!(name, "cron__list");
+        assert!(name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')));
+    }
 
     #[test]
     fn thinking_none_ignores_config() {

@@ -127,6 +127,53 @@ CARGO_TARGET_DIR=/tmp/astro-harness-doc-check \
 
 单独设计 test-support 的异步边界：将辅助 API 整体异步化，或通过明确的测试 runtime 适配；不要在零散调用点使用阻塞嵌套 runtime。修复后恢复 `subagents` 及依赖 `agent/test-support` 的测试覆盖。
 
+## H-003 Legacy Provider 的 Namespace 工具名不符合 Function 协议
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | High |
+| 发现日期 | 2026-08-29 |
+| 发现阶段 | DeepSeek Chat Completions 工具请求 |
+| 是否已修复 | 是；已完成协议修复、路由兼容、回归与文档更新 |
+
+### 问题描述
+
+DeepSeek 返回 HTTP 400：`tools[28].function.name` 不匹配 `^[a-zA-Z0-9\_-]+$`。Astro 会将 Responses API 的 Namespace 工具降级为 Chat Completions Function，但当前将名字展平为 `{namespace}.{child}`；其中的 `.` 不是 Function name 允许字符。当前内置 Cron 工具使用 Namespace，且 Namespace 被排在普通工具之后，与报错的第 29 个工具位置一致。
+
+### 源码证据
+
+- `crates/agent-tools/src/engine/registry.rs`：`api_specs()` 将非空 `namespace` 组装为 Responses API Namespace。
+- `crates/agent-providers/src/types/message.rs`：`ToolDefinition::function_definitions()` 将 Namespace 子工具降级为 `{namespace}.{child}` Function。
+- `crates/agent-providers/src/compat/completion.rs`：Chat Completions 请求直接把上述名称写入 `tools[].function.name`。
+- `crates/agent-core/src/runtime/tool_router.rs`：执行路由目前只登记 `{namespace}.{child}` wire name，因此不能只改下发名而不同步增加回程别名。
+
+### 建议修复方向
+
+保留 Responses API 原生 Namespace 的点分层语义；仅在降级为 Function 的 Provider 边界将名字编码为合法的 `{namespace}__{child}`，并让 step-scoped `ToolRouter` 同时接受原生 `{namespace}.{child}` 与降级 `{namespace}__{child}`，两者均映射回同一 registered handler。不应对所有工具名做无损信息的泛化字符替换。
+
+### 已采用的修复
+
+- `ToolDefinition::function_definitions()` 只在 Function-only Provider 降级边界将 Namespace 子工具编码为 `{namespace}__{child}`；Responses API 原生 Namespace 序列化不变。
+- Chat Completions 请求体统一复用该转换，覆盖 Namespace Function 与 Namespace Freeform。
+- step-scoped `ToolRouter` 同时登记 `{namespace}.{child}` 和 `{namespace}__{child}`，两者仅映射到本轮规格中已经存在的同一 registered handler。
+- 设计文档和术语规范明确区分原生 wire name 与 Legacy Function wire name。
+
+### 验证结果
+
+- `cargo test -p providers namespace_ -- --nocapture`：通过，2 个 Namespace 降级与请求体测试通过。
+- `cargo check -p providers -p agent --lib`：通过，确认 Provider 与 Agent production 路由代码可编译。
+- 三个本轮 Rust 文件的 `rustfmt --check`：通过。
+- `git diff --check`：通过。
+- `cargo test -p agent namespace_wire_name_resolves_to_registered_handler_name`：被 H-002 的既有 test-support/异步 API 编译错误阻塞；该命令在进入目标测试前产生 238 个无关编译错误。本轮新增双 wire name 断言已写入测试源，production 编译已通过。
+
+### 验收标准
+
+- 降级后所有 Function name 均匹配 `^[a-zA-Z0-9\_-]+$`。
+- Responses API 的原生 Namespace JSON 保持不变。
+- 模型返回 `{namespace}__{child}` 时能执行原 registered handler，不扩大可调用工具集。
+- DeepSeek/OpenAI-compatible Chat Completions 的请求体回归测试不再包含点分隔 Function name。
+
 ## 后续缺陷记录模板
 
 ```markdown

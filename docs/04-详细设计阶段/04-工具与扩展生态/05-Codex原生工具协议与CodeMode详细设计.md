@@ -218,12 +218,14 @@ WebSearch 表示由 Provider 托管的搜索：
 | --- | --- |
 | Function | 保持为 Function |
 | Freeform | 降为带 `{ input: string }` 的 Function |
-| Namespace Function | 展平为 `namespace.child` Function |
-| Namespace Freeform | 展平为 `namespace.child` + `{ input: string }` |
+| Namespace Function | 编码为 `namespace__child` Function；ToolRouter 回映射到原 registered handler |
+| Namespace Freeform | 编码为 `namespace__child` + `{ input: string }`；ToolRouter 使用相同回映射 |
 | ToolSearch | 降为普通 `tool_search` Function，仍由客户端执行 |
 | WebSearch | 不安全伪装，从通用 Function 列表中省略 |
 
 这个降级层的原则是“可无损转换才转换”。例如 Freeform 包成 `input` 虽然不再有 grammar 约束，但仍能保留原始文本；Provider-hosted WebSearch 则没有通用客户端函数能保留其执行主体和引用语义，因此不做伪降级。
+
+Namespace 的两种 wire name 属于明确的 Provider 边界：Responses API 原生路径继续使用 `namespace.child` 表达层级；Chat Completions 等 Function-only 路径使用 `namespace__child`，以满足常见的 `^[a-zA-Z0-9_-]+$` 名称约束。step-scoped ToolRouter 只为本轮已暴露的 Namespace 子工具登记这两个别名，并都指向同一 registered handler，因此既不通过全局字符清洗制造碰撞，也不扩大模型可调用的工具集合。
 
 ## 5. `tool_search` 延迟工具与 MCP 激活
 

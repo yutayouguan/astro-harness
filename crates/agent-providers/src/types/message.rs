@@ -103,6 +103,14 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
+/// 将 Responses API Namespace 子工具编码为 Legacy Function 的合法名称。
+///
+/// 点分名称只用于原生 Namespace 语义；Chat Completions 的 `function.name`
+/// 通常只接受字母、数字、下划线和连字符，因此用双下划线保留命名空间边界。
+pub fn legacy_namespace_function_name(namespace: &str, child: &str) -> String {
+    format!("{namespace}__{child}")
+}
+
 /// Responses API 自定义语法工具。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FreeformToolDefinition {
@@ -192,11 +200,11 @@ impl ToolDefinition {
                 .filter_map(|tool| match tool {
                     NamespaceToolDefinition::Function(tool) => {
                         let mut tool = tool.clone();
-                        tool.name = format!("{}.{}", namespace.name, tool.name);
+                        tool.name = legacy_namespace_function_name(&namespace.name, &tool.name);
                         Some(tool)
                     }
                     NamespaceToolDefinition::Freeform(tool) => Some(FunctionToolDefinition {
-                        name: format!("{}.{}", namespace.name, tool.name),
+                        name: legacy_namespace_function_name(&namespace.name, &tool.name),
                         description: tool.description.clone(),
                         parameters: serde_json::json!({
                             "type": "object",
@@ -493,8 +501,12 @@ mod tests {
 
         let functions = namespace.function_definitions();
         assert_eq!(functions.len(), 2);
-        assert_eq!(functions[0].name, "clock.now");
-        assert_eq!(functions[1].name, "clock.script");
+        assert_eq!(functions[0].name, "clock__now");
+        assert_eq!(functions[1].name, "clock__script");
+        assert!(functions.iter().all(|tool| tool
+            .name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))));
         assert_eq!(functions[1].parameters["required"][0], "input");
     }
 }

@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
+use providers::types::message::legacy_namespace_function_name;
 use tools::{DynToolHandler, ToolRegistry};
 
 #[derive(Clone)]
@@ -156,24 +157,32 @@ fn spec_route_names(registry: &ToolRegistry, spec: &serde_json::Value) -> Vec<(S
         let Some(namespace) = spec.get("name").and_then(serde_json::Value::as_str) else {
             return Vec::new();
         };
-        return spec
+        let mut routes = Vec::new();
+        for child in spec
             .get("tools")
             .and_then(serde_json::Value::as_array)
             .into_iter()
             .flatten()
-            .filter_map(|child| {
-                let child_name = child.get("name")?.as_str()?;
-                let wire_name = format!("{namespace}.{child_name}");
-                let registered_name = [
-                    format!("{namespace}_{child_name}"),
-                    wire_name.clone(),
-                    child_name.to_string(),
-                ]
-                .into_iter()
-                .find(|candidate| registry.get(candidate).is_some())?;
-                Some((wire_name, registered_name))
-            })
-            .collect();
+        {
+            let Some(child_name) = child.get("name").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
+            let native_wire_name = format!("{namespace}.{child_name}");
+            let legacy_wire_name = legacy_namespace_function_name(namespace, child_name);
+            let Some(registered_name) = [
+                format!("{namespace}_{child_name}"),
+                legacy_wire_name.clone(),
+                native_wire_name.clone(),
+                child_name.to_string(),
+            ]
+            .into_iter()
+            .find(|candidate| registry.get(candidate).is_some()) else {
+                continue;
+            };
+            routes.push((native_wire_name, registered_name.clone()));
+            routes.push((legacy_wire_name, registered_name));
+        }
+        return routes;
     }
 
     let name = if kind == "tool_search" {
@@ -304,6 +313,8 @@ mod tests {
 
         assert!(router.has_tool("cron.list"));
         assert_eq!(router.registered_name("cron.list"), "cron_list");
+        assert!(router.has_tool("cron__list"));
+        assert_eq!(router.registered_name("cron__list"), "cron_list");
     }
 
     #[test]
