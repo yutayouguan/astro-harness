@@ -504,6 +504,27 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
 
+  const openNodeInspector = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    setSelectedRunId(null);
+    setShowHistory(false);
+    setShowVarsPanel(false);
+    setShowAiAssistant(false);
+  }, []);
+
+  const toggleSidePanel = useCallback((panel: "history" | "variables" | "ai") => {
+    const shouldOpen = panel === "history"
+      ? !showHistory
+      : panel === "variables"
+        ? !showVarsPanel
+        : !showAiAssistant;
+    setShowHistory(panel === "history" && shouldOpen);
+    setShowVarsPanel(panel === "variables" && shouldOpen);
+    setShowAiAssistant(panel === "ai" && shouldOpen);
+    setSelectedRunId(null);
+    if (shouldOpen) setSelectedNodeId(null);
+  }, [showHistory, showVarsPanel, showAiAssistant]);
+
   useEffect(() => {
     if (!showMoreMenu) return;
     const closeMenu = (event: PointerEvent) => {
@@ -922,6 +943,17 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     () => nodes.find((n) => n.id === selectedNodeId),
     [nodes, selectedNodeId],
   );
+  const invalidNodes = useMemo(
+    () => nodes.flatMap((node) => {
+      const data = node.data as Record<string, unknown>;
+      const errors = validateNodeConfig(
+        data.nodeType as NodeType,
+        (data.config as Record<string, unknown>) ?? {},
+      );
+      return errors.length > 0 ? [{ id: node.id, label: String(data.label), errors }] : [];
+    }),
+    [nodes],
+  );
 
   return (
     <div ref={editorRef} className={`loop-editor${fullscreen ? " loop-editor--fullscreen" : ""}`}>
@@ -1001,20 +1033,14 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           <button
             className={`loop-icon-btn${showAiAssistant ? " is-active" : ""}`}
             title={t("loop.aiAssistant")}
-            onClick={() => {
-              setShowAiAssistant((v) => !v);
-              if (!showAiAssistant) {
-                setSelectedNodeId(null);
-                setShowHistory(false);
-              }
-            }}
+            onClick={() => toggleSidePanel("ai")}
           >
             <LOOP_ICON_MAP.Sparkles size={16} />
           </button>
           <button
             className={`loop-icon-btn${showVarsPanel ? " is-active" : ""}`}
             title={t("loop.variables")}
-            onClick={() => setShowVarsPanel((v) => !v)}
+            onClick={() => toggleSidePanel("variables")}
           >
             <LOOP_ICON_MAP.Variable size={16} />
           </button>
@@ -1092,10 +1118,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           <button
             className={`loop-icon-btn${showHistory ? " is-active" : ""}`}
             title={t("loop.history")}
-            onClick={() => {
-              setShowHistory((v) => !v);
-              setSelectedRunId(null);
-            }}
+            onClick={() => toggleSidePanel("history")}
           >
             <History size={16} />
           </button>
@@ -1113,18 +1136,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onClick={async () => {
               if (!workflow || running) return;
               // 运行前校验所有节点
-              const allErrors: string[] = [];
-              for (const n of nodes) {
-                const d = n.data as Record<string, unknown>;
-                const nt = d.nodeType as NodeType;
-                const cfg = (d.config as Record<string, unknown>) ?? {};
-                const errs = validateNodeConfig(nt, cfg);
-                if (errs.length > 0) {
-                  allErrors.push(`${d.label}: ${errs.join("、")}`);
-                }
-              }
-              if (allErrors.length > 0) {
-                showToast(`${allErrors.length} 个节点有未填写的必填字段:\n${allErrors.join("\n")}`, { tone: "error" });
+              if (invalidNodes.length > 0) {
+                openNodeInspector(invalidNodes[0].id);
+                showToast(`${invalidNodes.length} 个节点有未填写的必填字段:\n${invalidNodes.map((item) => `${item.label}: ${item.errors.join("、")}`).join("\n")}`, { tone: "error" });
                 return;
               }
               await handleSave();
@@ -1133,6 +1147,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: workflow.id });
                 showToast(t("loop.runComplete").replace("{count}", String(result.steps_executed)), { tone: "success" });
                 setShowHistory(true);
+                setShowVarsPanel(false);
+                setShowAiAssistant(false);
+                setSelectedNodeId(null);
               } catch (e) {
                 showToast(String(e), { tone: "error" });
               } finally {
@@ -1313,8 +1330,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onConnect={onConnect}
             onConnectStart={onConnectStart}
             onConnectEnd={onConnectEnd}
-            onNodeClick={(_, node) => { setSelectedNodeId(node.id); setContextMenu(null); }}
-            onNodeDoubleClick={(_, node) => setSelectedNodeId(node.id)}
+            onNodeClick={(_, node) => { openNodeInspector(node.id); setContextMenu(null); }}
+            onNodeDoubleClick={(_, node) => openNodeInspector(node.id)}
             onNodeContextMenu={(e, node) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.id }); }}
             onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); setContextMenu(null); }}
             onPaneContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
@@ -1334,6 +1351,27 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               <span>{nodes.length} {t("loop.statusNodes")}</span>
               <span className="loop-statusbar-sep">·</span>
               <span>{edges.length} {t("loop.statusEdges")}</span>
+              {invalidNodes.length > 0 && (
+                <>
+                  <span className="loop-statusbar-sep">·</span>
+                  <button
+                    className="loop-statusbar-issues"
+                    onClick={() => openNodeInspector(invalidNodes[0].id)}
+                  >
+                    <LOOP_ICON_MAP.AlertTriangle size={11} />
+                    {t("loop.statusIssues").replace("{count}", String(invalidNodes.length))}
+                  </button>
+                </>
+              )}
+              {running && (
+                <>
+                  <span className="loop-statusbar-sep">·</span>
+                  <span className="loop-statusbar-running">
+                    <LOOP_ICON_MAP.Loader2 size={11} className="loop-spin" />
+                    {t("loop.running")}
+                  </span>
+                </>
+              )}
               {dirty && (
                 <>
                   <span className="loop-statusbar-sep">·</span>
@@ -1387,7 +1425,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                       return label.toLowerCase().includes(ql);
                     });
                     if (found) {
-                      setSelectedNodeId(found.id);
+                      openNodeInspector(found.id);
                       reactFlowInstance.fitView({ nodes: [found], padding: 0.5, duration: 300 });
                     }
                   }
@@ -1410,7 +1448,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             >
               {contextMenu.nodeId ? (
                 <>
-                  <button onClick={() => { setSelectedNodeId(contextMenu.nodeId!); setContextMenu(null); }}>
+                  <button onClick={() => { openNodeInspector(contextMenu.nodeId!); setContextMenu(null); }}>
                     <LOOP_ICON_MAP.Settings2 size={13} /> {t("loop.configTab")}
                   </button>
                   <button onClick={() => {
@@ -1644,14 +1682,14 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 sourceHandle: e.source_handle ?? undefined,
                 target: e.target,
                 targetHandle: undefined,
-                animated: true,
+                ...edgePresentation(e.source_handle),
               }));
 
               setNodes(newRfNodes);
               setEdges(newRfEdges);
               setDirty(true);
               setShowAiAssistant(false);
-              setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 100);
+              setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, maxZoom: 1.05, duration: 300 }), 100);
             }}
             onClose={() => setShowAiAssistant(false)}
           />

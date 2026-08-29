@@ -1,6 +1,9 @@
 /* ── Responsive breakpoints ──────────────────────────────────── */
 
 @media (max-width: 900px) {
+  .loop-editor-body {
+    --loop-inspector-width: 320px;
+  }
   .loop-node-palette {
     width: 180px;
   }
@@ -37,6 +40,9 @@
 }
 
 @media (max-width: 700px) {
+  .loop-editor-body {
+    --loop-inspector-width: 280px;
+  }
   .loop-node-palette {
     width: 150px;
   }
@@ -162,6 +168,29 @@
 .loop-statusbar-dirty {
   color: #f59e0b;
   font-weight: 600;
+}
+.loop-statusbar-issues,
+.loop-statusbar-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #d97706;
+  font: inherit;
+  font-weight: 600;
+}
+.loop-statusbar-issues {
+  pointer-events: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.loop-statusbar-issues:hover {
+  color: #b45309;
+  text-decoration: underline;
+}
+.loop-statusbar-running {
+  color: var(--tone, #6366f1);
 }
 
 /* ── Shortcuts overlay ───────────────────────────────────────── */

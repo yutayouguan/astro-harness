@@ -1,18 +1,18 @@
 /* ── Config panel (右侧) ──────────────────────────────────────── */
 
 .loop-config-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 380px;
+  position: relative;
+  width: var(--loop-inspector-width, 360px);
+  flex-shrink: 0;
   border-left: 1px solid var(--border);
-  background: var(--bg0, #fff);
+  background: color-mix(in srgb, var(--glass-panel) 92%, transparent);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   z-index: 30;
-  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.06);
+  box-shadow: -8px 0 28px rgba(15, 23, 42, 0.045);
 }
 
 /* scroll body */
@@ -1016,4 +1016,3 @@
   cursor: pointer;
   border-radius: 4px;
 }
-

@@ -255,6 +255,7 @@
 }
 
 .loop-editor-body {
+  --loop-inspector-width: 360px;
   position: relative;
   display: flex;
   flex: 1;
@@ -302,7 +303,7 @@
 }
 
 .loop-collapse-toggle--right {
-  right: 380px;
+  right: var(--loop-inspector-width);
   top: 50%;
   transform: translateY(-50%);
   border-radius: 6px 0 0 6px;
