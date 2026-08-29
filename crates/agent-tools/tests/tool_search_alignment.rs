@@ -107,3 +107,31 @@ fn deferred_activation_survives_registry_reregistration() {
         types::ToolExposure::Direct
     );
 }
+
+#[test]
+fn registry_emits_native_responses_tool_shapes() {
+    let mut registry = ToolRegistry::new();
+    tools::register_all(&mut registry);
+    let specs = registry.schemas_for_api();
+
+    assert!(specs.iter().any(|spec| spec["type"] == "tool_search"));
+    let apply_patch = specs
+        .iter()
+        .find(|spec| spec["name"] == "apply_patch")
+        .expect("apply_patch custom tool");
+    assert_eq!(apply_patch["type"], "custom");
+    assert_eq!(apply_patch["format"]["syntax"], "lark");
+
+    let cron = specs
+        .iter()
+        .find(|spec| spec["type"] == "namespace" && spec["name"] == "cron")
+        .expect("cron namespace");
+    let names: Vec<_> = cron["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect();
+    assert!(names.contains(&"add"));
+    assert!(names.contains(&"list"));
+}
