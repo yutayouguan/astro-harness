@@ -13,6 +13,8 @@ pub mod compression;
 pub mod control;
 /// 执行域聚合模块（cron / subagents / memory_review）。
 pub mod exec;
+/// Git worktree 隔离与项目根解析。
+pub mod git_worktree;
 /// 提示词域：上下文、消息转换、hook 与 prompt builder。
 pub mod prompt;
 /// Agent 运行时核心。

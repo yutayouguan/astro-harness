@@ -29,7 +29,7 @@ pub struct McpOAuthBeginResult {
 }
 
 fn load_server(server_id: &str) -> Result<mcp::McpServerConfig, String> {
-    let project_root = worktree::resolve_project_root(None);
+    let project_root = agent::git_worktree::resolve_project_root(None);
     mcp::load_mcp_servers_layered(project_root.as_deref())
         .map_err(|error| error.to_string())?
         .into_iter()

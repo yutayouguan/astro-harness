@@ -391,7 +391,7 @@ pub async fn get_mcp_servers(
         .map(str::trim)
         .filter(|root| !root.is_empty())
         .map(std::path::PathBuf::from);
-    let resolved_root = explicit_root.or_else(|| worktree::resolve_project_root(None));
+    let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
     let servers =
         mcp::load_mcp_servers_scoped(scope, resolved_root.as_deref()).map_err(|e| e.to_string())?;
     Ok(servers
@@ -407,7 +407,7 @@ pub async fn get_mcp_server_statuses(
 ) -> Result<Vec<McpRuntimeStatusDto>, String> {
     let memory_root = home::default_memory_dir();
     let id = normalize_agent_id(agent_id).unwrap_or_else(|| home::active_agent_id(&memory_root));
-    let project_root = worktree::resolve_project_root(None)
+    let project_root = agent::git_worktree::resolve_project_root(None)
         .map(|root| root.to_string_lossy().into_owned())
         .unwrap_or_default();
     let endpoint = endpoint_url(&default_grpc_address());
@@ -470,7 +470,7 @@ pub async fn set_mcp_servers(
         .map(str::trim)
         .filter(|root| !root.is_empty())
         .map(std::path::PathBuf::from);
-    let resolved_root = explicit_root.or_else(|| worktree::resolve_project_root(None));
+    let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
     let configs: Vec<_> = servers
         .into_iter()
         .map(config_from_dto)
@@ -490,7 +490,7 @@ pub async fn refresh_mcp_tools(
     let effective_agent_id = id
         .clone()
         .unwrap_or_else(|| home::active_agent_id(&memory_root));
-    let execution_root = worktree::resolve_project_root(None)
+    let execution_root = agent::git_worktree::resolve_project_root(None)
         .unwrap_or_else(|| home::agent_workspace_dir(&memory_root, &effective_agent_id));
     let profile_id = memory::load_permission_settings(&memory_root)
         .selection
@@ -558,13 +558,16 @@ pub async fn get_usage_insights(args: UsageInsightsArgs) -> Result<usage::UsageI
         other => return Err(format!("invalid period: {other}")),
     };
     let agent_id = normalize_agent_id(args.agent_id);
-    let db = usage::UsageDb::open_default().await.map_err(|e| e.to_string())?;
+    let db = usage::UsageDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
     db.query_insights(usage::UsageInsightsQuery {
         period,
         as_of: args.as_of,
         agent_id,
     })
-    .await.map_err(|e| e.to_string())
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// `get_trace_insights` 请求参数。
@@ -593,7 +596,8 @@ pub async fn get_trace_insights(args: TraceInsightsArgs) -> Result<usage::TraceI
         as_of: args.as_of,
         agent_id,
     })
-    .await.map_err(|e| e.to_string())
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// `query_agent_logs` 请求参数。

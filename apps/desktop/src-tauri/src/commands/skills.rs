@@ -149,7 +149,7 @@ pub async fn list_installed_skills(
         .map(str::trim)
         .filter(|root| !root.is_empty())
         .map(PathBuf::from);
-    let resolved_root = explicit_root.or_else(|| worktree::resolve_project_root(None));
+    let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
     Ok(list_installed_scoped_for_agent(
         id.as_deref(),
         scope,
@@ -224,7 +224,7 @@ pub async fn install_store_skill(
         .map(str::trim)
         .filter(|root| !root.is_empty())
         .map(PathBuf::from);
-    let resolved_root = explicit_root.or_else(|| worktree::resolve_project_root(None));
+    let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
     let hint = InstallOriginHint {
         name,
         store,

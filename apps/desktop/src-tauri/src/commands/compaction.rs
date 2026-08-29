@@ -23,7 +23,9 @@ fn keep_tail_default() -> usize {
 async fn open_sessions() -> Result<session::SessionStore, String> {
     let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&root.join("sessions")).await.map_err(|e| e.to_string())
+    session::SessionStore::open_sessions_dir(&root.join("sessions"))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn fire_manual_pre_compact(
@@ -207,7 +209,8 @@ pub async fn compact_chat_session(
         let store = open_sessions().await?;
         let meta = store
             .get_session(sid)
-            .await.map_err(|e| e.to_string())?
+            .await
+            .map_err(|e| e.to_string())?
             .ok_or_else(|| "会话不存在".to_string())?;
         if meta.ended_at.is_some() {
             return Err("会话已结束，无法压实".into());
@@ -259,7 +262,8 @@ pub async fn compact_chat_session(
         let store = open_sessions().await?;
         store
             .compact_and_split_if_unchanged(sid, &new_id, &summary, keep, expected_last_message_id)
-            .await.map_err(|e| e.to_string())?;
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     fire_manual_post_compact(live_session.as_deref(), sid, &new_id);

@@ -118,7 +118,7 @@ pub async fn close_subagent_thread(
 #[tauri::command]
 pub async fn list_subagent_definitions() -> Result<Vec<AgentDefinitionDto>, String> {
     let memory_dir = home::default_memory_dir();
-    let project_root = worktree::resolve_project_root(None);
+    let project_root = agent::git_worktree::resolve_project_root(None);
     let configuration = subagents::load_agent_configuration(&memory_dir, project_root.as_deref())
         .map_err(|error| command_error("load agent configuration", error))?;
     Ok(configuration

@@ -207,7 +207,10 @@ async fn reflect_over_targets(
 }
 
 /// 为近期决策关联的会话构建精简 transcript（最多 3 个会话，各 ~1500 字符）。
-async fn build_transcripts(base: &Path, decisions: &[memory::DecisionEntry]) -> Vec<(String, String)> {
+async fn build_transcripts(
+    base: &Path,
+    decisions: &[memory::DecisionEntry],
+) -> Vec<(String, String)> {
     let mut session_ids: Vec<String> = Vec::new();
     for d in decisions {
         if let Some(sid) = d.session_id.as_deref().filter(|s| !s.is_empty()) {
@@ -1879,9 +1882,11 @@ pub async fn import_eval_from_session(
     }
 
     let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
-        .await.map_err(|e| format!("打开会话库失败: {e}"))?;
+        .await
+        .map_err(|e| format!("打开会话库失败: {e}"))?;
     let task = session_user_task(&store, &session_id)
-        .await.ok_or_else(|| "无法从会话提取任务文本".to_string())?;
+        .await
+        .ok_or_else(|| "无法从会话提取任务文本".to_string())?;
 
     let decisions = memory::list_recent_decisions(&base, 200)
         .map_err(|e| format!("读取 DecisionLog 失败: {e}"))?;

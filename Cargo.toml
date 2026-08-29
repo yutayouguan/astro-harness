@@ -17,7 +17,6 @@ members = [
     "crates/agent-memory",
     "crates/agent-network-proxy",
     "crates/agent-sandbox",
-    "crates/agent-delegate",
     "crates/agent-subagents",
     "crates/agent-evolution",
     "crates/agent-cron",

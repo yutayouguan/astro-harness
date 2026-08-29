@@ -13,7 +13,6 @@ home = { path = "../agent-home" }
 session = { path = "../agent-session" }
 usage = { path = "../agent-usage" }
 subagents = { path = "../agent-subagents" }
-worktree = { path = "../agent-delegate" }
 cron = { path = "../agent-cron" }
 skills = { path = "../agent-skills" }
 providers = { path = "../agent-providers" }

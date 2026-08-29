@@ -437,7 +437,9 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
 pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
     bootstrap_workspace()?;
     let _ = agent::exec::cron::reconcile_orphaned_runs();
-    let db = cron::CronRunDb::open_default().await.map_err(|e| e.to_string())?;
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
     let row = db.get(&id).await.map_err(|e| e.to_string())?;
     Ok(row.map(run_to_dto))
 }
@@ -447,7 +449,9 @@ pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
 pub async fn get_cron_run_by_session(session_id: String) -> Result<Option<CronRunDto>, String> {
     bootstrap_workspace()?;
     let _ = agent::exec::cron::reconcile_orphaned_runs();
-    let db = cron::CronRunDb::open_default().await.map_err(|e| e.to_string())?;
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
     let row = db
         .get_by_session_id(&session_id)
         .await
@@ -459,7 +463,9 @@ pub async fn get_cron_run_by_session(session_id: String) -> Result<Option<CronRu
 #[tauri::command]
 pub async fn delete_cron_run(id: String) -> Result<bool, String> {
     bootstrap_workspace()?;
-    let db = cron::CronRunDb::open_default().await.map_err(|e| e.to_string())?;
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
     db.delete(&id).await.map_err(|e| e.to_string())
 }
 
@@ -468,7 +474,9 @@ pub async fn delete_cron_run(id: String) -> Result<bool, String> {
 pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, String> {
     bootstrap_workspace()?;
     let _ = agent::exec::cron::reconcile_orphaned_runs();
-    let db = cron::CronRunDb::open_default().await.map_err(|e| e.to_string())?;
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
     let rows = db
         .list_filtered(cron::run_db::CronRunFilters {
             job_id: args.job_id,
@@ -477,7 +485,8 @@ pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, S
             date_to: args.date_to,
             limit: args.limit,
         })
-        .await.map_err(|e| e.to_string())?;
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(rows.into_iter().map(run_to_dto).collect())
 }
 

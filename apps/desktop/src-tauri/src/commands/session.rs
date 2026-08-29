@@ -189,7 +189,8 @@ pub async fn get_chat_history(
 
     let messages = store
         .build_chat_history(&sid, limit)
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
         .into_iter()
         .map(|m| ChatHistoryMessageDto {
             id: format!("db-{}", m.id),
@@ -244,7 +245,8 @@ pub async fn fork_chat_session(
     let store = open_sessions().await?;
     store
         .fork_session(source, &new_id, keep)
-        .await.map_err(|e| e.to_string())?;
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(new_id)
 }
 
@@ -263,7 +265,8 @@ pub async fn remove_chat_bubbles(session_id: String, start: i32, end: i32) -> Re
     let store = open_sessions().await?;
     store
         .remove_chat_bubbles(sid, start, end)
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 按 active / archived 筛选会话供侧栏展示。
@@ -281,11 +284,13 @@ pub async fn list_sessions(
     let sessions = if let Some(pid) = project_id.filter(|s| !s.is_empty()) {
         store
             .list_sessions_by_project(filter, limit, &pid)
-            .await.map_err(|e| e.to_string())?
+            .await
+            .map_err(|e| e.to_string())?
     } else {
         store
             .list_sessions_filtered(filter, limit, project_root.as_deref())
-            .await.map_err(|e| e.to_string())?
+            .await
+            .map_err(|e| e.to_string())?
     };
     Ok(sessions.into_iter().map(recent_session_dto).collect())
 }
@@ -308,21 +313,25 @@ pub async fn set_session_project_root(
         if let Ok(Some(proj)) = store.find_project_by_root(root).await {
             return store
                 .assign_session_to_project(&session_id, &proj.id)
-                .await.map_err(|e| e.to_string());
+                .await
+                .map_err(|e| e.to_string());
         }
     }
     store
         .set_session_project_root(&session_id, project_root.as_deref())
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 重命名会话。
 #[tauri::command]
 pub async fn rename_session(session_id: String, title: String) -> Result<(), String> {
     let title = validate_session_title(&title)?;
-    open_sessions().await?
+    open_sessions()
+        .await?
         .set_session_title(&session_id, &title)
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 强制重新生成会话标题（覆盖现有标题）。
@@ -347,7 +356,8 @@ pub async fn regenerate_session_title(
         let store = open_sessions().await?;
         store
             .first_turn_text(&sid)
-            .await.map_err(|e| e.to_string())?
+            .await
+            .map_err(|e| e.to_string())?
             .ok_or_else(|| "会话尚无完整首轮对话，无法生成标题".to_string())?
     };
 
@@ -432,9 +442,11 @@ pub async fn regenerate_session_title(
         return Err("模型未返回可用标题".into());
     }
 
-    open_sessions().await?
+    open_sessions()
+        .await?
         .set_session_title(&sid, &title)
-        .await.map_err(|e| e.to_string())?;
+        .await
+        .map_err(|e| e.to_string())?;
 
     emit_session_event(
         &app,
@@ -458,33 +470,41 @@ pub async fn regenerate_session_title(
 /// 归档会话。
 #[tauri::command]
 pub async fn archive_session(session_id: String) -> Result<(), String> {
-    open_sessions().await?
+    open_sessions()
+        .await?
         .archive_session(&session_id)
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 取消归档会话。
 #[tauri::command]
 pub async fn unarchive_session(session_id: String) -> Result<(), String> {
-    open_sessions().await?
+    open_sessions()
+        .await?
         .unarchive_session(&session_id)
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 置顶会话。
 #[tauri::command]
 pub async fn pin_session(session_id: String) -> Result<(), String> {
-    open_sessions().await?
+    open_sessions()
+        .await?
         .pin_session(&session_id)
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 取消置顶。
 #[tauri::command]
 pub async fn unpin_session(session_id: String) -> Result<(), String> {
-    open_sessions().await?
+    open_sessions()
+        .await?
         .unpin_session(&session_id)
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 先尽量释放运行时会话，再永久删除数据库记录。
@@ -502,9 +522,11 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
             "release_session before delete failed; deleting DB anyway"
         );
     }
-    open_sessions().await?
+    open_sessions()
+        .await?
         .delete_session_permanently(&session_id)
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -540,7 +562,8 @@ pub async fn list_projects() -> Result<Vec<ProjectDto>, String> {
     let store = open_sessions().await?;
     Ok(store
         .list_projects()
-        .await.map_err(|e| e.to_string())?
+        .await
+        .map_err(|e| e.to_string())?
         .into_iter()
         .map(project_to_dto)
         .collect())
@@ -556,7 +579,8 @@ pub async fn create_project(name: String, roots: Vec<String>) -> Result<ProjectD
     let root_refs: Vec<&str> = roots.iter().map(|s| s.as_str()).collect();
     let proj = store
         .create_project(name, &root_refs)
-        .await.map_err(|e| e.to_string())?;
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(project_to_dto(proj))
 }
 
@@ -571,17 +595,11 @@ pub async fn update_project(
     let root_strs: Option<Vec<&str>> = roots
         .as_ref()
         .map(|v| v.iter().map(|s| s.as_str()).collect());
-    let icon_ref: Option<Option<&str>> = icon
-        .as_ref()
-        .map(|opt| opt.as_deref());
+    let icon_ref: Option<Option<&str>> = icon.as_ref().map(|opt| opt.as_deref());
     let proj = store
-        .update_project(
-            &project_id,
-            name.as_deref(),
-            icon_ref,
-            root_strs.as_deref(),
-        )
-        .await.map_err(|e| e.to_string())?;
+        .update_project(&project_id, name.as_deref(), icon_ref, root_strs.as_deref())
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(project_to_dto(proj))
 }
 
@@ -590,7 +608,8 @@ pub async fn delete_project(project_id: String) -> Result<Vec<String>, String> {
     let store = open_sessions().await?;
     store
         .delete_project(&project_id)
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -601,7 +620,8 @@ pub async fn move_project(
     let store = open_sessions().await?;
     store
         .move_project(&project_id, before_project_id.as_deref())
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -612,7 +632,8 @@ pub async fn assign_session_to_project(
     let store = open_sessions().await?;
     store
         .assign_session_to_project(&session_id, &project_id)
-        .await.map_err(|e| e.to_string())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------

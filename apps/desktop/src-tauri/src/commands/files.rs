@@ -1,6 +1,8 @@
 //! 文件系统 Tauri 命令：列目录、读写文件、剪贴板、下载、删除、移动、复制。
 
 use serde::Serialize;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
 use tauri::Manager;
 
 use super::common::{bootstrap_workspace, memory_root, open_sessions, workspace_dir};
@@ -24,6 +26,17 @@ pub struct FileBase64Dto {
     pub mime: String,
     pub size: u64,
     pub base64: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectGitDiffDto {
+    pub path: String,
+    pub relative_path: String,
+    pub patch: String,
+    pub additions: usize,
+    pub deletions: usize,
+    pub is_binary: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +68,8 @@ async fn project_roots(project_id: &str) -> Result<Vec<std::path::PathBuf>, Stri
     if project_id.is_empty() {
         return Err("project_id 不能为空".into());
     }
-    let project = open_sessions().await?
+    let project = open_sessions()
+        .await?
         .get_project(project_id)
         .await
         .map_err(|e| e.to_string())?
@@ -180,6 +194,70 @@ fn sanitize_entry_name(name: &str) -> Result<String, String> {
         return Err("无效的名称".into());
     }
     Ok(name.to_string())
+}
+
+fn project_review_path(roots: &[PathBuf], requested: &str) -> Result<(PathBuf, PathBuf), String> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err("文件路径不能为空".into());
+    }
+
+    let path = PathBuf::from(requested);
+    if path.is_absolute() {
+        let resolved = resolve_project_path(roots, requested)?;
+        let root = roots
+            .iter()
+            .find(|root| resolved.starts_with(root.as_path()))
+            .cloned()
+            .ok_or_else(|| "文件不属于该项目".to_string())?;
+        return Ok((root, resolved));
+    }
+
+    let candidates = roots
+        .iter()
+        .map(|root| (root.clone(), root.join(&path)))
+        .collect::<Vec<_>>();
+    let selected = candidates
+        .iter()
+        .find(|(_, candidate)| std::fs::symlink_metadata(candidate).is_ok())
+        .or_else(|| candidates.first())
+        .ok_or_else(|| "项目没有可用根目录".to_string())?;
+    let resolved = resolve_project_path(roots, &selected.1.to_string_lossy())?;
+    Ok((selected.0.clone(), resolved))
+}
+
+fn run_git(root: &Path, args: &[&str]) -> Result<Output, String> {
+    Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .output()
+        .map_err(|error| format!("无法运行 git: {error}"))
+}
+
+fn git_stdout(output: Output, operation: &str, allow_diff_exit: bool) -> Result<String, String> {
+    if output.status.success() || (allow_diff_exit && output.status.code() == Some(1)) {
+        return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if detail.is_empty() {
+        format!("{operation}失败")
+    } else {
+        format!("{operation}失败: {detail}")
+    })
+}
+
+fn count_patch_changes(patch: &str) -> (usize, usize) {
+    patch.lines().fold((0, 0), |(additions, deletions), line| {
+        if line.starts_with('+') && !line.starts_with("+++") {
+            (additions + 1, deletions)
+        } else if line.starts_with('-') && !line.starts_with("---") {
+            (additions, deletions + 1)
+        } else {
+            (additions, deletions)
+        }
+    })
 }
 
 /// 比较两条路径是否指向同一位置（规范化后）。
@@ -402,6 +480,136 @@ pub async fn project_read_file(project_id: String, path: String) -> Result<Strin
         return Err("路径是目录".into());
     }
     std::fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+/// 返回项目内单个文件相对 HEAD 的统一 diff，供聊天右侧审查面板展示。
+#[tauri::command]
+pub async fn project_git_diff(
+    project_id: String,
+    path: String,
+) -> Result<ProjectGitDiffDto, String> {
+    const MAX_PATCH_BYTES: usize = 2 * 1024 * 1024;
+
+    let roots = project_roots(&project_id).await?;
+    let (project_root, file_path) = project_review_path(&roots, &path)?;
+    let repo_root_raw = git_stdout(
+        run_git(&project_root, &["rev-parse", "--show-toplevel"])?,
+        "定位 Git 仓库",
+        false,
+    )?;
+    let repo_root = PathBuf::from(repo_root_raw.trim());
+    let relative_path = file_path
+        .strip_prefix(&repo_root)
+        .map_err(|_| "文件不属于当前 Git 仓库".to_string())?
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    let status = git_stdout(
+        run_git(
+            &repo_root,
+            &[
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "--",
+                &relative_path,
+            ],
+        )?,
+        "读取文件状态",
+        false,
+    )?;
+    let is_untracked = status.lines().any(|line| line.starts_with("?? "));
+    let patch = if is_untracked {
+        git_stdout(
+            run_git(
+                &repo_root,
+                &[
+                    "diff",
+                    "--no-index",
+                    "--no-ext-diff",
+                    "--no-color",
+                    "--unified=3",
+                    "--",
+                    "/dev/null",
+                    &file_path.to_string_lossy(),
+                ],
+            )?,
+            "读取未跟踪文件差异",
+            true,
+        )?
+    } else {
+        let has_head = run_git(&repo_root, &["rev-parse", "--verify", "HEAD"])?
+            .status
+            .success();
+        if has_head {
+            git_stdout(
+                run_git(
+                    &repo_root,
+                    &[
+                        "diff",
+                        "--no-ext-diff",
+                        "--no-color",
+                        "--unified=3",
+                        "HEAD",
+                        "--",
+                        &relative_path,
+                    ],
+                )?,
+                "读取文件差异",
+                false,
+            )?
+        } else {
+            let staged = git_stdout(
+                run_git(
+                    &repo_root,
+                    &[
+                        "diff",
+                        "--cached",
+                        "--no-ext-diff",
+                        "--no-color",
+                        "--unified=3",
+                        "--",
+                        &relative_path,
+                    ],
+                )?,
+                "读取暂存区差异",
+                false,
+            )?;
+            let unstaged = git_stdout(
+                run_git(
+                    &repo_root,
+                    &[
+                        "diff",
+                        "--no-ext-diff",
+                        "--no-color",
+                        "--unified=3",
+                        "--",
+                        &relative_path,
+                    ],
+                )?,
+                "读取工作区差异",
+                false,
+            )?;
+            format!("{staged}{unstaged}")
+        }
+    };
+
+    if patch.len() > MAX_PATCH_BYTES {
+        return Err("文件差异过大，无法在审查面板中完整显示".into());
+    }
+    let (additions, deletions) = count_patch_changes(&patch);
+    let is_binary = patch
+        .lines()
+        .any(|line| line.starts_with("Binary files ") || line.starts_with("GIT binary patch"));
+
+    Ok(ProjectGitDiffDto {
+        path: file_path.to_string_lossy().into_owned(),
+        relative_path,
+        patch,
+        additions,
+        deletions,
+        is_binary,
+    })
 }
 
 /// 用系统默认应用打开项目根目录内的文件或目录。
@@ -1051,7 +1259,9 @@ pub async fn delete_path(path: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod project_path_tests {
-    use super::{ensure_not_project_root, resolve_project_path};
+    use super::{
+        count_patch_changes, ensure_not_project_root, project_review_path, resolve_project_path,
+    };
     use std::path::PathBuf;
     use tempfile::TempDir;
 
@@ -1126,5 +1336,24 @@ mod project_path_tests {
         let child = second.path().join("child");
         std::fs::create_dir(&child).unwrap();
         ensure_not_project_root(&roots, &child, "删除").unwrap();
+    }
+
+    #[test]
+    fn resolves_relative_review_path_inside_project_root() {
+        let root = TempDir::new().unwrap();
+        let file = root.path().join("src").join("main.rs");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "fn main() {}\n").unwrap();
+
+        let (selected_root, selected_file) =
+            project_review_path(&[root.path().to_path_buf()], "src/main.rs").unwrap();
+        assert_eq!(selected_root, root.path());
+        assert_eq!(selected_file, file);
+    }
+
+    #[test]
+    fn counts_only_changed_patch_lines() {
+        let patch = "--- a/file.rs\n+++ b/file.rs\n@@ -1,2 +1,3 @@\n-old\n+new\n+extra\n context\n";
+        assert_eq!(count_patch_changes(patch), (2, 1));
     }
 }

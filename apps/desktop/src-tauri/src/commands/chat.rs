@@ -426,10 +426,12 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         let store = open_sessions().await?;
         store
             .ensure_session(&sid, "tauri")
-            .await.map_err(|e| e.to_string())?;
+            .await
+            .map_err(|e| e.to_string())?;
         store
             .truncate_session_to_bubbles(&sid, keep.max(0) as usize)
-            .await.map_err(|e| e.to_string())?;
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     // 从 providers.json + keyring 解析 primary 与聊天后备链

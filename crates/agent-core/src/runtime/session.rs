@@ -113,6 +113,6 @@ pub fn resolve_session_project_root() -> Option<PathBuf> {
     if flag != "1" && !flag.eq_ignore_ascii_case("true") {
         return None;
     }
-    worktree::resolve_project_root(None)
-        .filter(|p| worktree::find_git_root(p).is_some() || p.is_dir())
+    crate::git_worktree::resolve_project_root(None)
+        .filter(|p| crate::git_worktree::find_git_root(p).is_some() || p.is_dir())
 }

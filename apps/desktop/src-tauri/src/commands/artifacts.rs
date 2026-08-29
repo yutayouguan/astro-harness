@@ -8,7 +8,9 @@ use std::collections::HashMap;
 async fn open_sessions() -> Result<session::SessionStore, String> {
     let root = default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&root.join("sessions")).await.map_err(|e| e.to_string())
+    session::SessionStore::open_sessions_dir(&root.join("sessions"))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Serialize)]
@@ -87,18 +89,22 @@ pub async fn list_artifacts(
             include_missing.unwrap_or(false),
             agent_filter,
         )
-        .await.map_err(|e| e.to_string())?;
+        .await
+        .map_err(|e| e.to_string())?;
 
     let counts_vec = db
         .category_counts(false, agent_filter)
-        .await.map_err(|e| e.to_string())?;
+        .await
+        .map_err(|e| e.to_string())?;
     let mut counts: HashMap<String, i64> = counts_vec.into_iter().collect();
     let total: i64 = counts.values().sum();
     counts.insert("all".into(), total);
 
-    let recent_sessions = open_sessions().await?
+    let recent_sessions = open_sessions()
+        .await?
         .list_recent_sessions(200)
-        .await.map_err(|e| e.to_string())?;
+        .await
+        .map_err(|e| e.to_string())?;
     let title_map: HashMap<String, String> = recent_sessions
         .into_iter()
         .map(|s| {
@@ -262,7 +268,8 @@ pub async fn register_artifact(
             message_id.as_deref(),
             Some(&resolved_agent),
         )
-        .await.map_err(|e| e.to_string())?;
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(map_row(row))
 }
 
@@ -309,7 +316,8 @@ pub async fn save_chat_upload(
             message_id.as_deref(),
             Some(&agent),
         )
-        .await.map_err(|e| e.to_string())?;
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(map_row(row))
 }
 
@@ -318,6 +326,9 @@ pub async fn save_chat_upload(
 pub async fn remove_artifacts_by_paths(paths: Vec<String>) -> Result<u32, String> {
     let mem = default_memory_dir();
     let db = open_default(&mem).await.map_err(|e| e.to_string())?;
-    let n = db.remove_by_paths(&paths).await.map_err(|e| e.to_string())?;
+    let n = db
+        .remove_by_paths(&paths)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(n as u32)
 }
