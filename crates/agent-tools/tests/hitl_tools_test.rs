@@ -54,6 +54,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -104,6 +105,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -169,6 +171,7 @@ async fn clarify_free_text_step_allows_empty_options() {
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -240,6 +243,7 @@ async fn clarify_multi_emits_wizard_hitl() {
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -316,6 +320,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -365,6 +370,7 @@ async fn present_emits_valid_astro_ui() {
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -416,6 +422,7 @@ async fn ask_user_rejects_mixed_questions_and_body() {
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let err = tools::dispatch_tool(

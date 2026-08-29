@@ -68,6 +68,8 @@ pub struct ToolContext<'a> {
     pub context_window: Option<u64>,
     /// 当前已使用的上下文 token 数；由 AgentLoop 注入，`None` 表示未知。
     pub context_tokens_used: Option<u64>,
+    /// Session 级工具注册表；`tool_search` 用它搜索并激活 deferred 工具。
+    pub tool_registry: Option<&'a RwLock<crate::registry::ToolRegistry>>,
 }
 
 impl<'a> ToolContext<'a> {
@@ -317,6 +319,7 @@ permissions:
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let policy = ctx.command_sandbox_policy().unwrap();

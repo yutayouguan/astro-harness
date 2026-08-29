@@ -718,6 +718,7 @@ mod path_tests {
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.txt").unwrap_err();
@@ -759,6 +760,7 @@ mod path_tests {
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let path = resolve_workspace_file(&ctx, "ok.txt").unwrap();

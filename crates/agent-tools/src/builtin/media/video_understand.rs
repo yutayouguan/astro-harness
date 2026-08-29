@@ -495,6 +495,7 @@ mod path_tests {
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.mp4").unwrap_err();

@@ -65,6 +65,11 @@ pub struct ToolRegistry {
     enabled: HashMap<String, bool>,
     /// Skill 加载后 additive 放宽的 toolset（即使 enabled 映射为 false 也允许）。
     skill_override_enabled: std::collections::HashSet<String>,
+    /// 当前 Session 内已由 `tool_search` 加载的 deferred 工具。
+    ///
+    /// MCP 每轮会卸载并重新注册，因此加载状态必须与具体 `ToolEntry`
+    /// 分离，否则搜索结果无法在下一次 sampling step 保持可见。
+    activated_deferred: std::collections::HashSet<String>,
 }
 
 impl ToolRegistry {
@@ -75,11 +80,13 @@ impl ToolRegistry {
             dynamic_handlers: HashMap::new(),
             enabled: HashMap::new(),
             skill_override_enabled: std::collections::HashSet::new(),
+            activated_deferred: std::collections::HashSet::new(),
         }
     }
 
     /// 注册一个动态工具（含 handler 闭包）。MCP 工具用此方法注册。
-    pub fn register_dynamic(&mut self, entry: ToolEntry, handler: DynToolHandler) {
+    pub fn register_dynamic(&mut self, mut entry: ToolEntry, handler: DynToolHandler) {
+        self.restore_deferred_activation(&mut entry);
         let name = entry.name.clone();
         self.tools.insert(name.clone(), entry);
         self.dynamic_handlers.insert(name, handler);
@@ -149,8 +156,20 @@ impl ToolRegistry {
     }
 
     /// 注册或覆盖一个工具条目（以 `entry.name` 为键）。
-    pub fn register(&mut self, entry: ToolEntry) {
+    pub fn register(&mut self, mut entry: ToolEntry) {
+        self.restore_deferred_activation(&mut entry);
         self.tools.insert(entry.name.clone(), entry);
+    }
+
+    fn restore_deferred_activation(&self, entry: &mut ToolEntry) {
+        if !self.activated_deferred.contains(&entry.name) {
+            return;
+        }
+        entry.exposure = match entry.exposure {
+            types::ToolExposure::Deferred => types::ToolExposure::Direct,
+            types::ToolExposure::DeferredModelOnly => types::ToolExposure::DirectModelOnly,
+            exposure => exposure,
+        };
     }
 
     /// 移除指定 toolset 下的全部条目。
@@ -227,6 +246,14 @@ impl ToolRegistry {
             .collect()
     }
 
+    /// 返回当前可搜索但尚未注入模型的工具。
+    pub fn searchable_deferred_tools(&self) -> Vec<&ToolEntry> {
+        self.available_tools()
+            .into_iter()
+            .filter(|entry| entry.exposure.is_deferred())
+            .collect()
+    }
+
     /// 将可用工具序列化为 OpenAI 风格的 `tools` / `functions` API 载荷。
     ///
     /// 每个条目的 `parameters` 会经 [`crate::schema::sanitize_tool_schema`] 清理，
@@ -279,18 +306,23 @@ impl ToolRegistry {
     ///
     /// 工具分发（`dispatch_named_tool`）不受 `exposure` 标记影响——已注册的工具
     /// 始终可调用；此方法仅控制是否向 LLM 暴露 schema。
-    pub fn activate_deferred(&mut self, name: &str) {
+    pub fn activate_deferred(&mut self, name: &str) -> bool {
         if let Some(entry) = self.tools.get_mut(name) {
             match entry.exposure {
                 types::ToolExposure::Deferred => {
                     entry.exposure = types::ToolExposure::Direct;
+                    self.activated_deferred.insert(name.to_string());
+                    return true;
                 }
                 types::ToolExposure::DeferredModelOnly => {
                     entry.exposure = types::ToolExposure::DirectModelOnly;
+                    self.activated_deferred.insert(name.to_string());
+                    return true;
                 }
                 _ => {}
             }
         }
+        false
     }
 }
 
@@ -455,6 +487,36 @@ mod tests {
         assert!(reg.get("persona_create").is_none());
         assert!(reg.get("context_search").is_some());
         assert!(reg.get("pin_context").unwrap().exclusive_access);
+    }
+
+    #[test]
+    fn deferred_activation_survives_dynamic_tool_reregistration() {
+        let mut reg = ToolRegistry::new();
+        let deferred = || ToolEntry {
+            name: "mcp__calendar__list".into(),
+            toolset: "mcp".into(),
+            description: "List calendar events".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            icon: "plug",
+            ..ToolEntry::lifecycle_defaults().deferred()
+        };
+
+        reg.register(deferred());
+        assert!(reg
+            .searchable_deferred_tools()
+            .iter()
+            .any(|entry| { entry.name == "mcp__calendar__list" }));
+        assert!(reg.activate_deferred("mcp__calendar__list"));
+        assert!(schema_names(&reg)
+            .iter()
+            .any(|name| name == "mcp__calendar__list"));
+
+        reg.unregister_toolset("mcp");
+        reg.register(deferred());
+        assert_eq!(
+            reg.get("mcp__calendar__list").unwrap().exposure,
+            types::ToolExposure::Direct
+        );
     }
 
     #[tokio::test]

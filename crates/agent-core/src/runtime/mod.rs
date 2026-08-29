@@ -1341,6 +1341,10 @@ impl Session {
             .tool_registry
             .write()
             .expect("tool registry lock poisoned");
+        let defer_mcp_tools = tool_registry
+            .available_tools()
+            .into_iter()
+            .any(|entry| entry.name == "tool_search" && entry.exposure.is_direct());
         tool_registry.unregister_toolset(MCP_TOOLSET);
         for spec in entries {
             let mcp_approval = types::McpToolApproval {
@@ -1359,7 +1363,11 @@ impl Session {
                 icon: "plug",
                 needs_confirmation,
                 mcp_approval: Some(mcp_approval),
-                ..ToolEntry::lifecycle_defaults()
+                ..if defer_mcp_tools {
+                    ToolEntry::lifecycle_defaults().deferred()
+                } else {
+                    ToolEntry::lifecycle_defaults()
+                }
             });
         }
         if !broker_capabilities.resource_servers.is_empty() {

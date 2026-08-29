@@ -127,6 +127,7 @@ mod tests {
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
         f(&ctx);
     }

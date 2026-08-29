@@ -325,6 +325,7 @@ mod tests {
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         }
     }
 
@@ -516,6 +517,7 @@ PY"#;
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let error = dispatch(&ctx, &serde_json::json!({"command": "touch denied.txt"}))
@@ -564,6 +566,7 @@ PY"#;
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;
@@ -618,6 +621,7 @@ PY"#;
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;

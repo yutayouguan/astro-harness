@@ -1,6 +1,4 @@
-//! 工具搜索：BM25 索引 + 缓存。
-
-use std::sync::Mutex;
+//! 工具搜索：从当前 Session 注册表中搜索 deferred 工具并加载。
 
 use bm25::{Document, Language, SearchEngineBuilder};
 use schemars::JsonSchema;
@@ -30,7 +28,7 @@ pub fn register(registry: &mut ToolRegistry) {
         name: "tool_search".to_string(),
         toolset: "system".to_string(),
         description:
-            "Search available tools by keyword. Returns matching tool names, descriptions and parameter signatures (`name: type`, `?` marks optional), ranked by relevance (BM25). Use this to discover specialized tools not in the default tool list; a tool found here can be called directly with the listed parameters."
+            "Search deferred tools by keyword. Returns complete loadable tool definitions ranked by relevance (BM25) and makes every match available on the next model call. Use this to discover specialized built-in and MCP tools that are not in the default tool list."
                 .to_string(),
         schema: schema_for_args::<ToolSearchArgs>(),
         check_fn: None,
@@ -46,65 +44,55 @@ crate::submit_builtin_tool! {
     args: ToolSearchArgs,
 }
 
-// ── BM25 缓存 ──────────────────────────────────────────────
-
 struct ToolSearchEntry {
     name: String,
     toolset: String,
     description: String,
-    params: Vec<crate::catalog::ToolParamInfo>,
+    parameters: serde_json::Value,
 }
 
 impl ToolSearchEntry {
-    /// `name: type`（可选参数加 `?`），供模型直接照签名构造调用。
-    fn signature(&self) -> Vec<String> {
-        self.params
-            .iter()
-            .map(|p| {
-                let optional = if p.optional { "?" } else { "" };
-                format!("{}{}: {}", p.name, optional, p.type_name)
-            })
-            .collect()
+    /// Codex-compatible loadable function schema returned by `tool_search`.
+    fn loadable_spec(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "function",
+            "name": self.name,
+            "description": self.description,
+            "strict": false,
+            "defer_loading": true,
+            "parameters": self.parameters,
+        })
     }
 }
 
-struct CachedIndex {
-    /// 缓存的 BM25 引擎（类型擦除为搜索回调，避免泛型逃逸）。
-    engine: bm25::SearchEngine<usize>,
-    /// 建索引时的工具数量，用于失效判断。
-    tool_count: usize,
-    /// 与索引对齐的工具元数据。
-    entries: Vec<ToolSearchEntry>,
-}
-
-static CACHE: Mutex<Option<CachedIndex>> = Mutex::new(None);
-
-/// 展开 toolset 目录为逐工具条目：一个 toolset 下的每个函数都单独可检索。
-fn flatten_catalog(catalog: &[crate::catalog::ToolCatalogItem]) -> Vec<ToolSearchEntry> {
-    let mut entries: Vec<ToolSearchEntry> = catalog
-        .iter()
-        .flat_map(|item| {
-            item.functions.iter().map(|f| ToolSearchEntry {
-                name: f.name.clone(),
-                toolset: item.id.clone(),
-                description: f.description.clone(),
-                params: f.params.clone(),
-            })
+fn searchable_entries(registry: &ToolRegistry) -> Vec<ToolSearchEntry> {
+    let mut entries: Vec<ToolSearchEntry> = registry
+        .searchable_deferred_tools()
+        .into_iter()
+        .map(|entry| ToolSearchEntry {
+            name: entry.name.clone(),
+            toolset: entry.toolset.clone(),
+            description: entry.description.clone(),
+            parameters: crate::schema::sanitize_tool_schema(entry.schema.clone()),
         })
         .collect();
     entries.sort_by(|a, b| a.name.cmp(&b.name));
-    entries.dedup_by(|a, b| a.name == b.name);
     entries
 }
 
-fn build_index(catalog: &[crate::catalog::ToolCatalogItem]) -> CachedIndex {
-    let entries = flatten_catalog(catalog);
-
+fn search(
+    entries: &[ToolSearchEntry],
+    query: &str,
+    limit: usize,
+) -> Vec<(String, serde_json::Value)> {
+    if entries.is_empty() || limit == 0 {
+        return Vec::new();
+    }
     let documents: Vec<Document<usize>> = entries
         .iter()
         .enumerate()
         .map(|(idx, entry)| {
-            // 工具名重复一次以提升名称匹配权重
+            // 工具名重复一次以提升名称匹配权重。
             let text = format!(
                 "{} {} {} {}",
                 entry.name, entry.name, entry.toolset, entry.description
@@ -112,50 +100,54 @@ fn build_index(catalog: &[crate::catalog::ToolCatalogItem]) -> CachedIndex {
             Document::new(idx, text)
         })
         .collect();
-
     let engine = SearchEngineBuilder::<usize>::with_documents(Language::English, documents).build();
 
-    CachedIndex {
-        engine,
-        tool_count: entries.len(),
-        entries,
-    }
+    engine
+        .search(query, limit)
+        .into_iter()
+        .map(|result| {
+            let entry = &entries[result.document.id];
+            (entry.name.clone(), entry.loadable_spec())
+        })
+        .collect()
 }
 
-/// 在内置工具目录中按关键字搜索，使用 BM25 索引，返回按相关性排序的匹配结果。
-pub async fn dispatch(_ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::Result<String> {
+/// 搜索当前 Session 的 deferred 工具，返回完整可加载 schema，并将命中
+/// 工具激活为下一次 sampling step 的模型可见工具。
+pub async fn dispatch(ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::Result<String> {
     let query = args.query.trim();
     if query.is_empty() {
         anyhow::bail!("tool_search requires a non-empty query");
     }
 
-    let catalog = crate::catalog::builtin_catalog();
-    let expected_count = flatten_catalog(&catalog).len();
     let limit = args.limit.min(50);
-
-    let mut guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if guard.is_none() || guard.as_ref().unwrap().tool_count != expected_count {
-        *guard = Some(build_index(&catalog));
+    if let Some(registry) = ctx.tool_registry {
+        let matches = {
+            let registry = registry
+                .read()
+                .map_err(|_| anyhow::anyhow!("tool registry lock poisoned"))?;
+            search(&searchable_entries(&registry), query, limit)
+        };
+        {
+            let mut registry = registry
+                .write()
+                .map_err(|_| anyhow::anyhow!("tool registry lock poisoned"))?;
+            for (name, _) in &matches {
+                registry.activate_deferred(name);
+            }
+        }
+        let specs: Vec<_> = matches.into_iter().map(|(_, spec)| spec).collect();
+        return Ok(serde_json::to_string_pretty(&specs)?);
     }
-    let cached = guard.as_ref().unwrap();
 
-    let results = cached.engine.search(query, limit);
-
-    let matches: Vec<serde_json::Value> = results
+    // 独立工具测试/调用没有 Session 注册表时，仍以全量内置工具构建一次性索引。
+    let mut registry = ToolRegistry::new();
+    crate::register_all(&mut registry);
+    let specs: Vec<_> = search(&searchable_entries(&registry), query, limit)
         .into_iter()
-        .map(|r| {
-            let entry = &cached.entries[r.document.id];
-            serde_json::json!({
-                "name": entry.name,
-                "toolset": entry.toolset,
-                "description": entry.description,
-                "parameters": entry.signature(),
-                "relevance": (r.score as f64 * 100.0).round() / 100.0,
-            })
-        })
+        .map(|(_, spec)| spec)
         .collect();
-
-    Ok(serde_json::to_string_pretty(&matches)?)
+    Ok(serde_json::to_string_pretty(&specs)?)
 }
 
 #[cfg(test)]
@@ -163,33 +155,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn flatten_exposes_each_tool_with_its_signature() {
-        let entries = flatten_catalog(&crate::catalog::builtin_catalog());
+    fn searchable_entries_include_full_deferred_schema() {
+        let mut registry = ToolRegistry::new();
+        crate::register_all(&mut registry);
+        let entries = searchable_entries(&registry);
 
-        let search = entries
+        let web_search = entries
             .iter()
-            .find(|e| e.name == "web_search")
+            .find(|entry| entry.name == "web_search")
             .expect("web_search");
-        assert_eq!(search.toolset, "web_search");
-        assert!(
-            search.signature().iter().any(|p| p == "query: string"),
-            "{:?}",
-            search.signature()
-        );
-
-        // 同一 toolset 下的第二个工具也必须单独可检索
-        assert!(entries.iter().any(|e| e.name == "web_fetch"));
+        assert_eq!(web_search.toolset, "web_search");
+        assert!(web_search.parameters["properties"]["query"].is_object());
+        assert!(entries.iter().any(|entry| entry.name == "web_fetch"));
     }
 
-    #[tokio::test]
-    async fn search_ranks_deferred_web_tools() {
-        let entries = flatten_catalog(&crate::catalog::builtin_catalog());
-        let index = build_index(&crate::catalog::builtin_catalog());
-        let hits = index.engine.search("search the web", 5);
-        let names: Vec<&str> = hits
+    #[test]
+    fn search_ranks_deferred_web_tools_and_returns_loadable_specs() {
+        let mut registry = ToolRegistry::new();
+        crate::register_all(&mut registry);
+        let entries = searchable_entries(&registry);
+        let matches = search(&entries, "search the web", 5);
+        let (_, spec) = matches
             .iter()
-            .map(|hit| entries[hit.document.id].name.as_str())
-            .collect();
-        assert!(names.contains(&"web_search"), "{names:?}");
+            .find(|(name, _)| name == "web_search")
+            .expect("web_search match");
+        assert_eq!(spec["type"], "function");
+        assert_eq!(spec["defer_loading"], true);
+        assert!(spec["parameters"]["properties"]["query"].is_object());
     }
 }
