@@ -262,7 +262,7 @@ impl SessionStore {
         Ok(())
     }
 
-    // ---- internal ----
+    // ---- 内部方法 ----
 
     async fn load_project_roots(&self, project_id: &str) -> Result<Vec<String>> {
         let rows = sqlx::query(

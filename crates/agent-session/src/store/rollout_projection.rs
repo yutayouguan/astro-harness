@@ -1,4 +1,4 @@
-//! Deterministic SQLite message projection rebuilt from the durable rollout.
+//! 从持久 rollout 确定性重建的 SQLite 消息投影。
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -23,10 +23,10 @@ struct ProjectedMessage {
     media_json: Option<String>,
 }
 
-/// Replace one session's derived `messages` rows with the response items in its rollout.
+/// 用 rollout 中的 response items 替换单个会话的派生 `messages` 行。
 ///
-/// Session metadata and every other session remain untouched. Deletion, insertion, counter
-/// replacement, and creation of a missing session are committed atomically.
+/// 会话元数据及其他会话保持不变。删除、插入、计数器替换
+/// 以及缺失会话的创建在同一事务中原子提交。
 pub async fn rebuild_messages_from_rollout(
     store: &SessionStore,
     session_id: &str,

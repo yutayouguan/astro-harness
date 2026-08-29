@@ -810,7 +810,7 @@ impl AstroServiceImpl {
         .await
     }
 
-    /// Production session-title emitter; public for durable integration coverage.
+    /// 生产环境会话标题发射器；公开以供持久化集成测试覆盖。
     #[doc(hidden)]
     pub async fn emit_session_metadata_extension(
         &self,
@@ -873,7 +873,7 @@ impl AstroServiceImpl {
         }
     }
 
-    /// Production workspace pending emitter; public for durable integration coverage.
+    /// 生产环境 workspace pending 发射器；公开以供持久化集成测试覆盖。
     #[doc(hidden)]
     pub async fn emit_pending_extension(
         &self,
@@ -1385,8 +1385,8 @@ impl AstroServiceImpl {
         let root_agent_id = root_agent_id.to_string();
         let watcher_registry = Arc::clone(&self.agent_thread_watchers);
         tokio::spawn(async move {
-            // Start at zero so activity racing between control creation and
-            // watcher scheduling is replayed from the ActivityBus buffer.
+            // 从零开始，以便 control 创建与 watcher 调度之间竞争的 activity
+            // 从 ActivityBus 缓冲区重放。
             let mut cursor = subagents::ActivityCursor(0);
             loop {
                 let Some(control) = weak_control.upgrade() else {
@@ -1397,10 +1397,9 @@ impl AstroServiceImpl {
                 drop(control);
                 let observation = observation.await;
 
-                // Keep the generation registry locked through publication.
-                // A replacement watcher cannot install its reset marker until
-                // every old-generation observation has either published first
-                // or observed that it no longer owns this root entry.
+                // 在发布期间保持 generation 注册表锁定。
+                // 替代 watcher 无法安装其 reset 标记，直到每个旧 generation
+                // 的观察要么已先行发布，要么已观察到自己不再持有此根条目。
                 let watchers = watcher_registry.lock().await;
                 let owns_entry = watchers
                     .get(&root_thread_id)

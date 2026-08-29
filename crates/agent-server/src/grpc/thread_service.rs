@@ -184,7 +184,7 @@ pub(crate) async fn subscribe_thread_events(
     let registry = service.connections.clone();
     let thread_states = service.thread_states.clone();
     let cleanup_subscription = generation.key().clone();
-    // Keep one slot reserved for the single terminal slow-consumer status.
+    // 预留一个槽位用于单个终端慢消费者状态。
     let (outbound, stream_rx) = tokio::sync::mpsc::channel(crate::transport::CHANNEL_CAPACITY + 1);
     tokio::spawn(async move {
         let mut receiver = receiver;

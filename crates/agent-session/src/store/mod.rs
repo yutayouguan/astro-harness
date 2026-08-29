@@ -64,7 +64,7 @@ pub struct NewMessage<'a> {
     pub session_id: &'a str,
     pub role: &'a str,
     pub content: Option<&'a str>,
-    /// Provider-facing/internal delivery view persisted by the initial INSERT.
+    /// 初次 INSERT 时持久化的 Provider 侧/内部交付视图。
     pub compressed_content: Option<&'a str>,
     pub tool_calls: Option<Value>,
     pub tool_call_id: Option<&'a str>,
@@ -141,9 +141,9 @@ pub struct StoredSession {
     pub tool_call_count: i64,
     pub archived_at: Option<f64>,
     pub pinned_at: Option<f64>,
-    /// Branch type: `"branch"`, `"side"`, `"agent"`, or `None` for the root session.
+    /// 分支类型：`"branch"`、`"side"`、`"agent"`，根会话为 `None`。
     pub branch_kind: Option<String>,
-    /// The message id in the parent session where this branch forked from.
+    /// 此分支在父会话中分叉的消息 id。
     pub branch_parent_message_id: Option<i64>,
     pub branch_parent_turn_index: Option<i64>,
     pub branch_inherited_turn_count: Option<i64>,
@@ -232,7 +232,7 @@ pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
 }
 
 // ---------------------------------------------------------------------------
-// Branch / lineage types
+// 分支 / 谱系类型
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -268,7 +268,7 @@ pub struct ForkedSession {
     pub created_at: f64,
 }
 
-/// A single user-turn anchor within a session lineage node.
+/// 会话谱系节点中的单个 user-turn 锚点。
 #[derive(Debug, Clone)]
 pub struct SessionTurnNode {
     pub user_message_id: i64,
@@ -278,7 +278,7 @@ pub struct SessionTurnNode {
     pub child_session_ids: Vec<String>,
 }
 
-/// One session in the lineage graph.
+/// 谱系图中的一个会话节点。
 #[derive(Debug, Clone)]
 pub struct SessionLineageNode {
     pub session_id: String,
@@ -292,7 +292,7 @@ pub struct SessionLineageNode {
     pub turns: Vec<SessionTurnNode>,
 }
 
-/// The complete lineage graph for a session tree.
+/// 会话树的完整谱系图。
 #[derive(Debug, Clone)]
 pub struct SessionLineageGraph {
     pub requested_session_id: String,

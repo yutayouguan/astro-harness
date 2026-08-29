@@ -310,12 +310,11 @@ impl SessionStore {
         Ok(())
     }
 
-    /// Fork a session from complete stored rows, optionally retaining only the
-    /// most recent complete user turns.
+    /// 从完整存储行分叉会话，可选仅保留最近的完整 user turn。
     ///
-    /// `None` copies the full history. `Some(0)` creates an empty child
-    /// session. A positive value starts at the Nth user row counted from the
-    /// end, so assistant/tool rows belonging to that user turn remain intact.
+    /// `None` 复制完整历史。`Some(0)` 创建空子会话。
+    /// 正数值从末尾第 N 条 user 行开始，该 user turn 所属的
+    /// assistant/tool 行保持完整。
     pub async fn fork_session_recent_turns(
         &self,
         source_id: &str,
