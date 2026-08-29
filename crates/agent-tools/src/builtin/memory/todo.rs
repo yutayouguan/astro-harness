@@ -41,14 +41,14 @@ pub enum TodoAction {
 /// `todo` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TodoArgs {
-    /// Action: "create" (default) or "update".
+    /// 操作："create"（默认）或 "update"。
     #[serde(default)]
     pub action: TodoAction,
-    /// List title; default `Todo`.
+    /// 列表标题；默认 `Todo`。
     #[serde(default)]
     pub title: Option<String>,
     pub items: Vec<TodoItem>,
-    /// Plan file stem (e.g. "20260722-a1b2c3") for action=update.
+    /// 计划文件名前缀（如 "20260722-a1b2c3"），action=update 时使用。
     #[serde(default)]
     pub plan_id: Option<String>,
 }
