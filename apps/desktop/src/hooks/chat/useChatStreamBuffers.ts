@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import {
   applyActivityUpsert,
   applyReasoningDelta,
-  sealOpenReasoning,
+  applyTextDelta,
 } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import type { ChatActivity, ChatMessage, MessageTokenUsage } from "../../types";
@@ -20,8 +20,10 @@ function calcTokensPerSec(
 export function useChatStreamBuffers(
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
 ) {
+  const streamSegmentPendingRef = useRef<
+    Map<string, Array<{ type: "text" | "reasoning"; content: string }>>
+  >(new Map());
   const streamPendingRef = useRef<Map<string, string>>(new Map());
-  const streamReasoningPendingRef = useRef<Map<string, string>>(new Map());
   const streamStartRef = useRef<Map<string, number>>(new Map());
   const firstTokenRef = useRef<Map<string, number>>(new Map());
   const pendingUsageRef = useRef<Map<string, MessageTokenUsage>>(new Map());
@@ -40,33 +42,43 @@ export function useChatStreamBuffers(
 
   const flushStreamTokens = useCallback(() => {
     streamRafRef.current = null;
-    const batch = new Map(streamPendingRef.current);
-    const reasoningBatch = new Map(streamReasoningPendingRef.current);
+    const batch = new Map(streamSegmentPendingRef.current);
+    streamSegmentPendingRef.current.clear();
     streamPendingRef.current.clear();
-    streamReasoningPendingRef.current.clear();
-    if (batch.size === 0 && reasoningBatch.size === 0) return;
+    if (batch.size === 0) return;
     const now = Date.now();
     setMessages((prev) =>
       prev.map((m) => {
-        const extra = batch.get(m.id);
-        const reasoningExtra = reasoningBatch.get(m.id);
-        if (!extra && !reasoningExtra) return m;
+        const chunks = batch.get(m.id);
+        if (!chunks?.length) return m;
         let next = m;
-        if (reasoningExtra) {
-          next = applyReasoningDelta(next, reasoningExtra, now);
+        for (const chunk of chunks) {
+          next =
+            chunk.type === "reasoning"
+              ? applyReasoningDelta(next, chunk.content, now)
+              : applyTextDelta(next, chunk.content, now);
         }
-        // first content token: seal any open reasoning segment
-        if (extra && !next.content && next.reasoning) {
-          next = sealOpenReasoning(next, now);
-        }
-        next = {
-          ...next,
-          content: extra ? next.content + extra : next.content,
-        };
         return next;
       }),
     );
   }, [setMessages]);
+
+  const enqueueSegment = useCallback(
+    (messageId: string, type: "text" | "reasoning", content: string) => {
+      const pending = streamSegmentPendingRef.current.get(messageId) ?? [];
+      const last = pending[pending.length - 1];
+      if (last?.type === type) {
+        last.content += content;
+      } else {
+        pending.push({ type, content });
+      }
+      streamSegmentPendingRef.current.set(messageId, pending);
+      if (streamRafRef.current == null) {
+        streamRafRef.current = requestAnimationFrame(flushStreamTokens);
+      }
+    },
+    [flushStreamTokens],
+  );
 
   const flushToolDeltas = useCallback(() => {
     toolDeltaRafRef.current = null;
@@ -133,25 +145,17 @@ export function useChatStreamBuffers(
         messageId,
         (streamPendingRef.current.get(messageId) ?? "") + token,
       );
-      if (streamRafRef.current == null) {
-        streamRafRef.current = requestAnimationFrame(flushStreamTokens);
-      }
+      enqueueSegment(messageId, "text", token);
     },
-    [flushStreamTokens],
+    [enqueueSegment],
   );
 
   const enqueueStreamReasoning = useCallback(
     (messageId: string, token: string) => {
       if (!token) return;
-      streamReasoningPendingRef.current.set(
-        messageId,
-        (streamReasoningPendingRef.current.get(messageId) ?? "") + token,
-      );
-      if (streamRafRef.current == null) {
-        streamRafRef.current = requestAnimationFrame(flushStreamTokens);
-      }
+      enqueueSegment(messageId, "reasoning", token);
     },
-    [flushStreamTokens],
+    [enqueueSegment],
   );
 
   const enqueueToolDelta = useCallback(
@@ -184,8 +188,8 @@ export function useChatStreamBuffers(
       cancelAnimationFrame(toolDeltaRafRef.current);
       toolDeltaRafRef.current = null;
     }
+    streamSegmentPendingRef.current.clear();
     streamPendingRef.current.clear();
-    streamReasoningPendingRef.current.clear();
     streamStartRef.current.clear();
     firstTokenRef.current.clear();
     pendingUsageRef.current.clear();

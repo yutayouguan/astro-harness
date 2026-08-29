@@ -6,14 +6,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   applyActivityUpsert,
+  applyReasoningDelta,
   applySurfaceUpsert,
+  applyTextDelta,
   reconcileReasoning,
+  reconcileText,
   sealOpenReasoning,
 } from "../../lib/chat/chatTimeline";
-import {
-  consumeBufferedTextReconcile,
-  reconcileAssistantText,
-} from "../../lib/chat/streamReconcile";
+import { consumeBufferedTextReconcile } from "../../lib/chat/streamReconcile";
 import { upsertAsyncAssistantMessage } from "../../lib/chat/asyncMessage";
 import {
   countRunningParallel,
@@ -81,7 +81,7 @@ export function useParallelTasks(deps: Deps) {
     streamBufRef.current.set(assistantId, "");
     depsRef.current.setMessages((prev) =>
       prev.map((m) =>
-        m.id === assistantId ? { ...m, content: (m.content || "") + pending } : m,
+        m.id === assistantId ? applyTextDelta(m, pending) : m,
       ),
     );
   }, []);
@@ -467,25 +467,21 @@ export function useParallelTasks(deps: Deps) {
           setMessages((prev) =>
             prev.map((message) =>
               message.id === assistantId
-                ? {
-                    ...message,
-                    content: reconcileAssistantText(
-                      message.content,
-                      reconciled.content,
-                    ),
-                  }
+                ? reconcileText(message, reconciled.content)
                 : message,
             ),
           );
         } else if (payload.type === "reasoning" && payload.content) {
+          flushToken(assistantId);
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId
-                ? { ...m, reasoning: (m.reasoning || "") + payload.content }
+                ? applyReasoningDelta(m, payload.content!)
                 : m,
             ),
           );
         } else if (payload.type === "reasoning_reconcile") {
+          flushToken(assistantId);
           setMessages((prev) =>
             prev.map((message) =>
               message.id === assistantId
@@ -494,6 +490,7 @@ export function useParallelTasks(deps: Deps) {
             ),
           );
         } else if (payload.type === "activity") {
+          flushToken(assistantId);
           let operations: unknown[] = [];
           try {
             const parsed = JSON.parse(payload.content_json || "{}") as {
@@ -589,6 +586,7 @@ export function useParallelTasks(deps: Deps) {
         } else if (payload.type === "run_finished" && payload.outcome_type === "error") {
           terminalError ??= t("status.unknownError");
         } else if (payload.type === "tool_call") {
+          flushToken(assistantId);
           const name = payload.name ?? "tool";
           const activity: ChatActivity = {
             id: payload.id || `act-${Date.now()}`,

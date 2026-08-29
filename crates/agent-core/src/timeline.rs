@@ -1,4 +1,4 @@
-//! 助手回合时间线：交错 reasoning / activity / surface，写入 `reasoning_details`。
+//! 助手回合时间线：交错 reasoning / text / activity / surface，写入 `reasoning_details`。
 
 use serde_json::{json, Value};
 
@@ -36,6 +36,33 @@ impl TimelineBuilder {
         self.segments.push(json!({
             "type": "reasoning",
             "id": format!("r-{at_ms}-{}", self.segments.len()),
+            "text": delta,
+            "at": at_ms,
+        }));
+    }
+
+    /// 追加正文；末段已是 text 则拼接，跨 reasoning / activity 后新开一段。
+    pub fn push_text_delta(&mut self, delta: &str, at_ms: i64) {
+        if delta.is_empty() {
+            return;
+        }
+        if let Some(last) = self.segments.last_mut() {
+            if last.get("type").and_then(|t| t.as_str()) == Some("text") {
+                let text = last
+                    .get("text")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("")
+                    .to_string()
+                    + delta;
+                if let Some(obj) = last.as_object_mut() {
+                    obj.insert("text".into(), json!(text));
+                }
+                return;
+            }
+        }
+        self.segments.push(json!({
+            "type": "text",
+            "id": format!("txt-{at_ms}-{}", self.segments.len()),
             "text": delta,
             "at": at_ms,
         }));
@@ -113,14 +140,16 @@ mod tests {
     fn interleaves_reasoning_and_activity() {
         let mut b = TimelineBuilder::new();
         b.push_reasoning_delta("a", 1);
-        b.upsert_activity("c1", 2);
-        b.push_reasoning_delta("b", 3);
+        b.push_text_delta("answer", 2);
+        b.upsert_activity("c1", 3);
+        b.push_reasoning_delta("b", 4);
         let v = b.into_reasoning_details(None);
         let segs = v["astro_timeline_v1"].as_array().unwrap();
-        assert_eq!(segs.len(), 3);
+        assert_eq!(segs.len(), 4);
         assert_eq!(segs[0]["type"], "reasoning");
-        assert_eq!(segs[1]["type"], "activity");
-        assert_eq!(segs[2]["text"], "b");
+        assert_eq!(segs[1]["type"], "text");
+        assert_eq!(segs[2]["type"], "activity");
+        assert_eq!(segs[3]["text"], "b");
     }
 
     #[test]
@@ -130,5 +159,20 @@ mod tests {
         b.upsert_activity("c1", 2);
         let v = b.into_reasoning_details(None);
         assert_eq!(v["astro_timeline_v1"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn text_deltas_merge_only_while_adjacent() {
+        let mut b = TimelineBuilder::new();
+        b.push_text_delta("a", 1);
+        b.push_text_delta("b", 2);
+        b.upsert_activity("c1", 3);
+        b.push_text_delta("c", 4);
+        let v = b.into_reasoning_details(None);
+        let segs = v["astro_timeline_v1"].as_array().unwrap();
+        assert_eq!(segs.len(), 3);
+        assert_eq!(segs[0]["text"], "ab");
+        assert_eq!(segs[1]["type"], "activity");
+        assert_eq!(segs[2]["text"], "c");
     }
 }

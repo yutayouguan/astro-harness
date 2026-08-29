@@ -120,6 +120,13 @@ function asTimelineSegments(raw: unknown): ChatTimelineSegment[] | undefined {
               ? seg.duration_sec
               : undefined,
       });
+    } else if (type === "text") {
+      out.push({
+        type: "text",
+        id: id || `txt-${out.length}`,
+        text: typeof seg.text === "string" ? seg.text : "",
+        at,
+      });
     } else if (type === "activity") {
       out.push({ type: "activity", id: id || `a-${out.length}`, at });
     } else if (type === "surface") {

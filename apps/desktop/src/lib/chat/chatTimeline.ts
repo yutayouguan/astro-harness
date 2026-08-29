@@ -1,5 +1,5 @@
 /**
- * 助手消息时间线拼装：按事件交错 reasoning / activity / surface。
+ * 助手消息时间线拼装：按事件交错 reasoning / text / activity / surface。
  */
 
 import type {
@@ -28,48 +28,6 @@ export function sumReasoningDurations(
     }
   }
   return any ? Math.round(sum * 10) / 10 : undefined;
-}
-
-/**
- * 同回合展示用：把多段 reasoning 合并成一块（放在首个 reasoning 位置），
- * activity / surface 保持相对顺序。末段仍开放（无 duration）则合并块也不封口。
- */
-export function coalesceReasoningSegments(
-  segments: ChatTimelineSegment[] | undefined,
-): ChatTimelineSegment[] | undefined {
-  if (!segments?.length) return segments;
-  const reasoning = segments.filter(
-    (s): s is Extract<ChatTimelineSegment, { type: "reasoning" }> =>
-      s.type === "reasoning",
-  );
-  if (reasoning.length <= 1) return segments;
-
-  const first = reasoning[0]!;
-  const last = reasoning[reasoning.length - 1]!;
-  const lastOpen = last.durationSec == null || last.durationSec <= 0;
-  const merged: ChatTimelineSegment = {
-    type: "reasoning",
-    id: first.id,
-    text: reasoning.map((r) => r.text).join(""),
-    at: first.at,
-    ...(lastOpen
-      ? {}
-      : { durationSec: sumReasoningDurations(segments) }),
-  };
-
-  let emitted = false;
-  const out: ChatTimelineSegment[] = [];
-  for (const seg of segments) {
-    if (seg.type === "reasoning") {
-      if (!emitted) {
-        out.push(merged);
-        emitted = true;
-      }
-      continue;
-    }
-    out.push(seg);
-  }
-  return out;
 }
 
 /**
@@ -145,33 +103,118 @@ export function applyReasoningDelta(
   };
 }
 
+/** 追加正文；只合并相邻正文，跨思考或工具后新开一段。 */
+export function applyTextDelta(
+  m: ChatMessage,
+  delta: string,
+  at: number = Date.now(),
+): ChatMessage {
+  if (!delta) return m;
+  let segments = ensureSegments(m);
+  const last = segments[segments.length - 1];
+  if (last?.type === "text") {
+    segments[segments.length - 1] = {
+      ...last,
+      text: last.text + delta,
+    };
+    return {
+      ...m,
+      segments,
+      content: m.content + delta,
+    };
+  }
+  const sealed = sealOpenReasoning({ ...m, segments }, at);
+  segments = ensureSegments(sealed);
+  segments.push({
+    type: "text",
+    id: `txt-${at}-${segments.length}`,
+    text: delta,
+    at,
+  });
+  return {
+    ...sealed,
+    segments,
+    content: sealed.content + delta,
+  };
+}
+
+function reconcileTextualSegments(
+  segments: ChatTimelineSegment[],
+  type: "reasoning" | "text",
+  canonical: string,
+  at: number,
+): ChatTimelineSegment[] {
+  const indexes = segments.flatMap((segment, index) =>
+    segment.type === type ? [index] : [],
+  );
+  if (indexes.length === 0) {
+    if (!canonical) return segments;
+    return [
+      ...segments,
+      type === "reasoning"
+        ? { type, id: `r-${at}-${segments.length}`, text: canonical, at }
+        : { type, id: `txt-${at}-${segments.length}`, text: canonical, at },
+    ];
+  }
+
+  const lastIndex = indexes[indexes.length - 1]!;
+  const prefix = indexes
+    .slice(0, -1)
+    .map((index) => {
+      const segment = segments[index]!;
+      return segment.type === type ? segment.text : "";
+    })
+    .join("");
+  if (canonical.startsWith(prefix)) {
+    const replacement = canonical.slice(prefix.length);
+    return segments.flatMap((segment, index) => {
+      if (index !== lastIndex) return [segment];
+      if (!replacement) return [];
+      if (segment.type === "reasoning") {
+        const { durationSec: _, ...open } = segment;
+        return [{ ...open, text: replacement }];
+      }
+      return segment.type === "text" ? [{ ...segment, text: replacement }] : [segment];
+    });
+  }
+
+  const firstIndex = indexes[0]!;
+  return segments.flatMap((segment, index) => {
+    if (segment.type !== type) return [segment];
+    if (index !== firstIndex || !canonical) return [];
+    if (segment.type === "reasoning") {
+      const { durationSec: _, ...open } = segment;
+      return [{ ...open, text: canonical }];
+    }
+    return [{ ...segment, text: canonical }];
+  });
+}
+
+/** 用恢复快照校正文案，同时尽可能保留既有事件边界。 */
+export function reconcileText(
+  m: ChatMessage,
+  canonical: string,
+  at: number = Date.now(),
+): ChatMessage {
+  return {
+    ...m,
+    content: canonical,
+    segments: reconcileTextualSegments(ensureSegments(m), "text", canonical, at),
+  };
+}
+
 /** Replace recovered reasoning with one canonical segment while preserving non-reasoning order. */
 export function reconcileReasoning(
   m: ChatMessage,
   canonical: string,
   at: number = Date.now(),
 ): ChatMessage {
-  const segments: ChatTimelineSegment[] = [];
-  let inserted = false;
-  for (const segment of m.segments ?? []) {
-    if (segment.type !== "reasoning") {
-      segments.push(segment);
-      continue;
-    }
-    if (!inserted && canonical) {
-      const { durationSec: _, ...open } = segment;
-      segments.push({ ...open, text: canonical });
-      inserted = true;
-    }
-  }
-  if (!inserted && canonical) {
-    segments.push({
-      type: "reasoning",
-      id: `r-${at}-${segments.length}`,
-      text: canonical,
-      at,
-    });
-  }
+  const segments = reconcileTextualSegments(
+    ensureSegments(m),
+    "reasoning",
+    canonical,
+    at,
+  );
   return {
     ...m,
     reasoning: canonical,

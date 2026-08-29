@@ -7,12 +7,12 @@ import {
   applySurfaceUpsert,
   parseActivityOperations,
   reconcileReasoning,
+  reconcileText,
   sealOpenReasoning,
 } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
 import { saveContextUsageForSession } from "../../lib/chat/chatSessionStore";
-import { reconcileAssistantText } from "../../lib/chat/streamReconcile";
 import { upsertAsyncAssistantMessage } from "../../lib/chat/asyncMessage";
 import {
   parseModeSwitchResult,
@@ -426,6 +426,10 @@ export function useSend(deps: UseSendDeps) {
           const payload = event.payload;
 
           if (payload.type === "token" && payload.content) {
+            if (toolDeltaRafRef.current != null) {
+              cancelAnimationFrame(toolDeltaRafRef.current);
+              flushToolDeltas();
+            }
             touchActivity();
             enqueueStreamToken(assistantId, payload.content);
           } else if (
@@ -438,6 +442,10 @@ export function useSend(deps: UseSendDeps) {
             );
             touchActivity();
           } else if (payload.type === "text_reconcile") {
+            if (toolDeltaRafRef.current != null) {
+              cancelAnimationFrame(toolDeltaRafRef.current);
+              flushToolDeltas();
+            }
             if (streamRafRef.current != null) {
               cancelAnimationFrame(streamRafRef.current);
             }
@@ -446,19 +454,24 @@ export function useSend(deps: UseSendDeps) {
             setMessages((prev) =>
               prev.map((message) =>
                 message.id === assistantId
-                  ? {
-                      ...message,
-                      content: reconcileAssistantText(message.content, canonical),
-                    }
+                  ? reconcileText(message, canonical)
                   : message,
               ),
             );
             touchActivity();
           } else if (payload.type === "reasoning" && payload.content) {
+            if (toolDeltaRafRef.current != null) {
+              cancelAnimationFrame(toolDeltaRafRef.current);
+              flushToolDeltas();
+            }
             touchActivity();
             enqueueStreamReasoning(assistantId, payload.content);
             setStatusPhase("generating");
           } else if (payload.type === "reasoning_reconcile") {
+            if (toolDeltaRafRef.current != null) {
+              cancelAnimationFrame(toolDeltaRafRef.current);
+              flushToolDeltas();
+            }
             if (streamRafRef.current != null) {
               cancelAnimationFrame(streamRafRef.current);
             }
@@ -517,6 +530,14 @@ export function useSend(deps: UseSendDeps) {
           ) {
             onUserInputCommitted?.(payload.client_message_id);
           } else if (payload.type === "activity") {
+            if (streamRafRef.current != null) {
+              cancelAnimationFrame(streamRafRef.current);
+              flushStreamTokens();
+            }
+            if (toolDeltaRafRef.current != null) {
+              cancelAnimationFrame(toolDeltaRafRef.current);
+              flushToolDeltas();
+            }
             const operations = parseActivityOperations(payload.content_json);
             const surface: UiSurface = {
               messageId: payload.message_id || `surf-${Date.now()}`,
@@ -584,6 +605,10 @@ export function useSend(deps: UseSendDeps) {
               setStatusPhase("error");
             }
           } else if (payload.type === "tool_call_delta") {
+            if (streamRafRef.current != null) {
+              cancelAnimationFrame(streamRafRef.current);
+              flushStreamTokens();
+            }
             touchActivity();
             enqueueToolDelta(assistantId, {
               index: payload.index ?? 0,
@@ -600,6 +625,10 @@ export function useSend(deps: UseSendDeps) {
             setStatusPhase("generating");
           } else if (payload.type === "tool_call") {
             touchActivity();
+            if (streamRafRef.current != null) {
+              cancelAnimationFrame(streamRafRef.current);
+              flushStreamTokens();
+            }
             if (toolDeltaRafRef.current != null) {
               cancelAnimationFrame(toolDeltaRafRef.current);
               flushToolDeltas();

@@ -149,7 +149,6 @@ import {
 } from "../schedule/CreateCronDialog";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
-import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
 import {
   groupConsecutiveActivities,
   isConsecutiveActivityGroup,
@@ -2263,11 +2262,10 @@ export default function ChatView({
                             ),
                           });
                         };
+                        let hasTimelineText = false;
 
                         if (m.segments && m.segments.length > 0) {
-                          const displaySegs =
-                            coalesceReasoningSegments(m.segments) ?? m.segments;
-                          for (const seg of displaySegs) {
+                          for (const [segmentIndex, seg] of m.segments.entries()) {
                             if (seg.type === "reasoning") {
                               const openReasoning =
                                 seg.durationSec == null || seg.durationSec <= 0;
@@ -2285,6 +2283,32 @@ export default function ChatView({
                                     durationSec={seg.durationSec}
                                     startedAtMs={active ? seg.at : undefined}
                                   />
+                                ),
+                              });
+                              continue;
+                            }
+                            if (seg.type === "text") {
+                              hasTimelineText = true;
+                              const active = Boolean(
+                                isStreamingBubble &&
+                                  segmentIndex === m.segments.length - 1,
+                              );
+                              steps.push({
+                                key: seg.id,
+                                kind: "reply",
+                                active,
+                                node: (
+                                  <>
+                                    <ChatMarkdown
+                                      content={seg.text}
+                                      streaming={active}
+                                      compact={displayPrefs.verbosity === "compact"}
+                                      plain={Boolean(m.error)}
+                                      caret={false}
+                                      mediaBaseDir={mediaBaseDir}
+                                    />
+                                    <MsgStreamLoader visible={active} />
+                                  </>
                                 ),
                               });
                               continue;
@@ -2342,9 +2366,7 @@ export default function ChatView({
                             m.activities?.length &&
                             displayPrefs.verbosity !== "compact"
                           );
-                        const hasProcess = steps.length > 0;
-
-                        if (m.content) {
+                        if (m.content && !hasTimelineText) {
                           steps.push({
                             key: `reply-${m.id}`,
                             kind: "reply",
@@ -2362,21 +2384,27 @@ export default function ChatView({
                               </>
                             ),
                           });
-                        } else if (isStreamingBubble && hasProcess) {
+                        }
+
+                        const hasProcess = steps.some(
+                          (step) => step.kind !== "reply",
+                        );
+
+                        if (!m.content && isStreamingBubble && hasProcess) {
                           steps.push({
                             key: `gen-${m.id}`,
                             kind: "generating",
                             active: true,
                             node: <MsgStreamLoader />,
                           });
-                        } else if (showLoaderAlone) {
+                        } else if (!m.content && showLoaderAlone) {
                           steps.push({
                             key: `gen-${m.id}`,
                             kind: "generating",
                             active: true,
                             node: <MsgStreamLoader alone />,
                           });
-                        } else if (isStreamingBubble && !hasProcess) {
+                        } else if (!m.content && isStreamingBubble && !hasProcess) {
                           steps.push({
                             key: `gen-${m.id}`,
                             kind: "generating",

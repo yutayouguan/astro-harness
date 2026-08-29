@@ -31,6 +31,27 @@ test("mapHistoryMessages restores activity media from history DTO", () => {
   ]);
 });
 
+test("mapHistoryMessages restores interleaved text timeline segments", () => {
+  const [message] = mapHistoryMessages([
+    {
+      id: "a1",
+      role: "assistant",
+      content: "beforeafter",
+      segments: [
+        { type: "text", id: "txt-1", text: "before", at: 100 },
+        { type: "activity", id: "tool-1", at: 200 },
+        { type: "text", id: "txt-2", text: "after", at: 300 },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(message?.segments?.map((segment) => segment.type), [
+    "text",
+    "activity",
+    "text",
+  ]);
+});
+
 test("mapHistoryMessages drops invalid media entries", () => {
   const msgs = mapHistoryMessages([
     {

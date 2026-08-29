@@ -138,7 +138,7 @@ export type ChatMessage = {
   createdAt?: number;
 };
 
-/** 助手气泡内可交错的时间线段 */
+/** 助手气泡内可交错的时间线段，顺序与模型事件到达顺序一致。 */
 export type ChatTimelineSegment =
   | {
       type: "reasoning";
@@ -146,6 +146,12 @@ export type ChatTimelineSegment =
       text: string;
       at: number;
       durationSec?: number;
+    }
+  | {
+      type: "text";
+      id: string;
+      text: string;
+      at: number;
     }
   | {
       type: "activity";

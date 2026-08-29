@@ -667,6 +667,7 @@ pub(crate) async fn run_turn(
                 None => break,
                 Some(Ok(StreamedAssistantContent::Text(text))) => {
                     if !text.is_empty() {
+                        timeline.push_text_delta(&text, now_ms());
                         if !assistant_started {
                             emit_text_item_started(
                                 &session,
@@ -726,6 +727,7 @@ pub(crate) async fn run_turn(
                     }
                     tool_acc.push(&accumulated_delta);
                     if let (Some(item_id), Some(buffered)) = (item_id, buffered) {
+                        timeline.upsert_activity(&item_id, now_ms());
                         emit_tool_argument_events(&session, &turn_context, &item_id, buffered)
                             .await;
                     }
@@ -785,6 +787,7 @@ pub(crate) async fn run_turn(
                 .get_or_insert_with(|| uuid::Uuid::new_v4().to_string())
                 .clone();
             let buffered = std::mem::take(&mut pending.deltas);
+            timeline.upsert_activity(&item_id, now_ms());
             emit_tool_argument_events(&session, &turn_context, &item_id, buffered).await;
         }
 

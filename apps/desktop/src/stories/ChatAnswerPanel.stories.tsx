@@ -94,6 +94,16 @@ function ChatAnswerPanel() {
                     showTimestamp={false}
                   />
                 </MsgTimelineStep>
+                <MsgTimelineStep kind="reply">
+                  <ChatMarkdown content="已经完成目录扫描，接下来检查构建状态。" />
+                </MsgTimelineStep>
+                <MsgTimelineStep kind="reasoning">
+                  <MsgReasoning
+                    reasoning="根据目录结果选择最小验证范围。"
+                    active={false}
+                    durationSec={12}
+                  />
+                </MsgTimelineStep>
                 <MsgTimelineStep kind="tool">
                   <MsgActivity
                     activity={terminalActivity}

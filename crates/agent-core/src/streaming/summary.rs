@@ -119,6 +119,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
             None => break,
             Some(Ok(StreamedAssistantContent::Text(text))) => {
                 full_response.push_str(&text);
+                timeline.push_text_delta(&text, now_ms());
                 emit_delta(session, turn_context, &assistant_item_id, text, false).await;
             }
             Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
@@ -189,6 +190,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
             "迭代预算已用尽（{used}/{max_total}）。模型未能生成总结，请基于已有工具结果继续或简化任务。"
         );
         full_response = fallback.clone();
+        timeline.push_text_delta(&fallback, now_ms());
         emit_delta(session, turn_context, &assistant_item_id, fallback, false).await;
     }
 
