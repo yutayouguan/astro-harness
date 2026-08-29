@@ -14,7 +14,7 @@ pub const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
 pub const PROTECTED_METADATA_DIRS: &[&str] = &[".git", ".agents", ".astro", ".codex"];
 
-/// Check if sandbox-exec is available.
+/// 检查 sandbox-exec 是否可用。
 pub fn probe() -> bool {
     Path::new(SANDBOX_EXEC).is_file()
 }
