@@ -1136,16 +1136,49 @@ async fn execute_code_mode_tool(
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Result<types::ToolOutput, crate::runtime::ToolCallError> {
-    match call.name.as_str() {
+    if session.cancel.is_cancelled() {
+        return Err(crate::runtime::ToolCallError::Cancelled);
+    }
+    session.increment_tool_round().await?;
+    let mut arguments = call.arguments.clone();
+    if call.name == "exec" {
+        match session.fire_hook(
+            hooks::PRE_TOOL_USE,
+            hooks::HookPayload {
+                session_id: session.session_id().to_string(),
+                turn_id: session.current_turn_id().await,
+                tool_name: Some(call.name.clone()),
+                tool_input: Some(arguments.clone()),
+                detail: format!("{} {}", call.name, arguments),
+                ..Default::default()
+            },
+        ) {
+            hooks::HookOutcome::Block(reason) => {
+                return Ok(format!("[blocked by hook] {reason}").into());
+            }
+            hooks::HookOutcome::Modify(value) => arguments = value,
+            _ => {}
+        }
+    }
+    if let Err(message) = tools::check_tool_call(turn_context.mode(), &call.name, &arguments) {
+        return Ok(message.into());
+    }
+    let agent_id = session.memory().agent_id.clone();
+    let _ = home::record_tool_call(&agent_id, &call.name, &arguments);
+    let turn_id = session.current_turn_id().await;
+    let _ = usage::record_tool_call(
+        &agent_id,
+        &call.name,
+        &arguments,
+        Some(session.session_id()),
+        turn_id.as_deref(),
+    );
+
+    let output = match call.name.as_str() {
         "exec" => {
-            let source = call
-                .arguments
+            let source = arguments
                 .as_str()
-                .or_else(|| {
-                    call.arguments
-                        .get("input")
-                        .and_then(serde_json::Value::as_str)
-                })
+                .or_else(|| arguments.get("input").and_then(serde_json::Value::as_str))
                 .ok_or_else(|| anyhow::anyhow!("exec expects raw JavaScript source text"))?;
             let source =
                 crate::runtime::code_mode::parse_exec_source(source).map_err(anyhow::Error::msg)?;
@@ -1171,10 +1204,10 @@ async fn execute_code_mode_tool(
                 turn_context,
                 hitl_gate,
             )
-            .await
+            .await?
         }
         "wait" => {
-            let args: CodeModeWaitArgs = serde_json::from_value(call.arguments.clone())
+            let args: CodeModeWaitArgs = serde_json::from_value(arguments.clone())
                 .map_err(|error| anyhow::anyhow!("invalid wait arguments: {error}"))?;
             if args.terminate {
                 let terminated = session
@@ -1186,15 +1219,19 @@ async fn execute_code_mode_tool(
                 return Ok(if terminated {
                     "Script terminated\nWall time 0.0 seconds\nOutput:\n".into()
                 } else {
-                    format!("Code Mode cell not found: {}", args.cell_id).into()
+                    format!(
+                        "Script failed\nWall time 0.0 seconds\nOutput:\nScript error:\nexec cell {} not found",
+                        args.cell_id
+                    )
+                    .into()
                 });
             }
-            session
-                .services
-                .code_mode
-                .resume(&args.cell_id)
-                .await
-                .map_err(crate::runtime::ToolCallError::from)?;
+            if let Err(error) = session.services.code_mode.resume(&args.cell_id).await {
+                return Ok(format!(
+                    "Script failed\nWall time 0.0 seconds\nOutput:\nScript error:\n{error}"
+                )
+                .into());
+            }
             drive_code_mode_cell(
                 session,
                 step_context,
@@ -1205,9 +1242,16 @@ async fn execute_code_mode_tool(
                 turn_context,
                 hitl_gate,
             )
-            .await
+            .await?
         }
         _ => unreachable!("not a Code Mode control tool"),
+    };
+    if call.name == "exec" {
+        Ok(session
+            .finalize_tool_call_result(&call.name, &arguments, output)
+            .await)
+    } else {
+        Ok(output)
     }
 }
 

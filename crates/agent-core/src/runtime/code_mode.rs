@@ -177,31 +177,26 @@ impl CodeModeService {
     ) -> anyhow::Result<String> {
         let node = resolve_node_path()
             .ok_or_else(|| anyhow::anyhow!("Code Mode requires Node.js on PATH"))?;
-        let readable_root = node
-            .parent()
-            .ok_or_else(|| anyhow::anyhow!("invalid Node.js executable path"))?
-            .to_path_buf();
+        let cell_id = uuid::Uuid::new_v4().to_string();
         let policy = sandbox::SandboxPolicy::new(
             types::SandboxMode::ReadOnly,
             execution_root,
             std::iter::empty(),
             false,
-        )?
-        .with_restricted_read(vec![readable_root]);
+        )?;
         let mut command =
             sandbox::SandboxRunner.tokio_command(&policy, node.to_string_lossy().as_ref())?;
         command
+            .arg("--permission")
             .arg("-e")
             .arg(NODE_HARNESS)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::null())
             .kill_on_drop(true)
-            .current_dir(execution_root)
+            .current_dir(std::env::temp_dir())
             .env_clear();
-        for key in [
-            "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR", "TMP", "TEMP",
-        ] {
+        for key in ["LANG", "LC_ALL", "LC_CTYPE", "TERM"] {
             if let Some(value) = std::env::var_os(key) {
                 command.env(key, value);
             }
@@ -227,7 +222,6 @@ impl CodeModeService {
         stdin.write_all(b"\n").await?;
         stdin.flush().await?;
 
-        let cell_id = uuid::Uuid::new_v4().to_string();
         self.cells.lock().await.insert(
             cell_id.clone(),
             Arc::new(Mutex::new(CodeCell {

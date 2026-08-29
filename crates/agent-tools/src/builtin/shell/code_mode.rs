@@ -10,6 +10,16 @@ use types::tool_entry::FreeformToolFormat;
 pub const EXEC_TOOL_NAME: &str = "exec";
 pub const WAIT_TOOL_NAME: &str = "wait";
 
+fn code_mode_available() -> bool {
+    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        std::process::Command::new("node")
+            .args(["--permission", "-e", ""])
+            .output()
+            .is_ok_and(|output| output.status.success())
+    })
+}
+
 const EXEC_LARK_GRAMMAR: &str = r#"start: pragma_source | plain_source
 pragma_source: PRAGMA_LINE NEWLINE SOURCE
 plain_source: SOURCE
@@ -38,17 +48,11 @@ const WAIT_DESCRIPTION: &str = r#"Waits on a yielded `exec` cell and returns new
 - `terminate: true` stops the running cell; false or omitted waits for output."#;
 
 pub fn register(registry: &mut ToolRegistry) {
-    let node_available = || {
-        std::process::Command::new("node")
-            .arg("--version")
-            .output()
-            .is_ok_and(|output| output.status.success())
-    };
     registry.register(ToolEntry {
         name: EXEC_TOOL_NAME.into(),
         toolset: "code_mode".into(),
         description: EXEC_DESCRIPTION.into(),
-        check_fn: Some(Box::new(node_available)),
+        check_fn: Some(Box::new(code_mode_available)),
         icon: "code",
         exclusive_access: true,
         exposure: types::ToolExposure::DirectModelOnly,
@@ -74,7 +78,7 @@ pub fn register(registry: &mut ToolRegistry) {
             "required": ["cell_id"],
             "additionalProperties": false
         }),
-        check_fn: Some(Box::new(node_available)),
+        check_fn: Some(Box::new(code_mode_available)),
         icon: "clock",
         exclusive_access: true,
         exposure: types::ToolExposure::DirectModelOnly,
