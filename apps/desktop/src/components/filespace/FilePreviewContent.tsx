@@ -30,6 +30,7 @@ type Props = {
   /** markdown/html：true=预览，false=源码 */
   previewMode: boolean;
   onOpenExternally: () => void;
+  showMediaToolbar?: boolean;
 };
 
 export default function FilePreviewContent({
@@ -41,6 +42,7 @@ export default function FilePreviewContent({
   onDraftChange,
   previewMode,
   onOpenExternally,
+  showMediaToolbar = true,
 }: Props) {
   const [pdfBroken, setPdfBroken] = useState(false);
 
@@ -52,7 +54,13 @@ export default function FilePreviewContent({
     return (
       <div className="ws-media-stage" data-kind={kind}>
         <div className="ws-media-frame">
-          <MediaPreview kind={kind} path={path} alt={name} showToolbar={false} />
+          <MediaPreview
+            kind={kind}
+            path={path}
+            alt={name}
+            showToolbar={false}
+            onOpenExternally={onOpenExternally}
+          />
         </div>
       </div>
     );
@@ -71,7 +79,9 @@ export default function FilePreviewContent({
           src={src}
           onError={() => setPdfBroken(true)}
         />
-        <MediaToolbar path={path} kind="document" compact />
+        {showMediaToolbar ? (
+          <MediaToolbar path={path} kind="document" compact />
+        ) : null}
       </div>
     );
   }

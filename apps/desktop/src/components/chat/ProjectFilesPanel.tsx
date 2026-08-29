@@ -242,7 +242,10 @@ export default function ProjectFilesPanel({
           await invoke("reveal_in_folder", { path: entry.path });
           break;
         case "openExternally":
-          await invoke("open_path_externally", { path: entry.path });
+          await invoke("project_open_path_externally", {
+            projectId: workbench.project?.id ?? "",
+            path: entry.path,
+          });
           break;
         case "openInVscode":
           await invoke("open_path_in_vscode", {

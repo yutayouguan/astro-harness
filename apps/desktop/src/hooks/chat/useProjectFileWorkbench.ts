@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GeneratingPreview } from "./useGeneratingPreview";
+import {
+  projectFileOpenPlan,
+  type ProjectFilePreviewKind,
+} from "../../lib/filespace/projectFilePreview";
 import type { FileEntryDto, ProjectDto } from "../../types";
 
 export type ProjectFileTab = {
@@ -13,6 +17,7 @@ export type ProjectFileTab = {
   saving: boolean;
   readonly: boolean;
   transient: boolean;
+  previewKind: ProjectFilePreviewKind;
   error: string | null;
 };
 
@@ -35,6 +40,7 @@ export type ProjectFileWorkbench = {
   activeKey: string | null;
   setActiveKey: (key: string) => void;
   openFile: (entry: FileEntryDto) => void;
+  openActiveExternally: () => Promise<void>;
   updateActiveContent: (content: string) => void;
   saveActive: () => Promise<void>;
   closeTab: (key: string) => void;
@@ -166,9 +172,17 @@ export function useProjectFileWorkbench(
         prev.map((tab) => {
           if (!tab.path) return tab;
           const path = remapPath(tab.path);
+          const plan = projectFileOpenPlan(basename(path));
           return path === tab.path
             ? tab
-            : { ...tab, key: path, path, name: basename(path) };
+            : {
+                ...tab,
+                key: path,
+                path,
+                name: basename(path),
+                readonly: plan.readonly,
+                previewKind: plan.kind,
+              };
         }),
       );
       setActiveKeyState((current) => (current ? remapPath(current) : current));
@@ -221,6 +235,7 @@ export function useProjectFileWorkbench(
   const openFile = useCallback(
     (entry: FileEntryDto) => {
       if (!project || entry.is_dir) return;
+      const plan = projectFileOpenPlan(entry.name);
       setPanelOpen(true);
       setActiveKeyState(entry.path);
       setTabs((prev) => {
@@ -233,14 +248,16 @@ export function useProjectFileWorkbench(
             name: entry.name,
             content: "",
             savedContent: "",
-            loading: true,
+            loading: plan.readAsText,
             saving: false,
-            readonly: false,
+            readonly: plan.readonly,
             transient: false,
+            previewKind: plan.kind,
             error: null,
           },
         ];
       });
+      if (!plan.readAsText) return;
       void invoke<string>("project_read_file", {
         projectId: project.id,
         path: entry.path,
@@ -297,6 +314,7 @@ export function useProjectFileWorkbench(
         saving: false,
         readonly: generatingPreview.status === "streaming",
         transient: true,
+        previewKind: "text",
         error: null,
       };
       const index = prev.findIndex((tab) => tab.key === key);
@@ -306,6 +324,31 @@ export function useProjectFileWorkbench(
 
     if (generatingPreview.status !== "done" || !generatingPreview.path || !project) return;
     const path = generatingPreview.path;
+    const name = basename(path);
+    const plan = projectFileOpenPlan(name);
+    if (!plan.readAsText) {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.key === key
+            ? {
+                ...tab,
+                key: path,
+                path,
+                name,
+                content: "",
+                savedContent: "",
+                readonly: plan.readonly,
+                transient: false,
+                previewKind: plan.kind,
+              }
+            : tab,
+        ),
+      );
+      setActiveKeyState((current) => (current === key ? path : current));
+      const parent = dirname(path);
+      if (parent) void loadDirectory(parent, true);
+      return;
+    }
     void invoke<string>("project_read_file", { projectId: project.id, path })
       .then((content) => {
         setTabs((prev) =>
@@ -320,6 +363,7 @@ export function useProjectFileWorkbench(
                   savedContent: content,
                   readonly: false,
                   transient: false,
+                  previewKind: plan.kind,
                 }
               : tab,
           ),
@@ -377,6 +421,14 @@ export function useProjectFileWorkbench(
     }
   }, [activeTab, project]);
 
+  const openActiveExternally = useCallback(async () => {
+    if (!project || !activeTab?.path) return;
+    await invoke("project_open_path_externally", {
+      projectId: project.id,
+      path: activeTab.path,
+    });
+  }, [activeTab?.path, project]);
+
   const closeTab = useCallback(
     (key: string) => {
       const target = tabs.find((tab) => tab.key === key);
@@ -420,6 +472,7 @@ export function useProjectFileWorkbench(
     activeKey,
     setActiveKey: setActiveKeyState,
     openFile,
+    openActiveExternally,
     updateActiveContent,
     saveActive,
     closeTab,

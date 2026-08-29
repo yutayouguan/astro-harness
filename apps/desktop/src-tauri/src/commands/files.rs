@@ -404,6 +404,17 @@ pub async fn project_read_file(project_id: String, path: String) -> Result<Strin
     std::fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
+/// 用系统默认应用打开项目根目录内的文件或目录。
+#[tauri::command]
+pub async fn project_open_path_externally(project_id: String, path: String) -> Result<(), String> {
+    let roots = project_roots(&project_id).await?;
+    let path = resolve_project_path(&roots, &path)?;
+    if !path.exists() {
+        return Err("路径不存在".into());
+    }
+    open_path_with_system(&path)
+}
+
 /// 写入项目内 UTF-8 文本文件；缺失的父目录会一并创建。
 #[tauri::command]
 pub async fn project_write_file(

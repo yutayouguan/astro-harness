@@ -20,6 +20,8 @@ export type MediaPreviewProps = {
   compact?: boolean;
   /** 是否显示下载/复制等工具条；卡片头已有操作时可关 */
   showToolbar?: boolean;
+  /** 宿主可提供带自身边界校验的系统打开逻辑 */
+  onOpenExternally?: () => void;
 };
 
 export default function MediaPreview({
@@ -30,6 +32,7 @@ export default function MediaPreview({
   className,
   compact,
   showToolbar = true,
+  onOpenExternally,
 }: MediaPreviewProps) {
   const src = useMemo(() => resolveMediaSrc(path), [path]);
   // path/src 可能随后端或 mediaBaseDir 异步变为可加载 URL；勿把首屏失败粘成永久 Broken
@@ -41,6 +44,10 @@ export default function MediaPreview({
   }, [src]);
 
   const openExternally = () => {
+    if (onOpenExternally) {
+      onOpenExternally();
+      return;
+    }
     void invoke("open_path_externally", { path }).catch(() => {});
   };
 
