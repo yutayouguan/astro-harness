@@ -156,7 +156,7 @@ pub struct UsageDb {
 }
 
 pub fn usage_db_path() -> PathBuf {
-    home::default_memory_dir().join("usage.db")
+    home::usage_db_path(&home::default_memory_dir())
 }
 
 fn fmt_utc_bound(dt: chrono::DateTime<Utc>) -> String {
@@ -304,9 +304,11 @@ impl UsageDb {
             let db = AstroDb::new(&parent);
             let pool = db.open_pool(&DB_SPEC).await?;
             sqlx::query(DDL).execute(&pool).await?;
-            sqlx::raw_sql(AssertSqlSafe(format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION}")))
-                .execute(&pool)
-                .await?;
+            sqlx::raw_sql(AssertSqlSafe(format!(
+                "PRAGMA user_version = {USAGE_SCHEMA_VERSION}"
+            )))
+            .execute(&pool)
+            .await?;
             return Ok(Self { pool, path });
         }
 
@@ -322,9 +324,11 @@ impl UsageDb {
             let db = AstroDb::new(&parent);
             let pool = db.open_pool(&DB_SPEC).await?;
             sqlx::query(DDL).execute(&pool).await?;
-            sqlx::raw_sql(AssertSqlSafe(format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION}")))
-                .execute(&pool)
-                .await?;
+            sqlx::raw_sql(AssertSqlSafe(format!(
+                "PRAGMA user_version = {USAGE_SCHEMA_VERSION}"
+            )))
+            .execute(&pool)
+            .await?;
             return Ok(Self { pool, path });
         }
 
@@ -344,15 +348,18 @@ impl UsageDb {
                     .execute(&pool)
                     .await?;
             }
-            sqlx::raw_sql(AssertSqlSafe(format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION}")))
-                .execute(&pool)
-                .await?;
+            sqlx::raw_sql(AssertSqlSafe(format!(
+                "PRAGMA user_version = {USAGE_SCHEMA_VERSION}"
+            )))
+            .execute(&pool)
+            .await?;
         }
 
         Ok(Self { pool, path })
     }
 
     pub async fn open_default() -> anyhow::Result<Self> {
+        home::ensure_default_workspace_dirs()?;
         Self::new(usage_db_path()).await
     }
 
@@ -419,9 +426,7 @@ impl UsageDb {
         let (start, end, bucket_fmt) = period_bounds(q.period, &as_of);
         let agent_id = q.agent_id.filter(|s| !s.is_empty());
         Ok(UsageInsights {
-            kpis: self
-                .query_kpis(&start, &end, agent_id.as_deref())
-                .await?,
+            kpis: self.query_kpis(&start, &end, agent_id.as_deref()).await?,
             series: self
                 .query_series(&start, &end, bucket_fmt, agent_id.as_deref())
                 .await?,
@@ -613,7 +618,9 @@ impl UsageDb {
                AND cost_status = 'unknown'
                {agent_clause}"
         );
-        let mut query = sqlx::query_as::<_, (i64,)>(AssertSqlSafe(sql)).bind(start).bind(end);
+        let mut query = sqlx::query_as::<_, (i64,)>(AssertSqlSafe(sql))
+            .bind(start)
+            .bind(end);
         if let Some(aid) = agent_id {
             query = query.bind(aid);
         }

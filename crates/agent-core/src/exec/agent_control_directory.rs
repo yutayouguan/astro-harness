@@ -32,9 +32,10 @@ impl AgentControlDirectory {
 
     /// 打开或复用根会话的 AgentControl（默认 db 路径），含崩溃恢复。
     pub async fn open_root(&self, root_session_id: &str) -> anyhow::Result<Arc<AgentControl>> {
+        home::ensure_default_workspace_dirs()?;
         self.open_root_at(
             root_session_id,
-            &home::default_memory_dir().join("subagents-v2.db"),
+            &home::subagents_db_path(&home::default_memory_dir()),
         )
         .await
     }
@@ -84,7 +85,7 @@ impl AgentControlDirectory {
     pub fn get(&self, root_session_id: &str) -> Option<Arc<AgentControl>> {
         self.get_at(
             root_session_id,
-            &home::default_memory_dir().join("subagents-v2.db"),
+            &home::subagents_db_path(&home::default_memory_dir()),
         )
     }
 

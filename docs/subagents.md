@@ -70,7 +70,7 @@ interrupt_message = true
 
 ## 持久化边界
 
-- `~/.astro/subagents-v2.db`：V2 Agent Graph、spawn edge、mailbox、状态事件和恢复元数据。
-- `~/.astro/sessions/state.db`：每个 Agent Thread 的真实消息、reasoning、tool call/result 时间线。
+- `~/.astro/data/subagents-v2.db`：V2 Agent Graph、spawn edge、mailbox、状态事件和恢复元数据。
+- `~/.astro/data/state.db`：每个 Agent Thread 的真实消息、reasoning、tool call/result 时间线。
 
 旧 V1 schema 只能被一次性迁移器识别：原 thread/message 表被改名为只读历史归档，不会恢复为可执行 runtime，也不提供旧模型 API。

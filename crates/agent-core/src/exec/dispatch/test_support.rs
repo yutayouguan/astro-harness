@@ -138,7 +138,7 @@ impl LifecycleTestApp {
         let root_thread_id = root_thread_id.into();
         let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))?;
         sessions.ensure_session(&root_thread_id, "acceptance-root")?;
-        let store = AgentGraphStore::open(memory_dir.join("subagents-v2.db"))?;
+        let store = AgentGraphStore::open(home::subagents_db_path(&memory_dir))?;
         let control = AgentControl::open(
             root_thread_id.clone(),
             store,
@@ -294,7 +294,7 @@ impl LifecycleTestApp {
             self.runtime_manager.active_count() == 0,
             "cannot restart test app with an active runtime"
         );
-        let store = AgentGraphStore::open(self.memory_dir.join("subagents-v2.db"))?;
+        let store = AgentGraphStore::open(home::subagents_db_path(&self.memory_dir))?;
         store.cleanup_pending_reservations(&self.root_thread_id)?;
         store.recover_running_as_interrupted(&self.root_thread_id)?;
         self.control = AgentControl::open(

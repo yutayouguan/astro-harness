@@ -110,8 +110,9 @@ impl CronRunDb {
     }
 
     pub async fn open_default() -> anyhow::Result<Self> {
-        let root = crate::cron_dir();
-        Self::new(cron_db_path(&root)).await
+        let base = home::default_memory_dir();
+        home::ensure_workspace_dirs(&base)?;
+        Self::new(home::cron_run_db_path(&base)).await
     }
 
     pub fn db_path(&self) -> &Path {
@@ -231,14 +232,13 @@ impl CronRunDb {
     }
 
     pub async fn list_running(&self) -> anyhow::Result<Vec<CronRunRow>> {
-        let rows = sqlx::query(
-            "SELECT * FROM cron_runs WHERE status = 'running' ORDER BY fired_at DESC",
-        )
-        .fetch_all(&self.pool)
-        .await?
-        .iter()
-        .map(row_to_cron_run)
-        .collect();
+        let rows =
+            sqlx::query("SELECT * FROM cron_runs WHERE status = 'running' ORDER BY fired_at DESC")
+                .fetch_all(&self.pool)
+                .await?
+                .iter()
+                .map(row_to_cron_run)
+                .collect();
         Ok(rows)
     }
 
@@ -292,7 +292,9 @@ mod tests {
     #[tokio::test]
     async fn finish_truncates_summary_and_output() {
         let dir = TempDir::new().unwrap();
-        let db = CronRunDb::new(dir.path().join(DB_SPEC.filename)).await.unwrap();
+        let db = CronRunDb::new(dir.path().join(DB_SPEC.filename))
+            .await
+            .unwrap();
         let id = db
             .insert_running(NewCronRun {
                 job_id: "j".into(),
@@ -324,7 +326,9 @@ mod tests {
     #[tokio::test]
     async fn delete_removes_run() {
         let dir = TempDir::new().unwrap();
-        let db = CronRunDb::new(dir.path().join(DB_SPEC.filename)).await.unwrap();
+        let db = CronRunDb::new(dir.path().join(DB_SPEC.filename))
+            .await
+            .unwrap();
         let id = db
             .insert_running(NewCronRun {
                 job_id: "j".into(),

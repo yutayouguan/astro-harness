@@ -13,7 +13,7 @@ use types::truncate_chars;
 
 use crate::db::UsageDb;
 use crate::trace_insights::TRACE_EVENTS_LIMIT;
-use home::default_memory_dir;
+use home::{data_dir, default_memory_dir};
 
 /// 单行 eval 记录（一个 session）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,7 +105,7 @@ pub async fn export_session_eval_jsonl_with_db(
 }
 
 async fn load_session_previews(session_id: &str) -> (String, Vec<EvalMessagePreview>) {
-    let sessions_dir = default_memory_dir().join("sessions");
+    let sessions_dir = data_dir(&default_memory_dir());
     let Ok(store) = SessionStore::open_sessions_dir(&sessions_dir).await else {
         return (String::new(), Vec::new());
     };

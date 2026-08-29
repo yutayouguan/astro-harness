@@ -340,12 +340,12 @@ impl SessionStore {
         Ok(store)
     }
 
-    /// 打开 `sessions_dir/state.db`；若存在旁路旧 `sessions.db` 则删除（不导入）。
-    pub async fn open_sessions_dir(sessions_dir: &Path) -> Result<Self> {
-        std::fs::create_dir_all(sessions_dir)
-            .with_context(|| format!("create sessions dir {}", sessions_dir.display()))?;
-        discard_sidecar_sessions_db(sessions_dir);
-        let store = Self::open(&sessions_dir.join("state.db")).await?;
+    /// 打开 `database_dir/state.db`；若存在旁路旧 `sessions.db` 则删除（不导入）。
+    pub async fn open_sessions_dir(database_dir: &Path) -> Result<Self> {
+        std::fs::create_dir_all(database_dir)
+            .with_context(|| format!("create session database dir {}", database_dir.display()))?;
+        discard_sidecar_sessions_db(database_dir);
+        let store = Self::open(&database_dir.join("state.db")).await?;
         store.backfill_sessions_from_messages().await?;
         Ok(store)
     }

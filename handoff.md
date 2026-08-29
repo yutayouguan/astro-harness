@@ -15,17 +15,17 @@
 
 | 字段 | 内容 |
 | --- | --- |
-| 状态 | `Open` |
+| 状态 | `Closed` |
 | 严重度 | High |
 | 发现日期 | 2026-08-29 |
 | 发现阶段 | Agent Harness 文档与源码对齐 |
-| 是否已修复 | 否；本次仅记录 |
+| 是否已修复 | 是；已完成实现、回归与文档收敛 |
 
-### 问题描述
+### 问题描述（修复前）
 
 `agent-home::ensure_workspace_dirs()` 把多个旧数据库迁移到 `{base}/data/`，但当前部分默认 helper 和生产调用仍从旧路径打开数据库。迁移一旦发生，后续旧路径调用可能创建新的空数据库；与此同时，部分新调用已经使用 `{base}/data/`，从而形成同一进程或不同功能读取不同数据库的 split-brain。
 
-### 源码证据
+### 源码证据（修复前）
 
 迁移目标：
 
@@ -73,13 +73,22 @@
 5. 断言唯一记录仍可见，且旧路径未生成第二份空库。
 6. 增加 WAL/SHM 存在时的迁移测试，并验证进程重启后的恢复行为。
 
-### 建议修复方向
+### 已采用的修复方向
 
-以下方案需由后续实现任务选择，本次未执行：
+- `agent-home` 集中定义 Session、usage、Agent Graph、artifacts、knowledge 和 Cron 运行库 resolver，canonical 目录统一为 `{base}/data/`。
+- Usage、AgentGraph、Artifact、Knowledge 和 Cron 的默认入口先执行 workspace 迁移，Server、Desktop、Agent runtime 和辅助任务调用不再打开旧 Session 路径。
+- SQLite 迁移将主库、`-wal`、`-shm` 作为文件族处理；单个文件族中途失败时回滚已移动成员。
+- 旧库和 canonical 主库同时存在时直接报错，不覆盖任何一份数据；旧 `cron/cron.db` 迁移时同时重命名为 `data/cron_v1.db`。
 
-- 推荐：先建立唯一的数据库路径 resolver，所有 store 和调用方统一使用；再执行带版本标记、sidecar 处理和幂等测试的迁移。
-- 保守方案：在所有消费者完成切换前暂停自动移动数据库，避免提前制造路径分叉。
-- 不建议：仅修改个别调用点，继续让默认 helper 与业务调用自行拼接路径。
+### 验证结果
+
+- `cargo check -p agent -p server -p subagents -p astro-agent`：通过。
+- `cargo test -p home`：通过，包含 canonical resolver、SQLite 文件族迁移、split-brain 拒绝和旧 Cron 文件名迁移。
+- `cargo test -p usage -p artifacts -p cron -p memory --lib`：通过。
+- `cargo test -p usage --test usage_db_test migrated_legacy_usage_database_remains_visible -- --exact`：通过，确认迁移后 usage 记录可见且旧库不会重建。
+- `cargo test -p agent --test cron_exec_test`：通过。
+- `cargo test -p session --lib`：通过；`dispatch_session_tool_test` 的 2 个用例单独执行通过。
+- `memory::ensure_workspace_migrates_legacy_session_without_creating_a_second_database` 验证迁移后原 Session 数据可见，且不重建旧库。
 
 ### 验收标准
 
@@ -88,6 +97,35 @@
 - 旧路径迁移幂等，已有目标文件时有明确冲突策略。
 - WAL/SHM、失败回滚和跨版本恢复均有覆盖。
 - 迁移前后的会话、usage、Agent Graph 数据可见性一致。
+
+## H-002 Agent Core test-support 未跟随异步存储 API
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Open` |
+| 严重度 | Medium |
+| 发现日期 | 2026-08-29 |
+| 发现阶段 | H-001 相关 crate 回归测试 |
+| 是否已修复 | 否；与本次数据库路径修复分离 |
+
+### 问题描述
+
+`crates/agent-core/src/exec/dispatch/test_support.rs` 的多个同步辅助方法仍直接对已经返回 `Future` 的 `AgentGraphStore`、`AgentControl` 和 `SessionStore` API 使用 `?`。当其他 crate 的测试通过 dev-dependency 启用 Agent test-support 时，`agent` 无法编译。
+
+### 验证证据
+
+执行：
+
+```bash
+CARGO_TARGET_DIR=/tmp/astro-harness-doc-check \
+  cargo test -p home -p usage -p artifacts -p cron -p memory -p subagents
+```
+
+编译器在 `dispatch/test_support.rs` 的 `LifecycleTestApp::new`、`restart_with`、`dispatch_at`、`status`、`pending_mailbox`、`session_contents` 和 `session_ids` 等位置报告 `E0277`，提示应对返回的 Future 使用 `.await`，但所在方法当前不是 async。
+
+### 建议处理
+
+单独设计 test-support 的异步边界：将辅助 API 整体异步化，或通过明确的测试 runtime 适配；不要在零散调用点使用阻塞嵌套 runtime。修复后恢复 `subagents` 及依赖 `agent/test-support` 的测试覆盖。
 
 ## 后续缺陷记录模板
 

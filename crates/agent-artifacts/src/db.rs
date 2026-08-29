@@ -1,6 +1,6 @@
-use anyhow::Context;
 use agent_db::sqlx::{self, Row};
 use agent_db::{AstroDb, DbSpec, SqlitePool};
+use anyhow::Context;
 use std::path::{Path, PathBuf};
 use types::SqliteStore;
 use uuid::Uuid;
@@ -84,7 +84,7 @@ pub struct ArtifactDb {
 }
 
 pub fn artifacts_db_path(memory_dir: &Path) -> PathBuf {
-    memory_dir.join("sessions").join("artifacts.db")
+    home::artifacts_db_path(memory_dir)
 }
 
 async fn db_has_agent_id_column(path: &Path) -> anyhow::Result<bool> {
@@ -99,15 +99,15 @@ async fn db_has_agent_id_column(path: &Path) -> anyhow::Result<bool> {
         pool.close().await;
         return Ok(true);
     }
-    let rows: Vec<(String,)> =
-        sqlx::query_as("SELECT name FROM pragma_table_info('artifacts')")
-            .fetch_all(&pool)
-            .await?;
+    let rows: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info('artifacts')")
+        .fetch_all(&pool)
+        .await?;
     pool.close().await;
     Ok(rows.iter().any(|(name,)| name == "agent_id"))
 }
 
 pub async fn open_default(memory_dir: &Path) -> anyhow::Result<ArtifactDb> {
+    home::ensure_workspace_dirs(memory_dir)?;
     ArtifactDb::new(artifacts_db_path(memory_dir)).await
 }
 
@@ -276,11 +276,10 @@ impl ArtifactDb {
     }
 
     pub async fn unlinked_paths(&self) -> anyhow::Result<Vec<String>> {
-        let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT path FROM artifacts WHERE session_id IS NULL AND missing = 0",
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let rows: Vec<(String,)> =
+            sqlx::query_as("SELECT path FROM artifacts WHERE session_id IS NULL AND missing = 0")
+                .fetch_all(&self.pool)
+                .await?;
         Ok(rows.into_iter().map(|(p,)| p).collect())
     }
 
@@ -372,9 +371,7 @@ impl ArtifactDb {
         include_missing: bool,
         agent_id: Option<&str>,
     ) -> anyhow::Result<Vec<(String, i64)>> {
-        let mut qb = sqlx::QueryBuilder::new(
-            "SELECT category, COUNT(*) FROM artifacts WHERE 1=1",
-        );
+        let mut qb = sqlx::QueryBuilder::new("SELECT category, COUNT(*) FROM artifacts WHERE 1=1");
         if !include_missing {
             qb.push(" AND missing = 0");
         }
@@ -406,8 +403,7 @@ impl ArtifactDb {
         .execute(&self.pool)
         .await?;
 
-        let mut roots: Vec<(PathBuf, Option<String>)> =
-            vec![(memory_root.join("uploads"), None)];
+        let mut roots: Vec<(PathBuf, Option<String>)> = vec![(memory_root.join("uploads"), None)];
         if let Ok(entries) = std::fs::read_dir(memory_root) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
@@ -467,10 +463,9 @@ impl ArtifactDb {
             }
         }
 
-        let paths: Vec<(String,)> =
-            sqlx::query_as("SELECT path FROM artifacts WHERE missing = 0")
-                .fetch_all(&self.pool)
-                .await?;
+        let paths: Vec<(String,)> = sqlx::query_as("SELECT path FROM artifacts WHERE missing = 0")
+            .fetch_all(&self.pool)
+            .await?;
         for (path,) in paths {
             if !Path::new(&path).exists() {
                 sqlx::query(
@@ -523,12 +518,12 @@ mod tests {
     #[tokio::test]
     async fn discards_db_without_agent_id_column() {
         let root = TempDir::new().unwrap();
-        let sessions = root.path().join("sessions");
-        fs::create_dir_all(&sessions).unwrap();
         let db_path = artifacts_db_path(root.path());
+        let database_dir = db_path.parent().unwrap();
+        fs::create_dir_all(database_dir).unwrap();
 
         {
-            let old_db = AstroDb::new(&sessions);
+            let old_db = AstroDb::new(database_dir);
             let pool = old_db.open_pool(&DB_SPEC).await.unwrap();
             sqlx::query(
                 "CREATE TABLE artifacts (
@@ -583,12 +578,14 @@ mod tests {
         let root = TempDir::new().unwrap();
         let uploads = root.path().join("uploads");
         fs::create_dir_all(&uploads).unwrap();
-        fs::create_dir_all(root.path().join("sessions")).unwrap();
+        fs::create_dir_all(home::data_dir(root.path())).unwrap();
 
         let upload_path = uploads.join("photo.png");
         fs::write(&upload_path, b"fake-png").unwrap();
 
-        let db = ArtifactDb::new(artifacts_db_path(root.path())).await.unwrap();
+        let db = ArtifactDb::new(artifacts_db_path(root.path()))
+            .await
+            .unwrap();
         let registered = db
             .register(
                 upload_path.to_str().unwrap(),
@@ -632,7 +629,7 @@ mod tests {
     #[tokio::test]
     async fn artifact_db_impls_sqlite_store() {
         let root = TempDir::new().unwrap();
-        fs::create_dir_all(root.path().join("sessions")).unwrap();
+        fs::create_dir_all(home::data_dir(root.path())).unwrap();
         let path = artifacts_db_path(root.path());
         let db = ArtifactDb::new(path).await.unwrap();
         let _pool: &SqlitePool = SqliteStore::pool(&db);

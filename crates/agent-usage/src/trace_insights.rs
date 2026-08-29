@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use types::truncate_chars;
 
 use crate::db::{period_window, UsageDb, UsagePeriod};
-use home::default_memory_dir;
+use home::{data_dir, default_memory_dir};
 use session::SessionStore;
 
 /// 列表默认条数
@@ -98,7 +98,7 @@ pub async fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<Trace
         .list_trace_sessions(&start, &end, agent.as_deref(), TRACE_LIST_LIMIT)
         .await?;
 
-    let sessions_dir = default_memory_dir().join("sessions");
+    let sessions_dir = data_dir(&default_memory_dir());
     let store = SessionStore::open_sessions_dir(&sessions_dir).await.ok();
 
     let mut traces = Vec::with_capacity(summaries.len());
@@ -108,7 +108,9 @@ pub async fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<Trace
     };
 
     for s in summaries {
-        let usage_rows = db.list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT).await?;
+        let usage_rows = db
+            .list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT)
+            .await?;
         let (mut events, preview_title) = if let Some(store) = store.as_ref() {
             match spans_from_chat_history(store, &s.session_id, &s.agent_id).await {
                 Ok(built) if !built.0.is_empty() => built,
@@ -569,7 +571,9 @@ mod tests {
     #[tokio::test]
     async fn trace_title_prefers_stored_session_title() {
         let dir = TempDir::new().unwrap();
-        let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+        let store = SessionStore::open(&dir.path().join("state.db"))
+            .await
+            .unwrap();
         store.ensure_session("s-title", "test").await.unwrap();
         store
             .set_session_title("s-title", "云南采菌子女孩")
@@ -754,7 +758,9 @@ mod tests {
 
         let sessions = dir.path().join("sessions");
         std::fs::create_dir_all(&sessions).unwrap();
-        let store = SessionStore::open(&sessions.join("state.db")).await.unwrap();
+        let store = SessionStore::open(&sessions.join("state.db"))
+            .await
+            .unwrap();
         store.ensure_session("s-io", "test").await.unwrap();
         store
             .set_session_title("s-io", "云南采菌子女孩")

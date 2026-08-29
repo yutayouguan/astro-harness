@@ -14,7 +14,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use chrono::Utc;
-use cron::{cron_db_path, cron_dir, CronJob, CronRunDb, NewCronRun};
+use cron::{cron_db_path, CronJob, CronRunDb, NewCronRun};
 use home::default_memory_dir;
 use providers::Usage;
 use session::{SessionStore, StoredMessage};
@@ -141,7 +141,9 @@ async fn apply_session_outcome(
 ///
 /// 供后端启动、ticker 与前端 list/get 调用；无孤儿时开销很小。
 pub async fn reconcile_orphaned_runs() -> anyhow::Result<u32> {
-    reconcile_orphaned_runs_with_roots(cron_dir(), default_memory_dir()).await
+    let memory_dir = default_memory_dir();
+    home::ensure_workspace_dirs(&memory_dir)?;
+    reconcile_orphaned_runs_with_roots(home::data_dir(&memory_dir), memory_dir).await
 }
 
 /// 同 [`reconcile_orphaned_runs`]，可指定 cron / memory 根目录（测试用）。
@@ -149,8 +151,9 @@ pub async fn reconcile_orphaned_runs_with_roots(
     cron_root: impl AsRef<Path>,
     memory_dir: impl AsRef<Path>,
 ) -> anyhow::Result<u32> {
+    let memory_dir = memory_dir.as_ref();
     let db = CronRunDb::new(cron_db_path(cron_root.as_ref())).await?;
-    let sessions = SessionStore::open_sessions_dir(&memory_dir.as_ref().join("sessions")).await.ok();
+    let sessions = SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await.ok();
     let finished_at = now_rfc3339();
     let mut changed = 0u32;
 
@@ -225,7 +228,7 @@ impl CronExecCredentials {
 
 /// 使用默认 cron 数据根目录执行一条定时任务。
 ///
-/// 等价于 `execute_job_with_roots(cron_dir(), ...)`，供 CLI 或调度器在标准布局下调用。
+/// 等价于 `execute_job_with_roots(data_dir(default_memory_dir()), ...)`，供 CLI 或调度器在标准布局下调用。
 ///
 /// # 参数
 ///
@@ -247,17 +250,19 @@ pub async fn execute_job(
     creds: CronExecCredentials,
     trigger: &str,
 ) -> anyhow::Result<cron::CronRunRow> {
-    execute_job_with_roots(cron_dir(), job, creds, trigger).await
+    let memory_dir = default_memory_dir();
+    home::ensure_workspace_dirs(&memory_dir)?;
+    execute_job_with_roots(home::data_dir(&memory_dir), job, creds, trigger).await
 }
 
-/// 在指定 cron 根目录下执行定时任务并完整记录生命周期。
+/// 在指定 Cron 数据根目录下执行定时任务并完整记录生命周期。
 ///
 /// 流程：检查运行互斥 → 可选创建聊天会话 → 插入 `running` 行 → 校验 API Key →
 /// 带 600s 超时的 Agent 执行 → 更新为 success/failure。
 ///
 /// # 参数
 ///
-/// - `cron_root`：cron  SQLite 与元数据所在根目录。
+/// - `cron_root`：Cron SQLite 所在目录；默认入口传入 canonical `data/` 目录。
 /// - `job`、`creds`、`trigger`：同 [`execute_job`](execute_job)。
 ///
 /// # 返回
@@ -317,7 +322,7 @@ async fn execute_job_with_roots_local(
     // 与 run_agent_job / Session 共用同一 memory_dir 下的 SessionStore。
     // show_in_chat 仅影响侧栏展示；执行记录 / Tracing 始终需要 session。
     let memory_dir = default_memory_dir();
-    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).await.ok();
+    let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir)).await.ok();
 
     if let Some(ref sid) = session_id {
         let summary = format!("定时任务 · {}", job.title);
@@ -460,7 +465,9 @@ pub async fn spawn_job(
     creds: CronExecCredentials,
     trigger: &str,
 ) -> anyhow::Result<cron::CronRunRow> {
-    let cron_root = cron_dir().to_path_buf();
+    let memory_dir = default_memory_dir();
+    home::ensure_workspace_dirs(&memory_dir)?;
+    let cron_root = home::data_dir(&memory_dir);
     let job = job.clone();
     let trigger = trigger.to_string();
     let creds_bg = creds.clone();
@@ -521,7 +528,7 @@ async fn begin_job_local(
 
     let session_id = Some(Uuid::new_v4().to_string());
     let memory_dir = default_memory_dir();
-    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).await.ok();
+    let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir)).await.ok();
     if let Some(ref sid) = session_id {
         let summary = format!("定时任务 · {}", job.title);
         if let Some(ref store) = sessions {
@@ -561,7 +568,7 @@ async fn complete_job_local(
     let _active = ActiveCronRunGuard::acquire(run_id);
     let db = CronRunDb::new(cron_db_path(cron_root)).await?;
     let memory_dir = default_memory_dir();
-    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).await.ok();
+    let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir)).await.ok();
     let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
 
     if creds.api_key.trim().is_empty() {
@@ -806,7 +813,7 @@ mod tests {
     async fn reconcile_marks_orphan_running_from_session_or_interrupt() {
         let cron_dir = TempDir::new().unwrap();
         let mem_dir = TempDir::new().unwrap();
-        let sessions_dir = mem_dir.path().join("sessions");
+        let sessions_dir = home::data_dir(mem_dir.path());
         std::fs::create_dir_all(&sessions_dir).unwrap();
         let store = SessionStore::open_sessions_dir(&sessions_dir).await.unwrap();
         store.ensure_session("sess-ok", "cron").await.unwrap();
@@ -829,7 +836,7 @@ mod tests {
             .await
             .unwrap();
 
-        let db = CronRunDb::new(cron_dir.path().join("cron.db")).await.unwrap();
+        let db = CronRunDb::new(cron_dir.path().join("cron_v1.db")).await.unwrap();
         let ok_id = db
             .insert_running(NewCronRun {
                 job_id: "j1".into(),
@@ -871,12 +878,12 @@ mod tests {
     async fn reconcile_upgrades_interrupted_after_session_completes() {
         let cron_dir = TempDir::new().unwrap();
         let mem_dir = TempDir::new().unwrap();
-        let sessions_dir = mem_dir.path().join("sessions");
+        let sessions_dir = home::data_dir(mem_dir.path());
         std::fs::create_dir_all(&sessions_dir).unwrap();
         let store = SessionStore::open_sessions_dir(&sessions_dir).await.unwrap();
         store.ensure_session("sess-later", "cron").await.unwrap();
 
-        let db = CronRunDb::new(cron_dir.path().join("cron.db")).await.unwrap();
+        let db = CronRunDb::new(cron_dir.path().join("cron_v1.db")).await.unwrap();
         let id = db
             .insert_running(NewCronRun {
                 job_id: "j".into(),

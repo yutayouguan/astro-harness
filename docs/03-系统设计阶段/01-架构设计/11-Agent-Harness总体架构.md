@@ -211,7 +211,7 @@ Server 端每 Thread listener 向 gRPC/Tauri 投影 live stream；重启或订�
 - `wait_agent`
 - `interrupt_agent`
 
-Graph、mailbox和状态投影持久化到 `subagents-v2.db`，真实对话时间线仍由 Session/rollout 管理。子 Agent 继承父任务权限且只可收窄；不隐式创建 git worktree。
+Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真实对话投影写入 `{base}/data/state.db`，rollout 事件仍位于 `{base}/sessions/rollouts/`。子 Agent 继承父任务权限且只可收窄；不隐式创建 git worktree。
 
 `delegate_task`、`Supervisor`、旧 V1 子任务表和“子 Agent 必然拥有独立 worktree”均不得再被描述为当前运行方案。
 

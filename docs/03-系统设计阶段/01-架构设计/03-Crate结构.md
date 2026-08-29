@@ -79,7 +79,7 @@ reqwest      = { version = "0.12", features = ["json", "stream", "rustls-tls", "
 | `crates/agent-delegate` | `worktree` | 轻量级工具执行代理（已精简，核心子 Agent 逻辑迁移到 `agent-subagents`）。 |
 | `crates/agent-subagents` | `subagents` | Codex V2 Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.astro` 自定义 agent 配置。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
-| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`cron.db`）、ticker（每 30s，`current_thread` runtime）。 |
+| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`data/cron_v1.db`）、ticker（每 30s，`current_thread` runtime）。 |
 | `crates/agent-workflow` | `workflow` | 可视化工作流引擎：29 种节点跨 6 类（Trigger/AI/Media/FlowControl/DataProcessing/Action），DAG 执行引擎、变量解析、运行 DB。 |
 | `crates/agent-a2ui` | `a2ui` | AG-UI 声明式生成式 UI 表面：22 种组件（Text、Card、Button、Image、Audio、Video、Metric、ClarifyWizard 等）、模板、校验。 |
 | `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、注册表/分发、ToolExposure 三级暴露（Direct/Deferred/Hidden）、BM25 工具搜索、审批逻辑、HITL、schema sanitization。内部目录：`engine/`（注册表/分发/catalog/schema）、`builtin/`（shell/agents/hitl/media/memory/present）。 |

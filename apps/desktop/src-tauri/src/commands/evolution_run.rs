@@ -225,7 +225,7 @@ async fn build_transcripts(
     if session_ids.is_empty() {
         return Vec::new();
     }
-    let store = match session::SessionStore::open_sessions_dir(&base.join("sessions")).await {
+    let store = match session::SessionStore::open_sessions_dir(&home::data_dir(base)).await {
         Ok(s) => s,
         Err(_) => return Vec::new(),
     };
@@ -1799,7 +1799,7 @@ async fn collect_eval_import_candidates(
         .filter_map(|e| e.source_session.clone())
         .collect();
 
-    let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
+    let store = session::SessionStore::open_sessions_dir(&home::data_dir(base))
         .await
         .map_err(|e| format!("打开会话库失败: {e}"))?;
 
@@ -1881,7 +1881,7 @@ pub async fn import_eval_from_session(
         return Err("该会话已导入评测集".into());
     }
 
-    let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
+    let store = session::SessionStore::open_sessions_dir(&home::data_dir(&base))
         .await
         .map_err(|e| format!("打开会话库失败: {e}"))?;
     let task = session_user_task(&store, &session_id)

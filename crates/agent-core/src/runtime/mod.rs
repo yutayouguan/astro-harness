@@ -291,7 +291,7 @@ impl Session {
         session_id: String,
         memory: MemoryManager,
     ) -> anyhow::Result<Self> {
-        let graph_db_path = config.memory_dir.join("subagents-v2.db");
+        let graph_db_path = home::subagents_db_path(&config.memory_dir);
         let agent_control = crate::exec::agent_control_directory::AgentControlDirectory::global()
             .open_root_at(&session_id, &graph_db_path).await?;
         Self::from_memory_with_agent_control(
@@ -314,7 +314,7 @@ impl Session {
         memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
         let sessions: Box<dyn ConversationStore> = Box::new(SessionStore::open_sessions_dir(
-            &config.memory_dir.join("sessions"),
+            &home::data_dir(&config.memory_dir),
         ).await?);
         let history = hydrate_history(&*sessions, &session_id).await?;
         let mut tool_registry = ToolRegistry::new();

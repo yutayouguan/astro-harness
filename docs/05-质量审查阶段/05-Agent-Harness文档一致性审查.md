@@ -36,7 +36,7 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 | 事件 | Core 产生 `EventMsg`；rollout 先记录，Server 再做 live projection | 已实现 |
 | 恢复 | rollout 是稳定事件事实源，SessionStore 是查询投影 | 已实现 |
 | 子 Agent | V2 Agent Threads + Graph/mailbox/status；真实对话仍进入 Session 时间线 | 已实现 |
-| 存储路径 | `{base}/data/` 是收敛目标，但旧路径调用尚未全部切换 | 部分实现 |
+| 存储路径 | SQLite 职责库统一位于 `{base}/data/`；旧库只经启动迁移读取 | 已实现 |
 
 ## 3. 已消除或降级的陈旧表述
 
@@ -64,8 +64,7 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 1. `agent-protocol::Op` 中部分控制分支仍返回 unsupported，不能因协议类型存在就宣称 runtime 已实现。
 2. Provider-hosted `WebSearch` 有协议表示；Registry 当前 `web_search` 仍是客户端 Deferred Function。
 3. Code Mode cell 媒体事件与最终 `ToolOutput`、前端 live projection 尚未完全同构。
-4. `{base}/data/` 迁移目标与 Session/usage/subagents 的默认调用路径尚未完全收敛。
-5. 旧文档正文保留的伪代码、表数量和性能目标需要在对应功能真正实现时逐项替换；顶部 Harness 基线只负责防止其被误读为现状。
+4. 旧文档正文保留的伪代码、表数量和性能目标需要在对应功能真正实现时逐项替换；顶部 Harness 基线只负责防止其被误读为现状。
 
 ## 6. 后续维护规则
 

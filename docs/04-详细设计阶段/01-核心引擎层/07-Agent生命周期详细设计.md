@@ -887,7 +887,7 @@ network retry 或 session/global proxy 状态。
 
 - root/subagent 都由 V2 runtime manager 启动 turn。
 - `AgentControl` 在一棵 Agent 树内共享。
-- 当前投影库为 `subagents-v2.db`；旧 V1 库只在启动迁移/归档时读取，不再是可调用 runtime。
+- 当前投影库为 `{base}/data/subagents-v2.db`；旧 V1 库只在启动迁移/归档时读取，不再是可调用 runtime。
 
 ### Phase E：Rollout 与记忆
 

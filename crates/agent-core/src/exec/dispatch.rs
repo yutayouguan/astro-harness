@@ -928,7 +928,7 @@ async fn fork_parent_session(
     child_session_id: &str,
     fork_turns: &Option<String>,
 ) -> anyhow::Result<ForkedSessionGuard> {
-    let sessions_dir = memory_dir.join("sessions");
+    let sessions_dir = home::data_dir(memory_dir);
     let sessions = session::SessionStore::open_sessions_dir(&sessions_dir).await?;
     let recent_turns = parse_fork_turns(fork_turns.as_deref())?;
     sessions.fork_session_recent_turns(
@@ -987,7 +987,7 @@ async fn validate_recovered_runtime_setup(
     thread: &subagents::AgentThreadV2,
     runtime: &SpawnRuntimeV2Request,
 ) -> anyhow::Result<()> {
-    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).await?;
+    let sessions = session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await?;
     let stored = sessions
         .get_session(&thread.session_id).await?
         .with_context(|| format!("child session {:?} is unavailable", thread.session_id))?;
@@ -1234,7 +1234,7 @@ impl DefaultDesktopAgentThreadControl {
             return Ok(Arc::clone(control));
         }
         crate::exec::agent_control_directory::AgentControlDirectory::global()
-            .open_root_at(root_session_id, &self.memory_dir.join("subagents-v2.db"))
+            .open_root_at(root_session_id, &home::subagents_db_path(&self.memory_dir))
             .await
     }
 
@@ -1268,7 +1268,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
     ) -> anyhow::Result<AgentThreadDetailV2> {
         let control = self.control(root_session_id).await?;
         let thread = control.resolve_desktop_target(target).await?;
-        let messages = session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions")).await?
+        let messages = session::SessionStore::open_sessions_dir(&home::data_dir(&self.memory_dir)).await?
             .get_messages(&thread.session_id).await?
             .into_iter()
             .map(|message| AgentThreadMessageV2 {

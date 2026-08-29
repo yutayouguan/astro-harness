@@ -54,18 +54,16 @@ impl KnowledgeDb {
         let path = path.into();
         let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
         let pool = db.open_pool(&DB_SPEC).await?;
-        sqlx::query("PRAGMA foreign_keys=ON")
-            .execute(&pool)
-            .await?;
+        sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
         let kdb = Self { pool, path };
         kdb.apply_migrate().await?;
         Ok(kdb)
     }
 
     pub async fn open_default() -> anyhow::Result<Self> {
-        let path = home::default_memory_dir()
-            .join("sessions")
-            .join("knowledge.db");
+        let base = home::default_memory_dir();
+        home::ensure_workspace_dirs(&base)?;
+        let path = home::knowledge_db_path(&base);
         Self::open(path).await
     }
 
@@ -107,12 +105,10 @@ impl KnowledgeDb {
             status.trim()
         };
 
-        let existing: Option<(String,)> = sqlx::query_as(
-            "SELECT id FROM contents WHERE path = ?1",
-        )
-        .bind(path)
-        .fetch_optional(&self.pool)
-        .await?;
+        let existing: Option<(String,)> = sqlx::query_as("SELECT id FROM contents WHERE path = ?1")
+            .bind(path)
+            .fetch_optional(&self.pool)
+            .await?;
 
         let id = if let Some((id,)) = existing {
             sqlx::query(
@@ -127,34 +123,28 @@ impl KnowledgeDb {
                 .bind(&id)
                 .execute(&self.pool)
                 .await?;
-            sqlx::query(
-                "INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)",
-            )
-            .bind(title)
-            .bind(body)
-            .bind(&id)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)")
+                .bind(title)
+                .bind(body)
+                .bind(&id)
+                .execute(&self.pool)
+                .await?;
             id
         } else {
             let id = Uuid::new_v4().to_string();
-            sqlx::query(
-                "INSERT INTO contents(id, title, path, status) VALUES (?1, ?2, ?3, ?4)",
-            )
-            .bind(&id)
-            .bind(title)
-            .bind(path)
-            .bind(status)
-            .execute(&self.pool)
-            .await?;
-            sqlx::query(
-                "INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)",
-            )
-            .bind(title)
-            .bind(body)
-            .bind(&id)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("INSERT INTO contents(id, title, path, status) VALUES (?1, ?2, ?3, ?4)")
+                .bind(&id)
+                .bind(title)
+                .bind(path)
+                .bind(status)
+                .execute(&self.pool)
+                .await?;
+            sqlx::query("INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)")
+                .bind(title)
+                .bind(body)
+                .bind(&id)
+                .execute(&self.pool)
+                .await?;
             id
         };
 
@@ -164,13 +154,12 @@ impl KnowledgeDb {
     }
 
     pub async fn get(&self, id: &str) -> anyhow::Result<Option<ContentRow>> {
-        let row = sqlx::query(
-            "SELECT id, title, path, status, created_at FROM contents WHERE id = ?1",
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await?
-        .map(|r| row_to_content(&r));
+        let row =
+            sqlx::query("SELECT id, title, path, status, created_at FROM contents WHERE id = ?1")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?
+                .map(|r| row_to_content(&r));
         Ok(row)
     }
 

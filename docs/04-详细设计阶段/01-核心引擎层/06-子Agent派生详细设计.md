@@ -1,6 +1,6 @@
 # 子 Agent 派生详细设计
 
-> **Harness 当前基线（2026-08-29）**：本文仅以 Codex V2 Agent Threads 章节为现行契约。模型工具只有 `spawn_agent/list_agents/send_message/followup_task/wait_agent/interrupt_agent`；Graph/mailbox/status 使用 `subagents-v2.db`，对话使用真实 Session 时间线，不隐式创建 worktree。旧 Supervisor/DelegateRunner 内容属迁移参考。
+> **Harness 当前基线（2026-08-29）**：本文仅以 Codex V2 Agent Threads 章节为现行契约。模型工具只有 `spawn_agent/list_agents/send_message/followup_task/wait_agent/interrupt_agent`；Graph/mailbox/status 使用 `{base}/data/subagents-v2.db`，对话投影使用 `{base}/data/state.db`，不隐式创建 worktree。旧 Supervisor/DelegateRunner 内容属迁移参考。
 
 > 版本：v2.0 | 日期：2026-08-20 | 状态：已落地
 > 对应需求：F-30 子 Agent 派生、F-04 Skills 系统、M-08 安全边界
@@ -130,7 +130,7 @@ pub struct AgentControl {
 
 /// 子 Agent 图的 SQLite 存储句柄（WAL 模式）。
 pub struct AgentGraphStore {
-    path: PathBuf,  // 默认 ~/.astro/memory/subagents-v2.db
+    path: PathBuf,  // 默认 ~/.astro/data/subagents-v2.db
 }
 ```
 

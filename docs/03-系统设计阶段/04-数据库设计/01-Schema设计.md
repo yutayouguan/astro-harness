@@ -2,7 +2,7 @@
 
 > 阶段：系统设计 | 状态：定稿 | 说明：21 表 + 3 虚拟表 + 1 视图 DDL（权威）
 
-> **当前 Harness 基线（2026-08-29）**：本文的“单一 `agent.db`”和表清单是历史方案，不是当前运行时事实源。当前 Harness 使用 rollout 事件源，并由 `state.db`、`subagents-v2.db`、`usage.db`、`artifacts.db`、`knowledge.db`、`cron.db` 等职责数据库形成投影；路径向 `{base}/data/` 收敛尚处于部分实现状态。当前字段与迁移以各 crate schema 和测试为准。
+> **当前 Harness 基线（2026-08-29）**：本文的“单一 `agent.db`”和表清单是历史方案，不是当前运行时事实源。当前 Harness 使用 rollout 事件源，并由 `{base}/data/` 中的 `state.db`、`subagents-v2.db`、`usage.db`、`artifacts.db`、`knowledge.db`、`cron_v1.db` 等职责数据库形成投影。当前字段与迁移以各 crate schema 和测试为准。
 
 ## 一、总体说明
 

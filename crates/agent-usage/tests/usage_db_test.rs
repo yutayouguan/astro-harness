@@ -48,6 +48,44 @@ fn zero_billing_event(e: ZeroBillingEvent<'_>) -> NewUsageEvent {
 }
 
 #[tokio::test]
+async fn migrated_legacy_usage_database_remains_visible() {
+    let dir = TempDir::new().unwrap();
+    let legacy_path = dir.path().join("usage.db");
+    let legacy = UsageDb::new(legacy_path.clone()).await.unwrap();
+    legacy
+        .insert(zero_billing_event(ZeroBillingEvent {
+            ts: "2026-08-29T00:00:00Z",
+            kind: "tool",
+            name: "legacy-tool",
+            agent_id: "default",
+            session_id: None,
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            meta_json: None,
+        }))
+        .await
+        .unwrap();
+    legacy.pool().close().await;
+    drop(legacy);
+
+    home::ensure_workspace_dirs(dir.path()).unwrap();
+
+    let canonical_path = home::usage_db_path(dir.path());
+    let canonical = UsageDb::new(canonical_path.clone()).await.unwrap();
+    let (count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM usage_events WHERE name = 'legacy-tool'",
+    )
+    .fetch_one(canonical.pool())
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+    assert!(!legacy_path.exists());
+    assert_eq!(canonical.db_path(), canonical_path);
+}
+
+#[tokio::test]
 async fn migrate_v3_to_v4_keeps_rows_and_adds_turn_id() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("usage.db");
@@ -205,7 +243,7 @@ fn usage_db_path_under_memory_dir() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = TempDir::new().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
-    assert_eq!(usage_db_path(), dir.path().join("usage.db"));
+    assert_eq!(usage_db_path(), dir.path().join("data/usage.db"));
     std::env::remove_var("ASTRO_MEMORY_DIR");
 }
 

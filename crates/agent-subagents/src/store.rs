@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{bail, Context};
-use chrono::{SecondsFormat, Utc};
 use agent_db::sqlx::{self, Row};
 use agent_db::SqlitePool;
+use anyhow::{bail, Context};
+use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::mailbox::{self, MailboxMessage, NewMailboxMessage};
@@ -34,7 +34,7 @@ const ERROR_MAX_TOKENS: usize = 900;
 const APPROX_BYTES_PER_TOKEN: usize = 4;
 
 fn v2_default_db_path() -> PathBuf {
-    home::default_memory_dir().join("subagents-v2.db")
+    home::subagents_db_path(&home::default_memory_dir())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -63,6 +63,7 @@ impl AgentGraphStore {
     }
 
     pub async fn open_default_v2() -> anyhow::Result<Self> {
+        home::ensure_default_workspace_dirs()?;
         Self::open(v2_default_db_path()).await
     }
 
@@ -212,12 +213,11 @@ impl AgentGraphStore {
     pub async fn rollback_pending_thread(&self, thread_id: &str) -> anyhow::Result<()> {
         require_non_empty("thread_id", thread_id)?;
         let mut tx = self.pool.begin().await?;
-        let row: Option<(String,)> = sqlx::query_as(
-            "SELECT status_kind FROM agent_threads WHERE thread_id = ?1",
-        )
-        .bind(thread_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT status_kind FROM agent_threads WHERE thread_id = ?1")
+                .bind(thread_id)
+                .fetch_optional(&mut *tx)
+                .await?;
         let status_kind = row
             .map(|(s,)| s)
             .with_context(|| format!("unknown agent thread {thread_id:?}"))?;
@@ -246,12 +246,11 @@ impl AgentGraphStore {
         require_non_empty("thread_id", thread_id)?;
         require_non_empty("turn_id", turn_id)?;
         let mut tx = self.pool.begin().await?;
-        let row: Option<(String,)> = sqlx::query_as(
-            "SELECT status_kind FROM agent_threads WHERE thread_id = ?1",
-        )
-        .bind(thread_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT status_kind FROM agent_threads WHERE thread_id = ?1")
+                .bind(thread_id)
+                .fetch_optional(&mut *tx)
+                .await?;
         let status_kind = row
             .map(|(s,)| s)
             .with_context(|| format!("unknown agent thread {thread_id:?}"))?;
@@ -512,10 +511,7 @@ impl AgentGraphStore {
         Ok(thread)
     }
 
-    pub async fn status_events(
-        &self,
-        thread_id: &str,
-    ) -> anyhow::Result<Vec<StoredStatusEvent>> {
+    pub async fn status_events(&self, thread_id: &str) -> anyhow::Result<Vec<StoredStatusEvent>> {
         require_non_empty("thread_id", thread_id)?;
         let rows = sqlx::query(
             "SELECT sequence, thread_id, event_kind, payload, source_turn_id, created_at
@@ -526,15 +522,10 @@ impl AgentGraphStore {
         .bind(thread_id)
         .fetch_all(&self.pool)
         .await?;
-        rows.iter()
-            .map(stored_status_event_from_row)
-            .collect()
+        rows.iter().map(stored_status_event_from_row).collect()
     }
 
-    pub async fn enqueue(
-        &self,
-        message: &NewMailboxMessage,
-    ) -> anyhow::Result<MailboxMessage> {
+    pub async fn enqueue(&self, message: &NewMailboxMessage) -> anyhow::Result<MailboxMessage> {
         mailbox::enqueue(&self.pool, message).await
     }
 
@@ -561,10 +552,7 @@ impl AgentGraphStore {
         mailbox::delete_pending(&self.pool, message_id).await
     }
 
-    pub async fn snapshot(
-        &self,
-        root_thread_id: &str,
-    ) -> anyhow::Result<AgentTreeSnapshotV2> {
+    pub async fn snapshot(&self, root_thread_id: &str) -> anyhow::Result<AgentTreeSnapshotV2> {
         self.snapshot_with_after_threads(root_thread_id, std::future::ready(()))
             .await
     }
@@ -619,12 +607,11 @@ impl AgentGraphStore {
 
     pub async fn edge_state(&self, child_thread_id: &str) -> anyhow::Result<Option<String>> {
         require_non_empty("child_thread_id", child_thread_id)?;
-        let row: Option<(String,)> = sqlx::query_as(
-            "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
-        )
-        .bind(child_thread_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1")
+                .bind(child_thread_id)
+                .fetch_optional(&self.pool)
+                .await?;
         Ok(row.map(|(s,)| s))
     }
 
@@ -916,7 +903,9 @@ mod tests {
 
     #[test]
     fn v2_default_database_path_is_canonical() {
-        assert_eq!(v2_default_db_path().file_name().unwrap(), "subagents-v2.db");
+        let path = v2_default_db_path();
+        assert_eq!(path.file_name().unwrap(), "subagents-v2.db");
+        assert_eq!(path.parent().unwrap().file_name().unwrap(), "data");
     }
 
     #[tokio::test]
@@ -1026,7 +1015,11 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(store.pending_for("root-thread", 0).await.unwrap().is_empty());
+        assert!(store
+            .pending_for("root-thread", 0)
+            .await
+            .unwrap()
+            .is_empty());
 
         store
             .apply_status_event(
@@ -1438,10 +1431,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let error = store
-            .rollback_pending_thread("running")
-            .await
-            .unwrap_err();
+        let error = store.rollback_pending_thread("running").await.unwrap_err();
         assert!(error.to_string().contains("pending_init"));
         assert_eq!(
             store.get_thread("running").await.unwrap().unwrap().status,
@@ -1571,10 +1561,7 @@ mod tests {
             .await
             .unwrap();
 
-        store
-            .validate_pending_reservation(&expected)
-            .await
-            .unwrap();
+        store.validate_pending_reservation(&expected).await.unwrap();
 
         let mut wrong_root = expected.clone();
         wrong_root.root_thread_id = "wrong-root".into();

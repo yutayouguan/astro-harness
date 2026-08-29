@@ -1519,7 +1519,7 @@ async fn ensure_interrupted_history_boundary(
     session_id: &str,
     content: &str,
 ) -> anyhow::Result<()> {
-    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).await?;
+    let sessions = session::SessionStore::open_sessions_dir(&home::data_dir(&memory_dir)).await?;
     let messages = sessions.get_messages(session_id).await?;
     if messages
         .last()

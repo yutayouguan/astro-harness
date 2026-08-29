@@ -38,7 +38,7 @@ use crate::{
 
 async fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+    session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir))
         .await
         .map_err(|e| e.to_string())
 }
@@ -1104,7 +1104,7 @@ impl AstroServiceImpl {
         candidate.set_side_effect_supervisor(supervisor).await;
         let agent_id = home::active_agent_id(&self.memory_dir);
         match agent::exec::agent_control_directory::AgentControlDirectory::global()
-            .get_at(thread_id, &self.memory_dir.join("subagents-v2.db"))
+            .get_at(thread_id, &home::subagents_db_path(&self.memory_dir))
         {
             Some(control) => {
                 self.attach_agent_thread_watcher(

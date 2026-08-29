@@ -9,8 +9,8 @@ use crate::GENERATED_SUBDIRS;
 use super::agent_config::AgentRuntimeConfig;
 use super::paths::{
     active_agent_id, agent_config_dir, agent_id_from_workspace_dir_name, agent_workspace_dir,
-    daily_memory_path, default_memory_dir, generate_agent_id, normalize_agent_id, set_active_agent,
-    DEFAULT_AGENT_ID,
+    daily_memory_path, default_memory_dir, ensure_workspace_dirs, generate_agent_id,
+    normalize_agent_id, set_active_agent, DEFAULT_AGENT_ID,
 };
 use super::templates::{render_template, AGENT_SUBDIRS, CORE_FILES, ENSURED_DIRS, STATE_FILES};
 
@@ -497,7 +497,7 @@ pub fn ensure_agent_space(
 /// └── active-agent.json
 /// ```
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
-    fs::create_dir_all(base)?;
+    ensure_workspace_dirs(base)?;
 
     let mut ensured_dirs = Vec::new();
     for rel in ENSURED_DIRS {

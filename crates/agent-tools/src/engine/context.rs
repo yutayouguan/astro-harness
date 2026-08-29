@@ -21,7 +21,7 @@ pub fn image_gen_targets_from_parts(p: ImageGenParts<'_>) -> ImageGenTargets {
 pub struct ToolContext<'a> {
     /// 当前 Agent 的记忆管理器；只在同步 memory/context/persona 操作期间短暂加锁。
     pub memory: &'a RwLock<MemoryManager>,
-    /// 共享会话库（`{memory_dir}/sessions`），供 `search` 使用。
+    /// 共享会话库（`{memory_dir}/data/state.db`），供 `search` 使用。
     pub sessions: &'a dyn ConversationStore,
     /// Agent 根目录（`~/.astro`），用于定位 `agents/{id}/` 等全局路径。
     pub memory_dir: PathBuf,

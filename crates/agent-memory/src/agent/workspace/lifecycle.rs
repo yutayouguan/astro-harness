@@ -23,7 +23,7 @@ fn initialize_session_store(sessions_dir: &Path) -> anyhow::Result<()> {
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     let mut report = home::ensure_workspace(base)?;
 
-    let sessions_dir = base.join("sessions");
+    let sessions_dir = home::data_dir(base);
     initialize_session_store(&sessions_dir)?;
 
     let bundled = skills::seed_bundled_into(base);
@@ -58,7 +58,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let report = ensure_workspace(dir.path()).unwrap();
 
-        assert!(dir.path().join("sessions").join("state.db").is_file());
+        assert!(home::session_db_path(dir.path()).is_file());
         assert!(report
             .created_files
             .iter()
@@ -76,6 +76,24 @@ mod tests {
 
         ensure_workspace(dir.path()).unwrap();
 
-        assert!(dir.path().join("sessions").join("state.db").is_file());
+        assert!(home::session_db_path(dir.path()).is_file());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn ensure_workspace_migrates_legacy_session_without_creating_a_second_database() {
+        let dir = TempDir::new().unwrap();
+        let legacy_dir = dir.path().join("sessions");
+        let legacy_path = legacy_dir.join("state.db");
+        let store = SessionStore::open_sessions_dir(&legacy_dir).await.unwrap();
+        store.ensure_session("legacy-session", "test").await.unwrap();
+        drop(store);
+
+        ensure_workspace(dir.path()).unwrap();
+
+        assert!(!legacy_path.exists());
+        let canonical_path = home::session_db_path(dir.path());
+        assert!(canonical_path.exists());
+        let reopened = SessionStore::open(&canonical_path).await.unwrap();
+        assert!(reopened.get_session("legacy-session").await.unwrap().is_some());
     }
 }
