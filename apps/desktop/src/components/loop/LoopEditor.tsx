@@ -204,6 +204,21 @@ function rfNodeType(nodeType: string): string {
   return BRANCH_NODE_TYPES.has(nodeType) ? "branchNode" : "loopNode";
 }
 
+function edgePresentation(sourceHandle?: string | null): Partial<RFEdge> {
+  return {
+    animated: false,
+    className: sourceHandle ? "loop-edge--branch" : "loop-edge--main",
+    ...(sourceHandle
+      ? {
+          label: sourceHandle,
+          labelStyle: { fontSize: 10, fill: "var(--ink-secondary)" },
+          labelBgPadding: [6, 3] as [number, number],
+          labelBgBorderRadius: 6,
+        }
+      : {}),
+  };
+}
+
 const nodeTypes: NodeTypes = {
   loopNode: LoopNode as unknown as NodeTypes[string],
   branchNode: BranchNode as unknown as NodeTypes[string],
@@ -525,7 +540,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       }),
     );
     setDirty(true);
-    setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50);
+    setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, maxZoom: 1.05, duration: 300 }), 50);
   }, [reactFlowInstance, setNodes]);
 
   const handleExportImage = useCallback(async () => {
@@ -647,20 +662,20 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             sourceHandle: e.source_handle ?? undefined,
             target: e.target,
             targetHandle: e.target_handle ?? undefined,
-            animated: true,
-            ...(e.source_handle ? { label: e.source_handle, labelStyle: { fontSize: 10, fill: "var(--ink-tertiary)" } } : {}),
+            ...edgePresentation(e.source_handle),
           })),
         );
+        setTimeout(() => reactFlowInstance.fitView({ padding: 0.22, maxZoom: 1.05, duration: 320 }), 80);
       } catch (e) {
         showToast(String(e), { tone: "error" });
       }
     })();
-  }, [workflowId, setNodes, setEdges]);
+  }, [workflowId, reactFlowInstance, setNodes, setEdges]);
 
   const onConnect: OnConnect = useCallback(
     (conn: Connection) => {
       pushSnapshot();
-      setEdges((eds) => addEdge({ ...conn, animated: true }, eds));
+      setEdges((eds) => addEdge({ ...conn, ...edgePresentation(conn.sourceHandle) }, eds));
       setDirty(true);
     },
     [setEdges, pushSnapshot],
@@ -735,7 +750,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       ]);
       setEdges((eds) =>
         addEdge(
-          { id: crypto.randomUUID(), source: connectDrop.sourceNodeId, sourceHandle: connectDrop.sourceHandleId ?? undefined, target: newId, animated: true },
+          {
+            id: crypto.randomUUID(),
+            source: connectDrop.sourceNodeId,
+            sourceHandle: connectDrop.sourceHandleId ?? undefined,
+            target: newId,
+            ...edgePresentation(connectDrop.sourceHandleId),
+          },
           eds,
         ),
       );
@@ -1298,16 +1319,17 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); setContextMenu(null); }}
             onPaneContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
             nodeTypes={nodeTypes}
-            defaultEdgeOptions={{ type: edgeType, animated: true }}
+            defaultEdgeOptions={{ type: edgeType, animated: false }}
             connectionLineType={edgeType === "straight" ? ConnectionLineType.Straight : edgeType === "default" ? ConnectionLineType.Bezier : ConnectionLineType.SmoothStep}
             isValidConnection={(conn) => isValidConnection(conn as Connection, nodes)}
             snapToGrid
             snapGrid={[20, 20]}
             fitView
+            fitViewOptions={{ padding: 0.22, maxZoom: 1.05 }}
             proOptions={{ hideAttribution: true }}
           >
-            <Background />
-            <Controls />
+            <Background gap={24} size={1} />
+            <Controls showInteractive={false} />
             <div className="loop-statusbar">
               <span>{nodes.length} {t("loop.statusNodes")}</span>
               <span className="loop-statusbar-sep">·</span>

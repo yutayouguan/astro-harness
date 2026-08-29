@@ -10,27 +10,37 @@
 
 /* React Flow 样式覆盖 */
 .loop-canvas-container .react-flow__background {
-  background: var(--bg0);
+  background: color-mix(in srgb, var(--bg0) 92%, var(--surface, transparent));
+  opacity: 0.72;
 }
 .loop-canvas-container .react-flow__controls {
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
-  border: 1px solid var(--border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)));
 }
 .loop-canvas-container .react-flow__controls-button {
-  background: var(--glass-panel);
-  color: var(--ink);
-  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--glass-panel) 78%, transparent);
+  color: var(--ink-secondary);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
 }
 .loop-canvas-container .react-flow__controls-button:hover {
   background: var(--glass-hover);
+  color: var(--ink);
 }
 .loop-canvas-container .react-flow__minimap {
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
   overflow: hidden;
   background: var(--glass-panel) !important;
+  opacity: 0.72;
+  transition: opacity 0.15s ease;
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.06);
+}
+.loop-canvas-container .react-flow__minimap:hover {
+  opacity: 1;
 }
 :root[data-theme="dark"] .loop-canvas-container .react-flow__minimap {
   background: color-mix(in srgb, var(--surface) 85%, transparent) !important;
@@ -75,8 +85,12 @@
 /* ── React Flow Edge styling ──────────────────────────────────── */
 
 .loop-canvas-container .react-flow__edge-path {
+  stroke: color-mix(in srgb, var(--ink-tertiary) 70%, transparent);
   stroke-width: 1.5;
   transition: stroke 0.15s, stroke-width 0.15s;
+}
+.loop-canvas-container .react-flow__edge.loop-edge--branch .react-flow__edge-path {
+  stroke-dasharray: 5 4;
 }
 .loop-canvas-container .react-flow__edge-interaction {
   stroke-width: 20;
@@ -92,27 +106,49 @@
 .loop-canvas-container .react-flow__edgelabel-renderer {
   pointer-events: none;
 }
+.loop-canvas-container .react-flow__edge-textbg {
+  fill: color-mix(in srgb, var(--glass-panel) 92%, transparent);
+  stroke: color-mix(in srgb, var(--border) 68%, transparent);
+  stroke-width: 1;
+}
+.loop-canvas-container .react-flow__edge-text {
+  font-weight: 600;
+}
 
 /* ── React Flow Node ──────────────────────────────────────────── */
 
 .loop-rf-node {
   position: relative;
-  padding: 10px 16px;
+  padding: 9px 14px;
   border-radius: 12px;
-  border: 1.5px solid color-mix(in srgb, var(--node-color, #888) 30%, var(--border));
-  background: var(--bg0, #fff);
-  min-width: 170px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, var(--node-color, #888));
+  background: color-mix(in srgb, var(--bg0, #fff) 94%, transparent);
+  min-width: 168px;
   max-width: 240px;
   color: var(--ink);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.055);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.loop-rf-node::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -1px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--node-color, #888);
+  opacity: 0.8;
 }
 .loop-rf-node:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: color-mix(in srgb, var(--node-color, #888) 42%, var(--border));
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.09);
 }
 .loop-rf-node.is-selected {
   border-color: var(--node-color, #888);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--node-color, #888) 20%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--node-color, #888) 18%, transparent),
+    0 8px 22px rgba(15, 23, 42, 0.1);
 }
 .loop-rf-node.is-disabled {
   opacity: 0.5;
@@ -193,8 +229,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--node-color, #888) 12%, transparent);
   color: var(--node-color, #888);
@@ -218,9 +254,10 @@
 }
 
 .loop-rf-node-type-tag {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ink-tertiary);
   white-space: nowrap;
+  opacity: 0.72;
 }
 
 .loop-rf-handle {
@@ -361,4 +398,3 @@
   min-width: 0 !important;
   min-height: 0 !important;
 }
-
