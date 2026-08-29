@@ -460,7 +460,10 @@
   height: 100%;
   margin: 0;
   border: 0;
-  border-radius: 0;
+}
+
+.project-file-editor-body > .fs-preview-pdf-wrap {
+  border-radius: 10px;
 }
 
 .project-file-editor-body > .ws-media-stage {
@@ -474,6 +477,11 @@
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
+}
+
+.project-file-editor-body .ws-media-stage[data-kind="image"] .media-preview-image,
+.project-file-editor-body .ws-media-stage[data-kind="video"] .media-preview-video {
+  border-radius: 10px;
 }
 
 .project-file-external-state span {
