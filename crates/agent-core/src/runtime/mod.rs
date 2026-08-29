@@ -98,6 +98,8 @@ pub struct Config {
     pub thread_memory_mode: types::ThreadMemoryMode,
     /// 控制 compact token 上限的度量方式（总量 vs 前缀之后的正文）。
     pub compact_scope: types::CompactTokenLimitScope,
+    /// 当模型目录未声明时使用的全局工具模式回退值。
+    pub tool_mode: Option<types::ToolMode>,
 }
 
 impl Config {
@@ -130,6 +132,7 @@ impl Config {
             static_override: None,
             thread_memory_mode: types::ThreadMemoryMode::Enabled,
             compact_scope: types::CompactTokenLimitScope::Total,
+            tool_mode: None,
         }
     }
 }
@@ -1087,6 +1090,13 @@ impl Session {
         self.lock_state().model_ctx.model_spec().cloned()
     }
 
+    /// 请求的工具暴露模式；模型元数据优先于全局回退值。
+    pub fn requested_tool_mode(&self) -> types::ToolMode {
+        self.lock_state()
+            .model_ctx
+            .requested_tool_mode(self.config.tool_mode)
+    }
+
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
     pub fn set_project_root(&self, root: Option<PathBuf>) {
         self.lock_state().project_root = root;
@@ -1478,14 +1488,21 @@ impl Session {
 
     /// 按当前交互模式过滤后的工具 schema（OpenAI tools 数组）。
     pub async fn schemas_for_api(&self) -> Vec<serde_json::Value> {
+        let (interaction_mode, requested_tool_mode) = {
+            let state = self.lock_state();
+            (
+                state.interaction_mode,
+                state.model_ctx.requested_tool_mode(self.config.tool_mode),
+            )
+        };
         let tool_registry = self
             .services
             .tool_registry
             .read()
             .expect("tool registry lock poisoned");
         tools::filter_schemas(
-            self.lock_state().interaction_mode,
-            tool_registry.schemas_for_api(),
+            interaction_mode,
+            tool_registry.schemas_for_api_with_mode(requested_tool_mode),
         )
     }
 

@@ -32,6 +32,11 @@ impl StepContext {
 
     /// 该工具是否在本次采样请求中被提供给模型。
     pub(crate) fn advertises_tool(&self, name: &str) -> bool {
+        self.tool_router.is_model_visible(name)
+    }
+
+    /// 工具是否可由 Code Mode 等受信任的嵌套运行时调用。
+    pub(crate) fn routes_tool(&self, name: &str) -> bool {
         self.tool_router.has_tool(name)
     }
 }

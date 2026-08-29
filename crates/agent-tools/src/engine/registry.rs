@@ -339,11 +339,33 @@ impl ToolRegistry {
     /// **非 Direct 工具不包含在返回列表中**，仅在 `tool_search`
     /// 发现后通过 `activate_deferred` 标记为 Direct 才会出现在后续调用中。
     pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        api_specs(
-            self.available_tools()
-                .into_iter()
-                .filter(|entry| entry.exposure.is_direct()),
-        )
+        self.schemas_for_api_with_mode(types::ToolMode::Direct)
+    }
+
+    /// 按 Codex 的 Direct / CodeMode / CodeModeOnly 策略返回模型可见 schema。
+    /// CodeMode 在宿主不可用时回退 Direct；CodeModeOnly 则 fail-closed。
+    pub fn schemas_for_api_with_mode(
+        &self,
+        requested_mode: types::ToolMode,
+    ) -> Vec<serde_json::Value> {
+        let available = self.available_tools();
+        let code_mode_available = available.iter().any(|entry| entry.name == "exec");
+        let mode = if requested_mode == types::ToolMode::CodeMode && !code_mode_available {
+            types::ToolMode::Direct
+        } else {
+            requested_mode
+        };
+        api_specs(available.into_iter().filter(|entry| {
+            if !entry.exposure.is_direct() {
+                return false;
+            }
+            let is_code_mode_control = matches!(entry.name.as_str(), "exec" | "wait");
+            match mode {
+                types::ToolMode::Direct => !is_code_mode_control,
+                types::ToolMode::CodeMode => true,
+                types::ToolMode::CodeModeOnly => is_code_mode_control,
+            }
+        }))
     }
 
     /// 返回全部工具的 API schema（包括 Deferred 但排除 Hidden），供 `tool_search` 等搜索使用。
@@ -352,6 +374,15 @@ impl ToolRegistry {
             self.available_tools()
                 .into_iter()
                 .filter(|entry| !entry.exposure.is_hidden()),
+        )
+    }
+
+    /// 执行路由可调用的全部 schema，包含仅 Code Mode 可用的工具。
+    pub fn all_callable_tool_schemas(&self) -> Vec<serde_json::Value> {
+        api_specs(
+            self.available_tools()
+                .into_iter()
+                .filter(|entry| entry.exposure != types::ToolExposure::Hidden),
         )
     }
 

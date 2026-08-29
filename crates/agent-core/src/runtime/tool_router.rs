@@ -1,6 +1,6 @@
 //! 采样步骤级工具路由快照。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
@@ -24,6 +24,7 @@ struct ToolRoute {
 /// deferred 工具不向模型通告，但一旦 `tool_search` 发现它们即可调用。
 pub(crate) struct ToolRouter {
     routes: HashMap<String, ToolRoute>,
+    model_visible_routes: HashSet<String>,
     model_visible_specs: Arc<[serde_json::Value]>,
 }
 
@@ -54,8 +55,14 @@ impl ToolRouter {
                 );
             }
         }
+        let model_visible_routes = model_visible_specs
+            .iter()
+            .flat_map(|spec| spec_route_names(registry, spec))
+            .map(|(wire_name, _)| wire_name)
+            .collect();
         Self {
             routes,
+            model_visible_routes,
             model_visible_specs: model_visible_specs.into(),
         }
     }
@@ -66,6 +73,10 @@ impl ToolRouter {
 
     pub(crate) fn has_tool(&self, name: &str) -> bool {
         self.routes.contains_key(name)
+    }
+
+    pub(crate) fn is_model_visible(&self, name: &str) -> bool {
+        self.model_visible_routes.contains(name)
     }
 
     pub(crate) fn registered_name<'a>(&'a self, wire_name: &'a str) -> &'a str {
@@ -136,10 +147,7 @@ impl ToolRouter {
     }
 }
 
-fn spec_route_names(
-    registry: &ToolRegistry,
-    spec: &serde_json::Value,
-) -> Vec<(String, String)> {
+fn spec_route_names(registry: &ToolRegistry, spec: &serde_json::Value) -> Vec<(String, String)> {
     let kind = spec
         .get("type")
         .and_then(serde_json::Value::as_str)
@@ -262,6 +270,8 @@ mod tests {
         assert!(router.has_tool("direct_tool"));
         assert!(router.has_tool("deferred_tool"));
         assert!(!router.has_tool("hidden_tool"));
+        assert!(router.is_model_visible("direct_tool"));
+        assert!(!router.is_model_visible("deferred_tool"));
 
         let specs = router.model_visible_specs();
         let advertised: Vec<&str> = specs

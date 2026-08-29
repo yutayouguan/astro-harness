@@ -111,7 +111,7 @@ mod tests {
     fn registers_native_exec_and_wait_contracts() {
         let mut registry = ToolRegistry::new();
         register(&mut registry);
-        let specs = registry.schemas_for_api();
+        let specs = registry.schemas_for_api_with_mode(types::ToolMode::CodeMode);
         let exec = specs.iter().find(|spec| spec["name"] == "exec").unwrap();
         assert_eq!(exec["type"], "custom");
         assert_eq!(exec["format"]["syntax"], "lark");

@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use types::{AuxiliaryTask, ChatTarget, ModelSpec, MAX_CHAT_FALLBACKS};
+use types::{AuxiliaryTask, ChatTarget, ModelSpec, ToolMode, MAX_CHAT_FALLBACKS};
 use types::{ImageGenTargets, ModelCredentials};
 
 /// LLM 模型配置、凭证与 fallback 链。
@@ -146,6 +146,15 @@ impl ModelContext {
 
     pub fn model_spec(&self) -> Option<&ModelSpec> {
         self.model_spec.as_ref()
+    }
+
+    pub fn requested_tool_mode(&self, fallback: Option<ToolMode>) -> ToolMode {
+        if let Some(spec) = self.model_spec.as_ref() {
+            return spec.requested_tool_mode(fallback);
+        }
+        ToolMode::codex_default_for_model(&self.credentials.model)
+            .or(fallback)
+            .unwrap_or_default()
     }
 
     // ── 上下文窗口 ─────────────────────────────────────────

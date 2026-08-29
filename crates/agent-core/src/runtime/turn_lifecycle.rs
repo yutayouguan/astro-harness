@@ -804,18 +804,27 @@ impl Session {
         if let Some(ctx) = self.take_inject_context().await {
             history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
         }
+        let (interaction_mode, requested_tool_mode) = {
+            let state = self.lock_state();
+            (
+                state.interaction_mode,
+                state.model_ctx.requested_tool_mode(self.config.tool_mode),
+            )
+        };
         let tool_router = {
             let registry = self
                 .services
                 .tool_registry
                 .read()
                 .expect("tool registry lock poisoned");
-            let interaction_mode = self.lock_state().interaction_mode;
-            let visible_specs = tools::filter_schemas(interaction_mode, registry.schemas_for_api());
+            let visible_specs = tools::filter_schemas(
+                interaction_mode,
+                registry.schemas_for_api_with_mode(requested_tool_mode),
+            );
             // Deferred 工具不进模型 schema，但发现后仍可调用；两者都要按交互模式过滤。
             let callable_specs = tools::filter_schemas(
                 interaction_mode,
-                registry.all_tool_schemas_including_deferred(),
+                registry.all_callable_tool_schemas(),
             );
             Arc::new(crate::runtime::ToolRouter::from_registry(
                 &registry,

@@ -980,7 +980,7 @@ fn code_mode_nested_tools(
     let mut by_identifier = std::collections::BTreeMap::new();
     for entry in registry.available_tools() {
         if matches!(entry.name.as_str(), "exec" | "wait" | "tool_search")
-            || entry.exposure.is_hidden()
+            || entry.exposure == types::ToolExposure::Hidden
         {
             continue;
         }
@@ -1102,6 +1102,7 @@ async fn drive_code_mode_cell(
                             pause,
                             turn_context,
                             hitl_gate,
+                            ToolInvocationSource::CodeMode,
                         ))
                         .await
                         {
@@ -1521,7 +1522,22 @@ pub(crate) async fn execute_tools_serial(
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<Vec<types::ToolOutput>> {
-    execute_tools_serial_inner(session, step_context, calls, pause, turn_context, hitl_gate).await
+    execute_tools_serial_inner(
+        session,
+        step_context,
+        calls,
+        pause,
+        turn_context,
+        hitl_gate,
+        ToolInvocationSource::Model,
+    )
+    .await
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ToolInvocationSource {
+    Model,
+    CodeMode,
 }
 
 async fn execute_tools_serial_inner(
@@ -1531,6 +1547,7 @@ async fn execute_tools_serial_inner(
     pause: &Arc<PauseControl>,
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
+    source: ToolInvocationSource,
 ) -> Option<Vec<types::ToolOutput>> {
     let mut out: Vec<types::ToolOutput> = Vec::with_capacity(calls.len());
     for call in calls {
@@ -1540,7 +1557,11 @@ async fn execute_tools_serial_inner(
         if !pause.wait_if_paused().await {
             return None;
         }
-        if !step_context.advertises_tool(&call.name) {
+        let callable = match source {
+            ToolInvocationSource::Model => step_context.advertises_tool(&call.name),
+            ToolInvocationSource::CodeMode => step_context.routes_tool(&call.name),
+        };
+        if !callable {
             out.push(
                 format!(
                     "工具 `{}` 不在生成本次调用的 StepContext 中，已拒绝执行。",
