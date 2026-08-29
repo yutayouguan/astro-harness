@@ -1,5 +1,7 @@
 # Provider 接口规范
 
+> **Harness 契约（2026-08-29）**：Provider 接口只负责将 `CompletionRequest` 转为厂商协议，并输出统一 `StreamChunk`。Turn loop、fallback 准入、tool execution、审批和历史持久化由 Harness 拥有。原生 `ToolDefinition` 是 tagged union，不得在接口层预先压成单一 Function。
+
 > 阶段：系统设计 | 状态：定稿 | 说明：8 个核心 trait、流式响应、Fallback
 
 ## 1. 核心 Trait 定义

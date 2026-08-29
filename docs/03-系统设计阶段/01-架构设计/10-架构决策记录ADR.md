@@ -1,5 +1,7 @@
 # 架构决策记录（Architecture Decision Records）
 
+> **现行决策（2026-08-29）**：Agent 按 `Model + Harness` 定义；Thread actor、SessionTask、StepContext、原生工具协议、append-only rollout 和 V2 Agent Threads 是当前基线。以下历史 ADR 可解释决策演进，但其 `Supervisor/delegate_task/Core EventBus/增量 Checkpoint` 等结论已被 [Agent Harness 总体架构](11-Agent-Harness总体架构.md) 取代。
+
 > 阶段：系统设计 | 状态：定稿 | 说明：记录所有关键架构决策的背景、方案、取舍与后果
 
 本文档汇总 Astro Agent 项目在架构设计过程中的所有关键技术决策。每条 ADR 遵循统一格式：背景（为什么需要这个决策）、决策（选择了什么）、备选方案（考虑过的替代方案及其优劣）、结果（决策带来的正面和负面后果）。

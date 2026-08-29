@@ -1,5 +1,7 @@
 # MCP 集成
 
+> **Harness 定位（2026-08-29）**：MCP 是 Harness 的外部工具 Gateway，而不是 Model 本身能力。当 `tool_search` 可用时，MCP 工具默认 Deferred；搜索激活只改变模型可见性，不跳过 MCP approval、HITL、`StepContext` 或审计。见 [Agent Harness 总体架构](../01-架构设计/11-Agent-Harness总体架构.md)。
+
 > 文档状态：定稿 | 阶段：系统设计 | 拆分自：原 07-MCP与Skills与子Agent.md
 
 ---

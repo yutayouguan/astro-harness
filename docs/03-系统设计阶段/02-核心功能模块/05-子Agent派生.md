@@ -1,5 +1,7 @@
 # 子 Agent 派生
 
+> **Harness 定位（2026-08-29）**：子 Agent 是 Harness 的 Orchestrator 子系统。当前唯一实现是 Codex V2 Agent Threads：`spawn_agent/list_agents/send_message/followup_task/wait_agent/interrupt_agent`，Graph/mailbox/status 位于 `subagents-v2.db`，真实对话位于 Session 时间线。旧 `delegate_task/Supervisor/DelegateRunner` 仅作迁移背景。
+
 > 文档状态：定稿 | 阶段：系统设计 | 拆分自：原 07-MCP与Skills与子Agent.md
 > 架构版本：Codex V2 Agent Thread（替代原 Supervisor/DelegateRunner 设计）
 

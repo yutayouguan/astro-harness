@@ -28,13 +28,14 @@
 | [01-架构总览.md](01-架构设计/01-架构总览.md) | 架构总览、技术栈选型、Monorepo 整体结构 |
 | [02-项目初始化.md](01-架构设计/02-项目初始化.md) | 项目初始化步骤与各模块开发顺序 |
 | [03-Crate结构.md](01-架构设计/03-Crate结构.md) | 各 Rust crate 详细结构与核心 trait 定义 |
-| [04-Prompt工程.md](01-架构设计/04-Prompt工程.md) | Prompt 工程指南：Tera 模板引擎、模型差异、反模式、测试方法 |
-| [05-系统分层架构.md](01-架构设计/05-系统分层架构.md) | 5 层架构图（UI / Shell / Runtime / Core-Provider-MCP / Infra） |
+| [04-Prompt工程.md](01-架构设计/04-Prompt工程.md) | Prompt scaffold：稳定基础指令、角色化动态上下文和独立原生工具 schema |
+| [05-系统分层架构.md](01-架构设计/05-系统分层架构.md) | 物理分层与纵向 Agent Harness 职责面 |
 | [06-模块依赖关系.md](01-架构设计/06-模块依赖关系.md) | Crate 依赖图、React 组件模块划分、外部依赖清单 |
 | [07-数据流设计.md](01-架构设计/07-数据流设计.md) | 主对话 / 工具调用 / 记忆读写 / Skills 执行 / 子 Agent 派生数据流 |
 | [08-部署架构.md](01-架构设计/08-部署架构.md) | 本地单机部署、多平台打包、自动更新、Ollama sidecar |
 | [09-端到端数据流追踪.md](01-架构设计/09-端到端数据流追踪.md) | 端到端数据流追踪：从用户输入到 LLM 响应的全链路数据流 |
 | [10-架构决策记录ADR.md](01-架构设计/10-架构决策记录ADR.md) | 架构决策记录（ADR）：关键技术选型与设计决策的记录与追溯 |
+| [11-Agent-Harness总体架构.md](01-架构设计/11-Agent-Harness总体架构.md) | Agent = Model + Harness；统一执行循环、上下文、工具、安全、恢复、观测和运行环境边界 |
 
 ## 02-核心功能模块
 
@@ -44,22 +45,22 @@
 | [02-OpenRouter模型目录.md](02-核心功能模块/02-OpenRouter模型目录.md) | OpenRouter 模型目录：价格、能力、模态，实时数据同步方案 |
 | [03-MCP集成.md](02-核心功能模块/03-MCP集成.md) | MCP Client/Server、工具风险等级配置、Transport（stdio/Streamable HTTP）、懒连接 |
 | [04-Skills系统.md](02-核心功能模块/04-Skills系统.md) | Skill Trait、SKILL.md 格式、BM25 按需披露（tantivy）、热加载 |
-| [05-子Agent派生.md](02-核心功能模块/05-子Agent派生.md) | delegate_task 接口、Supervisor、7 类屏蔽工具、深度限制、清理机制 |
+| [05-子Agent派生.md](02-核心功能模块/05-子Agent派生.md) | Codex V2 Agent Threads：六工具控制面、Graph/mailbox/status 持久化与权限收窄 |
 | [06-自我进化引擎.md](02-核心功能模块/06-自我进化引擎.md) | 自我进化引擎：TaskTrace、反思引擎、Skill 合成、Prompt 优化流程 |
-| [07-上下文管理.md](02-核心功能模块/07-上下文管理.md) | 上下文管理与 Token 优化：对话压缩、Token 预算公式、优先级槽 |
+| [07-上下文管理.md](02-核心功能模块/07-上下文管理.md) | PromptContract、动态上下文、工具结果压缩、token 预算与用量分段 |
 | [08-知识库RAG.md](02-核心功能模块/08-知识库RAG.md) | 知识库 RAG：文档摄入管线、混合检索（BM25 + sqlite-vec）、工作区独立知识库 |
-| [09-会话Checkpoint与恢复.md](02-核心功能模块/09-会话Checkpoint与恢复.md) | 会话断点保存、三种恢复场景、子 Agent 进度持久化、自动过期 |
+| [09-会话Checkpoint与恢复.md](02-核心功能模块/09-会话Checkpoint与恢复.md) | append-only rollout 事实源、snapshot + live boundary、SessionStore 投影与恢复 |
 
 ## 03-基础设施
 
 | 文件 | 说明 |
 | ---- | ---- |
-| [01-持久化层.md](03-基础设施/01-持久化层.md) | 持久化层：SQLite 运行时访问、数据目录结构 |
+| [01-持久化层.md](03-基础设施/01-持久化层.md) | rollout 事实源 + Session/Agent Graph/Usage/Cron/Artifact/Knowledge 独立投影存储 |
 | [02-可观测性.md](03-基础设施/02-可观测性.md) | 可观测性：结构化日志、OpenTelemetry 追踪、CostRecord 成本追踪 |
 | [03-错误处理与容错.md](03-基础设施/03-错误处理与容错.md) | 错误处理与容错：错误分类体系、重试退避、Provider 自动切换 |
-| [04-人工接管设计.md](03-基础设施/04-人工接管设计.md) | 人工接管：三级介入（单次审批 / 暂停 / 完全接管）、HumanGuard 状态机 |
-| [05-工具系统设计.md](03-基础设施/05-工具系统设计.md) | 工具系统：30 个内置工具、原子批量操作、沙箱权限 |
-| [06-安全边界.md](03-基础设施/06-安全边界.md) | 安全边界：PermissionSet 统一权限模型、Prompt 注入防御、审计日志 |
+| [04-人工接管设计.md](03-基础设施/04-人工接管设计.md) | interaction mode、HitlGate、PauseControl、SessionApprovalCache 与协议控制事件 |
+| [05-工具系统设计.md](03-基础设施/05-工具系统设计.md) | Registry/StepContext/ToolRouter、原生工具协议、Deferred 发现与执行闭环 |
+| [06-安全边界.md](03-基础设施/06-安全边界.md) | 暴露、快照、审批、attempt-scoped sandbox/network、hooks 与审计多层边界 |
 | [07-隐私与合规.md](03-基础设施/07-隐私与合规.md) | 隐私与合规：敏感词过滤、Provider 数据声明、SQLCipher 加密方案 |
 | [08-成本预算控制.md](03-基础设施/08-成本预算控制.md) | 成本预算控制：全局 / 工作区 / 任务预算层级、超支告警、费用仪表板 |
 

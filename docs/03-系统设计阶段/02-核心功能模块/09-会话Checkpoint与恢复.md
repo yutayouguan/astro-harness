@@ -1,5 +1,7 @@
 # 会话 Checkpoint 与恢复
 
+> **Harness 恢复基线（2026-08-29）**：当前权威恢复源是 `agent-rollout` append-only 时间线，不是独立 checkpoint row 或最后一条 message 猜测。Server 以 rollout snapshot + live boundary 投影，SessionStore 是查询/FTS/UI 视图。本文其余“增量 Checkpoint”结构作为历史方案保留。
+
 > 文档状态：定稿 | 阶段：系统设计 | 关联：agent-runtime round_loop、崩溃恢复
 
 ---

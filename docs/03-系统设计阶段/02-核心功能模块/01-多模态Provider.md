@@ -1,5 +1,7 @@
 # 多模态 Provider 系统
 
+> **Harness 边界（2026-08-29）**：Provider 是 Model 网关和协议适配层，不拥有 Agent turn、工具权限或持久化生命周期。Harness 通过 `CompletionRequest` 交付 messages/tool schemas，并将流规范化为 `StreamChunk`。原生工具契约见 [Codex 原生工具协议](../../04-详细设计阶段/04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md)。
+
 > 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-08-22
 
 ## 架构概览

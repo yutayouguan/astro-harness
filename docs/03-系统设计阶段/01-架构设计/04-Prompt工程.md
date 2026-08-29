@@ -1,5 +1,7 @@
 # Prompt 工程指南
 
+> **Harness 边界（2026-08-29）**：Prompt scaffold 是 Harness 交给 Model 的可见工作面，但不等于 Harness。当前契约分为 `PromptContract.base_instructions`、带角色的 dynamic context 和独立 `CompletionRequest.tools`。旧的单字符串/8 槽位/Tera 伪代码仅作历史方案参考。总体边界见 [Agent Harness 总体架构](11-Agent-Harness总体架构.md)。
+
 > 阶段：系统设计 | 状态：定稿 | 说明：Tera 模板引擎、模型差异、反模式、测试方法
 
 本文档面向**开发者**，指导如何为 astro-agent 编写 Skill Prompt 和系统 Prompt。这不是 Prompt 工程的理论综述，而是实际可用的模板、规范和注意事项。

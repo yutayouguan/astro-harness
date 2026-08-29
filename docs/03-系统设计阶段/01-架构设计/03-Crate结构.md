@@ -1,5 +1,7 @@
 # Crate 结构详解
 
+> **Agent Harness 基线（2026-08-29）**：Harness 主链由 `agent-core`、`agent-providers`、`agent-tools`、`agent-protocol`、`agent-rollout`、`agent-session`、`agent-subagents`、`agent-sandbox`、`agent-network-proxy` 和 `agent-server` 共同组成。`AgentLoop` 是 `Session` 的兼容别名，`agent-delegate` 只负责显式 worktree 任务。见 [Agent Harness 总体架构](11-Agent-Harness总体架构.md)。
+
 > 阶段：系统设计 | 状态：定稿 | 说明：各 Rust crate 详细结构与核心 trait 定义
 >
 > 本文档已根据实际代码库同步更新（2026-08-22）。
