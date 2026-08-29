@@ -13,7 +13,10 @@ pub const WAIT_TOOL_NAME: &str = "wait";
 fn code_mode_available() -> bool {
     static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *AVAILABLE.get_or_init(|| {
-        std::process::Command::new("node")
+        matches!(
+            sandbox::SandboxRunner.probe().status,
+            sandbox::SandboxHealthStatus::Available
+        ) && std::process::Command::new("node")
             .args(["--permission", "-e", ""])
             .output()
             .is_ok_and(|output| output.status.success())

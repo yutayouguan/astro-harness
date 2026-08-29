@@ -470,6 +470,25 @@ mod tests {
     }
 
     #[test]
+    fn exec_cells_roundtrip_as_custom_tool_calls() {
+        let msgs = vec![
+            Message::assistant(vec![AssistantContent::ToolCall(ToolCall {
+                id: "exec_1".into(),
+                name: "exec".into(),
+                arguments: json!("text('ok')"),
+                signature: None,
+            })]),
+            Message::tool_result("exec_1", "Script completed", false),
+        ];
+
+        let input = to_responses_input(&msgs);
+        assert_eq!(input[0]["type"], "custom_tool_call");
+        assert_eq!(input[0]["name"], "exec");
+        assert_eq!(input[0]["input"], "text('ok')");
+        assert_eq!(input[1]["type"], "custom_tool_call_output");
+    }
+
+    #[test]
     fn tool_search_roundtrips_with_loadable_tool_output() {
         let tools = json!([{
             "type": "function",
