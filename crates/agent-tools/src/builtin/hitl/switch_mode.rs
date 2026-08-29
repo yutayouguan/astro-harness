@@ -95,13 +95,14 @@ mod tests {
     use serde_json::json;
     use tempfile::TempDir;
 
-    fn with_ctx(f: impl FnOnce(&ToolContext<'_>)) {
+    async fn with_ctx(f: impl FnOnce(&ToolContext<'_>)) {
         let dir = TempDir::new().unwrap();
         let workspace = dir.path().join("ws");
         std::fs::create_dir_all(&workspace).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -132,39 +133,42 @@ mod tests {
         f(&ctx);
     }
 
-    #[test]
-    fn agent_requires_summary() {
+    #[tokio::test]
+    async fn agent_requires_summary() {
         with_ctx(|ctx| {
             let err = dispatch(ctx, &json!({ "to": "agent", "reason": "ready" }))
                 .unwrap_err()
                 .to_string();
             assert!(err.contains("summary"), "{err}");
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn plan_ok_without_summary() {
+    #[tokio::test]
+    async fn plan_ok_without_summary() {
         with_ctx(|ctx| {
             let raw = dispatch(ctx, &json!({ "to": "plan", "reason": "need a plan" })).unwrap();
             let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
             assert_eq!(v["to"], "plan");
             assert!(v["summary"].is_null());
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn rejects_ask_target() {
+    #[tokio::test]
+    async fn rejects_ask_target() {
         with_ctx(|ctx| {
             let err = dispatch(ctx, &json!({ "to": "ask", "reason": "x" })).unwrap_err();
             assert!(
                 err.to_string().contains("参数无效"),
                 "expected deserialize error, got {err}"
             );
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn agent_with_summary_ok() {
+    #[tokio::test]
+    async fn agent_with_summary_ok() {
         with_ctx(|ctx| {
             let raw = dispatch(
                 ctx,
@@ -178,6 +182,7 @@ mod tests {
             let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
             assert_eq!(v["to"], "agent");
             assert_eq!(v["summary"], "1. do A\n2. do B");
-        });
+        })
+        .await;
     }
 }

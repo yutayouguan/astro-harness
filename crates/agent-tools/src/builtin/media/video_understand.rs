@@ -458,8 +458,8 @@ mod path_tests {
     use memory::MemoryManager;
     use tempfile::TempDir;
 
-    #[test]
-    fn resolve_workspace_file_rejects_escape() {
+    #[tokio::test]
+    async fn resolve_workspace_file_rejects_escape() {
         let dir = TempDir::new().unwrap();
         let ws = dir.path().join("ws");
         let outside = dir.path().join("outside");
@@ -468,8 +468,9 @@ mod path_tests {
         std::fs::write(outside.join("secret.mp4"), b"x").unwrap();
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();

@@ -139,10 +139,15 @@ mod permission_tests {
     use super::*;
     use crate::context::ImageGenTargets;
 
-    fn with_ctx(dir: &tempfile::TempDir, write_grant: bool, f: impl FnOnce(&ToolContext<'_>)) {
+    async fn with_ctx(
+        dir: &tempfile::TempDir,
+        write_grant: bool,
+        f: impl FnOnce(&ToolContext<'_>),
+    ) {
         let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&manager.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&manager.base_dir.join("data"))
+            .await
+            .unwrap();
         let manager = std::sync::RwLock::new(manager);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -205,8 +210,8 @@ mod permission_tests {
         ));
     }
 
-    #[test]
-    fn read_only_denies_and_workspace_allows_in_process_writes() {
+    #[tokio::test]
+    async fn read_only_denies_and_workspace_allows_in_process_writes() {
         let dir = tempfile::tempdir().unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         with_ctx(&dir, false, |ctx| {
@@ -222,7 +227,8 @@ mod permission_tests {
                 enforce_in_process_write_policy(ctx, "context_search", &serde_json::json!({}))
                     .is_ok()
             );
-        });
+        })
+        .await;
         with_ctx(&dir, true, |ctx| {
             assert!(enforce_in_process_write_policy(
                 ctx,
@@ -230,7 +236,8 @@ mod permission_tests {
                 &serde_json::json!({"action": "create"})
             )
             .is_ok());
-        });
+        })
+        .await;
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
         with_ctx(&dir, false, |ctx| {
@@ -240,6 +247,7 @@ mod permission_tests {
                 &serde_json::json!({"action": "create"})
             )
             .is_ok());
-        });
+        })
+        .await;
     }
 }

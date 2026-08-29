@@ -599,6 +599,46 @@ mod tests {
         managed.runtime.wait_terminated().await;
     }
 
+    #[tokio::test]
+    async fn configure_thread_rejects_removed_ask_mode_without_mutating_session() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("removed-ask-mode")
+            .await
+            .expect("thread");
+        let session = managed.runtime.session();
+        let initial_temperature = session.temperature();
+        let initial_targets = session.chat_targets();
+
+        let error = service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "removed-ask-mode".into(),
+                    provider: "deepseek".into(),
+                    model: "deepseek-v4-flash".into(),
+                    interaction_mode: "ask".into(),
+                    temperature: Some(0.2),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("removed ask mode must fail");
+
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert_eq!(session.temperature(), initial_temperature);
+        assert_eq!(session.chat_targets(), initial_targets);
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
     #[test]
     fn turn_request_preserves_client_message_identity() {
         let mut chat = valid_chat_request();

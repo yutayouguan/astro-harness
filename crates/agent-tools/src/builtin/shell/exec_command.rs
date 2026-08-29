@@ -384,8 +384,9 @@ mod tests {
     async fn exec_command_uses_managed_proxy_environment() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -406,8 +407,9 @@ mod tests {
     async fn exec_command_managed_network_rejects_background_before_spawn() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -443,8 +445,9 @@ mod tests {
     async fn exec_command_managed_network_denial_is_typed() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -482,8 +485,9 @@ PY"#;
     async fn exec_command_without_managed_network_keeps_inherited_environment() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -506,8 +510,9 @@ PY"#;
         std::fs::create_dir_all(&ws).unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -559,8 +564,9 @@ PY"#;
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -610,8 +616,9 @@ PY"#;
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let bus = std::sync::Arc::new(hooks::PluginHookBus::new());

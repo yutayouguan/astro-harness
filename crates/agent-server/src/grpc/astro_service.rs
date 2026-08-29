@@ -1126,6 +1126,37 @@ impl AstroServiceImpl {
         thread: &agent::AstroThread,
         req: &proto::ChatRequest,
     ) -> Result<(), Status> {
+        // Validate the complete request before mutating the reusable session. Invalid legacy
+        // modes or malformed provider parameters must not partially reconfigure a live thread.
+        let interaction_mode =
+            types::InteractionMode::parse(&req.interaction_mode).ok_or_else(|| {
+                Status::invalid_argument(format!(
+                    "unsupported interaction_mode: {}",
+                    req.interaction_mode.trim().to_ascii_lowercase()
+                ))
+            })?;
+        if let Some(temperature) = req.temperature {
+            if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
+                return Err(Status::invalid_argument(
+                    "temperature must be between 0 and 2",
+                ));
+            }
+        }
+        let additional_params = if req.additional_params_json.trim().is_empty() {
+            None
+        } else {
+            let params: serde_json::Value = serde_json::from_str(&req.additional_params_json)
+                .map_err(|error| {
+                    Status::invalid_argument(format!("invalid additional_params_json: {error}"))
+                })?;
+            if !params.is_object() {
+                return Err(Status::invalid_argument(
+                    "additional_params_json must be an object",
+                ));
+            }
+            Some(params)
+        };
+
         let provider = if req.provider.trim().is_empty() {
             "ollama"
         } else {
@@ -1208,35 +1239,14 @@ impl AstroServiceImpl {
         if req.context_window > 0 {
             session.set_context_window(req.context_window);
         }
-        let interaction_mode =
-            types::InteractionMode::parse(&req.interaction_mode).ok_or_else(|| {
-                Status::invalid_argument(format!(
-                    "unsupported interaction_mode: {}",
-                    req.interaction_mode.trim().to_ascii_lowercase()
-                ))
-            })?;
         session.set_interaction_mode(interaction_mode).await;
         session.set_project_root(
             (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim())),
         );
         if let Some(temperature) = req.temperature {
-            if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
-                return Err(Status::invalid_argument(
-                    "temperature must be between 0 and 2",
-                ));
-            }
             session.set_temperature(temperature);
         }
-        if !req.additional_params_json.trim().is_empty() {
-            let params: serde_json::Value = serde_json::from_str(&req.additional_params_json)
-                .map_err(|error| {
-                    Status::invalid_argument(format!("invalid additional_params_json: {error}"))
-                })?;
-            if !params.is_object() {
-                return Err(Status::invalid_argument(
-                    "additional_params_json must be an object",
-                ));
-            }
+        if let Some(params) = additional_params {
             session.set_additional_params(params);
         }
         Ok(())
@@ -2838,18 +2848,23 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let control = subagents::AgentControl::open(
             "projection-root".into(),
-            subagents::AgentGraphStore::open(dir.path().join("graph.db")).unwrap(),
+            subagents::AgentGraphStore::open(dir.path().join("graph.db"))
+                .await
+                .unwrap(),
             subagents::Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 4,
             },
         )
+        .await
         .unwrap();
         control
             .reserve_spawn(&subagents::AgentPath::root(), "child")
+            .await
             .unwrap()
             .commit()
+            .await
             .unwrap();
         let observation = control
             .next_activity_after(
@@ -2876,20 +2891,24 @@ mod tests {
         let control = Arc::new(
             subagents::AgentControl::open(
                 root.into(),
-                subagents::AgentGraphStore::open(dir.path().join("agent-graph.db")).unwrap(),
+                subagents::AgentGraphStore::open(dir.path().join("agent-graph.db"))
+                    .await
+                    .unwrap(),
                 subagents::Limits {
                     max_threads: 8,
                     max_depth: 4,
                     max_running: 4,
                 },
             )
+            .await
             .unwrap(),
         );
         let spawn = control
             .reserve_spawn(&subagents::AgentPath::root(), "child")
+            .await
             .unwrap();
         let child_thread_id = spawn.thread_id().to_string();
-        spawn.commit().unwrap();
+        spawn.commit().await.unwrap();
 
         service
             .attach_agent_thread_watcher(
@@ -2902,6 +2921,7 @@ mod tests {
         control.notify_main_steer();
         control
             .record_runner_event(&child_thread_id, subagents::RunnerEvent::RuntimeTerminated)
+            .await
             .unwrap();
 
         let extensions = wait_for_agent_thread_extensions(&managed, dir.path(), root, |items| {
@@ -2962,13 +2982,16 @@ mod tests {
         let control = Arc::new(
             subagents::AgentControl::open(
                 root.into(),
-                subagents::AgentGraphStore::open(dir.path().join("agent-gap-graph.db")).unwrap(),
+                subagents::AgentGraphStore::open(dir.path().join("agent-gap-graph.db"))
+                    .await
+                    .unwrap(),
                 subagents::Limits {
                     max_threads: 8,
                     max_depth: 4,
                     max_running: 4,
                 },
             )
+            .await
             .unwrap(),
         );
         for _ in 0..1_025 {
@@ -3002,8 +3025,10 @@ mod tests {
             .clone();
         control
             .reserve_spawn(&subagents::AgentPath::root(), "after_gap")
+            .await
             .unwrap()
             .commit()
+            .await
             .unwrap();
 
         let extensions = wait_for_agent_thread_extensions(&managed, dir.path(), root, |items| {
@@ -4648,18 +4673,23 @@ mod tests {
         first.runtime.wait_terminated().await;
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn idle_thread_unloads_only_after_thirty_minutes() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        service
+            .get_session("idle-thread")
+            .await
+            .expect("prewarm idle session");
+        tokio::time::pause();
         let managed = service
             .get_or_create_thread("idle-thread")
             .await
             .expect("create idle thread");
         let old_runtime = Arc::clone(&managed.runtime);
         drop(managed);
-        tokio::task::yield_now().await;
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(29 * 60)).await;
         tokio::task::yield_now().await;
@@ -4671,6 +4701,7 @@ mod tests {
         }
         assert!(!service.threads.contains("idle-thread").await);
         assert!(service.thread_states.get("idle-thread").await.is_none());
+        tokio::time::resume();
         let replacement = service
             .get_or_create_thread("idle-thread")
             .await
@@ -4685,7 +4716,7 @@ mod tests {
         replacement.runtime.wait_terminated().await;
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn acquired_managed_handle_prevents_idle_unload_until_released() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -4694,7 +4725,8 @@ mod tests {
             .get_or_create_thread("leased-idle-thread")
             .await
             .expect("create idle thread");
-        tokio::task::yield_now().await;
+        tokio::time::pause();
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
@@ -4710,6 +4742,7 @@ mod tests {
 
         drop(current);
         drop(managed);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
             tokio::task::yield_now().await;
@@ -4717,7 +4750,7 @@ mod tests {
         assert!(!service.threads.contains("leased-idle-thread").await);
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn failed_terminal_unsubscribed_thread_unloads_after_thirty_minutes() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -4726,6 +4759,7 @@ mod tests {
             .get_or_create_thread("failed-thread")
             .await
             .expect("create thread");
+        tokio::time::pause();
         let (_receiver, _cancel, generation) = service
             .connections
             .register("connection-failed".into())
@@ -4776,6 +4810,7 @@ mod tests {
         assert_eq!(managed.activity_rx.borrow().status, "errored");
         assert!(!managed.activity_rx.borrow().has_subscribers);
         drop(managed);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
@@ -4786,7 +4821,7 @@ mod tests {
         assert!(service.thread_states.get("failed-thread").await.is_none());
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn never_returning_background_phase_releases_sink_then_allows_idle_unload() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -4795,6 +4830,7 @@ mod tests {
             .get_or_create_thread("stuck-background-thread")
             .await
             .expect("create thread");
+        tokio::time::pause();
         let (_receiver, _cancel, generation) = service
             .connections
             .register("connection-stuck".into())
@@ -4832,6 +4868,7 @@ mod tests {
         unsubscribe_rx.await.unwrap();
         assert!(managed.activity_rx.borrow().has_subscribers);
         drop(managed);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         // Simulate a provider future that never resolves. The background lease must retain
         // the sink through the work timeout plus marker window, then expire independently
@@ -4847,6 +4884,7 @@ mod tests {
             .expect("thread remains during idle window");
         assert!(!current.activity_rx.borrow().has_subscribers);
         drop(current);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
@@ -4913,7 +4951,7 @@ mod tests {
         assert_eq!(finalized.load(Ordering::SeqCst), 3);
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn released_generation_background_finalizer_cannot_resurrect_thread_or_session() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -5099,7 +5137,7 @@ mod tests {
         assert_eq!(count_rx.await.expect("waiter count"), 0);
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn completed_snapshot_can_resubscribe_then_unload_after_explicit_unsubscribe() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -5108,6 +5146,7 @@ mod tests {
             .get_or_create_thread("completed-thread")
             .await
             .expect("create thread");
+        tokio::time::pause();
         let (_receiver, _cancel, generation) = service
             .connections
             .register("connection-completed".into())
@@ -5173,6 +5212,7 @@ mod tests {
             .unwrap();
         unsubscribe_rx.await.unwrap();
         drop(managed);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {

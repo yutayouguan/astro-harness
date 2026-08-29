@@ -681,8 +681,8 @@ mod path_tests {
         assert!(d.ends_with("generated/images"));
     }
 
-    #[test]
-    fn resolve_workspace_file_rejects_escape() {
+    #[tokio::test]
+    async fn resolve_workspace_file_rejects_escape() {
         let dir = TempDir::new().unwrap();
         let ws = dir.path().join("ws");
         let outside = dir.path().join("outside");
@@ -691,8 +691,9 @@ mod path_tests {
         std::fs::write(outside.join("secret.txt"), b"x").unwrap();
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -725,16 +726,17 @@ mod path_tests {
         assert!(err.to_string().contains("工作区内"), "unexpected: {err}");
     }
 
-    #[test]
-    fn resolve_workspace_file_accepts_in_workspace() {
+    #[tokio::test]
+    async fn resolve_workspace_file_accepts_in_workspace() {
         let dir = TempDir::new().unwrap();
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
         std::fs::write(ws.join("ok.txt"), b"ok").unwrap();
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();

@@ -283,15 +283,16 @@ permissions:
         assert!(error.to_string().contains("not yet executable"), "{error}");
     }
 
-    #[test]
-    fn one_call_grant_upgrades_read_only_to_workspace_write() {
+    #[tokio::test]
+    async fn one_call_grant_upgrades_read_only_to_workspace_write() {
         let dir = tempfile::tempdir().unwrap();
         let workspace = dir.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&manager.base_dir.join("data")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&manager.base_dir.join("data"))
+            .await
+            .unwrap();
         let manager = std::sync::RwLock::new(manager);
         let targets = ImageGenTargets::default();
         let credentials = ModelCredentials::default();
