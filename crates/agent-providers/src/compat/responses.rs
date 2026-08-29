@@ -102,15 +102,8 @@ where
             let tools: Vec<Value> = request
                 .tools
                 .iter()
-                .map(|t| {
-                    json!({
-                        "type": "function",
-                        "name": t.name,
-                        "description": t.description,
-                        "parameters": t.parameters,
-                    })
-                })
-                .collect();
+                .map(serde_json::to_value)
+                .collect::<Result<_, _>>()?;
             body["tools"] = Value::Array(tools);
             body["tool_choice"] = json!("auto");
             if Ext::RESPONSES_PARALLEL_TOOLS {

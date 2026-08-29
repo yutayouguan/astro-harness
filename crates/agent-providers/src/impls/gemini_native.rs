@@ -100,22 +100,22 @@ impl CompletionModel for GeminiNativeCompletionModel {
 
         // Tools → function_declarations
         if !request.tools.is_empty() {
-            let tools = crate::google::tools::openai_tools_to_gemini_native(
-                &request
-                    .tools
-                    .iter()
-                    .map(|t| {
-                        json!({
-                            "type": "function",
-                            "function": {
-                                "name": t.name,
-                                "description": t.description,
-                                "parameters": t.parameters,
-                            }
-                        })
+            let function_tools = request
+                .tools
+                .iter()
+                .flat_map(|tool| tool.function_definitions())
+                .map(|tool| {
+                    json!({
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": tool.parameters,
+                        }
                     })
-                    .collect::<Vec<_>>(),
-            );
+                })
+                .collect::<Vec<_>>();
+            let tools = crate::google::tools::openai_tools_to_gemini_native(&function_tools);
             if !tools.is_empty() {
                 body["tools"] = Value::Array(tools);
             }

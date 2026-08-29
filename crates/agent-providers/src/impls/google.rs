@@ -175,10 +175,22 @@ impl CompletionModel for InteractionsCompletionModel {
 
         // Tools
         if !request.tools.is_empty() {
-            let tools: Vec<Value> = request.tools.iter().map(|t| {
-                json!({"type": "function", "name": t.name, "description": t.description, "parameters": t.parameters})
-            }).collect();
-            body["tools"] = Value::Array(tools);
+            let tools: Vec<Value> = request
+                .tools
+                .iter()
+                .flat_map(|tool| tool.function_definitions())
+                .map(|tool| {
+                    json!({
+                        "type": "function",
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters,
+                    })
+                })
+                .collect();
+            if !tools.is_empty() {
+                body["tools"] = Value::Array(tools);
+            }
         }
 
         // generation_config

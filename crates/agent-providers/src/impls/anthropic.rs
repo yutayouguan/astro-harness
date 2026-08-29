@@ -132,10 +132,21 @@ impl CompletionModel for AnthropicCompletionModel {
 
         // Tools
         if !request.tools.is_empty() {
-            let tools: Vec<Value> = request.tools.iter().map(|t| {
-                json!({"name": t.name, "description": t.description, "input_schema": t.parameters})
-            }).collect();
-            body["tools"] = Value::Array(tools);
+            let tools: Vec<Value> = request
+                .tools
+                .iter()
+                .flat_map(|tool| tool.function_definitions())
+                .map(|tool| {
+                    json!({
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.parameters,
+                    })
+                })
+                .collect();
+            if !tools.is_empty() {
+                body["tools"] = Value::Array(tools);
+            }
         }
 
         if let Some(tc) = request.additional_params.get("tool_choice") {

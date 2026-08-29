@@ -58,16 +58,16 @@ pub struct ThinkingConfig {
     pub effort: String,
 }
 
-/// Provider-independent native tool selection policy.
+/// 统一的原生工具选择策略（provider 无关）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolChoice {
-    /// Let the model decide whether to call a tool.
+    /// 由模型自行决定是否调用工具。
     Auto,
-    /// Require at least one native tool call.
+    /// 强制至少调用一次原生工具。
     Required,
-    /// Disable native tool calls.
+    /// 禁用原生工具调用。
     None,
-    /// Require one specific native tool by name.
+    /// 强制调用指定名称的工具。
     Specific(String),
 }
 
@@ -75,15 +75,15 @@ pub enum ToolChoice {
 #[derive(Debug, Clone)]
 pub struct CompletionRequest {
     pub model: String,
-    /// Stable base instructions, independent from role-bearing request input.
+    /// 稳定的基础指令，独立于带角色的对话输入。
     pub instructions: String,
-    /// Dynamic context and conversation items with explicit roles.
+    /// 动态上下文与对话条目（带显式角色）。
     pub input: Vec<Message>,
-    /// Native tool schemas; never encoded into instruction or message text.
+    /// 原生工具 schema；不编码到指令或消息文本中。
     pub tools: Vec<ToolDefinition>,
-    /// Explicit native tool-selection contract. `None` keeps the provider default.
+    /// 显式工具选择策略。`None` 保持 provider 默认。
     pub tool_choice: Option<ToolChoice>,
-    /// Whether the provider may emit parallel tool calls. `None` keeps its default.
+    /// 是否允许 provider 并行发起工具调用。`None` 保持默认。
     pub parallel_tool_calls: Option<bool>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -112,8 +112,7 @@ impl Default for CompletionRequest {
 }
 
 impl CompletionRequest {
-    /// Lower the explicit instruction field into a system message for providers whose
-    /// wire protocol has no dedicated top-level instructions field.
+    /// 将 instructions 字段降级为 system 消息，供线路协议没有顶层指令字段的 provider 使用。
     pub fn input_with_instructions(&self) -> Vec<Message> {
         let mut messages = Vec::with_capacity(self.input.len() + 1);
         if !self.instructions.trim().is_empty() {
@@ -137,11 +136,11 @@ mod tests {
                 Message::developer("dynamic policy"),
                 Message::user_text("hello"),
             ],
-            tools: vec![ToolDefinition {
-                name: "lookup".into(),
-                description: "Lookup data".into(),
-                parameters: serde_json::json!({"type": "object"}),
-            }],
+            tools: vec![ToolDefinition::function(
+                "lookup",
+                "Lookup data",
+                serde_json::json!({"type": "object"}),
+            )],
             ..Default::default()
         };
 
@@ -154,6 +153,6 @@ mod tests {
             .input
             .iter()
             .all(|message| !message.text_content().contains("lookup")));
-        assert_eq!(request.tools[0].name, "lookup");
+        assert_eq!(request.tools[0].name(), "lookup");
     }
 }

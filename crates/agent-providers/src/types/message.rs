@@ -87,12 +87,120 @@ pub struct ToolCall {
     pub signature: Option<String>,
 }
 
-/// 工具定义（provider-agnostic JSON Schema）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolDefinition {
+/// 标准 JSON function 工具。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FunctionToolDefinition {
     pub name: String,
     pub description: String,
     pub parameters: Value,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub strict: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub defer_loading: Option<bool>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+/// Responses API 自定义语法工具。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FreeformToolDefinition {
+    pub name: String,
+    pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub defer_loading: Option<bool>,
+    pub format: Value,
+}
+
+/// 命名空间中的工具定义。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum NamespaceToolDefinition {
+    #[serde(rename = "function")]
+    Function(FunctionToolDefinition),
+    #[serde(rename = "custom")]
+    Freeform(FreeformToolDefinition),
+}
+
+/// Responses API 命名空间工具。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolNamespaceDefinition {
+    pub name: String,
+    pub description: String,
+    pub tools: Vec<NamespaceToolDefinition>,
+}
+
+/// 统一工具定义（provider 无关）。
+///
+/// 序列化格式遵循 Responses API。仅支持普通函数调用的 provider
+/// 通过 `function_definitions()` 展平兼容条目，忽略不支持的自定义/命名空间工具。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum ToolDefinition {
+    #[serde(rename = "function")]
+    Function(FunctionToolDefinition),
+    #[serde(rename = "custom")]
+    Freeform(FreeformToolDefinition),
+    #[serde(rename = "namespace")]
+    Namespace(ToolNamespaceDefinition),
+    #[serde(rename = "tool_search")]
+    ToolSearch {
+        execution: String,
+        description: String,
+        parameters: Value,
+    },
+    #[serde(rename = "web_search")]
+    WebSearch {
+        #[serde(flatten)]
+        options: serde_json::Map<String, Value>,
+    },
+}
+
+impl ToolDefinition {
+    pub fn function(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: Value,
+    ) -> Self {
+        Self::Function(FunctionToolDefinition {
+            name: name.into(),
+            description: description.into(),
+            parameters,
+            strict: false,
+            defer_loading: None,
+        })
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Function(tool) => &tool.name,
+            Self::Freeform(tool) => &tool.name,
+            Self::Namespace(namespace) => &namespace.name,
+            Self::ToolSearch { .. } => "tool_search",
+            Self::WebSearch { .. } => "web_search",
+        }
+    }
+
+    /// 展平为普通函数定义列表，供不支持 Responses API 自定义/命名空间工具的 provider 使用。
+    pub fn function_definitions(&self) -> Vec<FunctionToolDefinition> {
+        match self {
+            Self::Function(tool) => vec![tool.clone()],
+            Self::Namespace(namespace) => namespace
+                .tools
+                .iter()
+                .filter_map(|tool| match tool {
+                    NamespaceToolDefinition::Function(tool) => {
+                        let mut tool = tool.clone();
+                        tool.name = format!("{}.{}", namespace.name, tool.name);
+                        Some(tool)
+                    }
+                    NamespaceToolDefinition::Freeform(_) => None,
+                })
+                .collect(),
+            Self::Freeform(_) | Self::ToolSearch { .. } | Self::WebSearch { .. } => Vec::new(),
+        }
+    }
 }
 
 /// 统一消息。
@@ -276,5 +384,71 @@ mod tests {
             "\"assistant\""
         );
         assert_eq!(serde_json::to_string(&Role::Tool).unwrap(), "\"tool\"");
+    }
+
+    #[test]
+    fn responses_tool_variants_preserve_native_wire_shape() {
+        let tools = vec![
+            ToolDefinition::function(
+                "lookup",
+                "Lookup data",
+                serde_json::json!({"type": "object"}),
+            ),
+            ToolDefinition::Freeform(FreeformToolDefinition {
+                name: "apply_patch".into(),
+                description: "Apply a patch".into(),
+                defer_loading: None,
+                format: serde_json::json!({
+                    "type": "grammar",
+                    "syntax": "lark",
+                    "definition": "start: /.+/",
+                }),
+            }),
+            ToolDefinition::Namespace(ToolNamespaceDefinition {
+                name: "clock".into(),
+                description: "Clock tools".into(),
+                tools: vec![NamespaceToolDefinition::Function(FunctionToolDefinition {
+                    name: "now".into(),
+                    description: "Current time".into(),
+                    parameters: serde_json::json!({"type": "object"}),
+                    strict: true,
+                    defer_loading: Some(true),
+                })],
+            }),
+        ];
+
+        let json = serde_json::to_value(&tools).unwrap();
+        assert_eq!(json[0]["type"], "function");
+        assert_eq!(json[1]["type"], "custom");
+        assert_eq!(json[1]["format"]["syntax"], "lark");
+        assert_eq!(json[2]["type"], "namespace");
+        assert_eq!(json[2]["tools"][0]["defer_loading"], true);
+    }
+
+    #[test]
+    fn namespace_flattens_only_function_tools_for_legacy_providers() {
+        let namespace = ToolDefinition::Namespace(ToolNamespaceDefinition {
+            name: "clock".into(),
+            description: "Clock tools".into(),
+            tools: vec![
+                NamespaceToolDefinition::Function(FunctionToolDefinition {
+                    name: "now".into(),
+                    description: "Current time".into(),
+                    parameters: serde_json::json!({"type": "object"}),
+                    strict: false,
+                    defer_loading: None,
+                }),
+                NamespaceToolDefinition::Freeform(FreeformToolDefinition {
+                    name: "script".into(),
+                    description: "Run script".into(),
+                    defer_loading: None,
+                    format: serde_json::json!({"type": "text"}),
+                }),
+            ],
+        });
+
+        let functions = namespace.function_definitions();
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].name, "clock.now");
     }
 }

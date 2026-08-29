@@ -226,19 +226,23 @@ where
             let tools: Vec<Value> = request
                 .tools
                 .iter()
-                .map(|t| {
+                .flat_map(|tool| tool.function_definitions())
+                .map(|tool| {
                     json!({
                         "type": "function",
                         "function": {
-                            "name": t.name,
-                            "description": t.description,
-                            "parameters": t.parameters,
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": tool.parameters,
+                            "strict": tool.strict,
                         }
                     })
                 })
                 .collect();
-            body["tools"] = Value::Array(tools);
-            body["tool_choice"] = json!("auto");
+            if !tools.is_empty() {
+                body["tools"] = Value::Array(tools);
+                body["tool_choice"] = json!("auto");
+            }
         }
 
         // 厂商 hook：线路格式微调

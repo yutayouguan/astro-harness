@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::types::error::{ProviderError, ProviderResult};
 use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
-use crate::types::message::{Message, ToolDefinition};
+use crate::types::message::{FunctionToolDefinition, Message, ToolDefinition};
 use crate::types::request::{CompletionRequest, ProviderConfig, ThinkingConfig, ToolChoice};
 use crate::types::stream::CompletionStream;
 
@@ -61,24 +61,7 @@ pub(crate) async fn chat_stream_with_tool_policy(
             other => input.push(other),
         }
     }
-    let tool_defs: Vec<ToolDefinition> = tools
-        .iter()
-        .filter_map(|t| {
-            let f = t.get("function").unwrap_or(t);
-            Some(ToolDefinition {
-                name: f.get("name")?.as_str()?.to_string(),
-                description: f
-                    .get("description")
-                    .and_then(|d| d.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                parameters: f
-                    .get("parameters")
-                    .cloned()
-                    .unwrap_or(serde_json::json!({"type": "object", "properties": {}})),
-            })
-        })
-        .collect();
+    let tool_defs = tools.iter().filter_map(parse_tool_definition).collect();
 
     let request = CompletionRequest {
         model: config.model.clone(),
@@ -99,6 +82,41 @@ pub(crate) async fn chat_stream_with_tool_policy(
     };
 
     chat_stream_direct(provider, request, config).await
+}
+
+fn parse_tool_definition(value: &Value) -> Option<ToolDefinition> {
+    if let Some(function) = value.get("function") {
+        return parse_function_tool(function);
+    }
+
+    match value.get("type").and_then(Value::as_str) {
+        Some("function") => parse_function_tool(value),
+        Some("custom" | "namespace" | "tool_search" | "web_search") => {
+            serde_json::from_value(value.clone()).ok()
+        }
+        Some(_) => None,
+        None => parse_function_tool(value),
+    }
+}
+
+fn parse_function_tool(value: &Value) -> Option<ToolDefinition> {
+    Some(ToolDefinition::Function(FunctionToolDefinition {
+        name: value.get("name")?.as_str()?.to_string(),
+        description: value
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        parameters: value
+            .get("parameters")
+            .cloned()
+            .unwrap_or(serde_json::json!({"type": "object", "properties": {}})),
+        strict: value
+            .get("strict")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        defer_loading: value.get("defer_loading").and_then(Value::as_bool),
+    }))
 }
 
 /// 图片生成。按 profile 的 `image_mode` 路由到对应 HTTP 模块。
@@ -678,5 +696,36 @@ mod tests {
                 "provider {id} (default Responses) should have completion model"
             );
         }
+    }
+
+    #[test]
+    fn parses_responses_native_tool_variants_without_flattening() {
+        let custom = parse_tool_definition(&serde_json::json!({
+            "type": "custom",
+            "name": "apply_patch",
+            "description": "Apply a patch",
+            "format": {
+                "type": "grammar",
+                "syntax": "lark",
+                "definition": "start: /.+/"
+            }
+        }))
+        .unwrap();
+        assert!(matches!(custom, ToolDefinition::Freeform(_)));
+
+        let namespace = parse_tool_definition(&serde_json::json!({
+            "type": "namespace",
+            "name": "clock",
+            "description": "Clock tools",
+            "tools": [{
+                "type": "function",
+                "name": "now",
+                "description": "Current time",
+                "parameters": {"type": "object"},
+                "strict": true
+            }]
+        }))
+        .unwrap();
+        assert!(matches!(namespace, ToolDefinition::Namespace(_)));
     }
 }
