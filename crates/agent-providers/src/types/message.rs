@@ -195,10 +195,54 @@ impl ToolDefinition {
                         tool.name = format!("{}.{}", namespace.name, tool.name);
                         Some(tool)
                     }
-                    NamespaceToolDefinition::Freeform(_) => None,
+                    NamespaceToolDefinition::Freeform(tool) => Some(FunctionToolDefinition {
+                        name: format!("{}.{}", namespace.name, tool.name),
+                        description: tool.description.clone(),
+                        parameters: serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "input": {
+                                    "type": "string",
+                                    "description": "Raw custom-tool input matching the declared grammar."
+                                }
+                            },
+                            "required": ["input"],
+                            "additionalProperties": false
+                        }),
+                        strict: false,
+                        defer_loading: None,
+                    }),
                 })
                 .collect(),
-            Self::Freeform(_) | Self::ToolSearch { .. } | Self::WebSearch { .. } => Vec::new(),
+            Self::Freeform(tool) => vec![FunctionToolDefinition {
+                name: tool.name.clone(),
+                description: tool.description.clone(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "string",
+                            "description": "Raw custom-tool input matching the declared grammar."
+                        }
+                    },
+                    "required": ["input"],
+                    "additionalProperties": false
+                }),
+                strict: false,
+                defer_loading: None,
+            }],
+            Self::ToolSearch {
+                description,
+                parameters,
+                ..
+            } => vec![FunctionToolDefinition {
+                name: "tool_search".into(),
+                description: description.clone(),
+                parameters: parameters.clone(),
+                strict: false,
+                defer_loading: None,
+            }],
+            Self::WebSearch { .. } => Vec::new(),
         }
     }
 }
@@ -426,7 +470,7 @@ mod tests {
     }
 
     #[test]
-    fn namespace_flattens_only_function_tools_for_legacy_providers() {
+    fn namespace_flattens_to_functions_for_legacy_providers() {
         let namespace = ToolDefinition::Namespace(ToolNamespaceDefinition {
             name: "clock".into(),
             description: "Clock tools".into(),
@@ -448,7 +492,9 @@ mod tests {
         });
 
         let functions = namespace.function_definitions();
-        assert_eq!(functions.len(), 1);
+        assert_eq!(functions.len(), 2);
         assert_eq!(functions[0].name, "clock.now");
+        assert_eq!(functions[1].name, "clock.script");
+        assert_eq!(functions[1].parameters["required"][0], "input");
     }
 }

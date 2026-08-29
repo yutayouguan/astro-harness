@@ -1,4 +1,4 @@
-//! Session-bound Codex V2 Agent Thread dispatch.
+//! 绑定 Session 的 Codex V2 Agent Thread 分发。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -81,9 +81,8 @@ pub async fn active_root_runtime_material(
     active_root_runtime_material_with_upgrade_hook(memory_dir, root_session_id, || {}).await
 }
 
-/// Resolve the live root Session for Desktop-only lifecycle operations such
-/// as manual compaction. The registry stores Weak references, so this does not
-/// extend the Session lifetime.
+/// 解析活跃的根 Session，用于仅桌面端的生命周期操作（如手动压缩）。
+/// 注册表存储 Weak 引用，因此不会延长 Session 的生命周期。
 pub fn active_root_session_for_hooks(
     memory_dir: &Path,
     root_session_id: &str,
@@ -322,15 +321,15 @@ impl Drop for SpawnStartupGuard {
     fn drop(&mut self) {
         if self.armed {
             if let Err(error) = self.cleanup() {
-                // A running status here means the manager owns the second half
-                // of the unaccepted-start rollback after observing accept drop.
+                // 此处 running 状态意味着 manager 在观察到 accept drop 后
+                // 拥有未接受启动回滚的后半部分。
                 tracing::warn!(%error, "spawn caller cleanup deferred to runtime manager");
             }
         }
     }
 }
 
-/// Dispatcher bound to exactly one current Agent Thread session.
+/// 绑定到当前单个 Agent Thread session 的分发器。
 pub struct DefaultAgentThreadDispatch {
     control: Arc<AgentControl>,
     current_path: AgentPath,
@@ -532,10 +531,9 @@ impl DefaultAgentThreadDispatch {
             recovered_material.parent_model.as_deref(),
             Some(&recovered_material.parent_sandbox_mode),
         )?;
-        // Current catalog content supplies behavior/config overlays, but a
-        // restart must not silently switch the model contract accepted at
-        // spawn time. The durable descriptor is authoritative for these two
-        // non-secret choices.
+        // 当前 catalog 内容提供行为/配置覆盖，但重启不应悄悄切换
+        // spawn 时接受的模型契约。持久化 descriptor 对这两个
+        // 非机密选项具有权威性。
         resolved.model = descriptor.model.clone();
         resolved.model_reasoning_effort = descriptor.reasoning_effort.clone();
         let parent_path = target
@@ -1000,8 +998,8 @@ async fn validate_recovered_runtime_setup(
     validate_runtime_setup(memory_dir, control, thread, runtime, &thread.session_id).await
 }
 
-/// Desktop-only operations. This trait deliberately remains separate from the
-/// six model-visible methods in [`AgentThreadDispatch`].
+/// 仅桌面端操作。此 trait 有意与 [`AgentThreadDispatch`] 中的
+/// 六个模型可见方法保持分离。
 #[async_trait]
 pub trait DesktopAgentThreadControl: Send + Sync {
     async fn snapshot(&self, root_session_id: &str) -> anyhow::Result<AgentTreeSnapshotV2>;
@@ -1115,18 +1113,17 @@ async fn finish_close_operation(
                 }
                 index += 1;
             }
-            // request_close_slot removes and rejects Starting atomically,
-            // so re-read immediately; waiting here could miss the removal
-            // notification that was emitted before this result returned.
+            // request_close_slot 原子移除并拒绝 Starting 槽位，
+            // 因此立即重新读取；在此等待可能错过在结果返回之前
+            // 已发出的移除通知。
             Ok(CloseThreadStart::Starting) => continue,
             Ok(CloseThreadStart::TerminationRequested(terminated)) => {
-                // A successful non-Shutdown acknowledgement can belong to a
-                // generation that crossed the close-admission boundary. Re-read
-                // durable/runtime state instead of treating it as completion.
+                // 成功的非 Shutdown 确认可能属于跨越关闭准入边界的
+                // 代际。重新读取持久化/运行时状态，而非将其视为完成。
                 let acknowledgement = runtime_manager.wait_for_close_ack(terminated).await;
                 if acknowledgement.is_err() {
-                    // A closed acknowledgement channel can otherwise be
-                    // re-subscribed in a tight loop while cleanup converges.
+                    // 已关闭的确认通道可能在清理收敛期间
+                    // 被紧密循环重复订阅。
                     tokio::select! {
                         () = runtime_manager.wait_for_runtime_change() => {}
                         () = tokio::time::sleep(Duration::from_millis(50)) => {}
@@ -1429,8 +1426,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         let runtime_requests = Arc::clone(&self.runtime_requests);
         let background_control = Arc::clone(&control);
         let mut completion = tokio::spawn(async move {
-            // Coordination and lifecycle admission belong to the manager-owned
-            // convergence task before the first runtime close intent is created.
+            // 协调和生命周期准入归 manager 拥有的收敛任务所有，
+            // 在第一个 runtime close intent 创建之前执行。
             let _subtree_close = _close;
             let _close_admission = close_admission;
             finish_close_operation(

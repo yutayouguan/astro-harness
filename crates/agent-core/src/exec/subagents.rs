@@ -76,9 +76,9 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(
         if pending.is_empty() {
             return Ok(total);
         }
-        // A recovered older marker may cover only the prefix of the snapshot
-        // that admitted this generation. Continue at the same safe boundary
-        // so later sequence numbers are neither stranded nor duplicated.
+        // 恢复的旧标记可能仅覆盖了本代际准入快照的前缀。
+        // 继续在同一安全边界处消费，确保后续序列号既不会
+        // 滞留也不会重复。
     }
 }
 

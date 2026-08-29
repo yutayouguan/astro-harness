@@ -122,7 +122,8 @@ fn mcp_disabled_tools_not_in_schemas_for_api() {
         .schemas_for_api()
         .iter()
         .filter_map(|s| {
-            s.pointer("/function/name")
+            s.get("name")
+                .or_else(|| s.pointer("/function/name"))
                 .and_then(|n| n.as_str())
                 .map(str::to_string)
         })
@@ -165,5 +166,10 @@ fn reload_uses_agent_specific_tools_enabled() {
     assert!(reg
         .schemas_for_api()
         .iter()
-        .all(|s| s.pointer("/function/name").and_then(|n| n.as_str()) != Some("memory")));
+        .all(|s| {
+            s.get("name")
+                .or_else(|| s.pointer("/function/name"))
+                .and_then(|n| n.as_str())
+                != Some("memory")
+        }));
 }

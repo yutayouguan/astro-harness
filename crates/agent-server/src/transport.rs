@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tokio_util::sync::CancellationToken;
 
-/// Per-connection queue size used by the thread-event transport.
+/// Thread 事件传输层的每连接队列容量。
 pub const CHANNEL_CAPACITY: usize = 128;
 
 struct ConnectionEntry {
@@ -32,12 +32,11 @@ impl ConnectionGenerationKey {
     }
 }
 
-/// Opaque identity for one registration of a connection id.
+/// 某次 connection id 注册的不透明标识。
 ///
-/// Keep this handle with the stream and pass it to
-/// [`ConnectionRegistry::remove_generation`] when that stream exits. Unlike an
-/// id-only removal, cleanup through this handle cannot evict a newer stream
-/// that reused the same connection id.
+/// 将此 handle 与 stream 一起保留，在 stream 退出时传给
+/// [`ConnectionRegistry::remove_generation`]。与按 id 移除不同，
+/// 通过此 handle 清理不会误驱逐复用了同一 connection id 的新 stream。
 #[derive(Clone)]
 pub struct ConnectionGeneration {
     key: ConnectionGenerationKey,
@@ -50,7 +49,7 @@ impl ConnectionGeneration {
     }
 }
 
-/// Registry of bounded, independently backpressured thread-event connections.
+/// 有界、独立背压的 Thread 事件连接注册表。
 #[derive(Clone)]
 pub struct ConnectionRegistry {
     capacity: usize,
@@ -64,12 +63,11 @@ impl Default for ConnectionRegistry {
 }
 
 impl ConnectionRegistry {
-    /// Creates a registry whose connections each have the supplied queue capacity.
+    /// 以指定队列容量创建注册表。
     ///
     /// # Panics
     ///
-    /// Panics when `capacity` is zero because Tokio bounded channels require a
-    /// positive capacity.
+    /// `capacity` 为零时 panic，因为 Tokio bounded channel 要求正数容量。
     pub fn with_capacity(capacity: usize) -> Self {
         assert!(capacity > 0, "connection channel capacity must be positive");
         Self {
@@ -78,7 +76,7 @@ impl ConnectionRegistry {
         }
     }
 
-    /// Registers a connection, cancelling any older connection with the same id.
+    /// 注册连接，取消同 id 下的旧连接。
     pub async fn register(
         &self,
         connection_id: String,
@@ -107,10 +105,10 @@ impl ConnectionRegistry {
         (rx, cancel, generation)
     }
 
-    /// Attempts to enqueue an event without waiting for a slow consumer.
+    /// 尝试入队事件，不等待慢消费者。
     ///
-    /// A full queue evicts and cancels only the generation that was observed by
-    /// this send. A concurrently registered replacement remains active.
+    /// 队列满时仅驱逐并取消本次 send 所观察到的 generation；
+    /// 并发注册的替代连接不受影响。
     pub async fn send_to(&self, connection_id: &str, event: proto::ThreadEvent) -> bool {
         let entry = {
             let entries = self.entries.read().await;
@@ -133,7 +131,7 @@ impl ConnectionRegistry {
         }
     }
 
-    /// Enqueues only when the exact subscription generation remains current.
+    /// 仅当指定的订阅 generation 仍为当前时才入队。
     pub async fn send_to_generation(
         &self,
         key: &ConnectionGenerationKey,
@@ -175,24 +173,24 @@ impl ConnectionRegistry {
             .map(|entry| entry.key.clone())
     }
 
-    /// Returns whether a live registration currently owns `connection_id`.
+    /// 返回当前是否有活跃注册持有 `connection_id`。
     pub async fn contains(&self, connection_id: &str) -> bool {
         self.entries.read().await.contains_key(connection_id)
     }
 
-    /// Cleans up exactly the registration represented by `generation`.
+    /// 精确清理 `generation` 所代表的注册。
     ///
-    /// This is the normal stream-cleanup API. It cancels the observed
-    /// generation and removes it only while it remains current.
+    /// 这是常规的 stream 清理 API。取消被观察到的 generation，
+    /// 仅在其仍为当前时移除。
     pub async fn remove_generation(&self, generation: &ConnectionGeneration) -> bool {
         self.remove_if_current(&generation.key.connection_id, &generation.entry, true)
             .await
     }
 
-    /// Administratively removes whichever generation is current for an id.
+    /// 管理性移除指定 id 当前的 generation。
     ///
-    /// Stream teardown must use [`Self::remove_generation`] instead, otherwise
-    /// a stale stream could remove its replacement.
+    /// Stream 拆除应使用 [`Self::remove_generation`]，否则过期 stream
+    /// 可能误移除其替代连接。
     pub async fn force_remove(&self, connection_id: &str) {
         if let Some(entry) = self.entries.write().await.remove(connection_id) {
             entry.cancel.cancel();

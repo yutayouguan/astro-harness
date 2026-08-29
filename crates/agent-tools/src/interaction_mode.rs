@@ -9,6 +9,7 @@ pub use types::InteractionMode;
 const READONLY_ALLOW: &[&str] = &[
     "web_search",
     "web_fetch",
+    "tool_search",
     "browser_open",
     "browser_snapshot",
     "browser_scroll",
@@ -118,10 +119,31 @@ pub fn filter_schemas(
     }
     schemas
         .into_iter()
-        .filter(|s| {
-            s.pointer("/function/name")
-                .and_then(|n| n.as_str())
-                .is_some_and(|name| tool_visible_in_mode(mode, name))
+        .filter_map(|mut schema| {
+            if schema.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
+                let namespace = schema.get("name")?.as_str()?.to_string();
+                let tools = schema.get_mut("tools")?.as_array_mut()?;
+                tools.retain(|tool| {
+                    tool.get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|name| {
+                            tool_visible_in_mode(mode, &format!("{namespace}.{name}"))
+                        })
+                });
+                return (!tools.is_empty()).then_some(schema);
+            }
+            let name = if schema.get("type").and_then(serde_json::Value::as_str)
+                == Some("tool_search")
+            {
+                Some("tool_search")
+            } else {
+                schema
+                    .get("name")
+                    .or_else(|| schema.pointer("/function/name"))
+                    .and_then(serde_json::Value::as_str)
+            };
+            name.is_some_and(|name| tool_visible_in_mode(mode, name))
+                .then_some(schema)
         })
         .collect()
 }

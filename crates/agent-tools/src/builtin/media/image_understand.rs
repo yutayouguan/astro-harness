@@ -164,7 +164,7 @@ fn resolve_openai_image_urls(
 }
 
 /// 将用户/AI 给定的图片路径解析为本地绝对路径。
-/// - 绝对路径：拒绝含 `..` 的路径后直接使用（supports uploads dir outside workspace）。
+/// - 绝对路径：拒绝含 `..` 的路径后直接使用（支持工作区外的上传目录）。
 /// - 相对路径：经 `path_safe::resolve_safe` 解析到 workspace，防止逃逸与 symlink 攻击。
 fn resolve_local_path(ctx: &ToolContext<'_>, raw: &str) -> anyhow::Result<std::path::PathBuf> {
     let p = std::path::Path::new(raw);

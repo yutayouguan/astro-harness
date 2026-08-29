@@ -57,10 +57,10 @@ pub struct AskUserArgs {
     /// 向导标题（question）或确认卡标题（confirm）。
     #[serde(default)]
     pub title: Option<String>,
-    /// Confirm mode only: body text.
+    /// 仅 confirm 模式：正文文本。
     #[serde(default)]
     pub body: Option<String>,
-    /// Location mode: why location is needed (optional; default copy when empty).
+    /// location 模式：说明为何需要位置（可选；为空时使用默认文案）。
     #[serde(default)]
     pub message: Option<String>,
 }
@@ -120,7 +120,7 @@ fn has_location_hint(parsed: &AskUserArgs) -> bool {
         .is_some_and(|s| !s.is_empty())
 }
 
-/// Resolve mode; explicit `mode` wins; omitted mode must be unambiguous (never infers location).
+/// 解析 mode；显式 `mode` 优先；省略时须无歧义（永不推断为 location）。
 pub(crate) fn resolve_ask_user_mode(parsed: &AskUserArgs) -> anyhow::Result<AskUserMode> {
     let has_q = has_usable_questions(&parsed.questions);
     let has_b = has_body(parsed);

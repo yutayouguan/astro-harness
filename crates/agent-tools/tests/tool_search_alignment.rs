@@ -76,7 +76,8 @@ async fn search_returns_full_schema_and_activates_deferred_dynamic_tool() {
 
     let visible = registry.read().unwrap().schemas_for_api();
     assert!(visible.iter().any(|spec| {
-        spec.pointer("/function/name")
+        spec.get("name")
+            .or_else(|| spec.pointer("/function/name"))
             .and_then(|name| name.as_str())
             == Some("mcp__calendar__list_events")
     }));

@@ -160,29 +160,29 @@ pub struct Session {
     /// 子线程身份标识，用于路由 Codex subagent 生命周期 hooks。
     subagent_hook_context: StdMutex<Option<SubagentHookContext>>,
     subagent_stop_turns: StdMutex<HashSet<String>>,
-    /// First-class subagent thread dispatcher.
+    /// 一等公民子 Agent 线程分发器。
     pub(crate) execution: Arc<dyn tools::AgentThreadDispatch>,
 
     // ── 轻量状态 ───────────────────────────────────────────
     pub(crate) cancel: CancelSignal,
-    /// Long-lived controls reused by actor-submitted turns and exposed to adapters.
+    /// 长生命周期控制，供 actor 提交的轮次复用并暴露给适配器。
     thread_controls: StdMutex<Option<ThreadControls>>,
     thread_provider_options: StdMutex<ThreadProviderOptions>,
-    /// Codex-style single-active-task registry for this session.
+    /// 本会话的 Codex 风格单活跃任务注册表。
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
-    /// Serializes abort-old -> install -> bind -> start admission for session tasks.
+    /// 序列化会话任务的 abort-old -> install -> bind -> start 准入流程。
     pub(crate) task_admission: TokioMutex<()>,
-    /// Persistent completion signals survive `RunningTask` being taken for abort.
+    /// 持久化完成信号在 `RunningTask` 被取出中止后仍然存活。
     pub(crate) task_completions: TokioMutex<HashMap<String, tokio_util::sync::CancellationToken>>,
-    /// Bound atomically once by [`AstroThread`] for session runtime I/O.
+    /// 由 [`AstroThread`] 原子性地一次性绑定，用于会话运行时 I/O。
     runtime_io: OnceLock<RuntimeIoBindings>,
-    /// Serializes rollout persistence, status reduction, and live delivery.
+    /// 序列化 rollout 持久化、状态归约与实时分发。
     event_dispatch: TokioMutex<()>,
-    /// Exact-turn event taps registered before task installation.
+    /// 在任务安装前注册的精确轮次事件监听。
     turn_event_taps: TokioMutex<HashMap<String, Vec<async_channel::Sender<Event>>>>,
-    /// Guards one-time release of task, hook, MCP, and terminal resources.
+    /// 守护 task、hook、MCP 和终端资源的一次性释放。
     runtime_shutdown: AtomicBool,
-    /// Shared completion observed by every concurrent shutdown caller.
+    /// 所有并发关闭调用方共同观察的完成信号。
     runtime_shutdown_complete: tokio_util::sync::CancellationToken,
 }
 
@@ -193,10 +193,10 @@ pub(crate) struct SubagentHookContext {
     pub(crate) canonical_path: String,
 }
 
-/// Compatibility name retained while downstream crates migrate to [`Config`].
+/// 兼容性别名，在下游 crate 迁移到 [`Config`] 期间保留。
 pub type AgentConfig = Config;
 
-/// Compatibility name retained while downstream crates migrate to [`Session`].
+/// 兼容性别名，在下游 crate 迁移到 [`Session`] 期间保留。
 pub type AgentLoop = Session;
 
 struct RuntimeIoBindings {
@@ -230,7 +230,7 @@ impl Default for ThreadProviderOptions {
 }
 
 #[derive(Clone)]
-/// Opaque rollback point for Chat request-scoped settings.
+/// Chat 请求作用域设置的不透明回滚点。
 pub struct SessionRequestSettingsSnapshot {
     model_ctx: model_ctx::ModelContext,
     interaction_mode: types::InteractionMode,
@@ -270,7 +270,7 @@ impl Session {
         Self::from_memory(config, session_id, memory).await
     }
 
-    /// Construct a child agent runtime sharing the root Agent Graph control plane.
+    /// 构造共享根 Agent Graph 控制面的子 Agent 运行时。
     pub async fn with_session_id_for_agent_thread(
         config: Config,
         session_id: String,
@@ -389,7 +389,7 @@ impl Session {
             .map_err(|_| RuntimeIoBindError::AlreadyBound)
     }
 
-    /// Returns the stable pause, HITL, and approval cache controls used by actor-submitted turns.
+    /// 返回 actor 提交的轮次所使用的稳定 pause、HITL 和审批缓存控制。
     pub fn ensure_thread_controls(
         &self,
     ) -> (
@@ -435,7 +435,7 @@ impl Session {
         }
     }
 
-    /// Persist one unified event according to rollout policy before making it live.
+    /// 按 rollout 策略持久化一个统一事件，然后使其生效。
     pub async fn send_event(&self, turn_id: &str, mut msg: EventMsg) {
         let event_id = event_identity::normalize_event_msg(&mut msg, turn_id);
         let event = Event { id: event_id, msg };
@@ -443,9 +443,8 @@ impl Session {
             .await;
     }
 
-    /// Send an already normalized event while routing exact-turn taps by the
-    /// raw internal turn id. Used by bounded event builders that must measure
-    /// the final protocol envelope before dispatch.
+    /// 发送已规范化的事件，同时按原始内部 turn id 路由精确轮次监听。
+    /// 供需要在分发前测量最终协议信封的有界事件构建器使用。
     pub(crate) async fn send_prepared_event(&self, raw_turn_id: &str, msg: EventMsg) {
         let event = Event {
             id: event_identity::event_turn_id(raw_turn_id),
@@ -455,7 +454,7 @@ impl Session {
             .await;
     }
 
-    /// Register a lossless in-process receiver for one exact turn.
+    /// 为一个精确轮次注册无损进程内接收器。
     pub(crate) async fn subscribe_turn_events(
         &self,
         turn_id: &str,
@@ -581,7 +580,7 @@ impl Session {
         self.runtime_shutdown_complete.cancel();
     }
 
-    /// Atomically snapshot every Session field mutated while admitting a Chat request.
+    /// 原子性地快照在准入 Chat 请求时发生变更的所有 Session 字段。
     pub fn snapshot_request_settings(&self) -> SessionRequestSettingsSnapshot {
         let state = self.lock_state();
         SessionRequestSettingsSnapshot {
@@ -593,7 +592,7 @@ impl Session {
         }
     }
 
-    /// Roll request-scoped settings back when their generation is abandoned before handoff.
+    /// 当请求作用域设置在交接前被放弃时回滚。
     pub fn restore_request_settings(&self, snapshot: SessionRequestSettingsSnapshot) {
         let mut state = self.lock_state();
         state.model_ctx = snapshot.model_ctx;
@@ -678,7 +677,7 @@ impl Session {
         self.lock_state().turn.current_turn_id().map(str::to_owned)
     }
 
-    /// Current turn context (if bound).
+    /// 当前 turn 上下文（若已绑定）。
     pub(crate) async fn current_turn_context(&self) -> Option<Arc<TurnContext>> {
         self.lock_state().current_turn_context.clone()
     }
@@ -725,7 +724,7 @@ impl Session {
         )
     }
 
-    /// Replace only the plugin bus while preserving Gateway/Shell/UI transports.
+    /// 仅替换插件总线，同时保留 Gateway/Shell/UI 传输。
     pub fn set_hook_bus(&self, bus: Arc<::hooks::PluginHookBus>) {
         let current = self.hook_runtime();
         if Arc::ptr_eq(&current.plugin, &bus) {
@@ -1489,7 +1488,7 @@ impl Session {
         )
     }
 
-    /// Append conversation items to the session-owned history.
+    /// 将对话条目追加到会话拥有的历史记录中。
     pub async fn record_items(&self, items: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
         self.record_items_unlocked(items);
@@ -1499,12 +1498,12 @@ impl Session {
         self.lock_state().record_items(items);
     }
 
-    /// Return an owned snapshot of the current conversation history.
+    /// 返回当前对话历史的拥有式快照。
     pub async fn clone_history(&self) -> Vec<Message> {
         self.lock_state().clone_history()
     }
 
-    /// Replace the current conversation history with an owned snapshot.
+    /// 用拥有式快照替换当前对话历史。
     pub async fn replace_history(&self, history: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
         self.lock_state().replace_history(history);
@@ -1519,17 +1518,16 @@ impl Session {
         self.workspace_dir.clone()
     }
 
-    // ── Prompt context persistence ──────────────────────────
+    // ── Prompt 上下文持久化 ──────────────────────────
 
-    /// Return a clone of the current prompt context event history.
+    /// 返回当前 prompt 上下文事件历史的克隆。
     pub(crate) fn prompt_context_history(
         &self,
     ) -> Vec<crate::prompt::context_state::PromptContextEvent> {
         self.lock_state().prompt_context_history.clone()
     }
 
-    /// Persist the prompt context snapshot to the rollout if it changed since
-    /// the last persisted version.
+    /// 如果 prompt 上下文快照自上次持久化以来发生了变更，则将其持久化到 rollout。
     pub async fn persist_prompt_context_if_changed(
         &self,
         prompt: &crate::prompt::PromptContract,
@@ -1576,10 +1574,9 @@ impl Session {
         }
     }
 
-    /// Reset prompt context history after a mid-run compaction, keeping only
-    /// the compacted summary as the new baseline.
+    /// 在 mid-run 压缩后重置 prompt 上下文历史，仅保留压缩摘要作为新基线。
     pub async fn rebase_prompt_context_after_compaction(&self, summary_text: &str) {
-        // Build a minimal prompt contract from the summary to create a fresh snapshot.
+        // 从摘要构建最小 prompt 契约以创建新快照。
         let rebased_prompt =
             crate::prompt::PromptContract::from_base_instructions(summary_text);
         let rebased_context = rebased_prompt.context.clone();
@@ -1621,7 +1618,7 @@ impl Session {
         }
     }
 
-    /// Restore prompt context state from previously persisted rollout items.
+    /// 从先前持久化的 rollout 条目恢复 prompt 上下文状态。
     pub fn restore_prompt_context_from_rollout(&self, items: &[RolloutItem]) {
         let restored = crate::prompt::context_state::restore(items);
         let mut state = self.lock_state();
@@ -1629,7 +1626,7 @@ impl Session {
         state.prompt_context_history = restored.history;
     }
 
-    /// Return the last `n` messages from the conversation history.
+    /// 返回对话历史中最后 `n` 条消息。
     pub fn tail_history(&self, n: usize) -> Vec<types::message::Message> {
         let state = self.lock_state();
         let history = &state.history;
@@ -2146,7 +2143,7 @@ pub enum TurnResult {
         system_prompt: String,
         prompt: crate::prompt::PromptContract,
     },
-    /// Input was queued into the currently active regular task.
+    /// 输入已排入当前活跃的常规任务队列。
     Steered { turn_id: String },
     /// 模型请求的工具名称列表（由 streaming 层填充）。
     ToolCalls(Vec<String>),

@@ -51,8 +51,8 @@ impl ThreadHistoryBuilder {
                 {
                     return;
                 }
-                // Finish the previous pending turn before opening the next one,
-                // preserving its last observed status and items when no terminal arrived.
+                // 在打开下一个 turn 前结束上一个 pending turn，
+                // 若未收到终止事件则保留其最后观察到的状态和 items。
                 if let Some(turn) = self.active.take() {
                     self.completed.push(turn);
                 }
@@ -207,7 +207,7 @@ impl ThreadHistoryBuilder {
 
 pub enum ListenerCommand {
     CoreEvent(Event),
-    /// Runtime event observed by the production side-effect supervisor.
+    /// 由生产环境副作用监控器观察到的运行时事件。
     ObservedCoreEvent(Event),
     Resume {
         subscription: ConnectionGenerationKey,
@@ -247,7 +247,7 @@ pub struct ThreadState {
     pub status: String,
     pub history: ThreadHistoryBuilder,
     pub subscribers: HashMap<ConnectionId, ConnectionGenerationKey>,
-    /// Terminal-time logical delivery targets retained only until `astro.background_complete`.
+    /// 终止时的逻辑投递目标，仅保留到 `astro.background_complete` 事件到达。
     pub background_extension_sinks: HashMap<String, HashSet<ConnectionId>>,
     pub listener_command_tx: mpsc::UnboundedSender<ListenerCommand>,
     pub activity_tx: tokio::sync::watch::Sender<ThreadActivity>,

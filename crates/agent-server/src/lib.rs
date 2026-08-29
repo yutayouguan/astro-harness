@@ -30,7 +30,7 @@ pub(crate) const POST_TURN_COMPLETION_MARKER_TIMEOUT: std::time::Duration =
 pub(crate) const BACKGROUND_EXTENSION_SINK_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(6 * 60);
 
-/// Durable Thread used for workspace-wide events that are not owned by one chat session.
+/// 用于工作区级事件的持久 Thread，不属于任何单个聊天会话。
 pub const WORKSPACE_EVENT_THREAD_ID: &str = "astro-workspace-events";
 
 use std::time::Duration;

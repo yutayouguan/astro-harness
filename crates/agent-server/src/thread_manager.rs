@@ -106,7 +106,7 @@ impl ThreadManager {
         self.get_locked(thread_id).await
     }
 
-    /// Read the current entry while the caller holds this thread's creation lock.
+    /// 在调用方持有该 thread 创建锁时读取当前条目。
     pub(crate) async fn get_locked(&self, thread_id: &str) -> Option<Arc<ManagedThread>> {
         self.entries.read().await.get(thread_id).cloned()
     }
@@ -140,8 +140,8 @@ impl ThreadManager {
         {
             return RemoveCurrentThread::NotCurrent;
         }
-        // The manager entry and idle-unload task are the two owning references.
-        // Any additional reference is an in-flight operation that must finish first.
+        // manager 条目和 idle-unload 任务是两个持有引用。
+        // 额外的引用代表进行中的操作，必须先完成。
         if Arc::strong_count(expected) > 2 {
             return RemoveCurrentThread::Leased;
         }

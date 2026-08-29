@@ -271,7 +271,7 @@ pub async fn execute_job(
 /// - 超时：600 秒内未完成则记为「执行超时（600s）」。
 /// - 记录异常：插入后无法 `get` 同一 `run_id` 时返回 `cron run vanished`。
 ///
-/// # Send
+/// # Send 安全性
 ///
 /// `Session`/`SessionStore` 内部 future 非 Send。
 /// 本函数经 `spawn_blocking` + 单 worker multi-thread runtime 隔离，对外返回 Send future，

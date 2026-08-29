@@ -654,7 +654,7 @@ pub struct AstroServiceImpl {
     pause_controls: Arc<StdRwLock<HashMap<String, PauseRegistration>>>,
     /// session_id → generation 操作锁（Weak 以免 release 后无限增长）。
     generation_operations: GenerationOperations,
-    /// In-flight release ownership, weakly retained so completed unique ids are reclaimed.
+    /// 进行中的 release 所有权，弱引用持有以便已完成的唯一 id 被回收。
     release_ownerships: ReleaseOwnerships,
     /// session_id → 活 HITL 闸门。
     pub(crate) hitl_registry: HitlRegistry,
@@ -765,7 +765,7 @@ impl AstroServiceImpl {
             .map_err(|_| Status::unavailable("thread extension was not materialized"))
     }
 
-    /// Production background-review emitter; public for durable integration coverage.
+    /// 生产环境 background-review 发射器；公开以供持久化集成测试覆盖。
     #[doc(hidden)]
     pub async fn emit_background_review_extension(
         &self,

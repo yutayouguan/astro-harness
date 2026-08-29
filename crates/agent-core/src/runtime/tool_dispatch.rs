@@ -79,6 +79,12 @@ impl AgentLoop {
         grants: ToolExecutionGrants,
         step_context: Option<&super::StepContext>,
     ) -> anyhow::Result<types::ToolOutput> {
+        let wire_name = name;
+        let registered_name = step_context
+            .map(|step_context| step_context.tool_router.registered_name(wire_name))
+            .unwrap_or(wire_name)
+            .to_string();
+        let name = registered_name.as_str();
         let (agent_id, workspace_dir) = {
             let memory = self.memory();
             (memory.agent_id.clone(), memory.workspace_dir.clone())
@@ -107,7 +113,7 @@ impl AgentLoop {
                     .expect("tool registry lock poisoned")
                     .is_tool_allowed(name)
             },
-            |step_context| step_context.tool_router.has_tool(name),
+            |step_context| step_context.tool_router.has_tool(wire_name),
         );
 
         // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
@@ -144,7 +150,7 @@ impl AgentLoop {
                         .expect("tool registry lock poisoned")
                         .dynamic_handler(name)
                 },
-                |step_context| step_context.tool_router.dynamic_handler(name),
+                |step_context| step_context.tool_router.dynamic_handler(wire_name),
             )
         });
 

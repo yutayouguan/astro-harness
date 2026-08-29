@@ -14,14 +14,22 @@ use crate::types::stream::StreamChunk;
 
 /// 将 [`Message`] 转为 Responses API `input` 数组。
 pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     let mut result_ids = HashSet::new();
+    let mut call_names = HashMap::new();
     for m in messages {
         if let Message::Tool { tool_call_id, .. } = m {
             let id = tool_call_id.trim();
             if !id.is_empty() {
                 result_ids.insert(id.to_string());
+            }
+        }
+        if let Message::Assistant { content } = m {
+            for part in content {
+                if let AssistantContent::ToolCall(call) = part {
+                    call_names.insert(call.id.clone(), call.name.clone());
+                }
             }
         }
     }
@@ -38,11 +46,28 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                 if call_id.is_empty() {
                     continue;
                 }
-                input.push(json!({
-                    "type": "function_call_output",
-                    "call_id": call_id,
-                    "output": content,
-                }));
+                match call_names.get(call_id).map(String::as_str) {
+                    Some("tool_search") => {
+                        let tools = serde_json::from_str::<Vec<Value>>(content).unwrap_or_default();
+                        input.push(json!({
+                            "type": "tool_search_output",
+                            "call_id": call_id,
+                            "status": "completed",
+                            "execution": "client",
+                            "tools": tools,
+                        }));
+                    }
+                    Some("apply_patch" | "exec") => input.push(json!({
+                        "type": "custom_tool_call_output",
+                        "call_id": call_id,
+                        "output": content,
+                    })),
+                    _ => input.push(json!({
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": content,
+                    })),
+                }
             }
 
             Message::Assistant { content } => {
@@ -59,17 +84,41 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                         if !result_ids.contains(id.trim()) {
                             continue;
                         }
-                        let args = match arguments {
-                            Value::String(s) => s.clone(),
-                            other => other.to_string(),
-                        };
-                        input.push(json!({
-                            "type": "function_call",
-                            "id": id,
-                            "call_id": id,
-                            "name": name,
-                            "arguments": args,
-                        }));
+                        match name.as_str() {
+                            "tool_search" => input.push(json!({
+                                "type": "tool_search_call",
+                                "call_id": id,
+                                "execution": "client",
+                                "arguments": arguments,
+                            })),
+                            "apply_patch" | "exec" => {
+                                let input_text = arguments
+                                    .as_str()
+                                    .or_else(|| arguments.get("input").and_then(Value::as_str))
+                                    .map(str::to_string)
+                                    .unwrap_or_else(|| arguments.to_string());
+                                input.push(json!({
+                                    "type": "custom_tool_call",
+                                    "id": id,
+                                    "call_id": id,
+                                    "name": name,
+                                    "input": input_text,
+                                }));
+                            }
+                            _ => {
+                                let args = match arguments {
+                                    Value::String(s) => s.clone(),
+                                    other => other.to_string(),
+                                };
+                                input.push(json!({
+                                    "type": "function_call",
+                                    "id": id,
+                                    "call_id": id,
+                                    "name": name,
+                                    "arguments": args,
+                                }));
+                            }
+                        }
                     }
                 }
                 let text = m.text_content();
@@ -211,41 +260,72 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
 
         "response.output_item.added" => {
             if let Some(item) = v.get("item") {
-                if item.get("type").and_then(|t| t.as_str()) == Some("function_call") {
+                let item_type = item.get("type").and_then(|t| t.as_str());
+                if matches!(
+                    item_type,
+                    Some("function_call" | "custom_tool_call" | "tool_search_call")
+                ) {
                     let id = item
                         .get("call_id")
                         .or_else(|| item.get("id"))
                         .and_then(|s| s.as_str())
                         .unwrap_or("")
                         .to_string();
-                    let name = item
-                        .get("name")
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("")
-                        .to_string();
+                    let name = if item_type == Some("tool_search_call") {
+                        "tool_search".to_string()
+                    } else {
+                        item.get("name")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("")
+                            .to_string()
+                    };
                     let index = v.get("output_index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                    one!(StreamChunk::ToolCallStart {
+                    let mut chunks = vec![StreamChunk::ToolCallStart {
                         index,
                         id,
                         name,
                         signature: None,
-                    });
+                    }];
+                    if item_type == Some("tool_search_call") {
+                        if let Some(arguments) = item.get("arguments") {
+                            chunks.push(StreamChunk::ToolCallDelta {
+                                index,
+                                arguments: arguments.to_string(),
+                            });
+                        }
+                    }
+                    return chunks;
                 }
             }
         }
 
         "response.output_item.done" => {
             if let Some(item) = v.get("item") {
-                if item.get("type").and_then(|t| t.as_str()) == Some("function_call") {
+                let item_type = item.get("type").and_then(|t| t.as_str());
+                if matches!(
+                    item_type,
+                    Some("function_call" | "custom_tool_call" | "tool_search_call")
+                ) {
                     let index = v.get("output_index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                    if let Some(args) = item
-                        .get("arguments")
-                        .and_then(|a| a.as_str())
-                        .filter(|s| !s.is_empty())
-                    {
+                    let arguments = match item_type {
+                        Some("custom_tool_call") => item
+                            .get("input")
+                            .and_then(Value::as_str)
+                            .filter(|input| !input.is_empty())
+                            .and_then(|input| serde_json::to_string(input).ok()),
+                        Some("tool_search_call") => {
+                            item.get("arguments").map(Value::to_string)
+                        }
+                        _ => item
+                            .get("arguments")
+                            .and_then(Value::as_str)
+                            .filter(|args| !args.is_empty())
+                            .map(str::to_string),
+                    };
+                    if let Some(arguments) = arguments {
                         one!(StreamChunk::ToolCallDelta {
                             index,
-                            arguments: args.to_string()
+                            arguments
                         });
                     }
                 }
@@ -272,7 +352,10 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
                 .and_then(|o| o.as_array())
                 .map(|arr| {
                     arr.iter().any(|item| {
-                        item.get("type").and_then(|t| t.as_str()) == Some("function_call")
+                        matches!(
+                            item.get("type").and_then(|t| t.as_str()),
+                            Some("function_call" | "custom_tool_call" | "tool_search_call")
+                        )
                     })
                 })
                 .unwrap_or(false);
@@ -366,6 +449,51 @@ mod tests {
         assert_eq!(input[0]["name"], "get_weather");
         assert_eq!(input[0]["call_id"], "call_123");
         assert_eq!(input[1]["type"], "function_call_output");
+    }
+
+    #[test]
+    fn custom_tool_calls_roundtrip_with_custom_output() {
+        let msgs = vec![
+            Message::assistant(vec![AssistantContent::ToolCall(ToolCall {
+                id: "patch_1".into(),
+                name: "apply_patch".into(),
+                arguments: json!("*** Begin Patch\n*** End Patch"),
+                signature: None,
+            })]),
+            Message::tool_result("patch_1", "Success", false),
+        ];
+
+        let input = to_responses_input(&msgs);
+        assert_eq!(input[0]["type"], "custom_tool_call");
+        assert_eq!(input[0]["input"], "*** Begin Patch\n*** End Patch");
+        assert_eq!(input[1]["type"], "custom_tool_call_output");
+    }
+
+    #[test]
+    fn tool_search_roundtrips_with_loadable_tool_output() {
+        let tools = json!([{
+            "type": "function",
+            "name": "mcp__calendar__list",
+            "description": "List events",
+            "strict": false,
+            "defer_loading": true,
+            "parameters": {"type": "object", "properties": {}}
+        }]);
+        let msgs = vec![
+            Message::assistant(vec![AssistantContent::ToolCall(ToolCall {
+                id: "search_1".into(),
+                name: "tool_search".into(),
+                arguments: json!({"query": "calendar"}),
+                signature: None,
+            })]),
+            Message::tool_result("search_1", tools.to_string(), false),
+        ];
+
+        let input = to_responses_input(&msgs);
+        assert_eq!(input[0]["type"], "tool_search_call");
+        assert_eq!(input[0]["arguments"]["query"], "calendar");
+        assert_eq!(input[1]["type"], "tool_search_output");
+        assert_eq!(input[1]["tools"], tools);
     }
 
     #[test]
@@ -493,6 +621,33 @@ mod tests {
         assert!(
             matches!(&chunks[0], StreamChunk::ToolCallDelta { index: 0, ref arguments } if arguments == "{\"q\":")
         );
+    }
+
+    #[test]
+    fn extract_custom_tool_call_done_as_string_argument() {
+        let data = r#"{"type":"response.output_item.done","output_index":2,"item":{"type":"custom_tool_call","call_id":"patch_1","name":"apply_patch","input":"*** Begin Patch\n*** End Patch"}}"#;
+        let chunks = extract_responses_chunks(data);
+        assert!(matches!(
+            &chunks[0],
+            StreamChunk::ToolCallDelta { index: 2, arguments }
+                if serde_json::from_str::<String>(arguments).unwrap().starts_with("*** Begin Patch")
+        ));
+    }
+
+    #[test]
+    fn extract_tool_search_call_with_arguments() {
+        let data = r#"{"type":"response.output_item.added","output_index":1,"item":{"type":"tool_search_call","call_id":"search_1","execution":"client","arguments":{"query":"calendar","limit":2}}}"#;
+        let chunks = extract_responses_chunks(data);
+        assert!(matches!(
+            &chunks[0],
+            StreamChunk::ToolCallStart { index: 1, id, name, .. }
+                if id == "search_1" && name == "tool_search"
+        ));
+        assert!(matches!(
+            &chunks[1],
+            StreamChunk::ToolCallDelta { index: 1, arguments }
+                if serde_json::from_str::<Value>(arguments).unwrap()["query"] == "calendar"
+        ));
     }
 
     #[test]

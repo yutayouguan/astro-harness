@@ -109,7 +109,7 @@ fn entry_api_spec(entry: &ToolEntry, defer_loading: bool) -> serde_json::Value {
     })
 }
 
-fn api_specs(entries: impl IntoIterator<Item = &'_ ToolEntry>) -> Vec<serde_json::Value> {
+fn api_specs<'a>(entries: impl IntoIterator<Item = &'a ToolEntry>) -> Vec<serde_json::Value> {
     let mut plain = Vec::new();
     let mut namespaces = std::collections::BTreeMap::<String, Vec<serde_json::Value>>::new();
     for entry in entries {
@@ -395,12 +395,60 @@ mod tests {
     fn schema_names(reg: &ToolRegistry) -> Vec<String> {
         reg.schemas_for_api()
             .iter()
-            .filter_map(|s| {
-                s.pointer("/function/name")
-                    .and_then(|n| n.as_str())
-                    .map(str::to_string)
+            .flat_map(|schema| {
+                if schema.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
+                    let namespace = schema
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default();
+                    return schema
+                        .get("tools")
+                        .and_then(serde_json::Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|tool| tool.get("name").and_then(serde_json::Value::as_str))
+                        .map(|name| format!("{namespace}.{name}"))
+                        .collect::<Vec<_>>();
+                }
+                let name = if schema.get("type").and_then(serde_json::Value::as_str)
+                    == Some("tool_search")
+                {
+                    Some("tool_search")
+                } else {
+                    schema
+                        .get("name")
+                        .or_else(|| schema.pointer("/function/name"))
+                        .and_then(serde_json::Value::as_str)
+                };
+                name.map(str::to_string).into_iter().collect()
             })
             .collect()
+    }
+
+    fn assert_vendor_safe_parameters(schema: &serde_json::Value) {
+        if let Some(children) = schema
+            .get("tools")
+            .and_then(serde_json::Value::as_array)
+        {
+            for child in children {
+                assert_vendor_safe_parameters(child);
+            }
+            return;
+        }
+        let Some(params) = schema
+            .get("parameters")
+            .or_else(|| schema.pointer("/function/parameters"))
+        else {
+            return;
+        };
+        assert_eq!(
+            params.get("type").and_then(|value| value.as_str()),
+            Some("object"),
+            "tool parameters 应为 object: {params}"
+        );
+        if let Some(hazard) = crate::schema::schema_has_vendor_hazards(params) {
+            panic!("tool parameters 仍含厂商不友好结构 `{hazard}`: {params}");
+        }
     }
 
     /// 断言所有内置工具（含 deferred）的 parameters schema 不含厂商不友好结构。
@@ -411,21 +459,7 @@ mod tests {
         let schemas = reg.all_tool_schemas_including_deferred();
         assert!(!schemas.is_empty());
         for s in schemas {
-            let name = s
-                .pointer("/function/name")
-                .and_then(|n| n.as_str())
-                .unwrap_or("?");
-            let params = s
-                .pointer("/function/parameters")
-                .expect("missing parameters");
-            assert_eq!(
-                params.get("type").and_then(|t| t.as_str()),
-                Some("object"),
-                "tool `{name}` type 应为 object: {params}"
-            );
-            if let Some(hazard) = crate::schema::schema_has_vendor_hazards(params) {
-                panic!("tool `{name}` 仍含厂商不友好结构 `{hazard}`: {params}");
-            }
+            assert_vendor_safe_parameters(&s);
         }
     }
 

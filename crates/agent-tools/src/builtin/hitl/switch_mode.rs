@@ -28,11 +28,11 @@ impl ModeSwitchTarget {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct ModeSwitchArgs {
-    /// Target mode: only `plan` or `agent`.
+    /// 目标模式：仅 `plan` 或 `agent`。
     to: ModeSwitchTarget,
-    /// Why the switch is needed (shown when the plan is reviewed).
+    /// 切换原因（审阅计划时展示）。
     reason: String,
-    /// Required when `to=agent`: plan summary injected into the next turn after approval.
+    /// `to=agent` 时必填：审批通过后注入下一回合的计划摘要。
     #[serde(default)]
     summary: Option<String>,
 }

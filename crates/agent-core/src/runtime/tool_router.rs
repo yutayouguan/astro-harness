@@ -8,6 +8,7 @@ use tools::{DynToolHandler, ToolRegistry};
 
 #[derive(Clone)]
 struct ToolRoute {
+    registered_name: String,
     dynamic_handler: Option<DynToolHandler>,
     needs_confirmation: bool,
     stop_after_tool_call: bool,
@@ -32,16 +33,17 @@ impl ToolRouter {
         callable_specs: &[serde_json::Value],
         model_visible_specs: Vec<serde_json::Value>,
     ) -> Self {
-        let routes = callable_specs
-            .iter()
-            .chain(model_visible_specs.iter())
-            .filter_map(|spec| {
-                let name = spec.pointer("/function/name")?.as_str()?;
-                let entry = registry.get(name)?;
-                Some((
-                    name.to_string(),
+        let mut routes = HashMap::new();
+        for spec in callable_specs.iter().chain(model_visible_specs.iter()) {
+            for (wire_name, registered_name) in spec_route_names(registry, spec) {
+                let Some(entry) = registry.get(&registered_name) else {
+                    continue;
+                };
+                routes.insert(
+                    wire_name,
                     ToolRoute {
-                        dynamic_handler: registry.dynamic_handler(name),
+                        registered_name: registered_name.clone(),
+                        dynamic_handler: registry.dynamic_handler(&registered_name),
                         needs_confirmation: entry.needs_confirmation,
                         stop_after_tool_call: entry.stop_after_tool_call,
                         exclusive_access: entry.exclusive_access,
@@ -49,9 +51,9 @@ impl ToolRouter {
                         mcp_approval: entry.mcp_approval.clone(),
                         approval_requirement: entry.approval_requirement,
                     },
-                ))
-            })
-            .collect();
+                );
+            }
+        }
         Self {
             routes,
             model_visible_specs: model_visible_specs.into(),
@@ -64,6 +66,12 @@ impl ToolRouter {
 
     pub(crate) fn has_tool(&self, name: &str) -> bool {
         self.routes.contains_key(name)
+    }
+
+    pub(crate) fn registered_name<'a>(&'a self, wire_name: &'a str) -> &'a str {
+        self.routes
+            .get(wire_name)
+            .map_or(wire_name, |route| route.registered_name.as_str())
     }
 
     pub(crate) fn dynamic_handler(&self, name: &str) -> Option<DynToolHandler> {
@@ -126,6 +134,50 @@ impl ToolRouter {
                 route.sandbox_preference
             })
     }
+}
+
+fn spec_route_names(
+    registry: &ToolRegistry,
+    spec: &serde_json::Value,
+) -> Vec<(String, String)> {
+    let kind = spec
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("function");
+    if kind == "namespace" {
+        let Some(namespace) = spec.get("name").and_then(serde_json::Value::as_str) else {
+            return Vec::new();
+        };
+        return spec
+            .get("tools")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|child| {
+                let child_name = child.get("name")?.as_str()?;
+                let wire_name = format!("{namespace}.{child_name}");
+                let registered_name = [
+                    format!("{namespace}_{child_name}"),
+                    wire_name.clone(),
+                    child_name.to_string(),
+                ]
+                .into_iter()
+                .find(|candidate| registry.get(candidate).is_some())?;
+                Some((wire_name, registered_name))
+            })
+            .collect();
+    }
+
+    let name = if kind == "tool_search" {
+        Some("tool_search")
+    } else {
+        spec.get("name")
+            .or_else(|| spec.pointer("/function/name"))
+            .and_then(serde_json::Value::as_str)
+    };
+    name.filter(|name| registry.get(name).is_some())
+        .map(|name| vec![(name.to_string(), name.to_string())])
+        .unwrap_or_default()
 }
 
 impl fmt::Debug for ToolRouter {
@@ -214,9 +266,34 @@ mod tests {
         let specs = router.model_visible_specs();
         let advertised: Vec<&str> = specs
             .iter()
-            .filter_map(|spec| spec.pointer("/function/name")?.as_str())
+            .filter_map(|spec| {
+                spec.get("name")
+                    .or_else(|| spec.pointer("/function/name"))?
+                    .as_str()
+            })
             .collect();
         assert_eq!(advertised, vec!["direct_tool"]);
+    }
+
+    #[test]
+    fn namespace_wire_name_resolves_to_registered_handler_name() {
+        let mut registry = ToolRegistry::new();
+        registry.register(types::ToolEntry {
+            name: "cron_list".into(),
+            toolset: "cron".into(),
+            namespace: "cron".into(),
+            description: "list jobs".into(),
+            ..types::ToolEntry::lifecycle_defaults()
+        });
+        let visible = registry.schemas_for_api();
+        let router = ToolRouter::from_registry(
+            &registry,
+            &registry.all_tool_schemas_including_deferred(),
+            visible,
+        );
+
+        assert!(router.has_tool("cron.list"));
+        assert_eq!(router.registered_name("cron.list"), "cron_list");
     }
 
     #[test]
