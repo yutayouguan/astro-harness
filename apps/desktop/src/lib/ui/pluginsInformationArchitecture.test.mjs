@@ -11,6 +11,7 @@ const coreCssUrl = new URL(
   import.meta.url,
 );
 const tabsCssUrl = new URL("../../styles/components/tabs.css", import.meta.url);
+const toolsCssUrl = new URL("../../styles/features/tools.css", import.meta.url);
 const mcpSectionUrl = new URL(
   "../../components/settings/McpSection.tsx",
   import.meta.url,
@@ -44,6 +45,7 @@ const mcpBrandIconUrl = new URL(
 const panel = await readFile(panelUrl, "utf8");
 const styles = await readFile(coreCssUrl, "utf8");
 const tabs = await readFile(tabsCssUrl, "utf8");
+const toolsCss = await readFile(toolsCssUrl, "utf8");
 const mcpSection = await readFile(mcpSectionUrl, "utf8");
 const mcpTools = await readFile(mcpToolsUrl, "utf8");
 const messages = await readFile(messagesUrl, "utf8");
@@ -255,6 +257,10 @@ test("public MCP brands accept bundled assets and HTTPS catalog icons with a saf
     /src=\{validIcon \? `\/mcp-icons\/\$\{validIcon\}\.svg` : remoteIcon\}/,
   );
   assert.match(mcpBrandIcon, /const HTTPS_ICON_URL = \/\^https:/);
+  assert.match(mcpBrandIcon, /className="mcp-brand-icon-placeholder"/);
+  assert.match(mcpBrandIcon, /loading=\{remoteIcon \? "lazy" : "eager"\}/);
+  assert.match(mcpBrandIcon, /referrerPolicy="no-referrer"/);
+  assert.match(toolsCss, /\.mcp-brand-icon\.is-loaded/);
   assert.match(mcpBrandIcon, /return <McpIcon/);
 });
 

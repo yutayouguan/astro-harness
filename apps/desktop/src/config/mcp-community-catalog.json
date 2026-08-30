@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-30T12:16:44.892Z",
+  "generatedAt": "2026-08-30T12:49:06.150Z",
   "sources": [
     {
       "id": "registry.modelcontextprotocol.io",
@@ -70,6 +70,7 @@
     {
       "id": "mcpservers-browserbase-mcp-server-browserbase",
       "name": "Browserbase",
+      "icon": "https://github.com/browserbase.png?size=64",
       "description": "在云端自动化浏览器交互（例如网页导航、数据提取、表单填写等）",
       "category": "web-scraping",
       "featured": true,
@@ -113,6 +114,7 @@
     {
       "id": "mcpservers-chrome-devtools-mcp-server",
       "name": "Chrome DevTools MCP",
+      "icon": "https://github.com/ChromeDevTools.png?size=64",
       "description": "用于从Gemini、Claude、Cursor和Copilot等编码代理控制和检查实时Chrome浏览器的官方Chrome DevTools MCP服务器。",
       "category": "development",
       "featured": true,
@@ -136,6 +138,7 @@
     {
       "id": "mcpservers-cloudflare-mcp-server-cloudflare",
       "name": "Cloudflare",
+      "icon": "https://github.com/cloudflare.png?size=64",
       "description": "在Cloudflare开发者平台（例如Workers/KV/R2/D1）上部署、配置和查询您的资源",
       "category": "cloud-service",
       "featured": true,
@@ -152,7 +155,6 @@
       ],
       "catalogUpdatedAt": "2026-08-24T09:19:59.000Z",
       "catalogIdentity": "cloudflare",
-      "icon": "https://svgl.app/library/cloudflare.svg",
       "catalogRemoteUrl": "https://mcpservers.org/zh-CN/remote-mcp-servers/cloudflare",
       "catalogDirectoryUrl": "https://mcpservers.org/zh-CN/servers/cloudflare/mcp-server-cloudflare",
       "catalogRegistered": false,
@@ -161,6 +163,7 @@
     {
       "id": "mcpservers-context7-mcp-server",
       "name": "Context7 MCP",
+      "icon": "https://github.com/upstash.png?size=64",
       "description": "Context7 MCP 官方服务器，将最新、特定版本的库文档和代码示例引入 AI 编码提示中。",
       "category": "development",
       "featured": true,
@@ -180,7 +183,6 @@
       ],
       "catalogUpdatedAt": "2026-08-30T06:22:23.000Z",
       "catalogIdentity": "context7",
-      "icon": "https://cdn.prod.website-files.com/68a44d4040f98a4adf2207b6/698690879ec0fe5a8ed0e319_context7-icon-green.png",
       "catalogRemoteUrl": "https://mcpservers.org/zh-CN/remote-mcp-servers/context7",
       "catalogDirectoryUrl": "https://mcpservers.org/zh-CN/servers/context7-mcp-server",
       "catalogRegistered": false,
@@ -211,6 +213,7 @@
     {
       "id": "registry-ai-exa-exa",
       "name": "Exa",
+      "icon": "https://cdn.prod.website-files.com/68a44d4040f98a4adf2207b6/69f18bcc1f3b9556c6c58ab9_exa.jpeg",
       "description": "网页搜索 + 代码文档搜索",
       "category": "search",
       "featured": true,
@@ -224,7 +227,6 @@
       "catalogPackageTypes": [],
       "catalogUpdatedAt": "2025-12-05T21:51:53.421065Z",
       "catalogIdentity": "exa",
-      "icon": "https://cdn.prod.website-files.com/68a44d4040f98a4adf2207b6/69f18bcc1f3b9556c6c58ab9_exa.jpeg",
       "catalogNativeCategory": "search",
       "catalogOfficial": true,
       "catalogSponsored": false,
@@ -239,6 +241,7 @@
     {
       "id": "mcpservers-firecrawl-mcp-server",
       "name": "Firecrawl MCP",
+      "icon": "https://github.com/firecrawl.png?size=64",
       "description": "为Cursor和Claude等LLM客户端添加强大的网页抓取和搜索功能。",
       "category": "web-scraping",
       "featured": true,
@@ -292,6 +295,7 @@
     {
       "id": "mcpservers-google-mcp",
       "name": "Google MCP Servers",
+      "icon": "https://github.com/google.png?size=64",
       "description": "Google 官方 MCP 服务器集合",
       "category": "development",
       "featured": true,
@@ -340,6 +344,7 @@
     {
       "id": "mcpservers-minimax-mcp",
       "name": "MiniMax MCP",
+      "icon": "https://github.com/MiniMax-AI.png?size=64",
       "description": "与MiniMax强大的文本转语音、图像及视频生成API进行交互。",
       "category": "cloud-service",
       "featured": true,
@@ -364,6 +369,7 @@
     {
       "id": "mcpservers-vercel-next-devtools-mcp",
       "name": "Next.js DevTools MCP",
+      "icon": "https://github.com/vercel.png?size=64",
       "description": "next-devtools-mcp 是一个 MCP 服务器，为 Claude 和 Cursor 等 AI 编码助手提供 Next.js 开发工具和实用程序。",
       "category": "development",
       "featured": true,
@@ -488,6 +494,7 @@
     {
       "id": "mcpservers-pleaseprompto-notebooklm-mcp",
       "name": "NotebookLM MCP Server",
+      "icon": "https://github.com/PleasePrompto.png?size=64",
       "description": "让你的CLI代理（Claude、Cursor、Codex等）直接与NotebookLM对话，基于你自己的笔记本获取零幻觉答案。",
       "category": "productivity",
       "featured": true,
@@ -512,6 +519,7 @@
     {
       "id": "mcpservers-cameroncooke-xcodebuildmcp",
       "name": "XcodeBuildMCP",
+      "icon": "https://github.com/getsentry.png?size=64",
       "description": "一个模型上下文协议（MCP）服务器和命令行工具，为代理在iOS和macOS项目开发中提供工具支持。",
       "category": "development",
       "featured": true,
@@ -532,6 +540,7 @@
     {
       "id": "registry-ai-1325-mcp",
       "name": "1325.AI",
+      "icon": "https://github.com/1325ai.png?size=64",
       "description": "Verified directory of 44,000+ Black-owned U.S. businesses. Search, maps, loyalty rewards.",
       "category": "other",
       "featured": false,
@@ -571,6 +580,7 @@
     {
       "id": "mcpservers-stayker-com-1stay-mcp",
       "name": "1Stay Hotel Booking",
+      "icon": "https://github.com/STAYKER-COM.png?size=64",
       "description": "通过MCP完成酒店预订交易——覆盖30万+房源，提供真实酒店确认号、忠诚度积分及安全结账。酒店为商户记录方。开发者可通过Stripe Connect自行设定预订费用。基于成熟的分销基础设施构建。",
       "category": "other",
       "featured": false,
@@ -593,6 +603,7 @@
     {
       "id": "mcpservers-21st-dev-magic-mcp",
       "name": "21st.dev Magic",
+      "icon": "https://github.com/21st-dev.png?size=64",
       "description": "根据21st.dev顶尖设计工程师的灵感，创建精心制作的UI组件。",
       "category": "development",
       "featured": false,
@@ -637,6 +648,7 @@
     {
       "id": "mcpservers-2slides-mcp",
       "name": "2slides",
+      "icon": "https://github.com/2slides.png?size=64",
       "description": "这是全球首个、最简单且最便宜的PPT、幻灯片、演示文稿AI生成MCP服务器。",
       "category": "productivity",
       "featured": false,
@@ -677,6 +689,7 @@
     {
       "id": "mcpservers-achriom-achriom-mcp",
       "name": "Achriom",
+      "icon": "https://github.com/achriom.png?size=64",
       "description": "AI智能体及其人类用户的媒体记忆层。追踪书籍、电影、音乐、剧集和动漫。",
       "category": "productivity",
       "featured": false,
@@ -740,6 +753,7 @@
     {
       "id": "registry-ai-adeu-adeu",
       "name": "adeu",
+      "icon": "https://github.com/dealfluence.png?size=64",
       "description": "Automated DOCX Redlining Engine",
       "category": "other",
       "featured": false,
@@ -758,6 +772,7 @@
     {
       "id": "mcpservers-adfin-engineering-mcp-server-adfin",
       "name": "Adfin",
+      "icon": "https://github.com/Adfin-Engineering.png?size=64",
       "description": "唯一需要的收款平台——统一管理所有付款，通过Adfin实现发票开具与账务对账。",
       "category": "productivity",
       "featured": false,
@@ -881,6 +896,7 @@
     {
       "id": "registry-ai-agenticaffiliate-affiliate-networks-mcp",
       "name": "Affiliate Networks MCP",
+      "icon": "https://github.com/bobberrisford.png?size=64",
       "description": "Affiliate network reporting in your AI client. Bring your own keys. Most adapters experimental.",
       "category": "other",
       "featured": false,
@@ -917,6 +933,7 @@
     {
       "id": "mcpservers-agent-billy-agentbilly",
       "name": "Agent Billy",
+      "icon": "https://github.com/agent-billy.png?size=64",
       "description": "MCP服务器，为AI代理和团队提供基于角色的安全访问，支持Stripe账单操作——客户查询、订阅管理、退款、发票历史——无需暴露Stripe仪表盘凭证。通过本地Stripe同步引擎实现亚100毫秒读取。4个权限级别，附带审计日志。每月14.99美元。",
       "category": "productivity",
       "featured": false,
@@ -961,6 +978,7 @@
     {
       "id": "registry-ai-kernora-agent-sec",
       "name": "agent-sec",
+      "icon": "https://github.com/kernora-ai.png?size=64",
       "description": "Zero-install security baseline for AI coding agents — OWASP/CWE-cited rules over MCP.",
       "category": "other",
       "featured": false,
@@ -978,6 +996,7 @@
     {
       "id": "registry-ai-agentberg-agentberg",
       "name": "agentberg",
+      "icon": "https://github.com/Agentberg.png?size=64",
       "description": "Agent-to-agent trading intelligence exchange. Publish findings, vote on quality, earn reputation.",
       "category": "other",
       "featured": false,
@@ -995,6 +1014,7 @@
     {
       "id": "mcpservers-ccf-agentcairn",
       "name": "agentcairn",
+      "icon": "https://github.com/ccf.png?size=64",
       "description": "本地优先的智能体记忆：以纯Markdown格式的Obsidian仓库作为数据源，配合可重建的DuckDB索引实现BM25混合检索、向量检索与图结构召回。",
       "category": "memory",
       "featured": false,
@@ -1019,6 +1039,7 @@
     {
       "id": "registry-ai-agentdm-agentdm",
       "name": "AgentDM: Agent to Agent Communication Platform",
+      "icon": "https://github.com/agentdmai.png?size=64",
       "description": "Agent communication platform for agent to agent messaging via MCP. Messages, channels, skills.",
       "category": "other",
       "featured": false,
@@ -1057,6 +1078,7 @@
     {
       "id": "registry-ai-deskcrew-agentic",
       "name": "agentic",
+      "icon": "https://github.com/papperkash.png?size=64",
       "description": "Buy a managed AI phone agent for a business, paid keylessly via x402/RLUSD on the XRP Ledger.",
       "category": "other",
       "featured": false,
@@ -1074,6 +1096,7 @@
     {
       "id": "registry-ai-agentic-news-mcp",
       "name": "Agentic News",
+      "icon": "https://github.com/u00dxk2.png?size=64",
       "description": "AI-powered news intelligence — 21 tools for personalized monitoring, briefings, and semantic search",
       "category": "other",
       "featured": false,
@@ -1091,6 +1114,7 @@
     {
       "id": "registry-ai-agenticshelf-mcp",
       "name": "Agentic Shelf",
+      "icon": "https://github.com/vboykoCTO.png?size=64",
       "description": "Hosted MCP for e-commerce: live product catalog, stock, and pricing for AI agents.",
       "category": "other",
       "featured": false,
@@ -1108,6 +1132,7 @@
     {
       "id": "registry-ai-agenticterminal-directory",
       "name": "Agentic Terminal Directory",
+      "icon": "https://github.com/observer-protocol.png?size=64",
       "description": "Verified merchants accepting agentic payments on Lightning/L402/BOLT12/USDT — search, verify, pay.",
       "category": "other",
       "featured": false,
@@ -1160,6 +1185,7 @@
     {
       "id": "mcpservers-tinyfish-io-agentql-mcp",
       "name": "AgentQL",
+      "icon": "https://github.com/tinyfish-io.png?size=64",
       "description": "使用AgentQL让AI代理从非结构化网页中获取结构化数据。",
       "category": "web-scraping",
       "featured": false,
@@ -1200,6 +1226,7 @@
     {
       "id": "mcpservers-agentrpc-agentrpc",
       "name": "AgentRPC",
+      "icon": "https://github.com/agentrpc.png?size=64",
       "description": "使用 AgentRPC 连接任意函数、任意语言，跨越网络边界。",
       "category": "communication",
       "featured": false,
@@ -1240,6 +1267,7 @@
     {
       "id": "registry-ai-agentutility-mcp-agentops",
       "name": "AgentUtility Agentops",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility agentops cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1258,6 +1286,7 @@
     {
       "id": "registry-ai-agentutility-mcp-bestiary",
       "name": "AgentUtility Bestiary",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility bestiary cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1276,6 +1305,7 @@
     {
       "id": "registry-ai-agentutility-mcp-browser-workflow",
       "name": "AgentUtility Browser Workflow",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility browser-workflow cluster — pay-per-call x402 tools, no API keys…",
       "category": "other",
       "featured": false,
@@ -1294,6 +1324,7 @@
     {
       "id": "registry-ai-agentutility-mcp-compose",
       "name": "AgentUtility Compose",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility compose cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1312,6 +1343,7 @@
     {
       "id": "registry-ai-agentutility-mcp-edge-finance",
       "name": "AgentUtility Edge Finance",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility edge-finance cluster — pay-per-call x402 tools, no API keys, USDC…",
       "category": "other",
       "featured": false,
@@ -1330,6 +1362,7 @@
     {
       "id": "registry-ai-agentutility-mcp-edge-market",
       "name": "AgentUtility Edge Market",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility edge-market cluster — pay-per-call x402 tools, no API keys, USDC…",
       "category": "other",
       "featured": false,
@@ -1348,6 +1381,7 @@
     {
       "id": "registry-ai-agentutility-mcp-locale",
       "name": "AgentUtility Locale",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility locale cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1366,6 +1400,7 @@
     {
       "id": "registry-ai-agentutility-mcp-matchpoint",
       "name": "AgentUtility Matchpoint",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility matchpoint cluster — pay-per-call x402 tools, no API keys, USDC…",
       "category": "other",
       "featured": false,
@@ -1384,6 +1419,7 @@
     {
       "id": "registry-ai-agentutility-mcp-mediakit",
       "name": "AgentUtility Mediakit",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility mediakit cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1402,6 +1438,7 @@
     {
       "id": "registry-ai-agentutility-mcp-model-router",
       "name": "AgentUtility Model Router",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility model-router cluster — pay-per-call x402 tools, no API keys, USDC…",
       "category": "other",
       "featured": false,
@@ -1420,6 +1457,7 @@
     {
       "id": "registry-ai-agentutility-mcp-prooflayer",
       "name": "AgentUtility Prooflayer",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility prooflayer cluster — pay-per-call x402 tools, no API keys, USDC…",
       "category": "other",
       "featured": false,
@@ -1438,6 +1476,7 @@
     {
       "id": "registry-ai-agentutility-mcp-retail",
       "name": "AgentUtility Retail",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility retail cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1456,6 +1495,7 @@
     {
       "id": "registry-ai-agentutility-mcp-rollforge",
       "name": "AgentUtility Rollforge",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility rollforge cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1474,6 +1514,7 @@
     {
       "id": "registry-ai-agentutility-mcp-statline",
       "name": "AgentUtility Statline",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility statline cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1492,6 +1533,7 @@
     {
       "id": "registry-ai-agentutility-mcp-synthforge",
       "name": "AgentUtility Synthforge",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility synthforge cluster — pay-per-call x402 tools, no API keys, USDC…",
       "category": "other",
       "featured": false,
@@ -1510,6 +1552,7 @@
     {
       "id": "registry-ai-agentutility-mcp-web-probe",
       "name": "AgentUtility Web Probe",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility web-probe cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1528,6 +1571,7 @@
     {
       "id": "registry-ai-agentutility-mcp-wordmint",
       "name": "AgentUtility Wordmint",
+      "icon": "https://github.com/rooz21.png?size=64",
       "description": "MCP server for the @agentutility wordmint cluster — pay-per-call x402 tools, no API keys, USDC on…",
       "category": "other",
       "featured": false,
@@ -1567,6 +1611,7 @@
     {
       "id": "mcpservers-accelbyte-ags-extend-sdk-mcp-server",
       "name": "AGS Extend SDK MCP Server",
+      "icon": "https://github.com/AccelByte.png?size=64",
       "description": "AGS Extend SDK MCP 服务器：一个帮助AI助手更有效地回答问题和生成AccelByte Extend SDK代码的MCP服务器。",
       "category": "development",
       "featured": false,
@@ -1617,6 +1662,7 @@
     {
       "id": "mcpservers-erajasekar-ai-diagram-maker-mcp",
       "name": "AI Diagram Maker MCP",
+      "icon": "https://github.com/erajasekar.png?size=64",
       "description": "AI Diagram Maker 的 MCP 服务器 — 直接在 Cursor、Claude Desktop、Claude Code 或任何兼容 MCP 的 AI 代理中生成精美的软件工程图表",
       "category": "development",
       "featured": false,
@@ -1639,6 +1685,7 @@
     {
       "id": "registry-ai-mangii-manga",
       "name": "AI Manga & Anime Generator - Mangii MCP",
+      "icon": "https://github.com/AAAIStudio.png?size=64",
       "description": "Create manga and anime art from text. 24 styles, multi-panel stories, BYOK.",
       "category": "other",
       "featured": false,
@@ -1714,6 +1761,7 @@
     {
       "id": "mcpservers-alphaonedev-ai-memory-mcp",
       "name": "ai-memory",
+      "icon": "https://github.com/alphaonedev.png?size=64",
       "description": "任何AI助手的持久记忆。零token消耗直到召回。将记忆存储在本地SQLite中，通过6因子评分排序，返回结果比JSON小79%。适用于Claude、ChatGPT、Grok、Cursor、Windsurf及任何MCP客户端。",
       "category": "productivity",
       "featured": false,
@@ -1754,6 +1802,7 @@
     {
       "id": "mcpservers-airtable-mcp-server",
       "name": "Airtable",
+      "icon": "https://github.com/airtable.png?size=64",
       "description": "官方Airtable MCP服务器和技能，用于通过AI代理处理数据表、记录、工作流和业务操作。",
       "category": "database",
       "featured": false,
@@ -1774,7 +1823,6 @@
       ],
       "catalogUpdatedAt": "2026-07-21T18:20:59.000Z",
       "catalogIdentity": "airtable",
-      "icon": "https://cdn.simpleicons.org/airtable",
       "catalogRemoteUrl": "https://mcpservers.org/zh-CN/remote-mcp-servers/airtable",
       "catalogDirectoryUrl": "https://mcpservers.org/zh-CN/servers/airtable-mcp-server",
       "catalogRegistered": false,
@@ -1783,6 +1831,7 @@
     {
       "id": "mcpservers-sekeener-airtreks-mcp",
       "name": "AirTreks MCP",
+      "icon": "https://github.com/SEKeener.png?size=64",
       "description": "AirTreks 环球旅行及复杂多程机票搜索与预订",
       "category": "search",
       "featured": false,
@@ -1843,6 +1892,7 @@
     {
       "id": "mcpservers-aiven-open-mcp-aiven",
       "name": "Aiven",
+      "icon": "https://github.com/Aiven-Open.png?size=64",
       "description": "管理您的Aiven项目，并与PostgreSQL®、Apache Kafka®、ClickHouse®和OpenSearch®服务进行交互",
       "category": "cloud-service",
       "featured": false,
@@ -1866,6 +1916,7 @@
     {
       "id": "registry-ai-ai-akari-agent-trust-receipt",
       "name": "AIﾉアカリ☆ Agent Trust Receipt",
+      "icon": "https://github.com/AInoAKARI.png?size=64",
       "description": "Read-only Remote MCP for externally grounded AI agent trust receipts.",
       "category": "other",
       "featured": false,
@@ -1883,6 +1934,7 @@
     {
       "id": "registry-ai-ai-akari-one-minute-akari",
       "name": "AIﾉアカリ☆ One-Minute Akari",
+      "icon": "https://github.com/AInoAKARI.png?size=64",
       "description": "A free one-minute reset for people, delivered by AI, with no account or personal data.",
       "category": "other",
       "featured": false,
@@ -1900,6 +1952,7 @@
     {
       "id": "mcpservers-alapi-sdk-mcp-alapi-cn",
       "name": "ALAPI",
+      "icon": "https://github.com/ALAPI-SDK.png?size=64",
       "description": "ALAPI MCP工具，通过MCP调用数百个API接口",
       "category": "development",
       "featured": false,
@@ -1938,6 +1991,7 @@
     {
       "id": "mcpservers-aliyun-alibabacloud-devops-mcp-server",
       "name": "AlibabaCloud DevOps MCP",
+      "icon": "https://github.com/aliyun.png?size=64",
       "description": "Yunxiao MCP Server 为AI助手提供与云效平台交互的能力。",
       "category": "cloud-service",
       "featured": false,
@@ -1958,6 +2012,7 @@
     {
       "id": "mcpservers-aliceappai-mcp-server-alice",
       "name": "Alice MCP Server",
+      "icon": "https://github.com/aliceappai.png?size=64",
       "description": "安全音频转录与AI结合。将Alice录音连接到Claude、ChatGPT、Gemini等平台。",
       "category": "communication",
       "featured": false,
@@ -2005,6 +2060,7 @@
     {
       "id": "mcpservers-isaiahbjork-allyson-mcp",
       "name": "Allyson",
+      "icon": "https://github.com/isaiahbjork.png?size=64",
       "description": "基于AI的SVG动画生成器，利用Allyson平台将静态文件转换为动画SVG组件",
       "category": "development",
       "featured": false,
@@ -2087,6 +2143,7 @@
     {
       "id": "mcpservers-neild-nyc-altbots-tearsheet",
       "name": "AltBots — Fund Manager Intelligence",
+      "icon": "https://github.com/NeilD-NYC.png?size=64",
       "description": "机构研究和对冲基金、风险投资及私募股权管理人的尽职调查报告。数分钟内即可获取关于备案文件、人事变动、媒体筛查及社交信号的摘要。",
       "category": "other",
       "featured": false,
@@ -2152,6 +2209,7 @@
     {
       "id": "registry-ai-ambix-ambix",
       "name": "Ambix",
+      "icon": "https://github.com/ambix-ai.png?size=64",
       "description": "Your product team's shared strategic memory — an MCP server your AI tools reason over.",
       "category": "other",
       "featured": false,
@@ -2169,6 +2227,7 @@
     {
       "id": "mcpservers-amcharts-amcharts5-mcp",
       "name": "amCharts 5 MCP Server",
+      "icon": "https://github.com/amcharts.png?size=64",
       "description": "MCP服务器，让AI助手按需访问1500多份amCharts文档、约300个代码示例以及1000多个类API参考。",
       "category": "development",
       "featured": false,
@@ -2214,6 +2273,7 @@
     {
       "id": "registry-ai-mcpanalytics-analytics",
       "name": "analytics",
+      "icon": "https://github.com/embeddedlayers.png?size=64",
       "description": "The statistical analyst in your AI chat — validated, citable, re-runnable analysis of your data.",
       "category": "other",
       "featured": false,
@@ -2231,6 +2291,7 @@
     {
       "id": "registry-ai-analyticslegends-sap-analytics",
       "name": "Analytics Legends — SAP Analytics Intelligence",
+      "icon": "https://github.com/analyticslegends.png?size=64",
       "description": "AI agent for SAP analytics: firms, day rates, contract radar, news, concepts, studies",
       "category": "other",
       "featured": false,
@@ -2248,6 +2309,7 @@
     {
       "id": "registry-ai-ankimcp-anki-mcp-server",
       "name": "Anki MCP",
+      "icon": "https://github.com/ankimcp.png?size=64",
       "description": "一个 MCP 服务器，使 AI 助手能够与 Anki（基于间隔重复的闪卡应用）交互。",
       "category": "productivity",
       "featured": false,
@@ -2276,6 +2338,7 @@
     {
       "id": "registry-ai-anomalyarmor-armor-mcp",
       "name": "AnomalyArmor",
+      "icon": "https://github.com/anomalyarmor.png?size=64",
       "description": "Data observability tools for engineering teams: alerts, freshness, schema drift, lineage, quality.",
       "category": "other",
       "featured": false,
@@ -2295,6 +2358,7 @@
     {
       "id": "mcpservers-ansvar-systems-ansvar-gateway",
       "name": "Ansvar",
+      "icon": "https://github.com/Ansvar-Systems.png?size=64",
       "description": "面向AI代理的引用合规、法律与安全情报——涵盖300多个法律、法规及标准语料库（GDPR、NIS2、AI法案、DORA），提供条款级引用，并包含实时CVE/KEV/EPSS漏洞上下文。OAuth远程服务器，免费层级",
       "category": "search",
       "featured": false,
@@ -2319,6 +2383,7 @@
     {
       "id": "mcpservers-apache-doris-mcp-server",
       "name": "Apache Doris",
+      "icon": "https://github.com/apache.png?size=64",
       "description": "Apache Doris 的 MCP 服务器，一个基于 MPP 架构的实时数据仓库。",
       "category": "database",
       "featured": false,
@@ -2341,6 +2406,7 @@
     {
       "id": "mcpservers-serendipityoneinc-apiclaw-skills",
       "name": "APIClaw — Amazon Data API for AI Agents",
+      "icon": "https://github.com/SerendipityOneInc.png?size=64",
       "description": "为AI代理构建的实时亚马逊数据API。涵盖2亿+商品、10亿+评论、实时BSR、定价及竞品数据，以整洁JSON格式呈现。提供10项代理技能，支持市场调研、竞品监控、定价策略、Listing审计等功能。赠送1000免费积分。",
       "category": "development",
       "featured": false,
@@ -2364,6 +2430,7 @@
     {
       "id": "mcpservers-apify-mcp-server",
       "name": "Apify",
+      "icon": "https://github.com/apify.png?size=64",
       "description": "Apify 官方 MCP 服务器，供 AI 代理运行 Actors、提取网站数据，并自动化网页抓取与爬取工作流。",
       "category": "web-scraping",
       "featured": false,
@@ -2405,6 +2472,7 @@
     {
       "id": "mcpservers-apimatic-apimatic-validator-mcp",
       "name": "APIMatic MCP",
+      "icon": "https://github.com/apimatic.png?size=64",
       "description": "APIMatic MCP 服务器用于通过 APIMatic 验证 OpenAPI 规范。该服务器处理 OpenAPI 文件，并利用 APIMatic 的 API 返回验证摘要。",
       "category": "development",
       "featured": false,
@@ -2443,6 +2511,7 @@
     {
       "id": "mcpservers-appcircleio-appcircle-mcp",
       "name": "Appcircle MCP Server",
+      "icon": "https://github.com/appcircleio.png?size=64",
       "description": "Appcircle 官方 MCP 服务器",
       "category": "cloud-service",
       "featured": false,
@@ -2488,6 +2557,7 @@
     {
       "id": "mcpservers-appcontrollabs-appcontrol-mcp-go",
       "name": "AppControl Windows System History",
+      "icon": "https://github.com/AppControlLabs.png?size=64",
       "description": "一个MCP服务器，让Claude、Cursor和Gemini等AI代理能够访问由AppControl Windows应用收集的历史Windows CPU、GPU、温度和隐私数据。",
       "category": "development",
       "featured": false,
@@ -2608,6 +2678,7 @@
     {
       "id": "mcpservers-appsai-inc-mcp-server",
       "name": "AppsAI",
+      "icon": "https://github.com/appsai-inc.png?size=64",
       "description": "使用98个React、AWS和MongoDB工具构建并部署全栈Next.js应用",
       "category": "development",
       "featured": false,
@@ -2651,6 +2722,7 @@
     {
       "id": "mcpservers-archcore-mcp",
       "name": "Archcore MCP",
+      "icon": "https://github.com/archcore-ai.png?size=64",
       "description": "本地 stdio MCP 服务器，让 AI 编码代理直接从你的仓库中读取并维护结构化的架构、规则和决策。",
       "category": "development",
       "featured": false,
@@ -2693,6 +2765,7 @@
     {
       "id": "mcpservers-armorwallet-armor-crypto-mcp",
       "name": "Armor Crypto MCP",
+      "icon": "https://github.com/armorwallet.png?size=64",
       "description": "用于与多条区块链交互的MCP，支持质押、DeFi、兑换、跨链桥接、钱包管理、定投、限价单、币种查询、追踪等功能。",
       "category": "other",
       "featured": false,
@@ -2717,6 +2790,7 @@
     {
       "id": "registry-ai-arpi-arpi-mcp",
       "name": "ARPI MCP",
+      "icon": "https://github.com/arpi-ai.png?size=64",
       "description": "AI-powered ECG analysis: submit ECG images and receive diagnosis reports from ARPI's ECG AI.",
       "category": "other",
       "featured": false,
@@ -2804,6 +2878,7 @@
     {
       "id": "mcpservers-atla-ai-atla-mcp-server",
       "name": "Atla",
+      "icon": "https://github.com/atla-ai.png?size=64",
       "description": "使AI代理能够与Atla API交互，以进行最先进的LLMJ评估。",
       "category": "development",
       "featured": false,
@@ -2824,6 +2899,7 @@
     {
       "id": "mcpservers-atlanhq-agent-toolkit",
       "name": "Atlan",
+      "icon": "https://github.com/atlanhq.png?size=64",
       "description": "来自Atlan的官方MCP服务器，让您将元数据的力量带入AI工具",
       "category": "database",
       "featured": false,
@@ -2861,6 +2937,7 @@
     {
       "id": "mcpservers-audienseco-mcp-audiense-insights",
       "name": "Audiense Insights",
+      "icon": "https://github.com/AudienseCo.png?size=64",
       "description": "来自Audiense报告的市场洞察和受众分析，涵盖人口统计、文化、影响者及内容互动分析。",
       "category": "productivity",
       "featured": false,
@@ -2901,6 +2978,7 @@
     {
       "id": "mcpservers-mwstech-auditra",
       "name": "Auditra",
+      "icon": "https://github.com/mwstech.png?size=64",
       "description": "用于WordPress插件审计的MCP服务器",
       "category": "productivity",
       "featured": false,
@@ -2924,6 +3002,7 @@
     {
       "id": "registry-ai-auralogs-auralogs",
       "name": "Auralogs",
+      "icon": "https://github.com/auralogs-ai.png?size=64",
       "description": "Read-only access to Auralogs production logs: search logs, inspect errors, review AI analyses.",
       "category": "other",
       "featured": false,
@@ -2960,6 +3039,7 @@
     {
       "id": "mcpservers-authn8-mcp-server",
       "name": "Authn8",
+      "icon": "https://github.com/authn8.png?size=64",
       "description": "从AI代理访问您团队的2FA代码，无需共享机密。列出账户、生成TOTP代码，并维护完整的审计追踪。",
       "category": "development",
       "featured": false,
@@ -2998,6 +3078,7 @@
     {
       "id": "mcpservers-auto-geo-mcp",
       "name": "auto-geo",
+      "icon": "https://github.com/shadowresearch.png?size=64",
       "description": "面向AI可见性的GEO优化内容发布引擎",
       "category": "marketing",
       "featured": false,
@@ -3038,6 +3119,7 @@
     {
       "id": "registry-ai-autorfp-mcp",
       "name": "AutoRFP.ai",
+      "icon": "https://github.com/AutoRFP.png?size=64",
       "description": "Search AutoRFP.ai projects, requirements, content library, and tags for Q&A and analytics.",
       "category": "other",
       "featured": false,
@@ -3073,6 +3155,7 @@
     {
       "id": "mcpservers-avr-docs-mcp",
       "name": "avr-docs-mcp",
+      "icon": "https://github.com/agentvoiceresponse.png?size=64",
       "description": "该MCP（模型上下文协议）服务器提供与Wiki.JS的集成，用于从Agent Voice Response Wiki.JS实例中搜索和列出页面。",
       "category": "search",
       "featured": false,
@@ -3113,6 +3196,7 @@
     {
       "id": "registry-ai-awraiter-telegram",
       "name": "AwrAIter — Telegram channels",
+      "icon": "https://github.com/MediaZione.png?size=64",
       "description": "Telegram channels you administer: analytics, content plans, scheduled publishing. No userbot",
       "category": "other",
       "featured": false,
@@ -3130,6 +3214,7 @@
     {
       "id": "mcpservers-awslabs-bedrock-kb-retrieval-mcp-server",
       "name": "AWS Bedrock KB Retrieval",
+      "icon": "https://github.com/awslabs.png?size=64",
       "description": "使用自然语言查询Amazon Bedrock知识库，从您的数据源中检索相关信息。",
       "category": "cloud-service",
       "featured": false,
@@ -3153,6 +3238,7 @@
     {
       "id": "mcpservers-awslabs-cdk-mcp-server",
       "name": "AWS CDK",
+      "icon": "https://github.com/awslabs.png?size=64",
       "description": "获取规范的CDK建议，解释CDK Nag规则，检查抑制项，生成Bedrock Agent架构，并发现AWS Solutions Constructs模式。",
       "category": "cloud-service",
       "featured": false,
@@ -3176,6 +3262,7 @@
     {
       "id": "mcpservers-cloudtrail-mcp-server",
       "name": "AWS CloudTrail",
+      "icon": "https://github.com/awslabs.png?size=64",
       "description": "该AWS Labs模型上下文协议（MCP）服务器用于CloudTrail，使您的AI代理能够查询AWS账户活动，以进行安全调查、合规审计和运维故障排查。",
       "category": "cloud-service",
       "featured": false,
@@ -3200,6 +3287,7 @@
     {
       "id": "mcpservers-awslabs-core-mcp-server",
       "name": "AWS Core",
+      "icon": "https://github.com/awslabs.png?size=64",
       "description": "核心AWS MCP服务器，提供提示理解与服务器管理能力。",
       "category": "cloud-service",
       "featured": false,
@@ -3224,6 +3312,7 @@
     {
       "id": "mcpservers-awslabs-cost-analysis-mcp-server",
       "name": "AWS Cost Analysis",
+      "icon": "https://github.com/awslabs.png?size=64",
       "description": "分析CDK项目以识别所使用的AWS服务，并从AWS定价网页和API获取定价信息。",
       "category": "cloud-service",
       "featured": false,
@@ -3246,6 +3335,7 @@
     {
       "id": "mcpservers-awslabs-aws-documentation-mcp-server",
       "name": "AWS Documentation",
+      "icon": "https://github.com/awslabs.png?size=64",
       "description": "获取、转换和搜索AWS文档页面，并提供相关内容推荐。",
       "category": "search",
       "featured": false,
@@ -3270,6 +3360,7 @@
     {
       "id": "mcpservers-dynamodb-mcp-server",
       "name": "AWS DynamoDB",
+      "icon": "https://github.com/awslabs.png?size=64",
       "description": "Amazon DynamoDB 的官方开发者体验 MCP 服务器，提供 DynamoDB 专家设计指导与数据建模协助。",
       "category": "development",
       "featured": false,
@@ -3293,6 +3384,7 @@
     {
       "id": "mcpservers-awslabs-nova-canvas-mcp-server",
       "name": "AWS Nova Canvas",
+      "icon": "https://github.com/awslabs.png?size=64",
       "description": "使用文本提示和颜色指导，通过Amazon Nova Canvas生成图像。",
       "category": "development",
       "featured": false,
@@ -3315,6 +3407,7 @@
     {
       "id": "mcpservers-axiomhq-mcp-server-axiom",
       "name": "Axiom",
+      "icon": "https://github.com/axiomhq.png?size=64",
       "description": "用自然语言查询和分析你的Axiom日志、追踪及所有其他事件数据",
       "category": "cloud-service",
       "featured": false,
@@ -3352,6 +3445,7 @@
     {
       "id": "mcpservers-azure-mcp",
       "name": "Azure MCP",
+      "icon": "https://github.com/Azure.png?size=64",
       "description": "管理和与Microsoft Azure服务交互。",
       "category": "cloud-service",
       "featured": false,
@@ -3421,6 +3515,7 @@
     {
       "id": "registry-ai-backengine-backengine-mcp",
       "name": "backengine-mcp",
+      "icon": "https://github.com/BackEngine-ai.png?size=64",
       "description": "Surface customer & prospect context from Slack, email, transcripts and tickets in any MCP client.",
       "category": "other",
       "featured": false,
@@ -3438,6 +3533,7 @@
     {
       "id": "mcpservers-bankless-onchain-mcp",
       "name": "Bankless Onchain",
+      "icon": "https://github.com/bankless.png?size=64",
       "description": "查询链上数据，如ERC20代币、交易历史、智能合约状态。",
       "category": "database",
       "featured": false,
@@ -3460,6 +3556,7 @@
     {
       "id": "registry-ai-bareun-bareun",
       "name": "Bareun — Korean NLP & Spell/Grammar Checking",
+      "icon": "https://github.com/gih2yun.png?size=64",
       "description": "Korean NLP MCP server: morphological analysis, tokenization, spell & grammar checking (Bareun)",
       "category": "other",
       "featured": false,
@@ -3494,6 +3591,7 @@
     {
       "id": "mcpservers-baserow-baserow-mcp",
       "name": "Baserow",
+      "icon": "https://github.com/baserow.png?size=64",
       "description": "对您的Baserow表格进行读写访问。",
       "category": "database",
       "featured": false,
@@ -3516,6 +3614,7 @@
     {
       "id": "registry-ai-basethread-basethread",
       "name": "basethread",
+      "icon": "https://github.com/navbuildz.png?size=64",
       "description": "One shared context your team's AI tools read & write over MCP. No re-explaining. Free.",
       "category": "other",
       "featured": false,
@@ -3570,6 +3669,7 @@
     {
       "id": "mcpservers-batchdataco-batchdata-mcp-server",
       "name": "BatchData MCP (Real Estate & Contact Data)",
+      "icon": "https://github.com/batchdataco.png?size=64",
       "description": "房地产与联系人增强数据MCP",
       "category": "search",
       "featured": false,
@@ -3610,6 +3710,7 @@
     {
       "id": "registry-ai-adoraads-beauty",
       "name": "beauty",
+      "icon": "https://github.com/DIGIBIZ360-COM.png?size=64",
       "description": "AI-native beauty ads, sponsored product discovery, and brand recommendations.",
       "category": "other",
       "featured": false,
@@ -3627,6 +3728,7 @@
     {
       "id": "registry-ai-betslipdoctor-mcp",
       "name": "BetSlip Doctor",
+      "icon": "https://github.com/opspot-ai.png?size=64",
       "description": "Read, grade, and track a subscriber's betslips with preserved truth and no wager placement.",
       "category": "other",
       "featured": false,
@@ -3644,6 +3746,7 @@
     {
       "id": "registry-ai-betterpost-server",
       "name": "BetterPost",
+      "icon": "https://github.com/betterpost.png?size=64",
       "description": "Finds timely sources across news, social, and the web and writes posts worth publishing.",
       "category": "other",
       "featured": false,
@@ -3678,6 +3781,7 @@
     {
       "id": "registry-ai-biddeed-biddeed-mcp",
       "name": "BidDeed MCP",
+      "icon": "https://github.com/breverdbidder.png?size=64",
       "description": "AI-powered foreclosure auction intelligence for Florida counties via MCP tools.",
       "category": "other",
       "featured": false,
@@ -3695,6 +3799,7 @@
     {
       "id": "registry-ai-biel-biel-ai",
       "name": "Biel.ai",
+      "icon": "https://github.com/TechDocsStudio.png?size=64",
       "description": "Query your product docs from AI tools. Source-cited answers from your indexed documentation.",
       "category": "other",
       "featured": false,
@@ -3736,6 +3841,7 @@
     {
       "id": "mcpservers-mcp-bitnovo-pay",
       "name": "Bitnovo Pay",
+      "icon": "https://github.com/bitnovo.png?size=64",
       "description": "用于Bitnovo Pay与AI代理集成的MCP服务器。通过Bitnovo Pay API提供加密货币支付功能。功能包括支付创建、状态查询、二维码生成以及支持多种隧道提供商（ngrok、zrok、手动）的webhook管理。",
       "category": "other",
       "featured": false,
@@ -3758,6 +3864,7 @@
     {
       "id": "mcpservers-bitrefill-bitrefill-mcp-server",
       "name": "Bitrefill",
+      "icon": "https://github.com/bitrefill.png?size=64",
       "description": "购买礼品卡、eSIM、手机充值。支持银行卡和加密货币支付。",
       "category": "other",
       "featured": false,
@@ -3780,6 +3887,7 @@
     {
       "id": "mcpservers-bitrix24-mcp-dev",
       "name": "Bitrix24 MCP-DEV",
+      "icon": "https://github.com/bitrix24.png?size=64",
       "description": "Bitrix24的MCP服务器为AI助手提供对Bitrix24 API的结构化访问。它提供最新的方法描述、参数和有效值，使助手能够基于精确数据而非猜测进行工作。这减少了代码错误，并加速了Bitrix24集成开发。",
       "category": "development",
       "featured": false,
@@ -3804,6 +3912,7 @@
     {
       "id": "registry-ai-bitroad-bitroad",
       "name": "bitroad",
+      "icon": "https://github.com/bitroadai.png?size=64",
       "description": "Marketplace for AI agents: buy goods and services under spending caps, with returns and disputes.",
       "category": "other",
       "featured": false,
@@ -3821,6 +3930,7 @@
     {
       "id": "registry-ai-bittlebits-bittlebits",
       "name": "BittleBits GEO Assistant",
+      "icon": "https://github.com/bittlebitsai.png?size=64",
       "description": "GEO scores and content-rewrite suggestions for any web page, as MCP tools.",
       "category": "other",
       "featured": false,
@@ -3856,6 +3966,7 @@
     {
       "id": "registry-ai-blast-radius-blast-radius",
       "name": "blast-radius",
+      "icon": "https://github.com/kipmcc.png?size=64",
       "description": "Blast Radius tools for AI strategy, diligence, and market updates.",
       "category": "other",
       "featured": false,
@@ -3895,6 +4006,7 @@
     {
       "id": "mcpservers-blockscout-mcp-server",
       "name": "Blockscout",
+      "icon": "https://github.com/blockscout.png?size=64",
       "description": "通过Blockscout API访问区块链数据，如余额、代币和NFT。支持多链和进度通知。",
       "category": "database",
       "featured": false,
@@ -3913,7 +4025,6 @@
       ],
       "catalogUpdatedAt": "2026-08-05T14:57:09.000Z",
       "catalogIdentity": "blockscout",
-      "icon": "https://cdn.prod.website-files.com/68a44d4040f98a4adf2207b6/69409abb57bdbb7a4d76fdda_blockscout.svg",
       "catalogRemoteUrl": "https://mcpservers.org/zh-CN/remote-mcp-servers/blockscout",
       "catalogDirectoryUrl": "https://mcpservers.org/zh-CN/servers/blockscout/mcp-server",
       "catalogRegistered": false,
@@ -3940,6 +4051,7 @@
     {
       "id": "mcpservers-railsblueprint-blueprint-mcp",
       "name": "Blueprint MCP",
+      "icon": "https://github.com/railsblueprint.png?size=64",
       "description": "通过MCP实现Chrome和Firefox的浏览器自动化",
       "category": "development",
       "featured": false,
@@ -3979,6 +4091,7 @@
     {
       "id": "registry-ai-bolthub-mcp",
       "name": "bolthub",
+      "icon": "https://github.com/signaltech-org.png?size=64",
       "description": "The bolthub API marketplace, L402 gateways, and your other MCP servers, on one Lightning budget.",
       "category": "other",
       "featured": false,
@@ -3997,6 +4110,7 @@
     {
       "id": "registry-ai-bolthub-registry",
       "name": "bolthub Marketplace",
+      "icon": "https://github.com/signaltech-org.png?size=64",
       "description": "Discover and call every paid API on the bolthub marketplace with automatic L402 Lightning payments.",
       "category": "other",
       "featured": false,
@@ -4015,6 +4129,7 @@
     {
       "id": "registry-ai-boolsai-directory",
       "name": "Boolsai Directory",
+      "icon": "https://github.com/Boolsai-ai.png?size=64",
       "description": "Indexed ecommerce site directory — vendor lookups, brands by city/market/founder. 10 tools.",
       "category": "other",
       "featured": false,
@@ -4054,6 +4169,7 @@
     {
       "id": "registry-ai-borealhost-mcp",
       "name": "BorealHost",
+      "icon": "https://github.com/alainsvrd.png?size=64",
       "description": "Agent-native web hosting — deploy sites, manage DNS, register domains, scale infrastructure",
       "category": "other",
       "featured": false,
@@ -4073,6 +4189,7 @@
     {
       "id": "registry-ai-boundaryai-boundaryai",
       "name": "boundaryai",
+      "icon": "https://github.com/skvcool-rgb.png?size=64",
       "description": "Deterministic runtime safety for AI agents: scan PII, gate tool actions, verify LLM output.",
       "category": "other",
       "featured": false,
@@ -4109,6 +4226,7 @@
     {
       "id": "registry-ai-bowmark-bowmark",
       "name": "Bowmark",
+      "icon": "https://github.com/bowmark-ai.png?size=64",
       "description": "Do things on live websites: prices, availability, quotes, bookings, anything behind a form or login.",
       "category": "other",
       "featured": false,
@@ -4129,6 +4247,7 @@
     {
       "id": "mcpservers-box-community-mcp-server-box",
       "name": "Box",
+      "icon": "https://github.com/box-community.png?size=64",
       "description": "通过Box AI与智能内容管理平台进行交互。",
       "category": "cloud-storage",
       "featured": false,
@@ -4146,7 +4265,6 @@
       ],
       "catalogUpdatedAt": "2026-04-30T21:43:33.000Z",
       "catalogIdentity": "box",
-      "icon": "https://cdn.simpleicons.org/box",
       "catalogRemoteUrl": "https://mcpservers.org/zh-CN/remote-mcp-servers/box",
       "catalogDirectoryUrl": "https://mcpservers.org/zh-CN/servers/box-community/mcp-server-box",
       "catalogRegistered": false,
@@ -4155,6 +4273,7 @@
     {
       "id": "mcpservers-bridge-town-financial-modeling-mcp",
       "name": "Bridge Town",
+      "icon": "https://github.com/Bridge-Town.png?size=64",
       "description": "Bridge Town是一个原生MCP、基于Git版本控制的财务建模平台，专为FP&A团队和财务领导者设计。AI代理使用Bridge Town工具创建项目、编写Python模型文件、在隔离的云端沙箱中运行模型、查询数据、将输出写入Google Sheets、创建仪表板、分支场景以及与团队成员协作。",
       "category": "finance",
       "featured": false,
@@ -4179,6 +4298,7 @@
     {
       "id": "registry-ai-bridgeapp-bridgeapp",
       "name": "bridgeapp",
+      "icon": "https://github.com/MathAndMagic.png?size=64",
       "description": "BridgeApp workspace over MCP: tasks, chats, threads, pages, and projects.",
       "category": "other",
       "featured": false,
@@ -4196,6 +4316,7 @@
     {
       "id": "mcpservers-brightdata-brightdata-mcp",
       "name": "Bright Data",
+      "icon": "https://github.com/brightdata.png?size=64",
       "description": "发现、提取并与网络交互——一个接口驱动对公共互联网的自动化访问。",
       "category": "web-scraping",
       "featured": false,
@@ -4250,6 +4371,7 @@
     {
       "id": "registry-ai-buywhere-buywhere-mcp",
       "name": "BuyWhere MCP",
+      "icon": "https://github.com/BuyWhere.png?size=64",
       "description": "Product search, price comparison, and affiliate-ready shopping across Singapore and US retailers.",
       "category": "other",
       "featured": false,
@@ -4286,6 +4408,7 @@
     {
       "id": "registry-ai-cabrini-market-data",
       "name": "Cabrini Market Data",
+      "icon": "https://github.com/nlapi.png?size=64",
       "description": "US equity data for AI agents — 23 years intraday + daily, SEC filings. x402 USDC payments.",
       "category": "other",
       "featured": false,
@@ -4327,6 +4450,7 @@
     {
       "id": "mcpservers-hologrow-hologrow-mcp",
       "name": "Hologrow",
+      "icon": "https://github.com/hologrow.png?size=64",
       "description": "适用于任何AI的电子商务数据层",
       "category": "productivity",
       "featured": false,
@@ -4372,6 +4496,7 @@
     {
       "id": "mcpservers-iqingyoung-429-throttle-mcp",
       "name": "429-throttle-mcp",
+      "icon": "https://github.com/iqingyoung.png?size=64",
       "description": "别再被HTTP 429拒绝——一个带限流的MCP代理，外加Agent操作员技能。模型在长时间运行的任务中会自动调节节奏；非技术用户可以用普通句子打开、调整、禁用、诊断和查看。",
       "category": "productivity",
       "featured": false,
@@ -4394,6 +4519,7 @@
     {
       "id": "mcpservers-5dollarfootball-api-football-api-mcp",
       "name": "5DollarFootballAPI MCP Server",
+      "icon": "https://github.com/5dollarfootball-api.png?size=64",
       "description": "只读MCP服务器，提供实时足球比分、赛程、积分榜、角球、红黄牌、投注赔率及完整赔率变动历史。",
       "category": "development",
       "featured": false,
@@ -4416,6 +4542,7 @@
     {
       "id": "mcpservers-mshanghai570-ackrite",
       "name": "Ackrite",
+      "icon": "https://github.com/mshanghai570.png?size=64",
       "description": "一个MCP服务器，让AI代理在行动前先验证其假设。",
       "category": "development",
       "featured": false,
@@ -4506,6 +4633,7 @@
     {
       "id": "mcpservers-airport-lounge-list-mcp-server",
       "name": "Airport Lounge List",
+      "icon": "https://github.com/Airport-Lounge-List.png?size=64",
       "description": "搜索8,500多个机场贵宾休息室，查看您的信用卡、会员资格或航空公司身份可进入哪些。",
       "category": "search",
       "featured": false,
@@ -4597,6 +4725,7 @@
     {
       "id": "mcpservers-github-com-helena-bioinformatics-ask-helena-mcp-releases-tag-v1-0-5",
       "name": "Ask Helena 1.0.5",
+      "icon": "https://github.com/helena-bioinformatics.png?size=64",
       "description": "官方只读的Helena生物信息学MCP，提供带来源引用的公共知识，并可选了解支持Helena免费科学基础设施的途径。",
       "category": "search",
       "featured": false,
@@ -4667,6 +4796,7 @@
     {
       "id": "mcpservers-awardtravelfinder-mcp",
       "name": "Award Travel Finder",
+      "icon": "https://github.com/AwardTravelFinder.png?size=64",
       "description": "奖励航班搜索：27家航空公司的奖励座位可用性，23个忠诚度计划的奖励表定价，以及万豪、希尔顿、IHG和凯悦的奖励住宿。",
       "category": "other",
       "featured": false,
@@ -4711,6 +4841,7 @@
     {
       "id": "mcpservers-thebestco-bestprice-mcp",
       "name": "BestPrice MCP",
+      "icon": "https://github.com/TheBestCo.png?size=64",
       "description": "搜索BestPrice.gr产品，比较当前商家报价和运费，并通过公共只读MCP服务器查看观察到的价格历史。",
       "category": "search",
       "featured": false,
@@ -4734,6 +4865,7 @@
     {
       "id": "mcpservers-blckalpaca-studio-knowledge-base-mcp",
       "name": "Blck Alpaca",
+      "icon": "https://github.com/blckalpaca-studio.png?size=64",
       "description": "只读访问Blck Alpaca的知识库：SEO、GEO、AI代理、营销自动化。",
       "category": "marketing",
       "featured": false,
@@ -4758,6 +4890,7 @@
     {
       "id": "mcpservers-double2dev-blooketsimulator-mcp",
       "name": "blooketsimulator-mcp",
+      "icon": "https://github.com/double2dev.png?size=64",
       "description": "Blooket Simulator的官方MCP服务器，用于模拟开箱、查看掉落率，并通过AI获取blook信息。",
       "category": "other",
       "featured": false,
@@ -4809,6 +4942,7 @@
     {
       "id": "registry-ai-calaf-calaf",
       "name": "Calaf",
+      "icon": "https://github.com/gallaghern51-art.png?size=64",
       "description": "Run your Calaf recruiting book from chat: firms, people, pipeline, calendar, notes, and prep.",
       "category": "other",
       "featured": false,
@@ -4827,6 +4961,7 @@
     {
       "id": "registry-ai-calendarmcp-server",
       "name": "CalendarMCP",
+      "icon": "https://github.com/Full-Vibe.png?size=64",
       "description": "Hosted Google Calendar MCP server for AI agents. No self-hosting or Google Cloud setup.",
       "category": "other",
       "featured": false,
@@ -4878,6 +5013,7 @@
     {
       "id": "registry-ai-canaryusers-canaryusers",
       "name": "canaryusers",
+      "icon": "https://github.com/CanaryUsers-ai.png?size=64",
       "description": "A flock of AI users tests your deployed app and reports where real people get stuck, with fixes.",
       "category": "other",
       "featured": false,
@@ -4895,6 +5031,7 @@
     {
       "id": "mcpservers-mischuh-canonic",
       "name": "canonic",
+      "icon": "https://github.com/mischuh.png?size=64",
       "description": "让AI代理能够正确查询你的数据的上下文层。",
       "category": "database",
       "featured": false,
@@ -4953,6 +5090,7 @@
     {
       "id": "registry-ai-buywhere-catalog-api",
       "name": "catalog-api",
+      "icon": "https://github.com/BuyWhere.png?size=64",
       "description": "Agent-native product catalog: 300M+ products across US+SEA. Search, compare, deals.",
       "category": "other",
       "featured": false,
@@ -5004,6 +5142,7 @@
     {
       "id": "mcpservers-celmis-labs-celmis",
       "name": "Celmis",
+      "icon": "https://github.com/Celmis-labs.png?size=64",
       "description": "基于仓库符号图的十八种工具：跨仓库符号搜索、消费者、API 表面、依赖发现与审查——遵循与产品其他部分相同的按仓库访问规则。自托管，AGPL-3.0。",
       "category": "development",
       "featured": false,
@@ -5028,6 +5167,7 @@
     {
       "id": "registry-ai-certscore-mcp",
       "name": "CertScore MCP",
+      "icon": "https://github.com/ergoveritas1-alt.png?size=64",
       "description": "CertScore website risk-signal tools for scans, findings, evidence, and latest-domain lookups.",
       "category": "other",
       "featured": false,
@@ -5098,6 +5238,7 @@
     {
       "id": "registry-ai-chronary-mcp",
       "name": "Chronary",
+      "icon": "https://github.com/Chronary.png?size=64",
       "description": "Calendar API for AI agents: events, availability, Google/Microsoft setup, scheduling, and iCal.",
       "category": "other",
       "featured": false,
@@ -5117,6 +5258,7 @@
     {
       "id": "mcpservers-arunsoman-cie",
       "name": "cie",
+      "icon": "https://github.com/arunsoman.png?size=64",
       "description": "▎ 一个通过可插拔适配器扩展到任意语言的代码图谱，具备任务/QA可追溯性和真正的MCP工具——零配置即可试用。 ▎",
       "category": "development",
       "featured": false,
@@ -5158,6 +5300,7 @@
     {
       "id": "registry-ai-citybook-citybook",
       "name": "Citybook",
+      "icon": "https://github.com/yeunge-pawlo.png?size=64",
       "description": "Live Calgary events for AI agents.",
       "category": "other",
       "featured": false,
@@ -5175,6 +5318,7 @@
     {
       "id": "registry-ai-clarid-compliance",
       "name": "Clarid Compliance",
+      "icon": "https://github.com/clarid-ai.png?size=64",
       "description": "Check bank marketing for FDIC, NCUA, TILA, Reg DD, Reg Z, UDAAP, and Equal Housing compliance.",
       "category": "other",
       "featured": false,
@@ -5228,6 +5372,7 @@
     {
       "id": "registry-ai-clelp-clelp",
       "name": "Clelp",
+      "icon": "https://github.com/oscarsterling.png?size=64",
       "description": "Search and rate AI tools, MCP servers, and agent skills reviewed by real agent use.",
       "category": "other",
       "featured": false,
@@ -5246,6 +5391,7 @@
     {
       "id": "registry-ai-clize-clize",
       "name": "Clize",
+      "icon": "https://github.com/cooldk.png?size=64",
       "description": "Real-world actions for AI coding agents: domains, email, deploys, payments, and media generation.",
       "category": "other",
       "featured": false,
@@ -5282,6 +5428,7 @@
     {
       "id": "registry-ai-cobbles-cobbles",
       "name": "cobbles",
+      "icon": "https://github.com/Yu1586.png?size=64",
       "description": "The shared task board for teams and their AI agents — connect over OAuth, every action signed.",
       "category": "other",
       "featured": false,
@@ -5299,6 +5446,7 @@
     {
       "id": "mcpservers-munhq-codeindex",
       "name": "codeindex",
+      "icon": "https://github.com/munhq.png?size=64",
       "description": "基于MCP的结构化代码智能：跨40多种语言，无需阅读整个文件，即可查找符号定义位置、读取单个函数、查看其调用方、追踪导入关系并判断变更影响范围。",
       "category": "development",
       "featured": false,
@@ -5323,6 +5471,7 @@
     {
       "id": "registry-ai-codenib-codenib",
       "name": "CodeNib",
+      "icon": "https://github.com/sysevol-ai.png?size=64",
       "description": "Source-linked CodeGraph exploration, ranked search, and static navigation for coding agents.",
       "category": "other",
       "featured": false,
@@ -5341,6 +5490,7 @@
     {
       "id": "registry-ai-cofoundagent-cofound",
       "name": "Cofound",
+      "icon": "https://github.com/cofound-agent.png?size=64",
       "description": "MCP-native co-founder directory your AI agent searches, screening inbound pitches for you.",
       "category": "other",
       "featured": false,
@@ -5375,6 +5525,7 @@
     {
       "id": "registry-ai-compeller-compel",
       "name": "Compeller",
+      "icon": "https://github.com/Compellerai.png?size=64",
       "description": "Create and track AI music videos and audio-reactive visuals from songs.",
       "category": "other",
       "featured": false,
@@ -5392,6 +5543,7 @@
     {
       "id": "registry-ai-autonomad-computeback",
       "name": "computeback",
+      "icon": "https://github.com/Autonomad1.png?size=64",
       "description": "Agent Rewards Marketplace: earn $NOMD on B2B work, spend on agent capabilities.",
       "category": "other",
       "featured": false,
@@ -5445,6 +5597,7 @@
     {
       "id": "registry-ai-com-mcp-contabo",
       "name": "Contabo (VPS) MCP Server",
+      "icon": "https://github.com/la-rebelion.png?size=64",
       "description": "Contabo API (v1.0.0) as MCP tools for cloud provisioning, and management. Powered by HAPI MCP server",
       "category": "other",
       "featured": false,
@@ -5481,6 +5634,7 @@
     {
       "id": "mcpservers-maaakso-contexter-mcp",
       "name": "Contexter",
+      "icon": "https://github.com/maaakso.png?size=64",
       "description": "一个跨ChatGPT、Claude、Telegram及任何MCP客户端的共享项目上下文——保存重要内容，随处继续，与使用自己AI的人分享。",
       "category": "productivity",
       "featured": false,
@@ -5505,6 +5659,7 @@
     {
       "id": "registry-ai-autoblocks-contextlayer-mcp",
       "name": "contextlayer-mcp",
+      "icon": "https://github.com/autoblocksai.png?size=64",
       "description": "Personal context management for AI assistants",
       "category": "other",
       "featured": false,
@@ -5558,6 +5713,7 @@
     {
       "id": "registry-ai-cookiy-cookiy",
       "name": "Cookiy",
+      "icon": "https://github.com/cookiy-ai.png?size=64",
       "description": "AI user research via studies, interviews, recruitment, reports, and quantitative surveys.",
       "category": "other",
       "featured": false,
@@ -5595,6 +5751,7 @@
     {
       "id": "registry-ai-cosmonote-notes",
       "name": "Cosmonote",
+      "icon": "https://github.com/cosmonote.png?size=64",
       "description": "Access your Cosmonote audio notes, transcriptions, summaries, and action items.",
       "category": "other",
       "featured": false,
@@ -5664,6 +5821,7 @@
     {
       "id": "registry-ai-creationloop-creationloop",
       "name": "creationloop",
+      "icon": "https://github.com/marino129.png?size=64",
       "description": "CreationLoop is your Marketing Agent. Read the overview, offer, and FAQ; apply as a design partner.",
       "category": "other",
       "featured": false,
@@ -5681,6 +5839,7 @@
     {
       "id": "registry-ai-creativescope-creative-intelligence",
       "name": "CreativeScope — Mobile Game Ad Creative Intelligence",
+      "icon": "https://github.com/creativescope.png?size=64",
       "description": "Mobile-game ad creative intelligence across SDK ad networks: search, rankings, AI hook analysis.",
       "category": "other",
       "featured": false,
@@ -5698,6 +5857,7 @@
     {
       "id": "registry-ai-deinai-creator-skill",
       "name": "Creator SKILL — Influencer Discovery",
+      "icon": "https://github.com/deinai.png?size=64",
       "description": "AI influencer search on TikTok, Instagram, YouTube. Deinai MCP token required; credits per result.",
       "category": "other",
       "featured": false,
@@ -5717,6 +5877,7 @@
     {
       "id": "registry-ai-deinai-creator-skill-v2",
       "name": "Creator SKILL v2 — Influencer Discovery",
+      "icon": "https://github.com/deinai.png?size=64",
       "description": "SKILL-02 (not SKILL-01): AI influencer search on TikTok, Instagram & YouTube. sk_live_ token.",
       "category": "other",
       "featured": false,
@@ -5753,6 +5914,7 @@
     {
       "id": "mcpservers-csvbox-io-csvbox-mcp-server",
       "name": "CSVBox MCP Server",
+      "icon": "https://github.com/csvbox-io.png?size=64",
       "description": "用于创建、验证和管理CSVBox导入器及CSV数据工作流的MCP服务器。",
       "category": "development",
       "featured": false,
@@ -5847,6 +6009,7 @@
     {
       "id": "registry-ai-haymon-database",
       "name": "database",
+      "icon": "https://github.com/haymon-ai.png?size=64",
       "description": "Database MCP server for MySQL, MariaDB, PostgreSQL & SQLite",
       "category": "other",
       "featured": false,
@@ -5882,6 +6045,7 @@
     {
       "id": "mcpservers-aurelio-nakamura-dataloupe",
       "name": "dataloupe",
+      "icon": "https://github.com/aurelio-nakamura.png?size=64",
       "description": "离线MCP服务器，可查询CSV/Parquet/Excel/JSON文件并生成自包含的交互式HTML报告；由AI代理构建和维护。",
       "category": "database",
       "featured": false,
@@ -5906,6 +6070,7 @@
     {
       "id": "registry-ai-haymon-dbmcp",
       "name": "dbmcp",
+      "icon": "https://github.com/haymon-ai.png?size=64",
       "description": "Database MCP server for MySQL, MariaDB, PostgreSQL & SQLite with PII redaction and write-prevention",
       "category": "other",
       "featured": false,
@@ -5941,6 +6106,7 @@
     {
       "id": "registry-ai-decimal-registry",
       "name": "DecimalAI Skills Registry",
+      "icon": "https://github.com/decimal-labs.png?size=64",
       "description": "Search agent skills ranked by measured lift vs a no-skill baseline, with safety and rankings.",
       "category": "other",
       "featured": false,
@@ -6048,6 +6214,7 @@
     {
       "id": "registry-ai-diagramzu-mcp",
       "name": "DiagramZu",
+      "icon": "https://github.com/yenchieh.png?size=64",
       "description": "Let Claude, Cursor, or ChatGPT author Mermaid diagrams your team can read and share.",
       "category": "other",
       "featured": false,
@@ -6117,6 +6284,7 @@
     {
       "id": "registry-ai-djzs-trust-mcp",
       "name": "DJZS Trust MCP",
+      "icon": "https://github.com/SIFR0-dev.png?size=64",
       "description": "Deterministic pre-execution audit for trading agents. PASS/WAIT/FAIL, reproducible verdict_hash.",
       "category": "other",
       "featured": false,
@@ -6134,6 +6302,7 @@
     {
       "id": "registry-ac-tandem-docs-mcp",
       "name": "docs-mcp",
+      "icon": "https://github.com/frumu-ai.png?size=64",
       "description": "Remote MCP server for Tandem docs, install guides, SDKs, workflows, and agent setup help.",
       "category": "other",
       "featured": false,
@@ -6168,6 +6337,7 @@
     {
       "id": "registry-ai-filegraph-document-processing",
       "name": "document-processing",
+      "icon": "https://github.com/filegraph.png?size=64",
       "description": "Extract text from documents, manipulate PDFs, and perform OCR on images.",
       "category": "other",
       "featured": false,
@@ -6218,6 +6388,7 @@
     {
       "id": "registry-ai-imboard-dossier",
       "name": "dossier",
+      "icon": "https://github.com/imboard-ai.png?size=64",
       "description": "MCP server for dossier automation standard - enables LLMs to discover, verify, and execute dossiers",
       "category": "other",
       "featured": false,
@@ -6256,6 +6427,7 @@
     {
       "id": "registry-ai-doublespeed-mcp",
       "name": "doublespeed — Xcode as an API",
+      "icon": "https://github.com/doublespeed-main.png?size=64",
       "description": "Build, test and run iOS apps on a remote Mac from any machine. XcodeBuildMCP-compatible tools.",
       "category": "other",
       "featured": false,
@@ -6274,6 +6446,7 @@
     {
       "id": "registry-ai-dreamlit-mcp",
       "name": "Dreamlit",
+      "icon": "https://github.com/dreamlit-ai.png?size=64",
       "description": "Create, test, publish, and manage Dreamlit notification workflows from AI clients.",
       "category": "other",
       "featured": false,
@@ -6343,6 +6516,7 @@
     {
       "id": "registry-ai-dxpert-mcp",
       "name": "dxpert.ai — industrial AI-readiness & UNS agents",
+      "icon": "https://github.com/dxpert-ai.png?size=64",
       "description": "Industrial AI-readiness diagnostics, UNS design, and UNS agents for MCP clients.",
       "category": "other",
       "featured": false,
@@ -6379,6 +6553,7 @@
     {
       "id": "registry-ai-dynt-api-dynt",
       "name": "Dynt",
+      "icon": "https://github.com/bpais88.png?size=64",
       "description": "Company finances for agents: transactions, invoices, bills, expenses, subscriptions, receipts.",
       "category": "other",
       "featured": false,
@@ -6414,6 +6589,7 @@
     {
       "id": "registry-ai-elicitly-elicitly",
       "name": "Elicitly",
+      "icon": "https://github.com/elicitly.png?size=64",
       "description": "Human-in-the-loop for AI agents over MCP elicitation: confirm/form dialogs plus a capability doctor",
       "category": "other",
       "featured": false,
@@ -6428,12 +6604,12 @@
       ],
       "catalogUpdatedAt": "2026-08-23T16:52:21.070583Z",
       "catalogIdentity": "elicitly",
-      "icon": "https://www.elicitly.ai/favicon.svg",
       "catalogTags": []
     },
     {
       "id": "registry-ai-byteask-embedded-docs",
       "name": "embedded-docs",
+      "icon": "https://github.com/ByteAsk.png?size=64",
       "description": "Page-cited retrieval for embedded docs, datasheets, MISRA, CMSIS, and RTOS references.",
       "category": "other",
       "featured": false,
@@ -6469,6 +6645,7 @@
     {
       "id": "registry-ai-argushq-enforcement-database",
       "name": "enforcement-database",
+      "icon": "https://github.com/andrewjgaber-commits.png?size=64",
       "description": "Search Argus HQ public FDA enforcement data: warning letters, recalls, approvals, 483s.",
       "category": "other",
       "featured": false,
@@ -6486,6 +6663,7 @@
     {
       "id": "registry-ai-entityenricher-enricher",
       "name": "Entity Enricher",
+      "icon": "https://github.com/TOT-Concept.png?size=64",
       "description": "Multi-LLM entity enrichment: schemas, single/batch enrichment, fusion, model benchmarks.",
       "category": "other",
       "featured": false,
@@ -6520,6 +6698,7 @@
     {
       "id": "registry-ai-eonik-mcp",
       "name": "eonik",
+      "icon": "https://github.com/eonik-ai.png?size=64",
       "description": "Read brand, research, and performance facts; draft briefs. Never spends. You approve every cut.",
       "category": "other",
       "featured": false,
@@ -6555,6 +6734,7 @@
     {
       "id": "registry-ai-epinu-epinu",
       "name": "Epinu",
+      "icon": "https://github.com/CMS87.png?size=64",
       "description": "Agent-first marketplace for real-world assets — agro and energy first; humans approve every write.",
       "category": "other",
       "featured": false,
@@ -6572,6 +6752,7 @@
     {
       "id": "registry-ai-etincel-etincel-nonfiction",
       "name": "etincel-nonfiction",
+      "icon": "https://github.com/AIStoryHub.png?size=64",
       "description": "Trainable non-fiction writing voice, presets, and an anti-AI-tells audit for Claude, via MCP.",
       "category": "other",
       "featured": false,
@@ -6591,6 +6772,7 @@
     {
       "id": "registry-ai-everway-everway-mcp-server",
       "name": "Everway MCP Server",
+      "icon": "https://github.com/everway-ai.png?size=64",
       "description": "Read and update your Everway trips and itineraries from any MCP-compatible AI assistant.",
       "category": "other",
       "featured": false,
@@ -6632,6 +6814,7 @@
     {
       "id": "mcpservers-blankcut-kubernetes-mcp-server",
       "name": "Kubernetes MCP Server",
+      "icon": "https://github.com/blankcut.png?size=64",
       "description": "一个用Go构建的Claude Kubernetes MCP服务器，集成了ArgoCD、GitLab、Claude AI和Kubernetes，实现对Kubernetes环境的高级控制与自动化。",
       "category": "version-control",
       "featured": false,
@@ -6685,6 +6868,7 @@
     {
       "id": "mcpservers-memstate-ai",
       "name": "Memstate AI",
+      "icon": "https://github.com/memstate-ai.png?size=64",
       "description": "具备类Git版本控制的智能体记忆。自定义LLM将对话转化为结构化事实，并自动检测冲突——智能体可追溯决策演变过程，而非面对四段矛盾文本。相比RAG/图谱系统减少80%令牌消耗。支持MCP+REST协议。",
       "category": "version-control",
       "featured": false,
@@ -6732,6 +6916,7 @@
     {
       "id": "mcpservers-aakarim-openlore",
       "name": "OpenLore",
+      "icon": "https://github.com/aakarim.png?size=64",
       "description": "面向智能体的知识服务器。通过SSH和MCP向AI代理提供文档，支持身份范围视图、受控写入和结构化元数据。单一二进制，零配置。",
       "category": "memory",
       "featured": false,
@@ -6756,6 +6941,7 @@
     {
       "id": "mcpservers-packy-tracking-packy-tracking-mcp",
       "name": "Packy Tracking MCP",
+      "icon": "https://github.com/packy-tracking.png?size=64",
       "description": "多承运商包裹追踪",
       "category": "other",
       "featured": false,
@@ -6778,6 +6964,7 @@
     {
       "id": "mcpservers-afiliptsov-pickadive-mcp",
       "name": "PickADive Scuba Diving",
+      "icon": "https://github.com/afiliptsov.png?size=64",
       "description": "实时水肺潜水规划：任意地点附近的预报窗口、最佳时节气候、海洋生物季节，以及4,800多个潜点的事实信息——免费、只读、无需认证。",
       "category": "search",
       "featured": false,
@@ -6870,6 +7057,7 @@
     {
       "id": "mcpservers-kinerette-uxgen-commerce-kit",
       "name": "uxgen",
+      "icon": "https://github.com/kinerette.png?size=64",
       "description": "托管式MCP，为编码代理提供电商转化机制：数量折扣、免邮门槛、订单追加和粘性加购，并附带欧盟规则。",
       "category": "design",
       "featured": false,
@@ -6937,6 +7125,7 @@
     {
       "id": "mcpservers-bryntay-a1-mcp",
       "name": "A1 Gallery",
+      "icon": "https://github.com/bryntay.png?size=64",
       "description": "按风格、字体、颜色、版块和测定的设计令牌搜索1,145个真实网站设计。",
       "category": "design",
       "featured": false,
@@ -6959,6 +7148,7 @@
     {
       "id": "mcpservers-sofiia7-actually",
       "name": "Actually",
+      "icon": "https://github.com/Sofiia7.png?size=64",
       "description": "将任意新闻文本映射到其相关的Polymarket市场，并返回该市场自身的概率。",
       "category": "finance",
       "featured": false,
@@ -7095,6 +7285,7 @@
     {
       "id": "mcpservers-github-com-agency-ai-dev-agency-ai-mcp-blob-main-readme-md",
       "name": "Agency AI",
+      "icon": "https://github.com/agency-ai-dev.png?size=64",
       "description": "Agency AI MCP将Claude和ChatGPT转变为Meta（Facebook、Instagram）和Google广告账户的完整广告管理器。",
       "category": "marketing",
       "featured": false,
@@ -7140,6 +7331,7 @@
     {
       "id": "mcpservers-liuboacean-agent-comm-hub",
       "name": "agent-comm-hub",
+      "icon": "https://github.com/liuboacean.png?size=64",
       "description": "生产级多智能体通信MCP服务器，基于MCP+SSE提供58个工具——实时消息、任务调度、共享内存及基于信任的进化引擎。SQLite WAL持久化，四级RBAC，零依赖Python/TypeScript SDK。",
       "category": "communication",
       "featured": false,
@@ -7163,6 +7355,7 @@
     {
       "id": "mcpservers-flovoice53-tech-agent-identity-mcp",
       "name": "agent-identity-mcp",
+      "icon": "https://github.com/flovoice53-tech.png?size=64",
       "description": "为AI代理提供一个一次性邮箱和一个真实的英国电话号码，用于端到端测试注册/验证流程。",
       "category": "communication",
       "featured": false,
@@ -7186,6 +7379,7 @@
     {
       "id": "mcpservers-laiye-adp-adp-mcp-nodejs",
       "name": "Agentic Document Parsing and Extraction (ADP)",
+      "icon": "https://github.com/Laiye-ADP.png?size=64",
       "description": "ADP自动对海外发票、国内凭证、采购合同、物流单据、财务报表及贸易合同进行分类，并精准提取关键字段。同时支持表格解析、内容校验及多语种识别。无需模板配置、数据标注或持续规则维护，即可高效处理大批量文档任务。",
       "category": "file-system",
       "featured": false,
@@ -7210,6 +7404,7 @@
     {
       "id": "mcpservers-ariaxhan-agentmailkit",
       "name": "agentmailkit",
+      "icon": "https://github.com/ariaxhan.png?size=64",
       "description": "本地优先的定时邮件摘要，由LLM根据RSS、网络和本地来源撰写，默认进行试运行。",
       "category": "communication",
       "featured": false,
@@ -7234,6 +7429,7 @@
     {
       "id": "mcpservers-zapnikita95-agentpay-mcp",
       "name": "AgentPay",
+      "icon": "https://github.com/zapnikita95.png?size=64",
       "description": "面向俄罗斯AI代理的商户目录：search_products和get_product从白名单专业商店返回价格、库存和ProductCard。受控结账，设有消费限额。远程MCP https://agentpay.shop/ap/mcp。运营商ООО НЕКСУС-ТЕХ。非x402/加密货币。",
       "category": "search",
       "featured": false,
@@ -7257,6 +7453,7 @@
     {
       "id": "mcpservers-yinnho-aginxbrowser",
       "name": "AginxBrowser",
+      "icon": "https://github.com/yinnho.png?size=64",
       "description": "Agent优先的浏览器服务器：单个Rust二进制文件，内置V8，无需Chromium。14个MCP工具（抓取/搜索/点击/截图/下载 + 持久会话），具备隐身TLS指纹。",
       "category": "web-scraping",
       "featured": false,
@@ -7279,6 +7476,7 @@
     {
       "id": "mcpservers-web3-plurality-plurality-mcp-server",
       "name": "AI Context Flow",
+      "icon": "https://github.com/Web3-Plurality.png?size=64",
       "description": "为Claude、Cursor和ChatGPT提供持久记忆。跨所有AI工具保存、整理和搜索你的上下文。",
       "category": "memory",
       "featured": false,
@@ -7418,6 +7616,7 @@
     {
       "id": "mcpservers-samayhuf-star-all-apis-gateway",
       "name": "All APIs Gateway",
+      "icon": "https://github.com/samayhuf-star.png?size=64",
       "description": "Web智能API网关：17个API以20个MCP工具形式提供，用于SEO和抓取。按次付费，通过USDC结算。",
       "category": "web-scraping",
       "featured": false,
@@ -7459,6 +7658,7 @@
     {
       "id": "mcpservers-jerponhr-alun-alun",
       "name": "Alun-alun",
+      "icon": "https://github.com/JerponHR.png?size=64",
       "description": "面向AI代理的印尼语公共广场，设有每日限额和公开行动账本。",
       "category": "communication",
       "featured": false,
@@ -7499,6 +7699,7 @@
     {
       "id": "mcpservers-pyalgobot-angelone-mcp-git",
       "name": "angelone-mcp",
+      "icon": "https://github.com/pyalgobot.png?size=64",
       "description": "一个封装了Angel One SmartAPI的MCP（模型上下文协议）服务器，提供交易、投资组合、市场数据、GTT规则以及保证金/经纪服务。",
       "category": "finance",
       "featured": false,
@@ -7521,6 +7722,7 @@
     {
       "id": "mcpservers-bobbyseamoss-apillow-mcp",
       "name": "apillow-mcp",
+      "icon": "https://github.com/bobbyseamoss.png?size=64",
       "description": "面向AI代理的Zillow房产数据——按城市或邮政编码搜索房源，查询任意美国地址，获取每个房产的50多个字段，包括价格、Zestimate估值、价格历史及成交数据。",
       "category": "web-scraping",
       "featured": false,
@@ -7544,6 +7746,7 @@
     {
       "id": "mcpservers-apiself-apiself-mcp",
       "name": "APISelf",
+      "icon": "https://github.com/apiself.png?size=64",
       "description": "本地桌面应用作为MCP工具，从您自己机器上的一个端点提供服务",
       "category": "other",
       "featured": false,
@@ -7582,6 +7785,7 @@
     {
       "id": "mcpservers-zelentsov-dev-apple-ads-mcp",
       "name": "Apple Ads MCP",
+      "icon": "https://github.com/zelentsov-dev.png?size=64",
       "description": "本地优先的MCP服务器，用于从Claude、Codex及其他MCP客户端进行Apple Ads研究、优化和基于收据验证的App Store广告系列管理。",
       "category": "marketing",
       "featured": false,
@@ -7605,6 +7809,7 @@
     {
       "id": "mcpservers-parasxos-apple-mail-mcp",
       "name": "Apple Mail",
+      "icon": "https://github.com/parasxos.png?size=64",
       "description": "通过Apple Mail搜索、阅读、分类和发送邮件，利用Mail自带的SQLite索引实现亚毫秒级全文搜索，支持发送验证及Exchange正文回填。",
       "category": "communication",
       "featured": false,
@@ -7628,6 +7833,7 @@
     {
       "id": "mcpservers-techhorizonlabs-foundbyai-mcp",
       "name": "Are you found by AI?",
+      "icon": "https://github.com/techhorizonlabs.png?size=64",
       "description": "针对企业在7个答案引擎（ChatGPT、Claude、Gemini、Perplexity、Grok、DeepSeek、Google AI Overviews）中的实时AI可见性测量，可由所有者自己的AI查询；公开演示位于areyoufoundbyai.com/mcp/demo。",
       "category": "marketing",
       "featured": false,
@@ -7670,6 +7876,7 @@
     {
       "id": "mcpservers-askanuradha-mcp-server-atlassian-bitbucket",
       "name": "Atlassian Bitbucket",
+      "icon": "https://github.com/askanuradha.png?size=64",
       "description": "与Atlassian Bitbucket Cloud交互，管理仓库、拉取请求、工作区和代码。",
       "category": "version-control",
       "featured": false,
@@ -7800,6 +8007,7 @@
     {
       "id": "mcpservers-aws-samples-sample-mcp-server-s3",
       "name": "AWS S3",
+      "icon": "https://github.com/aws-samples.png?size=64",
       "description": "从 AWS S3 存储桶中检索 PDF 等文件。需要 AWS 凭证才能访问。",
       "category": "cloud-storage",
       "featured": false,
@@ -7839,6 +8047,7 @@
     {
       "id": "mcpservers-johnsmalls22-rgb-backlinkmcp-server",
       "name": "BacklinkMCP",
+      "icon": "https://github.com/johnsmalls22-rgb.png?size=64",
       "description": "远程MCP，用于域名权威度、引荐域名、竞争对手链接差距、有害链接审查以及实时首页验证。",
       "category": "marketing",
       "featured": false,
@@ -8021,6 +8230,7 @@
     {
       "id": "mcpservers-pdogra1299-bitbucket-mcp-server",
       "name": "Bitbucket",
+      "icon": "https://github.com/pdogra1299.png?size=64",
       "description": "通过 Bitbucket API 管理 Bitbucket 仓库、拉取请求和流水线，支持 Cloud 和 Server 版本。",
       "category": "version-control",
       "featured": false,
@@ -8165,6 +8375,7 @@
     {
       "id": "mcpservers-brandfetch-brandfetch-mcp-server",
       "name": "brandfetch MCP",
+      "icon": "https://github.com/Brandfetch.png?size=64",
       "description": "用于连接Brandfetch服务的MCP服务器",
       "category": "design",
       "featured": false,
@@ -8186,6 +8397,7 @@
     {
       "id": "mcpservers-github-com-kochetkov-ma-brewpage-openapi-tree-main-mcp-server",
       "name": "brewpage-mcp",
+      "icon": "https://github.com/kochetkov-ma.png?size=64",
       "description": "将HTML、Markdown、KV、JSON、文件从AI助手发布到brewpage.app。",
       "category": "cloud-storage",
       "featured": false,
@@ -8227,6 +8439,7 @@
     {
       "id": "mcpservers-bunkerity-bunkerweb-mcp",
       "name": "BunkerWeb MCP",
+      "icon": "https://github.com/bunkerity.png?size=64",
       "description": "BunkerWeb 部署的官方 MCP 服务器，供 AI 助手管理实例、服务、配置、封禁、插件、任务和缓存。",
       "category": "cloud-service",
       "featured": false,
@@ -8440,6 +8653,7 @@
     {
       "id": "mcpservers-cdatasoftware-bitbucket-mcp-server-by-cdata",
       "name": "CData Bitbucket",
+      "icon": "https://github.com/CDataSoftware.png?size=64",
       "description": "一个用于Bitbucket的只读MCP服务器，使LLM能够通过CData JDBC驱动程序查询实时数据。",
       "category": "version-control",
       "featured": false,
@@ -8480,6 +8694,7 @@
     {
       "id": "mcpservers-aadilr-changethisfile-mcp",
       "name": "ChangeThisFile",
+      "icon": "https://github.com/aadilr.png?size=64",
       "description": "免费文件转换，支持999种路径（图片、视频、音频、文档、数据、字体、电子书、压缩包）——无需API密钥。",
       "category": "file-system",
       "featured": false,
@@ -8557,6 +8772,7 @@
     {
       "id": "mcpservers-equinoxaifinance-rgb-civicdataforge-mcp",
       "name": "CivicDataForge Government Evidence",
+      "icon": "https://github.com/equinoxaifinance-rgb.png?size=64",
       "description": "基于来源的政府记录证据，涵盖财产、医疗保健、设施、挪威及路由。",
       "category": "search",
       "featured": false,
@@ -8651,6 +8867,7 @@
     {
       "id": "mcpservers-fmg75-cli-revit",
       "name": "CLI_Revit",
+      "icon": "https://github.com/fmg75.png?size=64",
       "description": "面向Revit/BIM自动化的令牌高效MCP框架——搜索并运行160多个脚本，而非逐个暴露工具。",
       "category": "design",
       "featured": false,
@@ -8750,6 +8967,7 @@
     {
       "id": "mcpservers-felores-cloudinary-mcp-server",
       "name": "Cloudinary MCP Server",
+      "icon": "https://github.com/felores.png?size=64",
       "description": "从兼容的MCP客户端上传图片和视频到Cloudinary。",
       "category": "cloud-storage",
       "featured": false,
@@ -8767,7 +8985,6 @@
       ],
       "catalogUpdatedAt": "2025-03-13T16:53:36.000Z",
       "catalogIdentity": "cloudinary",
-      "icon": "https://svgl.app/library/cloudinary.svg",
       "catalogRemoteUrl": "https://mcpservers.org/zh-CN/remote-mcp-servers/cloudinary",
       "catalogDirectoryUrl": "https://mcpservers.org/zh-CN/servers/felores/cloudinary-mcp-server",
       "catalogRegistered": false,
@@ -8776,6 +8993,7 @@
     {
       "id": "mcpservers-colinvaughn-codegraph",
       "name": "CodeGraph",
+      "icon": "https://github.com/ColinVaughn.png?size=64",
       "description": "跨语言代码图谱提取与可视化——支持34种以上语言的符号、调用图及跨仓库关系，具备增量缓存与联邦支持。",
       "category": "file-system",
       "featured": false,
@@ -8835,6 +9053,7 @@
     {
       "id": "mcpservers-ys-projectcalc-agent-cold-email",
       "name": "Coldrig (agent-cold-email)",
+      "icon": "https://github.com/YS-projectcalc.png?size=64",
       "description": "代理运营的冷邮件基础设施：域名、邮箱、预热、活动、回复，以及由服务器强制执行的护栏，统一通过一个承载令牌管理（28个MCP/HTTP工具，托管MCP服务器 + npm CLI，免费沙箱）。",
       "category": "marketing",
       "featured": false,
@@ -8858,6 +9077,7 @@
     {
       "id": "mcpservers-capsterasupport-worthune-sdk",
       "name": "com.worthune/models",
+      "icon": "https://github.com/CapsteraSupport.png?size=64",
       "description": "55个经一致性检验的金融模型，附有已发布的规格说明；回复中会引用假设和来源。",
       "category": "finance",
       "featured": false,
@@ -8880,6 +9100,7 @@
     {
       "id": "mcpservers-monglong0214-commitlore",
       "name": "CommitLore",
+      "icon": "https://github.com/MongLong0214.png?size=64",
       "description": "面向编码代理的Git原生决策记忆，以Git尾注和引用/注释形式存储。",
       "category": "version-control",
       "featured": false,
@@ -8920,6 +9141,7 @@
     {
       "id": "mcpservers-rudrendupaul-computeledger",
       "name": "ComputeLedger",
+      "icon": "https://github.com/RudrenduPaul.png?size=64",
       "description": "通过MCP工具对计算使用收据进行签名、哈希链式处理及验证，无需信任签发方。",
       "category": "cloud-service",
       "featured": false,
@@ -9012,6 +9234,7 @@
     {
       "id": "mcpservers-convertica-net-convertica-mcp",
       "name": "Convertica MCP Server",
+      "icon": "https://github.com/convertica-net.png?size=64",
       "description": "将PDF、Word、Excel、PowerPoint、EPUB、HEIC及图片从Claude或Cursor转换，仅通过两个MCP工具即可使用35种转换器。",
       "category": "file-system",
       "featured": false,
@@ -9035,6 +9258,7 @@
     {
       "id": "mcpservers-wesselsrepository-cookiefreeanalytics-mcp",
       "name": "Cookie Free Analytics",
+      "icon": "https://github.com/WesselsRepository.png?size=64",
       "description": "无Cookie网页分析MCP。网站、页面、来源、实时、漏斗。欧盟托管，GDPR合规。仅供Claude/Cursor只读访问。",
       "category": "marketing",
       "featured": false,
@@ -9094,6 +9318,7 @@
     {
       "id": "mcpservers-filippopilo-cortex-connector",
       "name": "Cortex",
+      "icon": "https://github.com/FilippoPilo.png?size=64",
       "description": "为AI助手提供持久化语义记忆——一个远程MCP服务器，具备服务端质量门控，可拒绝冗余写入（生产环境中约80%），并将矛盾追踪为一等对象。",
       "category": "memory",
       "featured": false,
@@ -9212,6 +9437,7 @@
     {
       "id": "mcpservers-mysleekdesigns-crawlforge-mcp",
       "name": "Crawlforge MCP",
+      "icon": "https://github.com/mysleekdesigns.png?size=64",
       "description": "为Claude、Cursor及任何MCP客户端提供28个MCP原生网络工具：抓取和爬取为干净Markdown或模式驱动JSON，用CSS选择器或纯英语提取，检查真实Google自然排名，解析文档，监控页面变化，运行多源深度研究，并向自主代理提供无URL的提示。LLM提取默认使用本地Ollama——无需LLM密钥，数据不离开您的机器。MIT许可。提供1,000次免费一次性额度，无需银行卡。",
       "category": "web-scraping",
       "featured": false,
@@ -9253,6 +9479,7 @@
     {
       "id": "mcpservers-crm-solid-crmsolid-mcp",
       "name": "CRM Solid",
+      "icon": "https://github.com/CRM-Solid.png?size=64",
       "description": "跨12个网络的社交私信收件箱和帖子排程，由Claude、Cursor或ChatGPT驱动。",
       "category": "communication",
       "featured": false,
@@ -9348,6 +9575,7 @@
     {
       "id": "mcpservers-geek-fun-data-studio-agent",
       "name": "Data Studio Agent",
+      "icon": "https://github.com/geek-fun.png?size=64",
       "description": "统一MCP服务器，让AI编程代理直接访问你的数据库：通过SqlKit支持70多种SQL数据库（PostgreSQL、MySQL、SQL Server、SQLite、ClickHouse、Snowflake、BigQuery），通过DocKit支持NoSQL数据库（Elasticsearch、MongoDB、DynamoDB）。本地优先：凭据永不离开你的机器，默认只读，共79个工具。",
       "category": "database",
       "featured": false,
@@ -9431,6 +9659,7 @@
     {
       "id": "mcpservers-developerz-ai-db-mcp-gateway",
       "name": "db-mcp-gateway",
+      "icon": "https://github.com/developerz-ai.png?size=64",
       "description": "让AI代理获得数据库访问权限，而无需交出数据库URL",
       "category": "database",
       "featured": false,
@@ -9474,6 +9703,7 @@
     {
       "id": "mcpservers-nirholas-defi-agents",
       "name": "DeFI Agents MCP",
+      "icon": "https://github.com/nirholas.png?size=64",
       "description": "DeFi代理定义JSON API - 适用于Web3、加密货币交易、投资组合管理和区块链自动化的生产级代理",
       "category": "cloud-storage",
       "featured": false,
@@ -9516,6 +9746,7 @@
     {
       "id": "mcpservers-yash-neural-depverse",
       "name": "Depverse",
+      "icon": "https://github.com/yash-neural.png?size=64",
       "description": "为AI编程代理提供实时npm和PyPI包版本、元数据及依赖信息的MCP服务器。",
       "category": "version-control",
       "featured": false,
@@ -9628,6 +9859,7 @@
     {
       "id": "mcpservers-spranab-discord-mcp",
       "name": "discord-mcp",
+      "icon": "https://github.com/spranab.png?size=64",
       "description": "通过AI助手运行Discord服务器——一个分层MCP工具背后支持30多项操作。",
       "category": "communication",
       "featured": false,
@@ -9709,6 +9941,7 @@
     {
       "id": "mcpservers-firdausmntp-dokumen-pintar",
       "name": "Dokumen-Pintar",
+      "icon": "https://github.com/firdausmntp.png?size=64",
       "description": "62个格式感知工具，让AI精准读写Word、Excel和PDF文件——外加符合印尼标准的学术文档检查功能。",
       "category": "file-system",
       "featured": false,
@@ -9732,6 +9965,7 @@
     {
       "id": "mcpservers-johnsmalls22-rgb-domain-search-king-mcp",
       "name": "Domain Search King",
+      "icon": "https://github.com/johnsmalls22-rgb.png?size=64",
       "description": "为需要真实域名可用性的AI代理提供的MCP服务器——通过Verisign RDAP在查询时验证.com域名是否免费，而非AI猜测的列表。",
       "category": "search",
       "featured": false,
@@ -9772,6 +10006,7 @@
     {
       "id": "mcpservers-dorylab-dory",
       "name": "Dory MCP Server",
+      "icon": "https://github.com/dorylab.png?size=64",
       "description": "在不使用桌面客户端的情况下运行Dory，它是MCP服务器、自动化以及直接Dory Action执行的独立入口。",
       "category": "database",
       "featured": false,
@@ -9792,6 +10027,7 @@
     {
       "id": "mcpservers-adsytd1-dosai-api",
       "name": "DOS AI",
+      "icon": "https://github.com/adsytd1.png?size=64",
       "description": "用于管理WhatsApp和Telegram AI助手的远程MCP服务器：项目、提示词、对话、线索和分析，设计上不包含破坏性工具。",
       "category": "communication",
       "featured": false,
@@ -9834,6 +10070,7 @@
     {
       "id": "mcpservers-ltspace-dowse",
       "name": "dowse",
+      "icon": "https://github.com/ltspace.png?size=64",
       "description": "针对Windows文件的快速本地全文搜索——文件名、内容及OCR截图文本；只读MCP工具。",
       "category": "file-system",
       "featured": false,
@@ -9879,6 +10116,7 @@
     {
       "id": "mcpservers-craigvg-drillerdb-mcp",
       "name": "DrillerDB",
+      "icon": "https://github.com/CraigVG.png?size=64",
       "description": "面向水井和钻井承包商的远程MCP服务器：查询并操作作业、客户、发票、施工队、日程及钻井日志。",
       "category": "productivity",
       "featured": false,
@@ -9902,6 +10140,7 @@
     {
       "id": "mcpservers-editmamei-editmamei",
       "name": "Editmamei",
+      "icon": "https://github.com/editmamei.png?size=64",
       "description": "面向Adobe Photoshop的自然语言接口，作为本地MCP服务器运行，负责规划编辑操作并使用Photoshop原生工具执行，而非生成像素。",
       "category": "design",
       "featured": false,
@@ -9940,6 +10179,7 @@
     {
       "id": "mcpservers-mshanghai570-l-dopa",
       "name": "El-Dopa",
+      "icon": "https://github.com/mshanghai570.png?size=64",
       "description": "一个MCP服务器，帮助AI代理恢复状态、重新聚焦，并高效完成任务。",
       "category": "development",
       "featured": false,
@@ -10002,6 +10242,7 @@
     {
       "id": "mcpservers-human01-io-enviadores-mcp",
       "name": "Enviadores",
+      "icon": "https://github.com/human01-io.png?size=64",
       "description": "墨西哥多承运商物流（Estafeta、DHL、FedEx、Paquetexpress）：预付费余额上的实时费率、标签、追踪和地址簿。远程MCP：https://api.enviadores.com.mx/api/v1/mcp",
       "category": "cloud-service",
       "featured": false,
@@ -10023,6 +10264,7 @@
     {
       "id": "mcpservers-daniel3303-equibles",
       "name": "Equibles",
+      "icon": "https://github.com/daniel3303.png?size=64",
       "description": "来自主要监管来源的、面向AI代理的自托管美国市场数据：包含全文和语义搜索的SEC文件、XBRL基本面数据、13F机构持仓、内部人士及国会交易、空头持仓、FRED宏观数据以及每日价格。",
       "category": "finance",
       "featured": false,
@@ -10127,6 +10369,7 @@
     {
       "id": "mcpservers-saravananjaichandar-etch-mcp",
       "name": "Etch",
+      "icon": "https://github.com/SaravananJaichandar.png?size=64",
       "description": "AI代理决策的签名审计链，可离线对照固定公钥进行验证。每个事件均使用混合Ed25519 + FIPS 205 SLH-DSA-SHA2-128f信封签名，经Merkle链纳入一个纪元，并在Sigstore Rekor + Bitcoin OpenTimestamps上锚定纪元。",
       "category": "other",
       "featured": false,
@@ -10225,6 +10468,7 @@
     {
       "id": "registry-ai-explorium-mcp-explorium",
       "name": "Explorium",
+      "icon": "https://github.com/explorium-ai.png?size=64",
       "description": "B2B客户开发，数据丰富",
       "category": "other",
       "featured": false,
@@ -10299,6 +10543,7 @@
     {
       "id": "mcpservers-bekservice-famulor-mcp",
       "name": "Famulor",
+      "icon": "https://github.com/bekservice.png?size=64",
       "description": "管理AI助手、全渠道历史记录、通话、营销活动、消息、知识库和自动化。",
       "category": "communication",
       "featured": false,
@@ -10365,6 +10610,7 @@
     {
       "id": "mcpservers-mediafire-fastio-cli",
       "name": "Fast.io",
+      "icon": "https://github.com/MediaFire.png?size=64",
       "description": "AI优先的文件共享与协作。251个MCP工具为智能体提供完整工作空间：文件存储、品牌化分享、评论、工作流及内置RAG。50GB免费，无需信用卡。",
       "category": "cloud-storage",
       "featured": false,
@@ -10430,6 +10676,7 @@
     {
       "id": "mcpservers-fatenava-fatenava-mcp",
       "name": "fatenava-mcp",
+      "icon": "https://github.com/fatenava.png?size=64",
       "description": "All-in-one destiny charting: BaZi (八字/四柱推命/사주), Zi Wei Dou Shu (紫微斗數), and Western astrology natal charts in one tool — true solar time correction, multilingual input (中文/EN/日本語/한국어), free, no account required. `npx -y fatenava-mcp`",
       "category": "other",
       "featured": false,
@@ -10470,6 +10717,7 @@
     {
       "id": "registry-ai-featureboard-featureboard",
       "name": "FeatureBoard",
+      "icon": "https://github.com/valentil.png?size=64",
       "description": "Local-first project board MCP: an AI agent plans, works, verifies, and ships tickets from markdown.",
       "category": "other",
       "featured": false,
@@ -10521,6 +10769,7 @@
     {
       "id": "mcpservers-feednest-app-mcp",
       "name": "FeedNest",
+      "icon": "https://github.com/feednest-app.png?size=64",
       "description": "您精选的信息源（RSS、YouTube、播客、Google新闻）作为任何AI代理的上下文：26种工具，用于阅读、搜索、保存、标记、高亮和注释您的订阅源。",
       "category": "productivity",
       "featured": false,
@@ -10597,6 +10846,7 @@
     {
       "id": "registry-ai-fiber-mcp",
       "name": "Fiber AI",
+      "icon": "https://github.com/fiber-ai.png?size=64",
       "description": "Search companies, enrich contacts, and reveal emails and phones from your AI agent.",
       "category": "other",
       "featured": false,
@@ -10614,6 +10864,7 @@
     {
       "id": "mcpservers-planetabhi-figma-mcp-server",
       "name": "Figma MCP Server",
+      "icon": "https://github.com/planetabhi.png?size=64",
       "description": "一个本地 Figma MCP 服务器，完整覆盖 Figma REST API。",
       "category": "design",
       "featured": false,
@@ -10630,7 +10881,6 @@
       ],
       "catalogUpdatedAt": "2026-08-07T22:01:20.412Z",
       "catalogIdentity": "figma",
-      "icon": "https://svgl.app/library/figma.svg",
       "catalogRemoteUrl": "https://mcpservers.org/zh-CN/remote-mcp-servers/figma",
       "catalogDirectoryUrl": "https://mcpservers.org/zh-CN/servers/planetabhi/figma-mcp-server",
       "catalogRegistered": false,
@@ -10691,6 +10941,7 @@
     {
       "id": "registry-ai-financegenius-financegenius",
       "name": "FinanceGenius.AI",
+      "icon": "https://github.com/financegenius-ai.png?size=64",
       "description": "India's financial MCP — cards, loans, FDs, insurance, MFs; EMI/SIP/tax calcs; NAV lookup; RAG.",
       "category": "other",
       "featured": false,
@@ -10795,6 +11046,7 @@
     {
       "id": "mcpservers-kapella-hub-firekeephq",
       "name": "Firekeep",
+      "icon": "https://github.com/kapella-hub.png?size=64",
       "description": "源代码可用的、自托管的共享内存、工作上下文、协调与证据，适用于Claude Code、Codex、Kiro、OpenCode及MCP客户端。",
       "category": "memory",
       "featured": false,
@@ -10854,6 +11106,7 @@
     {
       "id": "mcpservers-flight-queue-mcp",
       "name": "FlightQueue",
+      "icon": "https://github.com/Flight-Queue.png?size=64",
       "description": "机场安检等待时间与预测、FAA延误、EES边境排队、休息室及航空公司行李统计，覆盖8,000多个机场。",
       "category": "other",
       "featured": false,
@@ -10875,6 +11128,7 @@
     {
       "id": "mcpservers-flightseatmap-mcp",
       "name": "FlightSeatMap",
+      "icon": "https://github.com/FlightSeatmap.png?size=64",
       "description": "150多家航空公司的座位图、座位评分、旅客评论和座位提醒。",
       "category": "other",
       "featured": false,
@@ -10913,6 +11167,7 @@
     {
       "id": "registry-ai-flowcastle-flowcastle",
       "name": "FlowCastle",
+      "icon": "https://github.com/FlowCastle.png?size=64",
       "description": "Build, edit, and deploy Telegram bots on FlowCastle's hosted visual flow platform.",
       "category": "other",
       "featured": false,
@@ -11062,6 +11317,7 @@
     {
       "id": "mcpservers-github-com-helena-bioinformatics-folklore-mcp-releases-tag-folklore-mcp-v1-4-0",
       "name": "Folklore Clinical Variant Interpretation MCP 1.4.0",
+      "icon": "https://github.com/helena-bioinformatics.png?size=64",
       "description": "公共只读胚系变异解读、ACMG/AMP证据和文献MCP，带有明确选择加入的Helena Good支持发现工具。",
       "category": "other",
       "featured": false,
@@ -11085,6 +11341,7 @@
     {
       "id": "mcpservers-ddevetak-footballcharts-mcp",
       "name": "Football Charts",
+      "icon": "https://github.com/ddevetak.png?size=64",
       "description": "93个足球联赛的积分榜、赛果、赛程、模型概率及每日蒙特卡洛赛季预测。",
       "category": "cloud-service",
       "featured": false,
@@ -11147,6 +11404,7 @@
     {
       "id": "registry-ai-framethrower-framethrower",
       "name": "FrameThrower",
+      "icon": "https://github.com/framethrower-ai.png?size=64",
       "description": "Film stills from 5,489 films, searchable by lighting, lens character, shot size, colour and mood.",
       "category": "other",
       "featured": false,
@@ -11164,6 +11422,7 @@
     {
       "id": "mcpservers-datpascal-frankki-mcp",
       "name": "FrankKi",
+      "icon": "https://github.com/datPascal.png?size=64",
       "description": "智能体通过托管的远程MCP服务器，在全球范围内发送真实打印信件，并提供报价、预览、审批控制和跟踪功能。",
       "category": "communication",
       "featured": false,
@@ -11187,6 +11446,7 @@
     {
       "id": "mcpservers-gsterlingpress-fresh-api",
       "name": "FRESH",
+      "icon": "https://github.com/GSterlingPress.png?size=64",
       "description": "判断AI代理在再次检索URL之前，应复用还是重新获取该URL。",
       "category": "web-scraping",
       "featured": false,
@@ -11207,6 +11467,7 @@
     {
       "id": "mcpservers-kurtzhi-fsext-mcp-server-java",
       "name": "fsext-mcp-server-java",
+      "icon": "https://github.com/kurtzhi.png?size=64",
       "description": "Fsext-MCP-Server(Java)：一个功能全面且安全的MCP服务器，用于本地文件系统操作，内置图像处理、OCR和媒体工具。",
       "category": "file-system",
       "featured": false,
@@ -11229,6 +11490,7 @@
     {
       "id": "mcpservers-kurtzhi-fsext-mcp-server-python",
       "name": "fsext-mcp-server-python",
+      "icon": "https://github.com/kurtzhi.png?size=64",
       "description": "一个功能完备的安全MCP服务器，用于本地文件系统操作，内置图像处理、OCR和媒体工具。",
       "category": "file-system",
       "featured": false,
@@ -11250,6 +11512,7 @@
     {
       "id": "mcpservers-kurtzhi-fsext-mcp-server-typescript",
       "name": "fsext-mcp-server-typescript",
+      "icon": "https://github.com/kurtzhi.png?size=64",
       "description": "Fsext-MCP-Server(Typescript)：一个功能全面的安全MCP服务器，用于本地文件系统操作，内置图像处理、OCR和媒体工具。完全符合官方MCP规范，提供标准化的请求/响应模式、大文件流式I/O、多传输远程部署，以及用于LLM代理集成的强大文本搜索与替换工作流。",
       "category": "file-system",
       "featured": false,
@@ -11274,6 +11537,7 @@
     {
       "id": "mcpservers-codechap-mcp-server-ftp",
       "name": "FTP MCP",
+      "icon": "https://github.com/codeChap.png?size=64",
       "description": "用于FTP文件操作的MCP服务器 — 浏览、下载、上传和管理远程文件",
       "category": "file-system",
       "featured": false,
@@ -11399,6 +11663,7 @@
     {
       "id": "mcpservers-gandr-ai-gandr-mcp",
       "name": "Gandr TTS",
+      "icon": "https://github.com/Gandr-AI.png?size=64",
       "description": "面向MCP客户端的文本转语音。能正确朗读数字和日期。六种音色，WAV输出，每次渲染均带水印。",
       "category": "cloud-service",
       "featured": false,
@@ -11421,6 +11686,7 @@
     {
       "id": "registry-ai-gateco-gateco",
       "name": "Gateco",
+      "icon": "https://github.com/fortisil.png?size=64",
       "description": "Permission-aware retrieval for AI systems: policy-enforced access to organizational knowledge.",
       "category": "other",
       "featured": false,
@@ -11439,6 +11705,7 @@
     {
       "id": "registry-ai-gatetest-www-gatetest",
       "name": "gatetest",
+      "icon": "https://github.com/crclabs-hq.png?size=64",
       "description": "120-module QA gate. Give Claude eyes (screenshots), ears (Sentry errors), and hands (verify fixes).",
       "category": "other",
       "featured": false,
@@ -11472,6 +11739,7 @@
     {
       "id": "registry-ai-gavelin-mcp",
       "name": "Gavelin",
+      "icon": "https://github.com/gavelin-ai.png?size=64",
       "description": "Search bills and speaker-attributed hearing transcripts across all 50 US state legislatures.",
       "category": "other",
       "featured": false,
@@ -11489,6 +11757,7 @@
     {
       "id": "mcpservers-github-com-nagarjunr-data-connectors-for-ai-agents-tree-main-mcpservers-gcpbucket",
       "name": "GCP Bucket Connector (data-connectors-ai)",
+      "icon": "https://github.com/nagarjunr.png?size=64",
       "description": "用于GCP Cloud Storage的只读MCP服务器：列出存储桶中的对象。",
       "category": "cloud-storage",
       "featured": false,
@@ -11510,6 +11779,7 @@
     {
       "id": "registry-ai-gemus-gemus",
       "name": "Gemus",
+      "icon": "https://github.com/Gemus-AI.png?size=64",
       "description": "Node-based AI design workflows on the Gemus canvas: generate images, video, 3D, and PPT.",
       "category": "other",
       "featured": false,
@@ -11527,6 +11797,7 @@
     {
       "id": "registry-ai-gency-gency-mcp",
       "name": "gency-mcp",
+      "icon": "https://github.com/studiolab-dev.png?size=64",
       "description": "Gency AI product image generation - MCP server for Claude, Codex, Cursor, VS Code",
       "category": "other",
       "featured": false,
@@ -11545,6 +11816,7 @@
     {
       "id": "mcpservers-northtekdevs-genome",
       "name": "GENOME",
+      "icon": "https://github.com/NORTHTEKDevs.png?size=64",
       "description": "完全本地的AI代理记忆：写入路径零LLM调用，可离线运行，在已发布基准测试中与Mem0准确率持平。",
       "category": "memory",
       "featured": false,
@@ -11584,6 +11856,7 @@
     {
       "id": "mcpservers-github-com-geolens-io-geolens-tree-main-mcp",
       "name": "geolens-mcp",
+      "icon": "https://github.com/geolens-io.png?size=64",
       "description": "对自托管GeoLens地理空间目录的只读访问：数据集搜索、模式、GeoJSON要素、已保存地图，以及基于PostGIS的沙箱只读SQL。",
       "category": "database",
       "featured": false,
@@ -11608,6 +11881,7 @@
     {
       "id": "mcpservers-cayirtepeomer-gerrit-code-review-mcp",
       "name": "Gerrit Code Review",
+      "icon": "https://github.com/cayirtepeomer.png?size=64",
       "description": "与Gerrit代码审查系统集成，用于审查代码变更和详细信息。",
       "category": "version-control",
       "featured": false,
@@ -11686,6 +11960,7 @@
     {
       "id": "mcpservers-nagaozen-ghiblimcp-vercel-app",
       "name": "ghiblimcp.vercel.app",
+      "icon": "https://github.com/nagaozen.png?size=64",
       "description": "吉卜力MCP收录了吉卜力世界中的角色、地点与物品，旨在帮助代理发现资源、通过MCP请求使用资源，并以合理方式与之交互。",
       "category": "cloud-service",
       "featured": false,
@@ -11748,6 +12023,7 @@
     {
       "id": "mcpservers-singhashish4000-mcp-server",
       "name": "Git Analytics",
+      "icon": "https://github.com/singhashish4000.png?size=64",
       "description": "为Git仓库提供详细的分析和洞察。",
       "category": "version-control",
       "featured": false,
@@ -11771,6 +12047,7 @@
     {
       "id": "mcpservers-siddheshdongare-git-pilot",
       "name": "GIT-Pilot",
+      "icon": "https://github.com/SiddheshDongare.png?size=64",
       "description": "一个强大的GitHub自动化与管理工具，提供全面的GitHub操作API封装。",
       "category": "version-control",
       "featured": false,
@@ -11794,6 +12071,7 @@
     {
       "id": "mcpservers-mcp-mirror-wanzunz-github-graphql-api-mcp",
       "name": "GitHub GraphQL API",
+      "icon": "https://github.com/MCP-Mirror.png?size=64",
       "description": "查询并与GitHub GraphQL API交互。需要个人访问令牌。",
       "category": "version-control",
       "featured": false,
@@ -11816,6 +12094,7 @@
     {
       "id": "mcpservers-ajaychinthapalli-github-pages-mcp-server",
       "name": "GitHub Pages MCP Server",
+      "icon": "https://github.com/ajaychinthapalli.png?size=64",
       "description": "你好！这是一个GitHub MCP服务器，旨在让兼容MCP的LLM（如Claude）与服务器通信，并通过GitHub API管理GitHub Pages部署。",
       "category": "version-control",
       "featured": false,
@@ -11839,6 +12118,7 @@
     {
       "id": "mcpservers-ajaychinthapalli-github-webhooks-mcp-server",
       "name": "GitHub Webhooks MCP Server",
+      "icon": "https://github.com/ajaychinthapalli.png?size=64",
       "description": "一个简单的MCP服务器，用于管理GitHub webhooks，并让兼容MCP的LLM与GitHub API进行交互。",
       "category": "version-control",
       "featured": false,
@@ -11885,6 +12165,7 @@
     {
       "id": "mcpservers-chris-miaskowski-custom-gitlab-mcp-server",
       "name": "GitLab",
+      "icon": "https://github.com/chris-miaskowski.png?size=64",
       "description": "通过符合MCP规范的服务器与GitLab仓库、议题及合并请求进行交互。",
       "category": "version-control",
       "featured": false,
@@ -11903,7 +12184,6 @@
       ],
       "catalogUpdatedAt": "2025-03-07T12:17:24.000Z",
       "catalogIdentity": "gitlab",
-      "icon": "https://svgl.app/library/gitlab.svg",
       "catalogRemoteUrl": "https://mcpservers.org/zh-CN/remote-mcp-servers/gitlab",
       "catalogDirectoryUrl": "https://mcpservers.org/zh-CN/servers/chris-miaskowski/custom-gitlab-mcp-server",
       "catalogRegistered": false,
@@ -11912,6 +12192,7 @@
     {
       "id": "mcpservers-gliana-labs-gliana-mcp",
       "name": "GlianaAI",
+      "icon": "https://github.com/Gliana-Labs.png?size=64",
       "description": "按次付费访问90多个AI模型，外加网页、OCR、人脸和市场数据工具——无需注册或API密钥，每次调用均从您自己的钱包以USDC结算。",
       "category": "cloud-service",
       "featured": false,
@@ -11968,6 +12249,7 @@
     {
       "id": "registry-agency-goji-goji",
       "name": "goji",
+      "icon": "https://github.com/goji-agency.png?size=64",
       "description": "Answers on AEO, SEO, web and brand from GOJI's published material. Melbourne, Australia.",
       "category": "other",
       "featured": false,
@@ -11985,6 +12267,7 @@
     {
       "id": "mcpservers-golf-data-golf",
       "name": "Golf Intelligence, by Stracka",
+      "icon": "https://github.com/golf-data.png?size=64",
       "description": "为开发者构建高尔夫应用程序提供最高质量的高尔夫球场数据集：20年专有测绘数据，每日更新，通过API提供记分卡、GPS和3D果岭。",
       "category": "search",
       "featured": false,
@@ -12008,6 +12291,7 @@
     {
       "id": "registry-ai-gondola-gondola",
       "name": "gondola",
+      "icon": "https://github.com/gondola-ai.png?size=64",
       "description": "Travel award search: compare cash vs points on hotels, flights & cars, cents-per-point, and book.",
       "category": "other",
       "featured": false,
@@ -12220,6 +12504,7 @@
     {
       "id": "registry-ai-joinmultiplayer-gpu",
       "name": "gpu",
+      "icon": "https://github.com/yukakust.png?size=64",
       "description": "Agent-to-agent network for teams: dm, who-knows-X routing, shared rooms. Human-in-the-loop.",
       "category": "other",
       "featured": false,
@@ -12290,6 +12575,7 @@
     {
       "id": "mcpservers-rudrendupaul-graphkeeper",
       "name": "GraphKeeper",
+      "icon": "https://github.com/RudrenduPaul.png?size=64",
       "description": "挖掘 git 历史中的文件共变模式，通过 MCP 构建可查询的知识图谱。",
       "category": "version-control",
       "featured": false,
@@ -12349,6 +12635,7 @@
     {
       "id": "mcpservers-ohhavefun-groundlink",
       "name": "Groundlink",
+      "icon": "https://github.com/ohhavefun.png?size=64",
       "description": "为Claude、Cursor及其他MCP主机提供一个groundlink_search工具，返回经过验证、带有来源的结果，而非无依据的猜测。每个密钥可免费查询100次，之后每次查询费用为十分之一美分。",
       "category": "search",
       "featured": false,
@@ -12388,6 +12675,7 @@
     {
       "id": "registry-ai-gtfi-groundtruth",
       "name": "GroundTruth — subsurface scan QA & trade estimating",
+      "icon": "https://github.com/Dranos-Bot.png?size=64",
       "description": "Two independent AI models read a GPR, locate or pipe scan and flag the do-not-core call.",
       "category": "other",
       "featured": false,
@@ -12405,6 +12693,7 @@
     {
       "id": "mcpservers-growsurf-growsurf-mcp",
       "name": "GrowSurf",
+      "icon": "https://github.com/growsurf.png?size=64",
       "description": "通过AI助手构建和管理GrowSurf推荐及联盟计划。",
       "category": "marketing",
       "featured": false,
@@ -12498,6 +12787,7 @@
     {
       "id": "registry-ai-com-mcp-hapi-mcp",
       "name": "HAPI MCP Server",
+      "icon": "https://github.com/larebelion.png?size=64",
       "description": "HAPI MCP server: Dynamically exposes OpenAPI REST APIs as MCP tools for AI assistants",
       "category": "other",
       "featured": false,
@@ -12552,6 +12842,7 @@
     {
       "id": "mcpservers-hasdata-airbnb-mcp",
       "name": "HasData Airbnb MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "按地点和日期搜索Airbnb住宿，并提供完整的房源详情，以结构化JSON格式呈现。",
       "category": "web-scraping",
       "featured": false,
@@ -12573,6 +12864,7 @@
     {
       "id": "mcpservers-hasdata-booking-mcp",
       "name": "HasData Booking.com MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "按目的地和日期搜索Booking.com住宿，并提供完整的房源详情，以结构化JSON格式呈现。",
       "category": "web-scraping",
       "featured": false,
@@ -12594,6 +12886,7 @@
     {
       "id": "mcpservers-hasdata-duckduckgo-mcp",
       "name": "HasData DuckDuckGo MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "DuckDuckGo搜索以JSON格式返回，包含排名的自然结果、独立数组中的广告以及37个地区。",
       "category": "web-scraping",
       "featured": false,
@@ -12616,6 +12909,7 @@
     {
       "id": "mcpservers-hasdata-google-flights-mcp",
       "name": "HasData Google Flights MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "Google Flights行程，包含票价、航段、碳排放和价格历史，以JSON格式提供。",
       "category": "web-scraping",
       "featured": false,
@@ -12638,6 +12932,7 @@
     {
       "id": "mcpservers-hasdata-google-maps-mcp",
       "name": "HasData Google Maps MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "Google Maps地点、评论、贡献者历史、照片和帖子以JSON格式提供，无需Google Cloud项目。",
       "category": "web-scraping",
       "featured": false,
@@ -12661,6 +12956,7 @@
     {
       "id": "mcpservers-hasdata-google-search-mcp",
       "name": "HasData Google Search MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "将Google搜索结果页（SERP）以JSON格式呈现，涵盖自然搜索结果、AI概览、用户还问了什么、AI模式、新闻和购物。",
       "category": "web-scraping",
       "featured": false,
@@ -12683,6 +12979,7 @@
     {
       "id": "mcpservers-hasdata-google-trends-mcp",
       "name": "HasData Google Trends MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "Google Trends 随时间变化的兴趣、按地区的兴趣，以及上升和热门的相关查询，以 JSON 格式呈现。",
       "category": "web-scraping",
       "featured": false,
@@ -12706,6 +13003,7 @@
     {
       "id": "mcpservers-hasdata-indeed-mcp",
       "name": "HasData Indeed MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "按关键词和地点搜索Indeed职位列表，以及完整职位信息，以结构化JSON格式提供。",
       "category": "web-scraping",
       "featured": false,
@@ -12728,6 +13026,7 @@
     {
       "id": "mcpservers-hasdata-instagram-mcp",
       "name": "HasData Instagram MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "公开的Instagram个人资料和帖子动态，按用户名获取，并解析话题标签和提及。",
       "category": "web-scraping",
       "featured": false,
@@ -12750,6 +13049,7 @@
     {
       "id": "mcpservers-hasdata-tiktok-mcp",
       "name": "HasData TikTok MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "公开的TikTok个人资料、视频、评论，以及按关键词搜索视频或创作者，均以JSON格式提供。",
       "category": "web-scraping",
       "featured": false,
@@ -12773,6 +13073,7 @@
     {
       "id": "mcpservers-hasdata-youtube-mcp",
       "name": "HasData YouTube MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "搜索YouTube，并以JSON格式读取视频、频道和字幕数据，无需Google Cloud项目。",
       "category": "web-scraping",
       "featured": false,
@@ -12797,6 +13098,7 @@
     {
       "id": "mcpservers-hasdata-zillow-mcp",
       "name": "HasData Zillow MCP Server",
+      "icon": "https://github.com/HasData.png?size=64",
       "description": "Zillow待售、待租及已售房源，以及完整房产详情，以结构化JSON格式提供。",
       "category": "web-scraping",
       "featured": false,
@@ -12820,6 +13122,7 @@
     {
       "id": "registry-ai-aviado-health",
       "name": "health",
+      "icon": "https://github.com/kipmcc.png?size=64",
       "description": "Supplement research, biomarker effects, drug interactions, and brand quality data",
       "category": "other",
       "featured": false,
@@ -12904,6 +13207,7 @@
     {
       "id": "mcpservers-jfiglesias1-heliciel-mcp",
       "name": "Heliciel — Propeller & Wing Design",
+      "icon": "https://github.com/jfiglesias1.png?size=64",
       "description": "根据自然语言规格设计螺旋桨、风扇、机翼和涡轮机。每个数值均来自真实的BEM计算，而非猜测。提供3D视图和CAD导出功能。",
       "category": "design",
       "featured": false,
@@ -12924,6 +13228,7 @@
     {
       "id": "registry-ai-helixar-mcp",
       "name": "Helixar Security",
+      "icon": "https://github.com/Helixar-AI.png?size=64",
       "description": "Security tools for AI agents: scan MCP servers, validate HDP delegation chains, audit releases.",
       "category": "other",
       "featured": false,
@@ -12960,6 +13265,7 @@
     {
       "id": "mcpservers-hermoso-ai-hermoso",
       "name": "Hermoso",
+      "icon": "https://github.com/hermoso-ai.png?size=64",
       "description": "从你的AI代理运行整个营销运营：研究已经胜出的广告，生成完成的视频和图片广告，发布到10个社交渠道，并在11个广告平台上管理广告活动。",
       "category": "marketing",
       "featured": false,
@@ -13076,6 +13382,7 @@
     {
       "id": "mcpservers-agaveis-hiberden-mcp",
       "name": "Hiberden",
+      "icon": "https://github.com/Agaveis.png?size=64",
       "description": "通过AI助手读取并验证本地媒体归档目录：涵盖LTO磁带、磁盘、NAS及兼容S3的云存储的3-2-1覆盖，通过回读并重新哈希来验证副本；删除/管理工具默认关闭。",
       "category": "file-system",
       "featured": false,
@@ -13096,6 +13403,7 @@
     {
       "id": "mcpservers-vectorize-io-hindsight",
       "name": "Hindsight",
+      "icon": "https://github.com/vectorize-io.png?size=64",
       "description": "Hindsight：像人类记忆一样工作的智能体记忆",
       "category": "cloud-storage",
       "featured": false,
@@ -13171,6 +13479,7 @@
     {
       "id": "mcpservers-hosttracker-mcp",
       "name": "HostTracker",
+      "icon": "https://github.com/HostTracker.png?size=64",
       "description": "官方HostTracker MCP服务器：从300多个全球位置运行正常运行时间、SSL、DNS、黑名单和页面速度检查，并管理监控器、警报、事件和状态页面。",
       "category": "cloud-service",
       "featured": false,
@@ -13194,6 +13503,7 @@
     {
       "id": "registry-ai-hotker-hotker",
       "name": "HOTKER 핫커 | 한국 상품·휴대폰 성지 구매가 AI",
+      "icon": "https://github.com/c2bcom10-ship-it.png?size=64",
       "description": "검증된 한국 오픈마켓 핫딜과 스마트폰 성지 판매조건을 검색하고 총비용·약정 반환금·SKT·KT·LG U+ 결합할인을 계산합니다.",
       "category": "other",
       "featured": false,
@@ -13211,6 +13521,7 @@
     {
       "id": "mcpservers-tse-wei-chen-hs-sql-agent",
       "name": "hs-sql-agent",
+      "icon": "https://github.com/tse-wei-chen.png?size=64",
       "description": "C# SQL Agent MCP服务器，支持原始SQL输入、严格AST验证，并内置管理界面。消除六大数据库中的LLM幻觉与安全风险。",
       "category": "database",
       "featured": false,
@@ -13269,6 +13580,7 @@
     {
       "id": "mcpservers-khadinakbarlabs-humanizer-pro-mcp",
       "name": "Humanizer PRO MCP",
+      "icon": "https://github.com/khadinakbarlabs.png?size=64",
       "description": "Humanizer PRO是一个托管的OAuth MCP，用于重写授权的草稿文本、扫描AI风格信号，并检查单词平衡模式。",
       "category": "marketing",
       "featured": false,
@@ -13292,6 +13604,7 @@
     {
       "id": "mcpservers-ali-ulu-huqan",
       "name": "HUQAN",
+      "icon": "https://github.com/ali-ulu.png?size=64",
       "description": "本地优先的验证与治理层，适用于AI代理、声明、记忆写入及高风险操作，具备证据、策略门控、来源追溯和信任收据功能。",
       "category": "development",
       "featured": false,
@@ -13315,6 +13628,7 @@
     {
       "id": "mcpservers-hushvert-mcp",
       "name": "hushvert",
+      "icon": "https://github.com/hushvert.png?size=64",
       "description": "为AI代理提供文件转换：办公文档转PDF、PDF转Word、文档互换，以及通过hushvert托管API进行音视频转码。",
       "category": "file-system",
       "featured": false,
@@ -13339,6 +13653,7 @@
     {
       "id": "registry-ai-hypernatural-hypernatural",
       "name": "Hypernatural",
+      "icon": "https://github.com/hypernaturalai.png?size=64",
       "description": "Create and edit AI videos from chat: plan shots, generate scenes, and export stories and ads.",
       "category": "other",
       "featured": false,
@@ -13373,6 +13688,7 @@
     {
       "id": "registry-ai-i18nagent-i18n-agent",
       "name": "i18n-agent",
+      "icon": "https://github.com/i18n-agent.png?size=64",
       "description": "AI-powered translation for 48 languages with context-aware quality",
       "category": "other",
       "featured": false,
@@ -13504,6 +13820,7 @@
     {
       "id": "registry-ai-imaginode-imaginode",
       "name": "imaginode",
+      "icon": "https://github.com/Frankhoubre.png?size=64",
       "description": "Generate AI images and videos (Flux, Nano Banana, Kling, Veo, 48+ models), refunds on failure.",
       "category": "other",
       "featured": false,
@@ -13580,6 +13897,7 @@
     {
       "id": "mcpservers-imprezahost-impreza-mcp",
       "name": "Impreza Host",
+      "icon": "https://github.com/imprezahost.png?size=64",
       "description": "用于离岸服务器管理的官方Impreza Host连接器",
       "category": "cloud-service",
       "featured": false,
@@ -13657,6 +13975,7 @@
     {
       "id": "mcpservers-anshumax-india-fin-compliance-plugin",
       "name": "India Fin Compliance",
+      "icon": "https://github.com/anshumax.png?size=64",
       "description": "一个MCP，连接至与金融类别相关的印度监管文件精选列表。",
       "category": "finance",
       "featured": false,
@@ -13703,6 +14022,7 @@
     {
       "id": "registry-ai-bankee-inferventis-mcp",
       "name": "Inferventis MCP Server",
+      "icon": "https://github.com/Bankee-ai.png?size=64",
       "description": "Loan & mortgage calculator, compound interest, ROI, crypto prices, FX conversion for AI agents.",
       "category": "other",
       "featured": false,
@@ -13720,6 +14040,7 @@
     {
       "id": "registry-ai-inflowpay-app-inflow",
       "name": "inflow",
+      "icon": "https://github.com/inflowpayai.png?size=64",
       "description": "MCP Server for agents to onboard, pay, and provision services autonomously with InFlow",
       "category": "other",
       "featured": false,
@@ -13737,6 +14058,7 @@
     {
       "id": "registry-ai-infolang-mcp",
       "name": "InfoLang Memory",
+      "icon": "https://github.com/InfoLang-Inc.png?size=64",
       "description": "InfoLang semantic memory MCP — investigate, memorize, and recall compressed agent context.",
       "category": "other",
       "featured": false,
@@ -13899,6 +14221,7 @@
     {
       "id": "mcpservers-jim-coyne-intersight-mcp",
       "name": "Intersight MCP",
+      "icon": "https://github.com/jim-coyne.png?size=64",
       "description": "用于配置和管理Cisco Intersight的综合性MCP服务器。",
       "category": "cloud-storage",
       "featured": false,
@@ -13923,6 +14246,7 @@
     {
       "id": "registry-ai-intodns-scanner",
       "name": "IntoDNS.ai DNS & Email Security Scanner",
+      "icon": "https://github.com/RoscoNL.png?size=64",
       "description": "DNS and email security: check SPF, DKIM, DMARC, DNSSEC, DANE and build the records. 45 tools.",
       "category": "other",
       "featured": false,
@@ -13978,6 +14302,7 @@
     {
       "id": "registry-ai-ironscout-ironscout",
       "name": "ironscout",
+      "icon": "https://github.com/jeb-scarbrough.png?size=64",
       "description": "Read-only ammo pricing: offer search, caliber market snapshots, retailer directory. Descriptive.",
       "category": "other",
       "featured": false,
@@ -14097,6 +14422,7 @@
     {
       "id": "mcpservers-nithishnithi-go-jenkins-mcp",
       "name": "Jenkins MCP Server",
+      "icon": "https://github.com/NithishNithi.png?size=64",
       "description": "MCP Jenkins 是一个基于 Go 的集成层，旨在将模型上下文协议（MCP）工具与 Jenkins CI/CD 流水线连接起来。该项目提供了一个轻量级、高性能的桥梁，支持通过 MCP 驱动的工作流实现自动化流水线执行、作业管理和状态检索。",
       "category": "version-control",
       "featured": false,
@@ -14260,6 +14586,7 @@
     {
       "id": "mcpservers-alexbo-git-kalyvox-mcp",
       "name": "Kalyvox",
+      "icon": "https://github.com/alexbo-git.png?size=64",
       "description": "Kalyvox的官方MCP服务器，面向中小企业的AI电话总机标准。",
       "category": "communication",
       "featured": false,
@@ -14282,6 +14609,7 @@
     {
       "id": "registry-ai-kavel-kavel-mcp",
       "name": "kavel-mcp",
+      "icon": "https://github.com/hanshs474.png?size=64",
       "description": "Discover Kavel's AI photo/video generators, get tuned prompts, and open the right tool on kavel.ai.",
       "category": "other",
       "featured": false,
@@ -14300,6 +14628,7 @@
     {
       "id": "registry-ai-kawacode-mcp",
       "name": "Kawa Code",
+      "icon": "https://github.com/kawacode-ai.png?size=64",
       "description": "Team-aware memory: intent, decisions, real-time conflicts for AI coding assistants.",
       "category": "other",
       "featured": false,
@@ -14373,6 +14702,7 @@
     {
       "id": "registry-ai-kinlab-kin",
       "name": "Kin",
+      "icon": "https://github.com/firelock-ai.png?size=64",
       "description": "The system of record for AI-written software.",
       "category": "other",
       "featured": false,
@@ -14472,6 +14802,7 @@
     {
       "id": "mcpservers-nometalalchemist-kitchensink4word",
       "name": "KitchenSink4Word",
+      "icon": "https://github.com/nometalalchemist.png?size=64",
       "description": "Microsoft Word 的全能工具箱：170 个工具，包括实时编辑打开的文档、合并感知表格、引文、脚注、目录、修订写作、邮件合并、编辑修订以及出版风格转换。",
       "category": "productivity",
       "featured": false,
@@ -14513,6 +14844,7 @@
     {
       "id": "mcpservers-luqueee-kivgraph",
       "name": "Kivgraph",
+      "icon": "https://github.com/luqueee.png?size=64",
       "description": "本地开源代码图谱MCP，面向编码代理，支持基于意图的代码发现、分析器解析的关系以及跨仓库导航。",
       "category": "development",
       "featured": false,
@@ -14588,6 +14920,7 @@
     {
       "id": "mcpservers-knowjudges-knowjudges-mcp",
       "name": "KnowJudges",
+      "icon": "https://github.com/KnowJudges.png?size=64",
       "description": "通过MCP免费获取美国法官和法院的源链接研究。",
       "category": "database",
       "featured": false,
@@ -14609,6 +14942,7 @@
     {
       "id": "mcpservers-dat999zx-knowl",
       "name": "Knowl",
+      "icon": "https://github.com/dat999zx.png?size=64",
       "description": "面向AI代理的本地优先、始终最新的记忆系统",
       "category": "memory",
       "featured": false,
@@ -14670,6 +15004,7 @@
     {
       "id": "mcpservers-zeeshandev6-knownbase-mcp",
       "name": "Knownbase MCP",
+      "icon": "https://github.com/zeeshandev6.png?size=64",
       "description": "持久化、可搜索的项目记忆，供AI智能体通过模型上下文协议使用。",
       "category": "memory",
       "featured": false,
@@ -14709,6 +15044,7 @@
     {
       "id": "registry-ai-kolens-kolens-mcp",
       "name": "KOLens",
+      "icon": "https://github.com/mira-gift-hq.png?size=64",
       "description": "TikTok KOL intelligence with a public MCP remote for search, profiles, lists, and alerts.",
       "category": "other",
       "featured": false,
@@ -14814,6 +15150,7 @@
     {
       "id": "registry-ai-kumbuka-kumbuka-server",
       "name": "Kumbuka",
+      "icon": "https://github.com/kumbuka-ai.png?size=64",
       "description": "Governed, auditable knowledge your team curates for its AI assistants, self-hostable",
       "category": "other",
       "featured": false,
@@ -14884,6 +15221,7 @@
     {
       "id": "registry-ai-latticenet-latticenet",
       "name": "LatticeNet",
+      "icon": "https://github.com/joshholly.png?size=64",
       "description": "社交发布平台，AI代理为作者。发布笔记和文章，关注、评论和私信。通过Google或GitHub进行OAuth认证。",
       "category": "communication",
       "featured": false,
@@ -14911,6 +15249,7 @@
     {
       "id": "registry-ai-lattiq-x402-trading-signals",
       "name": "Lattiq x402 Trading Signals",
+      "icon": "https://github.com/PoopsDavis.png?size=64",
       "description": "Regime-aware ES1/NQ futures trading signals. HMM + 15 quant strategies. x402 USDC micropayments.",
       "category": "other",
       "featured": false,
@@ -14928,6 +15267,7 @@
     {
       "id": "registry-ai-law-mcp-lawyer-search",
       "name": "Law.AI — Lawyer Search",
+      "icon": "https://github.com/risk-ai.png?size=64",
       "description": "Verified lawyer and attorney search, discovery, and matching for AI — 991K+ US profiles.",
       "category": "other",
       "featured": false,
@@ -14964,6 +15304,7 @@
     {
       "id": "mcpservers-layvenio-layven-mcp",
       "name": "Layven",
+      "icon": "https://github.com/Layvenio.png?size=64",
       "description": "供你的智能体和团队成员使用的共享驱动器。",
       "category": "file-system",
       "featured": false,
@@ -14984,6 +15325,7 @@
     {
       "id": "registry-ai-lazyads-mcp",
       "name": "Lazy Ads",
+      "icon": "https://github.com/camerondwills.png?size=64",
       "description": "Hosted MCP for nine ad networks. BYOA, flat SaaS — no percent of spend, no fake ROAS.",
       "category": "other",
       "featured": false,
@@ -15001,6 +15343,7 @@
     {
       "id": "mcpservers-darksider4all-leadgen-mcp",
       "name": "Leadgen MCP",
+      "icon": "https://github.com/darksider4all.png?size=64",
       "description": "罗马尼亚商业注册查询（官方ONRC数据）、董事搜索、网站联系方式提取，以及面向AI代理的WHOIS/DNS/SPF-DMARC域名审计。",
       "category": "database",
       "featured": false,
@@ -15059,6 +15402,7 @@
     {
       "id": "mcpservers-legalize-dev-mcp",
       "name": "Legalize",
+      "icon": "https://github.com/legalize-dev.png?size=64",
       "description": "Legalize开放综合法规语料库的官方连接器——可查阅任何历史日期的法律文本，并附有引文对应的git提交记录。",
       "category": "search",
       "featured": false,
@@ -15097,6 +15441,7 @@
     {
       "id": "registry-ai-com-mcp-lenny-rachitsky-podcast",
       "name": "Lenny Rachitsky Podcast Transcripts MCP Server",
+      "icon": "https://github.com/la-rebelion.png?size=64",
       "description": "MCP server for structured access to Lenny Rachitsky podcast transcripts. For content creators.",
       "category": "other",
       "featured": false,
@@ -15132,6 +15477,7 @@
     {
       "id": "registry-ai-levelfour-levelfour-mcp",
       "name": "levelfour-mcp",
+      "icon": "https://github.com/LevelFourAI.png?size=64",
       "description": "Cloud cost visibility and savings recommendations grounded in your actual AWS, GCP and Azure bill.",
       "category": "other",
       "featured": false,
@@ -15167,6 +15513,7 @@
     {
       "id": "registry-ai-licensy-mcp-server",
       "name": "Licensy",
+      "icon": "https://github.com/licensyai.png?size=64",
       "description": "Real-time U.S. medical license verification across all 50 states + DC.",
       "category": "other",
       "featured": false,
@@ -15202,6 +15549,7 @@
     {
       "id": "mcpservers-moifek-limadata-mcp-community",
       "name": "Limadata",
+      "icon": "https://github.com/Moifek.png?size=64",
       "description": "面向智能体AI、招聘科技和GTM团队的实时数据增强API。",
       "category": "database",
       "featured": false,
@@ -15222,6 +15570,7 @@
     {
       "id": "registry-ai-limitguard-api-trust-intelligence",
       "name": "LimitGuard Trust Intelligence",
+      "icon": "https://github.com/JWconsultancy1234.png?size=64",
       "description": "Entity verification, sanctions screening, and trust scoring for AI agents.",
       "category": "other",
       "featured": false,
@@ -15257,6 +15606,7 @@
     {
       "id": "registry-ai-linkdeal-www-mcp",
       "name": "LinkDeal",
+      "icon": "https://github.com/LinkDeal.png?size=64",
       "description": "Find B2B leads from LinkedIn engagement, enrich contacts and deliver to Slack.",
       "category": "other",
       "featured": false,
@@ -15273,6 +15623,7 @@
     {
       "id": "registry-ai-lithtrix-lithtrix-mcp",
       "name": "Lithtrix — Identity, Memory & Trust for AI Agents",
+      "icon": "https://github.com/lithtrix.png?size=64",
       "description": "Identity, memory, trust, and swarm primitives for AI agents. MIRC base always free.",
       "category": "other",
       "featured": false,
@@ -15370,6 +15721,7 @@
     {
       "id": "registry-ai-llmhosting-pricing",
       "name": "LLM Hosting Pricing",
+      "icon": "https://github.com/zayedAlmansoori.png?size=64",
       "description": "LLM and GPU rental prices: model price lookup, GPU listings, cheapest-GPU search, price history",
       "category": "other",
       "featured": false,
@@ -15387,6 +15739,7 @@
     {
       "id": "registry-ai-llmintel-llmintel",
       "name": "llmintel",
+      "icon": "https://github.com/hivemindunit.png?size=64",
       "description": "Check whether an LLM model id is deprecated, retiring, or retired, and what to migrate to.",
       "category": "other",
       "featured": false,
@@ -15401,7 +15754,6 @@
       ],
       "catalogUpdatedAt": "2026-07-28T03:18:38.060041Z",
       "catalogIdentity": "llmintel",
-      "icon": "https://llmintel.ai/logo.svg",
       "catalogTags": []
     },
     {
@@ -15429,6 +15781,7 @@
     {
       "id": "mcpservers-lobu-ai-lobu",
       "name": "Lobu",
+      "icon": "https://github.com/lobu-ai.png?size=64",
       "description": "面向ChatGPT、Claude、Codex及其他MCP客户端的共享公司上下文与受管工具。",
       "category": "memory",
       "featured": false,
@@ -15469,6 +15822,7 @@
     {
       "id": "mcpservers-zuneracodes-localkeep",
       "name": "LocalKeep",
+      "icon": "https://github.com/zuneracodes.png?size=64",
       "description": "由你决定Claude记住关于你的什么。LocalKeep是一条由你策展的个人时间线——存储在你设备上的带标题、带日期、可编辑的记忆库——然后Claude通过MCP查找它们，而不是凭空捏造不可编辑的云端记忆。",
       "category": "memory",
       "featured": false,
@@ -15562,6 +15916,7 @@
     {
       "id": "registry-ai-ludo-game-assets",
       "name": "Ludo AI Game Assets",
+      "icon": "https://github.com/Ludo-AI.png?size=64",
       "description": "Generate game assets with AI: sprites, 3D models, animations, sound effects, music, and voices.",
       "category": "other",
       "featured": false,
@@ -15579,6 +15934,7 @@
     {
       "id": "mcpservers-alice51849-lumi-mcp",
       "name": "Lumi App Finder",
+      "icon": "https://github.com/alice51849.png?size=64",
       "description": "一个第一方、完全离线的MCP服务器，将任务或买家需求匹配到Lumi Studio在Apple 50个地区的实时iOS应用，并返回发布者撰写的上下文及直接App Store链接。",
       "category": "search",
       "featured": false,
@@ -15601,6 +15957,7 @@
     {
       "id": "registry-ai-lumify-sports-intelligence",
       "name": "Lumify Sports Intelligence",
+      "icon": "https://github.com/lumifyai.png?size=64",
       "description": "Schedules, scores, odds, splits & explainable AI bet confidence — 8+ sports, free instant key.",
       "category": "other",
       "featured": false,
@@ -15672,6 +16029,7 @@
     {
       "id": "mcpservers-janyork-llm-wiki-cli",
       "name": "LWC",
+      "icon": "https://github.com/JanYork.png?size=64",
       "description": "只读 MCP 服务器，用于对基于源代码的项目记忆进行有界探索，支持引用、溯源、SQLite/FTS5 检索以及可选的文档和代码图。",
       "category": "memory",
       "featured": false,
@@ -15693,6 +16051,7 @@
     {
       "id": "mcpservers-lyrenth-lyrenth-mcp",
       "name": "Lyrenth",
+      "icon": "https://github.com/lyrenth.png?size=64",
       "description": "通过Lyrenth的27亿+页面索引，将任何公共URL读取为干净的AIDocument（Markdown加结构和来源）。",
       "category": "search",
       "featured": false,
@@ -15716,6 +16075,7 @@
     {
       "id": "mcpservers-maddogfinance-maddog-mcp",
       "name": "MADDOG",
+      "icon": "https://github.com/maddogfinance.png?size=64",
       "description": "价格行为时段读取，具备可测量的准确性：日类型概率、区间突破，以及每日评分的公开前瞻记分板——远程可流式HTTP，免费层级，无需注册。",
       "category": "finance",
       "featured": false,
@@ -15762,6 +16122,7 @@
     {
       "id": "registry-ai-magicinsights-insights",
       "name": "Magic Insights",
+      "icon": "https://github.com/andrewchmr.png?size=64",
       "description": "Query your customer feedback: studies, themes, suggestions, tags, and sentiment trends.",
       "category": "other",
       "featured": false,
@@ -15851,6 +16212,7 @@
     {
       "id": "registry-ai-mailjunky-mcp",
       "name": "MailJunky",
+      "icon": "https://github.com/TheNightProject.png?size=64",
       "description": "Send emails, track events, and manage contacts with MailJunky.",
       "category": "other",
       "featured": false,
@@ -15867,6 +16229,7 @@
     {
       "id": "mcpservers-csitte-mailwarden",
       "name": "mailwarden",
+      "icon": "https://github.com/csitte.png?size=64",
       "description": "原生 Gmail MCP 服务器，用于收件箱分类整理——通过重新验证的结果搜索、标签、归档/删除、邮箱侧稍后提醒、分类摘要、RFC 8058 退订；按设计不提供发送工具。",
       "category": "communication",
       "featured": false,
@@ -15890,6 +16253,7 @@
     {
       "id": "registry-ai-mainbook-bank-statement-converter",
       "name": "MainBook Bank Statement Converter",
+      "icon": "https://github.com/human-beyond.png?size=64",
       "description": "Convert PDF bank statements to checked Excel, CSV or JSON with balance validation.",
       "category": "other",
       "featured": false,
@@ -15963,6 +16327,7 @@
     {
       "id": "mcpservers-mdedit-ai-mdedit-agent-plugin",
       "name": "Markdown by mdedit.ai",
+      "icon": "https://github.com/mdedit-ai.png?size=64",
       "description": "在mdedit.ai中，让AI代理创建、查找、修订、审阅、导出并显式发布Markdown文档。",
       "category": "productivity",
       "featured": false,
@@ -15986,6 +16351,7 @@
     {
       "id": "registry-ai-iturri-market-data",
       "name": "market-data",
+      "icon": "https://github.com/iturri-ai.png?size=64",
       "description": "Verified market data for AI trading agents: quality-flagged candles, funding, OI, order flow. x402.",
       "category": "other",
       "featured": false,
@@ -16027,6 +16393,7 @@
     {
       "id": "registry-ai-marketintell-marketintell",
       "name": "marketintell",
+      "icon": "https://github.com/ravidsrk.png?size=64",
       "description": "AI analyst desk for stocks, options & crypto with sourced trade setups and a public accuracy record.",
       "category": "other",
       "featured": false,
@@ -16069,6 +16436,7 @@
     {
       "id": "registry-ai-markettrace-agent-feed",
       "name": "MarketTrace agent-feed",
+      "icon": "https://github.com/MarketTrace.png?size=64",
       "description": "Crypto perps data for AI agents: funding rates, open interest, liquidations, order book, CVD.",
       "category": "other",
       "featured": false,
@@ -16127,6 +16495,7 @@
     {
       "id": "registry-ai-masnavi-masnavi",
       "name": "masnavi",
+      "icon": "https://github.com/shahhoseini.png?size=64",
       "description": "Rumi's complete Masnavi (25,635 beyts) — search, quote, verify and explain. Free, no auth.",
       "category": "other",
       "featured": false,
@@ -16144,6 +16513,7 @@
     {
       "id": "mcpservers-getmasv-masv-mcp-server",
       "name": "masv",
+      "icon": "https://github.com/getmasv.png?size=64",
       "description": "MASV 是一款易于使用且超可靠的管理文件传输服务。",
       "category": "cloud-storage",
       "featured": false,
@@ -16240,6 +16610,7 @@
     {
       "id": "registry-ai-aient-mcp",
       "name": "mcp",
+      "icon": "https://github.com/haf.png?size=64",
       "description": "MCP-native AI SRE: ask what's broken in production, get a reviewed GitHub fix PR.",
       "category": "other",
       "featured": false,
@@ -16291,6 +16662,7 @@
     {
       "id": "registry-ai-atlaso-mcp",
       "name": "mcp",
+      "icon": "https://github.com/atlaso-labs.png?size=64",
       "description": "AI memory layer — one shared, persistent memory across every AI tool you connect.",
       "category": "other",
       "featured": false,
@@ -16325,6 +16697,7 @@
     {
       "id": "registry-ai-clarx-mcp",
       "name": "mcp",
+      "icon": "https://github.com/Gernika-Labs.png?size=64",
       "description": "Score agent manifests, generate CI workflows, and pull Clarx scan findings into your IDE.",
       "category": "other",
       "featured": false,
@@ -16343,6 +16716,7 @@
     {
       "id": "registry-ai-clawfetch-mcp",
       "name": "mcp",
+      "icon": "https://github.com/clawfetch.png?size=64",
       "description": "Web intelligence for AI agents: fetch, render, extract, research. x402 micropayments, no API keys.",
       "category": "other",
       "featured": false,
@@ -16362,6 +16736,7 @@
     {
       "id": "registry-ai-crayonz-mcp",
       "name": "mcp",
+      "icon": "https://github.com/iitian-vibes.png?size=64",
       "description": "Design custom apparel from chat: AI art on tees and hoodies, then a checkout link to buy.",
       "category": "other",
       "featured": false,
@@ -16379,6 +16754,7 @@
     {
       "id": "registry-ai-cueapi-mcp",
       "name": "mcp",
+      "icon": "https://github.com/cueapi.png?size=64",
       "description": "Schedule agent work and report write-once outcomes via CueAPI from any MCP host.",
       "category": "other",
       "featured": false,
@@ -16414,6 +16790,7 @@
     {
       "id": "registry-ai-dataecho-mcp",
       "name": "mcp",
+      "icon": "https://github.com/mohocp.png?size=64",
       "description": "Deploy files, sites, and Dockerfile apps to live URLs + private drives for agent memory.",
       "category": "other",
       "featured": false,
@@ -16431,6 +16808,7 @@
     {
       "id": "registry-ai-elfa-mcp",
       "name": "mcp",
+      "icon": "https://github.com/elfa-ai.png?size=64",
       "description": "Crypto social intelligence from X and Telegram, plus the Elfa Auto condition engine",
       "category": "other",
       "featured": false,
@@ -16501,6 +16879,7 @@
     {
       "id": "registry-ai-foura-mcp",
       "name": "mcp",
+      "icon": "https://github.com/fouradata.png?size=64",
       "description": "Reliable web access for AI agents: smart HTTP, rotating proxies, and full-browser rendering.",
       "category": "other",
       "featured": false,
@@ -16520,6 +16899,7 @@
     {
       "id": "registry-ai-matih-mcp",
       "name": "mcp",
+      "icon": "https://github.com/matih-labs.png?size=64",
       "description": "The grounded data layer for any LLM: governed SQL, metrics, lineage and catalog over your data.",
       "category": "other",
       "featured": false,
@@ -16539,6 +16919,7 @@
     {
       "id": "mcpservers-bsreeram08-git-commands-mcp",
       "name": "MCP Git Repo Browser",
+      "icon": "https://github.com/bsreeram08.png?size=64",
       "description": "一个Git仓库浏览器，允许你使用模型上下文协议导航和检查本地Git仓库。",
       "category": "version-control",
       "featured": false,
@@ -16561,6 +16942,7 @@
     {
       "id": "mcpservers-alexbakers-mcp-ipfs",
       "name": "MCP IPFS Server",
+      "icon": "https://github.com/alexbakers.png?size=64",
       "description": "使用 w3 CLI 与 storacha.network IPFS 平台交互。",
       "category": "cloud-storage",
       "featured": false,
@@ -16582,6 +16964,7 @@
     {
       "id": "registry-ai-mcpjunction-directory",
       "name": "MCP Junction",
+      "icon": "https://github.com/rickstek.png?size=64",
       "description": "Search a nightly-refreshed directory of MCP servers by keyword, category or topic.",
       "category": "other",
       "featured": false,
@@ -16622,6 +17005,7 @@
     {
       "id": "mcpservers-sofiia7-arc",
       "name": "ArcBounty",
+      "icon": "https://github.com/Sofiia7.png?size=64",
       "description": "让AI代理赚取USDC：在Arc上浏览、领取并提交链上赏金，通过规范的ERC-8183托管及ERC-8004链上信誉，将报酬支付到代理自己的钱包。",
       "category": "finance",
       "featured": false,
@@ -16670,6 +17054,7 @@
     {
       "id": "mcpservers-edmen12-deskmcp",
       "name": "DeskMCP",
+      "icon": "https://github.com/edmen12.png?size=64",
       "description": "开源的Windows MCP策略网关，用于控制ChatGPT对本地文件和终端会话的访问，具备工作区范围权限、受保护的写入操作、会话所属进程以及审计日志功能。",
       "category": "productivity",
       "featured": false,
@@ -16715,6 +17100,7 @@
     {
       "id": "registry-ai-justdrop-mcp",
       "name": "mcp",
+      "icon": "https://github.com/Managed-Digital-LLC.png?size=64",
       "description": "Live, end-to-end encrypted, ephemeral file transfer between your AI agent and any device.",
       "category": "other",
       "featured": false,
@@ -16733,6 +17119,7 @@
     {
       "id": "mcpservers-peterpirog-mcp-light-memory",
       "name": "MCP Light Memory",
+      "icon": "https://github.com/PeterPirog.png?size=64",
       "description": "本地优先的持久化记忆，用于编码代理，跨会话保留相关项目上下文并减少不必要的令牌使用。",
       "category": "memory",
       "featured": false,
@@ -16756,6 +17143,7 @@
     {
       "id": "mcpservers-boy-373-mcp-marketplace",
       "name": "MCP Marketplace",
+      "icon": "https://github.com/boy-373.png?size=64",
       "description": "通过AI驱动的搜索，发现并探索25,000多个MCP服务器。支持MCP（SSE）和A2A双协议。",
       "category": "search",
       "featured": false,
@@ -16779,6 +17167,7 @@
     {
       "id": "mcpservers-demo112-mcp-server-convert",
       "name": "MCP Server Convert",
+      "icon": "https://github.com/demo112.png?size=64",
       "description": "文档转换MCP服务器——支持PDF、DOCX、HTML、EPUB转Markdown，集成6种工具并支持Docker",
       "category": "file-system",
       "featured": false,
@@ -16801,6 +17190,7 @@
     {
       "id": "mcpservers-hs737-mcp-server-for-ynab",
       "name": "MCP Server for YNAB",
+      "icon": "https://github.com/hs737.png?size=64",
       "description": "一个MCP服务器，将AI助手连接到你的YNAB预算——默认只读，可选写入功能会被记录且可撤销。",
       "category": "finance",
       "featured": false,
@@ -16823,6 +17213,7 @@
     {
       "id": "mcpservers-dockndevai-mcp-clickhouse",
       "name": "mcp-clickhouse",
+      "icon": "https://github.com/dockndevai.png?size=64",
       "description": "ClickHouse的MCP服务器——通过SQL语句分类驱动读写/破坏性操作门控、数据库白名单、行数上限、试运行和审计日志，实现探索、查询和管理。",
       "category": "database",
       "featured": false,
@@ -16847,6 +17238,7 @@
     {
       "id": "mcpservers-dockndevai-mcp-debezium",
       "name": "mcp-debezium",
+      "icon": "https://github.com/dockndevai.png?size=64",
       "description": "用于Debezium / Kafka Connect的MCP服务器——监控和管理CDC连接器（状态、配置、重启、生命周期），支持访问模式、连接器白名单、删除门控和凭据脱敏。",
       "category": "database",
       "featured": false,
@@ -16870,6 +17262,7 @@
     {
       "id": "mcpservers-dockndevai-mcp-kafka",
       "name": "mcp-kafka",
+      "icon": "https://github.com/dockndevai.png?size=64",
       "description": "Apache Kafka 的 MCP 服务器 — 监控和管理集群、主题和消费者组（含滞后），支持访问模式、主题白名单、删除门控、试运行和审计日志。",
       "category": "database",
       "featured": false,
@@ -16893,6 +17286,7 @@
     {
       "id": "mcpservers-dockndevai-mcp-oci",
       "name": "mcp-oci",
+      "icon": "https://github.com/dockndevai.png?size=64",
       "description": "用于Oracle Cloud（OCI）的MCP服务器——实时资源发现、依赖映射和Terraform生成；默认只读并支持机密信息脱敏。",
       "category": "cloud-service",
       "featured": false,
@@ -16916,6 +17310,7 @@
     {
       "id": "mcpservers-iprabhu-mcp-perforce-server",
       "name": "mcp-perforce-server",
+      "icon": "https://github.com/iPraBhu.png?size=64",
       "description": "mcp-perforce-server 是一个用于 Perforce (p4) 的模型上下文协议服务器，具有安全默认设置、结构化 JSON 响应，并支持原生风格和 MCP 优化的工作流程。",
       "category": "version-control",
       "featured": false,
@@ -16938,6 +17333,7 @@
     {
       "id": "registry-ai-cdbx-mcp-server",
       "name": "mcp-server",
+      "icon": "https://github.com/ChristopherHButler.png?size=64",
       "description": "Build Apps and run code in 30 languages — sandboxed, with persistent sessions for agent loops.",
       "category": "other",
       "featured": false,
@@ -16955,6 +17351,7 @@
     {
       "id": "registry-ai-marchward-mcp-server",
       "name": "mcp-server",
+      "icon": "https://github.com/marchward.png?size=64",
       "description": "Runtime authority for AI agents: credential mediation, spend cap, approval gates, audit log.",
       "category": "other",
       "featured": false,
@@ -16973,6 +17370,7 @@
     {
       "id": "mcpservers-johnnytheshark-mcp-state",
       "name": "mcp-state",
+      "icon": "https://github.com/JohnnytheShark.png?size=64",
       "description": "为智能体提供嵌入式SQLite黑板，使AI智能体能够读取、修补和归档其状态，而不会使对话上下文变得杂乱。",
       "category": "memory",
       "featured": false,
@@ -16996,6 +17394,7 @@
     {
       "id": "registry-ai-mcpcap-mcpcap",
       "name": "mcpcap",
+      "icon": "https://github.com/mcpcap.png?size=64",
       "description": "An MCP server for analyzing PCAP files.",
       "category": "other",
       "featured": false,
@@ -17067,6 +17466,7 @@
     {
       "id": "mcpservers-mrfentmen-meilisearch-mcp",
       "name": "meilisearch-mcp",
+      "icon": "https://github.com/mrfentmen.png?size=64",
       "description": "通过AI代理搜索MeiliSearch索引并管理文档",
       "category": "database",
       "featured": false,
@@ -17089,6 +17489,7 @@
     {
       "id": "mcpservers-weeci-mektup-mcp",
       "name": "Mektup mcp",
+      "icon": "https://github.com/WeeCi.png?size=64",
       "description": "Mektup是一个自托管的多域名电子邮件平台。该MCP服务器允许AI编码代理（Claude Code、Claude Desktop、Cursor、Lovable、Replit、Base44或任何兼容MCP的客户端）管理某个域名的真实电子邮件。",
       "category": "communication",
       "featured": false,
@@ -17147,6 +17548,7 @@
     {
       "id": "mcpservers-pcircle-ai-memesh-llm-memory",
       "name": "MeMesh",
+      "icon": "https://github.com/PCIRCLE-AI.png?size=64",
       "description": "MeMesh 是运行在你自己电脑上的 AI Agent 协作层。记忆、指定收件人的消息和改进建议，都存放在同一个 SQLite 文件中。Claude Code、Codex、Cursor、Gemini，或你自己接入的本地模型，都能通过 MCP、HTTP 或 CLI 使用；不绑定单一厂商，也无需先将数据上传到云端。开源、MIT 许可、免费使用。",
       "category": "development",
       "featured": false,
@@ -17170,6 +17572,7 @@
     {
       "id": "mcpservers-byronwade-memoria",
       "name": "Memoria",
+      "icon": "https://github.com/byronwade.png?size=64",
       "description": "通过git取证揭示隐藏的文件依赖关系，防止AI破坏代码。",
       "category": "version-control",
       "featured": false,
@@ -17193,6 +17596,7 @@
     {
       "id": "mcpservers-jmagar-memory-bank-mcp",
       "name": "Memory Bank MCP",
+      "icon": "https://github.com/jmagar.png?size=64",
       "description": "一个用于远程记忆库管理的MCP服务器，通过Supergateway增强以支持流式HTTP传输。它支持多项目管理，并需要持久化存储。",
       "category": "cloud-storage",
       "featured": false,
@@ -17237,6 +17641,7 @@
     {
       "id": "mcpservers-rudrendupaul-memtrust",
       "name": "memtrust",
+      "icon": "https://github.com/RudrenduPaul.png?size=64",
       "description": "独立的、可复现的智能体记忆后端基准测试框架。",
       "category": "memory",
       "featured": false,
@@ -17291,6 +17696,7 @@
     {
       "id": "mcpservers-ariaxhan-metabrain",
       "name": "metabrain",
+      "icon": "https://github.com/ariaxhan.png?size=64",
       "description": "零依赖的SQLite记忆，供智能体使用，将重复模式提升为经过测试的假设和已验证的偏好。",
       "category": "memory",
       "featured": false,
@@ -17374,6 +17780,7 @@
     {
       "id": "mcpservers-miguelcespedes-mcp-server-microsoft-paint-nodejs",
       "name": "Microsoft Paint MCP Server for Node.js",
+      "icon": "https://github.com/miguelcespedes.png?size=64",
       "description": "语义MCP接口，用于Microsoft Paint，采用UI自动化、Win32及绘图DSL实现。",
       "category": "design",
       "featured": false,
@@ -17490,6 +17897,7 @@
     {
       "id": "mcpservers-misar-ai-misarmail-mcp",
       "name": "MisarMail MCP Server",
+      "icon": "https://github.com/Misar-AI.png?size=64",
       "description": "发送事务性邮件、运行营销活动和自动化流程、管理联系人并审计送达率——54个带注释的工具。",
       "category": "communication",
       "featured": false,
@@ -17513,6 +17921,7 @@
     {
       "id": "mcpservers-rasinmuhammed-misata",
       "name": "Misata",
+      "icon": "https://github.com/rasinmuhammed.png?size=64",
       "description": "生成具有可解析外键和可对账聚合的逼真多表测试数据，并附带完整性检查返回。从您自己的模式填充Postgres、MySQL和SQLite，或导出CSV/JSON/SQL/Parquet。确定性生成，相同的模式和种子产生相同的行。",
       "category": "database",
       "featured": false,
@@ -17537,6 +17946,7 @@
     {
       "id": "mcpservers-mrfentmen-mixpanel-mcp",
       "name": "mixpanel-mcp",
+      "icon": "https://github.com/mrfentmen.png?size=64",
       "description": "查询Mixpanel事件、漏斗、留存、群组和用户画像",
       "category": "database",
       "featured": false,
@@ -17553,7 +17963,6 @@
       ],
       "catalogUpdatedAt": "2026-08-08T22:01:38.051Z",
       "catalogIdentity": "mixpanel",
-      "icon": "https://cdn.prod.website-files.com/68a44d4040f98a4adf2207b6/69b842de13c16936e674bff7_Mixpanel%20Logomark%20Purple%20(1).svg",
       "catalogRemoteUrl": "https://mcpservers.org/zh-CN/remote-mcp-servers/mixpanel",
       "catalogDirectoryUrl": "https://mcpservers.org/zh-CN/servers/mrfentmen/mixpanel-mcp",
       "catalogRegistered": false,
@@ -17562,6 +17971,7 @@
     {
       "id": "registry-ai-lucasandersen-mlp-tax",
       "name": "MLP Tax Computation Engine",
+      "icon": "https://github.com/luc253.png?size=64",
       "description": "Deterministic MLP tax engine with IRS citations. 6 tools: basis, §751, estate, projections.",
       "category": "other",
       "featured": false,
@@ -17820,6 +18230,7 @@
     {
       "id": "mcpservers-github-com-benjammartin-munitionx402-tree-main-packages-mcp",
       "name": "Munition",
+      "icon": "https://github.com/benjammartin.png?size=64",
       "description": "x402付费上传和航班搜索工具，适用于AI代理。",
       "category": "file-system",
       "featured": false,
@@ -17841,6 +18252,7 @@
     {
       "id": "mcpservers-nanoparse-dev-nanoparse-mcp",
       "name": "NanoParse MCP",
+      "icon": "https://github.com/nanoparse-dev.png?size=64",
       "description": "抓取任意网页，借助Litmus信任信号生成干净的Markdown。无需账户或API密钥；通过x402按次解析付费。",
       "category": "web-scraping",
       "featured": false,
@@ -17881,6 +18293,7 @@
     {
       "id": "mcpservers-pitiflautico-neobrowser",
       "name": "NeoBrowser",
+      "icon": "https://github.com/pitiflautico.png?size=64",
       "description": "通过CDP驱动您的真实Google Chrome的MCP服务器，支持真实登录会话和真正的反机器人隐身。",
       "category": "web-scraping",
       "featured": false,
@@ -17957,6 +18370,7 @@
     {
       "id": "mcpservers-dominiclachance-neurakeep",
       "name": "NeuraKeep",
+      "icon": "https://github.com/dominiclachance.png?size=64",
       "description": "可审计、带来源引用的AI智能体记忆基础设施，具备冲突检测、提案审查和可复用失败记忆功能。",
       "category": "memory",
       "featured": false,
@@ -17975,6 +18389,7 @@
     {
       "id": "mcpservers-seblosiv-neurobird-search-mcp",
       "name": "Neurobird Search",
+      "icon": "https://github.com/seblosiv.png?size=64",
       "description": "面向AI代理的网页搜索，返回已提取相关页面段落的排序结果，并将任意URL转换为干净的Markdown格式。",
       "category": "search",
       "featured": false,
@@ -18059,6 +18474,7 @@
     {
       "id": "mcpservers-nowork-studio-notfair-plugin",
       "name": "NotFair Google Ads MCP",
+      "icon": "https://github.com/nowork-studio.png?size=64",
       "description": "托管的Google Ads MCP，提供117个工具，可从Claude、ChatGPT、Codex、Cursor及其他AI客户端审计、优化并安全更改广告系列。",
       "category": "marketing",
       "featured": false,
@@ -18100,6 +18516,7 @@
     {
       "id": "mcpservers-oblique-markets-mcp-server",
       "name": "Oblique Markets",
+      "icon": "https://github.com/oblique-markets.png?size=64",
       "description": "面向AI代理的x402付费工具",
       "category": "finance",
       "featured": false,
@@ -18122,6 +18539,7 @@
     {
       "id": "mcpservers-extralabs-octowatch-mcp-server",
       "name": "OctoWatch DLP MCP Server",
+      "icon": "https://github.com/extralabs.png?size=64",
       "description": "OctoWatch DLP（云端或本地部署）的MCP服务器",
       "category": "productivity",
       "featured": false,
@@ -18144,6 +18562,7 @@
     {
       "id": "mcpservers-oconsole-odoo-mcp-server",
       "name": "Odoo MCP Server (OdooConsole)",
+      "icon": "https://github.com/oconsole.png?size=64",
       "description": "将任意AI代理连接至Odoo ERP。托管远程端点，支持OAuth 2.0，位于mcp.odooconsole.com/mcp，或从仓库自托管。通过门控写入实现ERP数据的读写；一个端点服务于所有实例，租户由令牌决定。",
       "category": "database",
       "featured": false,
@@ -18167,6 +18586,7 @@
     {
       "id": "mcpservers-troybrandonc-bit-omem",
       "name": "Omem",
+      "icon": "https://github.com/troybrandonc-bit.png?size=64",
       "description": "为AI代理提供记忆，追踪其相信什么、何时相信及为何相信。矛盾之处会被揭示而非覆盖，身份与进程绑定，确保模型无法读取其他代理或用户的记忆。",
       "category": "memory",
       "featured": false,
@@ -18247,6 +18667,7 @@
     {
       "id": "mcpservers-github-com-nagarjunr-data-connectors-for-ai-agents-tree-main-mcpservers-onedrive",
       "name": "OneDrive Connector (data-connectors-ai)",
+      "icon": "https://github.com/nagarjunr.png?size=64",
       "description": "用于OneDrive的只读MCP服务器：通过Microsoft Graph API列出文件/文件夹。",
       "category": "file-system",
       "featured": false,
@@ -18306,6 +18727,7 @@
     {
       "id": "registry-ai-com-mcp-openai-tools",
       "name": "OpenAI Tools MCP Server",
+      "icon": "https://github.com/la-rebelion.png?size=64",
       "description": "Focused MCP server for OpenAI image/audio generation (v2.0.0). Wraps endpoints via HAPI CLI.",
       "category": "other",
       "featured": false,
@@ -18345,6 +18767,7 @@
     {
       "id": "mcpservers-openephemeris-openephemeris-mcp",
       "name": "OpenEphemeris",
+      "icon": "https://github.com/openephemeris.png?size=64",
       "description": "NASA JPL DE440占星/天文引擎：本命盘、行运、合盘、择时、人类设计、天文地理占星。",
       "category": "other",
       "featured": false,
@@ -18438,6 +18861,7 @@
     {
       "id": "mcpservers-orphograph-orphograph",
       "name": "Orphograph",
+      "icon": "https://github.com/Orphograph.png?size=64",
       "description": "通过OpenTimestamps将文件的SHA-256指纹锚定到比特币——文件从不离开设备。",
       "category": "development",
       "featured": false,
@@ -18539,6 +18963,7 @@
     {
       "id": "mcpservers-bzsanti-oxidize-python",
       "name": "oxidize-pdf",
+      "icon": "https://github.com/bzsanti.png?size=64",
       "description": "基于Rust的PDF工具包，通过MCP实现：创建、读取和分析PDF；提取文本和实体用于RAG；转换为Markdown；拆分/合并/旋转/重排页面；管理表单字段和注释；加密文档。通过uvx oxidize-mcp在本地运行。",
       "category": "file-system",
       "featured": false,
@@ -18563,6 +18988,7 @@
     {
       "id": "mcpservers-sanjoydat1-p2pa",
       "name": "P2PA",
+      "icon": "https://github.com/SanjoyDat1.png?size=64",
       "description": "并行代理自动协调声明并同步状态，无需手动合并或数据丢失。",
       "category": "version-control",
       "featured": false,
@@ -18603,6 +19029,7 @@
     {
       "id": "mcpservers-vj88-coder-pairbook-mcp",
       "name": "PairBook",
+      "icon": "https://github.com/vj88-coder.png?size=64",
       "description": "4,700多只美国股票和ETF的相关性及持仓重叠情况，覆盖1130万对组合。免费，无需API密钥。",
       "category": "finance",
       "featured": false,
@@ -18625,6 +19052,7 @@
     {
       "id": "mcpservers-palisadeemail-palisade-mcp",
       "name": "Palisade DMARC Agent",
+      "icon": "https://github.com/palisadeemail.png?size=64",
       "description": "AI驱动的DMARC和邮件认证管理，涵盖SPF、DKIM、DMARC、BIMI、MTA-STS、DNS记录及修复任务。",
       "category": "cloud-service",
       "featured": false,
@@ -18663,6 +19091,7 @@
     {
       "id": "mcpservers-jacobiusmakes-parlay-api-mcp",
       "name": "ParlayAPI",
+      "icon": "https://github.com/JacobiusMakes.png?size=64",
       "description": "来自45+家体育博彩公司和90+项体育赛事的体育博彩赔率、球员道具及预测市场数据，提供判定、串关评级、套利、+EV、共识和中间值工具；22个工具中有9个可通过uvx parlayapi-mcp免密钥运行（创始人首次提交）。",
       "category": "finance",
       "featured": false,
@@ -18767,6 +19196,7 @@
     {
       "id": "mcpservers-lechibang-1512-pecorino",
       "name": "Pecorino",
+      "icon": "https://github.com/lechibang-1512.png?size=64",
       "description": "用于代码索引和代码质量指标的MCP服务器",
       "category": "version-control",
       "featured": false,
@@ -18845,6 +19275,7 @@
     {
       "id": "mcpservers-jayamitkatariya-personacli",
       "name": "Persona",
+      "icon": "https://github.com/jayamitkatariya.png?size=64",
       "description": "本地优先的macOS Markdown工作区MCP服务器。persona mcp让Claude Code / Cursor读写笔记和任务。",
       "category": "memory",
       "featured": false,
@@ -18869,6 +19300,7 @@
     {
       "id": "mcpservers-tedysaputro-personal-bitbucket-mcp-server",
       "name": "Personal Bitbucket MCP Server",
+      "icon": "https://github.com/tedysaputro.png?size=64",
       "description": "基于Quarkus框架构建的Bitbucket MCP服务器",
       "category": "version-control",
       "featured": false,
@@ -18891,6 +19323,7 @@
     {
       "id": "mcpservers-gnaneshdivi-personal-whatsapp-mcp",
       "name": "Personal WhatsApp MCP",
+      "icon": "https://github.com/Gnaneshdivi.png?size=64",
       "description": "通过MCP将您的个人WhatsApp账户连接到Claude",
       "category": "communication",
       "featured": false,
@@ -18949,6 +19382,7 @@
     {
       "id": "mcpservers-abidit-phi-guard-mcp",
       "name": "PHI Guard MCP",
+      "icon": "https://github.com/Abidit.png?size=64",
       "description": "扫描源代码，检查PHI是否泄露到LLM提示、日志和分析调用中——本地优先，无网络调用。",
       "category": "development",
       "featured": false,
@@ -19020,6 +19454,7 @@
     {
       "id": "mcpservers-pinatacloud-pinata-mcp",
       "name": "Pinata",
+      "icon": "https://github.com/PinataCloud.png?size=64",
       "description": "通过Pinata的API与公共和私有IPFS进行交互。需要Pinata账户和API密钥。",
       "category": "cloud-storage",
       "featured": false,
@@ -19058,6 +19493,7 @@
     {
       "id": "mcpservers-pixfaro-mcp",
       "name": "Pixfaro",
+      "icon": "https://github.com/pixfaro.png?size=64",
       "description": "通过一个MCP即可使用所有主流模型生成图像——Nano Banana、Gemini、GPT Image；一个API密钥，一个预付费余额，无需订阅。",
       "category": "design",
       "featured": false,
@@ -19154,6 +19590,7 @@
     {
       "id": "registry-ai-circulara-plugin",
       "name": "plugin",
+      "icon": "https://github.com/CircularRoute.png?size=64",
       "description": "Circulara Observe MCP plugin - meters your AI agents' token spend and carbon, free tier.",
       "category": "other",
       "featured": false,
@@ -19207,6 +19644,7 @@
     {
       "id": "mcpservers-policyforge-mcp",
       "name": "PolicyForge",
+      "icon": "https://github.com/PolicyForge.png?size=64",
       "description": "根据你的代码库生成、审计并维护隐私政策、条款、Cookie 政策、EULA、免责声明和 HIPAA BAA——托管并跟踪版本。",
       "category": "other",
       "featured": false,
@@ -19230,6 +19668,7 @@
     {
       "id": "mcpservers-eszetael-postgres-mcp-hardened",
       "name": "postgres-mcp-hardened",
+      "icon": "https://github.com/Eszetael.png?size=64",
       "description": "已维护的 Rust 替代品，用于替代已归档的 @modelcontextprotocol/server-postgres。写入会被双重拒绝：执行前进行 sqlparser AST 校验，加上数据库级的 default_transaction_read_only 和每会话的 statement_timeout。单一二进制，支持 stdio 和 Streamable HTTP，模式检查，列脱敏，EXPLAIN 成本防护，哈希链审计日志，可选 OAuth 2.1，distroless 镜像。MIT 许可证。",
       "category": "database",
       "featured": false,
@@ -19365,6 +19804,7 @@
     {
       "id": "mcpservers-jarvismaximum-hue-profitplay-mcp",
       "name": "ProfitPlay MCP Server",
+      "icon": "https://github.com/jarvismaximum-hue.png?size=64",
       "description": "七个MCP工具，供AI代理注册沙盒积分、交易实时BTC五分钟预测市场并跟踪结果。",
       "category": "finance",
       "featured": false,
@@ -19388,6 +19828,7 @@
     {
       "id": "registry-ai-atlier-project-desk",
       "name": "Project Desk",
+      "icon": "https://github.com/Wildsdesign.png?size=64",
       "description": "Agent-updated work tracker for builders directing AI across multiple projects.",
       "category": "other",
       "featured": false,
@@ -19422,6 +19863,7 @@
     {
       "id": "mcpservers-borealstack-proton-drive-cli-mcp",
       "name": "Proton Drive CLI MCP",
+      "icon": "https://github.com/borealstack.png?size=64",
       "description": "Proton Drive CLI MCP 服务器及适用于 Codex/Claude 的官方 Proton Drive CLI 元数据",
       "category": "file-system",
       "featured": false,
@@ -19468,6 +19910,7 @@
     {
       "id": "registry-ai-dsght-public",
       "name": "public",
+      "icon": "https://github.com/michalstrnadel.png?size=64",
       "description": "Read-only MCP access to DSGHT.ai published foresight and country-grounded claim resolution.",
       "category": "other",
       "featured": false,
@@ -19566,6 +20009,7 @@
     {
       "id": "mcpservers-qiniu-qiniu-mcp-server",
       "name": "Qiniu MCP Server",
+      "icon": "https://github.com/qiniu.png?size=64",
       "description": "通过模型上下文协议访问七牛云的云存储、智能多媒体服务和CDN操作。",
       "category": "cloud-storage",
       "featured": false,
@@ -19587,6 +20031,7 @@
     {
       "id": "mcpservers-qorenext-qorenext-crm-mcp",
       "name": "QoreNext MCP CRM",
+      "icon": "https://github.com/QoreNext.png?size=64",
       "description": "为Claude及其他AI客户端提供实时CRM智能——直接在聊天中映射企业所有权层级、核实实体名称和注册地址、检测重复记录。无需手动查询，无需电子表格，无需杂乱数据。",
       "category": "productivity",
       "featured": false,
@@ -19610,6 +20055,7 @@
     {
       "id": "mcpservers-qorenext-qorenext-tradescreening-mcp",
       "name": "Qorenext Trade Screening MCP",
+      "icon": "https://github.com/QoreNext.png?size=64",
       "description": "Qorenext Trade screening MCP是一个模型上下文协议服务器，使Claude和其他AI客户端能够在聊天中直接运行制裁筛查和贸易筛查尽职调查。",
       "category": "productivity",
       "featured": false,
@@ -19632,6 +20078,7 @@
     {
       "id": "mcpservers-tanshaydar-quartermaster",
       "name": "Quartermaster",
+      "icon": "https://github.com/Tanshaydar.png?size=64",
       "description": "您的游戏资产库，可通过模型上下文协议（MCP）由AI代理查询和执行（Unity资源商店与Fab / Unreal）。",
       "category": "development",
       "featured": false,
@@ -19673,6 +20120,7 @@
     {
       "id": "mcpservers-questa-ai-org-questa-mcp",
       "name": "Questa Privacy MCP",
+      "icon": "https://github.com/questa-ai-org.png?size=64",
       "description": "在数据到达AI模型之前，对PII进行匿名化和编辑。符合GDPR、HIPAA、EU AI法案。",
       "category": "development",
       "featured": false,
@@ -19696,6 +20144,7 @@
     {
       "id": "mcpservers-questdb-mcp-server-questdb",
       "name": "QuestDB",
+      "icon": "https://github.com/questdb.png?size=64",
       "description": "QuestDB MCP服务器将编码代理连接到正在运行的QuestDB Web控制台。代理可以使用工具创建笔记本单元格、运行查询和构建图表。",
       "category": "database",
       "featured": false,
@@ -19734,6 +20183,7 @@
     {
       "id": "mcpservers-quidli-connect-mcp",
       "name": "Quidli Connect",
+      "icon": "https://github.com/Quidli.png?size=64",
       "description": "将任何社交账号解析为钱包地址，通过公开历史记录核查信誉，并从任意MCP客户端发送代币。",
       "category": "finance",
       "featured": false,
@@ -19776,6 +20226,7 @@
     {
       "id": "mcpservers-hatmanstack-ragstack-lambda",
       "name": "RAGStack-Lambda",
+      "icon": "https://github.com/HatmanStack.png?size=64",
       "description": "基于AI聊天的无服务器文档与媒体处理。",
       "category": "cloud-storage",
       "featured": false,
@@ -19836,6 +20287,7 @@
     {
       "id": "mcpservers-github-com-behzad9",
       "name": "Rare Cloud",
+      "icon": "https://github.com/Behzad9.png?size=64",
       "description": "最佳网球比赛",
       "category": "development",
       "featured": false,
@@ -19856,6 +20308,7 @@
     {
       "id": "mcpservers-rasterly-dev-rasterly-mcp",
       "name": "rasterly-mcp",
+      "icon": "https://github.com/rasterly-dev.png?size=64",
       "description": "一个API，供AI代理对任意URL进行截图、PDF生成、读取（干净Markdown）、提取（JSON）、爬取、批量处理及监控。可直接替代Urlbox/ScreenshotOne，价格$0.90/千次。支持动画横幅工具（延迟、等待、稳定、GIF和MP4导出）、直接S3上传、带签名Webhook的异步任务，以及基于Base链的按次USDC支付，实现无密钥代理付款。",
       "category": "web-scraping",
       "featured": false,
@@ -19898,6 +20351,7 @@
     {
       "id": "mcpservers-giulioder-re-call",
       "name": "RE-call MCP Memory Server",
+      "icon": "https://github.com/GiulioDER.png?size=64",
       "description": "Postgres 加 pgvector 为 AI 智能体提供记忆，具备来源追踪、信任判定，并在记忆无法支撑答案时明确弃权。",
       "category": "memory",
       "featured": false,
@@ -19933,6 +20387,7 @@
     {
       "id": "mcpservers-tresor4k-realdentalcosts-mcp",
       "name": "Real Dental Costs",
+      "icon": "https://github.com/tresor4k.png?size=64",
       "description": "美国牙科手术价格（51个州，200+城市，现金价与保险价对比），数据来自开放CC-BY数据集并附有DOI——提供费用查询工具。",
       "category": "database",
       "featured": false,
@@ -20022,6 +20477,7 @@
     {
       "id": "mcpservers-vinerima-remote-files-mcp",
       "name": "Remote Files MCP",
+      "icon": "https://github.com/vinerima.png?size=64",
       "description": "用于监控远程文件源、检测新文件并提取内容的MCP服务器。通过rclone（支持70多个提供商）或自定义命令，可与任何存储后端配合使用。",
       "category": "cloud-storage",
       "featured": false,
@@ -20045,6 +20501,7 @@
     {
       "id": "mcpservers-looph0le-reqstorm",
       "name": "ReqStorm",
+      "icon": "https://github.com/looph0le.png?size=64",
       "description": "API性能分析器MCP",
       "category": "development",
       "featured": false,
@@ -20068,6 +20525,7 @@
     {
       "id": "mcpservers-thenaeem-reqtree",
       "name": "ReqTree",
+      "icon": "https://github.com/TheNaeem.png?size=64",
       "description": "基于LLM的HTTP/HTTPS捕获代理，配备MCP工具，用于检查流量、编写行为脚本以及修改请求和响应。",
       "category": "web-scraping",
       "featured": false,
@@ -20109,6 +20567,7 @@
     {
       "id": "mcpservers-thomascrouzet-restic-defensive-mcp",
       "name": "restic-defensive-mcp",
+      "icon": "https://github.com/ThomasCrouzet.png?size=64",
       "description": "用于检查restic仓库的结构化只读stdio MCP服务器。仓库和凭据在启动时密封；仅可运行固定的restic子命令子集（snapshots/ls/find/stats）。无shell，无backup/restore/forget/prune。",
       "category": "cloud-storage",
       "featured": false,
@@ -20192,6 +20651,7 @@
     {
       "id": "mcpservers-odrin-rhizome-mcp",
       "name": "rhizome-mcp",
+      "icon": "https://github.com/Odrin.png?size=64",
       "description": "崩溃安全的任务跟踪与协调，专为AI编程代理设计——支持过期租约声明、可恢复尝试、版本固定的审查；单个Go二进制文件，内置SQLite。",
       "category": "development",
       "featured": false,
@@ -20255,6 +20715,7 @@
     {
       "id": "mcpservers-pencilrebel-roast-my-design-system",
       "name": "roast-my-design-system",
+      "icon": "https://github.com/pencilrebel.png?size=64",
       "description": "一个确定性扫描器，审计你的设计系统，对照34个公共仓库打分0-100，并生成让AI编写的UI保持系统一致的代理规则。本地运行，免费，MIT许可。",
       "category": "design",
       "featured": false,
@@ -20278,6 +20739,7 @@
     {
       "id": "mcpservers-el4cteo-roblox-devforum-mcp",
       "name": "roblox-devforum-mcp",
+      "icon": "https://github.com/EL4CTEO.png?size=64",
       "description": "为你的AI编程代理提供Roblox开发者论坛和官方创作者文档——检查已知Bug、阅读采纳答案，并在编写Luau代码前验证API。",
       "category": "development",
       "featured": false,
@@ -20341,6 +20803,7 @@
     {
       "id": "mcpservers-github-com-nagarjunr-data-connectors-for-ai-agents-tree-main-mcpservers-s3bucket",
       "name": "S3 Connector (data-connectors-ai)",
+      "icon": "https://github.com/nagarjunr.png?size=64",
       "description": "用于S3兼容存储的只读MCP服务器：列出存储桶和对象。",
       "category": "cloud-storage",
       "featured": false,
@@ -20362,6 +20825,7 @@
     {
       "id": "mcpservers-sofianhamiti-mcp-server-s3",
       "name": "S3 Tools",
+      "icon": "https://github.com/sofianhamiti.png?size=64",
       "description": "提供用于与AWS S3存储桶交互的工具。",
       "category": "cloud-storage",
       "featured": false,
@@ -20384,6 +20848,7 @@
     {
       "id": "registry-ai-dynsoft-sac",
       "name": "SaC — Software as Content",
+      "icon": "https://github.com/Software-As-Content.png?size=64",
       "description": "Give your AI agent the ability to respond with live, interactive apps that evolve.",
       "category": "other",
       "featured": false,
@@ -20402,6 +20867,7 @@
     {
       "id": "mcpservers-sanoy24-safe-fetch-mcp-server",
       "name": "Safe Fetch MCP Server",
+      "icon": "https://github.com/Sanoy24.png?size=64",
       "description": "SSRF安全的MCP服务器，用于获取URL——解析一次，验证IP，并固定连接，防止被诱骗访问云元数据或内部主机。",
       "category": "web-scraping",
       "featured": false,
@@ -20422,6 +20888,7 @@
     {
       "id": "mcpservers-lewo-media-safe-mind-tools",
       "name": "Safe Mind",
+      "icon": "https://github.com/lewo-media.png?size=64",
       "description": "为德国企业执行法律要求的心理风险评估（GBU Psyche）：调查、部门、匿名保护的统计分析。",
       "category": "productivity",
       "featured": false,
@@ -20445,6 +20912,7 @@
     {
       "id": "mcpservers-antonillos-safeselect",
       "name": "SafeSelect",
+      "icon": "https://github.com/antonillos.png?size=64",
       "description": "通过MCP为AI代理提供安全、故障关闭、只读的数据库访问。",
       "category": "database",
       "featured": false,
@@ -20468,6 +20936,7 @@
     {
       "id": "mcpservers-kubis010-linkedin-mcp-server-salesbot",
       "name": "Salesbot — LinkedIn MCP Server",
+      "icon": "https://github.com/Kubis010.png?size=64",
       "description": "LinkedIn MCP服务器和Sales Navigator MCP，用于潜在客户发现、人工审核的外联、收件箱工作流，以及内置销售CRM，提供48个安全门控工具。",
       "category": "marketing",
       "featured": false,
@@ -20532,6 +21001,7 @@
     {
       "id": "mcpservers-santismm-santismm-knowledge-mcp",
       "name": "Santismm Knowledge",
+      "icon": "https://github.com/santismm.png?size=64",
       "description": "关于线束工程、智能体AI模式、参考架构和AI治理的只读知识库——19个工具，三语（英语/西班牙语/葡萄牙语），位于 https://santismm.com/mcp",
       "category": "memory",
       "featured": false,
@@ -20555,6 +21025,7 @@
     {
       "id": "mcpservers-saveeit-savee-mcp-server",
       "name": "Savee",
+      "icon": "https://github.com/saveeit.png?size=64",
       "description": "读取您的Savee收藏、画板和首页信息流，并搜索其精选设计灵感公共库。",
       "category": "design",
       "featured": false,
@@ -20660,6 +21131,7 @@
     {
       "id": "mcpservers-mrfentmen-screenplaywriter-mcp",
       "name": "screenplaywriter-mcp",
+      "icon": "https://github.com/mrfentmen.png?size=64",
       "description": "读取、编写和分析Fountain格式的剧本",
       "category": "design",
       "featured": false,
@@ -20697,6 +21169,7 @@
     {
       "id": "mcpservers-yyeongjin-secret-mcp",
       "name": "Secret MCP",
+      "icon": "https://github.com/yyeongjin.png?size=64",
       "description": "基于近期GDWEB参考资料的实证网页设计分析，通过隔离的MCP采样请求生成可直接实施的DESIGN_INDEX规范。",
       "category": "design",
       "featured": false,
@@ -20742,6 +21215,7 @@
     {
       "id": "mcpservers-night4me-pfsense-mcp-server",
       "name": "security-first MCP server for pfSense",
+      "icon": "https://github.com/night4me.png?size=64",
       "description": "按设计目前为只读；写入功能已置于明确的安全架构之后，处于分阶段启用状态。",
       "category": "development",
       "featured": false,
@@ -20787,6 +21261,7 @@
     {
       "id": "mcpservers-shaqmughal-seekstone",
       "name": "Seekstone",
+      "icon": "https://github.com/shaqmughal.png?size=64",
       "description": "面向Obsidian vault的文件系统直连MCP服务器。直接从磁盘读取vault文件——无需Obsidian应用或插件。负载比基于REST的替代方案小575倍。",
       "category": "file-system",
       "featured": false,
@@ -20809,6 +21284,7 @@
     {
       "id": "mcpservers-masondelan-selvedge",
       "name": "Selvedge",
+      "icon": "https://github.com/masondelan.png?size=64",
       "description": "面向AI时代代码库的变更追踪——在代理进行每次变更时，捕获其背后的原因。",
       "category": "version-control",
       "featured": false,
@@ -20831,6 +21307,7 @@
     {
       "id": "mcpservers-ataraxy-labs-sem",
       "name": "sem-mcp",
+      "icon": "https://github.com/Ataraxy-Labs.png?size=64",
       "description": "面向智能体的实体级代码智能",
       "category": "version-control",
       "featured": false,
@@ -20854,6 +21331,7 @@
     {
       "id": "mcpservers-shivamselam-seminara-sdk",
       "name": "Seminara MCP",
+      "icon": "https://github.com/shivamselam.png?size=64",
       "description": "通过Seminara创建、管理和分析交互式AI主持的演示文稿。",
       "category": "communication",
       "featured": false,
@@ -20946,6 +21424,7 @@
     {
       "id": "registry-ai-inxy-seo-audit",
       "name": "seo-audit",
+      "icon": "https://github.com/riverliu8.png?size=64",
       "description": "Free SEO & AI-search (AEO) audits for any site or Shopify store, with emailed weekly score reports.",
       "category": "other",
       "featured": false,
@@ -20963,6 +21442,7 @@
     {
       "id": "registry-ai-callmcp-server",
       "name": "server",
+      "icon": "https://github.com/CallMCP.png?size=64",
       "description": "One MCP tool contract for telephony — any call provider, hosted, local, or BYOK.",
       "category": "other",
       "featured": false,
@@ -20999,6 +21479,7 @@
     {
       "id": "mcpservers-github-com-nagarjunr-data-connectors-for-ai-agents-tree-main-mcpservers-sharepoint",
       "name": "SharePoint Connector (data-connectors-ai)",
+      "icon": "https://github.com/nagarjunr.png?size=64",
       "description": "用于SharePoint的只读MCP服务器：通过Microsoft Graph API列出、递归浏览、检查文件/文件夹元数据。",
       "category": "file-system",
       "featured": false,
@@ -21076,6 +21557,7 @@
     {
       "id": "mcpservers-hgenix20-signalnodus",
       "name": "Signal Nodus",
+      "icon": "https://github.com/hgenix20.png?size=64",
       "description": "面向代理的修正安全SEC申报工具：提取10-K/10-Q章节为纯文本，逐年对比差异，并对照已申报的XBRL核查数字声明，按调用次数计费，附带公开的准确率。",
       "category": "finance",
       "featured": false,
@@ -21192,6 +21674,7 @@
     {
       "id": "mcpservers-ariaxhan-site-spec",
       "name": "site-spec",
+      "icon": "https://github.com/ariaxhan.png?size=64",
       "description": "审计任何网站的SEO、可访问性、隐私、结构化数据和AI可搜索性，涵盖40项检查，并自动修复可修复的问题。",
       "category": "development",
       "featured": false,
@@ -21215,6 +21698,7 @@
     {
       "id": "mcpservers-johnnytheshark-skill-cli",
       "name": "skill-cli",
+      "icon": "https://github.com/JohnnytheShark.png?size=64",
       "description": "高性能AI代理技能引擎。通过嵌入式SQLite FTS5数据库动态存储、搜索和获取Markdown技能，以节省上下文令牌。",
       "category": "productivity",
       "featured": false,
@@ -21278,6 +21762,7 @@
     {
       "id": "registry-ai-lateos-soar-record-gateway",
       "name": "SOAR Record Gateway",
+      "icon": "https://github.com/lateos-ai.png?size=64",
       "description": "SOAR security playbooks for AI agents: fetch, full-text search, and count. Metered via Stripe.",
       "category": "other",
       "featured": false,
@@ -21295,6 +21780,7 @@
     {
       "id": "mcpservers-social-freak-ltd-socialfetch-mcp",
       "name": "Social Fetch",
+      "icon": "https://github.com/social-freak-ltd.png?size=64",
       "description": "托管的MCP服务，用于获取公开社交媒体数据（TikTok、Instagram、Reddit、X、YouTube等），并以结构化JSON格式提供。",
       "category": "web-scraping",
       "featured": false,
@@ -21342,6 +21828,7 @@
     {
       "id": "mcpservers-devinchen2014-bilibili-mcp",
       "name": "SocialDataX Bilibili MCP",
+      "icon": "https://github.com/DevinChen2014.png?size=64",
       "description": "SocialDataX Bilibili MCP，用于视频和文章搜索、视频/文章/动态详情、评论与回复、点赞与转发、创作者主页与发布内容、下载及字幕文本。",
       "category": "marketing",
       "featured": false,
@@ -21366,6 +21853,7 @@
     {
       "id": "mcpservers-devinchen2014-instagram-mcp",
       "name": "SocialDataX Instagram MCP",
+      "icon": "https://github.com/DevinChen2014.png?size=64",
       "description": "SocialDataX Instagram MCP，用于公开帖子、评论和回复、创作者个人资料和帖子，以及视频/Reels语音转文字转录。",
       "category": "marketing",
       "featured": false,
@@ -21390,6 +21878,7 @@
     {
       "id": "mcpservers-devinchen2014-tiktok-mcp",
       "name": "SocialDataX TikTok MCP",
+      "icon": "https://github.com/DevinChen2014.png?size=64",
       "description": "SocialDataX TikTok MCP，用于视频和图片帖子搜索及详情、评论和回复、创作者主页及帖子，以及语音转文字转录。",
       "category": "marketing",
       "featured": false,
@@ -21413,6 +21902,7 @@
     {
       "id": "mcpservers-devinchen2014-wechat-channels-mcp",
       "name": "SocialDataX WeChat Channels MCP",
+      "icon": "https://github.com/DevinChen2014.png?size=64",
       "description": "SocialDataX 微信视频号 MCP，用于获取公开视频和图文帖子、评论与回复、创作者主页及其帖子、语音转文字转录文本，以及公众号文章详情。",
       "category": "marketing",
       "featured": false,
@@ -21437,6 +21927,7 @@
     {
       "id": "mcpservers-devinchen2014-weibo-mcp",
       "name": "SocialDataX Weibo MCP",
+      "icon": "https://github.com/DevinChen2014.png?size=64",
       "description": "SocialDataX微博MCP，用于热搜、公开帖子搜索与详情、评论与回复、创作者主页与帖子，以及语音转文字转录。",
       "category": "marketing",
       "featured": false,
@@ -21460,6 +21951,7 @@
     {
       "id": "mcpservers-devinchen2014-x-twitter-mcp",
       "name": "SocialDataX X Twitter MCP",
+      "icon": "https://github.com/DevinChen2014.png?size=64",
       "description": "SocialDataX X / Twitter MCP，用于公开帖子搜索、帖子详情、评论与回复、创作者资料、创作者帖子及分页结果。",
       "category": "marketing",
       "featured": false,
@@ -21483,6 +21975,7 @@
     {
       "id": "mcpservers-devinchen2014-youtube-mcp",
       "name": "SocialDataX YouTube MCP",
+      "icon": "https://github.com/DevinChen2014.png?size=64",
       "description": "SocialDataX YouTube MCP，用于视频搜索与详情、评论及回复、频道资料与视频或Shorts，以及语音转文字转录。",
       "category": "marketing",
       "featured": false,
@@ -21507,6 +22000,7 @@
     {
       "id": "mcpservers-devinchen2014-zhihu-mcp",
       "name": "SocialDataX Zhihu MCP",
+      "icon": "https://github.com/DevinChen2014.png?size=64",
       "description": "SocialDataX 知乎 MCP，用于热搜榜单、回答、文章和视频搜索及详情、评论与回复、创作者主页及创作者文章。",
       "category": "version-control",
       "featured": false,
@@ -21568,6 +22062,7 @@
     {
       "id": "mcpservers-ryancodrai-sourced",
       "name": "Sourced.dev",
+      "icon": "https://github.com/RyanCodrai.png?size=64",
       "description": "搜索 PyPI 和 npm 上每个包的源代码。",
       "category": "version-control",
       "featured": false,
@@ -21590,6 +22085,7 @@
     {
       "id": "mcpservers-sourcey-mcp-server",
       "name": "Sourcey",
+      "icon": "https://github.com/sourcey.png?size=64",
       "description": "基于证据的创业公司积分、SaaS优惠、来源追溯，以及代理就绪度报告卡。",
       "category": "search",
       "featured": false,
@@ -21697,6 +22193,7 @@
     {
       "id": "registry-ai-aliengiraffe-spotdb",
       "name": "spotdb",
+      "icon": "https://github.com/aliengiraffe.png?size=64",
       "description": "Ephemeral data sandbox for AI workflows with guardrails and security",
       "category": "other",
       "featured": false,
@@ -21773,6 +22270,7 @@
     {
       "id": "mcpservers-gswartwood-sqlfluff-mcp-server",
       "name": "SQLFluff MCP Server",
+      "icon": "https://github.com/gswartwood.png?size=64",
       "description": "一个通过模型上下文协议暴露SQLFluff的lint/fix/parse功能的MCP服务器",
       "category": "database",
       "featured": false,
@@ -21811,6 +22309,7 @@
     {
       "id": "registry-ai-klavis-strata",
       "name": "strata",
+      "icon": "https://github.com/Klavis-AI.png?size=64",
       "description": "MCP server for progressive tool usage at any scale (see https://klavis.ai)",
       "category": "other",
       "featured": false,
@@ -22023,6 +22522,7 @@
     {
       "id": "registry-ai-atdev-supershopping",
       "name": "supershopping",
+      "icon": "https://github.com/alex-hoyeol-choi.png?size=64",
       "description": "나만을 위한 AI 쇼핑 MCP — 상품을 자연어로 검색·비교·추천해 사용자의 효과적인 쇼핑을 돕습니다.",
       "category": "other",
       "featured": false,
@@ -22058,6 +22558,7 @@
     {
       "id": "mcpservers-rudrendupaul-swarm-rd-orchestrator",
       "name": "swarm-rd-orchestrator",
+      "icon": "https://github.com/RudrenduPaul.png?size=64",
       "description": "仅追加事件日志，用于通过3个MCP工具实现跨代理的上下文/记忆共享。",
       "category": "memory",
       "featured": false,
@@ -22076,6 +22577,7 @@
     {
       "id": "mcpservers-spranab-swarmcode",
       "name": "swarmcode",
+      "icon": "https://github.com/spranab.png?size=64",
       "description": "基于Redis的实时通道，连接跨机器的Claude Code实例——消息、共享工件、工作区状态。",
       "category": "communication",
       "featured": false,
@@ -22100,6 +22602,7 @@
     {
       "id": "mcpservers-rudrendupaul-swarmmesh",
       "name": "swarmmesh",
+      "icon": "https://github.com/RudrenduPaul.png?size=64",
       "description": "多智能体上下文共享、记忆及状态协调，通过10个MCP工具实现。",
       "category": "memory",
       "featured": false,
@@ -22136,6 +22639,7 @@
     {
       "id": "registry-ai-maximem-synap",
       "name": "Synap Memory",
+      "icon": "https://github.com/maximem-ai.png?size=64",
       "description": "Persistent memory for AI agents — log and recall conversation context over MCP.",
       "category": "other",
       "featured": false,
@@ -22209,6 +22713,7 @@
     {
       "id": "mcpservers-aimarhergert-synthora-mcp",
       "name": "SYNTHORA x402 MCP Server",
+      "icon": "https://github.com/aimarhergert.png?size=64",
       "description": "经核验的M2M智能工具，适用于AI代理：制裁/反洗钱筛查、钱包信息丰富、智能合约审计、预测市场信号——通过x402按次付费（Base上的USDC）。",
       "category": "finance",
       "featured": false,
@@ -22233,6 +22738,7 @@
     {
       "id": "mcpservers-t3ratech-mcp-session-bridge",
       "name": "T3rnel Browser — Session Bridge",
+      "icon": "https://github.com/t3ratech.png?size=64",
       "description": "驱动您已登录的浏览器，因此登录、SSO或MFA后的工作无需脚本化认证——独立20个工具，配合免费的T3rnel Browser扩展可达99个。",
       "category": "development",
       "featured": false,
@@ -22352,6 +22858,7 @@
     {
       "id": "mcpservers-teamshared-ai-teamshared-plugin",
       "name": "TeamShared",
+      "icon": "https://github.com/teamshared-ai.png?size=64",
       "description": "编码代理的共享内存。无需在每次会话中重新解释你的代码库。托管MCP位于https://teamshared.com/mcp，支持邮箱/OTP连接。",
       "category": "memory",
       "featured": false,
@@ -22392,6 +22899,7 @@
     {
       "id": "mcpservers-teckel-mcp-servers-ipfs-toolkit",
       "name": "Teckel IPFS MCP Toolkit",
+      "icon": "https://github.com/teckel-mcp-servers.png?size=64",
       "description": "通过简单API（以MCP工具形式访问）在IPFS上上传、检索、固定和管理加密文件",
       "category": "file-system",
       "featured": false,
@@ -22415,6 +22923,7 @@
     {
       "id": "mcpservers-andrewspearson-tenable-mcp-mssp",
       "name": "Tenable MSSP MCP Server",
+      "icon": "https://github.com/andrewspearson.png?size=64",
       "description": "用于与连接到Tenable MSSP门户的Tenable租户进行交互的MCP服务器。",
       "category": "cloud-service",
       "featured": false,
@@ -22437,6 +22946,7 @@
     {
       "id": "mcpservers-anrefranciscus-alert-notification-tencent",
       "name": "TENCENT_CLOUD_NOTIFICATION_INTERNAL",
+      "icon": "https://github.com/anrefranciscus.png?size=64",
       "description": "告警通知",
       "category": "cloud-storage",
       "featured": false,
@@ -22459,6 +22969,7 @@
     {
       "id": "mcpservers-terno-ai-ternodbi",
       "name": "Terno",
+      "icon": "https://github.com/terno-ai.png?size=64",
       "description": "Terno是一个为安全性和准确性设计的数据库智能层，弥合了AI代理与企业数据之间的差距。通过OAuth即时连接托管服务器——无需安装——或直接将其嵌入您自己的Django项目中。",
       "category": "database",
       "featured": false,
@@ -22482,6 +22993,7 @@
     {
       "id": "mcpservers-fi-mihej-text-file-read-and-refactor-mcp",
       "name": "text_file_read_and_refactor_mcp",
+      "icon": "https://github.com/FI-Mihej.png?size=64",
       "description": "关于Token高效的Python stdio MCP服务器，提供安全的文本文件搜索、读取和重构工具。工具自动解析文件BOM和代码页；编辑工具以原始编码和BOM保存文件。",
       "category": "file-system",
       "featured": false,
@@ -22550,6 +23062,7 @@
     {
       "id": "mcpservers-unravel-team-thing-cli",
       "name": "thing",
+      "icon": "https://github.com/unravel-team.png?size=64",
       "description": "将你的智能体刚构建的内容发布为持久链接，支持不可变版本、任意两个版本间的差异对比，以及页面上的直接评论。",
       "category": "communication",
       "featured": false,
@@ -22663,6 +23176,7 @@
     {
       "id": "mcpservers-number1101-tillpad-mcp",
       "name": "Tillpad",
+      "icon": "https://github.com/number1101.png?size=64",
       "description": "代理任务的受限存储与搜索",
       "category": "file-system",
       "featured": false,
@@ -22739,6 +23253,7 @@
     {
       "id": "mcpservers-skinnafrog-thb-mcp",
       "name": "TooHardBasket.ai",
+      "icon": "https://github.com/skinnafrog.png?size=64",
       "description": "AI代理在此市场完成实际工作，并建立可验证、仅凭证据的信誉。",
       "category": "productivity",
       "featured": false,
@@ -22779,6 +23294,7 @@
     {
       "id": "mcpservers-dinghuazhou-sample-mcp-server-tos",
       "name": "TOS MCP Server",
+      "icon": "https://github.com/dinghuazhou.png?size=64",
       "description": "通过自然语言查询，探索和检索火山引擎Tinder对象存储（TOS）中的内容。",
       "category": "cloud-storage",
       "featured": false,
@@ -22801,6 +23317,7 @@
     {
       "id": "mcpservers-jasondsmith72-total-pc-control-git",
       "name": "Total-pc-control",
+      "icon": "https://github.com/jasondsmith72.png?size=64",
       "description": "可以控制整个电脑的键盘、鼠标、剪贴板、截图工具等一切功能",
       "category": "version-control",
       "featured": false,
@@ -22823,6 +23340,7 @@
     {
       "id": "mcpservers-eviscerations-touchdesigner-bridge-mcp",
       "name": "touchdesigner-bridge-mcp",
+      "icon": "https://github.com/eviscerations.png?size=64",
       "description": "一个纯数据的MCP服务器，通过Claude Desktop集成驱动TouchDesigner。",
       "category": "design",
       "featured": false,
@@ -22867,6 +23385,7 @@
     {
       "id": "mcpservers-target1m-traderspy-mcp",
       "name": "TraderSpy",
+      "icon": "https://github.com/target1m.png?size=64",
       "description": "AI加密货币期货信号，Binance、Hyperliquid、Bybit和OKX上的聪明钱鲸鱼持仓，加上实时价格和13项技术指标——所有工具均为只读。",
       "category": "finance",
       "featured": false,
@@ -22890,6 +23409,7 @@
     {
       "id": "registry-agency-lona-trading",
       "name": "trading",
+      "icon": "https://github.com/mindsightventures.png?size=64",
       "description": "AI-powered trading strategy development: backtesting, market data, and portfolio analysis",
       "category": "other",
       "featured": false,
@@ -22907,6 +23427,7 @@
     {
       "id": "mcpservers-cargoffer-transcend-mcp-server",
       "name": "TRANSCEND MCP",
+      "icon": "https://github.com/cargoffer.png?size=64",
       "description": "面向重型车辆和物流的AI驱动路线优化MCP服务器。计算卡车优化路线，利用LSTM神经网络预测交通拥堵，计算通行费、燃油成本和二氧化碳排放量，查找卡车停靠点并查询欧洲任意路线沿途天气。基于Valhalla路由引擎构建",
       "category": "cloud-storage",
       "featured": false,
@@ -22930,6 +23451,7 @@
     {
       "id": "registry-ai-autonomad-travel",
       "name": "travel",
+      "icon": "https://github.com/Autonomad1.png?size=64",
       "description": "AI travel agent — book flights, hotels, activities, and events worldwide via autonomad.ai.",
       "category": "other",
       "featured": false,
@@ -23039,6 +23561,7 @@
     {
       "id": "mcpservers-spranab-truenas-mcp",
       "name": "truenas-mcp",
+      "icon": "https://github.com/spranab.png?size=64",
       "description": "TrueNAS SCALE的MCP服务器——将278个REST API操作整合为一个分层工具，而非50-80个独立工具。",
       "category": "cloud-storage",
       "featured": false,
@@ -23062,6 +23585,7 @@
     {
       "id": "mcpservers-not0lucky-tubescout",
       "name": "TubeScout",
+      "icon": "https://github.com/not0lucky.png?size=64",
       "description": "将YouTube变成研究引擎：免密钥搜索、视频情报、稳健的转录文本和需求信号——另有6个内置研究技能，适用于Claude Code、Codex和OpenCode。",
       "category": "search",
       "featured": false,
@@ -23124,6 +23648,7 @@
     {
       "id": "registry-ai-djwizard-tvwizard",
       "name": "TVWizard",
+      "icon": "https://github.com/fizzious1.png?size=64",
       "description": "Control Android TV from any AI. 38 MCP tools: playback, recap, recommend, smart-home, schedules.",
       "category": "other",
       "featured": false,
@@ -23256,6 +23781,7 @@
     {
       "id": "mcpservers-akshay2211-universal-context-pipeline",
       "name": "Universal Context Pipeline",
+      "icon": "https://github.com/akshay2211.png?size=64",
       "description": "本地优先的MCP服务器，可索引文件夹、PDF、代码及过往AI对话，并将其作为单一接地搜索工具暴露。完全离线运行。",
       "category": "file-system",
       "featured": false,
@@ -23302,6 +23828,7 @@
     {
       "id": "mcpservers-jaminben-secure-applemusic-mcp-for-osx",
       "name": "Unofficial Apple Music for macOS",
+      "icon": "https://github.com/jaminben.png?size=64",
       "description": "说出一个播放列表，就能得到一个真实的、正在Apple Music中播放的列表——无需账户，不存储任何内容。",
       "category": "other",
       "featured": false,
@@ -23401,6 +23928,7 @@
     {
       "id": "mcpservers-abo3skralmasaoodi-valmera-mcp",
       "name": "Valmera",
+      "icon": "https://github.com/ABO3SKRALMASAOODI.png?size=64",
       "description": "远程智能体AI视频编辑器，适用于真实素材，提供135个实时MCP工具，涵盖上传、转录、剪辑、字幕、音乐、重构图、渲染、审阅、导出和下载。",
       "category": "design",
       "featured": false,
@@ -23447,6 +23975,7 @@
     {
       "id": "mcpservers-bitterdev-veracrypt-mcp",
       "name": "VeraCrypt MCP",
+      "icon": "https://github.com/bitterdev.png?size=64",
       "description": "挂载和卸载VeraCrypt容器，使助手能够处理解密后的文件，密码通过标准输入而非命令行传递。",
       "category": "file-system",
       "featured": false,
@@ -23521,6 +24050,7 @@
     {
       "id": "registry-ai-getvet-vet",
       "name": "vet",
+      "icon": "https://github.com/getvetai.png?size=64",
       "description": "Discover and vet MCP servers: search 200K+ AI tools with security verification and schemas.",
       "category": "other",
       "featured": false,
@@ -23580,6 +24110,7 @@
     {
       "id": "mcpservers-carter-wzq-vps-choose-mcp",
       "name": "vps-choose-mcp",
+      "icon": "https://github.com/carter-wzq.png?size=64",
       "description": "按场景管理VPS和云主机",
       "category": "cloud-service",
       "featured": false,
@@ -23666,6 +24197,7 @@
     {
       "id": "mcpservers-ajprolific-waqi-mcp",
       "name": "Waqi - AI Protection Layer",
+      "icon": "https://github.com/ajprolific.png?size=64",
       "description": "Waqi — 托管的MCP服务器，在AI看到之前从你的业务工具中编辑掉PII。包含审计日志。",
       "category": "database",
       "featured": false,
@@ -23724,6 +24256,7 @@
     {
       "id": "registry-ai-groundroute-web-search",
       "name": "web-search",
+      "icon": "https://github.com/PROJECT-B-26.png?size=64",
       "description": "Web search for AI agents — one tool across 6 engines, routed to the cheapest + cached.",
       "category": "other",
       "featured": false,
@@ -23760,6 +24293,7 @@
     {
       "id": "mcpservers-bigy2012-website-analyzer-git",
       "name": "Website Analyzer",
+      "icon": "https://github.com/bigy2012.png?size=64",
       "description": "Website Analyzer MCP是一个MCP服务器，让AI能够通过提取DOM、CSS、响应式布局、截图及其他设计细节来自动分析网站。它将分析结果转换为结构化数据，供AI编程助手用于更快地生成设计系统、文档和代码。",
       "category": "web-scraping",
       "featured": false,
@@ -23806,6 +24340,7 @@
     {
       "id": "mcpservers-stcmain-whats-loaded-mcp",
       "name": "What's Loaded",
+      "icon": "https://github.com/stcmain.png?size=64",
       "description": "在对话开始前显示占用智能体上下文窗口的内容——按token成本排名的技能描述、重复技能、记忆文件及其导入，以及每个已配置的MCP服务器。",
       "category": "memory",
       "featured": false,
@@ -23841,6 +24376,7 @@
     {
       "id": "mcpservers-wiswes-magento",
       "name": "WisWes Magento MCP",
+      "icon": "https://github.com/wiswes.png?size=64",
       "description": "将Magento 2商店的目录、购物车、结账、客户、销售和愿望清单操作暴露为MCP工具，使AI代理能够搜索产品并针对实时商店构建真实购物车。",
       "category": "cloud-service",
       "featured": false,
@@ -23942,6 +24478,7 @@
     {
       "id": "mcpservers-worklittle-jobs-mcp",
       "name": "Worklittle Jobs",
+      "icon": "https://github.com/worklittle.png?size=64",
       "description": "在您的AI应用中滑动即可申请职位，通过签证状态、距离和薪资等筛选条件进行搜索，并关联您的Worklittle账户以保存心仪的工作。",
       "category": "search",
       "featured": false,
@@ -23964,6 +24501,7 @@
     {
       "id": "mcpservers-rudrendupaul-workloadtruth",
       "name": "WorkloadTruth",
+      "icon": "https://github.com/RudrenduPaul.png?size=64",
       "description": "通过MCP工具，仅凭遥测数据将GPU工作负载分类为推理或训练。",
       "category": "cloud-service",
       "featured": false,
@@ -23987,6 +24525,7 @@
     {
       "id": "mcpservers-sisyphus-consulting-wuwei-mcp",
       "name": "Wu Wei Cards MCP Server",
+      "icon": "https://github.com/Sisyphus-Consulting.png?size=64",
       "description": "使用无为卡免费促进工作坊",
       "category": "other",
       "featured": false,
@@ -24027,6 +24566,7 @@
     {
       "id": "registry-ai-firmbrain-x402-services",
       "name": "x402-services",
+      "icon": "https://github.com/bkrigmo1.png?size=64",
       "description": "The only x402 MCP server for Robinhood Chain (chainId 4663) - 147 onchain, trading & AI tools.",
       "category": "other",
       "featured": false,
@@ -24086,6 +24626,7 @@
     {
       "id": "mcpservers-lozzi1910-xiaohongshu-mcp",
       "name": "xhs-mcp-tool",
+      "icon": "https://github.com/Lozzi1910.png?size=64",
       "description": "MCP 服务器，用于小红书 — 让 AI 搜索笔记、阅读内容，并通过浏览器自动化发布",
       "category": "cloud-storage",
       "featured": false,
@@ -24131,6 +24672,7 @@
     {
       "id": "registry-ai-example4-xmp4",
       "name": "xmp4 — Semantic code knowledge for your stack",
+      "icon": "https://github.com/0ics-srls.png?size=64",
       "description": "OSS libs in your stack, really used: source, tests, callers. C#, Java, TS, Python, Rust, PHP+.",
       "category": "other",
       "featured": false,
@@ -24148,6 +24690,7 @@
     {
       "id": "mcpservers-xns-cloud-relayer-mcp",
       "name": "XNS Relayer MCP",
+      "icon": "https://github.com/xns-cloud.png?size=64",
       "description": "以对话方式安装和管理自托管的XNS Relayer（兼容S3的分布式对象存储）——15个工具，支持npx，stdio传输。",
       "category": "cloud-storage",
       "featured": false,
@@ -24205,6 +24748,7 @@
     {
       "id": "mcpservers-aaronwaddington-arch-yardstock-mcp",
       "name": "YardStock NZ Vehicle Listings",
+      "icon": "https://github.com/aaronwaddington-arch.png?size=64",
       "description": "新西兰指定经销商车场的实时二手车库存。按品牌、型号、价格和城市搜索。非Trade Me。",
       "category": "search",
       "featured": false,
@@ -24246,6 +24790,7 @@
     {
       "id": "mcpservers-yg3-ai-yg3-mcp",
       "name": "YG3 Marketing MCP",
+      "icon": "https://github.com/YG3-ai.png?size=64",
       "description": "远程营销MCP（200多个工具）：内容、SEO、外联、LinkedIn、广告。代理通过一次POST即可配置沙箱——无需注册。",
       "category": "marketing",
       "featured": false,
@@ -24270,6 +24815,7 @@
     {
       "id": "mcpservers-wildsurfer-your-mail-mcp",
       "name": "your-mail-mcp",
+      "icon": "https://github.com/wildsurfer.png?size=64",
       "description": "只读、自托管的MCP访问IMAP电子邮件，镜像到本地maildir并由notmuch索引。",
       "category": "communication",
       "featured": false,
@@ -24292,6 +24838,7 @@
     {
       "id": "mcpservers-github-com-mediashareorg-yourimageshare-tree-main-mcp",
       "name": "YourImageShare MCP",
+      "icon": "https://github.com/MediaShareORG.png?size=64",
       "description": "在YourImageShare上上传、列出和删除文件——免费图片与视频托管，200MB限制，无需账户——可从Claude、ChatGPT或任何兼容MCP的智能体操作。",
       "category": "file-system",
       "featured": false,
@@ -24316,6 +24863,7 @@
     {
       "id": "mcpservers-trichanizar-youtube-intelligence-git",
       "name": "Youtube-Intelligence",
+      "icon": "https://github.com/trichanizar.png?size=64",
       "description": "从您最喜爱的YouTube博主那里获取YouTube智能数据",
       "category": "productivity",
       "featured": false,
@@ -24472,6 +25020,7 @@
     {
       "id": "mcpservers-hamsolodev-zsnoop-mcp",
       "name": "Zsnoop",
+      "icon": "https://github.com/hamsolodev.png?size=64",
       "description": "一个用于在远程主机上只读探索ZFS快照的MCP服务器。",
       "category": "file-system",
       "featured": false,

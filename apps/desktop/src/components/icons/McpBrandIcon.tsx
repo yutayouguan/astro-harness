@@ -19,6 +19,7 @@ export default function McpBrandIcon({
   style,
 }: Props) {
   const [failedIcon, setFailedIcon] = useState<string>();
+  const [loadedIcon, setLoadedIcon] = useState<string>();
   const validIcon = icon && MCP_ICON_ID.test(icon) ? icon : undefined;
   const remoteIcon = icon && HTTPS_ICON_URL.test(icon) ? icon : undefined;
   const resolvedIcon = validIcon ?? remoteIcon;
@@ -28,15 +29,24 @@ export default function McpBrandIcon({
   }
 
   return (
-    <img
-      alt=""
+    <span
       aria-hidden
-      className={["mcp-brand-icon", className].filter(Boolean).join(" ")}
-      height={size}
-      width={size}
-      src={validIcon ? `/mcp-icons/${validIcon}.svg` : remoteIcon}
-      style={style}
-      onError={() => setFailedIcon(resolvedIcon)}
-    />
+      className={["mcp-brand-icon-shell", className].filter(Boolean).join(" ")}
+      style={{ ...style, "--mcp-brand-icon-size": `${size}px` } as CSSProperties}
+    >
+      <McpIcon className="mcp-brand-icon-placeholder" size={Math.max(12, size - 6)} />
+      <img
+        alt=""
+        className={`mcp-brand-icon${loadedIcon === resolvedIcon ? " is-loaded" : ""}`}
+        decoding="async"
+        height={size}
+        loading={remoteIcon ? "lazy" : "eager"}
+        referrerPolicy="no-referrer"
+        src={validIcon ? `/mcp-icons/${validIcon}.svg` : remoteIcon}
+        width={size}
+        onError={() => setFailedIcon(resolvedIcon)}
+        onLoad={() => setLoadedIcon(resolvedIcon)}
+      />
+    </span>
   );
 }

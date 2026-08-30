@@ -157,6 +157,18 @@ function httpsUrl(value, baseUrl) {
   }
 }
 
+function githubAvatarUrl(value) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.hostname.toLowerCase() !== "github.com") return undefined;
+    const owner = url.pathname.split("/").filter(Boolean)[0];
+    return owner ? `https://github.com/${encodeURIComponent(owner)}.png?size=64` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function catalogMatchKeys(server) {
   const keys = [];
   if (server.catalogIdentity) keys.push(`name:${server.catalogIdentity}`);
@@ -171,7 +183,10 @@ function catalogMatchKeys(server) {
 
 function toCatalogEntry(server, source, config) {
   const category = config.categoryMap[server.category] ?? "other";
-  const icon = config.iconAliases[server.slug] ?? httpsUrl(server.logoUrl, source.baseUrl);
+  const icon = config.iconAliases[server.slug] ??
+    httpsUrl(server.logoUrl, source.baseUrl) ??
+    githubAvatarUrl(server.url) ??
+    githubAvatarUrl(server.websiteUrl);
   return {
     id: `mcpservers-${server.slug.replace(/[^a-z0-9-]+/gi, "-").toLowerCase()}`,
     name: server.name,
@@ -211,7 +226,7 @@ export function toRegistryEntry(item, source) {
   const packages = Array.isArray(server.packages) ? server.packages : [];
   const icon = (Array.isArray(server.icons) ? server.icons : [])
     .map((candidate) => httpsUrl(candidate?.src, source.baseUrl))
-    .find(Boolean);
+    .find(Boolean) ?? githubAvatarUrl(server.repository?.url) ?? githubAvatarUrl(server.websiteUrl);
   const remoteUrl = remotes.find((remote) => remote?.type === "streamable-http")?.url;
   const sourceUrl = server.websiteUrl || server.repository?.url ||
     new URL(`${source.path}?search=${encodeURIComponent(server.name)}`, source.baseUrl).href;

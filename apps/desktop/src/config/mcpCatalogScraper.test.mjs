@@ -168,6 +168,25 @@ test("rejects non-HTTPS Registry icons", () => {
   assert.equal(entry.icon, undefined);
 });
 
+test("uses the Registry repository owner avatar when no brand icon is published", () => {
+  const entry = toRegistryEntry(
+    {
+      server: {
+        name: "io.example/github-fallback",
+        description: "GitHub avatar fallback example",
+        repository: { url: "https://github.com/example/mcp-server" },
+      },
+    },
+    {
+      id: "registry.modelcontextprotocol.io",
+      baseUrl: "https://registry.modelcontextprotocol.io",
+      path: "/v0/servers",
+    },
+  );
+
+  assert.equal(entry.icon, "https://github.com/example.png?size=64");
+});
+
 test("directory metadata enriches matching Registry records", () => {
   const registry = {
     id: "registry-io-example-search",
