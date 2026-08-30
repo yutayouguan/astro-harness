@@ -9,7 +9,8 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { Eye, ExternalLink, FileCode2, Save, Undo2 } from "lucide-react";
+import { ExternalLink, Save, Undo2 } from "lucide-react";
+import { Eye as EyeData, FileCode2 as FileCode2Data } from "lucide";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useTheme } from "../../hooks/app/useTheme";
 import { useConfirm } from "../../hooks/ui/DialogContext";
@@ -25,6 +26,7 @@ import {
 } from "../../lib/filespace/workspaceMdMode";
 import { buildWorkspaceMenuItems } from "../../lib/filespace/workspaceMenuItems";
 import MotionSwitch from "../ui/MotionSwitch";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import MediaToolbar from "../media/MediaToolbar";
 import FilePreviewContent from "../filespace/FilePreviewContent";
 import ExpandableSearch from "../ui/ExpandableSearch";
@@ -62,6 +64,41 @@ type Props = {
   /** 打开某文件的来源会话（若该文件已被编入产物索引且关联会话） */
   onOpenSession?: (sessionId: string, messageId?: string | null) => void;
 };
+
+export function MarkdownPreviewToggle({
+  preview,
+  onToggle,
+}: {
+  preview: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useI18n();
+  const label = preview
+    ? t("workspace.previewSource")
+    : t("workspace.previewMode");
+
+  return (
+    <div className="ws-md-modes" aria-label={t("workspace.previewMode")}>
+      <button
+        type="button"
+        className="ws-md-mode ws-md-mode--icon is-active"
+        aria-pressed={preview}
+        onClick={onToggle}
+        title={label}
+        aria-label={label}
+      >
+        <MorphToggleIcon
+          active={preview}
+          activeIcon={EyeData}
+          inactiveIcon={FileCode2Data}
+          size={15}
+          strokeWidth={2.3}
+          aria-hidden
+        />
+      </button>
+    </div>
+  );
+}
 
 /** 浏览 / 文本编辑 / 媒体预览 */
 type ViewMode = "browse" | "editor" | "media";
@@ -1080,34 +1117,10 @@ export default function WorkspacePanel({
     ) : null;
 
   const previewToggle = canTogglePreview ? (
-    <div
-      className="ws-md-modes"
-      role="tablist"
-      aria-label={t("workspace.previewMode")}
-    >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={docPreview}
-        className={`ws-md-mode ws-md-mode--icon ${docPreview ? "is-active" : ""}`}
-        onClick={() => setMdModePersist("preview")}
-        title={t("workspace.previewMode")}
-        aria-label={t("workspace.previewMode")}
-      >
-        <Eye size={15} strokeWidth={2.3} aria-hidden />
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={!docPreview}
-        className={`ws-md-mode ws-md-mode--icon ${!docPreview ? "is-active" : ""}`}
-        onClick={() => setMdModePersist("source")}
-        title={t("workspace.previewSource")}
-        aria-label={t("workspace.previewSource")}
-      >
-        <FileCode2 size={15} strokeWidth={2.3} aria-hidden />
-      </button>
-    </div>
+    <MarkdownPreviewToggle
+      preview={docPreview}
+      onToggle={() => setMdModePersist(docPreview ? "source" : "preview")}
+    />
   ) : null;
 
   return (
