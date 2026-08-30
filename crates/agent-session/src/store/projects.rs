@@ -278,7 +278,6 @@ impl SessionStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::store::SessionStore;
 
     async fn test_store() -> (tempfile::TempDir, SessionStore) {
@@ -342,7 +341,7 @@ mod tests {
     async fn move_project_reorders() {
         let (_dir, store) = test_store().await;
         let a = store.create_project("A", &[]).await.unwrap();
-        let b = store.create_project("B", &[]).await.unwrap();
+        let _b = store.create_project("B", &[]).await.unwrap();
         let c = store.create_project("C", &[]).await.unwrap();
         // 把 C 移到 A 前面 → C A B
         store.move_project(&c.id, Some(&a.id)).await.unwrap();

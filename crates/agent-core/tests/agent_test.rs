@@ -84,7 +84,7 @@ async fn test_agent_loop_memory_injection() {
 }
 
 #[tokio::test]
-async fn test_agent_loop_fts_recall_after_long_session() {
+async fn test_agent_loop_fts_does_not_duplicate_visible_history() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.recent_turns = 2;
@@ -102,10 +102,13 @@ async fn test_agent_loop_fts_recall_after_long_session() {
 
     match result {
         TurnResult::Continue { system_prompt, .. } => {
-            assert!(
-                system_prompt.contains("Aurora")
-                    || agent.recalled_context().await.contains("Aurora")
-            );
+            assert!(!system_prompt.contains("[Recalled Context]"));
+            assert!(agent.recalled_context().await.is_empty());
+            assert!(agent
+                .provider_history()
+                .await
+                .iter()
+                .any(|message| message.content_str().contains("Aurora")));
         }
         _ => panic!("expected Continue"),
     }

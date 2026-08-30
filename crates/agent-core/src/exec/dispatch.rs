@@ -603,11 +603,15 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             resolved.model.as_deref(),
         )?;
 
-        let reservation = self.control.reserve_spawn_typed(
-            &self.current_path,
-            &request.request.task_name,
-            &resolved.definition.name,
-        ).await?;
+        let reservation = self
+            .control
+            .reserve_spawn_typed(
+                &self.current_path,
+                &request.request.task_name,
+                &resolved.definition.name,
+            )
+            .await
+            .context("reserve agent thread")?;
         let thread = reservation.thread().clone();
         let memory_dir = request.runtime.memory_dir.clone();
         let runtime = build_runtime_request(
@@ -624,14 +628,18 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 thread_id: thread.thread_id.clone(),
                 model: runtime.model_request.model.clone(),
                 reasoning_effort: runtime.model_request.reasoning_effort.clone(),
-            }).await?;
+            })
+            .await
+            .context("persist agent runtime descriptor")?;
 
         let mut forked_session = fork_parent_session(
             &memory_dir,
             &runtime,
             &thread.session_id,
             &runtime.model_request.fork_turns,
-        ).await?;
+        )
+        .await
+        .context("fork parent session")?;
         if let Err(error) = validate_runtime_setup(
             &memory_dir,
             &self.control,

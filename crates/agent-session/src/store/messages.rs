@@ -324,7 +324,10 @@ impl SessionStore {
         if source_id == new_id {
             anyhow::bail!("fork_session_recent_turns: source and target session ids must differ");
         }
-        let mut tx = self.pool.begin().await?;
+        // Forking reads the parent and then writes the child. Reserve the write
+        // slot before taking that snapshot so a concurrent runtime update cannot
+        // turn this transaction into SQLITE_BUSY_SNAPSHOT at the first INSERT.
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let parent_row = sqlx::query("SELECT model, title FROM sessions WHERE id = ?1")
             .bind(source_id)
             .fetch_optional(&mut *tx)

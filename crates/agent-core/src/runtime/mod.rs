@@ -2083,7 +2083,7 @@ mod tests {
 
 /// 判断一次工具调用是否可能写入磁盘（供 `turn_wrote_disk` 标记使用）。
 ///
-/// `terminal` 命令不受限，保守视为总是可能写盘；`file_ops` 仅在写类
+/// `exec_command` 命令不受限，保守视为总是可能写盘；`file_ops` 仅在写类
 /// `operation`（`write`/`append`/`delete`/`mkdir`）时视为写盘，`read`/`list` 不算。
 /// 启发式判断用户消息是否像「纠正上一轮」（中英常见提示语）。
 ///
@@ -2128,7 +2128,7 @@ fn looks_like_user_correction(msg: &str) -> bool {
 
 fn tool_writes_disk(name: &str, args: &Value) -> bool {
     match name {
-        "terminal" => true,
+        "exec_command" => true,
         "file_ops" => matches!(
             args.get("operation")
                 .and_then(|v| v.as_str())

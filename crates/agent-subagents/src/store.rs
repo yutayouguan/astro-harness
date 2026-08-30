@@ -553,7 +553,7 @@ impl AgentGraphStore {
         after_threads: Fut,
     ) -> anyhow::Result<AgentTreeSnapshotV2> {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut tx = self.pool.begin().await?;
         let rows = sqlx::query(V2_THREADS_BY_ROOT_SQL)
             .bind(root_thread_id)
             .fetch_all(&mut *tx)
@@ -850,7 +850,11 @@ async fn open_pool(path: &Path) -> anyhow::Result<SqlitePool> {
         .log_statements(tracing::log::LevelFilter::Debug)
         .log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_secs(1));
 
+    // Open the small pool eagerly. Lazily creating another SQLite connection
+    // while a lifecycle write is active can race the per-connection WAL setup
+    // and surface as SQLITE_BUSY even though the actual transaction is short.
     let pool = SqlitePoolOptions::new()
+        .min_connections(4)
         .max_connections(4)
         .acquire_timeout(Duration::from_secs(10))
         .connect_with(opts)
