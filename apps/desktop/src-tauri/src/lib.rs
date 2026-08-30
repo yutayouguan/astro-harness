@@ -494,7 +494,9 @@ pub fn run() {
             infra::ip_location::infer_ip_location,
         ])
         .setup(|app| {
-            match commands::session::cleanup_stale_side_sessions() {
+            match tauri::async_runtime::block_on(
+                commands::session::cleanup_stale_side_sessions(),
+            ) {
                 Ok(count) if count > 0 => {
                     tracing::info!(count, "cleaned stale ephemeral side sessions");
                 }

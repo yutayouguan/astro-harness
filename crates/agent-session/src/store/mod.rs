@@ -239,6 +239,7 @@ pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BranchKind {
     Fork,
+    Side,
     Agent,
 }
 
@@ -246,6 +247,7 @@ impl BranchKind {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
             BranchKind::Fork => "fork",
+            BranchKind::Side => "side",
             BranchKind::Agent => "agent",
         }
     }

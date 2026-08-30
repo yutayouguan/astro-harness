@@ -43,6 +43,7 @@ import {
   settleRestoredActivities,
 } from "../../lib/chat/mapHistoryMessages";
 import { findLastUserMessageIndex } from "../../lib/chat/messageEditing";
+import { dispatchSessionsChanged } from "../../lib/chat/sessionManagement";
 import type {
   ArtifactDto,
   ChatAttachment,
@@ -969,10 +970,6 @@ export function useChatSession({
         sessionId: sessionId ?? stored?.sessionId ?? null,
         limit: 200,
       });
-      if (!history.messages?.length) return;
-      const restored = mapHistoryMessages(history.messages);
-      if (restored.length === 0) return;
-      applyRestoredHistory(history.sessionId, restored, [], history.endReason);
       setSessionEphemeral(!!history.ephemeral);
       setSideParentSessionId(history.ephemeral ? history.parentSessionId ?? null : null);
       setSideExcludedTurnCount(history.ephemeral ? history.excludedTurnCount ?? 0 : 0);
@@ -983,6 +980,10 @@ export function useChatSession({
           history.excludedTurnCount ?? 0,
         );
       }
+      if (!history.messages?.length) return;
+      const restored = mapHistoryMessages(history.messages);
+      if (restored.length === 0) return;
+      applyRestoredHistory(history.sessionId, restored, [], history.endReason);
     } catch {
       // keep welcome page if backend unavailable
     }
@@ -1461,6 +1462,7 @@ export function useChatSession({
       setSessionEndReason(null);
       setEmptyMode(null);
       if (persistClientState) saveChatSession(newId, keep, []);
+      dispatchSessionsChanged();
       showTransientToast(t("chat.branchDone"), { tone: "success" });
     },
     [messages, streaming, sessionId, clearStreamBuffers, persistClientState, showTransientToast, t, currentRunIdRef],

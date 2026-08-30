@@ -774,6 +774,148 @@ async fn fork_session_copies_bubbles_and_trailing_tools() {
 }
 
 #[tokio::test]
+async fn side_fork_keeps_model_history_but_is_excluded_from_regular_sessions() {
+    let (_dir, store) = test_store().await;
+    store
+        .create_session("source", "tauri", Some("model-a"), None, None)
+        .await
+        .unwrap();
+    let first_user_id = store
+        .append_message(NewMessage {
+            content: Some("question"),
+            ..NewMessage::empty("source", "user")
+        })
+        .await
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("answer"),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .await
+        .unwrap();
+
+    let fork = store
+        .fork_side_session_at_user_message("source", "side", first_user_id)
+        .await
+        .unwrap();
+
+    assert_eq!(fork.inherited_turn_count, 1);
+    assert_eq!(store.get_messages("side").await.unwrap().len(), 2);
+    let metadata = store.get_session("side").await.unwrap().unwrap();
+    assert_eq!(metadata.branch_kind.as_deref(), Some("side"));
+    assert_eq!(metadata.parent_session_id.as_deref(), Some("source"));
+    assert_eq!(metadata.branch_parent_message_id, Some(first_user_id));
+    let active = store
+        .list_sessions(SessionListFilter::Active, 10)
+        .await
+        .unwrap();
+    assert!(active.iter().all(|session| session.id != "side"));
+}
+
+#[tokio::test]
+async fn exact_fork_boundaries_match_through_turn_and_before_turn_semantics() {
+    let (_dir, store) = test_store().await;
+    store
+        .create_session("source", "tauri", None, None, None)
+        .await
+        .unwrap();
+    let first_user_id = store
+        .append_message(NewMessage {
+            content: Some("u1"),
+            ..NewMessage::empty("source", "user")
+        })
+        .await
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("a1"),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .await
+        .unwrap();
+    let second_user_id = store
+        .append_message(NewMessage {
+            content: Some("u2"),
+            ..NewMessage::empty("source", "user")
+        })
+        .await
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("a2"),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .await
+        .unwrap();
+
+    store
+        .fork_session_at_user_message("source", "through-first", first_user_id)
+        .await
+        .unwrap();
+    store
+        .fork_session_before_user_message("source", "before-second", second_user_id)
+        .await
+        .unwrap();
+
+    for id in ["through-first", "before-second"] {
+        let contents = store
+            .get_messages(id)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter_map(|message| message.content)
+            .collect::<Vec<_>>();
+        assert_eq!(contents, vec!["u1", "a1"]);
+        let metadata = store.get_session(id).await.unwrap().unwrap();
+        assert_eq!(metadata.branch_parent_message_id, Some(first_user_id));
+        assert_eq!(metadata.branch_inherited_turn_count, Some(1));
+    }
+}
+
+#[tokio::test]
+async fn stale_side_cleanup_preserves_and_detaches_persistent_children() {
+    let (_dir, store) = test_store().await;
+    store
+        .create_session("source", "tauri", None, None, None)
+        .await
+        .unwrap();
+    let user_id = store
+        .append_message(NewMessage {
+            content: Some("question"),
+            ..NewMessage::empty("source", "user")
+        })
+        .await
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("answer"),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .await
+        .unwrap();
+    store
+        .fork_side_session_at_user_message("source", "side", user_id)
+        .await
+        .unwrap();
+    store
+        .create_session("persistent-child", "tauri", None, None, Some("side"))
+        .await
+        .unwrap();
+
+    assert_eq!(store.delete_stale_side_sessions().await.unwrap(), 1);
+    assert!(store.get_session("side").await.unwrap().is_none());
+    assert!(store.get_messages("side").await.unwrap().is_empty());
+    assert!(store.get_session("source").await.unwrap().is_some());
+    let child = store
+        .get_session("persistent-child")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(child.parent_session_id.is_none());
+}
+
+#[tokio::test]
 async fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
     let (_dir, store) = test_store().await;
     store

@@ -131,7 +131,21 @@ export default function SideChatPanel({
         </span>
         <div className="side-chat-title">
           <strong>{t("chat.side.title")}</strong>
-          <span title={t("chat.side.subtitle")}>{t("chat.side.subtitle")}</span>
+          <span
+            title={
+              chat.sideExcludedTurnCount > 0
+                ? t("chat.side.hiddenTurns", {
+                    count: String(chat.sideExcludedTurnCount),
+                  })
+                : t("chat.side.subtitle")
+            }
+          >
+            {chat.sideExcludedTurnCount > 0
+              ? t("chat.side.hiddenTurns", {
+                  count: String(chat.sideExcludedTurnCount),
+                })
+              : t("chat.side.subtitle")}
+          </span>
         </div>
         <button
           type="button"

@@ -107,6 +107,31 @@ pub struct ChatHistoryDto {
     pub end_reason: Option<String>,
     /// 结束时间（epoch 秒）；未结束为 `None`
     pub ended_at: Option<f64>,
+    /// 临时 Side 会话不进入普通会话列表，离开时丢弃。
+    pub ephemeral: bool,
+    pub parent_session_id: Option<String>,
+    /// 模型仍可见、但 UI 不重复展示的继承回合数。
+    pub excluded_turn_count: i64,
+}
+
+fn exclude_inherited_turns(
+    messages: Vec<ChatHistoryMessageDto>,
+    inherited_turn_count: i64,
+) -> Vec<ChatHistoryMessageDto> {
+    let inherited_turn_count = inherited_turn_count.max(0) as usize;
+    if inherited_turn_count == 0 {
+        return messages;
+    }
+    let mut seen_users = 0usize;
+    let first_local = messages.iter().position(|message| {
+        if message.role == "user" {
+            seen_users += 1;
+        }
+        seen_users > inherited_turn_count
+    });
+    first_local
+        .map(|index| messages.into_iter().skip(index).collect())
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +205,9 @@ pub async fn get_chat_history(
                     messages: vec![],
                     end_reason: None,
                     ended_at: None,
+                    ephemeral: false,
+                    parent_session_id: None,
+                    excluded_turn_count: 0,
                 });
             }
         },
@@ -188,9 +216,26 @@ pub async fn get_chat_history(
     let meta = store.get_session(&sid).await.map_err(|e| e.to_string())?;
     let end_reason = meta.as_ref().and_then(|s| s.end_reason.clone());
     let ended_at = meta.as_ref().and_then(|s| s.ended_at);
+    let ephemeral = meta
+        .as_ref()
+        .is_some_and(|session| session.branch_kind.as_deref() == Some("side"));
+    let parent_session_id = ephemeral
+        .then(|| {
+            meta.as_ref()
+                .and_then(|session| session.parent_session_id.clone())
+        })
+        .flatten();
+    let excluded_turn_count = if ephemeral {
+        meta.as_ref()
+            .and_then(|session| session.branch_inherited_turn_count)
+            .unwrap_or(0)
+            .max(0)
+    } else {
+        0
+    };
 
-    let messages = store
-        .build_chat_history(&sid, limit)
+    let mut messages = store
+        .build_chat_history(&sid, usize::MAX)
         .await
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -216,27 +261,42 @@ pub async fn get_chat_history(
             ui_surfaces: m.ui_surfaces,
         })
         .collect();
+    if ephemeral {
+        messages = exclude_inherited_turns(messages, excluded_turn_count);
+    }
+    if messages.len() > limit {
+        messages = messages.split_off(messages.len() - limit);
+    }
 
     Ok(ChatHistoryDto {
         session_id: Some(sid),
         messages,
         end_reason,
         ended_at,
+        ephemeral,
+        parent_session_id,
+        excluded_turn_count,
     })
 }
 
-/// 从当前会话分支：复制截止到第 `keep_chat_bubbles` 条聊天气泡的消息到新会话。
+/// 从当前会话分支。
+///
+/// 新调用方使用 `source_message_id + boundary`，分别对应 Codex 的
+/// `lastTurnId` / `beforeTurnId`。`keep_chat_bubbles` 仅保留给旧调用方。
 #[tauri::command]
 pub async fn fork_chat_session(
     source_session_id: String,
-    keep_chat_bubbles: i32,
+    keep_chat_bubbles: Option<i32>,
     new_session_id: Option<String>,
+    source_message_id: Option<i64>,
+    boundary: Option<String>,
+    ephemeral: Option<bool>,
+    exclude_turns: Option<bool>,
 ) -> Result<String, String> {
     let source = source_session_id.trim();
     if source.is_empty() {
         return Err("source_session_id 不能为空".into());
     }
-    let keep = keep_chat_bubbles.max(0) as usize;
     let new_id = new_session_id
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -245,10 +305,73 @@ pub async fn fork_chat_session(
     }
 
     let store = open_sessions().await?;
-    store
-        .fork_session(source, &new_id, keep)
-        .await
+    let is_ephemeral = ephemeral.unwrap_or(false);
+    if is_ephemeral && exclude_turns != Some(true) {
+        return Err("ephemeral fork requires exclude_turns=true".into());
+    }
+    let boundary = boundary.as_deref().unwrap_or("through_turn");
+    if !matches!(boundary, "through_turn" | "before_turn") {
+        return Err(format!("invalid fork boundary: {boundary}"));
+    }
+    if source_message_id.is_none() && boundary == "before_turn" {
+        return Err("before_turn fork requires source_message_id".into());
+    }
+
+    if let Some(message_id) = source_message_id {
+        match (boundary, is_ephemeral) {
+            ("through_turn", false) => {
+                store
+                    .fork_session_at_user_message(source, &new_id, message_id)
+                    .await
+            }
+            ("through_turn", true) => {
+                store
+                    .fork_side_session_at_user_message(source, &new_id, message_id)
+                    .await
+            }
+            ("before_turn", false) => {
+                store
+                    .fork_session_before_user_message(source, &new_id, message_id)
+                    .await
+            }
+            ("before_turn", true) => {
+                store
+                    .fork_side_session_before_user_message(source, &new_id, message_id)
+                    .await
+            }
+            _ => unreachable!("fork boundary validated above"),
+        }
         .map_err(|e| e.to_string())?;
+    } else if is_ephemeral {
+        let message_id = store
+            .get_messages(source)
+            .await
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .rev()
+            .find(|message| message.role == "user")
+            .map(|message| message.id)
+            .ok_or_else(|| "cannot fork an empty session".to_string())?;
+        store
+            .fork_side_session_at_user_message(source, &new_id, message_id)
+            .await
+            .map_err(|e| e.to_string())?;
+    } else {
+        let keep = match keep_chat_bubbles {
+            Some(keep) => keep.max(0) as usize,
+            None => store
+                .get_messages(source)
+                .await
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .filter(|message| matches!(message.role.as_str(), "user" | "assistant"))
+                .count(),
+        };
+        store
+            .fork_session(source, &new_id, keep)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     Ok(new_id)
 }
 
@@ -675,6 +798,16 @@ pub async fn list_session_statuses() -> Result<Vec<serde_json::Value>, String> {
 #[tauri::command]
 pub async fn discard_side_session(session_id: String) -> Result<(), String> {
     let store = open_sessions().await?;
+    let Some(metadata) = store
+        .get_session(&session_id)
+        .await
+        .map_err(|e| e.to_string())?
+    else {
+        return Ok(());
+    };
+    if metadata.branch_kind.as_deref() != Some("side") {
+        return Err("refusing to discard a non-side session".into());
+    }
     store
         .delete_session_permanently(&session_id)
         .await
@@ -702,10 +835,13 @@ pub async fn assign_session_to_project_if_unassigned(
     Ok(())
 }
 
-/// Synchronous cleanup of stale side sessions at startup.
-pub fn cleanup_stale_side_sessions() -> Result<usize, String> {
-    // Stub – side-session cleanup not yet ported to sqlx store.
-    Ok(0)
+/// 清理上次进程遗留的临时 Side 会话。
+pub async fn cleanup_stale_side_sessions() -> Result<usize, String> {
+    let store = open_sessions().await?;
+    store
+        .delete_stale_side_sessions()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -714,8 +850,51 @@ pub fn cleanup_stale_side_sessions() -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_session_filter, validate_session_title};
+    use super::{
+        exclude_inherited_turns, parse_session_filter, validate_session_title,
+        ChatHistoryMessageDto,
+    };
     use session::SessionListFilter;
+
+    fn history_message(id: &str, role: &str) -> ChatHistoryMessageDto {
+        ChatHistoryMessageDto {
+            id: id.into(),
+            role: role.into(),
+            content: id.into(),
+            reasoning: None,
+            activities: Vec::new(),
+            segments: None,
+            ui_surfaces: None,
+        }
+    }
+
+    #[test]
+    fn excludes_only_inherited_turns_from_side_history() {
+        let messages = vec![
+            history_message("u1", "user"),
+            history_message("a1", "assistant"),
+            history_message("u2", "user"),
+            history_message("a2", "assistant"),
+        ];
+
+        let visible = exclude_inherited_turns(messages, 1);
+        assert_eq!(
+            visible
+                .iter()
+                .map(|message| message.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["u2", "a2"]
+        );
+    }
+
+    #[test]
+    fn inherited_only_side_history_is_empty() {
+        let messages = vec![
+            history_message("u1", "user"),
+            history_message("a1", "assistant"),
+        ];
+        assert!(exclude_inherited_turns(messages, 1).is_empty());
+    }
 
     #[test]
     fn parses_supported_session_filters() {
