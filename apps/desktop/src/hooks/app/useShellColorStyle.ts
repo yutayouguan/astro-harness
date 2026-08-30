@@ -15,7 +15,7 @@ const STORAGE_KEY_V1 = "astro-shell-color-style";
 
 function parseStyle(raw: unknown): ShellColorStyle {
   if (raw === "unified" || raw === "colorful" || raw === "dynamic") return raw;
-  return "colorful";
+  return DEFAULT_SHELL_COLOR_PREFS.style;
 }
 
 function readStoredPrefs(): ShellColorPrefs {

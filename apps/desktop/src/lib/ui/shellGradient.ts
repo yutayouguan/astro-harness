@@ -324,7 +324,7 @@ export const DEFAULT_SHELL_GRADIENT: ShellGradient = {
 };
 
 export const DEFAULT_SHELL_COLOR_PREFS: ShellColorPrefs = {
-  style: "colorful",
+  style: "dynamic",
   gradient: {
     ...DEFAULT_SHELL_GRADIENT,
     primary: { ...DEFAULT_SHELL_GRADIENT.primary },
