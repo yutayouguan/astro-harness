@@ -179,6 +179,8 @@ export type McpServer = {
   featured?: boolean;
   /** 公开目录中的官方文档或源码地址。 */
   websiteUrl?: string;
+  /** 公开目录品牌图标的本地资源标识。 */
+  icon?: string;
 };
 
 export function isMcpToolEnabled(server: McpServer, toolName: string): boolean {
@@ -348,6 +350,7 @@ export function normalizeMcpServer(raw: Partial<McpServer> & { id?: string; name
     category,
     featured: config.featured === true,
     websiteUrl: readOptionalString(config, ["websiteUrl", "website_url"]),
+    icon: readOptionalString(config, ["icon"]),
   };
 }
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const panelUrl = new URL(
@@ -28,6 +28,10 @@ const publicMcpCatalogLoaderUrl = new URL(
   "../../config/mcpPublicCatalog.ts",
   import.meta.url,
 );
+const mcpBrandIconUrl = new URL(
+  "../../components/icons/McpBrandIcon.tsx",
+  import.meta.url,
+);
 
 const panel = await readFile(panelUrl, "utf8");
 const styles = await readFile(coreCssUrl, "utf8");
@@ -42,6 +46,7 @@ const publicMcpCatalogLoader = await readFile(
   publicMcpCatalogLoaderUrl,
   "utf8",
 );
+const mcpBrandIcon = await readFile(mcpBrandIconUrl, "utf8");
 
 test("plugin catalog remounts after hook-signature edits during Fast Refresh", () => {
   assert.match(
@@ -175,6 +180,20 @@ test("public MCP directory is config-driven and covers every public category", (
   assert.match(mcpSection, /PUBLIC_MCP_CATALOG/);
   assert.match(mcpSection, /installableMcpServer/);
   assert.match(mcpSection, /mcpTools\.install/);
+});
+
+test("public MCP brands are config-driven bundled assets with a safe fallback", async () => {
+  const brandedServers = publicMcpCatalog.servers.filter((server) => server.icon);
+  assert.ok(brandedServers.length >= 20, "most public MCP entries should have brand icons");
+
+  for (const server of brandedServers) {
+    assert.match(server.icon, /^[a-z0-9-]+$/, `${server.id} has an unsafe icon id`);
+    await access(new URL(`../../../public/mcp-icons/${server.icon}.svg`, import.meta.url));
+  }
+
+  assert.match(mcpSection, /<McpBrandIcon icon=\{server\.icon\}/);
+  assert.match(mcpBrandIcon, /src=\{`\/mcp-icons\/\$\{validIcon\}\.svg`\}/);
+  assert.match(mcpBrandIcon, /return <McpIcon/);
 });
 
 test("plugin toolbar is compact and degrades to stacked rows on narrow screens", () => {

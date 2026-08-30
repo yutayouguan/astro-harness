@@ -57,6 +57,7 @@ import {
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
+import McpBrandIcon from "../icons/McpBrandIcon";
 import McpIcon from "../icons/McpIcon";
 import MotionSwitch from "../ui/MotionSwitch";
 import { IconRefresh } from "../icons/NavIcons";
@@ -696,7 +697,7 @@ function McpServerCard({
     >
       <header className="mcp-server-head">
         <div className="mcp-server-icon" aria-hidden>
-          <McpIcon size={22} />
+          <McpBrandIcon icon={server.icon} size={22} />
         </div>
         <div className="mcp-server-meta">
           <div className="mcp-server-title-row">
@@ -925,7 +926,7 @@ function McpCatalogCard({
     <article className="mcp-server-card is-on">
       <header className="mcp-server-head">
         <div className="mcp-server-icon" aria-hidden>
-          <McpIcon size={22} />
+          <McpBrandIcon icon={server.icon} size={22} />
         </div>
         <div className="mcp-server-meta">
           <div className="mcp-server-title-row">

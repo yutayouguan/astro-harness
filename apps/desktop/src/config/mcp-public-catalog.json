@@ -12,6 +12,7 @@
     {
       "id": "notion",
       "name": "Notion",
+      "icon": "notion",
       "description": "读写 Notion 页面、数据库与工作区。",
       "category": "productivity",
       "featured": true,
@@ -23,6 +24,7 @@
     {
       "id": "linear",
       "name": "Linear",
+      "icon": "linear",
       "description": "管理议题、项目、迭代周期与团队。",
       "category": "productivity",
       "featured": true,
@@ -34,6 +36,7 @@
     {
       "id": "atlassian",
       "name": "Atlassian",
+      "icon": "atlassian",
       "description": "连接 Jira、Confluence 与 Compass 工作流。",
       "category": "productivity",
       "featured": true,
@@ -45,6 +48,7 @@
     {
       "id": "asana",
       "name": "Asana",
+      "icon": "asana",
       "description": "管理 Asana 项目、任务与团队工作。",
       "category": "productivity",
       "type": "stdio",
@@ -56,6 +60,7 @@
     {
       "id": "github",
       "name": "GitHub",
+      "icon": "github",
       "description": "操作仓库、Issue、Pull Request、代码搜索与 Actions。",
       "category": "development",
       "featured": true,
@@ -67,6 +72,7 @@
     {
       "id": "gitlab",
       "name": "GitLab",
+      "icon": "gitlab",
       "description": "管理 GitLab 项目、Merge Request 与 CI/CD。",
       "category": "development",
       "type": "streamableHttp",
@@ -77,6 +83,7 @@
     {
       "id": "sentry",
       "name": "Sentry",
+      "icon": "sentry",
       "description": "查询错误、发布与应用性能信息。",
       "category": "development",
       "featured": true,
@@ -88,6 +95,7 @@
     {
       "id": "playwright",
       "name": "Playwright",
+      "icon": "playwright",
       "description": "通过结构化页面状态执行浏览器自动化与测试。",
       "category": "development",
       "type": "stdio",
@@ -117,6 +125,7 @@
     {
       "id": "stripe",
       "name": "Stripe",
+      "icon": "stripe",
       "description": "管理支付、客户、订阅与发票。",
       "category": "finance",
       "featured": true,
@@ -128,6 +137,7 @@
     {
       "id": "paypal",
       "name": "PayPal",
+      "icon": "paypal",
       "description": "处理 PayPal 发票、支付与交易。",
       "category": "finance",
       "type": "streamableHttp",
@@ -138,6 +148,7 @@
     {
       "id": "google-maps",
       "name": "Google Maps",
+      "icon": "google-maps",
       "description": "地理编码、路线规划与地点搜索。",
       "category": "travel",
       "type": "stdio",
@@ -149,6 +160,7 @@
     {
       "id": "pubmed",
       "name": "PubMed",
+      "icon": "pubmed",
       "description": "搜索 PubMed 与 NIH 医学文献。",
       "category": "health",
       "type": "streamableHttp",
@@ -159,6 +171,7 @@
     {
       "id": "exa",
       "name": "Exa",
+      "icon": "exa",
       "description": "面向 AI 工作流的语义网页搜索。",
       "category": "research",
       "featured": true,
@@ -169,6 +182,7 @@
     {
       "id": "tavily",
       "name": "Tavily",
+      "icon": "tavily",
       "description": "面向 Agent 的网页搜索与内容提取。",
       "category": "research",
       "type": "stdio",
@@ -180,6 +194,7 @@
     {
       "id": "brave-search",
       "name": "Brave Search",
+      "icon": "brave-search",
       "description": "使用 Brave Search 进行网页与本地搜索。",
       "category": "research",
       "type": "stdio",
@@ -202,6 +217,7 @@
     {
       "id": "anki",
       "name": "Anki",
+      "icon": "anki",
       "description": "管理 Anki 记忆卡牌与间隔复习内容。",
       "category": "education",
       "type": "stdio",
@@ -212,6 +228,7 @@
     {
       "id": "hugging-face",
       "name": "Hugging Face",
+      "icon": "hugging-face",
       "description": "搜索并使用 Hugging Face 模型、数据集与 Spaces。",
       "category": "education",
       "featured": true,
@@ -223,6 +240,7 @@
     {
       "id": "slack",
       "name": "Slack",
+      "icon": "slack",
       "description": "读写 Slack 消息、频道与用户信息。",
       "category": "communication",
       "type": "stdio",
@@ -234,6 +252,7 @@
     {
       "id": "neon",
       "name": "Neon",
+      "icon": "neon",
       "description": "管理 Neon Postgres 项目、分支与 SQL 查询。",
       "category": "analytics",
       "featured": true,
@@ -245,6 +264,7 @@
     {
       "id": "supabase",
       "name": "Supabase",
+      "icon": "supabase",
       "description": "管理 Supabase Postgres、Auth、Storage 与项目配置。",
       "category": "analytics",
       "featured": true,
@@ -256,6 +276,7 @@
     {
       "id": "grafana",
       "name": "Grafana",
+      "icon": "grafana",
       "description": "查询仪表盘、数据源、告警与可观测信息。",
       "category": "analytics",
       "type": "stdio",
@@ -267,6 +288,7 @@
     {
       "id": "figma",
       "name": "Figma",
+      "icon": "figma",
       "description": "读取 Figma 设计上下文、变量与原型信息。",
       "category": "other",
       "featured": true,
@@ -278,6 +300,7 @@
     {
       "id": "blender",
       "name": "Blender",
+      "icon": "blender",
       "description": "通过自然语言控制 Blender 场景与 3D 建模。",
       "category": "other",
       "type": "stdio",
