@@ -440,6 +440,8 @@ export function useParallelTasks(deps: Deps) {
         result?: string;
         delta?: string;
         phase?: string;
+        batch_id?: string;
+        execution_mode?: "serial" | "parallel";
         index?: number;
         outcome_type?: string;
         interrupts_json?: string;
@@ -616,8 +618,14 @@ export function useParallelTasks(deps: Deps) {
             input: payload.arguments_json ?? payload.arguments,
             output: payload.result,
             status:
-              payload.phase === "completed" || payload.result ? "done" : "running",
+              payload.phase === "failed"
+                ? "error"
+                : payload.phase === "completed" || payload.result
+                  ? "done"
+                  : "running",
             at: Date.now(),
+            batchId: payload.batch_id,
+            executionMode: payload.execution_mode,
           };
           setMessages((prev) =>
             prev.map((m) =>

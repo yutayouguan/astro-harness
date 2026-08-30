@@ -329,6 +329,8 @@ mod tests {
             output: None,
             media: Vec::new(),
             status: ToolStatus::InProgress,
+            batch_id: None,
+            execution_mode: None,
         });
         for msg in [
             EventMsg::ItemStarted(ItemEvent {

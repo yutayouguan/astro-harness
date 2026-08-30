@@ -36,6 +36,15 @@ export function groupConsecutiveActivities<T extends ActivityBearingItem>(
 
   for (const item of items) {
     if (item.activity) {
+      const previousBatch = run[run.length - 1]?.activity?.batchId;
+      const nextBatch = item.activity.batchId;
+      if (
+        run.length > 0 &&
+        (previousBatch || nextBatch) &&
+        previousBatch !== nextBatch
+      ) {
+        flush();
+      }
       run.push(item);
       continue;
     }

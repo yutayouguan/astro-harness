@@ -70,20 +70,49 @@ impl TimelineBuilder {
 
     /// 新 activity id 时追加段；已存在则忽略。
     pub fn upsert_activity(&mut self, id: &str, at_ms: i64) {
+        self.upsert_activity_with_execution(id, at_ms, None, None);
+    }
+
+    /// 追加工具活动并持久化其执行批次，供历史恢复时精确分组。
+    pub fn upsert_activity_with_execution(
+        &mut self,
+        id: &str,
+        at_ms: i64,
+        batch_id: Option<&str>,
+        execution_mode: Option<&str>,
+    ) {
         if id.is_empty() {
             return;
         }
-        let exists = self.segments.iter().any(|s| {
+        let existing = self.segments.iter_mut().find(|s| {
             s.get("type").and_then(|t| t.as_str()) == Some("activity")
                 && s.get("id").and_then(|t| t.as_str()) == Some(id)
         });
-        if !exists {
-            self.segments.push(json!({
-                "type": "activity",
-                "id": id,
-                "at": at_ms,
-            }));
+        if let Some(segment) = existing {
+            if let Some(object) = segment.as_object_mut() {
+                if let Some(batch_id) = batch_id {
+                    object.insert("batchId".into(), json!(batch_id));
+                }
+                if let Some(execution_mode) = execution_mode {
+                    object.insert("executionMode".into(), json!(execution_mode));
+                }
+            }
+            return;
         }
+        let mut segment = json!({
+            "type": "activity",
+            "id": id,
+            "at": at_ms,
+        });
+        if let Some(object) = segment.as_object_mut() {
+            if let Some(batch_id) = batch_id {
+                object.insert("batchId".into(), json!(batch_id));
+            }
+            if let Some(execution_mode) = execution_mode {
+                object.insert("executionMode".into(), json!(execution_mode));
+            }
+        }
+        self.segments.push(segment);
     }
 
     /// upsert surface 实体；新 messageId 时追加 surface 段。
@@ -159,6 +188,17 @@ mod tests {
         b.upsert_activity("c1", 2);
         let v = b.into_reasoning_details(None);
         assert_eq!(v["astro_timeline_v1"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn activity_execution_metadata_is_persisted_and_updated() {
+        let mut b = TimelineBuilder::new();
+        b.upsert_activity("c1", 1);
+        b.upsert_activity_with_execution("c1", 2, Some("batch-1"), Some("parallel"));
+        let v = b.into_reasoning_details(None);
+        let activity = &v["astro_timeline_v1"][0];
+        assert_eq!(activity["batchId"], "batch-1");
+        assert_eq!(activity["executionMode"], "parallel");
     }
 
     #[test]

@@ -30,6 +30,17 @@ pub struct ToolItem {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<types::MediaAsset>,
     pub status: ToolStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_mode: Option<ToolExecutionMode>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolExecutionMode {
+    Serial,
+    Parallel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

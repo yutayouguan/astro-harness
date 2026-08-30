@@ -206,6 +206,8 @@ mod tests {
                 output: None,
                 media: Vec::new(),
                 status: ToolStatus::InProgress,
+                batch_id: None,
+                execution_mode: None,
             })
         };
         let mut started = EventMsg::ItemStarted(ItemEvent {
@@ -275,6 +277,8 @@ mod tests {
                 output: None,
                 media: Vec::new(),
                 status: ToolStatus::InProgress,
+                batch_id: None,
+                execution_mode: None,
             })
         };
         let mut request = EventMsg::DynamicToolCallRequest(ControlRequestEvent {

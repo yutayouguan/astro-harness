@@ -2133,7 +2133,19 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
                     other => other.to_string(),
                 })
                 .unwrap_or_default(),
-            phase: if started { "started" } else { "completed" }.into(),
+            phase: if started {
+                "started"
+            } else if tool.status == agent_protocol::ToolStatus::Failed {
+                "failed"
+            } else {
+                "completed"
+            }
+            .into(),
+            batch_id: tool.batch_id,
+            execution_mode: tool.execution_mode.map(|mode| match mode {
+                agent_protocol::ToolExecutionMode::Serial => "serial".into(),
+                agent_protocol::ToolExecutionMode::Parallel => "parallel".into(),
+            }),
             media: tool.media.into_iter().map(media_asset_dto).collect(),
         }],
         Ok(TurnItem::AgentMessage(message))
@@ -2162,6 +2174,8 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
             arguments_json: String::new(),
             result: text.content,
             phase: if started { "started" } else { "completed" }.into(),
+            batch_id: None,
+            execution_mode: None,
             media: Vec::new(),
         }],
         Ok(TurnItem::HookPrompt(text)) => vec![ChatStreamEvent::Hook {
@@ -2931,6 +2945,40 @@ mod tests {
                 && name == "plan"
                 && result == "1. inspect\n"
                 && phase == "started"
+        ));
+    }
+
+    #[test]
+    fn tool_item_maps_batch_mode_and_failure_status() {
+        let item = proto::ThreadItem {
+            id: "call-1".into(),
+            item_type: "dynamic_tool_call".into(),
+            status: "failed".into(),
+            payload_json: serde_json::to_string(&TurnItem::DynamicToolCall(
+                agent_protocol::ToolItem {
+                    id: "call-1".into(),
+                    name: "read_file".into(),
+                    arguments: serde_json::json!({"path":"README.md"}),
+                    output: Some(serde_json::json!("failed")),
+                    media: Vec::new(),
+                    status: agent_protocol::ToolStatus::Failed,
+                    batch_id: Some("batch-1".into()),
+                    execution_mode: Some(agent_protocol::ToolExecutionMode::Parallel),
+                },
+            ))
+            .unwrap(),
+        };
+
+        assert!(matches!(
+            map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
+            [ChatStreamEvent::ToolCall {
+                phase,
+                batch_id,
+                execution_mode,
+                ..
+            }] if phase == "failed"
+                && batch_id.as_deref() == Some("batch-1")
+                && execution_mode.as_deref() == Some("parallel")
         ));
     }
 

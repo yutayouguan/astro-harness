@@ -224,3 +224,28 @@ test("enrichTimelineDurations keeps existing durationSec", () => {
     assert.equal(out[0]!.durationSec, 9);
   }
 });
+
+test("mapHistoryMessages restores tool batch execution metadata", () => {
+  const [message] = mapHistoryMessages([
+    {
+      id: "a1",
+      role: "assistant",
+      content: "",
+      activities: [
+        { id: "tool-1", kind: "tool", title: "read_file", status: "done" },
+      ],
+      segments: [
+        {
+          type: "activity",
+          id: "tool-1",
+          at: 10,
+          batchId: "batch-1",
+          executionMode: "parallel",
+        },
+      ],
+    },
+  ]);
+
+  assert.equal(message?.activities?.[0]?.batchId, "batch-1");
+  assert.equal(message?.activities?.[0]?.executionMode, "parallel");
+});

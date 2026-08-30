@@ -44,6 +44,7 @@ export type ChatAttachment = {
 
 /** 聊天活动条类型 */
 export type ChatActivityKind = "tool" | "skill" | "mcp" | "hook" | "memory" | "status";
+export type ToolExecutionMode = "serial" | "parallel";
 
 /** 助手气泡旁的活动记录 */
 export type ChatActivity = {
@@ -60,6 +61,10 @@ export type ChatActivity = {
   at?: number;
   /** 调用耗时（秒），完成态写入 */
   durationSec?: number;
+  /** 同一次模型响应产生的工具执行批次。 */
+  batchId?: string;
+  /** 后端实际选择的批次调度方式。 */
+  executionMode?: ToolExecutionMode;
   /** 结构化媒体（优先于从 output 文本 regex 解析） */
   media?: Array<{
     kind: "image" | "video" | "audio" | "html" | "code";
@@ -167,6 +172,8 @@ export type ChatTimelineSegment =
       type: "activity";
       id: string;
       at: number;
+      batchId?: string;
+      executionMode?: ToolExecutionMode;
     }
   | {
       type: "surface";

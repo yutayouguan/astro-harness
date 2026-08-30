@@ -3,8 +3,8 @@ import { ChevronDown as ChevronDownData, ChevronUp as ChevronUpData } from "luci
 import { Layers3 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
-  distinctActivityVisualKinds,
-  type ActivityVisualKind,
+  activityGroupSummary,
+  type ActivityGroupSummary,
 } from "../../lib/chat/activityPresentation";
 import type { ChatActivity } from "../../types";
 import { MorphToggleIcon } from "../icons/MorphIcon";
@@ -38,19 +38,36 @@ export default function MsgActivityGroup({
   }, [running, failed, interrupted]);
 
   const actionLabel = useMemo(
-    () =>
-      distinctActivityVisualKinds(activities)
-        .map((kind) => activityKindLabel(kind, t))
-        .join(" · "),
+    () => activityGroupSummaryLabel(activityGroupSummary(activities), t),
     [activities, t],
   );
-  const stateLabel = running
-    ? t("chat.activity.status.running")
-    : failed
-      ? t("chat.activity.status.error")
-      : interrupted
-        ? t("chat.activity.status.interrupted")
-        : null;
+  const completedCount = activities.filter(
+    (activity) => activity.status === "done",
+  ).length;
+  const failedCount = activities.filter(
+    (activity) => activity.status === "error",
+  ).length;
+  const parallel =
+    activities.length > 1 &&
+    activities.every((activity) => activity.executionMode === "parallel");
+  const metadata = [
+    running || failed || interrupted
+      ? t("chat.activityGroup.progress", {
+          completed: String(completedCount),
+          total: String(activities.length),
+        })
+      : t("chat.activityGroup.completed", { count: String(activities.length) }),
+    parallel
+      ? t("chat.activityGroup.parallel", { count: String(activities.length) })
+      : null,
+    running
+      ? t("chat.activity.status.running")
+      : failed
+        ? t("chat.activityGroup.failed", { count: String(failedCount) })
+        : interrupted
+          ? t("chat.activity.status.interrupted")
+          : null,
+  ].filter(Boolean);
 
   return (
     <section
@@ -72,8 +89,7 @@ export default function MsgActivityGroup({
         </span>
         <span className="msg-activity-group-title">{actionLabel}</span>
         <span className="msg-activity-group-count">
-          {t("chat.activityGroup.count", { count: String(activities.length) })}
-          {stateLabel ? ` · ${stateLabel}` : ""}
+          {metadata.join(" · ")}
         </span>
         <MorphToggleIcon
           active={open}
@@ -104,34 +120,9 @@ export default function MsgActivityGroup({
   );
 }
 
-function activityKindLabel(
-  kind: ActivityVisualKind,
+function activityGroupSummaryLabel(
+  summary: ActivityGroupSummary,
   t: ReturnType<typeof useI18n>["t"],
 ): string {
-  switch (kind) {
-    case "read":
-      return t("chat.activity.action.read");
-    case "search":
-      return t("chat.activity.action.search");
-    case "run":
-      return t("chat.activity.action.run");
-    case "edit":
-      return t("chat.activity.action.edit");
-    case "browse":
-      return t("chat.activity.action.browse");
-    case "media":
-      return t("chat.activity.action.media");
-    case "skill":
-      return t("chat.activity.kind.skill");
-    case "mcp":
-      return t("chat.activity.kind.mcp");
-    case "hook":
-      return t("chat.activity.kind.hook");
-    case "memory":
-      return t("chat.activity.kind.memory");
-    case "status":
-      return t("chat.activity.kind.status");
-    case "tool":
-      return t("chat.activity.kind.tool");
-  }
+  return t(`chat.activityGroup.summary.${summary}`);
 }

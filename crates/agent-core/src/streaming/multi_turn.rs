@@ -12,7 +12,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use agent_protocol::{
-    ControlRequestEvent, Event, EventMsg, ItemEvent, ToolStatus, TurnInput, UserInputCommittedEvent,
+    ControlRequestEvent, Event, EventMsg, ItemEvent, ToolExecutionMode, ToolStatus, TurnInput,
+    UserInputCommittedEvent,
 };
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
@@ -24,7 +25,7 @@ use types::ChatTarget;
 
 use super::lifecycle::{
     emit, emit_delta, emit_hook_completed, emit_hook_started, emit_response_items_completed,
-    emit_text_item_started, emit_usage, tool_turn_item,
+    emit_text_item_started, emit_usage, tool_turn_item_with_execution, ToolExecutionMetadata,
 };
 use super::maintenance::{
     emit_context_usage, emit_provider_context_usage, post_tool_maintenance, pre_llm_maintenance,
@@ -1094,10 +1095,36 @@ pub(crate) async fn run_turn(
             assistant_started = true;
         }
 
+        let force_serial = {
+            let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
+            step_context.tool_router.any_needs_confirmation(&names)
+                || step_context.tool_router.any_exclusive_access(&names)
+                || step_context.tool_router.any_may_require_approval(&names)
+                || calls
+                    .iter()
+                    .any(|c| tool_may_require_permission(&c.name, &c.arguments))
+        };
+        let tool_execution = calls.first().map(|first| ToolExecutionMetadata {
+            batch_id: format!("tool-batch-{}", first.id),
+            mode: if force_serial || hitl_gate.is_none() {
+                ToolExecutionMode::Serial
+            } else {
+                ToolExecutionMode::Parallel
+            },
+        });
+
         {
             let agent = session.as_ref();
             for c in &calls {
-                timeline.upsert_activity(&c.id, now_ms());
+                timeline.upsert_activity_with_execution(
+                    &c.id,
+                    now_ms(),
+                    tool_execution.as_ref().map(|value| value.batch_id.as_str()),
+                    tool_execution.as_ref().map(|value| match value.mode {
+                        ToolExecutionMode::Serial => "serial",
+                        ToolExecutionMode::Parallel => "parallel",
+                    }),
+                );
             }
             let details = types::message::merge_google_thought_signature(
                 Some(timeline.reasoning_details_snapshot()),
@@ -1188,13 +1215,14 @@ pub(crate) async fn run_turn(
                 &turn_context,
                 EventMsg::ItemStarted(ItemEvent {
                     turn_id: turn_context.sub_id().to_string(),
-                    item: tool_turn_item(
+                    item: tool_turn_item_with_execution(
                         call.id.clone(),
                         call.name.clone(),
                         call.arguments.clone(),
                         None,
                         Vec::new(),
                         ToolStatus::InProgress,
+                        tool_execution.as_ref(),
                     ),
                 }),
             )
@@ -1202,16 +1230,6 @@ pub(crate) async fn run_turn(
         }
 
         run_state.set_phase(RunPhase::ExecutingTools);
-        let force_serial = {
-            let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-            step_context.tool_router.any_needs_confirmation(&names)
-                || step_context.tool_router.any_exclusive_access(&names)
-                || step_context.tool_router.any_may_require_approval(&names)
-                || calls
-                    .iter()
-                    .any(|c| tool_may_require_permission(&c.name, &c.arguments))
-        };
-
         let outcomes = if force_serial || hitl_gate.is_none() {
             execute_tools_serial(
                 &session,
@@ -1244,6 +1262,7 @@ pub(crate) async fn run_turn(
             &turn_context,
             &mut timeline,
             now_ms,
+            tool_execution.as_ref(),
         )
         .await
         {

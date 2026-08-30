@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use agent_protocol::{
     AgentMessageItem, DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem,
-    TokenCountEvent, ToolItem, ToolStatus, TurnItem,
+    TokenCountEvent, ToolExecutionMode, ToolItem, ToolStatus, TurnItem,
 };
 use providers::Usage;
 
@@ -54,13 +54,20 @@ pub(crate) async fn emit_delta(
     .await;
 }
 
-pub(crate) fn tool_turn_item(
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ToolExecutionMetadata {
+    pub batch_id: String,
+    pub mode: ToolExecutionMode,
+}
+
+pub(crate) fn tool_turn_item_with_execution(
     id: impl Into<String>,
     name: impl Into<String>,
     arguments: serde_json::Value,
     output: Option<serde_json::Value>,
     media: Vec<types::MediaAsset>,
     status: ToolStatus,
+    execution: Option<&ToolExecutionMetadata>,
 ) -> TurnItem {
     let id = id.into();
     let name = name.into();
@@ -71,6 +78,8 @@ pub(crate) fn tool_turn_item(
         output,
         media,
         status,
+        batch_id: execution.map(|value| value.batch_id.clone()),
+        execution_mode: execution.map(|value| value.mode),
     };
     if name == "exec_command" || name == "code_exec" {
         TurnItem::CommandExecution(item)
@@ -104,10 +113,19 @@ fn tool_completed_event(
     output: Option<serde_json::Value>,
     media: &[types::MediaAsset],
     status: ToolStatus,
+    execution: Option<&ToolExecutionMetadata>,
 ) -> EventMsg {
     let mut event = EventMsg::ItemCompleted(ItemEvent {
         turn_id: turn_id.to_string(),
-        item: tool_turn_item(id, name, arguments.clone(), output, media.to_vec(), status),
+        item: tool_turn_item_with_execution(
+            id,
+            name,
+            arguments.clone(),
+            output,
+            media.to_vec(),
+            status,
+            execution,
+        ),
     });
     normalize_event_msg(&mut event, turn_id);
     event
@@ -137,6 +155,7 @@ fn truncated_tool_completed_event(
     inline_media_omitted: usize,
     stable_media_omitted: usize,
     preview: &str,
+    execution: Option<&ToolExecutionMetadata>,
 ) -> EventMsg {
     tool_completed_event(
         turn_id,
@@ -152,6 +171,7 @@ fn truncated_tool_completed_event(
         })),
         stable_media,
         status,
+        execution,
     )
 }
 
@@ -171,6 +191,43 @@ pub(crate) fn bounded_tool_completed_event(
     media: Vec<types::MediaAsset>,
     status: ToolStatus,
 ) -> EventMsg {
+    bounded_tool_completed_event_inner(turn_id, id, name, arguments, output, media, status, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounded_tool_completed_event_with_execution(
+    turn_id: &str,
+    id: &str,
+    name: &str,
+    arguments: serde_json::Value,
+    output: Option<serde_json::Value>,
+    media: Vec<types::MediaAsset>,
+    status: ToolStatus,
+    execution: &ToolExecutionMetadata,
+) -> EventMsg {
+    bounded_tool_completed_event_inner(
+        turn_id,
+        id,
+        name,
+        arguments,
+        output,
+        media,
+        status,
+        Some(execution),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bounded_tool_completed_event_inner(
+    turn_id: &str,
+    id: &str,
+    name: &str,
+    arguments: serde_json::Value,
+    output: Option<serde_json::Value>,
+    media: Vec<types::MediaAsset>,
+    status: ToolStatus,
+    execution: Option<&ToolExecutionMetadata>,
+) -> EventMsg {
     let original = tool_completed_event(
         turn_id,
         id,
@@ -179,6 +236,7 @@ pub(crate) fn bounded_tool_completed_event(
         output.clone(),
         &media,
         status,
+        execution,
     );
     let original_serialized_bytes = serialized_event_len(turn_id, &original);
     if original_serialized_bytes <= TOOL_COMPLETED_EVENT_MAX_BYTES {
@@ -213,6 +271,7 @@ pub(crate) fn bounded_tool_completed_event(
         inline_media_omitted,
         stable_media_omitted,
         "",
+        execution,
     );
     if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES {
         stable_media_omitted = stable_media.len();
@@ -228,6 +287,7 @@ pub(crate) fn bounded_tool_completed_event(
             inline_media_omitted,
             stable_media_omitted,
             "",
+            execution,
         );
     }
     if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES {
@@ -245,6 +305,7 @@ pub(crate) fn bounded_tool_completed_event(
             inline_media_omitted,
             stable_media_omitted,
             "",
+            execution,
         );
     }
 
@@ -266,6 +327,7 @@ pub(crate) fn bounded_tool_completed_event(
             inline_media_omitted,
             stable_media_omitted,
             "",
+            execution,
         );
     }
     assert!(
@@ -293,6 +355,7 @@ pub(crate) fn bounded_tool_completed_event(
             inline_media_omitted,
             stable_media_omitted,
             &preview,
+            execution,
         );
         if serialized_event_len(turn_id, &candidate) <= TOOL_COMPLETED_EVENT_MAX_BYTES {
             best = candidate;
@@ -628,6 +691,27 @@ pub(crate) async fn emit_usage(
 mod tests {
     use super::*;
     use crate::runtime::Config;
+
+    #[test]
+    fn tool_item_keeps_execution_batch_metadata() {
+        let execution = ToolExecutionMetadata {
+            batch_id: "batch-1".into(),
+            mode: ToolExecutionMode::Parallel,
+        };
+        let TurnItem::DynamicToolCall(item) = tool_turn_item_with_execution(
+            "call-1",
+            "read_file",
+            serde_json::json!({}),
+            None,
+            Vec::new(),
+            ToolStatus::InProgress,
+            Some(&execution),
+        ) else {
+            panic!("expected dynamic tool call");
+        };
+        assert_eq!(item.batch_id.as_deref(), Some("batch-1"));
+        assert_eq!(item.execution_mode, Some(ToolExecutionMode::Parallel));
+    }
 
     async fn session() -> (tempfile::TempDir, Arc<Session>, Arc<TurnContext>) {
         let dir = tempfile::tempdir().unwrap();

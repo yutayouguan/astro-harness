@@ -27,7 +27,9 @@ export function activityVisualKind(activity: ChatActivity): ActivityVisualKind {
 
   const name = activity.title.trim().toLowerCase();
   const operation = activityOperation(activity.input);
-  for (const candidate of [name, operation]) {
+  // Multiplexed tools such as exec_command/file_ops describe the real action
+  // in their structured input; prefer it over the broad tool family name.
+  for (const candidate of [operation, name]) {
     if (!candidate) continue;
     if (SEARCH_NAMES.test(candidate)) return "search";
     if (READ_NAMES.test(candidate)) return "read";
@@ -91,4 +93,31 @@ export function distinctActivityVisualKinds(
   const kinds = new Set<ActivityVisualKind>();
   for (const activity of activities) kinds.add(activityVisualKind(activity));
   return [...kinds];
+}
+
+export type ActivityGroupSummary =
+  | "research"
+  | "inspect"
+  | "modify_and_verify"
+  | "modify"
+  | "media"
+  | "execute"
+  | "coordinate"
+  | "tools";
+
+/** Produce a stable semantic heading without adding another model request. */
+export function activityGroupSummary(
+  activities: ChatActivity[],
+): ActivityGroupSummary {
+  const kinds = new Set(distinctActivityVisualKinds(activities));
+  if (kinds.has("edit") && kinds.has("run")) return "modify_and_verify";
+  if (kinds.has("edit")) return "modify";
+  if (kinds.has("media")) return "media";
+  if (kinds.has("search") || kinds.has("browse")) return "research";
+  if (kinds.has("run")) return "execute";
+  if (kinds.has("read")) return "inspect";
+  if (kinds.has("skill") || kinds.has("mcp") || kinds.has("hook")) {
+    return "coordinate";
+  }
+  return "tools";
 }

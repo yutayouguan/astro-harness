@@ -128,7 +128,25 @@ function asTimelineSegments(raw: unknown): ChatTimelineSegment[] | undefined {
         at,
       });
     } else if (type === "activity") {
-      out.push({ type: "activity", id: id || `a-${out.length}`, at });
+      const executionMode =
+        seg.executionMode === "serial" || seg.executionMode === "parallel"
+          ? seg.executionMode
+          : seg.execution_mode === "serial" || seg.execution_mode === "parallel"
+            ? seg.execution_mode
+            : undefined;
+      const batchId =
+        typeof seg.batchId === "string"
+          ? seg.batchId
+          : typeof seg.batch_id === "string"
+            ? seg.batch_id
+            : undefined;
+      out.push({
+        type: "activity",
+        id: id || `a-${out.length}`,
+        at,
+        batchId,
+        executionMode,
+      });
     } else if (type === "surface") {
       out.push({ type: "surface", id: id || `s-${out.length}`, at });
     }
@@ -164,6 +182,7 @@ function enrichActivityDurations(
     );
     if (idx < 0) return act;
     const at = segments[idx]!.at;
+    const activitySegment = segments[idx]!.type === "activity" ? segments[idx]! : null;
     const next = segments[idx + 1];
     let durationSec = act.durationSec;
     if (next && next.at > at) {
@@ -173,6 +192,8 @@ function enrichActivityDurations(
       ...act,
       at: act.at ?? at,
       durationSec: durationSec && durationSec > 0 ? durationSec : undefined,
+      batchId: act.batchId ?? activitySegment?.batchId,
+      executionMode: act.executionMode ?? activitySegment?.executionMode,
     };
   });
 }

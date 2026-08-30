@@ -72,6 +72,10 @@ pub enum ChatStreamEvent {
         arguments_json: String,
         result: String,
         phase: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        batch_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        execution_mode: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         media: Vec<MediaAssetDto>,
     },

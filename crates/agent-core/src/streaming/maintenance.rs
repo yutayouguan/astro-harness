@@ -11,9 +11,9 @@ use providers::types::message::Role as ProviderRole;
 use providers::Usage;
 
 use super::lifecycle::{
-    bounded_tool_completed_event, emit, emit_context_compacted, emit_extension_completed,
-    emit_hook_completed, emit_hook_started, emit_prepared, emit_subagent_activity,
-    is_subagent_tool,
+    bounded_tool_completed_event, bounded_tool_completed_event_with_execution, emit,
+    emit_context_compacted, emit_extension_completed, emit_hook_completed, emit_hook_started,
+    emit_prepared, emit_subagent_activity, is_subagent_tool, ToolExecutionMetadata,
 };
 use super::provider::ProviderStreamer;
 use crate::runtime::{AgentLoop, TurnContext};
@@ -293,6 +293,7 @@ pub(super) async fn record_tool_outcomes(
     turn_context: &TurnContext,
     timeline: &mut crate::timeline::TimelineBuilder,
     now_ms: impl Fn() -> i64,
+    execution: Option<&ToolExecutionMetadata>,
 ) -> bool {
     for (call, result) in calls.iter().zip(outcomes) {
         if pause.is_cancelled() {
@@ -358,9 +359,22 @@ pub(super) async fn record_tool_outcomes(
             .await;
         }
 
-        emit_prepared(
-            session,
-            turn_context,
+        let completed_event = if let Some(execution) = execution {
+            bounded_tool_completed_event_with_execution(
+                turn_context.sub_id(),
+                &call.id,
+                &call.name,
+                call.arguments.clone(),
+                Some(serde_json::Value::String(result_text.clone())),
+                tool_media,
+                if is_success {
+                    ToolStatus::Completed
+                } else {
+                    ToolStatus::Failed
+                },
+                execution,
+            )
+        } else {
             bounded_tool_completed_event(
                 turn_context.sub_id(),
                 &call.id,
@@ -373,9 +387,9 @@ pub(super) async fn record_tool_outcomes(
                 } else {
                     ToolStatus::Failed
                 },
-            ),
-        )
-        .await;
+            )
+        };
+        emit_prepared(session, turn_context, completed_event).await;
 
         if call.name == "memory" && is_success {
             let s = result_text.trim();

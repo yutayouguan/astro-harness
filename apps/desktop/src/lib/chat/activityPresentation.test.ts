@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ChatActivity } from "../../types.ts";
 import {
+  activityGroupSummary,
   activityDisplayTarget,
   activityVisualKind,
   distinctActivityVisualKinds,
@@ -48,6 +49,13 @@ test("extracts compact targets for human-readable rows", () => {
 test("classifies multiplexed tools from their structured operation", () => {
   assert.equal(
     activityVisualKind({
+      ...activity("exec_command"),
+      input: '{"operation":"read","path":"README.md"}',
+    }),
+    "read",
+  );
+  assert.equal(
+    activityVisualKind({
       ...activity("skills"),
       input: '{"action":"search","query":"timeline"}',
     }),
@@ -77,5 +85,19 @@ test("returns distinct visual kinds in event order", () => {
       activity("exec_command"),
     ]),
     ["read", "search", "run"],
+  );
+});
+
+test("summarizes the batch intent instead of exposing a raw verb list", () => {
+  assert.equal(
+    activityGroupSummary([
+      activity("apply_patch"),
+      activity("exec_command"),
+    ]),
+    "modify_and_verify",
+  );
+  assert.equal(
+    activityGroupSummary([activity("web_search"), activity("read_file")]),
+    "research",
   );
 });

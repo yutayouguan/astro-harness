@@ -400,6 +400,8 @@ export function useSend(deps: UseSendDeps) {
           result?: string;
           delta?: string;
           phase?: string;
+          batch_id?: string;
+          execution_mode?: "serial" | "parallel";
           media?: Array<{
             kind?: string;
             mime_type?: string;
@@ -740,8 +742,14 @@ export function useSend(deps: UseSendDeps) {
               output: payload.result || undefined,
               detail: payload.result || payload.arguments_json || undefined,
               status:
-                payload.phase === "completed" || payload.result ? "done" : "running",
+                payload.phase === "failed"
+                  ? "error"
+                  : payload.phase === "completed" || payload.result
+                    ? "done"
+                    : "running",
               at: Date.now(),
+              batchId: payload.batch_id,
+              executionMode: payload.execution_mode,
               media: structuredMedia,
             };
             setMessages((prev) =>

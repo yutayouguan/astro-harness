@@ -30,6 +30,8 @@ const groupedActivities: ChatActivity[] = [
     output: "读取 2146 行",
     status: "done",
     durationSec: 0.4,
+    batchId: "storybook-analysis",
+    executionMode: "parallel",
   },
   {
     id: "storybook-search",
@@ -39,6 +41,8 @@ const groupedActivities: ChatActivity[] = [
     output: "找到 18 处匹配",
     status: "done",
     durationSec: 0.2,
+    batchId: "storybook-analysis",
+    executionMode: "parallel",
   },
   {
     id: "storybook-run",
@@ -48,6 +52,8 @@ const groupedActivities: ChatActivity[] = [
     output: "Build completed",
     status: "done",
     durationSec: 3.6,
+    batchId: "storybook-analysis",
+    executionMode: "parallel",
   },
 ];
 
