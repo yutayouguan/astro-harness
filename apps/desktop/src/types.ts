@@ -25,7 +25,7 @@ export type ModelReasoningMeta = {
 };
 
 /** 聊天附件媒体类型 */
-export type ChatAttachmentKind = "image" | "video" | "audio" | "file";
+export type ChatAttachmentKind = "image" | "video" | "audio" | "file" | "folder";
 
 /** 用户消息附件 */
 export type ChatAttachment = {
@@ -832,6 +832,7 @@ export type SkillUpdateRow = {
 /** 侧栏近期会话 */
 export type RecentSessionDto = {
   sessionId: string;
+  projectId?: string | null;
   summary: string;
   createdAt: string | null;
   endReason?: string | null;

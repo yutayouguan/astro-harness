@@ -90,6 +90,7 @@ test("attachmentAcceptForCaps gates by capabilities", () => {
     "image/*,video/*",
   );
   assert.equal(attachmentKindAllowed("image", { ...EMPTY_MODEL_CAPABILITIES }), false);
+  assert.equal(attachmentKindAllowed("folder", { ...EMPTY_MODEL_CAPABILITIES }), true);
   assert.equal(
     attachmentKindAllowed("audio", {
       ...EMPTY_MODEL_CAPABILITIES,

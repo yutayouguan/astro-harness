@@ -23,6 +23,7 @@ import {
   ExternalLink,
   File,
   FileVideo,
+  FolderOpen,
   GitBranch,
   Hand,
   Image,
@@ -520,6 +521,9 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
 
 /** 附件种类对应小图标 */
 function AttachmentGlyph({ kind }: { kind: ChatAttachmentKind }) {
+  if (kind === "folder") {
+    return <FolderOpen size={16} strokeWidth={2} aria-hidden />;
+  }
   if (kind === "image") {
     return <Image size={16} strokeWidth={2} aria-hidden />;
   }
@@ -541,6 +545,7 @@ function ComposerContextGlyph({ kind }: { kind: ComposerContextToken["kind"] }) 
 
 /** 消息内附件缩略图条 */
 function MessageAttachments({ items }: { items: ChatAttachment[] }) {
+  const { t } = useI18n();
   if (!items.length) return null;
   return (
     <div className="msg-attachments">
@@ -557,7 +562,9 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
           )}
           <div className="msg-attachment-meta">
             <span className="msg-attachment-name">{att.name}</span>
-            <span className="msg-attachment-size">{formatSize(att.size)}</span>
+            <span className="msg-attachment-size">
+              {att.kind === "folder" ? t("chat.plusMenuFolder") : formatSize(att.size)}
+            </span>
           </div>
         </div>
       ))}
@@ -1791,6 +1798,41 @@ export default function ChatView({
     },
     [attachments, modelCapabilities, onAttachmentsChange, showToast, t],
   );
+
+  const addFolder = useCallback(async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: t("chat.plusMenuFolder"),
+      });
+      if (!selected || typeof selected !== "string") return;
+      if (
+        attachments.some(
+          (attachment) =>
+            attachment.kind === "folder" && attachment.localPath === selected,
+        )
+      ) {
+        return;
+      }
+      const name = selected.split(/[/\\]/).filter(Boolean).pop() || selected;
+      addAttachments([
+        {
+          id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name,
+          mime: "inode/directory",
+          kind: "folder",
+          size: 0,
+          localPath: selected,
+        },
+      ]);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), {
+        error: true,
+      });
+    }
+  }, [addAttachments, attachments, showToast, t]);
 
   const addPaths = useCallback(
     async (paths: string[]) => {
@@ -3085,7 +3127,9 @@ export default function ChatView({
                     <span className="composer-preview-meta">
                       <span className="composer-preview-name">{att.name}</span>
                       <span className="composer-preview-size">
-                        {formatSize(att.size)}
+                        {att.kind === "folder"
+                          ? t("chat.plusMenuFolder")
+                          : formatSize(att.size)}
                       </span>
                     </span>
                   </button>
@@ -3392,7 +3436,9 @@ export default function ChatView({
                   canAttach={
                     attachments.length < MAX_ATTACHMENTS && fileAccept !== ""
                   }
+                  canAttachFolder={attachments.length < MAX_ATTACHMENTS}
                   onAttach={() => fileInputRef.current?.click()}
+                  onAttachFolder={() => void addFolder()}
                   onSelectSkill={(skill) =>
                     addComposerContext({
                       id: skill.id,

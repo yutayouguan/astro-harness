@@ -307,7 +307,7 @@ impl SessionStore {
                        AND TRIM(m.content) != ''
                      ORDER BY m.timestamp ASC, m.id ASC
                      LIMIT 1) AS preview,
-                    s.ended_at, s.end_reason, s.archived_at, s.pinned_at
+                    s.ended_at, s.end_reason, s.archived_at, s.pinned_at, s.project_id
              FROM sessions s
              {where_clause}
              ORDER BY (s.pinned_at IS NULL) ASC, s.pinned_at DESC, s.started_at DESC
@@ -330,6 +330,7 @@ impl SessionStore {
                     row.get::<Option<String>, _>(5),
                     row.get::<Option<f64>, _>(6),
                     row.get::<Option<f64>, _>(7),
+                    row.get::<Option<String>, _>(8),
                 )
             })
             .collect();
@@ -374,7 +375,7 @@ impl SessionStore {
                        AND TRIM(m.content) != ''
                      ORDER BY m.timestamp ASC, m.id ASC
                      LIMIT 1) AS preview,
-                    s.ended_at, s.end_reason, s.archived_at, s.pinned_at
+                    s.ended_at, s.end_reason, s.archived_at, s.pinned_at, s.project_id
              FROM sessions s
              {where_clause}
              ORDER BY (s.pinned_at IS NULL) ASC, s.pinned_at DESC, s.started_at DESC
@@ -404,6 +405,7 @@ impl SessionStore {
                     row.get::<Option<String>, _>(5),
                     row.get::<Option<f64>, _>(6),
                     row.get::<Option<f64>, _>(7),
+                    row.get::<Option<String>, _>(8),
                 )
             })
             .collect();
@@ -420,13 +422,25 @@ impl SessionStore {
             Option<String>,
             Option<f64>,
             Option<f64>,
+            Option<String>,
         )>,
     ) -> Vec<RecentSession> {
         rows.into_iter()
             .map(
-                |(id, title, started_at, preview, ended_at, end_reason, archived_at, pinned_at)| {
+                |(
+                    id,
+                    title,
+                    started_at,
+                    preview,
+                    ended_at,
+                    end_reason,
+                    archived_at,
+                    pinned_at,
+                    project_id,
+                )| {
                     RecentSession {
                         id,
+                        project_id,
                         title,
                         started_at,
                         preview: preview.map(|p| truncate_chars(&p, 120)),

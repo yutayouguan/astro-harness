@@ -9,7 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Paperclip, Search, Settings2, Sparkles } from "lucide-react";
+import { FolderOpen, Paperclip, Search, Settings2, Sparkles } from "lucide-react";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
   useMcpTools,
@@ -25,7 +25,9 @@ type Props = {
   agentId?: string | null;
   skills: InstalledSkill[];
   canAttach: boolean;
+  canAttachFolder: boolean;
   onAttach: () => void;
+  onAttachFolder: () => void;
   onSelectSkill: (skill: InstalledSkill) => void;
   onSelectMcp: (server: McpServer) => void;
   onClose: () => void;
@@ -38,7 +40,9 @@ export default function ComposerPlusMenu({
   agentId,
   skills,
   canAttach,
+  canAttachFolder,
   onAttach,
+  onAttachFolder,
   onSelectSkill,
   onSelectMcp,
   onClose,
@@ -156,6 +160,21 @@ export default function ComposerPlusMenu({
               <span>
                 <strong>{t("chat.plusMenuFiles")}</strong>
                 <small>{t("chat.plusMenuFilesHint")}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="composer-plus-action"
+              disabled={!canAttachFolder}
+              onClick={() => {
+                onAttachFolder();
+                onClose();
+              }}
+            >
+              <FolderOpen size={16} strokeWidth={2} aria-hidden />
+              <span>
+                <strong>{t("chat.plusMenuFolder")}</strong>
+                <small>{t("chat.plusMenuFolderHint")}</small>
               </span>
             </button>
           </div>

@@ -1279,6 +1279,13 @@ impl AstroServiceImpl {
         session.set_project_root(
             (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim())),
         );
+        session.set_workspace_roots(
+            req.workspace_roots
+                .iter()
+                .map(|root| PathBuf::from(root.trim()))
+                .filter(|root| !root.as_os_str().is_empty())
+                .collect(),
+        );
         if let Some(temperature) = req.temperature {
             session.set_temperature(temperature);
         }

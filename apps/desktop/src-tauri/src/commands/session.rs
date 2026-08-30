@@ -14,6 +14,7 @@ use super::common::open_sessions;
 #[serde(rename_all = "camelCase")]
 pub struct RecentSessionDto {
     pub session_id: String,
+    pub project_id: Option<String>,
     pub summary: String,
     pub created_at: Option<String>,
     pub end_reason: Option<String>,
@@ -146,6 +147,7 @@ fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
         .map(|dt| dt.to_rfc3339());
     RecentSessionDto {
         session_id: s.id,
+        project_id: s.project_id,
         summary,
         created_at,
         end_reason: s.end_reason,

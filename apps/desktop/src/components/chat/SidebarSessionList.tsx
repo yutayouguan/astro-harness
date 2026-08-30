@@ -12,8 +12,10 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
+  ChevronRight,
   Download,
   Edit3,
+  FolderInput,
   GitBranch,
   MoreVertical,
   Pin,
@@ -44,7 +46,7 @@ import { useAppDialog } from "../../hooks/ui/DialogContext";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import type { RecentSessionDto } from "../../types";
+import type { ProjectDto, RecentSessionDto } from "../../types";
 import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import { visibleSessionTitle } from "../../lib/chat/sessionTitle";
 import {
@@ -124,7 +126,7 @@ type Props = {
   onOpenSession: (sessionId: string) => void;
   /** 删除当前会话前取消流 */
   onPrepareDeleteCurrentSession?: () => void | Promise<void>;
-  /** 当前会话被删除后清理本地状态 */
+  /** 当前会话被删除或移出当前项目后清理本地状态 */
   onClearDeletedCurrentSession?: () => void | Promise<void>;
 };
 
@@ -215,7 +217,15 @@ export default function SidebarSessionList({
   }, []);
 
   const [sessionMenu, setSessionMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null);
+  const [moveProjectOpen, setMoveProjectOpen] = useState(false);
+  const [moveProjects, setMoveProjects] = useState<ProjectDto[]>([]);
+  const [moveProjectsLoading, setMoveProjectsLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const openSessionMenu = useCallback((sessionId: string, x: number, y: number) => {
+    setMoveProjectOpen(false);
+    setSessionMenu({ sessionId, x, y });
+  }, []);
 
   useLayoutEffect(() => {
     if (!sessionMenu) return;
@@ -247,7 +257,7 @@ export default function SidebarSessionList({
     positionMenu();
     window.addEventListener("resize", positionMenu);
     return () => window.removeEventListener("resize", positionMenu);
-  }, [sessionMenu]);
+  }, [sessionMenu, moveProjectOpen, moveProjects.length]);
 
   useEffect(() => {
     if (!sessionMenu) return;
@@ -385,6 +395,60 @@ export default function SidebarSessionList({
     });
   }, [findMenuSession, onOpenSession, runSessionAction, t]);
 
+  const toggleMoveProjects = useCallback(async () => {
+    const nextOpen = !moveProjectOpen;
+    setMoveProjectOpen(nextOpen);
+    if (!nextOpen || moveProjectsLoading) return;
+    setMoveProjectsLoading(true);
+    try {
+      setMoveProjects(await invoke<ProjectDto[]>("list_projects"));
+    } catch (error) {
+      showToast(
+        t("sessions.actionFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        { error: true },
+      );
+      setMoveProjectOpen(false);
+    } finally {
+      setMoveProjectsLoading(false);
+    }
+  }, [moveProjectOpen, moveProjectsLoading, showToast, t]);
+
+  const handleMoveToProject = useCallback(
+    (session: RecentSessionDto, target: ProjectDto) => {
+      void runSessionAction(async () => {
+        await invoke("assign_session_to_project", {
+          sessionId: session.sessionId,
+          projectId: target.id,
+        });
+        setItems((current) =>
+          projectId && projectId !== target.id
+            ? current.filter((item) => item.sessionId !== session.sessionId)
+            : current.map((item) =>
+                item.sessionId === session.sessionId
+                  ? { ...item, projectId: target.id }
+                  : item,
+              ),
+        );
+        if (session.sessionId === activeSessionId) {
+          await onClearDeletedCurrentSession?.();
+        }
+        showToast(t("sessions.moveDone", { project: target.name }), {
+          tone: "success",
+        });
+      });
+    },
+    [
+      activeSessionId,
+      onClearDeletedCurrentSession,
+      projectId,
+      runSessionAction,
+      showToast,
+      t,
+    ],
+  );
+
   const handleDelete = useCallback(async () => {
     const session = findMenuSession();
     if (!session) return;
@@ -472,8 +536,8 @@ export default function SidebarSessionList({
               clearSessionUnread(s.sessionId);
               onOpenSession(s.sessionId);
             }}
-            onContextMenu={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
-            onMoreClick={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
+            onContextMenu={(x, y) => openSessionMenu(s.sessionId, x, y)}
+            onMoreClick={(x, y) => openSessionMenu(s.sessionId, x, y)}
             onPinToggle={() => handlePinToggle(s)}
             onArchiveToggle={() => handleArchiveToggle(s)}
           />
@@ -505,6 +569,14 @@ export default function SidebarSessionList({
       {sessionMenu && (() => {
         const menuSession = items.find((s) => s.sessionId === sessionMenu.sessionId);
         const pinned = Boolean(menuSession?.pinnedAt);
+        const currentProjectId = menuSession?.projectId ?? projectId;
+        const runtimeStatus = resolveSessionStatus(
+          sessionStatuses[sessionMenu.sessionId],
+        );
+        const moveDisabled = runtimeStatus === "running" || runtimeStatus === "awaiting";
+        const targetProjects = moveProjects.filter(
+          (candidate) => candidate.id !== currentProjectId,
+        );
         return createPortal(
           <div ref={menuRef} className="project-context-menu" style={{ top: sessionMenu.y, left: sessionMenu.x }} role="menu">
             <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => { if (menuSession) handlePinToggle(menuSession); }}>
@@ -530,6 +602,48 @@ export default function SidebarSessionList({
             <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => handleBranch()}>
               <GitBranch size={14} strokeWidth={1.8} aria-hidden /><span>{t("sessions.branch")}</span>
             </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="project-context-menu-item"
+              disabled={moveDisabled}
+              title={moveDisabled ? t("sessions.moveRunningDisabled") : undefined}
+              aria-expanded={moveProjectOpen}
+              onClick={() => void toggleMoveProjects()}
+            >
+              <FolderInput size={14} strokeWidth={1.8} aria-hidden />
+              <span>{t("sessions.moveToProject")}</span>
+              <ChevronRight
+                className={`session-move-project-chevron ${moveProjectOpen ? "is-open" : ""}`}
+                size={13}
+                strokeWidth={2}
+                aria-hidden
+              />
+            </button>
+            {moveProjectOpen ? (
+              <div className="session-move-project-list" role="group" aria-label={t("sessions.moveToProject")}>
+                {moveProjectsLoading ? (
+                  <span className="session-move-project-empty">{t("sessions.moveLoading")}</span>
+                ) : targetProjects.length === 0 ? (
+                  <span className="session-move-project-empty">{t("sessions.noOtherProjects")}</span>
+                ) : (
+                  targetProjects.map((target) => (
+                    <button
+                      key={target.id}
+                      type="button"
+                      role="menuitem"
+                      className="project-context-menu-item session-move-project-target"
+                      onClick={() => {
+                        if (menuSession) handleMoveToProject(menuSession, target);
+                      }}
+                    >
+                      <FolderInput size={13} strokeWidth={1.8} aria-hidden />
+                      <span>{target.name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
             <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => { if (menuSession) handleArchiveToggle(menuSession); }}>
               <MorphToggleIcon
                 active={archived}

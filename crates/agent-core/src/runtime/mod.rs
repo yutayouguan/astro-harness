@@ -239,6 +239,7 @@ pub struct SessionRequestSettingsSnapshot {
     model_ctx: model_ctx::ModelContext,
     interaction_mode: types::InteractionMode,
     project_root: Option<PathBuf>,
+    workspace_roots: Vec<PathBuf>,
     temperature: f32,
     additional_params: Value,
 }
@@ -591,6 +592,7 @@ impl Session {
             model_ctx: state.model_ctx.clone(),
             interaction_mode: state.interaction_mode,
             project_root: state.project_root.clone(),
+            workspace_roots: state.workspace_roots.clone(),
             temperature: state.temperature,
             additional_params: state.additional_params.clone(),
         }
@@ -602,6 +604,7 @@ impl Session {
         state.model_ctx = snapshot.model_ctx;
         state.interaction_mode = snapshot.interaction_mode;
         state.project_root = snapshot.project_root;
+        state.workspace_roots = snapshot.workspace_roots;
         state.temperature = snapshot.temperature;
         state.additional_params = snapshot.additional_params;
     }
@@ -1101,6 +1104,21 @@ impl Session {
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
     pub fn set_project_root(&self, root: Option<PathBuf>) {
         self.lock_state().project_root = root;
+    }
+
+    /// 设置本轮可访问的工作区根；主项目根始终置于首位并自动去重。
+    pub fn set_workspace_roots(&self, roots: Vec<PathBuf>) {
+        let mut state = self.lock_state();
+        let mut normalized = Vec::new();
+        if let Some(project_root) = state.project_root.clone() {
+            normalized.push(project_root);
+        }
+        for root in roots {
+            if !normalized.contains(&root) {
+                normalized.push(root);
+            }
+        }
+        state.workspace_roots = normalized;
     }
 
     /// 当前代码/项目根（若有）。
@@ -1907,16 +1925,31 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let session = Session::new(test_config(&dir)).await.unwrap();
         let project_root = dir.path().join("project");
+        let extra_root = dir.path().join("reference");
         session.set_chat_credentials("openai", "gpt-5.6", "key", "https://example.test");
         session.set_project_root(Some(project_root.clone()));
+        session.set_workspace_roots(vec![extra_root.clone(), project_root.clone()]);
         session.set_permission_profile(Some("workspace-write".to_string()));
 
         let model = session.model_context_snapshot().await;
         assert_eq!(model.chat_model(), "gpt-5.6");
         assert_eq!(session.project_root_snapshot().await, Some(project_root));
         assert_eq!(
+            session.workspace_roots(),
+            vec![dir.path().join("project"), extra_root]
+        );
+        assert_eq!(
             session.permission_profile_snapshot().await.as_deref(),
             Some("workspace-write")
+        );
+
+        let settings = session.snapshot_request_settings();
+        session.set_project_root(Some(dir.path().join("temporary-project")));
+        session.set_workspace_roots(vec![dir.path().join("temporary-reference")]);
+        session.restore_request_settings(settings);
+        assert_eq!(
+            session.workspace_roots(),
+            vec![dir.path().join("project"), dir.path().join("reference")]
         );
     }
 

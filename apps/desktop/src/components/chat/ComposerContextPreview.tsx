@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Bot, File, FileVideo, Image, Music2, Sparkles, X } from "lucide-react";
+import { Bot, File, FileVideo, FolderOpen, Image, Music2, Sparkles, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ComposerContextToken } from "../../lib/chat/composerContext";
 import type { ChatAttachment, SkillContent } from "../../types";
@@ -46,6 +46,7 @@ function ContextIcon({ token }: { token: ComposerContextToken }) {
 }
 
 function AttachmentIcon({ item }: { item: ChatAttachment }) {
+  if (item.kind === "folder") return <FolderOpen size={18} aria-hidden />;
   if (item.kind === "image") return <Image size={18} aria-hidden />;
   if (item.kind === "video") return <FileVideo size={18} aria-hidden />;
   if (item.kind === "audio") return <Music2 size={18} aria-hidden />;
@@ -166,7 +167,9 @@ export default function ComposerContextPreview({
                 <strong>{title}</strong>
                 <small>
                   {target.type === "attachment"
-                    ? `${target.item.mime} · ${formatSize(target.item.size)}`
+                    ? target.item.kind === "folder"
+                      ? t("chat.plusMenuFolder")
+                      : `${target.item.mime} · ${formatSize(target.item.size)}`
                     : contextKindLabel}
                 </small>
               </span>

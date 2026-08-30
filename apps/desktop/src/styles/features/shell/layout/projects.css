@@ -1207,6 +1207,42 @@ html[data-theme="dark"] .project-context-menu {
   background: color-mix(in srgb, var(--tone, #64748b) 10%, transparent);
 }
 
+.project-context-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.project-context-menu-item:disabled:hover {
+  background: transparent;
+}
+
+.session-move-project-chevron {
+  margin-left: auto;
+  transition: transform 140ms ease;
+}
+
+.session-move-project-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.session-move-project-list {
+  margin: 2px 4px 4px 24px;
+  padding-left: 4px;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.session-move-project-target {
+  padding-block: 6px;
+  font-size: 12px;
+}
+
+.session-move-project-empty {
+  display: block;
+  padding: 7px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .project-context-menu-item.is-danger {
   color: var(--danger, #ef4444);
 }
@@ -1218,6 +1254,12 @@ html[data-theme="dark"] .project-context-menu {
 .project-context-menu-item svg {
   flex-shrink: 0;
   opacity: 0.65;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-move-project-chevron {
+    transition: none;
+  }
 }
 
 /* 项目 header 更多按钮 */

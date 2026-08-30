@@ -187,6 +187,8 @@ export function attachmentKindAllowed(
       return Boolean(caps.audio_in);
     case "file":
       return Boolean(caps.file);
+    case "folder":
+      return true;
     default:
       return false;
   }

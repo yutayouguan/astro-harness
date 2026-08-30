@@ -180,6 +180,7 @@ pub struct ChatHistoryMessage {
 #[derive(Debug, Clone)]
 pub struct RecentSession {
     pub id: String,
+    pub project_id: Option<String>,
     pub title: Option<String>,
     pub started_at: f64,
     /// 首条 user 消息正文截断；无则 `None`。
