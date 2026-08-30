@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock, Weak};
@@ -662,6 +662,8 @@ pub struct AstroServiceImpl {
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
     pub(crate) hook_runtime: Arc<::hooks::HookRuntime>,
+    /// canonical project root → trusted command-hook runtime.
+    project_hook_runtimes: Arc<StdMutex<HashMap<PathBuf, Arc<::hooks::HookRuntime>>>>,
     /// root thread → 当前 V2 AgentControl generation。
     agent_thread_watchers: Arc<Mutex<HashMap<String, Weak<subagents::AgentControl>>>>,
 }
@@ -697,7 +699,48 @@ impl AstroServiceImpl {
             hitl_registry: HitlRegistry::new(),
             memory_dir,
             hook_runtime,
+            project_hook_runtimes: Arc::new(StdMutex::new(HashMap::new())),
             agent_thread_watchers: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub(crate) fn hook_runtime_for_project(&self, project_root: &str) -> Arc<::hooks::HookRuntime> {
+        let requested_root = project_root.trim();
+        if requested_root.is_empty() {
+            return Arc::clone(&self.hook_runtime);
+        }
+        let project_root = match Path::new(requested_root).canonicalize() {
+            Ok(project_root) => project_root,
+            Err(error) => {
+                tracing::warn!(%error, project_root = requested_root, "cannot resolve project hook root");
+                return Arc::clone(&self.hook_runtime);
+            }
+        };
+        if let Some(runtime) = self
+            .project_hook_runtimes
+            .lock()
+            .expect("project hook runtime cache mutex poisoned")
+            .get(&project_root)
+            .cloned()
+        {
+            return runtime;
+        }
+        match self
+            .hook_runtime
+            .with_project_commands(&self.memory_dir, &project_root)
+        {
+            Ok(runtime) => {
+                let runtime = Arc::new(runtime);
+                self.project_hook_runtimes
+                    .lock()
+                    .expect("project hook runtime cache mutex poisoned")
+                    .insert(project_root, Arc::clone(&runtime));
+                runtime
+            }
+            Err(error) => {
+                tracing::warn!(%error, project_root = %project_root.display(), "failed to discover project command hooks");
+                Arc::clone(&self.hook_runtime)
+            }
         }
     }
 
@@ -1190,7 +1233,7 @@ impl AstroServiceImpl {
             api_mode: fallback.api_mode.trim().to_string(),
         }));
         let session = thread.session();
-        session.set_hook_runtime(Arc::clone(&self.hook_runtime));
+        session.set_hook_runtime(self.hook_runtime_for_project(&req.project_root));
         let (_, hitl_gate, _) = session.ensure_thread_controls();
         if !self
             .hitl_registry

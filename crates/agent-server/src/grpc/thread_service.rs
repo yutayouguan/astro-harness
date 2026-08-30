@@ -239,13 +239,14 @@ pub(crate) async fn submit_turn(
         .current_generation_key(&connection_id)
         .await
         .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
+    let request_hook_runtime = service.hook_runtime_for_project(&chat.project_root);
     if let Some(turn_request) = validated.turn_request.as_mut() {
         let input = turn_request
             .input
             .first_mut()
             .expect("validated non-resume chat must contain one input");
         if let Some(reason) =
-            apply_pre_gateway_hook(&service.hook_runtime, thread_id, &chat.project_root, input)
+            apply_pre_gateway_hook(&request_hook_runtime, thread_id, &chat.project_root, input)
         {
             return Ok(submit_turn_response(
                 String::new(),

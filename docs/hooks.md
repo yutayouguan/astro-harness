@@ -8,6 +8,10 @@ Astro 有三条 Hook 通道：
 
 对外配置与 `HookInput.hook_event_name` 统一使用 PascalCase canonical 名称。本页同时记录 Batch A 的**命名与 serialization 契约**，以及 B1 的**统一派发与生命周期契约**。
 
+Command Hooks 从用户级 `~/.astro/hooks.json` 加载；项目根到当前工作目录之间的
+`.astro/hooks.json` 只有在项目被 `~/.astro/config.toml` 明确标记为 `trusted` 时才会解析和执行。
+未授权或显式不信任的项目文件只进入 source discovery，内容不会被读取。
+
 可复制的配置样例见 [`docs/examples/hooks/`](./examples/hooks/)。
 
 ## 1. Canonical 事件名

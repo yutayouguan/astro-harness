@@ -15,8 +15,9 @@ pub mod shell;
 pub mod ui;
 
 pub use command::{
-    CommandHookDecision, CommandHookRunner, CommandHookSummary, HookHandlerConfig, HooksFile,
-    MatcherGroup, PermissionVote,
+    CommandHookDecision, CommandHookRunner, CommandHookScope, CommandHookSourceSummary,
+    CommandHookSummary, CommandHookTrust, HookHandlerConfig, HooksFile, MatcherGroup,
+    PermissionVote,
 };
 pub use config::{default_astro_root, load_config, load_config_or_default, AstroConfig};
 pub use context::PluginContext;
@@ -98,6 +99,21 @@ impl HookRuntime {
 
     pub fn recent_command_hook_runs(&self) -> Vec<HookRunRecord> {
         self.command.recent_runs()
+    }
+
+    pub fn command_hook_sources(&self) -> Vec<CommandHookSourceSummary> {
+        self.command.sources()
+    }
+
+    pub fn with_project_commands(
+        &self,
+        astro_home: &std::path::Path,
+        cwd: &std::path::Path,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            command: Arc::new(CommandHookRunner::load_for_project(astro_home, cwd)?),
+            ..self.clone()
+        })
     }
 
     /// 统一向 Plugin、Gateway、Shell 三套 transport 投递事件。

@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use std::time::Instant;
 
+use agent_config::loader::{load_local_config, LocalConfigOptions, ProjectTrust};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -101,10 +102,35 @@ struct ConfiguredCommand {
     status_message: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandHookScope {
+    User,
+    Project,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandHookTrust {
+    Trusted,
+    Untrusted,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CommandHookSourceSummary {
+    pub path: String,
+    pub scope: CommandHookScope,
+    pub trust: CommandHookTrust,
+    pub enabled: bool,
+    pub reason: Option<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct CommandHookRunner {
     handlers: HashMap<String, Vec<ConfiguredCommand>>,
     runs: HookRunStore,
+    sources: Vec<CommandHookSourceSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -120,16 +146,78 @@ pub struct CommandHookSummary {
 impl CommandHookRunner {
     pub fn load(root: &Path) -> anyhow::Result<Self> {
         let path = root.join("hooks.json");
-        if !path.is_file() {
-            return Ok(Self::default());
+        let mut runner = Self::default();
+        if path.is_file() {
+            runner.load_file(&path, CommandHookScope::User, CommandHookTrust::Trusted)?;
         }
-        let source = std::fs::read_to_string(&path)?;
-        let file: HooksFile = serde_json::from_str(&source)?;
-        Self::from_file(file, &path)
+        Ok(runner)
+    }
+
+    pub fn load_for_project(astro_home: &Path, cwd: &Path) -> anyhow::Result<Self> {
+        let mut runner = Self::load(astro_home)?;
+        let cwd = cwd.canonicalize()?;
+        let loaded = load_local_config(&LocalConfigOptions::new(astro_home, &cwd))?;
+        let trust = CommandHookTrust::from(loaded.project_trust);
+        for directory in project_hook_dirs(&loaded.project_root, &cwd) {
+            let path = directory.join("hooks.json");
+            if !path.is_file() {
+                continue;
+            }
+            if trust != CommandHookTrust::Trusted {
+                runner.sources.push(CommandHookSourceSummary {
+                    path: path.to_string_lossy().into_owned(),
+                    scope: CommandHookScope::Project,
+                    trust,
+                    enabled: false,
+                    reason: Some(
+                        match trust {
+                            CommandHookTrust::Untrusted => "project is untrusted",
+                            CommandHookTrust::Unknown => "project trust has not been granted",
+                            CommandHookTrust::Trusted => unreachable!(),
+                        }
+                        .into(),
+                    ),
+                });
+                continue;
+            }
+            runner.load_file(&path, CommandHookScope::Project, trust)?;
+        }
+        Ok(runner)
     }
 
     pub fn from_file(file: HooksFile, source: &Path) -> anyhow::Result<Self> {
-        let mut handlers = HashMap::new();
+        let mut runner = Self::default();
+        runner.sources.push(CommandHookSourceSummary {
+            path: source.to_string_lossy().into_owned(),
+            scope: CommandHookScope::User,
+            trust: CommandHookTrust::Trusted,
+            enabled: true,
+            reason: None,
+        });
+        runner.extend_from_file(file, source);
+        Ok(runner)
+    }
+
+    fn load_file(
+        &mut self,
+        source: &Path,
+        scope: CommandHookScope,
+        trust: CommandHookTrust,
+    ) -> anyhow::Result<()> {
+        let raw = std::fs::read_to_string(source)?;
+        let file: HooksFile = serde_json::from_str(&raw)?;
+        self.sources.push(CommandHookSourceSummary {
+            path: source.to_string_lossy().into_owned(),
+            scope,
+            trust,
+            enabled: true,
+            reason: None,
+        });
+        self.extend_from_file(file, source);
+        Ok(())
+    }
+
+    fn extend_from_file(&mut self, file: HooksFile, source: &Path) {
         for (event, groups) in file.hooks {
             if !HookEvent::COMMAND_HOOK_EVENTS
                 .iter()
@@ -172,14 +260,17 @@ impl CommandHookRunner {
                         requested.unwrap_or(DEFAULT_TIMEOUT)
                     };
                     let id = handler_id(
+                        source,
                         &event,
                         group_index,
                         handler_index,
                         matcher_source.as_deref(),
                         &command,
                     );
-                    handlers.entry(event.clone()).or_insert_with(Vec::new).push(
-                        ConfiguredCommand {
+                    self.handlers
+                        .entry(event.clone())
+                        .or_insert_with(Vec::new)
+                        .push(ConfiguredCommand {
                             id,
                             source: source.to_string_lossy().into_owned(),
                             matcher: matcher.clone(),
@@ -187,15 +278,10 @@ impl CommandHookRunner {
                             timeout,
                             asynchronous: r#async && event != crate::SESSION_END,
                             status_message,
-                        },
-                    );
+                        });
                 }
             }
         }
-        Ok(Self {
-            handlers,
-            runs: HookRunStore::default(),
-        })
     }
 
     pub fn is_empty(&self) -> bool {
@@ -230,6 +316,10 @@ impl CommandHookRunner {
 
     pub fn recent_runs(&self) -> Vec<HookRunRecord> {
         self.runs.recent()
+    }
+
+    pub fn sources(&self) -> Vec<CommandHookSourceSummary> {
+        self.sources.clone()
     }
 
     pub async fn run(&self, event: &str, payload: &HookPayload) -> Vec<CommandHookDecision> {
@@ -323,6 +413,7 @@ impl CommandHookRunner {
 }
 
 fn handler_id(
+    source: &Path,
     event: &str,
     group_index: usize,
     handler_index: usize,
@@ -330,6 +421,8 @@ fn handler_id(
     command: &str,
 ) -> String {
     let mut digest = Sha256::new();
+    digest.update(source.to_string_lossy().as_bytes());
+    digest.update([0]);
     for part in [
         event,
         &group_index.to_string(),
@@ -341,6 +434,26 @@ fn handler_id(
         digest.update([0]);
     }
     format!("command-{:x}", digest.finalize())
+}
+
+fn project_hook_dirs(project_root: &Path, cwd: &Path) -> Vec<PathBuf> {
+    let mut directories = cwd
+        .ancestors()
+        .take_while(|directory| directory.starts_with(project_root))
+        .map(|directory| directory.join(".astro"))
+        .collect::<Vec<_>>();
+    directories.reverse();
+    directories
+}
+
+impl From<ProjectTrust> for CommandHookTrust {
+    fn from(value: ProjectTrust) -> Self {
+        match value {
+            ProjectTrust::Trusted => Self::Trusted,
+            ProjectTrust::Untrusted => Self::Untrusted,
+            ProjectTrust::Unknown => Self::Unknown,
+        }
+    }
 }
 
 fn finish_run(
@@ -651,6 +764,28 @@ fn parse_output(event: &str, output: &CommandOutput) -> CommandHookDecision {
 mod tests {
     use super::*;
 
+    fn project_fixture(trust: &str, hooks: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let root = tempfile::tempdir().unwrap();
+        let astro_home = root.path().join("home/.astro");
+        let project = root.path().join("repo");
+        let cwd = project.join("nested");
+        std::fs::create_dir_all(&astro_home).unwrap();
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        std::fs::create_dir_all(project.join(".astro")).unwrap();
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::write(
+            astro_home.join("config.toml"),
+            format!(
+                "[projects.{:?}]\ntrust_level = {:?}\n",
+                project.to_string_lossy(),
+                trust
+            ),
+        )
+        .unwrap();
+        std::fs::write(project.join(".astro/hooks.json"), hooks).unwrap();
+        (root, astro_home, cwd)
+    }
+
     fn file(command: String, matcher: Option<&str>, asynchronous: bool) -> HooksFile {
         HooksFile {
             hooks: HashMap::from([(
@@ -683,6 +818,39 @@ mod tests {
         )
         .unwrap();
         assert!(invalid.is_empty());
+    }
+
+    #[test]
+    fn trusted_project_hooks_are_discovered_and_enabled() {
+        let (_root, astro_home, cwd) = project_fixture(
+            "trusted",
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"true"}]}]}}"#,
+        );
+
+        let runner = CommandHookRunner::load_for_project(&astro_home, &cwd).unwrap();
+
+        assert_eq!(runner.handler_count(), 1);
+        assert_eq!(runner.sources().len(), 1);
+        assert_eq!(runner.sources()[0].scope, CommandHookScope::Project);
+        assert_eq!(runner.sources()[0].trust, CommandHookTrust::Trusted);
+        assert!(runner.sources()[0].enabled);
+    }
+
+    #[test]
+    fn untrusted_project_hook_content_is_not_parsed() {
+        let (_root, astro_home, cwd) =
+            project_fixture("untrusted", "this is intentionally invalid JSON");
+
+        let runner = CommandHookRunner::load_for_project(&astro_home, &cwd).unwrap();
+
+        assert_eq!(runner.handler_count(), 0);
+        assert_eq!(runner.sources().len(), 1);
+        assert_eq!(runner.sources()[0].trust, CommandHookTrust::Untrusted);
+        assert!(!runner.sources()[0].enabled);
+        assert_eq!(
+            runner.sources()[0].reason.as_deref(),
+            Some("project is untrusted")
+        );
     }
 
     #[tokio::test]

@@ -2480,6 +2480,7 @@ dependencies = [
 name = "hooks"
 version = "0.1.0"
 dependencies = [
+ "agent-config",
  "anyhow",
  "async-trait",
  "dirs 5.0.1",
