@@ -75,6 +75,13 @@ import {
   isStoreSkillInstalled as matchStoreSkillInstalled,
 } from "../../lib/skills/skillInstalledMatch";
 import {
+  filterStoreSkills,
+  STORE_CATEGORY_IDS,
+  type StoreApiKeyFilter,
+  type StoreCategory,
+  type StoreCategoryFilter,
+} from "../../lib/skills/storeSkillFilters";
+import {
   applyCheckResults,
   canUpdateSkillFromOrigin,
   filterUpdateRows,
@@ -413,6 +420,10 @@ export default function SkillsPanel({
   const [machineSkills, setMachineSkills] = useState<InstalledSkill[]>([]);
   const [storeResults, setStoreResults] = useState<StoreSkill[]>([]);
   const [storeId, setStoreId] = useState<SkillStoreId | "all">("all");
+  const [storeCategory, setStoreCategory] =
+    useState<StoreCategoryFilter>("all");
+  const [storeApiKeyFilter, setStoreApiKeyFilter] =
+    useState<StoreApiKeyFilter>("all");
   const [query, setQuery] = useState("");
   const [installedQuery, setInstalledQuery] = useState("");
   const [machineQuery, setMachineQuery] = useState("");
@@ -1672,14 +1683,19 @@ export default function SkillsPanel({
   };
 
   const sortedStoreResults = useMemo(() => {
-    if (storeSort !== "installs") return storeResults;
-    return [...storeResults].sort((a, b) => {
+    const filtered = filterStoreSkills(
+      storeResults,
+      storeCategory,
+      storeApiKeyFilter,
+    );
+    if (storeSort !== "installs") return filtered;
+    return [...filtered].sort((a, b) => {
       const ai = a.installs ?? -1;
       const bi = b.installs ?? -1;
       if (bi !== ai) return bi - ai;
       return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
     });
-  }, [storeResults, storeSort]);
+  }, [storeResults, storeSort, storeCategory, storeApiKeyFilter]);
 
   const detailItems = useMemo(() => {
     if (personalTab === "machine") return filteredMachine.map((s) => s.id);
@@ -1754,6 +1770,44 @@ export default function SkillsPanel({
       { value: "default", label: t("skills.sort.default") },
       { value: "installs", label: t("skills.sort.installs") },
     ],
+    [t],
+  );
+
+  const storeSourceOptions = useMemo(
+    () => [
+      { value: "all", label: t("skills.filter.sourceAll") },
+      { value: "skillhub", label: t("skills.store.skillhub") },
+      { value: "skillsdotsh", label: t("skills.store.skillsdotsh") },
+      { value: "clawhub", label: t("skills.store.clawhub") },
+    ],
+    [t],
+  );
+
+  const storeCategoryOptions = useMemo(
+    () => [
+      { value: "all", label: t("skills.filter.categoryAll") },
+      ...STORE_CATEGORY_IDS.map((category) => ({
+        value: category,
+        label: t(`skills.category.${category}` as MessageKey),
+      })),
+    ],
+    [t],
+  );
+
+  const storeApiKeyOptions = useMemo(
+    () => [
+      { value: "all", label: t("skills.filter.apiKeyAll") },
+      { value: "required", label: t("skills.filter.apiKeyRequired") },
+      { value: "not-required", label: t("skills.filter.apiKeyFree") },
+    ],
+    [t],
+  );
+
+  const storeCategoryLabel = useCallback(
+    (category: string) =>
+      STORE_CATEGORY_IDS.includes(category as StoreCategory)
+        ? t(`skills.category.${category}` as MessageKey)
+        : category,
     [t],
   );
 
@@ -2124,6 +2178,16 @@ export default function SkillsPanel({
             </span>
           ) : null}
         </header>
+        {(skill.category || skill.requires_api_key === true) && (
+          <div className="skill-card-taxonomy">
+            {skill.category && (
+              <span>{storeCategoryLabel(skill.category)}</span>
+            )}
+            {skill.requires_api_key === true && (
+              <span className="requires-key">{t("skills.filter.apiKeyRequired")}</span>
+            )}
+          </div>
+        )}
         <div className="skill-card-desc">
           <p>
             {storeCardDescription(skill, t("skills.detailInstalls"))}
@@ -2562,7 +2626,7 @@ export default function SkillsPanel({
             const stars = detail?.stars ?? null;
             const author = detail?.owner_name ?? null;
             const version = detail?.version ?? null;
-            const category = detail?.category ?? null;
+            const category = detail?.category ?? selectedStore.category ?? null;
             const updated = formatStoreUpdatedAt(detail?.updated_at, t);
             const description =
               detail?.overview?.trim() ||
@@ -2713,7 +2777,7 @@ export default function SkillsPanel({
                         <Library size={15} strokeWidth={2.25} aria-hidden />
                         {t("skills.detailCategory")}
                       </span>
-                      <span title={category}>{category}</span>
+                      <span title={category}>{storeCategoryLabel(category)}</span>
                     </div>
                   )}
                   <div className="skills-detail-meta-item">
@@ -3223,39 +3287,38 @@ export default function SkillsPanel({
           <div className="skills-store-toolbar">
             <div className="skills-store-toolbar-row">
               <div
-                className="skills-store-tabs"
-                role="tablist"
-                aria-label={t("skills.stores")}
+                className="skills-store-filters"
+                role="group"
+                aria-label={t("skills.filters")}
               >
-                {(
-                  ["all", "skillhub", "skillsdotsh", "clawhub"] as const
-                ).map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    aria-selected={storeId === id}
-                    className={`skills-store-tab ${storeId === id ? "active" : ""}`}
-                    onClick={() => setStoreId(id)}
-                  >
-                    {id === "all" ? (
-                      <LayoutGrid size={14} strokeWidth={2.25} aria-hidden />
-                    ) : id === "skillhub" ? (
-                      <Sparkles size={14} strokeWidth={2.25} aria-hidden />
-                    ) : id === "clawhub" ? (
-                      <Bot size={14} strokeWidth={2.25} aria-hidden />
-                    ) : (
-                      <Terminal size={14} strokeWidth={2.25} aria-hidden />
-                    )}
-                    {id === "all"
-                      ? t("skills.storeAll")
-                      : id === "skillhub"
-                        ? t("skills.store.skillhub")
-                        : id === "clawhub"
-                          ? t("skills.store.clawhub")
-                          : t("skills.store.skillsdotsh")}
-                  </button>
-                ))}
+                <SelectMenu
+                  size="sm"
+                  className="skills-store-source-filter"
+                  value={storeId}
+                  onChange={(value) => setStoreId(value as SkillStoreId | "all")}
+                  options={storeSourceOptions}
+                  aria-label={t("skills.filter.sourceAll")}
+                  selectionIndicator="radio"
+                />
+                <SelectMenu
+                  size="sm"
+                  className="skills-store-category-filter"
+                  value={storeCategory}
+                  onChange={(value) => setStoreCategory(value as StoreCategoryFilter)}
+                  options={storeCategoryOptions}
+                  aria-label={t("skills.filter.categoryAll")}
+                  selectionIndicator="radio"
+                  menuMaxHeight={620}
+                />
+                <SelectMenu
+                  size="sm"
+                  className="skills-store-api-key-filter"
+                  value={storeApiKeyFilter}
+                  onChange={(value) => setStoreApiKeyFilter(value as StoreApiKeyFilter)}
+                  options={storeApiKeyOptions}
+                  aria-label={t("skills.filter.apiKeyAll")}
+                  selectionIndicator="radio"
+                />
               </div>
               <SelectMenu
                 size="sm"
@@ -3279,7 +3342,7 @@ export default function SkillsPanel({
               <MsgStreamLoader alone />
             </div>
           ) : viewMode === "detail" ? (
-            storeResults.length === 0 ? (
+            sortedStoreResults.length === 0 ? (
               <EmptyIllustration
                 scene="skills"
                 size="lg"
@@ -3298,7 +3361,7 @@ export default function SkillsPanel({
               className={`skills-gallery is-${viewMode}`}
               role="list"
             >
-              {storeResults.length === 0 ? (
+              {sortedStoreResults.length === 0 ? (
                 <EmptyIllustration
                   scene="skills"
                   size="lg"

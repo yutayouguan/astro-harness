@@ -709,6 +709,8 @@ export type StoreSkill = {
   installs: number | null;
   install_ref: string;
   homepage: string | null;
+  category?: string | null;
+  requires_api_key?: boolean | null;
 };
 
 /** 商店详情 */

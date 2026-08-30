@@ -80,6 +80,12 @@ pub struct StoreSkill {
     pub install_ref: String,
     /// 主页。
     pub homepage: Option<String>,
+    /// 市场侧场景分类（例如 `dev-programming`）。
+    #[serde(default)]
+    pub category: Option<String>,
+    /// 是否明确需要 API Key；来源未提供时为 `None`。
+    #[serde(default)]
+    pub requires_api_key: Option<bool>,
 }
 
 /// 商店详情（详情页 / 安装提示）。

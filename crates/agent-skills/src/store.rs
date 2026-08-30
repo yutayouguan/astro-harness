@@ -43,6 +43,13 @@ struct SkillHubSkill {
     downloads: Option<u64>,
     homepage: Option<String>,
     upstream_url: Option<String>,
+    category: Option<String>,
+    labels: Option<SkillHubLabels>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SkillHubLabels {
+    requires_api_key: Option<String>,
 }
 
 fn http_client() -> Result<Client> {
@@ -60,6 +67,14 @@ fn map_skillhub(s: SkillHubSkill) -> StoreSkill {
         .unwrap_or_default();
     let owner = s.owner_name.unwrap_or_else(|| "unknown".into());
     let slug = s.slug.clone();
+    let requires_api_key = s
+        .labels
+        .and_then(|labels| labels.requires_api_key)
+        .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
+            "true" => Some(true),
+            "false" => Some(false),
+            _ => None,
+        });
     // 勿用 homepage（api.skillhub.cn/...）：那不是可安装引用，会导致 CLI 安装必失败。
     let install_ref = match s.upstream_url.filter(|u| !u.trim().is_empty()) {
         Some(url) if url.contains("github.com/") => url,
@@ -77,6 +92,8 @@ fn map_skillhub(s: SkillHubSkill) -> StoreSkill {
         installs: s.installs.or(s.downloads),
         install_ref,
         homepage: s.homepage,
+        category: s.category.filter(|value| !value.trim().is_empty()),
+        requires_api_key,
     }
 }
 
@@ -157,6 +174,8 @@ fn parse_skills_sh_html(html: &str, query: &str) -> Vec<StoreSkill> {
             // package 可能含 `/`（如 vercel-labs/skills），附带 skill 名供非交互安装
             install_ref: format!("skillsdotsh:{source}/{slug}"),
             homepage: Some(format!("https://skills.sh/{source}/{slug}")),
+            category: None,
+            requires_api_key: None,
         });
     }
     out
@@ -187,7 +206,54 @@ struct ClawHubListSkill {
     description: Option<String>,
     stats: Option<ClawHubStats>,
     topics: Option<Vec<String>>,
+    categories: Option<Vec<String>>,
+    metadata: Option<ClawHubMetadata>,
     updated_at: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClawHubMetadata {
+    setup: Option<Vec<ClawHubSetupItem>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClawHubSetupItem {
+    key: Option<String>,
+    required: Option<bool>,
+}
+
+fn normalize_clawhub_category(values: impl IntoIterator<Item = String>) -> Option<String> {
+    for value in values {
+        let normalized = value.trim().to_ascii_lowercase();
+        let category = match normalized.as_str() {
+            "productivity" | "office" => "office-efficiency",
+            "writing" | "content" | "content-creation" => "content-creation",
+            "development" | "developer-tools" | "programming" | "coding" => "dev-programming",
+            "analytics" | "data" | "data-analysis" => "data-analysis",
+            "design" | "media" | "multimedia" => "design-media",
+            "agents" | "ai" | "automation" => "ai-agent",
+            "knowledge" | "research" => "knowledge-management",
+            "business" | "finance" | "marketing" => "business-ops",
+            "education" | "learning" => "education",
+            "security" | "devops" | "operations" => "it-ops-security",
+            "lifestyle" | "health" | "travel" => "life-service",
+            _ => continue,
+        };
+        return Some(category.into());
+    }
+    None
+}
+
+fn clawhub_requires_api_key(metadata: Option<ClawHubMetadata>) -> Option<bool> {
+    let setup = metadata?.setup?;
+    let has_required_key = setup.into_iter().any(|item| {
+        item.required.unwrap_or(false)
+            && item.key.is_some_and(|key| {
+                let key = key.to_ascii_uppercase();
+                key.contains("API_KEY") || key.contains("TOKEN") || key.contains("SECRET")
+            })
+    });
+    Some(has_required_key)
 }
 
 #[derive(Debug, Deserialize)]
@@ -216,7 +282,14 @@ fn map_clawhub(s: ClawHubListSkill) -> StoreSkill {
         .or(s.description)
         .unwrap_or_default();
     let installs = s.stats.as_ref().and_then(|st| st.downloads.or(st.installs));
-    let _ = (s.topics, s.updated_at);
+    let category = normalize_clawhub_category(
+        s.categories
+            .unwrap_or_default()
+            .into_iter()
+            .chain(s.topics.unwrap_or_default()),
+    );
+    let requires_api_key = clawhub_requires_api_key(s.metadata);
+    let _ = s.updated_at;
     StoreSkill {
         id: format!("clawhub:{slug}"),
         name,
@@ -227,6 +300,8 @@ fn map_clawhub(s: ClawHubListSkill) -> StoreSkill {
         install_ref: format!("clawhub:{slug}"),
         // 无 owner 时用官网短链；详情接口会补全 /{handle}/skills/{slug}
         homepage: Some(format!("https://clawhub.ai/s/skills/{slug}")),
+        category,
+        requires_api_key,
     }
 }
 
@@ -244,6 +319,18 @@ struct ClawHubSearchHit {
     summary: Option<String>,
     downloads: Option<u64>,
     owner_handle: Option<String>,
+    native: Option<ClawHubSearchNative>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClawHubSearchNative {
+    skill: Option<ClawHubSearchNativeSkill>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClawHubSearchNativeSkill {
+    categories: Option<Vec<String>>,
+    topics: Option<Vec<String>>,
 }
 
 fn map_clawhub_search_hit(s: ClawHubSearchHit) -> StoreSkill {
@@ -254,6 +341,15 @@ fn map_clawhub_search_hit(s: ClawHubSearchHit) -> StoreSkill {
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| slug.clone());
     let desc = s.summary.unwrap_or_default();
+    let category = s.native.and_then(|native| native.skill).and_then(|skill| {
+        normalize_clawhub_category(
+            skill
+                .categories
+                .unwrap_or_default()
+                .into_iter()
+                .chain(skill.topics.unwrap_or_default()),
+        )
+    });
     let (id, install_ref, homepage) = match &handle {
         Some(h) => (
             format!("clawhub:{h}/{slug}"),
@@ -275,6 +371,8 @@ fn map_clawhub_search_hit(s: ClawHubSearchHit) -> StoreSkill {
         installs: s.downloads,
         install_ref,
         homepage: Some(homepage),
+        category,
+        requires_api_key: None,
     }
 }
 
@@ -509,7 +607,7 @@ fn detail_from_list(skill: &StoreSkill) -> StoreSkillDetail {
         homepage: skill.homepage.clone(),
         detail_url,
         icon_url: None,
-        category: None,
+        category: skill.category.clone(),
         sub_categories: vec![],
         version: None,
         updated_at: None,
@@ -745,10 +843,16 @@ mod tests {
             downloads: None,
             homepage: Some("https://api.skillhub.cn/user_x/web-tools-guide".into()),
             upstream_url: None,
+            category: Some("knowledge-management".into()),
+            labels: Some(SkillHubLabels {
+                requires_api_key: Some("false".into()),
+            }),
         };
         let mapped = map_skillhub(s);
         assert_eq!(mapped.install_ref, "skillhub:user_x/web-tools-guide");
         assert!(!mapped.install_ref.contains("api.skillhub.cn"));
+        assert_eq!(mapped.category.as_deref(), Some("knowledge-management"));
+        assert_eq!(mapped.requires_api_key, Some(false));
     }
 
     #[test]
@@ -774,6 +878,8 @@ mod tests {
             installs: Some(1),
             install_ref: "clawhub:outlit-sdk".into(),
             homepage: Some("https://clawhub.ai/s/skills/outlit-sdk".into()),
+            category: None,
+            requires_api_key: None,
         };
         assert_eq!(store_skill_slug(&skill), "outlit-sdk");
         assert_eq!(
@@ -789,6 +895,8 @@ mod tests {
             installs: Some(1),
             install_ref: "clawhub:steipete--weather".into(),
             homepage: Some("https://clawhub.ai/steipete/skills/weather".into()),
+            category: None,
+            requires_api_key: None,
         };
         assert_eq!(store_skill_slug(&owned), "weather");
     }
@@ -801,6 +909,12 @@ mod tests {
             summary: Some("Get weather".into()),
             downloads: Some(163969),
             owner_handle: Some("steipete".into()),
+            native: Some(ClawHubSearchNative {
+                skill: Some(ClawHubSearchNativeSkill {
+                    categories: Some(vec!["lifestyle".into()]),
+                    topics: Some(vec!["Weather".into()]),
+                }),
+            }),
         };
         let mapped = map_clawhub_search_hit(hit);
         assert_eq!(mapped.id, "clawhub:steipete/weather");
@@ -809,6 +923,7 @@ mod tests {
             mapped.homepage.as_deref(),
             Some("https://clawhub.ai/steipete/skills/weather")
         );
+        assert_eq!(mapped.category.as_deref(), Some("life-service"));
     }
 
     #[test]
@@ -833,6 +948,8 @@ mod tests {
             installs: Some(1),
             install_ref: "skillhub:user_x/web-tools-guide".into(),
             homepage: Some("https://api.skillhub.cn/user_x/web-tools-guide".into()),
+            category: Some("knowledge-management".into()),
+            requires_api_key: Some(false),
         };
         let detail = detail_from_list(&skill);
         assert_eq!(

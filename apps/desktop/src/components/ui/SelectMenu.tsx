@@ -37,6 +37,10 @@ type Props = {
   placeholder?: string;
   /** 展开方向：auto（默认）/ up（强制向上）/ down（强制向下） */
   openDirection?: "auto" | "up" | "down";
+  /** 选中项标记：默认勾选，单选筛选可使用圆点。 */
+  selectionIndicator?: "check" | "radio";
+  /** 长选项列表的可视高度上限。 */
+  menuMaxHeight?: number;
 };
 
 /** 选中项勾选标记 */
@@ -59,6 +63,14 @@ function CheckIcon() {
   );
 }
 
+function RadioIcon() {
+  return (
+    <span className="select-menu-radio" aria-hidden>
+      <span />
+    </span>
+  );
+}
+
 /** 通用下拉选择菜单（Portal 列表） */
 export function SelectMenu({
   value,
@@ -70,6 +82,8 @@ export function SelectMenu({
   "aria-label": ariaLabel,
   placeholder = "—",
   openDirection = "auto",
+  selectionIndicator = "check",
+  menuMaxHeight = 260,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -91,11 +105,11 @@ export function SelectMenu({
     open,
     anchorRef: triggerRef,
     menuRef: listRef,
-    sizeKey: `${options.length}:${value}:${openDirection}`,
+    sizeKey: `${options.length}:${value}:${openDirection}:${menuMaxHeight}`,
     minWidth: 140,
     maxWidth: 280,
-    maxHeightCap: 260,
-    maxHeightRatio: 0.42,
+    maxHeightCap: menuMaxHeight,
+    maxHeightRatio: menuMaxHeight > 260 ? 0.8 : 0.42,
     preferAlign: "start",
     placement,
   });
@@ -257,7 +271,11 @@ export function SelectMenu({
                       </span>
                     ) : null}
                     <span className="select-menu-option-label">{opt.label}</span>
-                    {active ? <CheckIcon /> : null}
+                    {active ? (
+                      selectionIndicator === "radio" ? <RadioIcon /> : <CheckIcon />
+                    ) : selectionIndicator === "radio" ? (
+                      <span className="select-menu-radio" aria-hidden />
+                    ) : null}
                   </button>
                 </li>
               );

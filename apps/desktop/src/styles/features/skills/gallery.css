@@ -111,6 +111,10 @@
   display: none;
 }
 
+.skills-gallery.is-list .skill-card-taxonomy {
+  flex: 0 0 auto;
+}
+
 .skills-gallery.is-list .skill-card-actions,
 .skills-gallery.is-list .skill-card-actions.is-store {
   display: flex;

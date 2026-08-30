@@ -474,9 +474,41 @@ html[data-theme="dark"] .skills-store-toolbar .select-menu.is-open .select-menu-
   flex-wrap: wrap;
 }
 
-.skills-store-toolbar-row .skills-store-tabs {
+.skills-store-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
+  flex-wrap: wrap;
+}
+
+.skills-store-toolbar .skills-store-source-filter {
+  width: 8rem;
+  min-width: 8rem;
+  max-width: 8rem;
+}
+
+.skills-store-toolbar .skills-store-category-filter {
+  width: 10.5rem;
+  min-width: 10.5rem;
+  max-width: 10.5rem;
+}
+
+.skills-store-toolbar .skills-store-api-key-filter {
+  width: 9.5rem;
+  min-width: 9.5rem;
+  max-width: 9.5rem;
+}
+
+@media (max-width: 640px) {
+  .skills-store-toolbar-row {
+    align-items: stretch;
+  }
+
+  .skills-store-filters {
+    width: 100%;
+  }
 }
 
 /* 状态 pill：画廊卡 / 详情左侧列表共用（tools 侧见 .tools-detail-item-badge） */

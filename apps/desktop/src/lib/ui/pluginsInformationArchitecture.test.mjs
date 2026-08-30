@@ -135,6 +135,15 @@ test("public MCP directory has category metadata and a scrollable filter rail", 
   );
 });
 
+test("online Skills expose source, scene, and API Key filters", () => {
+  assert.match(panel, /className="skills-store-source-filter"/);
+  assert.match(panel, /className="skills-store-category-filter"/);
+  assert.match(panel, /className="skills-store-api-key-filter"/);
+  assert.equal(panel.match(/selectionIndicator="radio"/g)?.length, 3);
+  assert.match(panel, /STORE_CATEGORY_IDS\.map/);
+  assert.match(styles, /\.skills-store-filters\s*\{[\s\S]*?flex-wrap:\s*wrap;/);
+});
+
 test("public MCP directory is config-driven and covers every public category", () => {
   assert.equal(publicMcpCatalog.version, 1);
   assert.ok(publicMcpCatalog.servers.length >= 20);

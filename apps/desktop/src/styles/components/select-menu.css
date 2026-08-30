@@ -235,6 +235,30 @@
   color: var(--select-tone);
 }
 
+.select-menu-radio {
+  order: -1;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 2px solid color-mix(in srgb, var(--ink-mute) 52%, transparent);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.select-menu-radio > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.select-menu-option.is-active .select-menu-radio {
+  color: var(--select-tone);
+  border-color: currentColor;
+}
+
 .select-menu--sm .select-menu-trigger {
   min-height: 36px;
   width: 100%;
