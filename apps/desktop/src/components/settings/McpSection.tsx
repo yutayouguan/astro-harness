@@ -1012,6 +1012,43 @@ function McpCatalogCard({
   );
 }
 
+function normalizeMcpSearchText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/[^a-z0-9\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mcpServerSearchText(server: McpServer, categoryLabel?: string): string {
+  return normalizeMcpSearchText(
+    [
+      server.name,
+      server.description,
+      server.type,
+      server.command,
+      server.url,
+      server.args,
+      server.websiteUrl,
+      server.category,
+      categoryLabel,
+      server.catalogSource,
+      server.catalogSourceUrl,
+      server.catalogDirectoryUrl,
+      server.catalogUpstreamUrl,
+      server.catalogNativeCategory,
+      server.catalogRegistryName,
+      server.catalogPackageTypes,
+      server.catalogTags,
+    ]
+      .flat()
+      .filter(Boolean)
+      .join(" "),
+  );
+}
+
 /** 宿主页面挂载 MCP 区块所需的入参 */
 type McpSectionOptions = {
   /** 区块是否可见（决定是否轮询运行时状态） */
@@ -1088,12 +1125,26 @@ export function useMcpSection({
     ) return;
     addServers([installableMcpServer(server)]);
   };
-  const query = rawQuery.trim().toLowerCase();
+  const queryTokens = normalizeMcpSearchText(rawQuery).split(" ").filter(Boolean);
+
+  const indexedServers = useMemo(
+    () => servers.map((server) => ({
+      server,
+      searchText: mcpServerSearchText(
+        server,
+        server.category
+          ? t(`plugins.mcpPublic.category.${server.category}` as MessageKey)
+          : undefined,
+      ),
+    })),
+    [servers, t],
+  );
 
   const filteredServers = useMemo(() => {
-    return servers.filter((server) => {
+    return indexedServers.flatMap(({ server, searchText }) => {
       const matchesCategory =
         scope !== "builtin" ||
+        queryTokens.length > 0 ||
         !publicCategory ||
         publicCategory === "all" ||
         (publicCategory === "featured"
@@ -1105,23 +1156,11 @@ export function useMcpSection({
               : publicCategory === "other"
                 ? !server.category || server.category === "other"
                 : server.category === publicCategory);
-      if (!matchesCategory) return false;
-      if (!query) return true;
-      return (
-        server.name.toLowerCase().includes(query) ||
-        server.description.toLowerCase().includes(query) ||
-        server.type.toLowerCase().includes(query) ||
-        server.command.toLowerCase().includes(query) ||
-        server.url.toLowerCase().includes(query) ||
-        server.args.join(" ").toLowerCase().includes(query) ||
-        server.catalogSource?.toLowerCase().includes(query) ||
-        server.catalogNativeCategory?.toLowerCase().includes(query) ||
-        server.catalogRegistryName?.toLowerCase().includes(query) ||
-        server.catalogPackageTypes?.some((type) => type.toLowerCase().includes(query)) ||
-        server.catalogTags?.some((tag) => tag.toLowerCase().includes(query))
-      );
+      if (!matchesCategory) return [];
+      if (!queryTokens.every((token) => searchText.includes(token))) return [];
+      return [server];
     });
-  }, [servers, query, scope, publicCategory]);
+  }, [indexedServers, queryTokens, scope, publicCategory]);
 
   useEffect(() => {
     if (viewMode !== "detail") return;

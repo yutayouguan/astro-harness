@@ -508,6 +508,16 @@ export default function SkillsPanel({
     scope: mcpScope === "public" ? "builtin" : "global",
     publicCategory: mcpScope === "public" ? mcpPublicCategory : undefined,
   });
+  const updateMcpQuery = useCallback((value: string) => {
+    setMcpQuery(value);
+    if (mcpScope === "public" && value.trim()) {
+      setMcpPublicCategory("all");
+    }
+  }, [mcpScope]);
+  const selectMcpPublicCategory = useCallback((category: McpPublicCategory) => {
+    setMcpPublicCategory(category);
+    setMcpQuery("");
+  }, []);
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
@@ -2983,12 +2993,7 @@ export default function SkillsPanel({
             <>
               <ExpandableSearch
                 value={mcpQuery}
-                onChange={(value) => {
-                  setMcpQuery(value);
-                  if (mcpScope === "public" && value.trim()) {
-                    setMcpPublicCategory("all");
-                  }
-                }}
+                onChange={updateMcpQuery}
                 placeholderKey="tools.searchPlaceholder"
               />
               {viewToggle}
@@ -3043,10 +3048,7 @@ export default function SkillsPanel({
                   role="tab"
                   aria-selected={mcpPublicCategory === category}
                   className={`plugins-public-category ${mcpPublicCategory === category ? "is-active" : ""}`}
-                  onClick={() => {
-                    setMcpPublicCategory(category);
-                    setMcpQuery("");
-                  }}
+                  onClick={() => selectMcpPublicCategory(category)}
                 >
                   {t(`plugins.mcpPublic.category.${category}` as MessageKey)}
                 </button>

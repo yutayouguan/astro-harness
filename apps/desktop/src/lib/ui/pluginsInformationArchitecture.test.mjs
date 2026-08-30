@@ -242,6 +242,18 @@ test("public MCP directory is config-driven and uses catalog entry categories", 
   assert.match(mcpSection, /mcpTools\.install/);
 });
 
+test("public MCP search covers the whole catalog and normalizes indexed metadata", () => {
+  assert.match(panel, /setMcpPublicCategory\("all"\)/);
+  assert.match(panel, /setMcpQuery\(""\)/);
+  assert.match(mcpSection, /queryTokens\.length > 0/);
+  assert.match(mcpSection, /queryTokens\.every\(\(token\) => searchText\.includes\(token\)\)/);
+  assert.match(mcpSection, /server\.catalogSourceUrl/);
+  assert.match(mcpSection, /server\.catalogUpstreamUrl/);
+  assert.match(mcpSection, /server\.catalogRegistryName/);
+  assert.match(mcpSection, /plugins\.mcpPublic\.category\.\$\{server\.category\}/);
+  assert.match(mcpSection, /\.normalize\("NFKC"\)/);
+});
+
 test("public MCP brands accept bundled assets and HTTPS catalog icons with a safe fallback", async () => {
   const brandedServers = publicMcpCatalog.servers.filter((server) => server.icon);
   assert.ok(brandedServers.length >= 20, "most public MCP entries should have brand icons");
