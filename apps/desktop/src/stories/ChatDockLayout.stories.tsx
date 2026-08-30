@@ -249,10 +249,7 @@ function ChatDockLayout({
       style={{ minHeight: "100vh", display: "flex", background: "var(--shell-bg)" }}
     >
       <section className="content-pane">
-        <div
-          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}${kind === "files" ? " has-project-files" : ""}`}
-          style={{ "--chat-header-right-offset": `${dockWidth}px` } as CSSProperties}
-        >
+        <div className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}`}>
           <div className="content-heading" />
           <HeaderActions kind={kind} onSelect={onSelect} />
         </div>
@@ -273,7 +270,10 @@ function ChatDockLayout({
               </div>
             </div>
             <ProjectFilesDockPreview open={kind === "files"} />
-            {kind && kind !== "files" ? <DockPanel kind={kind} /> : null}
+            <div className={`side-chat-dock${kind === "side" ? " is-open" : ""}`}>
+              {kind === "side" ? <DockPanel kind="side" /> : null}
+            </div>
+            {kind === "runtime" ? <DockPanel kind={kind} /> : null}
           </div>
         </div>
       </section>

@@ -102,11 +102,7 @@ import {
   type SettingsTabId,
 } from "./lib/ui/navConfig";
 import { SETTINGS_TAB_GROUPS, settingsTabMeta } from "./lib/ui/settingsTabs";
-import { CHAT_RIGHT_PANEL_DEFAULT_WIDTH } from "./lib/ui/chatRightPanelWidth";
-import {
-  chatRightDockWidth,
-  resolveChatRightDock,
-} from "./lib/ui/chatRightDock";
+import { resolveChatRightDock } from "./lib/ui/chatRightDock";
 import {
   Activity,
   ArrowLeft,
@@ -134,7 +130,6 @@ import type {
 } from "./types";
 
 const ACTIVE_PROJECT_KEY = "astro.activeProjectId";
-const CHAT_REVIEW_PANEL_WIDTH = 880;
 
 export default function App() {
   // ── Theme / i18n / prefs ──────────────────────────────────────────────────
@@ -326,9 +321,6 @@ export default function App() {
   );
   const projectFiles = useProjectFileWorkbench(activeProject, chat.generatingPreview);
   const [projectFilesWidth, setProjectFilesWidth] = useState(264);
-  const [chatRightPanelWidth, setChatRightPanelWidth] = useState(
-    CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
-  );
   const [sideSessionId, setSideSessionId] = useState<string | null>(null);
   const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(null);
   const [reviewState, setReviewState] = useState<{
@@ -867,11 +859,6 @@ export default function App() {
     reviewOpen: reviewState != null,
   });
   const hasChatRightDock = activeChatRightDock !== null;
-  const chatHeaderRightOffset = chatRightDockWidth(activeChatRightDock, {
-    projectFiles: projectFilesWidth,
-    inspector: chatRightPanelWidth,
-    review: CHAT_REVIEW_PANEL_WIDTH,
-  });
 
   useEffect(() => {
     if (!conversationMenuOpen) return;
@@ -1446,10 +1433,7 @@ export default function App() {
           ) : (
             <>
               <div
-                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}${activeChatRightDock === "project-files" ? " has-project-files" : ""}`}
-                style={{
-                  "--chat-header-right-offset": `${chatHeaderRightOffset}px`,
-                } as CSSProperties}
+                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}`}
               >
                 <div className="content-heading">
                   {conversationTitle && (
@@ -1724,34 +1708,41 @@ export default function App() {
                     workbench={projectFiles}
                     onWidthChange={setProjectFilesWidth}
                   />
+                  <div
+                    className={`side-chat-dock${activeChatRightDock === "side-chat" ? " is-open" : ""}`}
+                    aria-hidden={activeChatRightDock !== "side-chat"}
+                  >
+                    <AnimatePresence initial={false}>
+                      {activeChatRightDock === "side-chat" && sideSessionId && activeProvider && (
+                        <SideChatPanel
+                          key={`side-chat-${sideSessionId}`}
+                          sessionId={sideSessionId}
+                          parentSessionId={sideHostSessionId}
+                          activeProjectId={activeProjectId}
+                          provider={activeProvider}
+                          providers={providers}
+                          displayPrefs={chatDisplayPrefs}
+                          interactionMode={chatMode}
+                          thinkingPrefs={thinkingPrefs}
+                          showThinkingControls={showThinking}
+                          reasoningMeta={activeModelReasoning}
+                          modelCapabilities={activeModelCapabilities}
+                          modelPricing={activeModelPricing}
+                          contextWindow={contextWindow}
+                          onThinkingLevelChange={onThinkingLevelChange}
+                          onToggleThinking={onToggleThinking}
+                          onOpenMcpSettings={() => {
+                            setSkillsInitialTab("mcp");
+                            setNav("skills");
+                          }}
+                          onOpenContext={() => openChatRightDock("context")}
+                          onOpenFileReview={openFileReview}
+                          onClose={closeSideChat}
+                        />
+                      )}
+                    </AnimatePresence>
+                  </div>
                   <AnimatePresence initial={false}>
-                    {activeChatRightDock === "side-chat" && sideSessionId && activeProvider && (
-                      <SideChatPanel
-                        key={`side-chat-${sideSessionId}`}
-                        sessionId={sideSessionId}
-                        parentSessionId={sideHostSessionId}
-                        activeProjectId={activeProjectId}
-                        provider={activeProvider}
-                        providers={providers}
-                        displayPrefs={chatDisplayPrefs}
-                        interactionMode={chatMode}
-                        thinkingPrefs={thinkingPrefs}
-                        showThinkingControls={showThinking}
-                        reasoningMeta={activeModelReasoning}
-                        modelCapabilities={activeModelCapabilities}
-                        modelPricing={activeModelPricing}
-                        contextWindow={contextWindow}
-                        onThinkingLevelChange={onThinkingLevelChange}
-                        onToggleThinking={onToggleThinking}
-                        onOpenMcpSettings={() => {
-                          setSkillsInitialTab("mcp");
-                          setNav("skills");
-                        }}
-                        onOpenContext={() => openChatRightDock("context")}
-                        onOpenFileReview={openFileReview}
-                        onClose={closeSideChat}
-                      />
-                    )}
                     {activeChatRightDock === "inspector" && (
                       <ChatRightPanel
                         key="chat-inspector"
@@ -1782,7 +1773,6 @@ export default function App() {
                         onPrefillInput={setInput}
                         onOpenMemory={() => openSettingsTab("memory")}
                         onOpenSkills={() => setNav("skills")}
-                        onWidthChange={setChatRightPanelWidth}
                       />
                     )}
                     {activeChatRightDock === "review" && reviewState && (
