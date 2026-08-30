@@ -59,7 +59,13 @@ html[data-theme="dark"] .bubble.assistant {
 }
 
 .bubble.assistant .msg-timeline-step.kind-reply .msg-timeline-rail {
-  padding-top: 3px;
+  /* 24px icon matches the 24.65px reply line box; align their top edges. */
+  padding-top: 0;
+}
+
+/* The general assistant paragraph rhythm must not indent a reply's first line. */
+.bubble.assistant .msg-timeline-step.kind-reply .msg-md > :first-child {
+  margin-top: 0;
 }
 
 .bubble.assistant .msg-timeline-dot {
