@@ -738,6 +738,7 @@ impl Session {
             plugin: bus,
             gateway: Arc::clone(&current.gateway),
             shell: Arc::clone(&current.shell),
+            command: Arc::clone(&current.command),
             ui_slot: current.ui_slot.clone(),
         }));
     }

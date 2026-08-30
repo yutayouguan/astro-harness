@@ -2,6 +2,7 @@
 //!
 //! 注册风格对齐：`ctx.register_hook("PostToolUse", callback)`。
 
+pub mod command;
 pub mod config;
 pub mod context;
 pub mod event;
@@ -12,6 +13,10 @@ pub mod plugin;
 pub mod shell;
 pub mod ui;
 
+pub use command::{
+    CommandHookDecision, CommandHookRunner, HookHandlerConfig, HooksFile, MatcherGroup,
+    PermissionVote,
+};
 pub use config::{default_astro_root, load_config, load_config_or_default, AstroConfig};
 pub use context::PluginContext;
 pub use event::HookEvent;
@@ -34,6 +39,7 @@ pub struct HookRuntime {
     pub plugin: Arc<PluginHookBus>,
     pub gateway: Arc<GatewayHookRegistry>,
     pub shell: Arc<std::sync::Mutex<ShellHookRunner>>,
+    pub command: Arc<CommandHookRunner>,
     /// 进程 plugin bus 上的 UI 时间线槽（每轮 chat 热替换 sender）。
     pub ui_slot: UiTimelineSlot,
 }
@@ -56,6 +62,7 @@ impl HookRuntime {
             plugin,
             gateway: Arc::new(GatewayHookRegistry::default()),
             shell: Arc::new(std::sync::Mutex::new(ShellHookRunner::default())),
+            command: Arc::new(CommandHookRunner::default()),
             ui_slot,
         }
     }
@@ -69,7 +76,14 @@ impl HookRuntime {
         if let Ok(mut sh) = rt.shell.lock() {
             *sh = ShellHookRunner::from_map(cfg.hooks);
         }
-        Ok(rt)
+        let command = match CommandHookRunner::load(root) {
+            Ok(command) => Arc::new(command),
+            Err(error) => {
+                tracing::warn!(%error, root = %root.display(), "failed to load hooks.json");
+                Arc::new(CommandHookRunner::default())
+            }
+        };
+        Ok(Self { command, ..rt })
     }
 
     pub fn plugin_context(&self) -> PluginContext<'_> {
@@ -79,52 +93,87 @@ impl HookRuntime {
     /// 统一向 Plugin、Gateway、Shell 三套 transport 投递事件。
     pub fn dispatch(&self, name: &str, payload: &HookPayload) -> HookOutcome {
         let payload = payload.for_event(name);
-        let out = self.plugin.fire(name, &payload);
+        let plugin = self.plugin.fire(name, &payload);
         self.gateway.fire(name, &payload);
         if let Ok(sh) = self.shell.lock() {
             sh.fire_async(name, &payload);
         }
-        out
+        aggregate_outcomes(plugin, run_command_hooks(&self.command, name, &payload))
     }
 
     pub fn dispatch_permission_request(&self, payload: &HookPayload) -> PermissionRequestDecision {
         let payload = payload.for_event(PERMISSION_REQUEST);
-        let decision = self.plugin.fire_permission_request(&payload);
+        let mut decision = self.plugin.fire_permission_request(&payload);
         self.gateway.fire(PERMISSION_REQUEST, &payload);
         if let Ok(shell) = self.shell.lock() {
             shell.fire_async(PERMISSION_REQUEST, &payload);
+        }
+        for command in run_command_hooks(&self.command, PERMISSION_REQUEST, &payload) {
+            if command.permission == Some(PermissionVote::Deny) || command.block_reason.is_some() {
+                return PermissionRequestDecision::Deny(
+                    command
+                        .block_reason
+                        .unwrap_or_else(|| "denied by command hook".into()),
+                );
+            }
+            if command.permission == Some(PermissionVote::Allow) {
+                decision = PermissionRequestDecision::Allow;
+            }
         }
         decision
     }
 
     pub fn dispatch_post_tool_use(&self, payload: &HookPayload) -> PostToolUseDecision {
         let payload = payload.for_event(POST_TOOL_USE);
-        let decision = self.plugin.fire_post_tool_use(&payload);
+        let mut decision = self.plugin.fire_post_tool_use(&payload);
         self.gateway.fire(POST_TOOL_USE, &payload);
         if let Ok(shell) = self.shell.lock() {
             shell.fire_async(POST_TOOL_USE, &payload);
+        }
+        for command in run_command_hooks(&self.command, POST_TOOL_USE, &payload) {
+            if decision.block_reason.is_none() {
+                decision.block_reason = command.block_reason;
+            }
+            if let Some(context) = command.additional_context {
+                decision.additional_contexts.push(context);
+            }
+            if let Some(feedback) = command.feedback {
+                decision.feedback_messages.push(feedback);
+            }
         }
         decision
     }
 
     pub fn dispatch_subagent_start(&self, payload: &HookPayload) -> Option<String> {
         let payload = payload.for_event(SUBAGENT_START);
-        let context = self.plugin.fire_subagent_start(&payload);
+        let mut contexts = self
+            .plugin
+            .fire_subagent_start(&payload)
+            .into_iter()
+            .collect::<Vec<_>>();
         self.gateway.fire(SUBAGENT_START, &payload);
         if let Ok(shell) = self.shell.lock() {
             shell.fire_async(SUBAGENT_START, &payload);
         }
-        context
+        contexts.extend(
+            run_command_hooks(&self.command, SUBAGENT_START, &payload)
+                .into_iter()
+                .filter_map(|decision| decision.additional_context),
+        );
+        (!contexts.is_empty()).then(|| contexts.join("\n\n"))
     }
 
     pub fn dispatch_subagent_stop(&self, payload: &HookPayload) -> HookOutcome {
         let payload = payload.for_event(SUBAGENT_STOP);
-        let outcome = self.plugin.fire_subagent_stop(&payload);
+        let plugin = self.plugin.fire_subagent_stop(&payload);
         self.gateway.fire(SUBAGENT_STOP, &payload);
         if let Ok(shell) = self.shell.lock() {
             shell.fire_async(SUBAGENT_STOP, &payload);
         }
-        outcome
+        aggregate_outcomes(
+            plugin,
+            run_command_hooks(&self.command, SUBAGENT_STOP, &payload),
+        )
     }
 
     /// 兼容包装：统一向三套 transport 投递事件。
@@ -138,10 +187,158 @@ impl HookRuntime {
     }
 }
 
+fn run_command_hooks(
+    runner: &Arc<CommandHookRunner>,
+    event: &str,
+    payload: &HookPayload,
+) -> Vec<CommandHookDecision> {
+    if runner.is_empty() {
+        return Vec::new();
+    }
+    let runner = Arc::clone(runner);
+    let event = event.to_string();
+    let payload = payload.clone();
+    match std::thread::spawn(move || {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map(|runtime| runtime.block_on(runner.run(&event, &payload)))
+    })
+    .join()
+    {
+        Ok(Ok(decisions)) => decisions,
+        Ok(Err(error)) => {
+            tracing::warn!(%error, "failed to initialize command hook runtime");
+            Vec::new()
+        }
+        Err(_) => {
+            tracing::warn!("command hook runtime panicked");
+            Vec::new()
+        }
+    }
+}
+
+fn aggregate_outcomes(plugin: HookOutcome, commands: Vec<CommandHookDecision>) -> HookOutcome {
+    let mut block = None;
+    let mut update = None;
+    let mut update_conflict = false;
+    let mut contexts = Vec::new();
+    let mut continuations = Vec::new();
+    match plugin {
+        HookOutcome::Block(reason) => block = Some(reason),
+        HookOutcome::Modify(value) => update = Some(value),
+        HookOutcome::InjectContext(context) => contexts.push(context),
+        HookOutcome::KeepGoing(prompt) => continuations.push(prompt),
+        other @ (HookOutcome::ReplaceText(_) | HookOutcome::Skip(_) | HookOutcome::Rewrite(_)) => {
+            return other;
+        }
+        HookOutcome::Continue | HookOutcome::Allow => {}
+    }
+    for command in commands {
+        if block.is_none() {
+            block = command.block_reason;
+        }
+        if let Some(candidate) = command.updated_input {
+            match &update {
+                Some(current) if current != &candidate => update_conflict = true,
+                None => update = Some(candidate),
+                _ => {}
+            }
+        }
+        contexts.extend(command.additional_context);
+        continuations.extend(command.keep_going);
+    }
+    if let Some(reason) = block {
+        return HookOutcome::Block(reason);
+    }
+    if update_conflict {
+        tracing::warn!("conflicting command hook input rewrites were ignored");
+    } else if let Some(update) = update {
+        return HookOutcome::Modify(update);
+    }
+    if !continuations.is_empty() {
+        return HookOutcome::KeepGoing(continuations.join("\n\n"));
+    }
+    if !contexts.is_empty() {
+        return HookOutcome::InjectContext(contexts.join("\n\n"));
+    }
+    HookOutcome::Continue
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn runtime_with_command(event: &str, command: &str) -> HookRuntime {
+        let mut runtime = HookRuntime::new();
+        runtime.command = Arc::new(
+            CommandHookRunner::from_file(
+                HooksFile {
+                    hooks: std::collections::HashMap::from([(
+                        event.to_string(),
+                        vec![MatcherGroup {
+                            matcher: None,
+                            hooks: vec![HookHandlerConfig::Command {
+                                command: command.to_string(),
+                                command_windows: None,
+                                timeout_sec: Some(2),
+                                r#async: false,
+                                status_message: None,
+                            }],
+                        }],
+                    )]),
+                    ..Default::default()
+                },
+                std::path::Path::new("hooks.json"),
+            )
+            .unwrap(),
+        );
+        runtime
+    }
+
+    #[test]
+    fn command_pre_tool_use_can_rewrite_input_through_unified_dispatch() {
+        let runtime = runtime_with_command(
+            PRE_TOOL_USE,
+            r#"printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"safe":true}}}'"#,
+        );
+        let outcome = runtime.dispatch(
+            PRE_TOOL_USE,
+            &HookPayload {
+                cwd: std::env::current_dir()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                tool_name: Some("terminal".into()),
+                ..Default::default()
+            },
+        );
+        assert!(matches!(
+            outcome,
+            HookOutcome::Modify(value) if value == serde_json::json!({"safe": true})
+        ));
+    }
+
+    #[test]
+    fn command_permission_denial_wins_over_plugin_allow() {
+        let runtime = runtime_with_command(
+            PERMISSION_REQUEST,
+            r#"printf '%s' '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"policy"}}}'"#,
+        );
+        runtime
+            .plugin
+            .register(PERMISSION_REQUEST, |_| HookOutcome::Allow);
+        let decision = runtime.dispatch_permission_request(&HookPayload {
+            cwd: std::env::current_dir()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+            tool_name: Some("terminal".into()),
+            ..Default::default()
+        });
+        assert_eq!(decision, PermissionRequestDecision::Deny("policy".into()));
+    }
 
     #[tokio::test]
     async fn runtime_does_not_bridge_legacy_shell_keys_to_canonical_events() {

@@ -2483,6 +2483,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "dirs 5.0.1",
+ "regex",
  "serde",
  "serde_json",
  "serde_yaml",
