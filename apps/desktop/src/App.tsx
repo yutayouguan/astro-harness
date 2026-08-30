@@ -888,8 +888,6 @@ export default function App() {
     reviewOpen: reviewState != null,
   });
   const hasChatRightDock = activeChatRightDock !== null;
-  const selectedSidebarProjectId =
-    nav === "chat" && chat.sessionId === null ? activeProjectId : null;
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -1138,7 +1136,7 @@ export default function App() {
                     {!collapsedSections.has("projects") && projects.map((proj) => (
                       <div
                         key={proj.id}
-                        className={`sidebar-project ${selectedSidebarProjectId === proj.id ? "is-active" : ""}`}
+                        className="sidebar-project"
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -1150,32 +1148,14 @@ export default function App() {
                             type="button"
                             className="sidebar-project-name"
                             title={proj.name}
-                            aria-current={selectedSidebarProjectId === proj.id ? "page" : undefined}
+                            aria-expanded={!collapsedProjects.has(proj.id)}
                             onClick={() => {
-                              if (activeProjectId !== proj.id) {
-                                if (!switchActiveProject(proj.id)) return;
-                                setCollapsedProjects((prev) => {
-                                  const next = new Set(prev);
-                                  next.delete(proj.id);
-                                  return next;
-                                });
-                                setNav("chat");
-                                void startNewChat();
-                                return;
-                              }
-                              if (chat.sessionId) {
-                                setNav("chat");
-                                void startNewChat();
-                                return;
-                              }
                               setCollapsedProjects((prev) => {
                                 const next = new Set(prev);
                                 if (next.has(proj.id)) next.delete(proj.id);
                                 else next.add(proj.id);
                                 return next;
                               });
-                              if (!switchActiveProject(proj.id)) return;
-                              setNav("chat");
                             }}
                           >
                             <ProjectFolderIcon

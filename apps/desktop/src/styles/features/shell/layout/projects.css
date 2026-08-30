@@ -414,33 +414,6 @@ html[data-theme="dark"] .sidebar-new-chat {
   background: var(--glass);
 }
 
-/* 激活项目只加重字重、图标着色，正文让位给激活会话的强调底色 */
-.sidebar-project.is-active > .sidebar-project-header {
-  position: relative;
-}
-
-/* 只用左侧强调条定位当前项目，底色留给当前会话 */
-.sidebar-project.is-active > .sidebar-project-header::before {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  translate: 0 -50%;
-  width: 2px;
-  height: 15px;
-  border-radius: 999px;
-  background: var(--tone, var(--tone-blue));
-  opacity: 0.85;
-}
-
-.sidebar-project.is-active > .sidebar-project-header .sidebar-project-name {
-  font-weight: 620;
-}
-
-.sidebar-project.is-active > .sidebar-project-header .sidebar-project-name svg {
-  color: var(--tone, var(--tone-blue));
-}
-
 .sidebar-project-action {
   display: grid;
   place-items: center;
@@ -488,10 +461,6 @@ html[data-theme="dark"] .sidebar-new-chat {
   border-radius: 1px;
   background: color-mix(in srgb, var(--ink-mute) 18%, transparent);
   pointer-events: none;
-}
-
-.sidebar-project.is-active > .sidebar-sessions::before {
-  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 26%, transparent);
 }
 
 .sidebar-session-new {

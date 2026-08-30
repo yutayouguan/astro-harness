@@ -84,6 +84,7 @@ function SessionRow({
 function SidebarSessionStates() {
   useBeautifyTips();
   const [query, setQuery] = useState("");
+  const [mainProjectExpanded, setMainProjectExpanded] = useState(true);
 
   return (
     <main className="app-shell" data-tone="blue" style={{ minHeight: "100vh" }}>
@@ -138,19 +139,30 @@ function SidebarSessionStates() {
             </div>
             <div className="sidebar-project">
               <div className="sidebar-project-header">
-                <button type="button" className="sidebar-project-name">
-                  <ProjectFolderIcon iconId="astro-space" expanded size={18} />
+                <button
+                  type="button"
+                  className="sidebar-project-name"
+                  aria-expanded={mainProjectExpanded}
+                  onClick={() => setMainProjectExpanded((expanded) => !expanded)}
+                >
+                  <ProjectFolderIcon
+                    iconId="astro-space"
+                    expanded={mainProjectExpanded}
+                    size={18}
+                  />
                   <span className="sidebar-item-label">主空间</span>
                 </button>
               </div>
-              <div className="sidebar-sessions">
-                <SessionRow
-                  title="请用 Python 写一个简单的 Web 爬虫"
-                  time="15 小时前"
-                  status="idle"
-                  active
-                />
-              </div>
+              {mainProjectExpanded ? (
+                <div className="sidebar-sessions">
+                  <SessionRow
+                    title="请用 Python 写一个简单的 Web 爬虫"
+                    time="15 小时前"
+                    status="idle"
+                    active
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="sidebar-project">
               <div className="sidebar-project-header">

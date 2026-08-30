@@ -79,29 +79,29 @@ test("project and recent actions stay with the section they affect", () => {
   );
 });
 
-test("project and nested session selection are mutually exclusive", () => {
-  assert.match(
+test("project folders only expand while sessions own selection", () => {
+  assert.match(app, /className="sidebar-project"/);
+  assert.doesNotMatch(app, /selectedSidebarProjectId/);
+  assert.doesNotMatch(
     app,
-    /const selectedSidebarProjectId =\s*nav === "chat" && chat\.sessionId === null \? activeProjectId : null;/,
-    "a project should only be selected on the project-level chat surface",
+    /className=\{`sidebar-project[^`]*is-active/,
+    "project folders should never render a selected class",
   );
+  assert.match(app, /aria-expanded=\{!collapsedProjects\.has\(proj\.id\)\}/);
   assert.match(
     app,
-    /className=\{`sidebar-project \$\{selectedSidebarProjectId === proj\.id \? "is-active" : ""\}`\}/,
-  );
-  assert.match(
-    app,
-    /aria-current=\{selectedSidebarProjectId === proj\.id \? "page" : undefined\}/,
-  );
-  assert.match(
-    app,
-    /if \(chat\.sessionId\) \{[\s\S]*?void startNewChat\(\);[\s\S]*?return;/,
-    "selecting the current project should leave its active session",
+    /className="sidebar-project-name"[\s\S]*?onClick=\{\(\) => \{[\s\S]*?setCollapsedProjects\([\s\S]*?next\.has\(proj\.id\)[\s\S]*?next\.add\(proj\.id\);[\s\S]*?return next;[\s\S]*?\}\);[\s\S]*?\}\}/,
+    "project folder clicks should only toggle expansion",
   );
   assert.match(
     sessionList,
     /aria-current=\{isActive \? "page" : undefined\}/,
   );
+  assert.doesNotMatch(
+    sidebarPolishStyles,
+    /\.sidebar-project\.is-active/,
+  );
+  assert.doesNotMatch(projectStyles, /\.sidebar-project\.is-active/);
 });
 
 test("sidebar hierarchy stays compact and keeps a separated footer", () => {
@@ -114,10 +114,6 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   const sectionToggle = rule(sidebarPolishStyles, ".sidebar-section-toggle");
   const sectionChevron = rule(sidebarPolishStyles, ".sidebar-section-chevron");
   const sectionTitle = rule(sidebarPolishStyles, ".sidebar-section-title");
-  const activeProject = rule(
-    sidebarPolishStyles,
-    ".sidebar-project.is-active > .sidebar-project-header",
-  );
   const projectGuide = rule(
     sidebarPolishStyles,
     ".sidebar-project > .sidebar-sessions::before",
@@ -152,9 +148,6 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.ok(sectionChevron, "missing section chevron styles");
   assert.match(sectionChevron, /opacity:\s*0\.4;/);
   assert.ok(sectionTitle, "missing section heading styles");
-  assert.ok(activeProject, "active project needs a quiet selected state");
-  assert.match(activeProject, /background:\s*color-mix\(in srgb, var\(--ink\) 8%, transparent\);/);
-  assert.match(activeProject, /box-shadow:\s*none;/);
   assert.ok(projectGuide, "project nesting should explicitly remove the long guide line");
   assert.match(projectGuide, /display:\s*none;/);
   assert.ok(session, "missing session row density styles");

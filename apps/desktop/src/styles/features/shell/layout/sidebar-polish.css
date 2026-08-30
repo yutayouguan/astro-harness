@@ -308,21 +308,6 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
-.sidebar-project.is-active > .sidebar-project-header {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  box-shadow: none;
-}
-
-.sidebar-project.is-active > .sidebar-project-header::before {
-  display: none;
-}
-
-.sidebar-project.is-active > .sidebar-project-header .sidebar-project-name {
-  color: var(--ink);
-  font-weight: 590;
-}
-
 .sidebar-project > .sidebar-sessions {
   padding-left: 8px;
 }
@@ -438,7 +423,6 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
 @media (prefers-contrast: more) {
   .sidebar.is-pinned,
   .sidebar-feature-tab.is-active,
-  .sidebar-project.is-active > .sidebar-project-header,
   .sidebar-session-item.is-active {
     border-color: color-mix(in srgb, var(--ink) 34%, transparent);
   }

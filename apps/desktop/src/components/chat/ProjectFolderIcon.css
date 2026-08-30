@@ -14,11 +14,6 @@
   transition: color 0.18s ease;
 }
 
-/* 当前项目的图标用满色，其余稍退让，保持侧栏层级 */
-.sidebar-project:not(.is-active) .project-folder-icon--tinted {
-  opacity: 0.72;
-}
-
 .project-edit-name-icon-btn .project-folder-icon {
   width: 22px;
   height: 22px;
