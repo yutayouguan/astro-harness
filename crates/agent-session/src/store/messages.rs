@@ -304,8 +304,13 @@ impl SessionStore {
             let branched = format!("{title} · branch");
             let _ = self.set_session_title(new_id, &branched).await;
         }
-        self.write_fork_metadata_from_messages(source_id, new_id, &messages[..=end], BranchKind::Fork)
-            .await?;
+        self.write_fork_metadata_from_messages(
+            source_id,
+            new_id,
+            &messages[..=end],
+            BranchKind::Fork,
+        )
+        .await?;
 
         Ok(())
     }
@@ -341,13 +346,12 @@ impl SessionStore {
             parent_row.get::<Option<String>, _>(0),
             parent_row.get::<Option<String>, _>(1),
         );
-        let target_exists: bool = sqlx::query(
-            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
-        )
-        .bind(new_id)
-        .fetch_one(&mut *tx)
-        .await?
-        .get::<bool, _>(0);
+        let target_exists: bool =
+            sqlx::query("SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)")
+                .bind(new_id)
+                .fetch_one(&mut *tx)
+                .await?
+                .get::<bool, _>(0);
         if target_exists {
             anyhow::bail!("fork_session_recent_turns: target session already exists");
         }
@@ -670,13 +674,12 @@ impl SessionStore {
             .map(|title| format!("{title} · continued"));
         let mut tx = self.pool.begin().await?;
 
-        let target_exists: bool = sqlx::query(
-            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
-        )
-        .bind(new_id)
-        .fetch_one(&mut *tx)
-        .await?
-        .get::<bool, _>(0);
+        let target_exists: bool =
+            sqlx::query("SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)")
+                .bind(new_id)
+                .fetch_one(&mut *tx)
+                .await?
+                .get::<bool, _>(0);
         if target_exists {
             anyhow::bail!("compact_and_split: target session already exists");
         }

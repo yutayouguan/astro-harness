@@ -51,12 +51,13 @@ test("chat header chrome stays anchored while project files animate", () => {
   );
 
   assert.ok(header, "missing chat header rule");
-  assert.match(header, /min-height:\s*38px;/);
-  assert.match(header, /padding:\s*2px 16px;/);
+  assert.match(header, /min-height:\s*42px;/);
+  assert.match(header, /padding:\s*4px 16px;/);
   assert.ok(actions, "missing chat header action rule");
   assert.match(actions, /position:\s*absolute;/);
+  assert.match(actions, /top:\s*50%;/);
   assert.match(actions, /right:\s*12px;/);
-  assert.match(actions, /bottom:\s*4px;/);
+  assert.match(actions, /transform:\s*translateY\(-50%\);/);
   assert.doesNotMatch(actions, /transition:\s*right/);
   assert.equal(projectFileActions, undefined);
 });

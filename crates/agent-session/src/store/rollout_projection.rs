@@ -54,12 +54,11 @@ pub async fn rebuild_messages_from_rollout(
     .bind(now)
     .execute(&mut *tx)
     .await?;
-    let projection_started_at: f64 =
-        sqlx::query("SELECT started_at FROM sessions WHERE id = ?1")
-            .bind(session_id)
-            .fetch_one(&mut *tx)
-            .await?
-            .get(0);
+    let projection_started_at: f64 = sqlx::query("SELECT started_at FROM sessions WHERE id = ?1")
+        .bind(session_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .get(0);
     sqlx::query("DELETE FROM messages WHERE session_id = ?1")
         .bind(session_id)
         .execute(&mut *tx)

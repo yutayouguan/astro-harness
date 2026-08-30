@@ -44,12 +44,12 @@ impl SessionStore {
             "INSERT OR IGNORE INTO projects (id, name, icon, position)
              VALUES (?1, ?2, ?3, 0)",
         )
-            .bind(DEFAULT_PROJECT_ID)
-            .bind(name)
-            .bind(icon)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected()
+        .bind(DEFAULT_PROJECT_ID)
+        .bind(name)
+        .bind(icon)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
             == 1;
 
         if inserted {
@@ -86,12 +86,10 @@ impl SessionStore {
                     .execute(&mut *tx)
                     .await?;
             } else {
-                sqlx::query(
-                    "UPDATE projects SET position = position + 1 WHERE id != ?1",
-                )
-                .bind(DEFAULT_PROJECT_ID)
-                .execute(&mut *tx)
-                .await?;
+                sqlx::query("UPDATE projects SET position = position + 1 WHERE id != ?1")
+                    .bind(DEFAULT_PROJECT_ID)
+                    .execute(&mut *tx)
+                    .await?;
             }
         }
 
@@ -192,12 +190,10 @@ impl SessionStore {
     /// 创建新项目。
     pub async fn create_project(&self, name: &str, roots: &[&str]) -> Result<Project> {
         let id = uuid::Uuid::new_v4().simple().to_string();
-        let next_pos: i64 = sqlx::query(
-            "SELECT COALESCE(MAX(position), -1) + 1 FROM projects",
-        )
-        .fetch_one(&self.pool)
-        .await?
-        .get(0);
+        let next_pos: i64 = sqlx::query("SELECT COALESCE(MAX(position), -1) + 1 FROM projects")
+            .fetch_one(&self.pool)
+            .await?
+            .get(0);
         sqlx::query("INSERT INTO projects (id, name, position) VALUES (?1, ?2, ?3)")
             .bind(&id)
             .bind(name)
@@ -205,13 +201,11 @@ impl SessionStore {
             .execute(&self.pool)
             .await?;
         for root in roots {
-            sqlx::query(
-                "INSERT OR IGNORE INTO project_roots (project_id, path) VALUES (?1, ?2)",
-            )
-            .bind(&id)
-            .bind(*root)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("INSERT OR IGNORE INTO project_roots (project_id, path) VALUES (?1, ?2)")
+                .bind(&id)
+                .bind(*root)
+                .execute(&self.pool)
+                .await?;
         }
         self.get_project(&id)
             .await?
@@ -257,21 +251,17 @@ impl SessionStore {
                 .execute(&mut *tx)
                 .await?;
             for root in roots {
-                sqlx::query(
-                    "INSERT INTO project_roots (project_id, path) VALUES (?1, ?2)",
-                )
-                .bind(id)
-                .bind(*root)
-                .execute(&mut *tx)
-                .await?;
+                sqlx::query("INSERT INTO project_roots (project_id, path) VALUES (?1, ?2)")
+                    .bind(id)
+                    .bind(*root)
+                    .execute(&mut *tx)
+                    .await?;
             }
             if name.is_none() {
-                sqlx::query(
-                    "UPDATE projects SET updated_at = datetime('now') WHERE id = ?1",
-                )
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
+                sqlx::query("UPDATE projects SET updated_at = datetime('now') WHERE id = ?1")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
             }
         }
         tx.commit().await?;
@@ -352,13 +342,11 @@ impl SessionStore {
         session_id: &str,
         project_id: &str,
     ) -> Result<()> {
-        let result = sqlx::query(
-            "UPDATE sessions SET project_id = ?1 WHERE id = ?2",
-        )
-        .bind(project_id)
-        .bind(session_id)
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query("UPDATE sessions SET project_id = ?1 WHERE id = ?2")
+            .bind(project_id)
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
         if result.rows_affected() == 0 {
             anyhow::bail!("assign_session_to_project: session not found");
         }
@@ -377,12 +365,11 @@ impl SessionStore {
     // ---- 内部方法 ----
 
     async fn load_project_roots(&self, project_id: &str) -> Result<Vec<String>> {
-        let rows = sqlx::query(
-            "SELECT path FROM project_roots WHERE project_id = ?1 ORDER BY path",
-        )
-        .bind(project_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let rows =
+            sqlx::query("SELECT path FROM project_roots WHERE project_id = ?1 ORDER BY path")
+                .bind(project_id)
+                .fetch_all(&self.pool)
+                .await?;
         let roots = rows.iter().map(|r| r.get(0)).collect();
         Ok(roots)
     }
@@ -468,16 +455,8 @@ mod tests {
         let store_b = SessionStore::open(&path).await.unwrap();
 
         let (result_a, result_b) = tokio::join!(
-            store_a.ensure_default_project(
-                "主空间",
-                "astro-space",
-                "/home/user/.astro/workspace"
-            ),
-            store_b.ensure_default_project(
-                "主空间",
-                "astro-space",
-                "/home/user/.astro/workspace"
-            ),
+            store_a.ensure_default_project("主空间", "astro-space", "/home/user/.astro/workspace"),
+            store_b.ensure_default_project("主空间", "astro-space", "/home/user/.astro/workspace"),
         );
         assert_eq!(result_a.unwrap().id, DEFAULT_PROJECT_ID);
         assert_eq!(result_b.unwrap().id, DEFAULT_PROJECT_ID);
@@ -547,10 +526,7 @@ mod tests {
         let (_dir, store) = test_store().await;
         let p = store.create_project("Test", &["/test"]).await.unwrap();
         store.ensure_session("s1", "tauri").await.unwrap();
-        store
-            .assign_session_to_project("s1", &p.id)
-            .await
-            .unwrap();
+        store.assign_session_to_project("s1", &p.id).await.unwrap();
         let orphans = store.delete_project(&p.id).await.unwrap();
         assert_eq!(orphans, vec!["s1"]);
         assert!(store.list_projects().await.unwrap().is_empty());
@@ -575,10 +551,7 @@ mod tests {
         let (_dir, store) = test_store().await;
         let p = store.create_project("Proj", &["/proj"]).await.unwrap();
         store.ensure_session("s1", "tauri").await.unwrap();
-        store
-            .assign_session_to_project("s1", &p.id)
-            .await
-            .unwrap();
+        store.assign_session_to_project("s1", &p.id).await.unwrap();
         store.unassign_session_from_project("s1").await.unwrap();
         // 不应 panic
     }

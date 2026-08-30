@@ -1,0 +1,57 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const root = new URL("../../", import.meta.url);
+
+async function source(path) {
+  return readFile(new URL(path, root), "utf8");
+}
+
+test("assistant answers expose one accessible context menu from pointer and toolbar", async () => {
+  const [chatView, menu] = await Promise.all([
+    source("components/chat/ChatView.tsx"),
+    source("components/chat/AssistantMessageContextMenu.tsx"),
+  ]);
+
+  assert.match(chatView, /onContextMenu=\{\(event\) =>/);
+  assert.match(chatView, /respectTextSelection/);
+  assert.match(chatView, /aria-haspopup="menu"/);
+  assert.match(menu, /role="menu"/);
+  assert.match(menu, /role="menuitemradio"/);
+  assert.match(menu, /\["ArrowDown", "ArrowUp", "Home", "End"\]/);
+  assert.match(menu, /event\.key === "Escape"/);
+});
+
+test("per-answer layout overrides remain separate from the global default", async () => {
+  const chatView = await source("components/chat/ChatView.tsx");
+
+  assert.match(
+    chatView,
+    /messageLayoutOverrides\[m\.id\] \?\? displayPrefs\.answerLayout/,
+  );
+  assert.match(chatView, /onDefaultAnswerLayoutChange\(layout\)/);
+  assert.match(chatView, /action === "layout-default"/);
+  assert.match(chatView, /action === "layout-timeline" \|\| action === "layout-grouped"/);
+});
+
+test("full-process controls reach reasoning and tool groups", async () => {
+  const [chatView, reasoning, activities] = await Promise.all([
+    source("components/chat/ChatView.tsx"),
+    source("components/chat/MsgReasoning.tsx"),
+    source("components/chat/MsgActivityGroup.tsx"),
+  ]);
+
+  assert.match(chatView, /forcedOpen=\{forcedProcessOpen\}/);
+  assert.match(reasoning, /forcedOpen\?: boolean/);
+  assert.match(activities, /forcedOpen\?: boolean/);
+});
+
+test("menu glass stays responsive and respects motion and transparency preferences", async () => {
+  const css = await source("styles/features/chat/message-context-menu.css");
+
+  assert.match(css, /width: min\(238px, calc\(100vw - 16px\)\)/);
+  assert.match(css, /backdrop-filter: blur/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(css, /prefers-reduced-transparency: reduce/);
+});

@@ -54,6 +54,7 @@ import {
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import {
   isActivityVisible,
+  type ChatAnswerLayout,
   type ChatDisplayPrefs,
 } from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -86,6 +87,10 @@ import {
 import type { MediaActionKind } from "../../lib/media/mediaActions";
 import type { ChatThinkingPrefs, ThinkingLevel } from "../../lib/chat/thinkingPrefs";
 import { groupAssistantAnswer } from "../../lib/chat/groupAssistantAnswer";
+import {
+  assistantAnswerPlainText,
+  assistantProcessMarkdown,
+} from "../../lib/chat/assistantMessageClipboard";
 import type {
   ChatActivity,
   ChatAttachment,
@@ -130,6 +135,9 @@ import MsgCitations from "./MsgCitations";
 import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
 import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimeline";
+import AssistantMessageContextMenu, {
+  type AssistantMessageMenuAction,
+} from "./AssistantMessageContextMenu";
 import { useMcpTools } from "../../hooks/providers/useMcpTools";
 import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
 import LocationA2UISurface from "./LocationA2UISurface";
@@ -298,6 +306,8 @@ type Props = {
   sendBlockedReason?: string;
   /** 聊天展示偏好（详细度等） */
   displayPrefs: ChatDisplayPrefs;
+  /** 将单条回答的布局提升为全局默认。 */
+  onDefaultAnswerLayoutChange?: (layout: ChatAnswerLayout) => void;
   /** 空状态模式：欢迎 / 创建 Agent / 正常 */
   emptyMode: ChatEmptyMode;
   /** 需要滚入视口的消息 id（用后应调用 onFocusConsumed） */
@@ -581,6 +591,7 @@ export function MessageActions({
   onRegenerate,
   onEdit,
   onBranch,
+  onOpenMenu,
 }: {
   messageId: string;
   content: string;
@@ -589,6 +600,7 @@ export function MessageActions({
   onRegenerate?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
   onBranch?: (messageId: string) => void;
+  onOpenMenu?: (anchor: HTMLButtonElement) => void;
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -644,6 +656,17 @@ export function MessageActions({
             title={t("chat.branchHint")}
           >
             <GitBranch size={14} strokeWidth={2} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="msg-action-btn"
+            disabled={disabled || !onOpenMenu}
+            onClick={(event) => onOpenMenu?.(event.currentTarget)}
+            aria-label={t("chat.messageMenu.title")}
+            title={t("chat.messageMenu.title")}
+            aria-haspopup="menu"
+          >
+            <MoreHorizontal size={14} strokeWidth={2} aria-hidden />
           </button>
         </>
       ) : (
@@ -756,6 +779,7 @@ export default function ChatView({
   sendBlocked = false,
   sendBlockedReason,
   displayPrefs,
+  onDefaultAnswerLayoutChange,
   emptyMode,
   focusMessageId,
   onFocusConsumed,
@@ -814,6 +838,17 @@ export default function ChatView({
   const [editingUserMessageId, setEditingUserMessageId] = useState<string | null>(null);
   const [editingUserDraft, setEditingUserDraft] = useState("");
   const [submittingUserEdit, setSubmittingUserEdit] = useState(false);
+  const [assistantMenu, setAssistantMenu] = useState<{
+    messageId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [messageLayoutOverrides, setMessageLayoutOverrides] = useState<
+    Record<string, ChatAnswerLayout>
+  >({});
+  const [messageProcessExpanded, setMessageProcessExpanded] = useState<
+    Record<string, boolean>
+  >({});
   const chatPaneRef = useRef<HTMLElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -2228,6 +2263,106 @@ export default function ChatView({
     }
   }, [editingUserDraft, editingUserMessageId, onEditUserMessage, submittingUserEdit]);
 
+  const contextMenuMessage = useMemo(
+    () => assistantMenu
+      ? messages.find((message) => message.id === assistantMenu.messageId) ?? null
+      : null,
+    [assistantMenu, messages],
+  );
+
+  const openAssistantMessageMenu = useCallback(
+    (messageId: string, x: number, y: number, respectTextSelection = true) => {
+      if (respectTextSelection) {
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed && selection.toString().trim()) {
+          return false;
+        }
+      }
+      setAssistantMenu({ messageId, x, y });
+      return true;
+    },
+    [],
+  );
+
+  const copyAssistantMessageText = useCallback(async (text: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(t("chat.copied"));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), {
+        tone: "error",
+      });
+    }
+  }, [showToast, t]);
+
+  const handleAssistantMessageMenuAction = useCallback(
+    (action: AssistantMessageMenuAction) => {
+      const menu = assistantMenu;
+      if (!menu) return;
+      const message = messages.find((candidate) => candidate.id === menu.messageId);
+      if (!message || message.role !== "assistant") return;
+
+      if (action === "layout-default") {
+        setMessageLayoutOverrides((current) => {
+          const next = { ...current };
+          delete next[message.id];
+          return next;
+        });
+        return;
+      }
+      if (action === "layout-timeline" || action === "layout-grouped") {
+        const layout = action === "layout-grouped" ? "grouped" : "timeline";
+        setMessageLayoutOverrides((current) => ({ ...current, [message.id]: layout }));
+        return;
+      }
+      if (action === "set-layout-default") {
+        const layout = messageLayoutOverrides[message.id];
+        if (!layout || !onDefaultAnswerLayoutChange) return;
+        onDefaultAnswerLayoutChange(layout);
+        setMessageLayoutOverrides((current) => {
+          const next = { ...current };
+          delete next[message.id];
+          return next;
+        });
+        return;
+      }
+      if (action === "toggle-process") {
+        setMessageProcessExpanded((current) => ({
+          ...current,
+          [message.id]: !current[message.id],
+        }));
+        return;
+      }
+      if (action === "copy-answer") {
+        void copyAssistantMessageText(assistantAnswerPlainText(message.content));
+        return;
+      }
+      if (action === "copy-markdown") {
+        void copyAssistantMessageText(message.content);
+        return;
+      }
+      if (action === "copy-process") {
+        void copyAssistantMessageText(assistantProcessMarkdown(message));
+        return;
+      }
+      if (action === "regenerate") {
+        onRegenerateMessage?.(message.id);
+        return;
+      }
+      onBranchMessage?.(message.id);
+    },
+    [
+      assistantMenu,
+      copyAssistantMessageText,
+      messageLayoutOverrides,
+      messages,
+      onBranchMessage,
+      onDefaultAnswerLayoutChange,
+      onRegenerateMessage,
+    ],
+  );
+
   return (
     <ChatMediaAttachProvider value={mediaAttachApi}>
     <section
@@ -2245,6 +2380,23 @@ export default function ChatView({
     >
       {toastHost}
       <TaskCompletionCelebration trigger={completionCelebrationId} />
+      {assistantMenu && contextMenuMessage?.role === "assistant" ? (
+        <AssistantMessageContextMenu
+          x={assistantMenu.x}
+          y={assistantMenu.y}
+          defaultLayout={displayPrefs.answerLayout}
+          layoutOverride={messageLayoutOverrides[contextMenuMessage.id]}
+          processExpanded={Boolean(messageProcessExpanded[contextMenuMessage.id])}
+          hasProcess={Boolean(
+            contextMenuMessage.reasoning?.trim() || contextMenuMessage.activities?.length,
+          )}
+          canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
+          canRegenerate={!streaming && Boolean(onRegenerateMessage)}
+          canBranch={!streaming && Boolean(onBranchMessage)}
+          onAction={handleAssistantMessageMenuAction}
+          onClose={() => setAssistantMenu(null)}
+        />
+      ) : null}
       {cronRun && !workspaceContent ? (
         <aside className="chat-cron-run-float">
           <CronRunFloatingCard
@@ -2282,6 +2434,9 @@ export default function ChatView({
               const reasoningActive = Boolean(
                 isStreamingBubble && m.reasoning && !m.content,
               );
+              const answerLayout =
+                messageLayoutOverrides[m.id] ?? displayPrefs.answerLayout;
+              const forcedProcessOpen = messageProcessExpanded[m.id];
               const isEditingUserMessage = editingUserMessageId === m.id;
               const canEditUserMessage =
                 m.role === "user" &&
@@ -2331,6 +2486,18 @@ export default function ChatView({
                       } ${isStreamingBubble && (m.content || m.reasoning) ? "is-streaming" : ""}${
                         isEditingUserMessage ? " is-editing" : ""
                       }`}
+                      data-allow-context-menu={m.role === "assistant" ? "true" : undefined}
+                      onContextMenu={(event) => {
+                        if (m.role !== "assistant" || isStreamingBubble) return;
+                        const opened = openAssistantMessageMenu(
+                          m.id,
+                          event.clientX,
+                          event.clientY,
+                        );
+                        if (!opened) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
                     >
                       {m.attachments && m.attachments.length > 0 && (
                         <MessageAttachments items={m.attachments} />
@@ -2364,7 +2531,7 @@ export default function ChatView({
                             node: (
                               <MsgActivity
                                 activity={act}
-                                defaultOpen={false}
+                                defaultOpen={forcedProcessOpen ?? false}
                                 showTimestamp={displayPrefs.showTimestamps}
                                 mediaBaseDir={mediaBaseDir}
                               />
@@ -2421,6 +2588,7 @@ export default function ChatView({
                                     active={active}
                                     durationSec={seg.durationSec}
                                     startedAtMs={active ? seg.at : undefined}
+                                    forcedOpen={forcedProcessOpen}
                                   />
                                 ),
                               });
@@ -2475,6 +2643,7 @@ export default function ChatView({
                                   reasoning={m.reasoning}
                                   active={reasoningActive}
                                   durationSec={m.reasoningDurationSec}
+                                  forcedOpen={forcedProcessOpen}
                                 />
                               ),
                             });
@@ -2495,7 +2664,7 @@ export default function ChatView({
                           }
                         }
 
-                        if (displayPrefs.answerLayout === "grouped") {
+                        if (answerLayout === "grouped") {
                           const groupedAnswer = groupAssistantAnswer(m);
                           const groupedViewSteps: Step[] = [];
                           const lastSegment = m.segments?.[m.segments.length - 1];
@@ -2516,6 +2685,7 @@ export default function ChatView({
                                   reasoning={groupedAnswer.reasoning}
                                   active={groupedReasoningActive}
                                   durationSec={groupedAnswer.reasoningDurationSec}
+                                  forcedOpen={forcedProcessOpen}
                                 />
                               ),
                             });
@@ -2536,6 +2706,7 @@ export default function ChatView({
                               node: (
                                 <MsgActivityGroup
                                   activities={visibleActivities}
+                                  forcedOpen={forcedProcessOpen}
                                   showTimestamp={displayPrefs.showTimestamps}
                                   mediaBaseDir={mediaBaseDir}
                                 />
@@ -2667,6 +2838,7 @@ export default function ChatView({
                                   >
                                     <MsgActivityGroup
                                       activities={activities}
+                                      forcedOpen={forcedProcessOpen}
                                       showTimestamp={displayPrefs.showTimestamps}
                                       mediaBaseDir={mediaBaseDir}
                                     />
@@ -2722,6 +2894,15 @@ export default function ChatView({
                         onBranch={
                           m.role === "assistant" ? onBranchMessage : undefined
                         }
+                        onOpenMenu={m.role === "assistant" ? (anchor) => {
+                          const rect = anchor.getBoundingClientRect();
+                          openAssistantMessageMenu(
+                            m.id,
+                            rect.right,
+                            rect.bottom + 4,
+                            false,
+                          );
+                        } : undefined}
                       />
                     ) : null}
                   </div>

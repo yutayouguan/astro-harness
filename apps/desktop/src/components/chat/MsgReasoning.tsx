@@ -19,6 +19,8 @@ type Props = {
   durationSec?: number;
   /** 思考起点（ms）；缺省时在 active 瞬间本地闩锁 */
   startedAtMs?: number;
+  /** 右键菜单“展开/折叠全部”的单次消息覆盖 */
+  forcedOpen?: boolean;
 };
 
 export default function MsgReasoning({
@@ -26,6 +28,7 @@ export default function MsgReasoning({
   active,
   durationSec,
   startedAtMs,
+  forcedOpen,
 }: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(active);
@@ -33,6 +36,14 @@ export default function MsgReasoning({
   const wasActiveRef = useRef(false);
 
   useEffect(() => {
+    if (forcedOpen != null) {
+      setOpen(forcedOpen);
+      if (!active) {
+        wasActiveRef.current = false;
+        setLocalStart(null);
+      }
+      return;
+    }
     if (active) {
       if (!wasActiveRef.current) {
         setLocalStart(startedAtMs ?? Date.now());
@@ -44,7 +55,7 @@ export default function MsgReasoning({
       setLocalStart(null);
       setOpen(false);
     }
-  }, [active, startedAtMs]);
+  }, [active, forcedOpen, startedAtMs]);
 
   const liveStart = active ? (startedAtMs ?? localStart) : null;
   const liveSec = useLiveElapsedSec(active, liveStart);

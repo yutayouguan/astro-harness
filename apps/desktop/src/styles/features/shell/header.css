@@ -18,9 +18,9 @@
 .content-header--chat {
   position: relative;
   gap: 12px;
-  min-height: 38px;
+  min-height: 42px;
   box-sizing: border-box;
-  padding: 2px 16px;
+  padding: 4px 16px;
 }
 
 .content-header--chat .content-heading {
@@ -35,14 +35,14 @@
 }
 
 .content-header--chat .page-title-icon {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 7px;
 }
 
 .content-header--chat .page-title-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
 }
 
 /* 会话名用比 .content-title(22px) 小一档的字号，
@@ -96,9 +96,10 @@
 
 .content-header--chat .header-actions {
   position: absolute;
-  top: auto;
+  top: 50%;
   right: 12px;
-  bottom: 4px;
+  bottom: auto;
+  transform: translateY(-50%);
   flex-wrap: nowrap;
 }
 

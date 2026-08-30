@@ -11,7 +11,7 @@ Astro Skills 领域层：本机扫描、商店搜索与安装、运行时注册�
 - **更新检查** -- `check_updates_for_agent()` 对比本地版本与商店版本，`update_installed_skill()` 执行增量更新
 - **备份与快照** -- 更新前自动备份旧版、`save_snapshot()` / `restore_skill_snapshot()` 管理快照历史
 - **使用统计** -- `record_skill_load()` 记录加载时间，`curate_report()` 生成使用报告
-- **种子技能** -- `seed_default_public_skills()` 预装默认公共 Skill 集合，`BUNDLED_SKILLS` 内嵌 Skill
+- **内置技能** -- `seed_bundled_skills()` 仅写入随应用编译发布的 `BUNDLED_SKILLS`
 - **Soft-alias** -- 模型将 skill 名当工具调用时，自动改写为 `skills(action=load, skill_id=...)`
 
 ## 模块结构
@@ -24,7 +24,7 @@ Astro Skills 领域层：本机扫描、商店搜索与安装、运行时注册�
 | `store.rs` | SkillHub 商店集成（28KB）：`search()` / `fetch_detail()` / API 请求与响应解析 |
 | `install.rs` | 安装逻辑（18KB）：`install_from_ref()` / `InstallOriginHint` / SkillHub HTTP + npx 两条路径 |
 | `origins.rs` | 来源追踪（17KB）：安装来源记录、来源匹配与验证 |
-| `seed.rs` | 种子技能（16KB）：`seed_default_public_skills()` / `seed_bundled_into()` / `BUNDLED_SKILLS` / `DEFAULT_PUBLIC_SKILLS` |
+| `seed.rs` | 内置技能：`seed_bundled_skills()` / `seed_bundled_into()` / `BUNDLED_SKILLS` |
 | `check.rs` | 更新检查（12KB）：`check_updates_for_agent()` / `classify_update_status()` / `filter_outdated_folders()` |
 | `update.rs` | 更新执行（11KB）：`update_installed_skill()` / `update_outdated_skills()` / `backup_skill_dir()` |
 | `backups.rs` | 备份管理：`list_skill_backups()` / `reveal_skill_backup()` / `SkillBackupEntry` |

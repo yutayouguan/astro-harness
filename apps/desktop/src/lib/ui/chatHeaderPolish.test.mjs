@@ -9,6 +9,7 @@ const unifiedColorUrl = new URL(
 );
 const titleUrl = new URL("../../components/chat/ConversationTitle.tsx", import.meta.url);
 const tipsUrl = new URL("../../hooks/ui/useBeautifyTips.ts", import.meta.url);
+const appUrl = new URL("../../App.tsx", import.meta.url);
 
 test("conversation title truncates and only exposes its full text when overflowing", async () => {
   const [css, source, tips] = await Promise.all([
@@ -64,5 +65,14 @@ test("unified color modes keep the conversation title neutral", async () => {
   assert.match(
     css,
     /\.content-header--chat[\s\S]*?\.conversation-title\[data-tone\][\s\S]*?\{[\s\S]*?color:\s*var\(--ink\);/,
+  );
+});
+
+test("conversation header follows the active project icon", async () => {
+  const source = await readFile(appUrl, "utf8");
+
+  assert.match(
+    source,
+    /<ProjectFolderIcon\s+[\s\S]*?iconId=\{activeProject\?\.icon\}[\s\S]*?expanded=\{false\}[\s\S]*?size=\{18\}/,
   );
 });

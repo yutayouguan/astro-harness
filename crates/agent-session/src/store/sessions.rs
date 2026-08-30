@@ -203,7 +203,10 @@ impl SessionStore {
             .bind(id)
             .execute(&self.pool)
             .await?;
-        anyhow::ensure!(result.rows_affected() == 1, "pin_session: session not found");
+        anyhow::ensure!(
+            result.rows_affected() == 1,
+            "pin_session: session not found"
+        );
         Ok(())
     }
 

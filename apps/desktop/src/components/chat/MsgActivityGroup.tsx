@@ -13,6 +13,7 @@ import MsgActivity from "./MsgActivity";
 type Props = {
   activities: ChatActivity[];
   defaultOpen?: boolean;
+  forcedOpen?: boolean;
   showTimestamp: boolean;
   mediaBaseDir?: string | null;
 };
@@ -20,6 +21,7 @@ type Props = {
 export default function MsgActivityGroup({
   activities,
   defaultOpen = false,
+  forcedOpen,
   showTimestamp,
   mediaBaseDir,
 }: Props) {
@@ -34,8 +36,12 @@ export default function MsgActivityGroup({
   );
 
   useEffect(() => {
-    if (running || failed || interrupted) setOpen(true);
-  }, [running, failed, interrupted]);
+    if (forcedOpen != null) {
+      setOpen(forcedOpen);
+    } else if (running || failed || interrupted) {
+      setOpen(true);
+    }
+  }, [failed, forcedOpen, interrupted, running]);
 
   const actionLabel = useMemo(
     () => activityGroupSummaryLabel(activityGroupSummary(activities), t),
@@ -108,7 +114,9 @@ export default function MsgActivityGroup({
               key={activity.id}
               activity={activity}
               defaultOpen={
-                activity.status === "error" || activity.status === "interrupted"
+                forcedOpen ??
+                (activity.status === "error" ||
+                  activity.status === "interrupted")
               }
               showTimestamp={showTimestamp}
               mediaBaseDir={mediaBaseDir}

@@ -61,7 +61,9 @@ impl SessionStore {
         }
 
         for hit in &mut hits {
-            hit.context = self.neighbor_context(hit.session_id.as_str(), hit.id).await?;
+            hit.context = self
+                .neighbor_context(hit.session_id.as_str(), hit.id)
+                .await?;
         }
         Ok(hits)
     }

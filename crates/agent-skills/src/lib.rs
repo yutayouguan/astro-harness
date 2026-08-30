@@ -73,10 +73,7 @@ pub use models::{
 };
 pub use preview::preview_skill_update;
 pub use registry::SkillRegistry;
-pub use seed::{
-    is_public_skill_installed, seed_bundled_into, seed_default_public_skills, SeedReport,
-    BUNDLED_SKILLS, DEFAULT_PUBLIC_SKILLS,
-};
+pub use seed::{seed_bundled_into, seed_bundled_skills, SeedReport, BUNDLED_SKILLS};
 pub use skill::{LoadedSkill, SkillMetadata};
 pub use snapshots::{
     list_snapshots, restore_latest as restore_skill_snapshot, save_snapshot, SkillSnapshot,

@@ -41,7 +41,6 @@ import ToolsPanel from "./components/settings/ToolsPanel";
 import EvolutionModelsPanel from "./components/settings/EvolutionModelsPanel";
 import {
   AstroLogoMark,
-  IconChat,
   IconCron,
   IconLoop,
   IconNewChat,
@@ -852,7 +851,6 @@ export default function App() {
   );
 
   // ── Layout helpers ────────────────────────────────────────────────────────
-  const ActiveIcon = IconChat;
   const showHeaderStatus = chat.statusPhase !== "ready";
   const featureNav =
     nav === "cron" || nav === "loop" || nav === "skills" ? nav : null;
@@ -1456,7 +1454,12 @@ export default function App() {
                     <>
                       <div className="page-title-block">
                         <div className="page-title-icon" data-tone={shellTone} aria-hidden>
-                          <ActiveIcon width={15} height={15} />
+                          <ProjectFolderIcon
+                            iconId={activeProject?.icon}
+                            expanded={false}
+                            size={18}
+                            loading="eager"
+                          />
                         </div>
                         <div className="page-title-text">
                           <h1 className="content-title conversation-title" data-tone={shellTone}>
@@ -1648,6 +1651,7 @@ export default function App() {
                             : undefined
                       }
                       displayPrefs={chatDisplayPrefs}
+                      onDefaultAnswerLayoutChange={setAnswerLayout}
                       emptyMode={chat.emptyMode}
                       focusMessageId={chat.focusMessageId}
                       onFocusConsumed={() => setFocusMessageId(null)}

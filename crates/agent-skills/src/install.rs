@@ -1,8 +1,8 @@
 //! 从 SkillHub API 安装 Skill。
 
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::path::{Component, Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
@@ -56,22 +56,21 @@ pub fn scoped_skills_dir(scope: &str, project_root: Option<&Path>) -> Result<Pat
     Ok(dir)
 }
 
-/// URL 末段路径。
-fn last_path_segment(url: &str) -> Option<String> {
-    url.trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+fn validate_path_component(value: &str, label: &str) -> Result<()> {
+    let mut components = Path::new(value).components();
+    if value.is_empty()
+        || value.contains(['/', '\\', '\0'])
+        || !matches!(components.next(), Some(Component::Normal(_)))
+        || components.next().is_some()
+    {
+        bail!("非法 {label}: {value}");
+    }
+    Ok(())
 }
 
 /// 是否为受支持的 SkillHub 安装引用。
 pub(crate) fn is_skillhub_http_ref(install_ref: &str) -> bool {
-    let r = install_ref.trim();
-    r.starts_with("skillhub:")
-        || r.starts_with("https://api.skillhub.cn/")
-        || r.starts_with("https://skillhub.cn/")
-        || r.starts_with("https://www.skillhub.cn/")
+    skillhub_slug(install_ref).is_ok()
 }
 
 /// 从 `skillhub:` 或 SkillHub URL 解析 slug。
@@ -79,43 +78,125 @@ fn skillhub_slug(install_ref: &str) -> Result<String> {
     let r = install_ref.trim();
     if let Some(rest) = r.strip_prefix("skillhub:") {
         let slug = rest.rsplit('/').next().unwrap_or(rest).trim();
-        if slug.is_empty() {
-            bail!("SkillHub slug 为空: {install_ref}");
-        }
+        validate_path_component(slug, "SkillHub slug")?;
         return Ok(slug.to_string());
     }
-    last_path_segment(r).ok_or_else(|| anyhow!("无法从 SkillHub 引用解析 slug: {install_ref}"))
+    let url = reqwest::Url::parse(r)
+        .with_context(|| format!("无法解析 SkillHub 引用: {install_ref}"))?;
+    let allowed_host = matches!(
+        url.host_str(),
+        Some("api.skillhub.cn" | "skillhub.cn" | "www.skillhub.cn")
+    );
+    if url.scheme() != "https" || !allowed_host || url.port().is_some() {
+        bail!("仅支持官方 SkillHub HTTPS 引用: {install_ref}");
+    }
+    let slug = url
+        .path_segments()
+        .and_then(|mut segments| segments.next_back())
+        .filter(|segment| !segment.is_empty())
+        .ok_or_else(|| anyhow!("无法从 SkillHub 引用解析 slug: {install_ref}"))?;
+    validate_path_component(slug, "SkillHub slug")?;
+    Ok(slug.to_string())
 }
 
-/// 将文件树写入 `{dest}/{slug}/...`。
+fn safe_relative_path(value: &str) -> Result<PathBuf> {
+    if value.is_empty() || value.contains(['\\', '\0']) {
+        bail!("非法文件路径: {value}");
+    }
+    let path = Path::new(value);
+    if path
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        bail!("非法文件路径: {value}");
+    }
+    Ok(path.to_path_buf())
+}
+
+fn unique_install_path(dest_root: &Path, slug: &str, kind: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    dest_root.join(format!(
+        ".{slug}.astro-{kind}-{}-{nonce}",
+        std::process::id()
+    ))
+}
+
+fn remove_path(path: &Path) -> Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e).with_context(|| format!("stat {}", path.display())),
+    };
+    if metadata.is_dir() && !metadata.file_type().is_symlink() {
+        fs::remove_dir_all(path).with_context(|| format!("remove {}", path.display()))
+    } else {
+        fs::remove_file(path).with_context(|| format!("remove {}", path.display()))
+    }
+}
+
+/// 将文件树先写入同盘临时目录，校验后再替换 `{dest}/{slug}`；失败时保留旧版本。
 pub(crate) fn write_skill_files(
     dest_root: &Path,
     slug: &str,
     files: &[(String, Vec<u8>)],
 ) -> Result<PathBuf> {
-    if slug.trim().is_empty() {
-        bail!("skill slug 为空");
-    }
+    validate_path_component(slug, "skill slug")?;
     if files.is_empty() {
         bail!("SkillHub 包文件列表为空: {slug}");
     }
+    let validated = files
+        .iter()
+        .map(|(rel, bytes)| Ok((safe_relative_path(rel)?, bytes)))
+        .collect::<Result<Vec<_>>>()?;
+    if !validated
+        .iter()
+        .any(|(rel, _)| rel == Path::new("SKILL.md"))
+    {
+        bail!("SkillHub 包缺少 SKILL.md: {slug}");
+    }
+
+    fs::create_dir_all(dest_root).with_context(|| format!("create {}", dest_root.display()))?;
     let dest = dest_root.join(slug);
-    if dest.exists() {
-        fs::remove_dir_all(&dest).with_context(|| format!("remove {}", dest.display()))?;
-    }
-    for (rel, bytes) in files {
-        let rel = rel.trim_start_matches('/');
-        if rel.is_empty() || rel.contains("..") {
-            bail!("非法文件路径: {rel}");
+    let staging = unique_install_path(dest_root, slug, "staging");
+    let displaced = unique_install_path(dest_root, slug, "previous");
+    fs::create_dir(&staging).with_context(|| format!("create {}", staging.display()))?;
+
+    let write_result = (|| -> Result<()> {
+        for (rel, bytes) in &validated {
+            let path = staging.join(rel);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("create {}", parent.display()))?;
+            }
+            fs::write(&path, bytes).with_context(|| format!("write {}", path.display()))?;
         }
-        let path = dest.join(rel);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+        if !staging.join("SKILL.md").is_file() {
+            bail!("安装后未找到 SKILL.md: {}", staging.display());
         }
-        fs::write(&path, bytes).with_context(|| format!("write {}", path.display()))?;
+        Ok(())
+    })();
+    if let Err(error) = write_result {
+        let _ = remove_path(&staging);
+        return Err(error);
     }
-    if !dest.join("SKILL.md").is_file() {
-        bail!("安装后未找到 SKILL.md: {}", dest.display());
+
+    let had_dest = fs::symlink_metadata(&dest).is_ok();
+    if had_dest {
+        fs::rename(&dest, &displaced)
+            .with_context(|| format!("move existing {}", dest.display()))?;
+    }
+    if let Err(error) = fs::rename(&staging, &dest) {
+        let _ = remove_path(&staging);
+        if had_dest {
+            let _ = fs::rename(&displaced, &dest);
+        }
+        return Err(error).with_context(|| format!("activate {}", dest.display()));
+    }
+    if had_dest {
+        remove_path(&displaced)?;
     }
     Ok(dest)
 }
@@ -327,6 +408,9 @@ mod tests {
         ));
         assert!(!is_skillhub_http_ref("legacy:owner--skill"));
         assert!(!is_skillhub_http_ref("https://legacy.example/owner/skill"));
+        assert!(!is_skillhub_http_ref("https://skillhub.cn.evil.test/skills/demo"));
+        assert!(!is_skillhub_http_ref("https://skillhub.cn:8443/skills/demo"));
+        assert!(!is_skillhub_http_ref("skillhub:.."));
     }
 
     #[test]
@@ -342,6 +426,50 @@ mod tests {
             std::fs::read_to_string(dir.path().join("web-tools-guide/refs/a.md")).unwrap(),
             "a\n"
         );
+    }
+
+    #[test]
+    fn invalid_package_does_not_replace_existing_skill() {
+        let dir = tempfile::tempdir().unwrap();
+        let existing = dir.path().join("demo");
+        std::fs::create_dir_all(&existing).unwrap();
+        std::fs::write(existing.join("SKILL.md"), "# existing\n").unwrap();
+
+        let error = write_skill_files(
+            dir.path(),
+            "demo",
+            &[("../escape".into(), b"bad".to_vec())],
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("非法文件路径"));
+        assert_eq!(
+            std::fs::read_to_string(existing.join("SKILL.md")).unwrap(),
+            "# existing\n"
+        );
+        assert!(!dir.path().join("escape").exists());
+    }
+
+    #[test]
+    fn valid_package_replaces_existing_skill_without_stale_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let existing = dir.path().join("demo");
+        std::fs::create_dir_all(&existing).unwrap();
+        std::fs::write(existing.join("SKILL.md"), "# old\n").unwrap();
+        std::fs::write(existing.join("stale.txt"), "stale").unwrap();
+
+        write_skill_files(
+            dir.path(),
+            "demo",
+            &[("SKILL.md".into(), b"# new\n".to_vec())],
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(existing.join("SKILL.md")).unwrap(),
+            "# new\n"
+        );
+        assert!(!existing.join("stale.txt").exists());
     }
 
     #[test]
