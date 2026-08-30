@@ -1330,11 +1330,12 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
 }
 
 .page-body {
+  --page-body-inline-padding: 22px;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 22px 22px;
+  padding: 0 var(--page-body-inline-padding) 22px;
 }
 
 /* 无页头的功能页：自己补出标题栏安全区 */
@@ -1352,6 +1353,21 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
 
 .feature-content-inline :is(.cron-toolbar, .loop-toolbar, .loop-editor-toolbar, .plugins-command-bar) > * {
   pointer-events: auto;
+}
+
+/* 侧栏收起后，内容会回到窗口左边缘。所有占用原生标题栏高度的表面
+   共用同一条安全边界，避开 macOS 红绿灯和常驻侧栏开关。 */
+.app-shell[data-sidebar-state="collapsed"] .content-header {
+  padding-inline-start: var(--window-chrome-safe-left);
+}
+
+.app-shell[data-sidebar-state="collapsed"]
+  .feature-content-inline
+  :is(.cron-toolbar, .loop-toolbar, .loop-editor-toolbar, .plugins-command-bar) {
+  padding-inline-start: max(
+    0px,
+    calc(var(--window-chrome-safe-left) - var(--page-body-inline-padding))
+  );
 }
 
 .chat-pane {

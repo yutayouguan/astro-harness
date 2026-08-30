@@ -8,6 +8,10 @@
   --primitive-radius-xl: 24px;
   --titlebar-h: 52px;
   --titlebar-traffic-w: 78px;
+  --titlebar-sidebar-toggle-w: 34px;
+  --window-chrome-safe-left: calc(
+    var(--titlebar-traffic-w) + var(--titlebar-sidebar-toggle-w)
+  );
 
   /* Elevation */
   --z-drawer: 1300;

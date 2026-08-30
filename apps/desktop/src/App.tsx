@@ -912,6 +912,7 @@ export default function App() {
       className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}`}
       data-tone={shellTone}
       data-color-style={colorStyle}
+      data-sidebar-state={sidebar.sidebarVisible ? "visible" : "collapsed"}
     >
       {toneFadeBg && (
         <div
