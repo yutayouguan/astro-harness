@@ -1,5 +1,5 @@
-/* AI 回答面板：在不改变消息结构的前提下，收敛长文阅读面与嵌套工具层级。 */
-.bubble.assistant {
+/* 用户与 AI 共用同一层消息玻璃；左右位置与内容结构仍由各自消息行负责。 */
+html[data-theme] .bubble:is(.assistant, .user) {
   --answer-radius: 16px;
   --answer-inset-radius: 13px;
   position: relative;
@@ -12,28 +12,29 @@
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: var(--backdrop-glass);
   -webkit-backdrop-filter: var(--backdrop-glass);
+  color: var(--ink);
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease;
 }
 
-.bubble.assistant::before {
+.bubble:is(.assistant, .user)::before {
   content: none;
 }
 
-html[data-theme="light"] .bubble.assistant {
+html[data-theme="light"] .bubble:is(.assistant, .user) {
   background: var(--glass-layer, var(--glass-panel));
   border-color: var(--glass-edge);
   box-shadow: var(--shadow-card), var(--glass-rim);
 }
 
-html[data-theme="dark"] .bubble.assistant {
+html[data-theme="dark"] .bubble:is(.assistant, .user) {
   background: var(--glass-layer, var(--glass-panel));
   border-color: var(--glass-edge);
   box-shadow: var(--shadow-card), var(--glass-rim);
 }
 
-.bubble.assistant:focus-within {
+html[data-theme] .bubble:is(.assistant, .user):focus-within {
   border-color: color-mix(in srgb, var(--tone, var(--accent)) 22%, var(--glass-edge));
 }
 
@@ -234,7 +235,7 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  html[data-theme="light"] .bubble.assistant {
+  html[data-theme="light"] .bubble:is(.assistant, .user) {
     background: rgba(248, 250, 253, 0.98);
   }
 
@@ -246,7 +247,7 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
     );
   }
 
-  html[data-theme="dark"] .bubble.assistant {
+  html[data-theme="dark"] .bubble:is(.assistant, .user) {
     background: rgba(10, 10, 18, 0.96);
   }
 
@@ -278,7 +279,7 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
     max-width: calc(100% - 37px);
   }
 
-  .bubble.assistant {
+  html[data-theme] .bubble:is(.assistant, .user) {
     padding: 13px 13px 12px;
     border-radius: 14px;
   }
@@ -341,7 +342,7 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bubble.assistant {
+  html[data-theme] .bubble:is(.assistant, .user) {
     transition: none;
   }
 }
