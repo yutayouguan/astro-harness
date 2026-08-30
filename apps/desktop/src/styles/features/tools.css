@@ -351,10 +351,10 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  padding: 0;
+  padding: 2px;
   border-radius: inherit;
   background: #fff;
-  object-fit: cover;
+  object-fit: contain;
   opacity: 0;
   transform: scale(0.92);
   transition: opacity 140ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);

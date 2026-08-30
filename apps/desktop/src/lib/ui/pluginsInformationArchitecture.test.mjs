@@ -275,7 +275,7 @@ test("public MCP brands accept bundled assets and HTTPS catalog icons with a saf
   assert.match(mcpBrandIcon, /referrerPolicy="no-referrer"/);
   assert.match(toolsCss, /\.mcp-brand-icon\.is-loaded/);
   assert.match(toolsCss, /\.mcp-brand-icon-shell \{[\s\S]*?width: 100%;[\s\S]*?height: 100%;/);
-  assert.match(toolsCss, /\.mcp-brand-icon \{[\s\S]*?padding: 0;[\s\S]*?object-fit: cover;/);
+  assert.match(toolsCss, /\.mcp-brand-icon \{[\s\S]*?padding: 2px;[\s\S]*?object-fit: contain;/);
   assert.match(mcpBrandIcon, /return <McpIcon/);
 });
 
