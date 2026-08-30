@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   addComposerContextToken,
+  createFileComposerContextToken,
   removeTriggerText,
   serializeComposerContext,
   type ComposerContextToken,
@@ -32,6 +33,24 @@ test("composer context serializes to the existing skill and mention protocol", (
       "检查这份文件",
     ),
     "/pdf @browser @reviewer 检查这份文件",
+  );
+});
+
+test("file context keeps its path behind a compact composer token", () => {
+  const file = createFileComposerContextToken(
+    "/tmp/generated/fetch_title.py",
+    "代码",
+  );
+  assert.deepEqual(file, {
+    id: "/tmp/generated/fetch_title.py",
+    kind: "file",
+    name: "fetch_title.py",
+    description: "代码",
+    path: "/tmp/generated/fetch_title.py",
+  });
+  assert.equal(
+    serializeComposerContext([file], "继续修改"),
+    "@/tmp/generated/fetch_title.py 继续修改",
   );
 });
 

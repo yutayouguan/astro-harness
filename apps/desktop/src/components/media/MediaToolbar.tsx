@@ -64,7 +64,7 @@ export default function MediaToolbar({
       if (busy || !attachApi) return;
       setBusy("quote");
       try {
-        await attachApi.attachMediaPath(path);
+        await attachApi.attachMediaPath(path, kind);
         showToast(t("media.quoted"), { tone: "success" });
       } catch (err) {
         showToast(
@@ -75,7 +75,7 @@ export default function MediaToolbar({
         setBusy(null);
       }
     },
-    [attachApi, busy, path, showToast, t],
+    [attachApi, busy, kind, path, showToast, t],
   );
 
   const onPreview = useCallback((e: MouseEvent) => {

@@ -2717,6 +2717,10 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
   --composer-token-tone: var(--tone-blue, #2563eb);
 }
 
+.composer-context-token[data-kind="file"] {
+  --composer-token-tone: var(--tone-blue, #2563eb);
+}
+
 .composer-context-token-icon {
   width: 36px;
   height: 36px;

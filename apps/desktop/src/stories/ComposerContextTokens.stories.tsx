@@ -20,6 +20,13 @@ const attachment: ChatAttachment = {
 
 const contexts: ComposerContextToken[] = [
   {
+    id: "/Users/demo/project/fetch_title.py",
+    kind: "file",
+    name: "fetch_title.py",
+    description: "代码",
+    path: "/Users/demo/project/fetch_title.py",
+  },
+  {
     id: "skill-documents",
     kind: "skill",
     name: "documents",
@@ -41,6 +48,7 @@ const contexts: ComposerContextToken[] = [
 ];
 
 function TokenIcon({ kind }: { kind: ComposerContextToken["kind"] }) {
+  if (kind === "file") return <FileText size={15} aria-hidden />;
   if (kind === "skill") return <Sparkles size={15} aria-hidden />;
   if (kind === "mcp") return <McpIcon size={15} />;
   return <Bot size={15} aria-hidden />;

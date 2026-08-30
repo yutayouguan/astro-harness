@@ -41,6 +41,7 @@ function decodeText(base64: string | undefined): string | null {
 function ContextIcon({ token }: { token: ComposerContextToken }) {
   if (token.kind === "skill") return <Sparkles size={18} aria-hidden />;
   if (token.kind === "mcp") return <McpIcon size={18} />;
+  if (token.kind === "file") return <File size={18} aria-hidden />;
   return <Bot size={18} aria-hidden />;
 }
 
@@ -108,6 +109,7 @@ export default function ComposerContextPreview({
           agent: t("chat.contextToken.agent"),
           skill: t("chat.contextToken.skill"),
           mcp: t("chat.contextToken.mcp"),
+          file: t("chat.contextToken.file"),
         }[target.item.kind]
       : null;
   const attachmentText =

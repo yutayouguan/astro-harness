@@ -30,6 +30,19 @@ test("selected attachments and tools render as interactive composer tokens", asy
   assert.match(source, /serializeComposerContext\(composerContexts/);
 });
 
+test("quoted code and documents become file context tokens instead of image prompts", async () => {
+  const [source, toolbar] = await Promise.all([
+    readFile(chatViewUrl, "utf8"),
+    readFile(new URL("../../components/media/MediaToolbar.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(toolbar, /attachMediaPath\(path, kind\)/);
+  assert.match(source, /kind === "code" \|\| kind === "html" \|\| kind === "document"/);
+  assert.match(source, /createFileComposerContextToken\(path, description\)/);
+  assert.match(source, /media\.quoteCodePrompt/);
+  assert.match(source, /file: t\("chat\.contextToken\.file"\)/);
+});
+
 test("skills and MCP servers can be added to the composer and previewed", async () => {
   const [plusMenu, preview] = await Promise.all([
     readFile(plusMenuUrl, "utf8"),

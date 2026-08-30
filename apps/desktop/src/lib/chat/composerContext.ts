@@ -1,4 +1,4 @@
-export type ComposerContextKind = "agent" | "skill" | "mcp";
+export type ComposerContextKind = "agent" | "skill" | "mcp" | "file";
 
 export type ComposerContextToken = {
   id: string;
@@ -18,13 +18,30 @@ export function addComposerContextToken(
   return duplicate ? current : [...current, next];
 }
 
+export function createFileComposerContextToken(
+  path: string,
+  description?: string,
+): ComposerContextToken {
+  const normalizedPath = path.trim();
+  const baseName = normalizedPath.replace(/\\/g, "/").split("/").pop();
+  return {
+    id: normalizedPath,
+    kind: "file",
+    name: baseName || normalizedPath,
+    description,
+    path: normalizedPath,
+  };
+}
+
 export function serializeComposerContext(
   tokens: ComposerContextToken[],
   input: string,
 ): string {
-  const prefixes = tokens.map((token) =>
-    token.kind === "skill" ? `/${token.name}` : `@${token.name}`,
-  );
+  const prefixes = tokens.map((token) => {
+    if (token.kind === "skill") return `/${token.name}`;
+    if (token.kind === "file") return `@${token.path || token.name}`;
+    return `@${token.name}`;
+  });
   return [...prefixes, input.trim()].filter(Boolean).join(" ");
 }
 

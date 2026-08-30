@@ -82,6 +82,7 @@ import {
   pathsFromDataTransfer,
   pathsToAttachments,
 } from "../../lib/chat/chatPaste";
+import type { MediaActionKind } from "../../lib/media/mediaActions";
 import type { ChatThinkingPrefs, ThinkingLevel } from "../../lib/chat/thinkingPrefs";
 import { groupAssistantAnswer } from "../../lib/chat/groupAssistantAnswer";
 import type {
@@ -177,6 +178,7 @@ import {
 } from "../../lib/chat/composerCommands";
 import {
   addComposerContextToken,
+  createFileComposerContextToken,
   removeTriggerText,
   serializeComposerContext,
   type ComposerContextToken,
@@ -533,6 +535,7 @@ function AttachmentGlyph({ kind }: { kind: ChatAttachmentKind }) {
 function ComposerContextGlyph({ kind }: { kind: ComposerContextToken["kind"] }) {
   if (kind === "skill") return <Sparkles size={15} strokeWidth={2} aria-hidden />;
   if (kind === "mcp") return <McpIcon size={15} />;
+  if (kind === "file") return <File size={15} strokeWidth={2} aria-hidden />;
   return <Bot size={15} strokeWidth={2} aria-hidden />;
 }
 
@@ -1799,7 +1802,25 @@ export default function ChatView({
   );
 
   const attachMediaPath = useCallback(
-    async (path: string) => {
+    async (path: string, kind: MediaActionKind) => {
+      if (kind === "code" || kind === "html" || kind === "document") {
+        const description =
+          kind === "code"
+            ? t("media.kind.code")
+            : kind === "html"
+              ? t("media.kind.html")
+              : t("chat.contextToken.file");
+        addComposerContext(createFileComposerContextToken(path, description));
+        if (!input.trim()) {
+          onInputChange(
+            t(kind === "code" ? "media.quoteCodePrompt" : "media.quoteFilePrompt"),
+          );
+        }
+        window.requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+        });
+        return;
+      }
       const att = await pathToAttachment(path);
       addAttachments([att]);
       if (!input.trim()) {
@@ -1809,7 +1830,7 @@ export default function ChatView({
         textareaRef.current?.focus();
       });
     },
-    [addAttachments, input, onInputChange, t],
+    [addAttachments, addComposerContext, input, onInputChange, t],
   );
 
   const mediaAttachApi = useMemo(
@@ -3085,6 +3106,7 @@ export default function ChatView({
                   agent: t("chat.contextToken.agent"),
                   skill: t("chat.contextToken.skill"),
                   mcp: t("chat.contextToken.mcp"),
+                  file: t("chat.contextToken.file"),
                 }[token.kind];
                 return (
                   <div
