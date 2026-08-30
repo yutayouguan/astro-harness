@@ -60,7 +60,7 @@ function findObjectEnd(source, start) {
 
 function collectServerObjects(source) {
   const records = [];
-  const startPattern = /\{id:\d+,slug:"/g;
+  const startPattern = /\{id:(?:\d+|"(?:\\.|[^"\\])*")(?:,slug:"|,name:")/g;
   let match;
   while ((match = startPattern.exec(source))) {
     const end = findObjectEnd(source, match.index);
@@ -69,6 +69,19 @@ function collectServerObjects(source) {
     startPattern.lastIndex = end;
   }
   return records;
+}
+
+function buildObjectReferences(source) {
+  const references = new Map();
+  const pattern = /\$R\[(\d+)\]=\{/g;
+  let match;
+  while ((match = pattern.exec(source))) {
+    const start = source.indexOf("{", match.index);
+    const end = findObjectEnd(source, start);
+    if (end < 0) break;
+    references.set(match[1], source.slice(start, end));
+  }
+  return references;
 }
 
 function fieldToken(record, name) {
@@ -112,18 +125,24 @@ function referencedValue(record, name, references) {
 }
 
 function parseRecord(record, arrayReferences, dateReferences) {
-  const id = Number(fieldToken(record, "id"));
-  const slug = decodeJsString(fieldToken(record, "slug"));
+  const idToken = fieldToken(record, "id");
+  const decodedId = idToken?.startsWith('"') ? decodeJsString(idToken) : Number(idToken);
+  const slug = decodeJsString(fieldToken(record, "slug")) ??
+    (typeof decodedId === "string" ? decodedId : undefined);
   const name = decodeJsString(fieldToken(record, "name"));
-  if (!Number.isFinite(id) || !slug || !name) return undefined;
+  if ((typeof decodedId !== "string" && !Number.isFinite(decodedId)) || !slug || !name) {
+    return undefined;
+  }
   return {
-    id,
+    id: decodedId,
     slug,
     name,
     description: decodeJsString(fieldToken(record, "description")) ?? "",
     url: decodeJsString(fieldToken(record, "url")),
     websiteUrl: decodeJsString(fieldToken(record, "websiteUrl")),
-    logoUrl: decodeJsString(fieldToken(record, "logoUrl")),
+    logoUrl:
+      decodeJsString(fieldToken(record, "logoUrl")) ??
+      decodeJsString(fieldToken(record, "logo")),
     category: decodeJsString(fieldToken(record, "category")) ?? "other",
     tags: referencedValue(record, "tags", arrayReferences) ?? [],
     official: booleanField(record, "official") ?? false,
@@ -152,13 +171,23 @@ export function parseMcpServersCollections(html, collectionNames) {
   const source = html.replaceAll("\0", "");
   const arrayReferences = buildStringArrayReferences(source);
   const dateReferences = buildDateReferences(source);
+  const objectReferences = buildObjectReferences(source);
   const output = [];
 
   for (const collection of collectionNames) {
     for (const assignedArray of findAssignedArrays(source, collection)) {
-      for (const record of collectServerObjects(assignedArray)) {
+      const records = collectServerObjects(assignedArray);
+      for (const reference of assignedArray.matchAll(/\$R\[(\d+)\](?!\s*=)/g)) {
+        const record = objectReferences.get(reference[1]);
+        if (record) records.push(record);
+      }
+      const seen = new Set();
+      for (const record of records) {
         const server = parseRecord(record, arrayReferences, dateReferences);
-        if (server) output.push({ ...server, collection });
+        if (server && !seen.has(server.slug)) {
+          seen.add(server.slug);
+          output.push({ ...server, collection });
+        }
       }
     }
   }

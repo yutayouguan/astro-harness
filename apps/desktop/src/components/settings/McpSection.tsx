@@ -968,6 +968,16 @@ function McpCatalogCard({
               {t("plugins.mcpPublic.sponsored")}
             </span>
           ) : null}
+          {server.catalogRegistered ? (
+            <span className="mcp-server-env-key">
+              {t("plugins.mcpPublic.registered")}
+            </span>
+          ) : null}
+          {server.catalogRemote ? (
+            <span className="mcp-server-env-key">
+              {t("plugins.mcpPublic.remote")}
+            </span>
+          ) : null}
           {server.catalogTags?.slice(0, 3).map((tag) => (
             <span key={tag} className="mcp-server-env-key">{tag}</span>
           ))}
@@ -1090,9 +1100,11 @@ export function useMcpSection({
           ? server.featured === true
           : publicCategory === "official"
             ? server.catalogOfficial === true
-            : publicCategory === "other"
-              ? !server.category || server.category === "other"
-              : server.category === publicCategory);
+            : publicCategory === "remote"
+              ? server.catalogRemote === true
+              : publicCategory === "other"
+                ? !server.category || server.category === "other"
+                : server.category === publicCategory);
       if (!matchesCategory) return false;
       if (!query) return true;
       return (
@@ -1104,6 +1116,8 @@ export function useMcpSection({
         server.args.join(" ").toLowerCase().includes(query) ||
         server.catalogSource?.toLowerCase().includes(query) ||
         server.catalogNativeCategory?.toLowerCase().includes(query) ||
+        server.catalogRegistryName?.toLowerCase().includes(query) ||
+        server.catalogPackageTypes?.some((type) => type.toLowerCase().includes(query)) ||
         server.catalogTags?.some((tag) => tag.toLowerCase().includes(query))
       );
     });

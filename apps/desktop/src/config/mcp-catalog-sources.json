@@ -3,32 +3,85 @@
   "output": "src/config/mcp-community-catalog.json",
   "sources": [
     {
+      "id": "registry.modelcontextprotocol.io",
+      "kind": "registry-api",
+      "enabled": true,
+      "baseUrl": "https://registry.modelcontextprotocol.io",
+      "path": "/v0/servers",
+      "limit": 100,
+      "maxPages": 5,
+      "requestDelayMs": 250,
+      "timeoutMs": 30000,
+      "query": {
+        "version": "latest"
+      }
+    },
+    {
       "id": "mcpservers.org",
+      "kind": "ssr-html",
       "enabled": true,
       "baseUrl": "https://mcpservers.org",
       "locale": "zh-CN",
+      "categories": [
+        "development",
+        "productivity",
+        "database",
+        "search",
+        "web-scraping",
+        "file-system",
+        "version-control",
+        "communication",
+        "cloud-service",
+        "cloud-storage",
+        "marketing",
+        "finance",
+        "design",
+        "memory",
+        "other"
+      ],
       "requestDelayMs": 500,
       "timeoutMs": 30000,
       "userAgent": "Astro-Agent-MCP-Catalog/1.0",
       "feeds": [
         {
-          "path": "/zh-CN/",
+          "pathTemplate": "/{locale}/",
           "collections": ["featured", "latest"],
           "featuredCollections": ["featured"],
           "maxPages": 1
         },
         {
-          "path": "/zh-CN/official",
+          "pathTemplate": "/{locale}/official",
           "collections": ["servers"],
           "forceOfficial": true,
           "maxPages": 3
         },
         {
-          "path": "/zh-CN/remote-mcp-servers",
+          "pathTemplate": "/{locale}/all",
+          "collections": ["servers"],
+          "maxPages": 2
+        },
+        {
+          "pathTemplate": "/{locale}/category/{category}",
+          "expand": {
+            "parameter": "category",
+            "valuesFrom": "categories"
+          },
+          "collections": ["servers"],
+          "maxPages": 1
+        },
+        {
+          "pathTemplate": "/{locale}/remote-mcp-servers",
           "collections": ["featuredServers", "moreServers"],
+          "detailPathTemplate": "/{locale}/remote-mcp-servers/{slug}",
+          "remote": true,
           "maxPages": 1
         }
-      ]
+      ],
+      "search": {
+        "pathTemplate": "/{locale}/search",
+        "queryParam": "query",
+        "collections": ["servers"]
+      }
     }
   ],
   "categoryMap": {

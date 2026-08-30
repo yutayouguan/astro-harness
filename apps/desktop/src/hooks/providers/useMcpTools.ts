@@ -11,6 +11,7 @@ export const MCP_PUBLIC_CATEGORY_IDS = [
   "featured",
   "all",
   "official",
+  "remote",
   "development",
   "productivity",
   "database",
@@ -30,11 +31,14 @@ export const MCP_PUBLIC_CATEGORY_IDS = [
 export type McpPublicCategory = (typeof MCP_PUBLIC_CATEGORY_IDS)[number];
 export type McpPublicEntryCategory = Exclude<
   McpPublicCategory,
-  "featured" | "all" | "official"
+  "featured" | "all" | "official" | "remote"
 >;
 export const MCP_PUBLIC_ENTRY_CATEGORY_IDS = MCP_PUBLIC_CATEGORY_IDS.filter(
   (category): category is McpPublicEntryCategory =>
-    category !== "featured" && category !== "all" && category !== "official",
+    category !== "featured" &&
+    category !== "all" &&
+    category !== "official" &&
+    category !== "remote",
 );
 export type McpRuntimeState =
   | "configured"
@@ -194,17 +198,23 @@ export type McpServer = {
   featured?: boolean;
   /** 公开目录中的官方文档或源码地址。 */
   websiteUrl?: string;
-  /** 公开目录品牌图标的本地资源标识。 */
+  /** 公开目录品牌图标的本地资源标识或 HTTPS URL。 */
   icon?: string;
   /** false 表示仅供发现，不能直接写入 MCP 运行配置。 */
   catalogInstallable?: boolean;
   /** 目录数据来源及上游元数据，仅用于公开目录展示。 */
   catalogSource?: string;
   catalogSourceUrl?: string;
+  catalogDirectoryUrl?: string;
   catalogUpstreamUrl?: string;
   catalogNativeCategory?: string;
   catalogOfficial?: boolean;
   catalogSponsored?: boolean;
+  catalogRegistered?: boolean;
+  catalogRemote?: boolean;
+  catalogRemoteUrl?: string;
+  catalogRegistryName?: string;
+  catalogPackageTypes?: string[];
   catalogTags?: string[];
   catalogUpdatedAt?: string;
   catalogIdentity?: string;
@@ -382,12 +392,20 @@ export function normalizeMcpServer(raw: Partial<McpServer> & { id?: string; name
       typeof config.catalogInstallable === "boolean" ? config.catalogInstallable : undefined,
     catalogSource: readOptionalString(config, ["catalogSource"]),
     catalogSourceUrl: readOptionalString(config, ["catalogSourceUrl"]),
+    catalogDirectoryUrl: readOptionalString(config, ["catalogDirectoryUrl"]),
     catalogUpstreamUrl: readOptionalString(config, ["catalogUpstreamUrl"]),
     catalogNativeCategory: readOptionalString(config, ["catalogNativeCategory"]),
     catalogOfficial:
       typeof config.catalogOfficial === "boolean" ? config.catalogOfficial : undefined,
     catalogSponsored:
       typeof config.catalogSponsored === "boolean" ? config.catalogSponsored : undefined,
+    catalogRegistered:
+      typeof config.catalogRegistered === "boolean" ? config.catalogRegistered : undefined,
+    catalogRemote:
+      typeof config.catalogRemote === "boolean" ? config.catalogRemote : undefined,
+    catalogRemoteUrl: readOptionalString(config, ["catalogRemoteUrl"]),
+    catalogRegistryName: readOptionalString(config, ["catalogRegistryName"]),
+    catalogPackageTypes: readStringArray(config, ["catalogPackageTypes"]),
     catalogTags: readStringArray(config, ["catalogTags"]),
     catalogUpdatedAt: readOptionalString(config, ["catalogUpdatedAt"]),
     catalogIdentity: readOptionalString(config, ["catalogIdentity"]),

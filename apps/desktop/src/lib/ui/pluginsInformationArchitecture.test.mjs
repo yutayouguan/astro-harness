@@ -129,6 +129,7 @@ test("public MCP directory exposes the catalog taxonomy and aggregate filters", 
     "featured",
     "all",
     "official",
+    "remote",
     "development",
     "productivity",
     "database",
@@ -152,6 +153,7 @@ test("public MCP directory exposes the catalog taxonomy and aggregate filters", 
     "精选",
     "全部",
     "官方 🌟",
+    "远程 MCP",
     "数据库",
     "网页抓取",
     "文件系统",
@@ -168,6 +170,8 @@ test("public MCP directory exposes the catalog taxonomy and aggregate filters", 
   assert.match(mcpSection, /publicCategory === "all"/);
   assert.match(mcpSection, /publicCategory === "official"/);
   assert.match(mcpSection, /server\.catalogOfficial === true/);
+  assert.match(mcpSection, /publicCategory === "remote"/);
+  assert.match(mcpSection, /server\.catalogRemote === true/);
   assert.match(mcpSection, /server\.category === publicCategory/);
   assert.match(
     tabs,
@@ -236,7 +240,7 @@ test("public MCP directory is config-driven and uses catalog entry categories", 
   assert.match(mcpSection, /mcpTools\.install/);
 });
 
-test("public MCP brands are config-driven bundled assets with a safe fallback", async () => {
+test("public MCP brands accept bundled assets and HTTPS catalog icons with a safe fallback", async () => {
   const brandedServers = publicMcpCatalog.servers.filter((server) => server.icon);
   assert.ok(brandedServers.length >= 20, "most public MCP entries should have brand icons");
 
@@ -246,28 +250,57 @@ test("public MCP brands are config-driven bundled assets with a safe fallback", 
   }
 
   assert.match(mcpSection, /<McpBrandIcon icon=\{server\.icon\}/);
-  assert.match(mcpBrandIcon, /src=\{`\/mcp-icons\/\$\{validIcon\}\.svg`\}/);
+  assert.match(
+    mcpBrandIcon,
+    /src=\{validIcon \? `\/mcp-icons\/\$\{validIcon\}\.svg` : remoteIcon\}/,
+  );
+  assert.match(mcpBrandIcon, /const HTTPS_ICON_URL = \/\^https:/);
   assert.match(mcpBrandIcon, /return <McpIcon/);
 });
 
-test("community MCP discovery uses an offline snapshot and never enables direct install", () => {
-  assert.ok(communityMcpCatalog.servers.length > 50);
+test("MCP discovery merges the official Registry with categorized SSR snapshots", () => {
+  assert.ok(communityMcpCatalog.servers.length > 1_000);
+  const registryServers = communityMcpCatalog.servers.filter(
+    (server) => server.catalogRegistered === true,
+  );
+  const remoteServers = communityMcpCatalog.servers.filter(
+    (server) => server.catalogRemote === true,
+  );
+  assert.ok(registryServers.length > 400);
+  assert.ok(remoteServers.length > 250);
   for (const server of communityMcpCatalog.servers) {
     assert.equal(server.catalogInstallable, false);
-    assert.equal(server.catalogSource, "mcpservers.org");
-    assert.match(server.catalogSourceUrl, /^https:\/\/mcpservers\.org\/zh-CN\/servers\//);
+    assert.ok(
+      server.catalogSource
+        .split(" + ")
+        .every((source) =>
+          source === "mcpservers.org" || source === "registry.modelcontextprotocol.io"
+        ),
+    );
+    assert.match(server.catalogSourceUrl, /^https:\/\//);
     assert.equal(server.command, undefined);
     assert.equal(server.url, undefined);
   }
 
-  for (const source of mcpCatalogSources.sources) {
-    assert.doesNotMatch(source.baseUrl, /\/api(?:\/|$)/);
-    for (const feed of source.feeds) assert.doesNotMatch(feed.path, /\/api(?:\/|$)/);
+  const registrySource = mcpCatalogSources.sources.find(
+    (source) => source.kind === "registry-api",
+  );
+  const directorySource = mcpCatalogSources.sources.find(
+    (source) => source.kind === "ssr-html",
+  );
+  assert.equal(registrySource?.path, "/v0/servers");
+  assert.equal(registrySource?.query.version, "latest");
+  assert.equal(directorySource?.search.pathTemplate, "/{locale}/search");
+  assert.equal(directorySource?.search.queryParam, "query");
+  for (const feed of directorySource.feeds) {
+    assert.doesNotMatch(feed.path ?? feed.pathTemplate, /\/api(?:\/|$)/);
   }
 
   assert.match(publicMcpCatalogLoader, /mcp-community-catalog\.json/);
   assert.match(publicMcpCatalogLoader, /Discovery-only MCP entries cannot be installed/);
   assert.match(mcpSection, /server\.catalogInstallable === false/);
+  assert.match(mcpSection, /server\.catalogRegistered/);
+  assert.match(mcpSection, /server\.catalogRemote/);
   assert.match(mcpSection, /selectedServer\.catalogInstallable !== false/);
 });
 
