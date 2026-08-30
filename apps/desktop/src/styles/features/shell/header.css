@@ -45,12 +45,12 @@
   height: 15px;
 }
 
-/* 会话名不是页面级标题，用比 .content-title(22px) 小一档的字号，
+/* 会话名用比 .content-title(22px) 小一档的字号，
    与右侧胶囊组的视觉重量对齐。其它页面的 22px 不受影响。 */
 .content-header--chat .conversation-title {
   min-width: 0;
   width: 100%;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--ink);
@@ -97,7 +97,7 @@
 .content-header--chat .header-actions {
   position: absolute;
   top: auto;
-  right: 16px;
+  right: 12px;
   bottom: 4px;
   flex-wrap: nowrap;
 }
