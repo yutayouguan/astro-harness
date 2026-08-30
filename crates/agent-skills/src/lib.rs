@@ -2,10 +2,10 @@
 //!
 //! ```text
 //! skills/          领域库（agent / backend / Tauri 共用）
-//! ├── models             DTO 与商店筛选
+//! ├── models             DTO
 //! ├── installed          扫描 SKILL.md、启用状态
-//! ├── store              SkillHub API、skills.sh 爬虫
-//! ├── install            SkillHub HTTP / npx skills add
+//! ├── store              SkillHub API
+//! ├── install            SkillHub HTTP 安装
 //! ├── skill / registry   运行时 LoadedSkill
 //! ```
 
@@ -68,9 +68,8 @@ pub use installed::{
     read_skill_file_ex, recent_astro_tools, reveal_skill_file, set_enabled, set_enabled_for_agent,
 };
 pub use models::{
-    InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateCheckResult,
-    SkillUpdateItemResult, SkillUpdatePreview, SkillUpdateStatus, StoreSkill, StoreSkillDetail,
-    UpdateSkillOpts,
+    InstalledSkill, SkillBundle, SkillFileEntry, SkillUpdateCheckResult, SkillUpdateItemResult,
+    SkillUpdatePreview, SkillUpdateStatus, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
 };
 pub use preview::preview_skill_update;
 pub use registry::SkillRegistry;

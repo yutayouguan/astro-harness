@@ -116,7 +116,7 @@ test("pageHasMore stops when append adds nothing new", () => {
 test("store cache key normalizes query", async () => {
   const { storeCacheKey, isStoreCacheFresh, STORE_CACHE_TTL_MS, LOCAL_SKILLS_TTL_MS } =
     await import("./skillsLazyLoad.ts");
-  assert.equal(storeCacheKey("clawhub", "  Weather "), storeCacheKey("clawhub", "weather"));
+  assert.equal(storeCacheKey("  Weather "), storeCacheKey("weather"));
   assert.equal(isStoreCacheFresh(Date.now() - 1000), true);
   assert.equal(
     isStoreCacheFresh(Date.now() - STORE_CACHE_TTL_MS - 1),

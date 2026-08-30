@@ -48,8 +48,8 @@ test("name match links origin when folder differs", () => {
       {
         folder: "weather-skill",
         name: "weather",
-        store: "clawhub",
-        install_ref: "clawhub:weather",
+        store: "skillhub",
+        install_ref: "skillhub:owner/weather",
         agent_id: "workspace",
         installed_at: 1,
       },
@@ -97,8 +97,8 @@ test("linked machine skill is included", () => {
       {
         folder: "find-skills",
         name: "find-skills",
-        store: "clawhub",
-        install_ref: "clawhub:find-skills",
+        store: "skillhub",
+        install_ref: "skillhub:owner/find-skills",
         agent_id: "workspace",
         installed_at: 1,
       },
@@ -127,8 +127,8 @@ test("unlinked machine skill is ignored", () => {
       {
         folder: "find-skills",
         name: "find-skills",
-        store: "clawhub",
-        install_ref: "clawhub:find-skills",
+        store: "skillhub",
+        install_ref: "skillhub:owner/find-skills",
         agent_id: "workspace",
         installed_at: 1,
       },
@@ -321,8 +321,8 @@ test("filter updatable excludes machine-scoped rows with origin", () => {
       {
         folder: "find-skills",
         name: "find-skills",
-        store: "clawhub",
-        install_ref: "clawhub:find-skills",
+        store: "skillhub",
+        install_ref: "skillhub:owner/find-skills",
         agent_id: "workspace",
         installed_at: 1,
       },

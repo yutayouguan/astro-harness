@@ -5,7 +5,7 @@ Astro Skills 领域层：本机扫描、商店搜索与安装、运行时注册�
 ## 核心职责
 
 - **本机扫描** -- 扫描 `~/.astro/skills/` 和 Agent 级目录下的 `SKILL.md`，解析 frontmatter 元数据（name / description / astro_tools），支持启用/禁用状态管理
-- **商店集成** -- 通过 SkillHub API 搜索和获取详情（`search()` / `fetch_detail()`），爬取 skills.sh 商店页面
+- **商店集成** -- 通过 SkillHub API 搜索、获取详情和安装（`search()` / `fetch_detail()`）
 - **安装** -- `install_from_ref()` 支持 SkillHub HTTP 安装和 `npx skills add` 本地安装，`InstallOriginHint` 记录来源
 - **运行时注册表** -- `SkillRegistry` 内存字典，按名称索引已加载的 `LoadedSkill`，支持 register / list / get
 - **更新检查** -- `check_updates_for_agent()` 对比本地版本与商店版本，`update_installed_skill()` 执行增量更新
@@ -19,7 +19,7 @@ Astro Skills 领域层：本机扫描、商店搜索与安装、运行时注册�
 | 文件 | 职责 |
 |------|------|
 | `lib.rs` | workspace 目录覆盖、公共 re-exports |
-| `models.rs` | DTO 定义：`InstalledSkill` / `StoreSkill` / `StoreSkillDetail` / `SkillBundle` / `SkillFileEntry` / `SkillStoreFilter` / 更新检查结果类型 |
+| `models.rs` | DTO 定义：`InstalledSkill` / `StoreSkill` / `StoreSkillDetail` / `SkillBundle` / `SkillFileEntry` / 更新检查结果类型 |
 | `installed.rs` | 本机扫描核心（39KB）：`list_installed()` / `load_skill_by_name()` / `list_enabled_for_prompt()` / `parse_skill_frontmatter_full()` / 启用状态管理 / 文件操作 |
 | `store.rs` | SkillHub 商店集成（28KB）：`search()` / `fetch_detail()` / API 请求与响应解析 |
 | `install.rs` | 安装逻辑（18KB）：`install_from_ref()` / `InstallOriginHint` / SkillHub HTTP + npx 两条路径 |

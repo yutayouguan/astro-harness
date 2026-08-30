@@ -483,12 +483,6 @@ html[data-theme="dark"] .skills-store-toolbar .select-menu.is-open .select-menu-
   flex-wrap: wrap;
 }
 
-.skills-store-toolbar .skills-store-source-filter {
-  width: 8rem;
-  min-width: 8rem;
-  max-width: 8rem;
-}
-
 .skills-store-toolbar .skills-store-category-filter {
   width: 10.5rem;
   min-width: 10.5rem;

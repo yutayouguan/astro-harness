@@ -1,8 +1,7 @@
-//! 从商店引用安装 Skill：SkillHub 走 HTTP API；skills.sh / GitHub 走 `npx skills add`。
+//! 从 SkillHub API 安装 Skill。
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -11,9 +10,7 @@ use serde::Deserialize;
 use crate::agent_id::normalize as normalize_agent_id;
 use crate::digest::skill_content_digest;
 use crate::models::SkillOriginRecord;
-use crate::origins::{
-    fill_origin_remote_baseline, find_origin, infer_folder, infer_store, upsert_origin,
-};
+use crate::origins::{fill_origin_remote_baseline, find_origin, infer_folder, upsert_origin};
 
 /// SkillHub 公开文件 API（无需 CLI / login）。
 const SKILLHUB_API: &str = "https://api.skillhub.cn";
@@ -59,13 +56,6 @@ pub fn scoped_skills_dir(scope: &str, project_root: Option<&Path>) -> Result<Pat
     Ok(dir)
 }
 
-/// 去掉 GitHub URL 前缀，得到 `owner/repo`。
-fn strip_github_prefix(url: &str) -> Option<String> {
-    url.strip_prefix("https://github.com/")
-        .or_else(|| url.strip_prefix("http://github.com/"))
-        .map(|s| s.trim_end_matches('/').trim_end_matches(".git").to_string())
-}
-
 /// URL 末段路径。
 fn last_path_segment(url: &str) -> Option<String> {
     url.trim_end_matches('/')
@@ -75,12 +65,13 @@ fn last_path_segment(url: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// 是否走 SkillHub HTTP 直装（避免损坏的 `--registry skillhub.cn` CLI）。
+/// 是否为受支持的 SkillHub 安装引用。
 pub(crate) fn is_skillhub_http_ref(install_ref: &str) -> bool {
     let r = install_ref.trim();
     r.starts_with("skillhub:")
-        || r.contains("api.skillhub.cn/")
-        || (r.contains("skillhub.cn/") && !r.contains("skills.sh/"))
+        || r.starts_with("https://api.skillhub.cn/")
+        || r.starts_with("https://skillhub.cn/")
+        || r.starts_with("https://www.skillhub.cn/")
 }
 
 /// 从 `skillhub:` 或 SkillHub URL 解析 slug。
@@ -94,104 +85,6 @@ fn skillhub_slug(install_ref: &str) -> Result<String> {
         return Ok(slug.to_string());
     }
     last_path_segment(r).ok_or_else(|| anyhow!("无法从 SkillHub 引用解析 slug: {install_ref}"))
-}
-
-/// `npx skills add` / clawhub 非交互参数。
-fn skills_add_args(package: &str, skill: Option<&str>) -> Vec<String> {
-    let mut args = vec![
-        "--yes".to_string(),
-        "skills".to_string(),
-        "add".to_string(),
-        package.to_string(),
-    ];
-    if let Some(name) = skill.filter(|s| !s.is_empty()) {
-        args.push("--skill".to_string());
-        args.push(name.to_string());
-    }
-    args.push("-y".to_string());
-    args
-}
-
-/// 解析 `skills.sh/{source}/{skillId}`（source 可含 `/`）。
-fn parse_skills_sh_path(path: &str) -> Result<(String, Option<String>)> {
-    let path = path.trim().trim_end_matches('/');
-    if path.is_empty() {
-        bail!("skills.sh 路径为空");
-    }
-    // owner/repo → 整包；owner/repo/skill → 指定 skill
-    let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
-    match parts.as_slice() {
-        [] => bail!("skills.sh 路径为空"),
-        [a] => Ok(((*a).to_string(), None)),
-        [a, b] => Ok((format!("{a}/{b}"), None)),
-        [..] => {
-            let skill = parts.last().unwrap().to_string();
-            let package = parts[..parts.len() - 1].join("/");
-            Ok((package, Some(skill)))
-        }
-    }
-}
-
-/// 将商店 `install_ref` 解析为 `npx` 参数。SkillHub HTTP 引用应走 `is_skillhub_http_ref`。
-pub(crate) fn build_install_args(install_ref: &str, _install_dir: &Path) -> Result<Vec<String>> {
-    let install_ref = install_ref.trim();
-    if install_ref.is_empty() {
-        return Err(anyhow!("安装引用为空"));
-    }
-    if is_skillhub_http_ref(install_ref) {
-        return Err(anyhow!(
-            "SkillHub 引用应使用 HTTP 直装，而非 skillhub CLI: {install_ref}"
-        ));
-    }
-
-    if let Some(rest) = install_ref.strip_prefix("skillsdotsh:") {
-        let (package, skill) = parse_skills_sh_path(rest)?;
-        return Ok(skills_add_args(&package, skill.as_deref()));
-    }
-
-    if let Some(slug) = install_ref.strip_prefix("clawhub:") {
-        return Ok(vec![
-            "--yes".to_string(),
-            "clawhub@latest".to_string(),
-            "install".to_string(),
-            slug.to_string(),
-        ]);
-    }
-
-    if install_ref.starts_with("http://") || install_ref.starts_with("https://") {
-        if let Some(repo) = strip_github_prefix(install_ref) {
-            return Ok(skills_add_args(&repo, None));
-        }
-        if install_ref.contains("clawhub") {
-            let slug = last_path_segment(install_ref)
-                .ok_or_else(|| anyhow!("无法从 ClawHub 链接解析 slug: {install_ref}"))?;
-            return Ok(vec![
-                "--yes".to_string(),
-                "clawhub@latest".to_string(),
-                "install".to_string(),
-                slug,
-            ]);
-        }
-        if install_ref.contains("skills.sh/") {
-            let path = install_ref
-                .split("skills.sh/")
-                .nth(1)
-                .ok_or_else(|| anyhow!("无法解析 skills.sh 链接: {install_ref}"))?;
-            let (package, skill) = parse_skills_sh_path(path)?;
-            return Ok(skills_add_args(&package, skill.as_deref()));
-        }
-        return Err(anyhow!(
-            "暂不支持该链接自动安装: {install_ref}。请使用 owner/repo 或 GitHub 仓库地址。"
-        ));
-    }
-
-    if install_ref.contains('/') {
-        return Ok(skills_add_args(install_ref, None));
-    }
-
-    Err(anyhow!(
-        "暂不支持自动安装: {install_ref}。请使用 npx skills add <owner/repo>、skillhub:owner/slug 或 GitHub 链接。"
-    ))
 }
 
 /// 将文件树写入 `{dest}/{slug}/...`。
@@ -295,76 +188,10 @@ async fn install_skillhub_http(slug: &str, skills_dir: &Path) -> Result<String> 
     ))
 }
 
-/// 调用 `npx` 执行 skills / clawhub 安装命令。
-fn run_npx(args: &[String], cwd: &Path) -> Result<String> {
-    let output = Command::new("npx")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .context("执行 npx 失败（请确认已安装 Node.js）")?;
-
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(if stdout.trim().is_empty() {
-            format!("安装完成 → {}（npx {}）", cwd.display(), args.join(" "))
-        } else {
-            format!("{}\n→ {}", stdout.trim(), cwd.display())
-        })
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let detail = if !stderr.trim().is_empty() {
-            stderr.trim().to_string()
-        } else {
-            stdout.trim().to_string()
-        };
-        Err(anyhow!("安装失败: {detail}"))
-    }
-}
-
-fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
-    fs::create_dir_all(dest)?;
-    for entry in fs::read_dir(src).with_context(|| format!("read {}", src.display()))? {
-        let entry = entry?;
-        let source = entry.path();
-        let target = dest.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_dir_recursive(&source, &target)?;
-        } else {
-            fs::copy(&source, &target)
-                .with_context(|| format!("copy {} -> {}", source.display(), target.display()))?;
-        }
-    }
-    Ok(())
-}
-
-/// `npx skills add` 会先落到 cwd 下的兼容目录；scoped install 再归一化到目标层。
-fn relocate_cli_install(workspace: &Path, skills_dir: &Path, folder: &str) -> Result<PathBuf> {
-    let destination = skills_dir.join(folder);
-    if destination.join("SKILL.md").is_file() {
-        return Ok(destination);
-    }
-    let source = [
-        workspace.join(".agents/skills").join(folder),
-        workspace.join(".cursor/skills").join(folder),
-        workspace.join("skills").join(folder),
-    ]
-    .into_iter()
-    .find(|candidate| candidate.join("SKILL.md").is_file())
-    .ok_or_else(|| anyhow!("installed Skill `{folder}` was not found after CLI completed"))?;
-    if destination.exists() {
-        fs::remove_dir_all(&destination)?;
-    }
-    let resolved = fs::canonicalize(&source).unwrap_or(source);
-    copy_dir_recursive(&resolved, &destination)?;
-    Ok(destination)
-}
-
-/// 安装时附带的来源提示（商店名 / 展示名 / 本地文件夹名）。
+/// 安装时附带的来源提示（展示名 / 本地文件夹名）。
 #[derive(Debug, Clone, Default)]
 pub struct InstallOriginHint {
     pub name: Option<String>,
-    pub store: Option<String>,
     pub folder: Option<String>,
 }
 
@@ -401,14 +228,6 @@ async fn record_after_install_in_dir(
         return Ok(());
     };
 
-    let store = hint
-        .store
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| infer_store(install_ref));
-
     let name = hint
         .name
         .as_deref()
@@ -439,7 +258,7 @@ async fn record_after_install_in_dir(
         folder: folder.clone(),
         skill_id: None,
         name,
-        store,
+        store: "skillhub".to_string(),
         install_ref: install_ref.to_string(),
         agent_id: Some(normalized_agent.clone()),
         scope: scope.map(str::to_string),
@@ -453,7 +272,7 @@ async fn record_after_install_in_dir(
     fill_origin_remote_baseline(Some(&normalized_agent), &folder).await
 }
 
-/// 安装技能到指定 Agent 工作区的 `skills/`（SkillHub 无需 Node；其余需本机 Node.js）
+/// 安装 SkillHub 技能到指定 Agent 工作区的 `skills/`。
 pub async fn install_from_ref(
     install_ref: &str,
     agent_id: Option<&str>,
@@ -482,38 +301,12 @@ async fn install_from_ref_into(
     skills_dir: PathBuf,
     scope: Option<&str>,
 ) -> Result<String> {
-    let workspace = skills_dir
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| skills_dir.clone());
-
     let hint = hint.unwrap_or_default();
-    let folder = hint
-        .folder
-        .as_deref()
-        .map(str::trim)
-        .filter(|folder| !folder.is_empty())
-        .map(str::to_string)
-        .or_else(|| infer_folder(install_ref));
-    let result = if is_skillhub_http_ref(install_ref) {
-        let slug = skillhub_slug(install_ref)?;
-        install_skillhub_http(&slug, &skills_dir).await?
-    } else {
-        let args = build_install_args(install_ref, &skills_dir)?;
-        let cli_workspace = workspace.clone();
-        let output = tokio::task::spawn_blocking(move || run_npx(&args, &cli_workspace))
-            .await
-            .context("npx 任务 join 失败")??;
-        if scope.is_some() {
-            let folder = folder
-                .as_deref()
-                .ok_or_else(|| anyhow!("cannot determine installed Skill folder"))?;
-            let destination = relocate_cli_install(&workspace, &skills_dir, folder)?;
-            format!("{output}\n→ {}", destination.display())
-        } else {
-            output
-        }
-    };
+    if !is_skillhub_http_ref(install_ref) {
+        bail!("仅支持 SkillHub 安装引用: {install_ref}");
+    }
+    let slug = skillhub_slug(install_ref)?;
+    let result = install_skillhub_http(&slug, &skills_dir).await?;
 
     record_after_install_in_dir(install_ref, agent_id, &hint, &skills_dir, scope).await?;
 
@@ -523,120 +316,17 @@ async fn install_from_ref_into(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
-    fn resolves_owner_repo() {
-        let args = build_install_args("vercel-labs/agent-skills", Path::new("/tmp/x")).unwrap();
-        assert_eq!(
-            args,
-            vec![
-                "--yes".to_string(),
-                "skills".to_string(),
-                "add".to_string(),
-                "vercel-labs/agent-skills".to_string(),
-                "-y".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn resolves_github_url() {
-        let args = build_install_args(
-            "https://github.com/vercel-labs/agent-skills.git",
-            Path::new("/tmp/x"),
-        )
-        .unwrap();
-        assert_eq!(args[3], "vercel-labs/agent-skills");
-        assert!(args.contains(&"--yes".to_string()));
-        assert!(args.contains(&"-y".to_string()));
-    }
-
-    #[test]
-    fn resolves_clawhub_prefix() {
-        let args =
-            build_install_args("clawhub:my-namespace--my-skill", Path::new("/tmp/x")).unwrap();
-        assert_eq!(
-            args,
-            vec![
-                "--yes".to_string(),
-                "clawhub@latest".to_string(),
-                "install".to_string(),
-                "my-namespace--my-skill".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn resolves_skills_sh_url() {
-        let args = build_install_args("https://skills.sh/owner/repo", Path::new("/tmp/x")).unwrap();
-        assert_eq!(
-            args,
-            vec![
-                "--yes".to_string(),
-                "skills".to_string(),
-                "add".to_string(),
-                "owner/repo".to_string(),
-                "-y".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn resolves_skillsdotsh_ref_with_skill_flag() {
-        let args = build_install_args(
-            "skillsdotsh:vercel-labs/skills/find-skills",
-            Path::new("/tmp/x"),
-        )
-        .unwrap();
-        assert_eq!(
-            args,
-            vec![
-                "--yes".to_string(),
-                "skills".to_string(),
-                "add".to_string(),
-                "vercel-labs/skills".to_string(),
-                "--skill".to_string(),
-                "find-skills".to_string(),
-                "-y".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn resolves_skills_sh_homepage_with_nested_source() {
-        let args = build_install_args(
-            "https://skills.sh/vercel-labs/skills/find-skills",
-            Path::new("/tmp/x"),
-        )
-        .unwrap();
-        assert_eq!(
-            args,
-            vec![
-                "--yes".to_string(),
-                "skills".to_string(),
-                "add".to_string(),
-                "vercel-labs/skills".to_string(),
-                "--skill".to_string(),
-                "find-skills".to_string(),
-                "-y".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn skillhub_prefix_is_native_http_not_broken_cli_registry() {
+    fn accepts_only_skillhub_refs() {
         assert!(is_skillhub_http_ref(
             "skillhub:user_ec205dbb/web-tools-guide"
         ));
         assert!(is_skillhub_http_ref(
             "https://api.skillhub.cn/user_ec205dbb/web-tools-guide"
         ));
-        assert!(build_install_args(
-            "skillhub:user_ec205dbb/web-tools-guide",
-            Path::new("/tmp/x")
-        )
-        .is_err());
+        assert!(!is_skillhub_http_ref("legacy:owner--skill"));
+        assert!(!is_skillhub_http_ref("https://legacy.example/owner/skill"));
     }
 
     #[test]
@@ -663,24 +353,6 @@ mod tests {
         assert!(target.is_dir());
         assert!(scoped_skills_dir("builtin", Some(project.path())).is_err());
         assert!(scoped_skills_dir("project", None).is_err());
-    }
-
-    #[test]
-    fn relocates_cli_output_into_scoped_skills_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let workspace = dir.path();
-        let source = workspace.join(".agents/skills/demo");
-        let target_root = workspace.join(".astro/skills");
-        fs::create_dir_all(&source).unwrap();
-        fs::write(source.join("SKILL.md"), "# demo").unwrap();
-
-        let target = relocate_cli_install(workspace, &target_root, "demo").unwrap();
-
-        assert_eq!(target, target_root.join("demo"));
-        assert_eq!(
-            fs::read_to_string(target.join("SKILL.md")).unwrap(),
-            "# demo"
-        );
     }
 
     #[tokio::test]

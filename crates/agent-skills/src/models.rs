@@ -72,7 +72,7 @@ pub struct StoreSkill {
     pub description: String,
     /// 来源仓库或标识。
     pub source: String,
-    /// 商店名（skillhub / skills.sh 等）。
+    /// 商店名（当前固定为 `skillhub`）。
     pub store: String,
     /// 安装次数（若有）。
     pub installs: Option<u64>,
@@ -129,32 +129,6 @@ pub struct StoreSkillDetail {
     pub owner_name: Option<String>,
     /// 是否认证。
     pub verified: Option<bool>,
-}
-
-/// 商店筛选：`skillhub` | `skillsdotsh` | `clawhub` | `all`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SkillStoreFilter {
-    /// 全部来源。
-    All,
-    /// 仅 SkillHub。
-    SkillHub,
-    /// 仅 skills.sh。
-    SkillsDotSh,
-    /// 仅 ClawHub。
-    ClawHub,
-}
-
-impl SkillStoreFilter {
-    /// 解析查询字符串；未知值返回 `None`。
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "all" => Some(Self::All),
-            "skillhub" => Some(Self::SkillHub),
-            "skillsdotsh" => Some(Self::SkillsDotSh),
-            "clawhub" => Some(Self::ClawHub),
-            _ => None,
-        }
-    }
 }
 
 /// 技能安装来源记录（`skill-origins.json` 单条）。

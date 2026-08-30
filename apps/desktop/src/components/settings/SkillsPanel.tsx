@@ -121,7 +121,6 @@ import type {
   SkillUpdateRow,
   StoreSkill,
   StoreSkillDetail,
-  SkillStoreId,
 } from "../../types";
 
 type SkillPreviewCategory =
@@ -247,11 +246,9 @@ function skillTone(id: string): (typeof SKILL_TONES)[number] {
   return SKILL_TONES[hash % SKILL_TONES.length];
 }
 
-/** 商店来源短徽章文案 */
-function storeBadge(store: string): string {
-  if (store === "skillhub") return "SH";
-  if (store === "clawhub") return "CH";
-  return "S·";
+/** SkillHub 短徽章文案 */
+function storeBadge(): string {
+  return "SH";
 }
 
 /** 安装量缩写（K / M） */
@@ -419,7 +416,6 @@ export default function SkillsPanel({
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [machineSkills, setMachineSkills] = useState<InstalledSkill[]>([]);
   const [storeResults, setStoreResults] = useState<StoreSkill[]>([]);
-  const [storeId, setStoreId] = useState<SkillStoreId | "all">("all");
   const [storeCategory, setStoreCategory] =
     useState<StoreCategoryFilter>("all");
   const [storeApiKeyFilter, setStoreApiKeyFilter] =
@@ -510,7 +506,7 @@ export default function SkillsPanel({
   /** 递增以丢弃切换 Tab / 重新搜索后的过期响应 */
   const storeFetchGen = useRef(0);
   const storeCacheRef = useRef<Map<string, StoreListCacheEntry>>(new Map());
-  /** 当前列表对应的缓存键（storeId + 已提交搜索词） */
+  /** 当前列表对应的缓存键（已提交搜索词） */
   const activeStoreCacheKeyRef = useRef<string | null>(null);
   const storePageRef = useRef(1);
   const selectedDetailIdRef = useRef<string | null>(null);
@@ -542,13 +538,11 @@ export default function SkillsPanel({
   const galleryScrollRef = useRef<HTMLDivElement | null>(null);
   const detailListRef = useRef<HTMLDivElement | null>(null);
   const queryRef = useRef(query);
-  const storeIdRef = useRef(storeId);
   const storeResultsRef = useRef<StoreSkill[]>([]);
   const loadMoreRef = useRef<() => Promise<void>>(async () => {});
   const loadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
   queryRef.current = query;
-  storeIdRef.current = storeId;
   storeResultsRef.current = storeResults;
   loadingMoreRef.current = loadingMore;
   hasMoreRef.current = hasMore;
@@ -848,9 +842,8 @@ export default function SkillsPanel({
       const mode = opts?.mode ?? (append ? "hard" : "hard");
       const silent = !append && mode === "silent";
       const gen = append ? storeFetchGen.current : ++storeFetchGen.current;
-      const store = storeIdRef.current;
       const q = queryRef.current.trim();
-      const cacheKey = storeCacheKey(store, q);
+      const cacheKey = storeCacheKey(q);
 
       if (append) {
         if (loadMoreLock.current) return;
@@ -880,7 +873,6 @@ export default function SkillsPanel({
       try {
         const list = await invoke<StoreSkill[]>("search_store_skills", {
           query: q,
-          store,
           limit: STORE_PAGE_SIZE,
           page,
         });
@@ -1021,7 +1013,7 @@ export default function SkillsPanel({
 
     // SWR：先写入上一 Tab 快照，再恢复缓存；过期则后台静默刷新
     persistActiveStoreCache();
-    const key = storeCacheKey(storeId, queryRef.current);
+    const key = storeCacheKey(queryRef.current);
     const cached = storeCacheRef.current.get(key);
     activeStoreCacheKeyRef.current = key;
 
@@ -1037,7 +1029,6 @@ export default function SkillsPanel({
   }, [
     active,
     personalTab,
-    storeId,
     fetchStorePage,
     persistActiveStoreCache,
     applyStoreCache,
@@ -1070,7 +1061,7 @@ export default function SkillsPanel({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [active, personalTab, storeId, hasMore, loadingStore, viewMode, storeResults.length]);
+  }, [active, personalTab, hasMore, loadingStore, viewMode, storeResults.length]);
 
   const storeLoadMoreFooter = (
     <>
@@ -1146,7 +1137,6 @@ export default function SkillsPanel({
         installRef: skill.install_ref,
         agentId,
         name: skill.name,
-        store: skill.store,
         folder: inferFolderFromInstallRef(skill.install_ref),
         scope: target,
         projectRoot: null,
@@ -1773,16 +1763,6 @@ export default function SkillsPanel({
     [t],
   );
 
-  const storeSourceOptions = useMemo(
-    () => [
-      { value: "all", label: t("skills.filter.sourceAll") },
-      { value: "skillhub", label: t("skills.store.skillhub") },
-      { value: "skillsdotsh", label: t("skills.store.skillsdotsh") },
-      { value: "clawhub", label: t("skills.store.clawhub") },
-    ],
-    [t],
-  );
-
   const storeCategoryOptions = useMemo(
     () => [
       { value: "all", label: t("skills.filter.categoryAll") },
@@ -2104,7 +2084,7 @@ export default function SkillsPanel({
                 </span>
               )}
               <span className="skill-card-tag" title={origin.install_ref}>
-                {storeBadge(origin.store)} {origin.store}
+                {storeBadge()} {origin.store}
               </span>
             </>
           ) : (
@@ -2588,7 +2568,7 @@ export default function SkillsPanel({
             onClick={() => setSelectedDetailId(skill.id)}
           >
             <span className="skills-detail-item-icon" aria-hidden>
-              {storeBadge(skill.store)}
+              {storeBadge()}
             </span>
             <span className="skills-detail-item-body">
               <span className="skills-detail-item-title">{skill.name}</span>
@@ -2635,14 +2615,7 @@ export default function SkillsPanel({
                 selectedStore,
                 t("skills.detailInstalls"),
               );
-            const storeLabel =
-              selectedStore.store === "skillhub"
-                ? t("skills.store.skillhub")
-                : selectedStore.store === "skillsdotsh"
-                  ? t("skills.store.skillsdotsh")
-                  : selectedStore.store === "clawhub"
-                    ? t("skills.store.clawhub")
-                    : selectedStore.store;
+            const storeLabel = t("skills.store.skillhub");
 
             return (
               <>
@@ -3291,15 +3264,6 @@ export default function SkillsPanel({
                 role="group"
                 aria-label={t("skills.filters")}
               >
-                <SelectMenu
-                  size="sm"
-                  className="skills-store-source-filter"
-                  value={storeId}
-                  onChange={(value) => setStoreId(value as SkillStoreId | "all")}
-                  options={storeSourceOptions}
-                  aria-label={t("skills.filter.sourceAll")}
-                  selectionIndicator="radio"
-                />
                 <SelectMenu
                   size="sm"
                   className="skills-store-category-filter"

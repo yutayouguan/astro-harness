@@ -13,9 +13,8 @@ use skills::{
     read_skill_file_ex, reveal_skill_backup as skills_reveal_skill_backup,
     reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
     update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
-    InstalledSkill, SkillBackupEntry, SkillBundle, SkillSnapshot, SkillStoreFilter,
-    SkillUpdateCheckResult, SkillUpdateItemResult, SkillUpdatePreview, StoreSkill,
-    StoreSkillDetail, UpdateSkillOpts,
+    InstalledSkill, SkillBackupEntry, SkillBundle, SkillSnapshot, SkillUpdateCheckResult,
+    SkillUpdateItemResult, SkillUpdatePreview, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
 };
 
 #[derive(Serialize)]
@@ -161,17 +160,12 @@ pub async fn list_installed_skills(
 #[tauri::command]
 pub async fn search_store_skills(
     query: String,
-    store: String,
     limit: Option<usize>,
     page: Option<usize>,
 ) -> Result<Vec<StoreSkill>, String> {
-    let filter =
-        SkillStoreFilter::parse(&store).ok_or_else(|| format!("unknown store: {store}"))?;
     let limit = limit.unwrap_or(24);
     let page = page.unwrap_or(1);
-    search(&query, filter, limit, page)
-        .await
-        .map_err(|e| e.to_string())
+    search(&query, limit, page).await.map_err(|e| e.to_string())
 }
 
 /// Tauri 命令：get_store_skill_detail。
@@ -208,7 +202,6 @@ pub async fn install_store_skill(
     install_ref: String,
     agent_id: Option<String>,
     name: Option<String>,
-    store: Option<String>,
     folder: Option<String>,
     scope: Option<String>,
     project_root: Option<String>,
@@ -225,11 +218,7 @@ pub async fn install_store_skill(
         .filter(|root| !root.is_empty())
         .map(PathBuf::from);
     let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
-    let hint = InstallOriginHint {
-        name,
-        store,
-        folder,
-    };
+    let hint = InstallOriginHint { name, folder };
     install_from_ref_scoped(
         &install_ref,
         agent.as_deref(),

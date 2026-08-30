@@ -24,22 +24,13 @@ export function inferFolderFromInstallRef(installRef: string): string | undefine
       .pop();
     return slug?.trim() || undefined;
   }
-  if (trimmed.startsWith("clawhub:")) {
-    const slug = trimmed.slice("clawhub:".length).trim();
-    if (slug.includes("--")) {
-      const after = slug.split("--").pop();
-      if (after?.trim()) return after.trim();
-    }
-    return undefined;
+  if (trimmed.includes("skillhub.cn/")) {
+    return trimmed.split("/").filter(Boolean).pop()?.trim() || undefined;
   }
-  const withoutScheme = trimmed.includes(":")
-    ? trimmed.slice(trimmed.indexOf(":") + 1)
-    : trimmed;
-  const pathTail = withoutScheme.split("/").filter(Boolean).pop();
-  return pathTail?.trim() || undefined;
+  return undefined;
 }
 
-/** 从 `scheme:rest` / `owner/slug` / `owner--slug` 提取可比对的短名 */
+/** 从 SkillHub `owner/slug` 提取可比对的短名。 */
 function slugCandidates(raw: string): string[] {
   const trimmed = raw.trim();
   if (!trimmed) return [];
@@ -47,10 +38,6 @@ function slugCandidates(raw: string): string[] {
     ? trimmed.slice(trimmed.indexOf(":") + 1)
     : trimmed;
   const out: string[] = [];
-  if (withoutScheme.includes("--")) {
-    const after = withoutScheme.split("--").pop();
-    if (after) out.push(after);
-  }
   const pathTail = withoutScheme.split("/").filter(Boolean).pop();
   if (pathTail) out.push(pathTail);
   out.push(withoutScheme);

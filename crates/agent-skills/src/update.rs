@@ -28,7 +28,6 @@ fn memory_dir() -> PathBuf {
 fn origin_hint(record: &SkillOriginRecord) -> InstallOriginHint {
     InstallOriginHint {
         name: Some(record.name.clone()),
-        store: Some(record.store.clone()),
         folder: Some(record.folder.clone()),
     }
 }
@@ -294,8 +293,8 @@ mod tests {
             folder: "ghost-skill".into(),
             skill_id: None,
             name: "ghost".into(),
-            store: "clawhub".into(),
-            install_ref: "clawhub:ghost".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:owner/ghost".into(),
             agent_id: Some("workspace".into()),
             scope: None,
             installed_at: 1,

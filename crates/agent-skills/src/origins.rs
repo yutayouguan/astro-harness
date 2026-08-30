@@ -3,13 +3,14 @@
 use std::fs;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::agent_id::normalize as normalize_agent_id;
 use crate::models::{SkillOriginRecord, SkillOriginsFile, StoreSkill, StoreSkillDetail};
 use crate::store::fetch_detail;
 
 const ORIGINS_FILE: &str = "skill-origins.json";
+const ORIGINS_VERSION: u32 = 2;
 
 /// 解析本机 Astro 数据根目录。
 fn memory_dir() -> PathBuf {
@@ -27,6 +28,14 @@ fn origin_key(agent_id: Option<&str>, folder: &str) -> (String, String) {
     (normalize_agent_id(agent_id), folder.to_string())
 }
 
+fn is_skillhub_install_ref(install_ref: &str) -> bool {
+    let value = install_ref.trim();
+    value.starts_with("skillhub:")
+        || value.starts_with("https://api.skillhub.cn/")
+        || value.starts_with("https://skillhub.cn/")
+        || value.starts_with("https://www.skillhub.cn/")
+}
+
 /// `skill-origins.json` 路径。
 pub fn origins_path() -> PathBuf {
     memory_dir().join(ORIGINS_FILE)
@@ -37,18 +46,30 @@ pub fn load_origins() -> Result<SkillOriginsFile> {
     let path = origins_path();
     if !path.exists() {
         return Ok(SkillOriginsFile {
-            version: 1,
+            version: ORIGINS_VERSION,
             records: Vec::new(),
         });
     }
     let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     if text.trim().is_empty() {
         return Ok(SkillOriginsFile {
-            version: 1,
+            version: ORIGINS_VERSION,
             records: Vec::new(),
         });
     }
-    serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))
+    let mut file: SkillOriginsFile =
+        serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    let original_len = file.records.len();
+    file.records.retain(|record| {
+        record.store.eq_ignore_ascii_case("skillhub")
+            && is_skillhub_install_ref(&record.install_ref)
+    });
+    let needs_migration = file.version != ORIGINS_VERSION || file.records.len() != original_len;
+    file.version = ORIGINS_VERSION;
+    if needs_migration {
+        save_origins(&file)?;
+    }
+    Ok(file)
 }
 
 /// 写入来源清单。
@@ -64,6 +85,12 @@ pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
 
 /// 按 `(agent_id, folder)` 插入或更新；更新时写入新记录的 `last_updated_at`。
 pub fn upsert_origin(mut record: SkillOriginRecord) -> Result<()> {
+    if !record.store.eq_ignore_ascii_case("skillhub")
+        || !is_skillhub_install_ref(&record.install_ref)
+    {
+        bail!("仅支持记录 SkillHub 安装来源");
+    }
+    record.store = "skillhub".to_string();
     record.agent_id = Some(normalize_agent_id(record.agent_id.as_deref()));
     let key = origin_key(record.agent_id.as_deref(), &record.folder);
     let mut file = load_origins()?;
@@ -89,31 +116,6 @@ pub fn find_origin(agent_id: Option<&str>, folder: &str) -> Result<Option<SkillO
         .find(|r| origin_key(r.agent_id.as_deref(), &r.folder) == key))
 }
 
-/// 从 `install_ref` 推断商店名（`skillhub:` / `clawhub:` 等前缀）。
-pub fn infer_store(install_ref: &str) -> String {
-    let r = install_ref.trim();
-    if let Some(rest) = r.strip_prefix("skillhub:") {
-        let _ = rest;
-        return "skillhub".to_string();
-    }
-    if let Some(rest) = r.strip_prefix("clawhub:") {
-        let _ = rest;
-        return "clawhub".to_string();
-    }
-    if r.contains("api.skillhub.cn/") || r.contains("skillhub.cn/") {
-        return "skillhub".to_string();
-    }
-    if r.contains("skills.sh/") {
-        return "skillsdotsh".to_string();
-    }
-    if let Some((prefix, _)) = r.split_once(':') {
-        if !prefix.is_empty() {
-            return prefix.to_string();
-        }
-    }
-    "unknown".to_string()
-}
-
 /// 从 `install_ref` 推断本地技能文件夹名。
 pub fn infer_folder(install_ref: &str) -> Option<String> {
     let r = install_ref.trim();
@@ -121,21 +123,9 @@ pub fn infer_folder(install_ref: &str) -> Option<String> {
         let slug = rest.rsplit('/').next().unwrap_or(rest).trim();
         return (!slug.is_empty()).then(|| slug.to_string());
     }
-    if let Some(rest) = r.strip_prefix("clawhub:") {
-        let slug = rest.trim();
-        if let Some((_, folder)) = slug.rsplit_once("--") {
-            let folder = folder.trim();
-            return (!folder.is_empty()).then(|| folder.to_string());
-        }
-        return None;
-    }
     if r.contains("api.skillhub.cn/") || r.contains("skillhub.cn/") {
         let slug = r.trim_end_matches('/').rsplit('/').next()?.trim();
         return (!slug.is_empty()).then(|| slug.to_string());
-    }
-    if let Some((_, path)) = r.split_once(':') {
-        let segment = path.trim_end_matches('/').rsplit('/').next()?.trim();
-        return (!segment.is_empty()).then(|| segment.to_string());
     }
     None
 }
@@ -145,16 +135,7 @@ fn derive_store_skill_id(origin: &SkillOriginRecord) -> String {
     if let Some(rest) = r.strip_prefix("skillhub:") {
         return format!("skillhub:{rest}");
     }
-    if let Some(rest) = r.strip_prefix("clawhub:") {
-        if let Some((handle, slug)) = rest.rsplit_once("--") {
-            return format!("clawhub:{handle}/{slug}");
-        }
-        return format!("clawhub:{rest}");
-    }
-    if r.contains(':') {
-        return r.to_string();
-    }
-    format!("{}:{}", origin.store, origin.folder)
+    format!("skillhub:{}", origin.folder)
 }
 
 fn derive_source(install_ref: &str, store: &str) -> String {
@@ -162,16 +143,6 @@ fn derive_source(install_ref: &str, store: &str) -> String {
     if let Some(rest) = r.strip_prefix("skillhub:") {
         if let Some((owner, _)) = rest.split_once('/') {
             return owner.to_string();
-        }
-    }
-    if let Some(rest) = r.strip_prefix("clawhub:") {
-        if let Some((handle, _)) = rest.rsplit_once("--") {
-            return handle.to_string();
-        }
-    }
-    if let Some((_, path)) = r.split_once(':') {
-        if let Some((source, _)) = path.split_once('/') {
-            return source.to_string();
         }
     }
     store.to_string()
@@ -188,7 +159,7 @@ pub fn origin_to_store_skill(origin: &SkillOriginRecord) -> StoreSkill {
         name: origin.name.clone(),
         description: String::new(),
         source: derive_source(&origin.install_ref, &origin.store),
-        store: origin.store.clone(),
+        store: "skillhub".to_string(),
         installs: None,
         install_ref: origin.install_ref.clone(),
         homepage: None,
@@ -285,15 +256,12 @@ mod tests {
     }
 
     #[test]
-    fn infer_folder_from_skillhub_and_clawhub() {
+    fn infer_folder_from_skillhub_ref() {
         assert_eq!(
             infer_folder("skillhub:owner/ppt-generator-skill").as_deref(),
             Some("ppt-generator-skill")
         );
-        assert_eq!(
-            infer_folder("clawhub:steipete--weather").as_deref(),
-            Some("weather")
-        );
+        assert_eq!(infer_folder("legacy:owner--weather"), None);
     }
 
     #[test]
@@ -303,7 +271,7 @@ mod tests {
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
         let file = load_origins().unwrap();
-        assert_eq!(file.version, 1);
+        assert_eq!(file.version, ORIGINS_VERSION);
         assert!(file.records.is_empty());
     }
 
@@ -351,9 +319,53 @@ mod tests {
     }
 
     #[test]
-    fn infer_store_from_prefix() {
-        assert_eq!(infer_store("skillhub:owner/slug"), "skillhub");
-        assert_eq!(infer_store("clawhub:owner--slug"), "clawhub");
+    fn load_origins_removes_non_skillhub_history() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        save_origins(&SkillOriginsFile {
+            version: 1,
+            records: vec![
+                SkillOriginRecord {
+                    folder: "keep".into(),
+                    skill_id: None,
+                    name: "keep".into(),
+                    store: "skillhub".into(),
+                    install_ref: "skillhub:owner/keep".into(),
+                    agent_id: None,
+                    scope: None,
+                    installed_at: 1,
+                    last_updated_at: None,
+                    remote_version: None,
+                    remote_updated_at: None,
+                    content_digest: None,
+                },
+                SkillOriginRecord {
+                    folder: "remove".into(),
+                    skill_id: None,
+                    name: "remove".into(),
+                    store: "legacy-market".into(),
+                    install_ref: "legacy:owner/remove".into(),
+                    agent_id: None,
+                    scope: None,
+                    installed_at: 1,
+                    last_updated_at: None,
+                    remote_version: None,
+                    remote_updated_at: None,
+                    content_digest: None,
+                },
+            ],
+        })
+        .unwrap();
+
+        let file = load_origins().unwrap();
+        assert_eq!(file.records.len(), 1);
+        assert_eq!(file.records[0].folder, "keep");
+
+        let persisted: SkillOriginsFile =
+            serde_json::from_str(&fs::read_to_string(origins_path()).unwrap()).unwrap();
+        assert_eq!(persisted.version, ORIGINS_VERSION);
+        assert_eq!(persisted.records.len(), 1);
     }
 
     fn sample_detail(version: Option<&str>, updated_at: Option<i64>) -> StoreSkillDetail {
@@ -471,7 +483,6 @@ mod tests {
             Some("workspace"),
             &InstallOriginHint {
                 name: Some("Demo".into()),
-                store: Some("skillhub".into()),
                 folder: Some("demo-skill".into()),
             },
         )
@@ -508,7 +519,6 @@ mod tests {
             Some("workspace"),
             &InstallOriginHint {
                 name: Some("Demo".into()),
-                store: Some("skillhub".into()),
                 folder: Some("demo-skill".into()),
             },
         )

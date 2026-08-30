@@ -257,17 +257,6 @@ mod tests {
     }
 
     #[test]
-    fn origin_to_store_skill_clawhub_id() {
-        let mut origin = sample_origin(None, None, None, 1);
-        origin.store = "clawhub".into();
-        origin.install_ref = "clawhub:steipete--weather".into();
-        origin.folder = "weather".into();
-        let skill = origin_to_store_skill(&origin);
-        assert_eq!(skill.id, "clawhub:steipete/weather");
-        assert_eq!(skill.source, "steipete");
-    }
-
-    #[test]
     fn check_origin_against_detail_outdated() {
         let origin = sample_origin(Some("1.0.0"), None, None, 100);
         let detail = sample_detail(Some("2.0.0"), None);
@@ -344,8 +333,8 @@ mod tests {
             folder: "ghost-skill".into(),
             skill_id: None,
             name: "ghost".into(),
-            store: "clawhub".into(),
-            install_ref: "clawhub:ghost".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:owner/ghost".into(),
             agent_id: Some("workspace".into()),
             scope: None,
             installed_at: 1,

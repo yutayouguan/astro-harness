@@ -681,9 +681,6 @@ export type FileEntryDto = {
   size: number;
 };
 
-/** Skill 商店来源 id */
-export type SkillStoreId = "skillhub" | "skillsdotsh" | "clawhub";
-
 /** 本机已安装 Skill */
 export type InstalledSkill = {
   id: string;

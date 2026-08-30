@@ -37,38 +37,3 @@ test("SkillHub install prompt links to slug detail page", () => {
   assert.match(cmd, /详情：https:\/\/skillhub\.cn\/skills\/demo-skill/);
   assert.doesNotMatch(cmd, /api\.skillhub\.cn/);
 });
-
-test("ClawHub detail URL uses homepage or short link", () => {
-  const skill = {
-    id: "clawhub:outlit-sdk",
-    name: "Outlit SDK",
-    description: "desc",
-    source: "clawhub",
-    store: "clawhub",
-    installs: 1305,
-    install_ref: "clawhub:outlit-sdk",
-    homepage: "https://clawhub.ai/s/skills/outlit-sdk",
-  };
-  assert.equal(
-    storeSkillDetailUrl(skill),
-    "https://clawhub.ai/s/skills/outlit-sdk",
-  );
-  assert.match(storeInstallCommand(skill), /clawhub@latest install outlit-sdk/);
-});
-
-test("skills.sh detail URL prefers www host", () => {
-  const skill = {
-    id: "skillsdotsh:vercel-labs/skills/find-skills",
-    name: "find-skills",
-    description: "x",
-    source: "vercel-labs/skills",
-    store: "skillsdotsh",
-    installs: 1,
-    install_ref: "skillsdotsh:vercel-labs/skills/find-skills",
-    homepage: "https://skills.sh/vercel-labs/skills/find-skills",
-  };
-  assert.equal(
-    storeSkillDetailUrl(skill),
-    "https://www.skills.sh/vercel-labs/skills/find-skills",
-  );
-});
