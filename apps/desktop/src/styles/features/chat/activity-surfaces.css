@@ -237,12 +237,12 @@ html[data-theme="dark"] .bubble.assistant .msg-activity-io {
   background: rgba(0, 0, 0, 0.11);
 }
 
-/* Composer task status is docked to the leading edge instead of floating centrally. */
+/* Compact task status stays centered over the composer instead of spanning it. */
 .composer-shell .todo-progress-float {
-  align-self: flex-start;
-  width: min(100%, 680px);
-  max-width: calc(100% - 24px);
-  margin: 0 12px 6px;
+  align-self: center;
+  width: max-content;
+  max-width: min(calc(100% - 32px), 520px);
+  margin: 0 auto 6px;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--ink) 8%, var(--glass-edge));
   border-radius: 10px;
@@ -276,6 +276,7 @@ html[data-theme="dark"] .bubble.assistant .msg-activity-io {
 }
 
 .composer-shell .todo-progress-current {
+  max-width: min(240px, 28vw);
   min-width: 0;
   overflow: hidden;
   color: var(--ink-mute);
@@ -285,7 +286,8 @@ html[data-theme="dark"] .bubble.assistant .msg-activity-io {
 }
 
 .composer-shell .todo-progress-popover {
-  left: 0;
+  right: auto;
+  left: 50%;
   width: min(420px, calc(100vw - 48px));
   border-radius: 12px;
   background:
@@ -298,14 +300,14 @@ html[data-theme="dark"] .bubble.assistant .msg-activity-io {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.42),
     0 10px 28px color-mix(in srgb, var(--ink) 9%, transparent);
-  transform: none;
-  transform-origin: left bottom;
+  transform: translateX(-50%);
+  transform-origin: center bottom;
 }
 
 .composer-shell .todo-progress-section.is-files .todo-progress-popover {
-  right: 0;
-  left: auto;
-  transform-origin: right bottom;
+  right: auto;
+  left: 50%;
+  transform-origin: center bottom;
 }
 
 html[data-theme="dark"] .composer-shell .todo-progress-float,
@@ -322,11 +324,11 @@ html[data-theme="dark"] .composer-shell .todo-progress-popover {
 @keyframes todo-progress-popover-docked-in {
   from {
     opacity: 0;
-    transform: translateY(4px) scale(0.985);
+    transform: translate(-50%, 4px) scale(0.985);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate(-50%, 0) scale(1);
   }
 }
 
@@ -342,9 +344,9 @@ html[data-theme="dark"] .composer-shell .todo-progress-popover {
   }
 
   .composer-shell .todo-progress-float {
-    width: calc(100% - 16px);
-    max-width: none;
-    margin-inline: 8px;
+    width: max-content;
+    max-width: calc(100% - 16px);
+    margin-inline: auto;
   }
 
   .composer-shell .todo-progress-current {

@@ -180,8 +180,22 @@ function collectFileChangeEvent(
   }
 }
 
-function isTodoActivity(activity: ChatActivity): boolean {
+/** TODO 是输入框状态源，不应再作为回答时间线里的普通工具卡展示。 */
+export function isTodoActivity(activity: ChatActivity): boolean {
   return normalizedToolName(activity.title) === "todo";
+}
+
+/** 仅承载 TODO 更新的助手消息可以从回答列表完全省略。 */
+export function isTodoOnlyActivityMessage(message: ChatMessage): boolean {
+  return (
+    message.role === "assistant" &&
+    !message.content.trim() &&
+    !message.reasoning?.trim() &&
+    !message.attachments?.length &&
+    !message.uiSurfaces?.length &&
+    Boolean(message.activities?.length) &&
+    message.activities!.every(isTodoActivity)
+  );
 }
 
 function isNewTodoPlan(activity: ChatActivity): boolean {

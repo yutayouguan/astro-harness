@@ -51,10 +51,11 @@ test("expanded tool activity gains depth while running state avoids full-card gl
   assert.match(css, /prefers-reduced-transparency: reduce/);
 });
 
-test("tool parameters collapse independently and TODO status docks to the composer", async () => {
-  const [activity, progress, css] = await Promise.all([
+test("TODO updates stay out of answers and use a compact centered composer status", async () => {
+  const [activity, progress, chatView, css] = await Promise.all([
     source("components/chat/MsgActivity.tsx"),
     source("components/chat/TodoProgress.tsx"),
+    source("components/chat/ChatView.tsx"),
     source("styles/features/chat/activity-surfaces.css"),
   ]);
 
@@ -62,6 +63,15 @@ test("tool parameters collapse independently and TODO status docks to the compos
   assert.match(activity, /className="msg-activity-io-disclosure"/);
   assert.match(activity, /msg-activity-input-collapse/);
   assert.match(progress, /className="todo-progress-current"/);
-  assert.match(css, /\.composer-shell \.todo-progress-float \{[\s\S]*align-self: flex-start/);
-  assert.match(css, /\.composer-shell \.todo-progress-popover \{[\s\S]*transform-origin: left bottom/);
+  assert.match(chatView, /if \(isTodoOnlyActivityMessage\(m\)\) return null/);
+  assert.match(chatView, /if \(isTodoActivity\(act\)\) return/);
+  assert.match(chatView, /<TodoProgress[\s\S]*messages=\{messages\}/);
+  assert.match(
+    css,
+    /\.composer-shell \.todo-progress-float \{[\s\S]*align-self: center;[\s\S]*width: max-content;[\s\S]*max-width: min\(calc\(100% - 32px\), 520px\);[\s\S]*margin: 0 auto 6px/,
+  );
+  assert.match(
+    css,
+    /\.composer-shell \.todo-progress-popover \{[\s\S]*left: 50%;[\s\S]*transform: translateX\(-50%\);[\s\S]*transform-origin: center bottom/,
+  );
 });

@@ -5,6 +5,8 @@ import {
   displayFileName,
   extractFileChangeSummary,
   extractLatestTodoPlan,
+  isTodoActivity,
+  isTodoOnlyActivityMessage,
 } from "./taskProgress.ts";
 
 const patch = `*** Begin Patch
@@ -62,6 +64,21 @@ test("extracts the latest todo plan", () => {
       { text: "实现交互", done: false },
     ],
   });
+});
+
+test("todo activities remain available to the progress bar but can be omitted from answers", () => {
+  const todoActivity = messages[1]!.activities![0]!;
+  assert.equal(isTodoActivity(todoActivity), true);
+  assert.equal(
+    isTodoOnlyActivityMessage({
+      id: "todo-only",
+      role: "assistant",
+      content: "",
+      activities: [todoActivity],
+    }),
+    true,
+  );
+  assert.equal(isTodoOnlyActivityMessage(messages[1]!), false);
 });
 
 test("aggregates per-file line changes from apply_patch", () => {

@@ -133,7 +133,11 @@ import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
-import type { FileChangeItem } from "../../lib/chat/taskProgress";
+import {
+  isTodoActivity,
+  isTodoOnlyActivityMessage,
+  type FileChangeItem,
+} from "../../lib/chat/taskProgress";
 import BrowserPreviewFloat from "./BrowserPreviewFloat";
 import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
 import {
@@ -2175,6 +2179,7 @@ export default function ChatView({
                 !turnInFlight &&
                 !sendBlocked &&
                 Boolean(onEditUserMessage);
+              if (isTodoOnlyActivityMessage(m)) return null;
               return (
                 <div
                   key={m.id}
@@ -2238,6 +2243,7 @@ export default function ChatView({
                         };
                         const steps: Step[] = [];
                         const pushActivity = (act: ChatActivity) => {
+                          if (isTodoActivity(act)) return;
                           if (!isActivityVisible(act.kind, displayPrefs)) return;
                           steps.push({
                             key: `act-${act.id}`,
