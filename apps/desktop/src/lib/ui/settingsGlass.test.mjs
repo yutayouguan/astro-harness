@@ -34,7 +34,7 @@ test("active sidebar settings navigation uses a flat tinted selection", () => {
   assert.doesNotMatch(sidebar, /var\(--glass-rim\)/);
 });
 
-test("settings navigation hover and press states stay flat", () => {
+test("settings navigation hover and press states give restrained feedback", () => {
   const hover = rule(
     projectStyles,
     ".sidebar-settings-nav .settings-sidebar-item:hover",
@@ -46,10 +46,23 @@ test("settings navigation hover and press states stay flat", () => {
 
   assert.ok(hover, "missing settings navigation hover rule");
   assert.match(hover, /border-color:\s*transparent;/);
-  assert.match(hover, /background:\s*transparent;/);
+  assert.match(hover, /background:\s*color-mix\([\s\S]*?var\(--ink\) 4%/);
   assert.match(hover, /box-shadow:\s*none;/);
   assert.ok(pressed, "missing settings navigation pressed rule");
-  assert.match(pressed, /transform:\s*none;/);
+  assert.match(pressed, /transform:\s*scale\(0\.985\);/);
+});
+
+test("settings sidebar uses grouped compact navigation and a quiet search field", () => {
+  assert.match(projectStyles, /\.sidebar-settings-search\s*\{/);
+  assert.match(projectStyles, /\.sidebar-settings-group-label\s*\{/);
+
+  const item = rule(
+    projectStyles,
+    ".sidebar-settings-nav .settings-sidebar-item",
+  );
+  assert.ok(item, "missing settings navigation item rule");
+  assert.match(item, /min-height:\s*36px;/);
+  assert.match(item, /border-radius:\s*10px;/);
 });
 
 test("preference category navigation keeps the shared glass material", () => {

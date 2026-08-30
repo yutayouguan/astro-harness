@@ -46,6 +46,7 @@ import {
   IconPanelOpen,
   IconPlugin,
   IconRightPanel,
+  IconSearch,
 } from "./components/icons";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
 import { useActiveSessionTitle } from "./hooks/chat/useActiveSessionTitle";
@@ -100,7 +101,7 @@ import {
   type NavId,
   type SettingsTabId,
 } from "./lib/ui/navConfig";
-import { SETTINGS_TABS, settingsTabMeta } from "./lib/ui/settingsTabs";
+import { SETTINGS_TAB_GROUPS, settingsTabMeta } from "./lib/ui/settingsTabs";
 import { CHAT_RIGHT_PANEL_DEFAULT_WIDTH } from "./lib/ui/chatRightPanelWidth";
 import {
   chatRightDockWidth,
@@ -172,6 +173,20 @@ export default function App() {
   );
   const [nav, setNav] = useState<NavId>(NAV[0].id);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("preferences");
+  const [settingsQuery, setSettingsQuery] = useState("");
+  const visibleSettingsGroups = useMemo(() => {
+    const query = settingsQuery.trim().toLocaleLowerCase();
+    if (!query) return SETTINGS_TAB_GROUPS;
+
+    return SETTINGS_TAB_GROUPS.map((group) => ({
+      ...group,
+      items: group.label.toLocaleLowerCase().includes(query)
+        ? group.items
+        : group.items.filter((item) =>
+            item.label.toLocaleLowerCase().includes(query),
+          ),
+    })).filter((group) => group.items.length > 0);
+  }, [settingsQuery]);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   // 选中的项目决定工具执行目录，重启后必须沿用上次的选择，否则会退回默认空间。
   const [activeProjectId, setActiveProjectId] = useState(
@@ -926,7 +941,7 @@ export default function App() {
       >
         <aside
           ref={sidebar.sidebarRef}
-          className={`sidebar ${sidebar.sidebarOpen || sidebar.sidebarPinned ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned ? "is-pinned" : ""} ${sidebar.showSidebarLabels ? "is-labels" : "is-icons"} ${sidebar.sidebarResizing ? "is-resizing" : ""}`}
+          className={`sidebar ${nav === "settings" ? "is-settings" : ""} ${sidebar.sidebarOpen || sidebar.sidebarPinned ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned ? "is-pinned" : ""} ${sidebar.showSidebarLabels ? "is-labels" : "is-icons"} ${sidebar.sidebarResizing ? "is-resizing" : ""}`}
           onMouseEnter={sidebar.openSidebar}
           onMouseLeave={sidebar.scheduleHideSidebar}
           onContextMenu={sidebar.openSidebarContextMenu}
@@ -941,19 +956,38 @@ export default function App() {
                 <ArrowLeft size={16} strokeWidth={2} aria-hidden />
                 <span className="sidebar-item-label">返回</span>
               </button>
-              <div className="sidebar-settings-nav">
-                {SETTINGS_TABS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                    onClick={() => setSettingsTab(item.id)}
-                  >
-                    <item.Icon size={18} strokeWidth={1.6} aria-hidden />
-                    <span className="sidebar-item-label">{item.label}</span>
-                  </button>
+              <label className="sidebar-settings-search">
+                <IconSearch width={16} height={16} aria-hidden />
+                <input
+                  type="search"
+                  value={settingsQuery}
+                  onChange={(event) => setSettingsQuery(event.target.value)}
+                  placeholder="搜索设置…"
+                  aria-label="搜索设置"
+                />
+              </label>
+              <nav className="sidebar-settings-nav" aria-label="设置分类">
+                {visibleSettingsGroups.map((group) => (
+                  <div className="sidebar-settings-group" key={group.id}>
+                    <div className="sidebar-settings-group-label">{group.label}</div>
+                    {group.items.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                        aria-current={settingsTab === item.id ? "page" : undefined}
+                        onClick={() => setSettingsTab(item.id)}
+                      >
+                        <item.Icon size={18} strokeWidth={1.7} aria-hidden />
+                        <span className="sidebar-item-label">{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 ))}
-              </div>
+                {visibleSettingsGroups.length === 0 ? (
+                  <p className="sidebar-settings-empty">没有匹配的设置</p>
+                ) : null}
+              </nav>
             </>
           ) : (
             <>
