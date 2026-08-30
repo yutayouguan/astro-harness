@@ -6,6 +6,10 @@ const projectStyles = await readFile(
   new URL("../../styles/features/shell/layout/projects.css", import.meta.url),
   "utf8",
 );
+const sidebarPolishStyles = await readFile(
+  new URL("../../styles/features/shell/layout/sidebar-polish.css", import.meta.url),
+  "utf8",
+);
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -55,4 +59,20 @@ test("dark sidebar search has a scoped low-white override", () => {
   assert.match(dark, /rgba\(255, 255, 255, 0\.05\)/);
   assert.match(dark, /rgba\(8, 6, 18, 0\.48\)/);
   assert.doesNotMatch(dark, /rgba\(255, 255, 255, 0\.3\)/);
+});
+
+test("collapsed and expanded sidebar search keep the same row height", () => {
+  const trigger = rule(
+    sidebarPolishStyles,
+    ".sidebar-global-search .expandable-search-btn",
+  );
+  const field = rule(
+    sidebarPolishStyles,
+    ".sidebar-global-search .expandable-search-field",
+  );
+
+  assert.ok(trigger, "missing polished sidebar search trigger styles");
+  assert.ok(field, "missing polished expanded sidebar search styles");
+  assert.match(trigger, /height:\s*42px;/);
+  assert.match(field, /height:\s*42px;/);
 });

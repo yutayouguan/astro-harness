@@ -134,6 +134,10 @@ html[data-theme="dark"] .sidebar.is-settings {
     0 2px 6px color-mix(in srgb, var(--tone, transparent) 4%, transparent);
 }
 
+.sidebar-global-search .expandable-search-field {
+  height: 42px;
+}
+
 .sidebar-group-label,
 .sidebar-section-title {
   color: color-mix(in srgb, var(--ink-mute) 88%, var(--ink));
