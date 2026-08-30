@@ -1,4 +1,4 @@
-//! Codex-compatible command hook configuration and execution.
+//! Command hook configuration and execution.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -112,7 +112,7 @@ impl CommandHookRunner {
     pub fn from_file(file: HooksFile, source: &Path) -> anyhow::Result<Self> {
         let mut handlers = HashMap::new();
         for (event, groups) in file.hooks {
-            if !HookEvent::CODEX
+            if !HookEvent::COMMAND_HOOK_EVENTS
                 .iter()
                 .any(|candidate| candidate.as_str() == event)
             {
@@ -531,7 +531,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_codex_hooks_json_shape_and_rejects_bad_matcher() {
+    fn parses_command_hooks_json_shape_and_rejects_bad_matcher() {
         let parsed: HooksFile = serde_json::from_str(
             r#"{"hooks":{"PreToolUse":[{"matcher":"^Bash$","hooks":[{"type":"command","command":"true","timeout":2}]}]}}"#,
         )
