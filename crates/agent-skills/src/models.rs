@@ -80,6 +80,9 @@ pub struct StoreSkill {
     pub install_ref: String,
     /// 主页。
     pub homepage: Option<String>,
+    /// SkillHub 列表图标。
+    #[serde(default)]
+    pub icon_url: Option<String>,
     /// 市场侧场景分类（例如 `dev-programming`）。
     #[serde(default)]
     pub category: Option<String>,

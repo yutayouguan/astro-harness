@@ -706,6 +706,7 @@ export type StoreSkill = {
   installs: number | null;
   install_ref: string;
   homepage: string | null;
+  icon_url: string | null;
   category?: string | null;
   requires_api_key?: boolean | null;
 };

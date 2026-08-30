@@ -53,6 +53,12 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
+.skills-detail-item-icon .skills-store-icon-image {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
 html[data-theme="dark"] .skills-detail-item-icon {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),

@@ -37,6 +37,7 @@ struct SkillHubSkill {
     installs: Option<u64>,
     downloads: Option<u64>,
     homepage: Option<String>,
+    icon_url: Option<String>,
     category: Option<String>,
     labels: Option<SkillHubLabels>,
 }
@@ -79,6 +80,7 @@ fn map_skillhub(s: SkillHubSkill) -> StoreSkill {
         installs: s.installs.or(s.downloads),
         install_ref,
         homepage: s.homepage,
+        icon_url: s.icon_url.filter(|value| !value.trim().is_empty()),
         category: s.category.filter(|value| !value.trim().is_empty()),
         requires_api_key,
     }
@@ -252,7 +254,7 @@ fn detail_from_list(skill: &StoreSkill) -> StoreSkillDetail {
         install_ref: skill.install_ref.clone(),
         homepage: skill.homepage.clone(),
         detail_url,
-        icon_url: None,
+        icon_url: skill.icon_url.clone(),
         category: skill.category.clone(),
         sub_categories: vec![],
         version: None,
@@ -342,6 +344,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn skillhub_list_parses_and_maps_icon_url() {
+        let raw = r#"{
+            "code": 0,
+            "data": {
+                "skills": [{
+                    "name": "Demo",
+                    "slug": "demo",
+                    "iconUrl": "https://cdn.example.com/demo.png"
+                }]
+            }
+        }"#;
+        let body: SkillHubResponse = serde_json::from_str(raw).unwrap();
+        let mapped = map_skillhub(body.data.unwrap().skills.into_iter().next().unwrap());
+        assert_eq!(
+            mapped.icon_url.as_deref(),
+            Some("https://cdn.example.com/demo.png")
+        );
+    }
+
+    #[test]
     fn skillhub_install_ref_prefers_skillhub_prefix_over_homepage() {
         let s = SkillHubSkill {
             name: "web-tools-guide".into(),
@@ -353,6 +375,7 @@ mod tests {
             installs: Some(1),
             downloads: None,
             homepage: Some("https://api.skillhub.cn/user_x/web-tools-guide".into()),
+            icon_url: Some("https://cdn.example.com/web-tools-guide.png".into()),
             category: Some("knowledge-management".into()),
             labels: Some(SkillHubLabels {
                 requires_api_key: Some("false".into()),
@@ -363,6 +386,10 @@ mod tests {
         assert!(!mapped.install_ref.contains("api.skillhub.cn"));
         assert_eq!(mapped.category.as_deref(), Some("knowledge-management"));
         assert_eq!(mapped.requires_api_key, Some(false));
+        assert_eq!(
+            mapped.icon_url.as_deref(),
+            Some("https://cdn.example.com/web-tools-guide.png")
+        );
     }
 
     #[test]
@@ -376,6 +403,7 @@ mod tests {
             installs: Some(1),
             install_ref: "skillhub:user_x/web-tools-guide".into(),
             homepage: Some("https://api.skillhub.cn/user_x/web-tools-guide".into()),
+            icon_url: Some("https://cdn.example.com/web-tools-guide.png".into()),
             category: Some("knowledge-management".into()),
             requires_api_key: Some(false),
         };
@@ -385,6 +413,10 @@ mod tests {
             "https://skillhub.cn/skills/web-tools-guide"
         );
         assert_eq!(detail.slug, "web-tools-guide");
+        assert_eq!(
+            detail.icon_url.as_deref(),
+            Some("https://cdn.example.com/web-tools-guide.png")
+        );
     }
 
     #[test]

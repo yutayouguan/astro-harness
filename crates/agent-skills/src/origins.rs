@@ -163,6 +163,7 @@ pub fn origin_to_store_skill(origin: &SkillOriginRecord) -> StoreSkill {
         installs: None,
         install_ref: origin.install_ref.clone(),
         homepage: None,
+        icon_url: None,
         category: None,
         requires_api_key: None,
     }

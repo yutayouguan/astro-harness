@@ -250,6 +250,49 @@ function storeBadge(): string {
   return "SH";
 }
 
+function StoreSkillIcon({
+  skill,
+  variant,
+}: {
+  skill: StoreSkill;
+  variant: "card" | "detail-list";
+}) {
+  const className =
+    variant === "card"
+      ? "tool-icon skill-card-icon skills-store-icon"
+      : "skills-detail-item-icon skills-store-icon";
+  return (
+    <span className={className} aria-hidden>
+      {variant === "card" && <span className="tool-icon-lens" />}
+      <span
+        className={
+          variant === "card"
+            ? "tool-icon-glyph skills-store-icon-fallback"
+            : "skills-store-icon-fallback"
+        }
+      >
+        {variant === "card" ? (
+          <CloudDownload size={22} strokeWidth={2} />
+        ) : (
+          storeBadge()
+        )}
+      </span>
+      {skill.icon_url ? (
+        <img
+          className="skills-store-icon-image"
+          src={skill.icon_url}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+          }}
+        />
+      ) : null}
+    </span>
+  );
+}
+
 /** 安装量缩写（K / M） */
 function formatInstalls(n?: number | null): string {
   if (n == null) return "";
@@ -2149,12 +2192,7 @@ export default function SkillsPanel({
         aria-busy={installingId === skill.id}
       >
         <header className="skill-card-top">
-          <div className="tool-icon skill-card-icon" aria-hidden>
-            <span className="tool-icon-lens" />
-            <span className="tool-icon-glyph">
-              <CloudDownload size={22} strokeWidth={2} />
-            </span>
-          </div>
+          <StoreSkillIcon skill={skill} variant="card" />
           <h3 className="skill-card-title">{skill.name}</h3>
           {already ? (
             <span className="skill-card-link-badge is-on">
@@ -2575,9 +2613,7 @@ export default function SkillsPanel({
             data-tone={skillTone(skill.id)}
             onClick={() => setSelectedDetailId(skill.id)}
           >
-            <span className="skills-detail-item-icon" aria-hidden>
-              {storeBadge()}
-            </span>
+            <StoreSkillIcon skill={skill} variant="detail-list" />
             <span className="skills-detail-item-body">
               <span className="skills-detail-item-title">{skill.name}</span>
               <span className="skills-detail-item-meta">

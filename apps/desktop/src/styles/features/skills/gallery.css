@@ -83,6 +83,12 @@
   height: 18px;
 }
 
+.skills-gallery.is-list .skill-card-icon .skills-store-icon-image {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
 .skills-gallery.is-list .skill-card-badge {
   font-size: 9px;
 }
