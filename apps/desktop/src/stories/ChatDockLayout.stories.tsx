@@ -15,8 +15,10 @@ import {
 } from "lucide-react";
 import SubagentActivityBar from "../components/chat/SubagentActivityBar";
 import TaskMonitorPanel from "../components/chat/TaskMonitorPanel";
+import ConversationTitle from "../components/chat/ConversationTitle";
 import { LocaleProvider } from "../i18n/LocaleContext";
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
+import { useBeautifyTips } from "../hooks/ui/useBeautifyTips";
 
 type DockKind = "files" | "side" | "runtime";
 
@@ -233,6 +235,7 @@ function ChatDockLayout({
   kind: DockKind | null;
   onSelect?: (kind: DockKind | null) => void;
 }) {
+  useBeautifyTips();
   const dockWidth =
     kind === "files" ? 320 : kind === "side" ? 384 : kind === "runtime" ? 360 : 0;
   const dockClasses =
@@ -250,7 +253,22 @@ function ChatDockLayout({
     >
       <section className="content-pane">
         <div className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}`}>
-          <div className="content-heading" />
+          <div className="content-heading">
+            <div className="page-title-block">
+              <div className="page-title-icon" data-tone="blue" aria-hidden>
+                <MessageSquare size={15} />
+              </div>
+              <div className="page-title-text">
+                <h1 className="content-title conversation-title" data-tone="blue">
+                  <ConversationTitle
+                    title="请用 Python 写一个简单的 Web 爬虫，抓取页面标题并整理运行结果"
+                    renameLabel="重命名"
+                    onRename={() => {}}
+                  />
+                </h1>
+              </div>
+            </div>
+          </div>
           <HeaderActions kind={kind} onSelect={onSelect} />
         </div>
         <div className="page-body page-body--chat">

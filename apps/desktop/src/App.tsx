@@ -16,6 +16,7 @@ import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel, { type ChatRightTab } from "./components/chat/ChatRightPanel";
 import ChatReviewPanel from "./components/chat/ChatReviewPanel";
 import SideChatPanel from "./components/chat/SideChatPanel";
+import ConversationTitle from "./components/chat/ConversationTitle";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
 import ProjectEditDialog from "./components/chat/ProjectEditDialog";
 import ProjectFolderIcon from "./components/chat/ProjectFolderIcon";
@@ -56,6 +57,7 @@ import { useSessionStatusMap } from "./hooks/chat/useSessionStatusMap";
 import { useSubagentThreads } from "./hooks/chat/useSubagentThreads";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
 import { useBeautifyTips } from "./hooks/ui/useBeautifyTips";
+import { usePrompt } from "./hooks/ui/DialogContext";
 import { useProviders } from "./hooks/providers/useProviders";
 import { useShellColorStyle } from "./hooks/app/useShellColorStyle";
 import { useSidebar } from "./hooks/app/useSidebar";
@@ -92,6 +94,7 @@ import type { SlashAction } from "./lib/chat/composerCommands";
 import type { ComposerContextToken } from "./lib/chat/composerContext";
 import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
+import { dispatchSessionsChanged } from "./lib/chat/sessionManagement";
 import {
   resolveContextWindow,
   usagePercent,
@@ -148,6 +151,7 @@ export default function App() {
   } = useShellColorStyle();
   useBeautifyTips();
   const { t } = useI18n();
+  const promptForTitle = usePrompt();
   const {
     prefs: chatDisplayPrefs,
     setVerbosity,
@@ -851,6 +855,29 @@ export default function App() {
   const featureNav =
     nav === "cron" || nav === "loop" || nav === "skills" ? nav : null;
   const conversationTitle = useActiveSessionTitle(chat.sessionId);
+  const renameConversation = useCallback(async () => {
+    if (!chat.sessionId || !conversationTitle) return;
+    const next = await promptForTitle({
+      title: t("sessions.rename"),
+      message: t("sessions.renamePrompt"),
+      defaultValue: conversationTitle,
+      confirmLabel: t("sessions.renameSave"),
+      cancelLabel: t("sessions.cancel"),
+    });
+    const title = next?.trim();
+    if (!title || title === conversationTitle) return;
+    try {
+      await invoke("rename_session", { sessionId: chat.sessionId, title });
+      dispatchSessionsChanged();
+    } catch (error) {
+      showTransientToast(
+        t("sessions.actionFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        { tone: "error" },
+      );
+    }
+  }, [chat.sessionId, conversationTitle, promptForTitle, showTransientToast, t]);
   const { label: settingsTitle, Icon: SettingsIcon } = settingsTabMeta(settingsTab);
   const activeChatRightDock = resolveChatRightDock({
     projectFilesOpen: projectFiles.panelOpen,
@@ -1446,9 +1473,11 @@ export default function App() {
                         </div>
                         <div className="page-title-text">
                           <h1 className="content-title conversation-title" data-tone={shellTone}>
-                            <span className="content-title-main" title={conversationTitle}>
-                              {conversationTitle}
-                            </span>
+                            <ConversationTitle
+                              title={conversationTitle}
+                              renameLabel={t("sessions.rename")}
+                              onRename={() => void renameConversation()}
+                            />
                           </h1>
                         </div>
                       </div>

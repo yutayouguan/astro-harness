@@ -172,16 +172,38 @@ export function useBeautifyTips(enabled = true) {
     };
 
     let activeEl: HTMLElement | null = null;
+    let showTimer: number | null = null;
 
-    const showFor = (el: HTMLElement) => {
+    const clearShowTimer = () => {
+      if (showTimer === null) return;
+      window.clearTimeout(showTimer);
+      showTimer = null;
+    };
+
+    const showFor = (el: HTMLElement, delayed = false) => {
       const tipText = el.getAttribute("data-tip")?.trim();
       if (!tipText) return;
+      clearShowTimer();
       activeEl = el;
-      placeTip(el, tipText);
+      const requestedDelay = delayed
+        ? Number.parseInt(el.getAttribute("data-tip-delay") ?? "0", 10)
+        : 0;
+      const delay = Number.isFinite(requestedDelay)
+        ? Math.max(0, Math.min(requestedDelay, 1000))
+        : 0;
+      if (delay === 0) {
+        placeTip(el, tipText);
+        return;
+      }
+      showTimer = window.setTimeout(() => {
+        showTimer = null;
+        if (activeEl === el) placeTip(el, tipText);
+      }, delay);
     };
 
     const hideIfActive = (el: HTMLElement | null) => {
       if (!el || el !== activeEl) return;
+      clearShowTimer();
       activeEl = null;
       hideTip();
     };
@@ -193,7 +215,7 @@ export function useBeautifyTips(enabled = true) {
       if (!el) return;
       const from = ne.relatedTarget as Node | null;
       if (from && el.contains(from)) return;
-      showFor(el);
+      showFor(el, true);
     };
 
     const onOut = (e: Event) => {
@@ -229,6 +251,7 @@ export function useBeautifyTips(enabled = true) {
 
     const onPointerDown = () => {
       if (!activeEl) return;
+      clearShowTimer();
       activeEl = null;
       hideTip();
     };
@@ -269,6 +292,7 @@ export function useBeautifyTips(enabled = true) {
 
     return () => {
       mo.disconnect();
+      clearShowTimer();
       if (showRaf) {
         cancelAnimationFrame(showRaf);
         showRaf = 0;
