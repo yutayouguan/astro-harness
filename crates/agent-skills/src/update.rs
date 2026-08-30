@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::agent_id::normalize as normalize_agent_id;
 use crate::check::{check_updates_for_agent, filter_outdated_folders};
-use crate::install::{install_from_ref_scoped, scoped_skills_dir, InstallOriginHint};
+use crate::install::{install_from_ref_scoped, scoped_skills_path, InstallOriginHint};
 use crate::models::{SkillOriginRecord, SkillUpdateItemResult, UpdateSkillOpts};
 use crate::origins::{find_origin, load_origins};
 use crate::preview::preview_skill_update;
@@ -28,7 +28,6 @@ fn memory_dir() -> PathBuf {
 fn origin_hint(record: &SkillOriginRecord) -> InstallOriginHint {
     InstallOriginHint {
         name: Some(record.name.clone()),
-        folder: Some(record.folder.clone()),
     }
 }
 
@@ -57,7 +56,7 @@ pub fn backup_skill_dir(
     folder: &str,
 ) -> Result<PathBuf> {
     let agent = normalize_agent_id(agent_id);
-    let skills_dir = scoped_skills_dir(scope, project_root)?;
+    let skills_dir = scoped_skills_path(scope, project_root)?;
     let src = skills_dir.join(folder);
     if !src.is_dir() {
         bail!("本地未找到技能目录: {folder}");
@@ -124,7 +123,7 @@ fn installed_skill_folder_exists(
     project_root: Option<&Path>,
     folder: &str,
 ) -> Result<bool> {
-    let skills_dir = scoped_skills_dir(scope, project_root)?;
+    let skills_dir = scoped_skills_path(scope, project_root)?;
     Ok(skills_dir.join(folder).is_dir())
 }
 
@@ -217,8 +216,7 @@ pub async fn update_all_with_origin(
         .records
         .iter()
         .filter(|r| {
-            normalize_agent_id(r.agent_id.as_deref()) == target
-                && r.scope.as_deref() == Some(scope)
+            normalize_agent_id(r.agent_id.as_deref()) == target && r.scope.as_deref() == Some(scope)
         })
         .map(|r| r.folder.clone())
         .collect();
@@ -241,6 +239,7 @@ pub async fn update_outdated_skills(
 mod tests {
     use super::*;
     use crate::digest::skill_content_digest;
+    use crate::install::scoped_skills_dir;
     use crate::models::SkillOriginRecord;
     use crate::origins::upsert_origin;
     use crate::ENV_TEST_LOCK;
@@ -261,7 +260,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:owner/demo".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: None,
             remote_version: None,
@@ -277,12 +276,13 @@ mod tests {
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        let skills_dir = agent_skills_dir(Some("workspace")).unwrap();
+        let skills_dir = scoped_skills_dir("global", None).unwrap();
         let skill_dir = skills_dir.join("demo-skill");
         write_skill_md(&skill_dir, "# Demo");
         fs::write(skill_dir.join("extra.txt"), "payload").unwrap();
 
-        let backup_path = backup_skill_dir(Some("workspace"), "demo-skill").unwrap();
+        let backup_path =
+            backup_skill_dir(Some("workspace"), "global", None, "demo-skill").unwrap();
         assert!(backup_path.is_dir());
         assert!(backup_path.join("SKILL.md").is_file());
         assert!(backup_path.join("extra.txt").is_file());
@@ -301,7 +301,7 @@ mod tests {
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        let skills_dir = agent_skills_dir(Some("workspace")).unwrap();
+        let skills_dir = scoped_skills_dir("global", None).unwrap();
         let skill_dir = skills_dir.join("demo-skill");
         write_skill_md(&skill_dir, "# Changed locally");
         let current = skill_content_digest(&skill_dir).unwrap();
@@ -311,6 +311,8 @@ mod tests {
 
         let err = update_installed_skill_ex(
             Some("workspace"),
+            "global",
+            None,
             "demo-skill",
             UpdateSkillOpts {
                 backup_if_dirty: true,
@@ -336,7 +338,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:owner/ghost".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: None,
             remote_version: None,
@@ -345,7 +347,9 @@ mod tests {
         })
         .unwrap();
 
-        let results = update_all_with_origin(Some("workspace")).await.unwrap();
+        let results = update_all_with_origin(Some("workspace"), "global", None)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert!(!results[0].ok);
         assert_eq!(results[0].folder, "ghost-skill");
@@ -358,9 +362,19 @@ mod tests {
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        let err = update_installed_skill(Some("workspace"), "missing")
-            .await
-            .unwrap_err();
+        let err = update_installed_skill_ex(
+            Some("workspace"),
+            "global",
+            None,
+            "missing",
+            UpdateSkillOpts {
+                backup_if_dirty: true,
+                force: true,
+                max_retries: 1,
+            },
+        )
+        .await
+        .unwrap_err();
         assert!(err.to_string().contains("无法追溯"));
     }
 
@@ -370,7 +384,9 @@ mod tests {
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        let r = update_all_with_origin(Some("workspace")).await.unwrap();
+        let r = update_all_with_origin(Some("workspace"), "global", None)
+            .await
+            .unwrap();
         assert!(r.is_empty());
     }
 
@@ -380,7 +396,9 @@ mod tests {
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        let r = update_outdated_skills(Some("workspace")).await.unwrap();
+        let r = update_outdated_skills(Some("workspace"), "global", None)
+            .await
+            .unwrap();
         assert!(r.is_empty());
     }
 }

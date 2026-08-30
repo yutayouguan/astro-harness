@@ -2,7 +2,7 @@
 //!
 //! 路径：`{base}/learning/evolution/proposals/{id}.json`。
 //! apply 语义对齐 `skills` 工具：新建写 SKILL.md、patch 唯一替换；仅限 agent
-//! skills 目录（`skills::install::agent_skills_dir`）。
+//! skills 目录（`skills::install::agent_workspace_skills_dir`）。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -153,7 +153,7 @@ fn apply_candidate(cand: &SkillCandidate) -> anyhow::Result<(String, PathBuf, Ro
     if !valid_skill_id(&cand.skill_id) {
         anyhow::bail!("非法 skill_id: {}", cand.skill_id);
     }
-    let skills_dir = skills::install::agent_skills_dir(None)?;
+    let skills_dir = skills::install::agent_workspace_skills_dir(None)?;
     let dest = skills_dir.join(&cand.skill_id);
     let agent_root = skills_dir
         .canonicalize()
@@ -326,7 +326,7 @@ mod tests {
         save_proposals(dir.path(), &[new_cand("x", "demo-approve")]).unwrap();
         let msg = approve_proposal(dir.path(), "x").unwrap();
         assert!(msg.contains("已新建"));
-        let skills_dir = skills::install::agent_skills_dir(None).unwrap();
+        let skills_dir = skills::install::agent_workspace_skills_dir(None).unwrap();
         assert!(skills_dir.join("demo-approve/SKILL.md").is_file());
         assert!(list_proposals(dir.path()).is_empty());
     }
@@ -338,7 +338,7 @@ mod tests {
         save_proposals(dir.path(), &[new_cand("f", "demo-fail")]).unwrap();
         let err = approve_proposal_checked(dir.path(), "f", |_dir| Err("boom".into()));
         assert!(err.is_err());
-        let skills_dir = skills::install::agent_skills_dir(None).unwrap();
+        let skills_dir = skills::install::agent_workspace_skills_dir(None).unwrap();
         // 新建应被整树回滚
         assert!(!skills_dir.join("demo-fail").exists());
         // 提案保留（未删除）
@@ -384,7 +384,7 @@ mod tests {
         save_proposals(dir.path(), &[patch]).unwrap();
         let msg = approve_proposal(dir.path(), "p").unwrap();
         assert!(msg.contains("已 patch"));
-        let skills_dir = skills::install::agent_skills_dir(None).unwrap();
+        let skills_dir = skills::install::agent_workspace_skills_dir(None).unwrap();
         let body = fs::read_to_string(skills_dir.join("demo-patch/SKILL.md")).unwrap();
         assert!(body.contains("步骤一（改）"));
     }

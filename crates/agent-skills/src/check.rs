@@ -4,13 +4,13 @@ use anyhow::Result;
 use std::path::Path;
 
 use crate::agent_id::normalize as normalize_agent_id;
-use crate::install::scoped_skills_dir;
+use crate::install::scoped_skills_path;
 use crate::models::{
     SkillOriginRecord, SkillUpdateCheckResult, SkillUpdateStatus, StoreSkillDetail,
 };
 use crate::origins::load_origins;
 pub use crate::origins::origin_to_store_skill;
-use crate::store::fetch_detail;
+use crate::store::fetch_detail_strict;
 
 /// 用本地 origin 快照与远端快照判定更新状态。
 pub fn classify_update_status(
@@ -72,7 +72,7 @@ fn installed_skill_folder_exists(
     project_root: Option<&Path>,
     folder: &str,
 ) -> Result<bool> {
-    let skills_dir = scoped_skills_dir(scope, project_root)?;
+    let skills_dir = scoped_skills_path(scope, project_root)?;
     Ok(skills_dir.join(folder).is_dir())
 }
 
@@ -88,8 +88,7 @@ pub async fn check_updates_for_agent(
         .records
         .into_iter()
         .filter(|r| {
-            normalize_agent_id(r.agent_id.as_deref()) == target
-                && r.scope.as_deref() == Some(scope)
+            normalize_agent_id(r.agent_id.as_deref()) == target && r.scope.as_deref() == Some(scope)
         })
         .collect();
 
@@ -99,7 +98,7 @@ pub async fn check_updates_for_agent(
             Ok(false) => continue,
             Ok(true) => {
                 let store_skill = origin_to_store_skill(&origin);
-                let item = match fetch_detail(&store_skill).await {
+                let item = match fetch_detail_strict(&store_skill).await {
                     Ok(detail) => check_origin_against_detail(&origin, &detail),
                     Err(e) => SkillUpdateCheckResult {
                         folder: origin.folder.clone(),
@@ -155,7 +154,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:owner/demo-skill".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at,
             last_updated_at,
             remote_version: remote_version.map(str::to_string),
@@ -346,7 +345,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:owner/ghost".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: None,
             remote_version: Some("1.0.0".into()),
@@ -355,7 +354,9 @@ mod tests {
         })
         .unwrap();
 
-        let results = check_updates_for_agent(Some("workspace")).await.unwrap();
+        let results = check_updates_for_agent(Some("workspace"), "global", None)
+            .await
+            .unwrap();
         assert!(results.is_empty());
 
         let file = load_origins().unwrap();

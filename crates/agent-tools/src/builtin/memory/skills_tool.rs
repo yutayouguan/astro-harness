@@ -1,7 +1,7 @@
 //! Skills 工具：list / view(load) / curate / manage（create、update、patch、delete）。
 //!
 //! 加载逻辑委托 [`skills::load_skill_by_name`]；列表用 [`skills::list_enabled_for_prompt`]；
-//! manage 写入当前 Agent 的 `workspace/skills/`（[`skills::install::agent_skills_dir`]）。
+//! manage 写入当前 Agent 的 `workspace/skills/`（[`skills::install::agent_workspace_skills_dir`]）。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -244,7 +244,7 @@ fn manage_skill(
 ) -> anyhow::Result<String> {
     validate_skill_id(skill_id)?;
     let op = manage_action.trim().to_lowercase();
-    let skills_dir = skills::install::agent_skills_dir(None)?;
+    let skills_dir = skills::install::agent_workspace_skills_dir(None)?;
     let dest = skills_dir.join(skill_id);
 
     match op.as_str() {
@@ -452,7 +452,7 @@ mod tests {
         )
         .unwrap();
         assert!(create.contains("已创建"));
-        let skills_dir = skills::install::agent_skills_dir(None).unwrap();
+        let skills_dir = skills::install::agent_workspace_skills_dir(None).unwrap();
         let md = skills_dir.join("demo-tool-skill/SKILL.md");
         assert!(md.is_file());
 
@@ -495,7 +495,7 @@ mod tests {
         )
         .unwrap();
         assert!(out.contains("1 处替换"));
-        let skills_dir = skills::install::agent_skills_dir(None).unwrap();
+        let skills_dir = skills::install::agent_workspace_skills_dir(None).unwrap();
         let body = fs::read_to_string(skills_dir.join("patch-demo/SKILL.md")).unwrap();
         assert!(body.contains("step ONE"));
         assert!(!body.contains("step one"));

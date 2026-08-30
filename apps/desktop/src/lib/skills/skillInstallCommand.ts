@@ -35,7 +35,6 @@ export function storeInstallCommand(
   const detailUrl = `https://skillhub.cn/skills/${skillhubDetailSlug(skill)}`;
   const targetPath =
     target === "project" ? "<当前项目>/.astro/skills" : "~/.astro/skills";
-  const folder = skillhubDetailSlug(skill);
   const apiKeyNote =
     skill.requires_api_key === true
       ? "- 凭据：安装后读取 SKILL.md 确认准确的 API Key 名称；不要让我在对话中粘贴密钥，也不要把密钥写入 Skill 或项目文件。\n"
@@ -48,7 +47,7 @@ export function storeInstallCommand(
     `- 安装引用：${installHint}\n` +
     `- 安装作用域：${target}\n` +
     `- 目标目录：${targetPath}\n` +
-    `- 工具参数：skill_id=${ownerSlug}，install_ref=${installHint}，folder=${folder}，scope=${target}，requires_api_key=${skill.requires_api_key === true}\n` +
+    `- 工具参数：skill_id=${ownerSlug}，install_ref=${installHint}，scope=${target}，requires_api_key=${skill.requires_api_key === true}\n` +
     apiKeyNote +
     `- 详情：${detailUrl}\n`
   );

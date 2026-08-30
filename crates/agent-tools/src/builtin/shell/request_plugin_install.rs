@@ -18,9 +18,6 @@ pub struct RequestPluginInstallArgs {
     /// 展示名称，用于安装来源记录。
     #[serde(default)]
     pub name: Option<String>,
-    /// 本地目录名，用于安装来源记录。
-    #[serde(default)]
-    pub folder: Option<String>,
     /// 安装作用域：`global`（`~/.astro/skills`）或 `project`（`<project>/.astro/skills`）。
     #[serde(default)]
     pub scope: Option<String>,
@@ -71,6 +68,17 @@ fn normalized_install_ref(args: &RequestPluginInstallArgs) -> anyhow::Result<Str
     {
         Ok(candidate.to_string())
     } else {
+        let segments = candidate.split('/').collect::<Vec<_>>();
+        if candidate.contains("://")
+            || candidate.contains('\\')
+            || segments.is_empty()
+            || segments.len() > 2
+            || segments
+                .iter()
+                .any(|segment| segment.is_empty() || *segment == "." || *segment == "..")
+        {
+            anyhow::bail!("仅支持 SkillHub skill_id 或官方 SkillHub 安装引用");
+        }
         Ok(format!("skillhub:{candidate}"))
     }
 }
@@ -97,7 +105,6 @@ pub async fn dispatch(
         Some(&agent_id),
         Some(skills::InstallOriginHint {
             name: args.name.clone(),
-            folder: args.folder.clone(),
         }),
         scope,
         project_root.as_deref(),
@@ -122,7 +129,6 @@ mod tests {
             skill_id: skill_id.into(),
             install_ref: None,
             name: None,
-            folder: None,
             scope: None,
             requires_api_key: false,
             reason: None,
@@ -138,6 +144,8 @@ mod tests {
         assert_eq!(normalized_scope(None).unwrap(), "global");
         assert_eq!(normalized_scope(Some("project")).unwrap(), "project");
         assert!(normalized_scope(Some("machine")).is_err());
+        assert!(normalized_install_ref(&args("https://github.com/owner/demo")).is_err());
+        assert!(normalized_install_ref(&args("../demo")).is_err());
     }
 
     #[test]
@@ -152,13 +160,7 @@ mod tests {
         let properties = entry.schema["properties"]
             .as_object()
             .expect("object properties");
-        for field in [
-            "skill_id",
-            "install_ref",
-            "folder",
-            "scope",
-            "requires_api_key",
-        ] {
+        for field in ["skill_id", "install_ref", "scope", "requires_api_key"] {
             assert!(
                 properties.contains_key(field),
                 "missing schema field {field}"

@@ -40,7 +40,7 @@ test("SkillHub install prompt pins Astro installer and target scope", () => {
   assert.match(cmd, /安装作用域：project/);
   assert.match(cmd, /<当前项目>\/\.astro\/skills/);
   assert.match(cmd, /tool_search/);
-  assert.match(cmd, /folder=demo-skill/);
+  assert.doesNotMatch(cmd, /folder=/);
   assert.match(cmd, /不要运行 SkillHub CLI/);
   assert.doesNotMatch(cmd, /api\.skillhub\.cn/);
 });

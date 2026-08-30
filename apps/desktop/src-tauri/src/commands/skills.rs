@@ -260,7 +260,6 @@ pub async fn install_store_skill(
     install_ref: String,
     agent_id: Option<String>,
     name: Option<String>,
-    folder: Option<String>,
     scope: Option<String>,
     project_root: Option<String>,
 ) -> Result<String, String> {
@@ -276,7 +275,7 @@ pub async fn install_store_skill(
         .filter(|root| !root.is_empty())
         .map(PathBuf::from);
     let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
-    let hint = InstallOriginHint { name, folder };
+    let hint = InstallOriginHint { name };
     install_from_ref_scoped(
         &install_ref,
         agent.as_deref(),

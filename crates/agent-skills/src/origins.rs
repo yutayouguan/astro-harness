@@ -6,8 +6,9 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 
 use crate::agent_id::normalize as normalize_agent_id;
+use crate::install::{is_safe_skill_folder, is_skillhub_http_ref};
 use crate::models::{SkillOriginRecord, SkillOriginsFile, StoreSkill, StoreSkillDetail};
-use crate::store::fetch_detail;
+use crate::store::fetch_detail_strict;
 
 const ORIGINS_FILE: &str = "skill-origins.json";
 const ORIGINS_VERSION: u32 = 3;
@@ -40,14 +41,6 @@ fn origin_key(agent_id: Option<&str>, scope: &str, folder: &str) -> (String, Str
     )
 }
 
-fn is_skillhub_install_ref(install_ref: &str) -> bool {
-    let value = install_ref.trim();
-    value.starts_with("skillhub:")
-        || value.starts_with("https://api.skillhub.cn/")
-        || value.starts_with("https://skillhub.cn/")
-        || value.starts_with("https://www.skillhub.cn/")
-}
-
 /// `skill-origins.json` 路径。
 pub fn origins_path() -> PathBuf {
     memory_dir().join(ORIGINS_FILE)
@@ -74,7 +67,8 @@ pub fn load_origins() -> Result<SkillOriginsFile> {
     let original_len = file.records.len();
     file.records.retain(|record| {
         record.store.eq_ignore_ascii_case("skillhub")
-            && is_skillhub_install_ref(&record.install_ref)
+            && is_skillhub_http_ref(&record.install_ref)
+            && is_safe_skill_folder(&record.folder)
             && valid_scope(record.scope.as_deref()).is_some()
     });
     let needs_migration = file.version != ORIGINS_VERSION || file.records.len() != original_len;
@@ -99,7 +93,8 @@ pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
 /// 按 `(agent_id, scope, folder)` 插入或更新。
 pub fn upsert_origin(mut record: SkillOriginRecord) -> Result<()> {
     if !record.store.eq_ignore_ascii_case("skillhub")
-        || !is_skillhub_install_ref(&record.install_ref)
+        || !is_skillhub_http_ref(&record.install_ref)
+        || !is_safe_skill_folder(&record.folder)
     {
         bail!("仅支持记录 SkillHub 安装来源");
     }
@@ -111,16 +106,12 @@ pub fn upsert_origin(mut record: SkillOriginRecord) -> Result<()> {
     record.scope = Some(scope.clone());
     let key = origin_key(record.agent_id.as_deref(), &scope, &record.folder);
     let mut file = load_origins()?;
-    if let Some(existing) = file
-        .records
-        .iter_mut()
-        .find(|r| {
-            valid_scope(r.scope.as_deref())
-                .map(|record_scope| origin_key(r.agent_id.as_deref(), record_scope, &r.folder))
-                .as_ref()
-                == Some(&key)
-        })
-    {
+    if let Some(existing) = file.records.iter_mut().find(|r| {
+        valid_scope(r.scope.as_deref())
+            .map(|record_scope| origin_key(r.agent_id.as_deref(), record_scope, &r.folder))
+            .as_ref()
+            == Some(&key)
+    }) {
         *existing = record;
     } else {
         file.records.push(record);
@@ -134,33 +125,16 @@ pub fn find_origin(
     scope: &str,
     folder: &str,
 ) -> Result<Option<SkillOriginRecord>> {
-    let scope = valid_scope(Some(scope))
-        .ok_or_else(|| anyhow::anyhow!("无效 Skill scope: {scope}"))?;
+    let scope =
+        valid_scope(Some(scope)).ok_or_else(|| anyhow::anyhow!("无效 Skill scope: {scope}"))?;
     let key = origin_key(agent_id, scope, folder);
     let file = load_origins()?;
-    Ok(file
-        .records
-        .into_iter()
-        .find(|r| {
-            valid_scope(r.scope.as_deref())
-                .map(|record_scope| origin_key(r.agent_id.as_deref(), record_scope, &r.folder))
-                .as_ref()
-                == Some(&key)
-        }))
-}
-
-/// 从 `install_ref` 推断本地技能文件夹名。
-pub fn infer_folder(install_ref: &str) -> Option<String> {
-    let r = install_ref.trim();
-    if let Some(rest) = r.strip_prefix("skillhub:") {
-        let slug = rest.rsplit('/').next().unwrap_or(rest).trim();
-        return (!slug.is_empty()).then(|| slug.to_string());
-    }
-    if r.contains("api.skillhub.cn/") || r.contains("skillhub.cn/") {
-        let slug = r.trim_end_matches('/').rsplit('/').next()?.trim();
-        return (!slug.is_empty()).then(|| slug.to_string());
-    }
-    None
+    Ok(file.records.into_iter().find(|r| {
+        valid_scope(r.scope.as_deref())
+            .map(|record_scope| origin_key(r.agent_id.as_deref(), record_scope, &r.folder))
+            .as_ref()
+            == Some(&key)
+    }))
 }
 
 fn derive_store_skill_id(origin: &SkillOriginRecord) -> String {
@@ -224,7 +198,7 @@ pub async fn fill_origin_remote_baseline(
         return Ok(());
     };
     let store_skill = origin_to_store_skill(&origin);
-    match fetch_detail(&store_skill).await {
+    match fetch_detail_strict(&store_skill).await {
         Ok(detail) => {
             if let Err(e) = upsert_origin(origin_with_remote_baseline(&origin, &detail)) {
                 tracing::debug!(
@@ -265,7 +239,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:x/ppt-generator-skill".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: None,
             remote_version: None,
@@ -280,7 +254,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:x/ppt-generator-skill".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: Some(2),
             remote_version: None,
@@ -294,12 +268,37 @@ mod tests {
     }
 
     #[test]
-    fn infer_folder_from_skillhub_ref() {
-        assert_eq!(
-            infer_folder("skillhub:owner/ppt-generator-skill").as_deref(),
-            Some("ppt-generator-skill")
-        );
-        assert_eq!(infer_folder("legacy:owner--weather"), None);
+    fn same_folder_in_global_and_project_keeps_distinct_origins() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        for scope in ["global", "project"] {
+            upsert_origin(SkillOriginRecord {
+                folder: "demo".into(),
+                skill_id: None,
+                name: "demo".into(),
+                store: "skillhub".into(),
+                install_ref: "skillhub:owner/demo".into(),
+                agent_id: Some("default".into()),
+                scope: Some(scope.into()),
+                installed_at: 1,
+                last_updated_at: None,
+                remote_version: None,
+                remote_updated_at: None,
+                content_digest: None,
+            })
+            .unwrap();
+        }
+
+        let file = load_origins().unwrap();
+        assert_eq!(file.records.len(), 2);
+        assert!(find_origin(Some("default"), "global", "demo")
+            .unwrap()
+            .is_some());
+        assert!(find_origin(Some("default"), "project", "demo")
+            .unwrap()
+            .is_some());
     }
 
     #[test]
@@ -326,7 +325,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:x/demo".into(),
             agent_id: None,
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: None,
             remote_version: None,
@@ -341,7 +340,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:x/demo".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: Some(9),
             remote_version: None,
@@ -371,7 +370,7 @@ mod tests {
                     store: "skillhub".into(),
                     install_ref: "skillhub:owner/keep".into(),
                     agent_id: None,
-                    scope: None,
+                    scope: Some("global".into()),
                     installed_at: 1,
                     last_updated_at: None,
                     remote_version: None,
@@ -385,7 +384,35 @@ mod tests {
                     store: "legacy-market".into(),
                     install_ref: "legacy:owner/remove".into(),
                     agent_id: None,
+                    scope: Some("global".into()),
+                    installed_at: 1,
+                    last_updated_at: None,
+                    remote_version: None,
+                    remote_updated_at: None,
+                    content_digest: None,
+                },
+                SkillOriginRecord {
+                    folder: "remove-missing-scope".into(),
+                    skill_id: None,
+                    name: "remove-missing-scope".into(),
+                    store: "skillhub".into(),
+                    install_ref: "skillhub:owner/remove-missing-scope".into(),
+                    agent_id: None,
                     scope: None,
+                    installed_at: 1,
+                    last_updated_at: None,
+                    remote_version: None,
+                    remote_updated_at: None,
+                    content_digest: None,
+                },
+                SkillOriginRecord {
+                    folder: "..".into(),
+                    skill_id: None,
+                    name: "remove-unsafe-folder".into(),
+                    store: "skillhub".into(),
+                    install_ref: "skillhub:owner/remove-unsafe-folder".into(),
+                    agent_id: None,
+                    scope: Some("global".into()),
                     installed_at: 1,
                     last_updated_at: None,
                     remote_version: None,
@@ -439,7 +466,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:owner/demo-skill".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 42,
             last_updated_at: None,
             remote_version: None,
@@ -462,7 +489,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:owner/demo-skill".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: None,
             remote_version: None,
@@ -488,7 +515,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:nonexistent-slug-xyz".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: None,
             remote_version: None,
@@ -497,11 +524,11 @@ mod tests {
         })
         .unwrap();
 
-        fill_origin_remote_baseline(Some("workspace"), "demo-skill")
+        fill_origin_remote_baseline(Some("workspace"), "global", "demo-skill")
             .await
             .unwrap();
 
-        let o = find_origin(Some("workspace"), "demo-skill")
+        let o = find_origin(Some("workspace"), "global", "demo-skill")
             .unwrap()
             .unwrap();
         assert!(o.remote_version.is_none());
@@ -510,23 +537,25 @@ mod tests {
 
     #[tokio::test]
     async fn record_after_install_upserts() {
-        use crate::install::{record_after_install, InstallOriginHint};
+        use crate::install::{record_after_install_in_dir, scoped_skills_dir, InstallOriginHint};
 
         let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        record_after_install(
+        let skills_dir = scoped_skills_dir("global", None).unwrap();
+        record_after_install_in_dir(
             "skillhub:owner/demo-skill",
             Some("workspace"),
             &InstallOriginHint {
                 name: Some("Demo".into()),
-                folder: Some("demo-skill".into()),
             },
+            &skills_dir,
+            "global",
         )
         .await
         .unwrap();
-        let o = find_origin(Some("workspace"), "demo-skill")
+        let o = find_origin(Some("workspace"), "global", "demo-skill")
             .unwrap()
             .unwrap();
         assert_eq!(o.install_ref, "skillhub:owner/demo-skill");
@@ -537,14 +566,14 @@ mod tests {
     #[tokio::test]
     async fn record_after_install_persists_content_digest() {
         use crate::digest::skill_content_digest;
-        use crate::install::{agent_skills_dir, record_after_install, InstallOriginHint};
+        use crate::install::{record_after_install_in_dir, scoped_skills_dir, InstallOriginHint};
         use std::io::Write;
 
         let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        let skills_dir = agent_skills_dir(Some("workspace")).unwrap();
+        let skills_dir = scoped_skills_dir("global", None).unwrap();
         let skill_dir = skills_dir.join("demo-skill");
         std::fs::create_dir_all(&skill_dir).unwrap();
         let mut f = std::fs::File::create(skill_dir.join("SKILL.md")).unwrap();
@@ -552,18 +581,19 @@ mod tests {
 
         let expected = skill_content_digest(&skill_dir).unwrap();
 
-        record_after_install(
+        record_after_install_in_dir(
             "skillhub:owner/demo-skill",
             Some("workspace"),
             &InstallOriginHint {
                 name: Some("Demo".into()),
-                folder: Some("demo-skill".into()),
             },
+            &skills_dir,
+            "global",
         )
         .await
         .unwrap();
 
-        let o = find_origin(Some("workspace"), "demo-skill")
+        let o = find_origin(Some("workspace"), "global", "demo-skill")
             .unwrap()
             .unwrap();
         assert_eq!(o.content_digest.as_deref(), Some(expected.as_str()));

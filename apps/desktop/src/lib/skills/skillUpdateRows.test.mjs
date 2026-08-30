@@ -14,6 +14,7 @@ const pptInstalled = {
   path: "",
   source_dir: "",
   enabled: true,
+  scope: "global",
 };
 
 const pptOrigin = {
@@ -22,6 +23,7 @@ const pptOrigin = {
   store: "skillhub",
   install_ref: "skillhub:owner/ppt-generator-skill",
   agent_id: "workspace",
+  scope: "global",
   installed_at: 1,
 };
 
@@ -303,7 +305,7 @@ test("filter updatable excludes unknown rows", () => {
   assert.equal(filterUpdateRows(applied, "updatable").length, 0);
 });
 
-test("filter updatable excludes machine-scoped rows with origin", () => {
+test("machine-scoped rows do not inherit a global origin", () => {
   const rows = mergeUpdateRows(
     [],
     [
@@ -330,7 +332,8 @@ test("filter updatable excludes machine-scoped rows with origin", () => {
     ],
     "workspace",
   );
-  assert.equal(filterUpdateRows(rows, "with_origin").length, 1);
+  assert.equal(filterUpdateRows(rows, "with_origin").length, 0);
+  assert.equal(filterUpdateRows(rows, "no_origin").length, 1);
   assert.equal(filterUpdateRows(rows, "updatable").length, 0);
 });
 

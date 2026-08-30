@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::path::Path;
 
 use crate::digest::skill_content_digest;
-use crate::install::scoped_skills_dir;
+use crate::install::scoped_skills_path;
 use crate::models::SkillUpdatePreview;
 use crate::origins::find_origin;
 
@@ -19,7 +19,7 @@ pub fn preview_skill_update(
     let baseline_digest = origin.as_ref().and_then(|o| o.content_digest.clone());
     let has_baseline_digest = baseline_digest.is_some();
 
-    let current_digest = match scoped_skills_dir(scope, project_root) {
+    let current_digest = match scoped_skills_path(scope, project_root) {
         Ok(skills_dir) => {
             let skill_path = skills_dir.join(folder);
             if skill_path.is_dir() {
@@ -70,7 +70,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:owner/demo".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: None,
             remote_version: None,

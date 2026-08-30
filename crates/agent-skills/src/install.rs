@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::agent_id::normalize as normalize_agent_id;
 use crate::digest::skill_content_digest;
 use crate::models::SkillOriginRecord;
-use crate::origins::{fill_origin_remote_baseline, find_origin, infer_folder, upsert_origin};
+use crate::origins::{fill_origin_remote_baseline, find_origin, upsert_origin};
 
 /// SkillHub 公开文件 API（无需 CLI / login）。
 const SKILLHUB_API: &str = "https://api.skillhub.cn";
@@ -27,23 +27,18 @@ fn memory_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(".astro"))
 }
 
-/// Agent 工作区根目录。
-fn agent_workspace(agent_id: &str) -> PathBuf {
-    home::agent_workspace_dir(&memory_dir(), agent_id)
-}
-
-/// 当前 Agent 工作区 skills 目录（在线安装 / 更新目标）
-pub fn agent_skills_dir(agent_id: Option<&str>) -> Result<PathBuf> {
+/// Agent 运行时生成或演化 Skill 的工作区目录；不用于在线市场安装。
+pub fn agent_workspace_skills_dir(agent_id: Option<&str>) -> Result<PathBuf> {
     let id = normalize_agent_id(agent_id);
-    let dir = agent_workspace(&id).join("skills");
+    let dir = home::agent_workspace_dir(&memory_dir(), &id).join("skills");
     fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
     Ok(dir)
 }
 
 /// 解析商店安装目标。`global` 写入当前用户 `~/.astro/skills`，
 /// `project` 写入可信项目的 `<project>/.astro/skills`。
-pub fn scoped_skills_dir(scope: &str, project_root: Option<&Path>) -> Result<PathBuf> {
-    let dir = match scope {
+pub fn scoped_skills_path(scope: &str, project_root: Option<&Path>) -> Result<PathBuf> {
+    let path = match scope {
         "global" => memory_dir().join("skills"),
         "project" => project_root
             .ok_or_else(|| anyhow!("project scope requires a project root"))?
@@ -52,6 +47,12 @@ pub fn scoped_skills_dir(scope: &str, project_root: Option<&Path>) -> Result<Pat
         "builtin" => bail!("builtin Skills are read-only"),
         other => bail!("unsupported Skill install scope: {other}"),
     };
+    Ok(path)
+}
+
+/// 解析并创建商店安装目标目录。
+pub fn scoped_skills_dir(scope: &str, project_root: Option<&Path>) -> Result<PathBuf> {
+    let dir = scoped_skills_path(scope, project_root)?;
     fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
     Ok(dir)
 }
@@ -68,6 +69,10 @@ fn validate_path_component(value: &str, label: &str) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn is_safe_skill_folder(folder: &str) -> bool {
+    validate_path_component(folder, "skill folder").is_ok()
+}
+
 /// 是否为受支持的 SkillHub 安装引用。
 pub(crate) fn is_skillhub_http_ref(install_ref: &str) -> bool {
     skillhub_slug(install_ref).is_ok()
@@ -77,12 +82,19 @@ pub(crate) fn is_skillhub_http_ref(install_ref: &str) -> bool {
 fn skillhub_slug(install_ref: &str) -> Result<String> {
     let r = install_ref.trim();
     if let Some(rest) = r.strip_prefix("skillhub:") {
-        let slug = rest.rsplit('/').next().unwrap_or(rest).trim();
+        let segments = rest.split('/').collect::<Vec<_>>();
+        if segments.is_empty() || segments.len() > 2 {
+            bail!("无效 SkillHub 安装引用: {install_ref}");
+        }
+        for segment in &segments {
+            validate_path_component(segment.trim(), "SkillHub 引用段")?;
+        }
+        let slug = segments.last().copied().unwrap_or_default().trim();
         validate_path_component(slug, "SkillHub slug")?;
         return Ok(slug.to_string());
     }
-    let url = reqwest::Url::parse(r)
-        .with_context(|| format!("无法解析 SkillHub 引用: {install_ref}"))?;
+    let url =
+        reqwest::Url::parse(r).with_context(|| format!("无法解析 SkillHub 引用: {install_ref}"))?;
     let allowed_host = matches!(
         url.host_str(),
         Some("api.skillhub.cn" | "skillhub.cn" | "www.skillhub.cn")
@@ -191,12 +203,23 @@ pub(crate) fn write_skill_files(
     if let Err(error) = fs::rename(&staging, &dest) {
         let _ = remove_path(&staging);
         if had_dest {
-            let _ = fs::rename(&displaced, &dest);
+            fs::rename(&displaced, &dest).with_context(|| {
+                format!(
+                    "activate {} failed ({error}); restoring previous version also failed",
+                    dest.display()
+                )
+            })?;
         }
         return Err(error).with_context(|| format!("activate {}", dest.display()));
     }
     if had_dest {
-        remove_path(&displaced)?;
+        if let Err(error) = remove_path(&displaced) {
+            tracing::warn!(
+                path = %displaced.display(),
+                error = %error,
+                "installed Skill but could not remove displaced directory"
+            );
+        }
     }
     Ok(dest)
 }
@@ -273,31 +296,16 @@ async fn install_skillhub_http(slug: &str, skills_dir: &Path) -> Result<String> 
 #[derive(Debug, Clone, Default)]
 pub struct InstallOriginHint {
     pub name: Option<String>,
-    pub folder: Option<String>,
 }
 
-async fn record_after_install_in_dir(
+pub(crate) async fn record_after_install_in_dir(
     install_ref: &str,
     agent_id: Option<&str>,
     hint: &InstallOriginHint,
     skills_dir: &Path,
     scope: &str,
 ) -> Result<()> {
-    let folder = hint
-        .folder
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .or_else(|| infer_folder(install_ref));
-
-    let Some(folder) = folder else {
-        tracing::warn!(
-            install_ref = %install_ref,
-            "无法推断 skill folder，跳过 origin 记录"
-        );
-        return Ok(());
-    };
+    let folder = skillhub_slug(install_ref)?;
 
     let name = hint
         .name
@@ -327,7 +335,7 @@ async fn record_after_install_in_dir(
 
     upsert_origin(SkillOriginRecord {
         folder: folder.clone(),
-        skill_id: None,
+        skill_id: existing.as_ref().and_then(|record| record.skill_id.clone()),
         name,
         store: "skillhub".to_string(),
         install_ref: install_ref.to_string(),
@@ -335,8 +343,12 @@ async fn record_after_install_in_dir(
         scope: Some(scope.to_string()),
         installed_at,
         last_updated_at: if is_update { Some(now) } else { None },
-        remote_version: None,
-        remote_updated_at: None,
+        remote_version: existing
+            .as_ref()
+            .and_then(|record| record.remote_version.clone()),
+        remote_updated_at: existing
+            .as_ref()
+            .and_then(|record| record.remote_updated_at),
         content_digest,
     })?;
 
@@ -388,9 +400,17 @@ mod tests {
         ));
         assert!(!is_skillhub_http_ref("legacy:owner--skill"));
         assert!(!is_skillhub_http_ref("https://legacy.example/owner/skill"));
-        assert!(!is_skillhub_http_ref("https://skillhub.cn.evil.test/skills/demo"));
-        assert!(!is_skillhub_http_ref("https://skillhub.cn:8443/skills/demo"));
+        assert!(!is_skillhub_http_ref(
+            "https://skillhub.cn.evil.test/skills/demo"
+        ));
+        assert!(!is_skillhub_http_ref(
+            "https://skillhub.cn:8443/skills/demo"
+        ));
         assert!(!is_skillhub_http_ref("skillhub:.."));
+        assert!(!is_skillhub_http_ref(
+            "skillhub:https://github.com/owner/demo"
+        ));
+        assert!(!is_skillhub_http_ref("skillhub:owner//demo"));
     }
 
     #[test]
@@ -415,12 +435,8 @@ mod tests {
         std::fs::create_dir_all(&existing).unwrap();
         std::fs::write(existing.join("SKILL.md"), "# existing\n").unwrap();
 
-        let error = write_skill_files(
-            dir.path(),
-            "demo",
-            &[("../escape".into(), b"bad".to_vec())],
-        )
-        .unwrap_err();
+        let error = write_skill_files(dir.path(), "demo", &[("../escape".into(), b"bad".to_vec())])
+            .unwrap_err();
 
         assert!(error.to_string().contains("非法文件路径"));
         assert_eq!(

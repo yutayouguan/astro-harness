@@ -279,60 +279,69 @@ async fn fetch_skillhub_v1_detail(slug: &str) -> Result<SkillHubV1Detail> {
     resp.json().await.context("parse SkillHub v1 detail JSON")
 }
 
-/// 从 SkillHub 拉取详情；失败时回退列表字段。
-pub async fn fetch_detail(skill: &StoreSkill) -> Result<StoreSkillDetail> {
-    let mut detail = detail_from_list(skill);
+fn merge_skillhub_detail(mut detail: StoreSkillDetail, body: SkillHubV1Detail) -> StoreSkillDetail {
+    let Some(api_skill) = body.skill else {
+        return detail;
+    };
+    if let Some(name) = api_skill.display_name.filter(|s| !s.is_empty()) {
+        detail.name = name;
+    }
+    if let Some(slug) = api_skill.slug.filter(|s| !s.is_empty()) {
+        detail.slug = slug;
+        detail.detail_url = format!("https://skillhub.cn/skills/{}", detail.slug);
+    }
+    let overview = api_skill
+        .summary_zh
+        .filter(|s| !s.is_empty())
+        .or(api_skill.summary.filter(|s| !s.is_empty()))
+        .unwrap_or_default();
+    if !overview.is_empty() {
+        detail.description = overview.clone();
+        detail.overview = overview;
+    }
+    if let Some(source) = api_skill.source.filter(|s| !s.is_empty()) {
+        detail.source = source;
+    }
+    detail.category = api_skill.category.filter(|s| !s.is_empty());
+    detail.sub_categories = api_skill
+        .sub_categories
+        .into_iter()
+        .filter_map(|c| c.name.or(c.key).filter(|s| !s.is_empty()))
+        .collect();
+    detail.icon_url = api_skill.icon_url.filter(|s| !s.is_empty());
+    detail.verified = api_skill.verified;
+    detail.updated_at = api_skill.updated_at;
+    if let Some(stats) = api_skill.stats {
+        detail.downloads = stats.downloads.or(detail.downloads);
+        detail.installs = stats.installs.or(detail.installs);
+        detail.stars = stats.stars;
+    }
+    detail.version = body
+        .latest_version
+        .and_then(|v| v.version)
+        .filter(|s| !s.is_empty());
+    detail.owner_name = body.owner.and_then(|o| {
+        o.display_name
+            .filter(|s| !s.is_empty())
+            .or(o.handle.filter(|s| !s.is_empty()))
+    });
+    detail
+}
 
-    match fetch_skillhub_v1_detail(&detail.slug).await {
-        Ok(body) => {
-            let Some(api_skill) = body.skill else {
-                return Ok(detail);
-            };
-            if let Some(name) = api_skill.display_name.filter(|s| !s.is_empty()) {
-                detail.name = name;
-            }
-            if let Some(slug) = api_skill.slug.filter(|s| !s.is_empty()) {
-                detail.slug = slug;
-                detail.detail_url = format!("https://skillhub.cn/skills/{}", detail.slug);
-            }
-            let overview = api_skill
-                .summary_zh
-                .filter(|s| !s.is_empty())
-                .or(api_skill.summary.filter(|s| !s.is_empty()))
-                .unwrap_or_default();
-            if !overview.is_empty() {
-                detail.description = overview.clone();
-                detail.overview = overview;
-            }
-            if let Some(source) = api_skill.source.filter(|s| !s.is_empty()) {
-                detail.source = source;
-            }
-            detail.category = api_skill.category.filter(|s| !s.is_empty());
-            detail.sub_categories = api_skill
-                .sub_categories
-                .into_iter()
-                .filter_map(|c| c.name.or(c.key).filter(|s| !s.is_empty()))
-                .collect();
-            detail.icon_url = api_skill.icon_url.filter(|s| !s.is_empty());
-            detail.verified = api_skill.verified;
-            detail.updated_at = api_skill.updated_at;
-            if let Some(stats) = api_skill.stats {
-                detail.downloads = stats.downloads.or(detail.downloads);
-                detail.installs = stats.installs.or(detail.installs);
-                detail.stars = stats.stars;
-            }
-            detail.version = body
-                .latest_version
-                .and_then(|v| v.version)
-                .filter(|s| !s.is_empty());
-            detail.owner_name = body.owner.and_then(|o| {
-                o.display_name
-                    .filter(|s| !s.is_empty())
-                    .or(o.handle.filter(|s| !s.is_empty()))
-            });
-            Ok(detail)
-        }
+/// 从 SkillHub 严格拉取详情；更新检查与安装基线使用，网络/API 错误向上传递。
+pub async fn fetch_detail_strict(skill: &StoreSkill) -> Result<StoreSkillDetail> {
+    let mut detail = detail_from_list(skill);
+    let body = fetch_skillhub_v1_detail(&detail.slug).await?;
+    detail = merge_skillhub_detail(detail, body);
+    Ok(detail)
+}
+
+/// 从 SkillHub 拉取详情；设置页展示允许失败时回退列表字段。
+pub async fn fetch_detail(skill: &StoreSkill) -> Result<StoreSkillDetail> {
+    match fetch_detail_strict(skill).await {
+        Ok(detail) => Ok(detail),
         Err(err) => {
+            let detail = detail_from_list(skill);
             tracing::warn!(error = %err, slug = %detail.slug, "SkillHub detail fetch failed; using list fields");
             Ok(detail)
         }

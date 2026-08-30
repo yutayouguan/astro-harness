@@ -47,6 +47,7 @@ export function originMatchesSkill(
   origin: SkillOriginRecord,
   skill: InstalledSkill,
 ): boolean {
+  if (origin.scope !== skill.scope) return false;
   const skillFolder = norm(folderFromId(skill.id));
   const originFolder = norm(origin.folder);
   if (skillFolder && originFolder && skillFolder === originFolder) {

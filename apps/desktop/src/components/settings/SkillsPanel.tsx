@@ -813,6 +813,7 @@ export default function SkillsPanel({
       try {
         const checks = await invoke<SkillUpdateCheckResult[]>("check_skill_updates", {
           agentId,
+          scope: "global",
         });
         setLastCheckResults(checks);
         const checkedAt = Date.now();
@@ -1253,7 +1254,6 @@ export default function SkillsPanel({
         installRef: skill.install_ref,
         agentId,
         name: skill.name,
-        folder: inferFolderFromInstallRef(skill.install_ref),
         scope: target,
         projectRoot: null,
       });
@@ -1335,6 +1335,7 @@ export default function SkillsPanel({
       const preview = await invoke<SkillUpdatePreview>("preview_skill_update", {
         folder,
         agentId,
+        scope: row.origin.scope ?? row.skill.scope ?? "global",
       });
       if (preview.has_local_changes) {
         setUpdateConfirm({ mode: "single", row, folder });
@@ -1350,11 +1351,13 @@ export default function SkillsPanel({
 
   const invokeUpdateInstalled = (
     folder: string,
+    scope: string,
     opts: { force: boolean; backupIfDirty: boolean },
   ) =>
     invoke<string>("update_installed_skill", {
       folder,
       agentId,
+      scope,
       force: opts.force,
       backupIfDirty: opts.backupIfDirty,
     });
@@ -1367,7 +1370,11 @@ export default function SkillsPanel({
     setUpdatingFolder(folder);
     setError(null);
     try {
-      await invokeUpdateInstalled(folder, opts);
+      await invokeUpdateInstalled(
+        folder,
+        row.origin?.scope ?? row.skill.scope ?? "global",
+        opts,
+      );
       await refreshUpdatesData();
       await checkSkillUpdates({ force: true, notify: false });
       showToast(t("skills.updateDone").replace("{name}", row.skill.name), {
@@ -1405,10 +1412,14 @@ export default function SkillsPanel({
         const folder = updateFolderForRow(row);
         setUpdatingFolder(folder);
         try {
-          const message = await invokeUpdateInstalled(folder, {
-            force: true,
-            backupIfDirty: true,
-          });
+          const message = await invokeUpdateInstalled(
+            folder,
+            row.origin?.scope ?? row.skill.scope ?? "global",
+            {
+              force: true,
+              backupIfDirty: true,
+            },
+          );
           results.push({ folder, ok: true, message });
         } catch (err) {
           results.push({ folder, ok: false, message: String(err) });
@@ -1458,6 +1469,7 @@ export default function SkillsPanel({
           const preview = await invoke<SkillUpdatePreview>("preview_skill_update", {
             folder,
             agentId,
+            scope: row.origin?.scope ?? row.skill.scope ?? "global",
           });
           return { row, preview };
         }),

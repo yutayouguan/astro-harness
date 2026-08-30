@@ -2328,7 +2328,8 @@ pub async fn approve_evolution_proposal_to_branch(id: String) -> Result<String, 
         .find(|c| c.id == id)
         .ok_or_else(|| format!("提案不存在: {id}"))?;
 
-    let skills_dir = skills::install::agent_skills_dir(None).map_err(|e| e.to_string())?;
+    let skills_dir =
+        skills::install::agent_workspace_skills_dir(None).map_err(|e| e.to_string())?;
     let repo = git_root(&skills_dir)
         .ok_or_else(|| "技能目录不在 git 仓库中，无法开分支（可用普通「批准写入」）".to_string())?;
 

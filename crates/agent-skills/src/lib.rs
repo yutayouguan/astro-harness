@@ -58,7 +58,7 @@ pub use check::{
     filter_outdated_folders, origin_to_store_skill,
 };
 pub use install::{
-    install_from_ref, install_from_ref_scoped, scoped_skills_dir, InstallOriginHint,
+    install_from_ref_scoped, scoped_skills_dir, scoped_skills_path, InstallOriginHint,
 };
 pub use installed::{
     link_skill_to_agent, list_enabled_for_prompt, list_enabled_for_prompt_with_config,
@@ -80,8 +80,7 @@ pub use snapshots::{
 };
 pub use store::{fetch_detail, search, search_with_filters};
 pub use update::{
-    backup_skill_dir, update_all_with_origin, update_installed_skill, update_installed_skill_ex,
-    update_outdated_skills,
+    backup_skill_dir, update_all_with_origin, update_installed_skill_ex, update_outdated_skills,
 };
 pub use usage::{
     curate_report, curate_report_at, last_loaded_at, record_skill_load, skill_usage_path,
