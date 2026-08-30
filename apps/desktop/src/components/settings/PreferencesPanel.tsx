@@ -24,7 +24,12 @@ import { useMorphicons } from "../../hooks/app/useMorphicons";
 import type { AppIconId } from "../../types";
 import type { ShellColorStyle } from "../../hooks/app/useShellColorStyle";
 import { useTheme, type ThemeMode, type GlassLevel } from "../../hooks/app/useTheme";
-import type { ChatDisplayPrefs, ChatVerbosity } from "../../hooks/chat/useChatDisplayPrefs";
+import type {
+  ChatAnswerLayout,
+  ChatDisplayPrefs,
+  ChatDisplayToggleKey,
+  ChatVerbosity,
+} from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import {
@@ -130,17 +135,15 @@ type Props = {
   tone?: string;
   chatDisplayPrefs: ChatDisplayPrefs;
   onChatVerbosityChange: (verbosity: ChatVerbosity) => void;
-  onChatToggleChange: (
-    key: keyof Omit<ChatDisplayPrefs, "verbosity">,
-    value: boolean,
-  ) => void;
+  onChatAnswerLayoutChange: (layout: ChatAnswerLayout) => void;
+  onChatToggleChange: (key: ChatDisplayToggleKey, value: boolean) => void;
   activeSessionId?: string;
   /** 由外部 settings 侧栏控制显示哪个分类；未传则显示内部导航 */
   section?: PreferenceCategory;
 };
 
 /** 聊天展示开关字段（不含 verbosity） */
-type ToggleKey = keyof Omit<ChatDisplayPrefs, "verbosity">;
+type ToggleKey = ChatDisplayToggleKey;
 
 const TOGGLE_KEYS: {
   key: ToggleKey;
@@ -207,6 +210,7 @@ export default function PreferencesPanel({
   tone = "twilight",
   chatDisplayPrefs: prefs,
   onChatVerbosityChange,
+  onChatAnswerLayoutChange,
   onChatToggleChange,
   activeSessionId,
   section,
@@ -345,6 +349,26 @@ export default function PreferencesPanel({
       id: "detailed",
       labelKey: "prefs.chat.detailed",
       descKey: "prefs.chat.detailedDesc",
+    },
+  ];
+
+  const answerLayoutOptions: {
+    id: ChatAnswerLayout;
+    labelKey: MessageKey;
+    descKey: MessageKey;
+    Icon: LucideIcon;
+  }[] = [
+    {
+      id: "timeline",
+      labelKey: "prefs.chat.layout.timeline",
+      descKey: "prefs.chat.layout.timelineDesc",
+      Icon: List,
+    },
+    {
+      id: "grouped",
+      labelKey: "prefs.chat.layout.grouped",
+      descKey: "prefs.chat.layout.groupedDesc",
+      Icon: Layers,
     },
   ];
 
@@ -767,6 +791,45 @@ export default function PreferencesPanel({
         className="prefs-category-stack"
         hidden={activeCategory !== "conversation"}
       >
+      <section className="prefs-card">
+        <div className="prefs-card-head">
+          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+            <List width={22} height={22} />
+          </div>
+          <div>
+            <h2 className="prefs-card-title">{t("prefs.chat.layout.title")}</h2>
+            <p className="prefs-card-sub">{t("prefs.chat.layout.sub")}</p>
+          </div>
+        </div>
+
+        <div
+          className="theme-options answer-layout-options"
+          role="radiogroup"
+          aria-label={t("prefs.chat.layout.title")}
+        >
+          {answerLayoutOptions.map(({ id, labelKey, descKey, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={prefs.answerLayout === id}
+              className={`theme-option ${prefs.answerLayout === id ? "active" : ""}`}
+              data-tone={tone}
+              onClick={() => onChatAnswerLayoutChange(id)}
+            >
+              <span className="theme-option-icon" aria-hidden>
+                <Icon size={18} strokeWidth={2} />
+              </span>
+              <span className="theme-option-text">
+                <span className="theme-option-label">{t(labelKey)}</span>
+                <span className="theme-option-desc">{t(descKey)}</span>
+              </span>
+              <span className="theme-option-check" aria-hidden />
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="prefs-card">
         <div className="prefs-card-head">
           <div className="prefs-icon-badge" data-tone={tone} aria-hidden>

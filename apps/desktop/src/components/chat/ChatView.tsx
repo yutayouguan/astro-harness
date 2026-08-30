@@ -83,6 +83,7 @@ import {
   pathsToAttachments,
 } from "../../lib/chat/chatPaste";
 import type { ChatThinkingPrefs, ThinkingLevel } from "../../lib/chat/thinkingPrefs";
+import { groupAssistantAnswer } from "../../lib/chat/groupAssistantAnswer";
 import type {
   ChatActivity,
   ChatAttachment,
@@ -2429,6 +2430,92 @@ export default function ChatView({
                               node: <MsgCitations citations={m.citations} />,
                             });
                           }
+                        }
+
+                        if (displayPrefs.answerLayout === "grouped") {
+                          const groupedAnswer = groupAssistantAnswer(m);
+                          const groupedViewSteps: Step[] = [];
+                          const lastSegment = m.segments?.[m.segments.length - 1];
+                          const groupedReasoningActive = Boolean(
+                            isStreamingBubble &&
+                              (lastSegment
+                                ? lastSegment.type === "reasoning"
+                                : reasoningActive),
+                          );
+
+                          if (groupedAnswer.reasoning) {
+                            groupedViewSteps.push({
+                              key: `grouped-reasoning-${m.id}`,
+                              kind: "reasoning",
+                              active: groupedReasoningActive,
+                              node: (
+                                <MsgReasoning
+                                  reasoning={groupedAnswer.reasoning}
+                                  active={groupedReasoningActive}
+                                  durationSec={groupedAnswer.reasoningDurationSec}
+                                />
+                              ),
+                            });
+                          }
+
+                          const visibleActivities = (m.activities ?? []).filter(
+                            (activity) =>
+                              !isTodoActivity(activity) &&
+                              isActivityVisible(activity.kind, displayPrefs),
+                          );
+                          if (visibleActivities.length > 0) {
+                            groupedViewSteps.push({
+                              key: `grouped-activities-${m.id}`,
+                              kind: visibleActivities[0]?.kind ?? "tool",
+                              active: visibleActivities.some(
+                                (activity) => activity.status === "running",
+                              ),
+                              node: (
+                                <MsgActivityGroup
+                                  activities={visibleActivities}
+                                  showTimestamp={displayPrefs.showTimestamps}
+                                  mediaBaseDir={mediaBaseDir}
+                                />
+                              ),
+                            });
+                          }
+
+                          groupedViewSteps.push(
+                            ...steps.filter((step) => step.kind === "surface"),
+                          );
+
+                          if (groupedAnswer.text) {
+                            groupedViewSteps.push({
+                              key: `grouped-reply-${m.id}`,
+                              kind: "reply",
+                              active: isStreamingBubble,
+                              node: (
+                                <>
+                                  <ChatMarkdown
+                                    content={groupedAnswer.text}
+                                    streaming={isStreamingBubble}
+                                    compact={displayPrefs.verbosity === "compact"}
+                                    plain={Boolean(m.error)}
+                                    caret={false}
+                                    mediaBaseDir={mediaBaseDir}
+                                  />
+                                  <MsgStreamLoader visible={isStreamingBubble} />
+                                </>
+                              ),
+                            });
+                          }
+
+                          if (m.citations?.length) {
+                            groupedViewSteps.push({
+                              key: `grouped-citations-${m.id}`,
+                              kind: "reasoning",
+                              active: false,
+                              node: <MsgCitations citations={m.citations} />,
+                            });
+                          }
+
+                          steps.splice(0, steps.length, ...groupedViewSteps);
+                          hasTimelineText = Boolean(groupedAnswer.text);
                         }
 
                         const showLoaderAlone =

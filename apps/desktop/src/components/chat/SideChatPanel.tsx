@@ -20,6 +20,8 @@ import type {
 } from "../../types";
 import ChatView from "./ChatView";
 
+const DOCK_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
 type Props = {
   sessionId: string;
   parentSessionId: string | null;
@@ -101,23 +103,27 @@ export default function SideChatPanel({
       className="side-chat-panel"
       aria-label={t("chat.side.panel")}
       initial={
-        reducedMotion ? { opacity: 0 } : { opacity: 0, x: 12, scale: 0.98 }
+        reducedMotion ? { opacity: 0 } : { opacity: 0, x: 18, scale: 0.985 }
       }
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={
         reducedMotion
-          ? { opacity: 0, transition: { duration: 0.12 } }
+          ? { opacity: 0 }
           : {
               opacity: 0,
-              x: 12,
+              x: 18,
               scale: 0.985,
-              transition: { duration: 0.16, ease: "easeOut" },
             }
       }
-      transition={{
-        duration: reducedMotion ? 0.12 : 0.24,
-        ease: [0.22, 1, 0.36, 1],
-      }}
+      transition={
+        reducedMotion
+          ? { duration: 0.12, ease: "easeOut" }
+          : {
+              x: { duration: 0.3, ease: DOCK_EASE },
+              scale: { duration: 0.3, ease: DOCK_EASE },
+              opacity: { duration: 0.18, ease: "easeOut" },
+            }
+      }
     >
       <header className="side-chat-head">
         <span className="side-chat-mark" aria-hidden>

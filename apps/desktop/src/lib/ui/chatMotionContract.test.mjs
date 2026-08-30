@@ -55,6 +55,22 @@ test("new motion keeps a reduced-motion opacity path", async () => {
   }
 });
 
+test("side chat surface matches the project-files enter geometry and timing", async () => {
+  const [sideChat, sideChatCss] = await Promise.all([
+    source("components/chat/SideChatPanel.tsx"),
+    source("styles/features/chat/side-chat.css"),
+  ]);
+
+  assert.match(sideChat, /opacity: 0, x: 18, scale: 0\.985/);
+  assert.match(sideChat, /x:\s*\{ duration: 0\.3, ease: DOCK_EASE \}/);
+  assert.match(sideChat, /scale:\s*\{ duration: 0\.3, ease: DOCK_EASE \}/);
+  assert.match(sideChat, /opacity:\s*\{ duration: 0\.18, ease: "easeOut" \}/);
+  assert.match(
+    sideChatCss,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.side-chat-dock[\s\S]*?transition:\s*none;/,
+  );
+});
+
 test("menus and dialogs avoid spring overshoot in routine interactions", async () => {
   const [selectMenu, agentPicker, dialog] = await Promise.all([
     source("styles/components/select-menu.css"),

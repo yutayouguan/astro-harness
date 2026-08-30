@@ -42,7 +42,7 @@ function rule(css, selector) {
   )?.groups?.body;
 }
 
-test("chat header aligns project files with the model picker without changing other docks", () => {
+test("chat header chrome stays anchored while project files animate", () => {
   const header = rule(headerStyles, ".content-header--chat");
   const actions = rule(headerStyles, ".content-header--chat .header-actions");
   const projectFileActions = rule(
@@ -57,12 +57,7 @@ test("chat header aligns project files with the model picker without changing ot
   assert.match(actions, /right:\s*16px;/);
   assert.match(actions, /bottom:\s*8px;/);
   assert.doesNotMatch(actions, /transition:\s*right/);
-  assert.ok(projectFileActions, "missing project-file header alignment rule");
-  assert.match(projectFileActions, /right:\s*auto;/);
-  assert.match(
-    projectFileActions,
-    /left:\s*calc\(100% - var\(--chat-header-right-offset, 0px\) - 6px\);/,
-  );
+  assert.equal(projectFileActions, undefined);
 });
 
 test("right-side chat surfaces share one inset container material", () => {
@@ -120,6 +115,30 @@ test("project files dock animates layout in both directions", () => {
   assert.match(openPanel, /pointer-events:\s*auto;/);
   assert.match(projectFilesPanel, /new ResizeObserver\(reportRenderedWidth\)/);
   assert.match(projectFilesPanel, /getBoundingClientRect\(\)\.width/);
+});
+
+test("side chat uses the same layout motion contract as project files", () => {
+  const slot = rule(sideChatStyles, ".side-chat-dock");
+  const openSlot = rule(sideChatStyles, ".side-chat-dock.is-open");
+  const panel = rule(sideChatStyles, ".side-chat-dock > .side-chat-panel");
+
+  assert.ok(slot, "missing collapsed side-chat dock slot");
+  assert.match(slot, /flex:\s*0 0 0;/);
+  assert.match(slot, /width:\s*0;/);
+  assert.match(slot, /visibility:\s*hidden;/);
+  assert.match(slot, /transition:[\s\S]*flex-basis 300ms[\s\S]*width 300ms[\s\S]*margin 300ms/);
+
+  assert.ok(openSlot, "missing expanded side-chat dock slot");
+  assert.match(openSlot, /flex-basis:\s*min\(var\(--side-chat-width, 384px\), 46%\);/);
+  assert.match(openSlot, /width:\s*min\(var\(--side-chat-width, 384px\), 46%\);/);
+  assert.match(openSlot, /margin:\s*var\(--chat-dock-inset\);/);
+  assert.match(openSlot, /visibility:\s*visible;/);
+
+  assert.ok(panel, "missing side-chat surface positioning rule");
+  assert.match(panel, /position:\s*absolute;/);
+  assert.match(panel, /inset:\s*0;/);
+  assert.match(panel, /width:\s*100%;/);
+  assert.match(panel, /margin:\s*0;/);
 });
 
 test("composer floats above a full-height conversation viewport", () => {

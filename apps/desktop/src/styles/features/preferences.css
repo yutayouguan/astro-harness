@@ -547,6 +547,10 @@ html[data-theme="dark"] .prefs-icon-badge {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.theme-options.answer-layout-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .theme-option {
   position: relative;
   display: flex;
@@ -1484,6 +1488,10 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   }
 
   .theme-options.lang-options {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-options.answer-layout-options {
     grid-template-columns: 1fr;
   }
 

@@ -2,10 +2,13 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type ChatVerbosity = "compact" | "normal" | "detailed";
+export type ChatAnswerLayout = "timeline" | "grouped";
 
 export type ChatDisplayPrefs = {
   /** 整体详细程度预设 */
   verbosity: ChatVerbosity;
+  /** AI 回答内容的组织方式 */
+  answerLayout: ChatAnswerLayout;
   /** 显示工具调用 */
   showTools: boolean;
   /** 显示 Skills 调用 */
@@ -22,9 +25,17 @@ export type ChatDisplayPrefs = {
   showTimestamps: boolean;
 };
 
+export type ChatDisplayToggleKey = Exclude<
+  keyof ChatDisplayPrefs,
+  "verbosity" | "answerLayout"
+>;
+
 const STORAGE_KEY = "astro.chat.displayPrefs.v2";
 
-const PRESETS: Record<ChatVerbosity, Omit<ChatDisplayPrefs, "verbosity">> = {
+const PRESETS: Record<
+  ChatVerbosity,
+  Omit<ChatDisplayPrefs, "verbosity" | "answerLayout">
+> = {
   compact: {
     showTools: false,
     showSkills: false,
@@ -55,7 +66,7 @@ const PRESETS: Record<ChatVerbosity, Omit<ChatDisplayPrefs, "verbosity">> = {
 };
 
 function defaultPrefs(): ChatDisplayPrefs {
-  return { verbosity: "normal", ...PRESETS.normal };
+  return { verbosity: "normal", answerLayout: "timeline", ...PRESETS.normal };
 }
 
 function readStored(): ChatDisplayPrefs {
@@ -72,6 +83,7 @@ function readStored(): ChatDisplayPrefs {
         : base.verbosity;
     return {
       verbosity,
+      answerLayout: parsed.answerLayout === "grouped" ? "grouped" : "timeline",
       showTools: typeof parsed.showTools === "boolean" ? parsed.showTools : PRESETS[verbosity].showTools,
       showSkills:
         typeof parsed.showSkills === "boolean" ? parsed.showSkills : PRESETS[verbosity].showSkills,
@@ -130,15 +142,19 @@ export function useChatDisplayPrefs() {
   }, [prefs]);
 
   const setVerbosity = useCallback((verbosity: ChatVerbosity) => {
-    setPrefs({ verbosity, ...PRESETS[verbosity] });
+    setPrefs((prev) => ({ ...prev, verbosity, ...PRESETS[verbosity] }));
   }, []);
 
   const setToggle = useCallback(
-    (key: keyof Omit<ChatDisplayPrefs, "verbosity">, value: boolean) => {
+    (key: ChatDisplayToggleKey, value: boolean) => {
       setPrefs((prev) => ({ ...prev, [key]: value }));
     },
     [],
   );
 
-  return { prefs, setVerbosity, setToggle, setPrefs };
+  const setAnswerLayout = useCallback((answerLayout: ChatAnswerLayout) => {
+    setPrefs((prev) => ({ ...prev, answerLayout }));
+  }, []);
+
+  return { prefs, setVerbosity, setToggle, setAnswerLayout, setPrefs };
 }

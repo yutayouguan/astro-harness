@@ -26,7 +26,19 @@ test("chat shell keeps the project files surface mounted for reversible motion",
   assert.doesNotMatch(appSource, /activeChatRightDock === "project-files" \? \(/);
   assert.match(appSource, /activeChatRightDock === "side-chat" && sideSessionId/);
   assert.match(appSource, /activeChatRightDock === "inspector" && \(/);
-  assert.doesNotMatch(appSource, /const chatHeaderRightOffset\s*=\s*\([^;]+\)\s*\+/);
+  assert.doesNotMatch(appSource, /--chat-header-right-offset/);
+  assert.doesNotMatch(appSource, /chatRightDockWidth/);
+});
+
+test("side chat has a persistent layout slot around its exit lifecycle", () => {
+  assert.match(
+    appSource,
+    /className=\{`side-chat-dock\$\{activeChatRightDock === "side-chat" \? " is-open" : ""\}`\}/,
+  );
+  assert.match(
+    appSource,
+    /<div[\s\S]*?className=\{`side-chat-dock[\s\S]*?<AnimatePresence initial=\{false\}>[\s\S]*?<SideChatPanel/,
+  );
 });
 
 test("opening either dock entry closes the previously active surface", () => {

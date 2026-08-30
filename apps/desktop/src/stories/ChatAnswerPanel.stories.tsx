@@ -141,6 +141,73 @@ function ChatAnswerPanel() {
   );
 }
 
+function GroupedAnswerLayoutPreview() {
+  const activities = groupedActivities.slice(0, 2);
+  const messages: ChatMessage[] = [
+    {
+      id: "grouped-answer",
+      role: "assistant",
+      reasoning: "先梳理目标，再核对工具输出。",
+      reasoningDurationSec: 2.4,
+      content: "已完成目录检查。\n\n### 结果\n\n所有正文片段都已合并为一个 Markdown 回答。",
+      activities,
+      segments: [
+        { type: "reasoning", id: "reasoning-1", text: "先梳理目标，", at: 1 },
+        { type: "activity", id: activities[0]!.id, at: 2 },
+        { type: "text", id: "text-1", text: "已完成目录检查。", at: 3 },
+        { type: "reasoning", id: "reasoning-2", text: "再核对工具输出。", at: 4 },
+        { type: "activity", id: activities[1]!.id, at: 5 },
+        {
+          type: "text",
+          id: "text-2",
+          text: "\n\n### 结果\n\n所有正文片段都已合并为一个 Markdown 回答。",
+          at: 6,
+        },
+      ],
+    },
+  ];
+
+  return (
+    <MorphiconProvider>
+      <LocaleProvider>
+        <DialogProvider>
+          <main style={{ height: "760px", background: "var(--shell-bg)" }}>
+            <ChatView
+              messages={messages}
+              input=""
+              attachments={[]}
+              streaming={false}
+              displayPrefs={{
+                verbosity: "normal",
+                answerLayout: "grouped",
+                showTools: true,
+                showSkills: true,
+                showMcp: false,
+                showHooks: true,
+                showMemory: true,
+                showStatus: true,
+                showTimestamps: false,
+              }}
+              emptyMode={null}
+              onInputChange={() => {}}
+              onAttachmentsChange={() => {}}
+              onSend={() => {}}
+              onNewChat={() => {}}
+              onPickWelcomePrompt={() => {}}
+              thinkingPrefs={{ level: "off" }}
+              onToggleThinking={() => {}}
+              onThinkingLevelChange={() => {}}
+              chatMode="agent"
+              onChatModeChange={() => {}}
+              onOpenContext={() => {}}
+            />
+          </main>
+        </DialogProvider>
+      </LocaleProvider>
+    </MorphiconProvider>
+  );
+}
+
 function InlineUserEditPreview() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: "u-1", role: "user", content: "先给我解释一下这个模块。" },
@@ -161,6 +228,7 @@ function InlineUserEditPreview() {
               streaming={false}
               displayPrefs={{
                 verbosity: "normal",
+                answerLayout: "timeline",
                 showTools: true,
                 showSkills: true,
                 showMcp: false,
@@ -214,6 +282,7 @@ function WelcomeLogoInteractionPreview() {
               streaming={false}
               displayPrefs={{
                 verbosity: "normal",
+                answerLayout: "timeline",
                 showTools: true,
                 showSkills: true,
                 showMcp: false,
@@ -255,6 +324,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const GroupedLayout: Story = {
+  render: () => <GroupedAnswerLayoutPreview />,
+};
 
 export const InlineUserEdit: Story = {
   render: () => <InlineUserEditPreview />,

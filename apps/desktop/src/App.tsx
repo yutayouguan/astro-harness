@@ -153,7 +153,12 @@ export default function App() {
   } = useShellColorStyle();
   useBeautifyTips();
   const { t } = useI18n();
-  const { prefs: chatDisplayPrefs, setVerbosity, setToggle } = useChatDisplayPrefs();
+  const {
+    prefs: chatDisplayPrefs,
+    setVerbosity,
+    setToggle,
+    setAnswerLayout,
+  } = useChatDisplayPrefs();
   const chatDisplayPrefsRef = useRef(chatDisplayPrefs);
   chatDisplayPrefsRef.current = chatDisplayPrefs;
   const { thinkingPrefs, setLevel: setThinkingLevel } = useChatThinkingPrefs();
@@ -1355,6 +1360,7 @@ export default function App() {
                       tone={shellTone}
                       chatDisplayPrefs={chatDisplayPrefs}
                       onChatVerbosityChange={setVerbosity}
+                      onChatAnswerLayoutChange={setAnswerLayout}
                       onChatToggleChange={setToggle}
                       activeSessionId={chat.sessionId ?? undefined}
                     />
