@@ -44,7 +44,8 @@ export function activityVisualKind(activity: ChatActivity): ActivityVisualKind {
 /** Extract a compact subject for the human-readable activity row. */
 export function activityDisplayTarget(activity: ChatActivity): string {
   const input = activityInput(activity.input);
-  if (!input) return "";
+  const patchTarget = activityPatchTarget(activity.input);
+  if (!input) return patchTarget;
 
   const kind = activityVisualKind(activity);
   const raw =
@@ -57,7 +58,7 @@ export function activityDisplayTarget(activity: ChatActivity): string {
           : kind === "media"
             ? input.prompt ?? input.path
             : input.path ?? input.file ?? input.target;
-  if (typeof raw !== "string") return "";
+  if (typeof raw !== "string") return patchTarget;
 
   const firstLine = raw.trim().split(/\r?\n/, 1)[0] ?? "";
   if (!firstLine) return "";
@@ -67,6 +68,34 @@ export function activityDisplayTarget(activity: ChatActivity): string {
       ? pathParts[pathParts.length - 1]!
       : firstLine;
   return compact.length > 72 ? `${compact.slice(0, 69)}…` : compact;
+}
+
+/** Extract the first edited file from apply_patch's freeform Lark payload. */
+function activityPatchTarget(input: string | undefined): string {
+  if (!input?.trim()) return "";
+
+  let patch = input.trim();
+  try {
+    const parsed: unknown = JSON.parse(patch);
+    if (typeof parsed === "string") {
+      patch = parsed;
+    } else if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const record = parsed as Record<string, unknown>;
+      const candidate = record.patch ?? record.diff ?? record.input;
+      if (typeof candidate === "string") patch = candidate;
+    }
+  } catch {
+    // Freeform tool arguments are valid input even when they are not JSON.
+  }
+
+  const paths = [...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s*(.+?)\s*$/gm)]
+    .map((match) => match[1]?.trim() ?? "")
+    .filter(Boolean);
+  if (paths.length === 0) return "";
+
+  const unique = [...new Set(paths)];
+  const first = unique[0]!.replace(/\\/g, "/").split("/").filter(Boolean).pop()!;
+  return unique.length > 1 ? `${first} +${unique.length - 1}` : first;
 }
 
 function activityOperation(input: string | undefined): string {

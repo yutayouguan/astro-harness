@@ -277,20 +277,32 @@ function resolveActivityTitle(
   t: ReturnType<typeof useI18n>["t"],
 ): string {
   const target = activityDisplayTarget(activity);
-  if (!target) return activity.title;
+  const completed = activity.status === "done" ? ".done" : "";
   switch (kind) {
     case "read":
-      return t("chat.activity.item.read", { target });
+      return target
+        ? t(`chat.activity.item${completed}.read`, { target })
+        : t(`chat.activity.action${completed}.read`);
     case "search":
-      return t("chat.activity.item.search", { target });
+      return target
+        ? t(`chat.activity.item${completed}.search`, { target })
+        : t(`chat.activity.action${completed}.search`);
     case "run":
-      return t("chat.activity.item.run", { target });
+      return target
+        ? t(`chat.activity.item${completed}.run`, { target })
+        : t(`chat.activity.action${completed}.run`);
     case "edit":
-      return t("chat.activity.item.edit", { target });
+      return target
+        ? t(`chat.activity.item${completed}.edit`, { target })
+        : t(`chat.activity.action${completed}.edit`);
     case "browse":
-      return t("chat.activity.item.browse", { target });
+      return target
+        ? t(`chat.activity.item${completed}.browse`, { target })
+        : t(`chat.activity.action${completed}.browse`);
     case "media":
-      return t("chat.activity.item.media", { target });
+      return target
+        ? t(`chat.activity.item${completed}.media`, { target })
+        : t(`chat.activity.action${completed}.media`);
     default:
       return activity.title;
   }

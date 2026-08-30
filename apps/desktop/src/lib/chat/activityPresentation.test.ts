@@ -44,6 +44,30 @@ test("extracts compact targets for human-readable rows", () => {
     }),
     "npm run build",
   );
+  assert.equal(
+    activityDisplayTarget({
+      ...activity("apply_patch"),
+      input:
+        '"*** Begin Patch\\n*** Update File: apps/desktop/src/components/chat/ChatView.tsx\\n@@\\n*** End Patch"',
+    }),
+    "ChatView.tsx",
+  );
+  assert.equal(
+    activityDisplayTarget({
+      ...activity("apply_patch"),
+      input:
+        "*** Begin Patch\n*** Update File: apps/desktop/src/ChatView.tsx\n*** Add File: apps/desktop/src/NewPanel.tsx\n*** End Patch",
+    }),
+    "ChatView.tsx +1",
+  );
+  assert.equal(
+    activityDisplayTarget({
+      ...activity("apply_patch"),
+      input:
+        '{"patch":"*** Begin Patch\\n*** Update File: apps/desktop/src/MsgActivity.tsx\\n*** End Patch"}',
+    }),
+    "MsgActivity.tsx",
+  );
 });
 
 test("classifies multiplexed tools from their structured operation", () => {
