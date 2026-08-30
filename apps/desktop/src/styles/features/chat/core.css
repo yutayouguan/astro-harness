@@ -128,7 +128,6 @@ html[data-theme] {
 }
 
 .bubble.assistant .msg-activity-detail,
-.bubble.assistant .msg-md-codeblock,
 .bubble.assistant .msg-md-inline-code,
 .bubble.assistant .msg-md :not(pre) > code {
   border: 1px solid color-mix(in srgb, var(--ink) 11%, transparent);
@@ -146,7 +145,6 @@ html[data-theme] {
 }
 
 html[data-theme="dark"] .bubble.assistant .msg-activity-detail,
-html[data-theme="dark"] .bubble.assistant .msg-md-codeblock,
 html[data-theme="dark"] .bubble.assistant .msg-md-inline-code,
 html[data-theme="dark"] .bubble.assistant .msg-md :not(pre) > code {
   border-color: color-mix(in srgb, var(--glass-edge) 85%, transparent);
@@ -160,7 +158,6 @@ html[data-theme="dark"] .bubble.assistant .msg-md :not(pre) > code {
 
 @media (prefers-reduced-transparency: reduce) {
   html[data-theme="light"] .bubble.assistant .msg-activity-detail,
-  html[data-theme="light"] .bubble.assistant .msg-md-codeblock,
   html[data-theme="light"] .bubble.assistant .msg-md-inline-code,
   html[data-theme="light"] .bubble.assistant .msg-md :not(pre) > code {
     backdrop-filter: none;
@@ -169,7 +166,6 @@ html[data-theme="dark"] .bubble.assistant .msg-md :not(pre) > code {
   }
 
   html[data-theme="dark"] .bubble.assistant .msg-activity-detail,
-  html[data-theme="dark"] .bubble.assistant .msg-md-codeblock,
   html[data-theme="dark"] .bubble.assistant .msg-md-inline-code,
   html[data-theme="dark"] .bubble.assistant .msg-md :not(pre) > code {
     backdrop-filter: none;

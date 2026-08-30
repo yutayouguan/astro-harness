@@ -67,6 +67,21 @@ const answer = `当前工作目录为：
 
 我已按类型整理了当前目录，可以继续帮你查看文件或总结内容。`;
 
+const codeBlockShowcase = `### 单行命令
+
+\`\`\`bash
+python3 fetch_title.py https://www.python.org
+\`\`\`
+
+### 多行代码
+
+\`\`\`typescript
+async function fetchTitle(url: string) {
+  const response = await fetch(url);
+  return response.text();
+}
+\`\`\``;
+
 function ChatAnswerPanel() {
   return (
     <MorphiconProvider>
@@ -136,6 +151,32 @@ function ChatAnswerPanel() {
           </div>
         </div>
       </main>
+      </LocaleProvider>
+    </MorphiconProvider>
+  );
+}
+
+function CodeBlockShowcase() {
+  return (
+    <MorphiconProvider>
+      <LocaleProvider>
+        <main
+          style={{
+            minHeight: "100vh",
+            boxSizing: "border-box",
+            padding: "44px 24px",
+            background: "var(--shell-bg)",
+            color: "var(--ink)",
+          }}
+        >
+          <div className="msg-row assistant" style={{ margin: "0 auto" }}>
+            <div className="msg-stack">
+              <article className="bubble assistant">
+                <ChatMarkdown content={codeBlockShowcase} />
+              </article>
+            </div>
+          </div>
+        </main>
       </LocaleProvider>
     </MorphiconProvider>
   );
@@ -327,6 +368,10 @@ export const Default: Story = {};
 
 export const GroupedLayout: Story = {
   render: () => <GroupedAnswerLayoutPreview />,
+};
+
+export const CodeBlocks: Story = {
+  render: () => <CodeBlockShowcase />,
 };
 
 export const InlineUserEdit: Story = {

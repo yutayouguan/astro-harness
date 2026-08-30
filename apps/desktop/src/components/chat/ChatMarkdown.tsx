@@ -2,8 +2,11 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
+  type CSSProperties,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -111,6 +114,62 @@ function MarkdownMedia({
   );
 }
 
+function CodeCopyButton({
+  codeText,
+  style,
+}: {
+  codeText: string;
+  style?: CSSProperties;
+}) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const onCopy = useCallback(async () => {
+    if (!codeText) return;
+    try {
+      await navigator.clipboard.writeText(codeText);
+      setCopied(true);
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+      resetTimerRef.current = window.setTimeout(() => {
+        setCopied(false);
+        resetTimerRef.current = null;
+      }, 1200);
+    } catch {
+      // Clipboard availability depends on the active webview permissions.
+    }
+  }, [codeText]);
+
+  const label = copied ? t("chat.codeCopied") : t("chat.copyCode");
+
+  return (
+    <button
+      type="button"
+      className={`msg-md-code-copy ${copied ? "is-copied" : ""}`}
+      onClick={() => void onCopy()}
+      aria-label={label}
+      title={label}
+      style={style}
+    >
+      <span className="msg-md-code-copy-feedback" role="status" aria-live="polite">
+        {copied ? t("chat.codeCopied") : ""}
+      </span>
+      <CopyMorphIcon copied={copied} size={15} aria-hidden />
+    </button>
+  );
+}
+
 function HtmlCodeBlock({
   className,
   children,
@@ -120,23 +179,11 @@ function HtmlCodeBlock({
 }) {
   const { t } = useI18n();
   const [mode, setMode] = useState<"source" | "preview">("source");
-  const [copied, setCopied] = useState(false);
   const lang = /language-([\w+-]+)/.exec(className ?? "")?.[1] ?? "";
   const codeText = useMemo(
     () => childrenToText(children).replace(/\n$/, ""),
     [children],
   );
-
-  const onCopy = useCallback(async () => {
-    if (!codeText) return;
-    try {
-      await navigator.clipboard.writeText(codeText);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // ignore
-    }
-  }, [codeText]);
 
   return (
     <div className="msg-md-html-block" data-lang={lang || undefined}>
@@ -159,21 +206,16 @@ function HtmlCodeBlock({
         >
           {t("media.htmlShowPreview")}
         </button>
-        <button
-          type="button"
-          className={`msg-md-code-copy ${copied ? "is-copied" : ""}`}
-          onClick={() => void onCopy()}
-          aria-label={copied ? t("chat.codeCopied") : t("chat.copyCode")}
-          title={copied ? t("chat.codeCopied") : t("chat.copyCode")}
-          style={{ marginLeft: "auto" }}
-        >
-          <CopyMorphIcon copied={copied} size={14} aria-hidden />
-        </button>
+        <CodeCopyButton codeText={codeText} style={{ marginLeft: "auto" }} />
       </div>
       {mode === "preview" ? (
         <HtmlPreview source={codeText} compact />
       ) : (
-        <div className="msg-md-codeblock" data-lang={lang || undefined}>
+        <div
+          className="msg-md-codeblock is-html-source"
+          data-lang={lang || undefined}
+          data-single-line={!codeText.includes("\n") || undefined}
+        >
           <pre className="msg-md-pre">
             <code className={className}>{children}</code>
           </pre>
@@ -190,38 +232,21 @@ function CodeBlock({
   className?: string;
   children?: ReactNode;
 }) {
-  const { t } = useI18n();
-  const [copied, setCopied] = useState(false);
   const lang = /language-([\w+-]+)/.exec(className ?? "")?.[1] ?? "";
   const codeText = useMemo(
     () => childrenToText(children).replace(/\n$/, ""),
     [children],
   );
 
-  const onCopy = useCallback(async () => {
-    if (!codeText) return;
-    try {
-      await navigator.clipboard.writeText(codeText);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // ignore clipboard failures
-    }
-  }, [codeText]);
-
   return (
-    <div className="msg-md-codeblock" data-lang={lang || undefined}>
+    <div
+      className="msg-md-codeblock"
+      data-lang={lang || undefined}
+      data-single-line={!codeText.includes("\n") || undefined}
+    >
       <div className="msg-md-code-header">
         <span className="msg-md-code-lang">{lang || "code"}</span>
-        <button
-          type="button"
-          className={`msg-md-code-copy ${copied ? "is-copied" : ""}`}
-          onClick={() => void onCopy()}
-          aria-label={copied ? t("chat.codeCopied") : t("chat.copyCode")}
-          title={copied ? t("chat.codeCopied") : t("chat.copyCode")}
-        >
-          <CopyMorphIcon copied={copied} size={14} aria-hidden />
-        </button>
+        <CodeCopyButton codeText={codeText} />
       </div>
       <pre className="msg-md-pre">
         <code className={className}>{children}</code>

@@ -217,17 +217,21 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
 
 .bubble.assistant .msg-md-codeblock {
   margin: 0.82em 0;
-  border-radius: var(--answer-inset-radius);
+  border-radius: 11px;
 }
 
 .bubble.assistant .msg-md-code-header {
-  min-height: 32px;
-  padding: 0.35rem 0.5rem 0.25rem 0.85rem;
+  min-height: 38px;
+  padding: 0 8px 0 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
 .bubble.assistant .msg-md-pre {
-  padding: 0.7rem 0.9rem 0.9rem;
+  padding: 14px 16px 16px;
+}
+
+.bubble.assistant .msg-md-codeblock[data-single-line="true"] .msg-md-pre {
+  padding-block: 13px 15px;
 }
 
 .bubble.assistant .msg-token-stats {
