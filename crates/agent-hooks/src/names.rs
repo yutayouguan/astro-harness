@@ -25,7 +25,6 @@ pub const POST_LLM_CALL: &str = HookEvent::PostLlmCall.as_str();
 pub const POST_APPROVAL_RESPONSE: &str = HookEvent::PostApprovalResponse.as_str();
 pub const PRE_GATEWAY_DISPATCH: &str = HookEvent::PreGatewayDispatch.as_str();
 pub const SESSION_RESET: &str = HookEvent::SessionReset.as_str();
-pub const SESSION_FINALIZE: &str = HookEvent::SessionFinalize.as_str();
 pub const GATEWAY_STARTUP: &str = HookEvent::GatewayStartup.as_str();
 pub const AGENT_END: &str = HookEvent::AgentEnd.as_str();
 pub const COMMAND_NEW_CHAT: &str = HookEvent::CommandNewChat.as_str();

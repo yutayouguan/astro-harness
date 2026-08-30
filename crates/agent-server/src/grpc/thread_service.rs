@@ -233,12 +233,26 @@ pub(crate) async fn submit_turn(
     }
     let mode = validate_turn_mode(&req.mode, &req.expected_turn_id)?;
     let explicit_steer = matches!(&mode, TurnInputMode::Steer { .. });
-    let validated = validate_chat_request(&chat)?;
+    let mut validated = validate_chat_request(&chat)?;
     let subscription = service
         .connections
         .current_generation_key(&connection_id)
         .await
         .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
+    if let Some(turn_request) = validated.turn_request.as_mut() {
+        let input = turn_request
+            .input
+            .first_mut()
+            .expect("validated non-resume chat must contain one input");
+        if let Some(reason) =
+            apply_pre_gateway_hook(&service.hook_runtime, thread_id, &chat.project_root, input)
+        {
+            return Ok(submit_turn_response(
+                String::new(),
+                TurnInputSubmission::NotSubmitted { reason },
+            ));
+        }
+    }
     if let Some(prepared) =
         prepare_resume_before_side_effects(service, thread_id, &validated.resume_items).await?
     {
@@ -311,6 +325,39 @@ pub(crate) async fn submit_turn(
     match submit {
         Ok((submission_id, submission)) => Ok(submit_turn_response(submission_id, submission)),
         Err(error) => Err(error),
+    }
+}
+
+fn apply_pre_gateway_hook(
+    runtime: &::hooks::HookRuntime,
+    session_id: &str,
+    cwd: &str,
+    input: &mut TurnInput,
+) -> Option<String> {
+    let outcome = runtime.dispatch(
+        ::hooks::PRE_GATEWAY_DISPATCH,
+        &::hooks::HookPayload {
+            session_id: session_id.to_string(),
+            cwd: cwd.to_string(),
+            prompt: Some(input.content.clone()),
+            detail: "chat ingress".into(),
+            ..Default::default()
+        },
+    );
+    apply_pre_gateway_outcome(input, outcome)
+}
+
+fn apply_pre_gateway_outcome(
+    input: &mut TurnInput,
+    outcome: ::hooks::HookOutcome,
+) -> Option<String> {
+    match outcome {
+        ::hooks::HookOutcome::Rewrite(content) => {
+            input.content = content;
+            None
+        }
+        ::hooks::HookOutcome::Skip(reason) | ::hooks::HookOutcome::Block(reason) => Some(reason),
+        _ => None,
     }
 }
 
@@ -534,6 +581,44 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+
+    #[test]
+    fn pre_gateway_rewrite_updates_the_validated_input() {
+        let runtime = ::hooks::HookRuntime::new();
+        runtime
+            .plugin
+            .register(::hooks::PRE_GATEWAY_DISPATCH, |payload| {
+                assert_eq!(payload.session_id, "session-1");
+                assert_eq!(payload.cwd, "/workspace");
+                assert_eq!(payload.prompt.as_deref(), Some("original"));
+                ::hooks::HookOutcome::Rewrite("rewritten".into())
+            });
+        let mut input = TurnInput {
+            content: "original".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        };
+
+        let skipped = apply_pre_gateway_hook(&runtime, "session-1", "/workspace", &mut input);
+
+        assert_eq!(input.content, "rewritten");
+        assert_eq!(skipped, None);
+    }
+
+    #[test]
+    fn pre_gateway_skip_returns_not_submitted_reason() {
+        let mut input = TurnInput {
+            content: "original".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        };
+
+        let skipped =
+            apply_pre_gateway_outcome(&mut input, ::hooks::HookOutcome::Skip("policy".into()));
+
+        assert_eq!(input.content, "original");
+        assert_eq!(skipped.as_deref(), Some("policy"));
+    }
 
     #[test]
     fn snapshot_proto_preserves_authoritative_pending_background_turns() {

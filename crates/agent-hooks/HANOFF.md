@@ -30,7 +30,7 @@ Child Agent Threads inherit the complete `Arc<HookRuntime>` from the parent runt
 | `SubagentStart` | Child startup admission, before its first provider request | Uses the inherited full `HookRuntime`; only additional context is applied, while block/stop requests are ignored as in Codex |
 | `SubagentStop` | Every child terminal turn, including interrupted/errored turns | Same `KeepGoing` continuation guard as root `Stop`; Desktop `Shutdown` does not emit a duplicate stop |
 
-`SessionFinalize` remains an Astro extension constant for compatibility, but it is not used as the canonical session-shutdown lifecycle event.
+`SessionEnd` is the only canonical session-shutdown lifecycle event.
 
 ## Payloads
 

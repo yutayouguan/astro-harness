@@ -25,7 +25,6 @@ pub enum HookEvent {
     PostApprovalResponse,
     PreGatewayDispatch,
     SessionReset,
-    SessionFinalize,
     GatewayStartup,
     AgentEnd,
     CommandNewChat,
@@ -72,7 +71,6 @@ impl HookEvent {
             Self::PostApprovalResponse => "PostApprovalResponse",
             Self::PreGatewayDispatch => "PreGatewayDispatch",
             Self::SessionReset => "SessionReset",
-            Self::SessionFinalize => "SessionFinalize",
             Self::GatewayStartup => "GatewayStartup",
             Self::AgentEnd => "AgentEnd",
             Self::CommandNewChat => "CommandNewChat",
@@ -87,8 +85,8 @@ mod tests {
         is_mutating_hook, AGENT_END, COMMAND_NEW_CHAT, GATEWAY_STARTUP, INTERRUPT,
         PERMISSION_REQUEST, POST_API_REQUEST, POST_APPROVAL_RESPONSE, POST_COMPACT, POST_LLM_CALL,
         POST_TOOL_USE, PRE_API_REQUEST, PRE_COMPACT, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL,
-        PRE_TOOL_USE, SESSION_END, SESSION_FINALIZE, SESSION_RESET, SESSION_START, STOP,
-        SUBAGENT_START, SUBAGENT_STOP, TRANSFORM_FINAL_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT,
+        PRE_TOOL_USE, SESSION_END, SESSION_RESET, SESSION_START, STOP, SUBAGENT_START,
+        SUBAGENT_STOP, TRANSFORM_FINAL_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT,
         TRANSFORM_TOOL_RESULT, USER_PROMPT_SUBMIT,
     };
     #[test]
@@ -141,7 +139,6 @@ mod tests {
         assert_eq!(POST_APPROVAL_RESPONSE, "PostApprovalResponse");
         assert_eq!(PRE_GATEWAY_DISPATCH, "PreGatewayDispatch");
         assert_eq!(SESSION_RESET, "SessionReset");
-        assert_eq!(SESSION_FINALIZE, "SessionFinalize");
         assert_eq!(GATEWAY_STARTUP, "GatewayStartup");
         assert_eq!(AGENT_END, "AgentEnd");
         assert_eq!(COMMAND_NEW_CHAT, "CommandNewChat");

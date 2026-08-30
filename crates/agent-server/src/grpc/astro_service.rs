@@ -661,7 +661,7 @@ pub struct AstroServiceImpl {
     /// 记忆根目录。
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
-    hook_runtime: Arc<::hooks::HookRuntime>,
+    pub(crate) hook_runtime: Arc<::hooks::HookRuntime>,
     /// root thread → 当前 V2 AgentControl generation。
     agent_thread_watchers: Arc<Mutex<HashMap<String, Weak<subagents::AgentControl>>>>,
 }

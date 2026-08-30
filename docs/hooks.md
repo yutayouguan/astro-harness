@@ -46,7 +46,6 @@ Astro 有三条 Hook 通道：
 | `PostApprovalResponse` | 审批结果产生后 |
 | `PreGatewayDispatch` | Gateway 入队前 |
 | `SessionReset` | 会话重置 |
-| `SessionFinalize` | 旧 Astro 扩展常量；canonical shutdown 使用 `SessionEnd` |
 | `GatewayStartup` | Gateway 启动 |
 | `AgentEnd` | 单次 Agent run 收尾 |
 | `CommandNewChat` | 新建对话命令 |
@@ -90,7 +89,7 @@ Plugin 注册与触发、Gateway manifest、Shell config key 均按字符串精�
 
 `SessionStart` 只有在其 outcome 非 `Block` 时才清除 pending source。若它被 `Block`，source 会保留，下一次 admission 会再次向 Plugin、Gateway、Shell 派发同一 `SessionStart`；因此 handler 应保持幂等。`UserPromptSubmit` 的 `Block` 会在输入写入前阻断该 admission；`InjectContext` 与该输入绑定、按 FIFO 进入随后的 response chain，并受 prompt 预算约束。初始输入的 context 参与其首个请求；steer context 不会被 Stop 的 bridge sampling 提前消费。
 
-11 个 Codex 公开事件均有生产 fire 点。`AgentEnd` 仍是 Astro 的单次 run 收尾扩展，不是 `SessionEnd`；`SessionFinalize` 不再承担 canonical shutdown 语义。
+所有公开事件均有生产 fire 点。`AgentEnd` 仍是 Astro 的单次 run 收尾扩展，不是 `SessionEnd`。
 
 `AgentEnd` 的 runtime failure 会保留原始失败文本于 `error`；取消与 receiver close 属于非错误收尾，`error` 为空。准备阶段的失败也同样派发一次 `AgentEnd`，但保持其原有 task error 返回，避免把 runtime 已经输出过的 terminal 再输出一次。
 
