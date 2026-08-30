@@ -73,6 +73,7 @@ import {
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
 import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
 import { countRunningParallel, countSettledByStatus, isParallelTaskActive } from "../../lib/chat/parallelTasks";
+import { projectCanonicalTimelineSegments } from "../../lib/chat/chatTimeline";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
 import TaskCompletionCelebration from "./TaskCompletionCelebration";
@@ -2600,9 +2601,13 @@ export default function ChatView({
                           });
                         };
                         let hasTimelineText = false;
+                        const timelineSegments =
+                          answerLayout === "timeline"
+                            ? projectCanonicalTimelineSegments(m)
+                            : m.segments;
 
-                        if (m.segments && m.segments.length > 0) {
-                          for (const [segmentIndex, seg] of m.segments.entries()) {
+                        if (timelineSegments && timelineSegments.length > 0) {
+                          for (const [segmentIndex, seg] of timelineSegments.entries()) {
                             if (seg.type === "reasoning") {
                               const openReasoning =
                                 seg.durationSec == null || seg.durationSec <= 0;
@@ -2629,7 +2634,7 @@ export default function ChatView({
                               hasTimelineText = true;
                               const active = Boolean(
                                 isStreamingBubble &&
-                                  segmentIndex === m.segments.length - 1,
+                                  segmentIndex === timelineSegments.length - 1,
                               );
                               steps.push({
                                 key: seg.id,

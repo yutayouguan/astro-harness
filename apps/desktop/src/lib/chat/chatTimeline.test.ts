@@ -4,6 +4,7 @@ import {
   applyReasoningDelta,
   applyActivityUpsert,
   applySurfaceUpsert,
+  projectCanonicalTimelineSegments,
   reconcileReasoning,
   reconcileText,
   sealOpenReasoning,
@@ -187,6 +188,72 @@ test("text reconciliation preserves prior interleaving when only the tail change
   if (reconciled.segments?.[2]?.type === "text") {
     assert.equal(reconciled.segments[2].text, "final");
   }
+});
+
+test("timeline projection restores a missing canonical answer tail without reordering tools", () => {
+  const original: ChatMessage = {
+    id: "a1",
+    role: "assistant",
+    content: "先写脚本。脚本已写好。最终答案。",
+    reasoning: "分析验证",
+    activities: [
+      { id: "t1", kind: "tool", title: "apply_patch", at: 2 },
+      { id: "t2", kind: "tool", title: "terminal", at: 5 },
+    ],
+    segments: [
+      { type: "reasoning", id: "r1", text: "分析", at: 1 },
+      { type: "activity", id: "t1", at: 2 },
+      { type: "text", id: "txt1", text: "先写脚本。", at: 3 },
+      { type: "reasoning", id: "r2", text: "验证", at: 4 },
+      { type: "activity", id: "t2", at: 5 },
+      { type: "text", id: "txt2", text: "脚本已写好。", at: 6 },
+    ],
+  };
+
+  const projected = projectCanonicalTimelineSegments(original);
+
+  assert.deepEqual(projected.map((segment) => segment.type), [
+    "reasoning",
+    "activity",
+    "text",
+    "reasoning",
+    "activity",
+    "text",
+  ]);
+  assert.equal(
+    projected
+      .filter((segment) => segment.type === "text")
+      .map((segment) => segment.text)
+      .join(""),
+    original.content,
+  );
+  assert.equal(original.segments?.at(-1)?.type, "text");
+  assert.equal(
+    original.segments?.at(-1)?.type === "text"
+      ? original.segments.at(-1)?.text
+      : "",
+    "脚本已写好。",
+  );
+});
+
+test("timeline projection appends a missing final answer after a trailing tool", () => {
+  const projected = projectCanonicalTimelineSegments({
+    id: "a2",
+    role: "assistant",
+    content: "准备。最终答案。",
+    activities: [{ id: "t1", kind: "tool", title: "terminal", at: 2 }],
+    segments: [
+      { type: "text", id: "txt1", text: "准备。", at: 1 },
+      { type: "activity", id: "t1", at: 2 },
+    ],
+  });
+
+  assert.deepEqual(projected.map((segment) => segment.type), [
+    "text",
+    "activity",
+    "text",
+  ]);
+  assert.equal(projected[2]?.type === "text" ? projected[2].text : "", "最终答案。");
 });
 
 test("canonical reasoning reconciliation replaces divergent text and keeps activities", () => {

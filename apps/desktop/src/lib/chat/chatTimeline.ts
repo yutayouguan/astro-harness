@@ -203,6 +203,58 @@ export function reconcileText(
   };
 }
 
+/**
+ * Build a read-only timeline projection whose textual segments match the
+ * canonical message aggregates. Live/recovered events can occasionally miss
+ * the final text delta even though `content` already contains the complete
+ * answer; rendering the raw segments would then truncate timeline view.
+ */
+export function projectCanonicalTimelineSegments(
+  message: ChatMessage,
+): ChatTimelineSegment[] {
+  let projected: ChatMessage = { ...message, segments: ensureSegments(message) };
+  const initialSegments = projected.segments ?? [];
+  const fallbackAt = initialSegments[initialSegments.length - 1]?.at ?? 0;
+
+  const segmentedReasoning = initialSegments
+    .filter((segment) => segment.type === "reasoning")
+    .map((segment) => segment.text)
+    .join("");
+  const canonicalReasoning = message.reasoning ?? segmentedReasoning;
+  if (canonicalReasoning !== segmentedReasoning) {
+    projected = reconcileReasoning(projected, canonicalReasoning, fallbackAt);
+  }
+
+  const segmentedText = (projected.segments ?? [])
+    .filter((segment) => segment.type === "text")
+    .map((segment) => segment.text)
+    .join("");
+  const canonicalText = message.content || segmentedText;
+  if (canonicalText !== segmentedText) {
+    if (canonicalText.startsWith(segmentedText)) {
+      const suffix = canonicalText.slice(segmentedText.length);
+      const segments = ensureSegments(projected);
+      const lastIndex = segments.length - 1;
+      const last = segments[lastIndex];
+      if (last?.type === "text") {
+        segments[lastIndex] = { ...last, text: last.text + suffix };
+      } else if (suffix) {
+        segments.push({
+          type: "text",
+          id: `txt-canonical-${message.id}`,
+          text: suffix,
+          at: fallbackAt,
+        });
+      }
+      projected = { ...projected, content: canonicalText, segments };
+    } else {
+      projected = reconcileText(projected, canonicalText, fallbackAt);
+    }
+  }
+
+  return ensureSegments(projected);
+}
+
 /** Replace recovered reasoning with one canonical segment while preserving non-reasoning order. */
 export function reconcileReasoning(
   m: ChatMessage,
