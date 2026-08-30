@@ -406,7 +406,7 @@
   background: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
-/* 公开 MCP 的分类是一条可横向浏览的轻量筛选轨道。 */
+/* 公开 MCP 分类在宽屏换行展示，窄屏退回横向浏览。 */
 .plugins-public-category-row {
   min-width: 0;
   padding-top: 2px;
@@ -415,10 +415,11 @@
 
 .plugins-public-categories {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
   padding: 8px 2px 2px;
-  overflow-x: auto;
+  overflow-x: visible;
   scrollbar-width: none;
 }
 
@@ -480,6 +481,11 @@
 }
 
 @media (max-width: 430px) {
+  .plugins-public-categories {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
   .plugins-command-row--primary {
     align-items: stretch;
   }

@@ -1,9 +1,9 @@
 import catalog from "./mcp-public-catalog.json";
 import communityCatalog from "./mcp-community-catalog.json";
 import {
-  MCP_PUBLIC_CATEGORY_IDS,
+  MCP_PUBLIC_ENTRY_CATEGORY_IDS,
   normalizeMcpServer,
-  type McpPublicCategory,
+  type McpPublicEntryCategory,
   type McpServer,
 } from "../hooks/providers/useMcpTools";
 
@@ -37,8 +37,8 @@ type CommunityCatalogEntry = {
   catalogIdentity?: string;
 };
 
-function isCatalogCategory(category: string | undefined): category is Exclude<McpPublicCategory, "featured"> {
-  return !!category && category !== "featured" && MCP_PUBLIC_CATEGORY_IDS.includes(category as McpPublicCategory);
+function isCatalogCategory(category: string | undefined): category is McpPublicEntryCategory {
+  return !!category && MCP_PUBLIC_ENTRY_CATEGORY_IDS.includes(category as McpPublicEntryCategory);
 }
 
 /** Validate and normalize the packaged public directory before it reaches the UI. */
@@ -107,7 +107,7 @@ function loadCommunityCatalog(curated: McpServer[]): McpServer[] {
     return [{
       ...normalizeMcpServer({
         ...entry,
-        category: entry.category as Exclude<McpPublicCategory, "featured">,
+        category: entry.category as McpPublicEntryCategory,
         type: "stdio",
         command: "",
         enabled: false,

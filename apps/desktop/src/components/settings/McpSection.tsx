@@ -1085,11 +1085,14 @@ export function useMcpSection({
       const matchesCategory =
         scope !== "builtin" ||
         !publicCategory ||
+        publicCategory === "all" ||
         (publicCategory === "featured"
           ? server.featured === true
-          : publicCategory === "other"
-            ? !server.category || server.category === "other"
-            : server.category === publicCategory);
+          : publicCategory === "official"
+            ? server.catalogOfficial === true
+            : publicCategory === "other"
+              ? !server.category || server.category === "other"
+              : server.category === publicCategory);
       if (!matchesCategory) return false;
       if (!query) return true;
       return (

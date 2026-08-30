@@ -9,18 +9,33 @@ export type McpToolApprovalMode = "auto" | "prompt" | "writes" | "approve";
 export type McpConfigScope = "global" | "builtin" | "project";
 export const MCP_PUBLIC_CATEGORY_IDS = [
   "featured",
-  "productivity",
+  "all",
+  "official",
   "development",
-  "finance",
-  "travel",
-  "health",
-  "research",
-  "education",
+  "productivity",
+  "database",
+  "search",
+  "web-scraping",
+  "file-system",
+  "version-control",
   "communication",
-  "analytics",
+  "cloud-service",
+  "cloud-storage",
+  "marketing",
+  "finance",
+  "design",
+  "memory",
   "other",
 ] as const;
 export type McpPublicCategory = (typeof MCP_PUBLIC_CATEGORY_IDS)[number];
+export type McpPublicEntryCategory = Exclude<
+  McpPublicCategory,
+  "featured" | "all" | "official"
+>;
+export const MCP_PUBLIC_ENTRY_CATEGORY_IDS = MCP_PUBLIC_CATEGORY_IDS.filter(
+  (category): category is McpPublicEntryCategory =>
+    category !== "featured" && category !== "all" && category !== "official",
+);
 export type McpRuntimeState =
   | "configured"
   | "disabled"
@@ -174,7 +189,7 @@ export type McpServer = {
   provenance: string;
   editable: boolean;
   /** 公开 MCP 目录中的分类；个人配置通常不提供。 */
-  category?: Exclude<McpPublicCategory, "featured">;
+  category?: McpPublicEntryCategory;
   /** 是否进入公开目录的精选集合。 */
   featured?: boolean;
   /** 公开目录中的官方文档或源码地址。 */
@@ -312,9 +327,9 @@ export function normalizeMcpServer(raw: Partial<McpServer> & { id?: string; name
         openWorldHint: typeof d.openWorldHint === "boolean" ? d.openWorldHint : undefined,
       }))
     : [];
-  const category = MCP_PUBLIC_CATEGORY_IDS.find(
-    (item) => item !== "featured" && item === config.category,
-  ) as Exclude<McpPublicCategory, "featured"> | undefined;
+  const category = MCP_PUBLIC_ENTRY_CATEGORY_IDS.find(
+    (item) => item === config.category,
+  );
   for (const d of discovered) {
     if (d.name && tools[d.name] === undefined) tools[d.name] = true;
   }

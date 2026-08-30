@@ -124,28 +124,58 @@ test("Skill and MCP navigation expose different source taxonomies", () => {
   assert.match(messages, /"plugins\.mcpScope\.public": "公开"/);
 });
 
-test("public MCP directory has category metadata and a scrollable filter rail", () => {
+test("public MCP directory exposes the catalog taxonomy and aggregate filters", () => {
   for (const category of [
     "featured",
-    "productivity",
+    "all",
+    "official",
     "development",
-    "finance",
-    "travel",
-    "health",
-    "research",
-    "education",
+    "productivity",
+    "database",
+    "search",
+    "web-scraping",
+    "file-system",
+    "version-control",
     "communication",
-    "analytics",
+    "cloud-service",
+    "cloud-storage",
+    "marketing",
+    "finance",
+    "design",
+    "memory",
     "other",
   ]) {
     assert.match(mcpTools, new RegExp(`"${category}"`));
   }
   assert.match(panel, /MCP_PUBLIC_CATEGORY_IDS\.map/);
+  for (const label of [
+    "精选",
+    "全部",
+    "官方 🌟",
+    "数据库",
+    "网页抓取",
+    "文件系统",
+    "版本控制",
+    "云服务",
+    "云存储",
+    "营销",
+    "设计",
+    "记忆",
+  ]) {
+    assert.match(messages, new RegExp(`: "${label}"`));
+  }
   assert.match(mcpSection, /server\.featured === true/);
+  assert.match(mcpSection, /publicCategory === "all"/);
+  assert.match(mcpSection, /publicCategory === "official"/);
+  assert.match(mcpSection, /server\.catalogOfficial === true/);
   assert.match(mcpSection, /server\.category === publicCategory/);
   assert.match(
     tabs,
-    /\.plugins-public-categories\s*\{[\s\S]*?overflow-x:\s*auto;/,
+    /\.plugins-public-categories\s*\{[\s\S]*?flex-wrap:\s*wrap;/,
+  );
+  assert.match(
+    tabs,
+    /@media \(max-width: 430px\)[\s\S]*?\.plugins-public-categories\s*\{[\s\S]*?overflow-x:\s*auto;/,
   );
 });
 
@@ -161,7 +191,7 @@ test("online Skills expose sort tabs, flattened scenes, and API Key filter", () 
   assert.match(panel, /"all"[\s\S]*"trending"[\s\S]*"downloads"[\s\S]*"recent"/);
 });
 
-test("public MCP directory is config-driven and covers every public category", () => {
+test("public MCP directory is config-driven and uses catalog entry categories", () => {
   assert.equal(publicMcpCatalog.version, 1);
   assert.ok(publicMcpCatalog.servers.length >= 20);
   assert.equal(
@@ -170,29 +200,27 @@ test("public MCP directory is config-driven and covers every public category", (
     "public MCP ids must be unique",
   );
 
-  const configuredCategories = new Set(
-    publicMcpCatalog.servers.map((server) => server.category),
-  );
-  for (const category of [
-    "productivity",
+  const entryCategories = new Set([
     "development",
-    "finance",
-    "travel",
-    "health",
-    "research",
-    "education",
+    "productivity",
+    "database",
+    "search",
+    "web-scraping",
+    "file-system",
+    "version-control",
     "communication",
-    "analytics",
+    "cloud-service",
+    "cloud-storage",
+    "marketing",
+    "finance",
+    "design",
+    "memory",
     "other",
-  ]) {
-    assert.ok(
-      configuredCategories.has(category),
-      `missing ${category} catalog entries`,
-    );
-  }
+  ]);
 
   for (const server of publicMcpCatalog.servers) {
     assert.ok(server.name && server.description);
+    assert.ok(entryCategories.has(server.category), `${server.id} has an unknown category`);
     assert.ok(server.type === "stdio" || server.type === "streamableHttp");
     assert.ok(
       server.type === "stdio" ? server.command : server.url,

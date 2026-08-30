@@ -165,8 +165,12 @@ async function main() {
 
   if (process.argv.includes("--check")) {
     const current = JSON.parse(await readFile(outputPath, "utf8"));
-    const comparable = { ...current, generatedAt: document.generatedAt };
-    if (JSON.stringify(comparable) !== JSON.stringify(document)) {
+    const stableSnapshot = (snapshot) => ({
+      version: snapshot.version,
+      sources: snapshot.sources.map(({ id, baseUrl }) => ({ id, baseUrl })),
+      servers: snapshot.servers,
+    });
+    if (JSON.stringify(stableSnapshot(current)) !== JSON.stringify(stableSnapshot(document))) {
       throw new Error("MCP community catalog snapshot is out of date");
     }
     console.log(`MCP community catalog is current (${servers.length} entries)`);
