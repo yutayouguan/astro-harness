@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
   type SVGProps,
+  type UIEvent,
 } from "react";
 import {
   BookOpen,
@@ -61,13 +62,11 @@ import {
 } from "../../lib/skills/skillInstallCommand";
 import { resolveFileType } from "../../lib/filespace/fileTypeIcon";
 import {
-  createLazyLoadGate,
-  decideLazyLoad,
+  isNearScrollEnd,
   isStoreCacheFresh,
   LOCAL_SKILLS_TTL_MS,
   pageHasMore,
   storeCacheKey,
-  type LazyLoadGate,
 } from "../../lib/skills/skillsLazyLoad";
 import {
   collectInstalledSkillKeys,
@@ -574,11 +573,7 @@ export default function SkillsPanel({
   const installedRef = useRef<InstalledSkill[]>([]);
   const machineRef = useRef<InstalledSkill[]>([]);
   const originsRef = useRef<SkillOriginRecord[]>([]);
-  const lazyGateRef = useRef<LazyLoadGate>(createLazyLoadGate());
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const onlinePaneRef = useRef<HTMLElement | null>(null);
-  const galleryScrollRef = useRef<HTMLDivElement | null>(null);
-  const detailListRef = useRef<HTMLDivElement | null>(null);
   const queryRef = useRef(query);
   const storeSortRef = useRef(storeSort);
   const storeCategoryRef = useRef(storeCategory);
@@ -877,7 +872,6 @@ export default function SkillsPanel({
     setLoadingStore(false);
     setLoadingMore(false);
     loadMoreLock.current = false;
-    lazyGateRef.current = createLazyLoadGate();
   }, []);
 
   const fetchStorePage = useCallback(
@@ -914,7 +908,6 @@ export default function SkillsPanel({
         setSelectedDetailId(null);
         selectedDetailIdRef.current = null;
         setStoreDetail(null);
-        lazyGateRef.current = createLazyLoadGate();
         setLoadingStore(true);
         setHasMore(true);
         hasMoreRef.current = true;
@@ -1017,11 +1010,31 @@ export default function SkillsPanel({
   }, [fetchStorePage, persistActiveStoreCache]);
 
   const loadMore = useCallback(async () => {
-    if (!hasMore || loadingStore || loadingMore || loadMoreLock.current) return;
-    await fetchStorePage(storePage + 1, true);
-  }, [fetchStorePage, hasMore, loadingMore, loadingStore, storePage]);
+    if (
+      !hasMoreRef.current ||
+      loadingMoreRef.current ||
+      loadMoreLock.current
+    ) {
+      return;
+    }
+    await fetchStorePage(storePageRef.current + 1, true);
+  }, [fetchStorePage]);
 
   loadMoreRef.current = loadMore;
+
+  const handleStoreScroll = useCallback((event: UIEvent<HTMLElement>) => {
+    const scroller =
+      event.target instanceof HTMLElement ? event.target : event.currentTarget;
+    if (!isNearScrollEnd(scroller)) return;
+    if (
+      !hasMoreRef.current ||
+      loadingMoreRef.current ||
+      loadMoreLock.current
+    ) {
+      return;
+    }
+    void loadMoreRef.current();
+  }, []);
 
   useEffect(() => {
     if (!active || primaryTab !== "skills") return;
@@ -1099,27 +1112,22 @@ export default function SkillsPanel({
   useEffect(() => {
     if (!active || personalTab !== "online" || !hasMore || loadingStore) return;
     const node = sentinelRef.current;
-    const root =
-      viewMode === "detail"
-        ? detailListRef.current
-        : galleryScrollRef.current;
-    if (!node || !root) return;
+    if (!node) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
         if (!entry) return;
-        const decision = decideLazyLoad(lazyGateRef.current, {
-          isIntersecting: entry.isIntersecting,
-          hasMore: hasMoreRef.current,
-          isLoading: loadingMoreRef.current || loadMoreLock.current,
-        });
-        lazyGateRef.current = decision.next;
-        if (decision.shouldLoad) {
+        if (
+          entry.isIntersecting &&
+          hasMoreRef.current &&
+          !loadingMoreRef.current &&
+          !loadMoreLock.current
+        ) {
           void loadMoreRef.current();
         }
       },
-      { root, rootMargin: "160px", threshold: 0 },
+      { root: null, rootMargin: "160px", threshold: 0 },
     );
     observer.observe(node);
     return () => observer.disconnect();
@@ -2603,7 +2611,7 @@ export default function SkillsPanel({
 
   const renderStoreDetail = () => (
     <div className="skills-detail">
-      <div ref={detailListRef} className="skills-detail-list" role="list">
+      <div className="skills-detail-list" role="list">
         {sortedStoreResults.map((skill) => (
           <button
             key={skill.id}
@@ -2973,7 +2981,16 @@ export default function SkillsPanel({
             </>
           ) : (
             <>
-              <ExpandableSearch value={mcpQuery} onChange={setMcpQuery} placeholderKey="tools.searchPlaceholder" />
+              <ExpandableSearch
+                value={mcpQuery}
+                onChange={(value) => {
+                  setMcpQuery(value);
+                  if (mcpScope === "public" && value.trim()) {
+                    setMcpPublicCategory("all");
+                  }
+                }}
+                placeholderKey="tools.searchPlaceholder"
+              />
               {viewToggle}
               <button
                 type="button"
@@ -3026,7 +3043,10 @@ export default function SkillsPanel({
                   role="tab"
                   aria-selected={mcpPublicCategory === category}
                   className={`plugins-public-category ${mcpPublicCategory === category ? "is-active" : ""}`}
-                  onClick={() => setMcpPublicCategory(category)}
+                  onClick={() => {
+                    setMcpPublicCategory(category);
+                    setMcpQuery("");
+                  }}
                 >
                   {t(`plugins.mcpPublic.category.${category}` as MessageKey)}
                 </button>
@@ -3290,9 +3310,9 @@ export default function SkillsPanel({
 
       {primaryTab === "skills" && scope === "global" && personalTab === "online" && (
         <section
-          ref={onlinePaneRef}
           className={`skills-pane skills-pane-online ${viewMode === "detail" ? "is-detail" : ""}`}
           role="tabpanel"
+          onScrollCapture={handleStoreScroll}
         >
           <header className="skills-pane-head">
             <div>
@@ -3302,26 +3322,39 @@ export default function SkillsPanel({
           </header>
 
           <div className="skills-store-toolbar">
-            <div
-              className="skills-store-sort-tabs"
-              role="tablist"
-              aria-label={t("skills.sort.label")}
-            >
-              {storeSortOptions.map((option) => {
-                const activeSort = storeSort === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="tab"
-                    aria-selected={activeSort}
-                    className={`skills-store-sort-tab ${activeSort ? "is-active" : ""}`}
-                    onClick={() => setStoreSort(option.value as StoreSort)}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
+            <div className="skills-store-toolbar-top">
+              <div
+                className="skills-store-sort-tabs"
+                role="tablist"
+                aria-label={t("skills.sort.label")}
+              >
+                {storeSortOptions.map((option) => {
+                  const activeSort = storeSort === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSort}
+                      className={`skills-store-sort-tab ${activeSort ? "is-active" : ""}`}
+                      onClick={() => setStoreSort(option.value as StoreSort)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <SelectMenu
+                size="sm"
+                className="skills-store-api-key-filter"
+                value={storeApiKeyFilter}
+                onChange={(value) =>
+                  setStoreApiKeyFilter(value as StoreApiKeyFilter)
+                }
+                options={storeApiKeyOptions}
+                aria-label={t("skills.filter.apiKeyAll")}
+                selectionIndicator="radio"
+              />
             </div>
             <div className="skills-store-toolbar-row">
               <div
@@ -3346,15 +3379,6 @@ export default function SkillsPanel({
                   );
                 })}
               </div>
-              <SelectMenu
-                size="sm"
-                className="skills-store-api-key-filter"
-                value={storeApiKeyFilter}
-                onChange={(value) => setStoreApiKeyFilter(value as StoreApiKeyFilter)}
-                options={storeApiKeyOptions}
-                aria-label={t("skills.filter.apiKeyAll")}
-                selectionIndicator="radio"
-              />
             </div>
           </div>
 
@@ -3385,7 +3409,6 @@ export default function SkillsPanel({
             )
           ) : (
             <div
-              ref={galleryScrollRef}
               className={`skills-gallery is-${viewMode}`}
               role="list"
             >
