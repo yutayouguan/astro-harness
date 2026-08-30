@@ -234,7 +234,7 @@ impl Session {
             !self.runtime_is_shutting_down(),
             "session runtime is shutting down"
         );
-        self.abort_all_tasks_inner(TurnAbortReason::Replaced)
+        self.abort_all_tasks_inner(TurnAbortReason::Replaced, false)
             .await?;
 
         let task: Arc<dyn AnySessionTask> = Arc::new(task);
@@ -425,7 +425,9 @@ impl Session {
     /// 协作式中止活跃任务，并等待其生命周期结束。
     pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) -> anyhow::Result<()> {
         let _admission = self.task_admission.lock().await;
-        self.abort_all_tasks_inner(reason).await
+        let emit_interrupt_hook = reason == TurnAbortReason::Interrupted;
+        self.abort_all_tasks_inner(reason, emit_interrupt_hook)
+            .await
     }
 
     pub(crate) async fn abort_all_tasks_for_shutdown(
@@ -458,13 +460,14 @@ impl Session {
                 None => None,
             },
         };
-        let result = self.abort_all_tasks_inner(reason).await;
+        let result = self.abort_all_tasks_inner(reason, false).await;
         (lifecycle, result)
     }
 
     async fn abort_all_tasks_inner(
         self: &Arc<Self>,
         reason: TurnAbortReason,
+        emit_interrupt_hook: bool,
     ) -> anyhow::Result<()> {
         let running = {
             let mut active_turn = self.active_turn.lock().await;
@@ -490,7 +493,7 @@ impl Session {
         let session = Arc::clone(self);
         tokio::spawn(async move {
             session
-                .supervise_abort_lifecycle(running, reason, reply_tx)
+                .supervise_abort_lifecycle(running, reason, emit_interrupt_hook, reply_tx)
                 .await;
         });
         reply_rx
@@ -502,6 +505,7 @@ impl Session {
         self: &Arc<Self>,
         mut running: RunningTask,
         reason: TurnAbortReason,
+        emit_interrupt_hook: bool,
         reply_tx: oneshot::Sender<anyhow::Result<()>>,
     ) {
         let turn_id = running.turn_context.sub_id().to_string();
@@ -564,6 +568,20 @@ impl Session {
 
         drop(running.task);
         Self::await_auxiliary_handles(&mut running.auxiliary_handles).await;
+        if emit_interrupt_hook && self.subagent_hook_context().is_none() {
+            if let Err(error) = self.flush_rollout().await {
+                tracing::warn!(%error, %turn_id, "failed to flush rollout before interrupt hook");
+            }
+            let _ = self.fire_hook(
+                ::hooks::INTERRUPT,
+                ::hooks::HookPayload {
+                    turn_id: Some(turn_id.clone()),
+                    reason: Some("interrupted".into()),
+                    detail: format!("turn={turn_id}"),
+                    ..Default::default()
+                },
+            );
+        }
         self.send_event(
             &turn_id,
             EventMsg::TurnAborted(TurnAbortedEvent {
@@ -968,6 +986,98 @@ mod tests {
             1
         );
         assert_eq!(thread.status(), AgentStatus::Idle);
+    }
+
+    #[tokio::test]
+    async fn interrupt_fires_root_hook_once_with_turn_context() {
+        let (_dir, session, thread) = task_test_thread("task-interrupt-hook-test").await;
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let observed_for_hook = Arc::clone(&observed);
+        bus.register(hooks::INTERRUPT, move |payload| {
+            observed_for_hook.lock().unwrap().push((
+                payload.hook_event_name.clone(),
+                payload.turn_id.clone(),
+                payload.reason.clone(),
+            ));
+            hooks::HookOutcome::Continue
+        });
+        session.set_hook_bus(bus);
+
+        let turn_id = "turn-interrupt-hook";
+        let started = Arc::new(Notify::new());
+        let context = session.create_turn_context(turn_id.into()).await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                PendingTask {
+                    started: Arc::clone(&started),
+                },
+            )
+            .await
+            .unwrap();
+        started.notified().await;
+
+        thread.submit(Op::Interrupt).await.unwrap();
+        let events = collect_terminal(&thread, turn_id).await;
+        assert!(matches!(
+            events.last().unwrap().msg,
+            EventMsg::TurnAborted(_)
+        ));
+        assert_eq!(
+            observed.lock().unwrap().as_slice(),
+            &[(
+                hooks::INTERRUPT.to_string(),
+                Some(turn_id.to_string()),
+                Some("interrupted".to_string()),
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn replacing_a_task_does_not_fire_interrupt_hook() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "task-replacement-hook-test".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        let interrupt_count = Arc::new(AtomicUsize::new(0));
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let interrupt_count_for_hook = Arc::clone(&interrupt_count);
+        bus.register(hooks::INTERRUPT, move |_| {
+            interrupt_count_for_hook.fetch_add(1, Ordering::SeqCst);
+            hooks::HookOutcome::Continue
+        });
+        session.set_hook_bus(bus);
+
+        let first_started = Arc::new(Notify::new());
+        session
+            .spawn_task(
+                session.create_turn_context("turn-replaced".into()).await,
+                Vec::new(),
+                PendingTask {
+                    started: Arc::clone(&first_started),
+                },
+            )
+            .await
+            .unwrap();
+        first_started.notified().await;
+        session
+            .spawn_task(
+                session.create_turn_context("turn-replacement".into()).await,
+                Vec::new(),
+                NoopTask,
+            )
+            .await
+            .unwrap();
+        session.wait_for_task("turn-replacement").await;
+
+        assert_eq!(interrupt_count.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

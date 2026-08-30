@@ -13,6 +13,7 @@ pub const USER_PROMPT_SUBMIT: &str = HookEvent::UserPromptSubmit.as_str();
 pub const SUBAGENT_START: &str = HookEvent::SubagentStart.as_str();
 pub const SUBAGENT_STOP: &str = HookEvent::SubagentStop.as_str();
 pub const STOP: &str = HookEvent::Stop.as_str();
+pub const INTERRUPT: &str = HookEvent::Interrupt.as_str();
 
 pub const PRE_LLM_CALL: &str = HookEvent::PreLlmCall.as_str();
 pub const PRE_API_REQUEST: &str = HookEvent::PreApiRequest.as_str();

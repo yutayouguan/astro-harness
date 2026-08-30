@@ -14,6 +14,7 @@ pub enum HookEvent {
     SubagentStart,
     SubagentStop,
     Stop,
+    Interrupt,
     PreLlmCall,
     PreApiRequest,
     PostApiRequest,
@@ -32,7 +33,7 @@ pub enum HookEvent {
 
 impl HookEvent {
     /// Canonical 事件（Codex CLI 兼容），顺序是对外契约的一部分。
-    pub const CODEX: [Self; 11] = [
+    pub const CODEX: [Self; 12] = [
         Self::PreToolUse,
         Self::PermissionRequest,
         Self::PostToolUse,
@@ -44,6 +45,7 @@ impl HookEvent {
         Self::SubagentStart,
         Self::SubagentStop,
         Self::Stop,
+        Self::Interrupt,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -59,6 +61,7 @@ impl HookEvent {
             Self::SubagentStart => "SubagentStart",
             Self::SubagentStop => "SubagentStop",
             Self::Stop => "Stop",
+            Self::Interrupt => "Interrupt",
             Self::PreLlmCall => "PreLlmCall",
             Self::PreApiRequest => "PreApiRequest",
             Self::PostApiRequest => "PostApiRequest",
@@ -81,7 +84,7 @@ impl HookEvent {
 mod tests {
     use super::*;
     use crate::names::{
-        is_mutating_hook, AGENT_END, COMMAND_NEW_CHAT, GATEWAY_STARTUP, PERMISSION_REQUEST,
+        is_mutating_hook, AGENT_END, COMMAND_NEW_CHAT, GATEWAY_STARTUP, INTERRUPT, PERMISSION_REQUEST,
         POST_API_REQUEST, POST_APPROVAL_RESPONSE, POST_COMPACT, POST_LLM_CALL, POST_TOOL_USE,
         PRE_API_REQUEST, PRE_COMPACT, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL, PRE_TOOL_USE,
         SESSION_END, SESSION_FINALIZE, SESSION_RESET, SESSION_START, STOP, SUBAGENT_START,
@@ -90,7 +93,7 @@ mod tests {
     };
     #[test]
     fn hook_events_have_exact_names_and_order() {
-        let codex: [HookEvent; 11] = HookEvent::CODEX;
+        let codex: [HookEvent; 12] = HookEvent::CODEX;
         let as_str: fn(HookEvent) -> &'static str = HookEvent::as_str;
         let names: Vec<_> = codex.into_iter().map(as_str).collect();
 
@@ -108,6 +111,7 @@ mod tests {
                 "SubagentStart",
                 "SubagentStop",
                 "Stop",
+                "Interrupt",
             ]
         );
     }
@@ -125,6 +129,7 @@ mod tests {
         assert_eq!(SUBAGENT_START, "SubagentStart");
         assert_eq!(SUBAGENT_STOP, "SubagentStop");
         assert_eq!(STOP, "Stop");
+        assert_eq!(INTERRUPT, "Interrupt");
 
         assert_eq!(PRE_LLM_CALL, "PreLlmCall");
         assert_eq!(PRE_API_REQUEST, "PreApiRequest");
