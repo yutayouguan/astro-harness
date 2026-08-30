@@ -29,6 +29,7 @@ export default function TodoProgress({ messages, onOpenFileReview }: Props) {
   const done = plan.items.filter((it) => it.done).length;
   const currentStep = done + 1;
   const allDone = done === total;
+  if (allDone) return null;
   const currentItem = allDone ? plan.title : plan.items[done]?.text;
   const progressPct = Math.round((done / total) * 100);
   const progressStyle = {

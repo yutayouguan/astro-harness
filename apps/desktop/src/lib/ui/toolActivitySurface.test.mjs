@@ -63,9 +63,13 @@ test("TODO updates stay out of answers and use a compact centered composer statu
   assert.match(activity, /className="msg-activity-io-disclosure"/);
   assert.match(activity, /msg-activity-input-collapse/);
   assert.match(progress, /className="todo-progress-current"/);
+  assert.match(progress, /if \(allDone\) return null/);
   assert.match(chatView, /if \(isTodoOnlyActivityMessage\(m\)\) return null/);
   assert.match(chatView, /if \(isTodoActivity\(act\)\) return/);
   assert.match(chatView, /<TodoProgress[\s\S]*messages=\{messages\}/);
+  assert.match(chatView, /isScrolledFromBottom \? \(/);
+  assert.match(chatView, /showStopControl \? \(/);
+  assert.match(chatView, /onClick=\{scrollConversationToBottom\}/);
   assert.match(
     css,
     /\.composer-shell \.todo-progress-float \{[\s\S]*align-self: center;[\s\S]*width: max-content;[\s\S]*max-width: min\(calc\(100% - 32px\), 520px\);[\s\S]*margin: 0 auto 6px/,
@@ -73,5 +77,14 @@ test("TODO updates stay out of answers and use a compact centered composer statu
   assert.match(
     css,
     /\.composer-shell \.todo-progress-popover \{[\s\S]*left: 50%;[\s\S]*transform: translateX\(-50%\);[\s\S]*transform-origin: center bottom/,
+  );
+  assert.match(
+    css,
+    /\.composer-shell \.chat-scroll-latest \{[\s\S]*align-self: center;[\s\S]*width: 36px;[\s\S]*height: 36px/,
+  );
+  assert.match(css, /\.chat-scroll-latest-dots > span \{[\s\S]*animation: chat-scroll-latest-dot/);
+  assert.match(
+    css,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.chat-scroll-latest-dots > span,[\s\S]*animation: none/,
   );
 });

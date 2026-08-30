@@ -3,18 +3,27 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("chat turn anchors reserve a left-side hit area", async () => {
-  const css = await readFile(
-    new URL("../../styles/features/chat/navigation.css", import.meta.url),
-    "utf8",
-  );
+  const [css, source] = await Promise.all([
+    readFile(
+      new URL("../../styles/features/chat/navigation.css", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../../components/chat/ChatMessageNav.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
   const trackRule = css.match(/\.chat-msg-nav-track\s*\{(?<body>[\s\S]*?)\}/);
 
   assert.ok(trackRule?.groups?.body, "missing chat message navigation track rule");
   assert.match(
     trackRule.groups.body,
-    /padding:\s*10px 28px 10px 0;/,
+    /padding:\s*8px 28px 8px 0;/,
     "the track must expand its hit area toward the conversation",
   );
+  assert.match(source, /const BASE = 16;/);
+  assert.match(source, /const GAP = 2;/);
+  assert.match(source, /const PAD_TOP = 8;/);
 });
 
 test("chat turn navigation is anchored to the left edge", async () => {
@@ -46,6 +55,7 @@ test("chat turn markers stay compact without shrinking the hit target", async ()
 
   assert.ok(buttonRule?.groups?.body, "missing chat navigation button rule");
   assert.match(buttonRule.groups.body, /width:\s*52px;/);
+  assert.match(buttonRule.groups.body, /height:\s*18px;/);
   assert.ok(markerRule?.groups?.body, "missing chat navigation marker rule");
   assert.match(markerRule.groups.body, /width:\s*7px;/);
   assert.ok(activeMarkerRule?.groups?.body, "missing active marker rule");

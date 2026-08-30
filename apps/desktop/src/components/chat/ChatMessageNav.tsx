@@ -30,15 +30,15 @@ type Props = {
   bottomRef: RefObject<HTMLElement | null>;
 };
 
-const BASE = 18;
+const BASE = 16;
 /** 与 CSS `.chat-msg-nav-track` gap 一致；放大后仍要留缝 */
-const GAP = 4;
+const GAP = 2;
 /** 与 CSS `.chat-msg-nav-track` padding-top 一致 */
-const PAD_TOP = 10;
+const PAD_TOP = 8;
 /** 峰值放大：略收敛，避免挤成一团 */
 const MAX_SCALE = 1.52;
 /** 影响半径：配合间距做更柔和的鱼眼 */
-const RANGE = 72;
+const RANGE = 58;
 /** 单张问答摘要卡，不叠放邻近预览。 */
 const LABEL_MAX = 1;
 

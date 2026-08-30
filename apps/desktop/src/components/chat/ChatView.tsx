@@ -800,6 +800,7 @@ export default function ChatView({
   const chatPaneRef = useRef<HTMLElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const followLatestRef = useRef(true);
   const composerShellRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typedHintRef = useRef<HTMLSpanElement>(null);
@@ -812,6 +813,7 @@ export default function ChatView({
   const contextWrapRef = useRef<HTMLDivElement>(null);
   const contextCloseTimerRef = useRef<number | null>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [isScrolledFromBottom, setIsScrolledFromBottom] = useState(false);
   const [approvalMode, setApprovalMode] =
     useState<PermissionPreset>("ask_for_approval");
   const [sandboxHealth, setSandboxHealth] =
@@ -1589,9 +1591,35 @@ export default function ChatView({
     }
   };
 
+  const updateConversationScrollState = useCallback(() => {
+    const list = messageListRef.current;
+    if (!list) return;
+    const distanceFromBottom =
+      list.scrollHeight - list.scrollTop - list.clientHeight;
+    const awayFromBottom = distanceFromBottom > 56;
+    followLatestRef.current = !awayFromBottom;
+    setIsScrolledFromBottom((current) =>
+      current === awayFromBottom ? current : awayFromBottom,
+    );
+  }, []);
+
+  const scrollConversationToBottom = useCallback(() => {
+    followLatestRef.current = true;
+    const list = messageListRef.current;
+    list?.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    followLatestRef.current = true;
+    setIsScrolledFromBottom(false);
+  }, [sessionId]);
+
   useEffect(() => {
     if (focusMessageId) return;
-    bottomRef.current?.scrollIntoView({
+    if (!followLatestRef.current) return;
+    const list = messageListRef.current;
+    list?.scrollTo({
+      top: list.scrollHeight,
       behavior: streaming ? "auto" : "smooth",
     });
   }, [messages, attachments, streaming, focusMessageId]);
@@ -2161,7 +2189,11 @@ export default function ChatView({
         />
       ) : (
         <div className="message-list-wrap">
-          <div className="message-list" ref={messageListRef}>
+          <div
+            className="message-list"
+            ref={messageListRef}
+            onScroll={updateConversationScrollState}
+          >
             {messages.map((m, index) => {
               const isStreamingBubble =
                 m.role === "assistant" &&
@@ -2550,6 +2582,25 @@ export default function ChatView({
           trySubmitComposer();
         }}
       >
+        {isScrolledFromBottom ? (
+          <button
+            type="button"
+            className={`chat-scroll-latest ${showStopControl ? "is-active" : ""}`.trim()}
+            title={t("chat.navScrollBottom")}
+            aria-label={t("chat.navScrollBottom")}
+            onClick={scrollConversationToBottom}
+          >
+            {showStopControl ? (
+              <span className="chat-scroll-latest-dots" aria-hidden>
+                <span />
+                <span />
+                <span />
+              </span>
+            ) : (
+              <ArrowDown size={18} strokeWidth={2} aria-hidden />
+            )}
+          </button>
+        ) : null}
         <TodoProgress messages={messages} onOpenFileReview={onOpenFileReview} />
         {modeSwitchPrompt?.to === "agent" && (
           <div
