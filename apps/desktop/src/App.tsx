@@ -88,6 +88,7 @@ import {
   type ChatWorkMode,
 } from "./lib/chat/chatMode";
 import type { SlashAction } from "./lib/chat/composerCommands";
+import type { ComposerContextToken } from "./lib/chat/composerContext";
 import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import {
@@ -222,6 +223,8 @@ export default function App() {
   }, []);
   const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | null>(null);
   const [skillsInitialTab, setSkillsInitialTab] = useState<"mcp" | null>(null);
+  const [composerContextPrefill, setComposerContextPrefill] =
+    useState<ComposerContextToken | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [modelContextWindow, setModelContextWindow] = useState<number | null>(null);
   const [activeModelCapabilities, setActiveModelCapabilities] =
@@ -1389,8 +1392,9 @@ export default function App() {
                       active
                       initialTab={skillsInitialTab}
                       onInitialTabConsumed={() => setSkillsInitialTab(null)}
-                      onInstallWithAgent={(prompt) => {
+                      onInstallWithAgent={(prompt, contextToken) => {
                         setInput(prompt);
+                        setComposerContextPrefill(contextToken ?? null);
                         setNav("chat");
                       }}
                       tone={shellTone}
@@ -1588,6 +1592,10 @@ export default function App() {
                         ) : null
                       }
                       input={chat.input}
+                      composerContextPrefill={composerContextPrefill}
+                      onComposerContextPrefillConsumed={() =>
+                        setComposerContextPrefill(null)
+                      }
                       attachments={chat.attachments}
                       streaming={chat.streaming}
                       turnInFlight={chat.turnInFlight}

@@ -274,6 +274,10 @@ type Props = {
   workspaceContent?: ReactNode;
   /** 输入框文本 */
   input: string;
+  /** 从其它页面带入输入框的结构化上下文标签。 */
+  composerContextPrefill?: ComposerContextToken | null;
+  /** 上下文标签被输入框接收后清空父级暂存。 */
+  onComposerContextPrefillConsumed?: () => void;
   /** 待发送附件 */
   attachments: ChatAttachment[];
   /** 是否正在流式生成 */
@@ -731,6 +735,8 @@ export default function ChatView({
   messages,
   workspaceContent = null,
   input,
+  composerContextPrefill = null,
+  onComposerContextPrefillConsumed,
   attachments,
   streaming,
   turnInFlight = false,
@@ -876,6 +882,15 @@ export default function ChatView({
     setComposerContexts([]);
     setPreviewTarget(null);
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!composerContextPrefill) return;
+    setComposerContexts((current) =>
+      addComposerContextToken(current, composerContextPrefill),
+    );
+    onComposerContextPrefillConsumed?.();
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [composerContextPrefill, onComposerContextPrefillConsumed]);
 
   const loadCronTask = useCallback(async (jobId: string) => {
     setCronJobRunsLoading(true);
