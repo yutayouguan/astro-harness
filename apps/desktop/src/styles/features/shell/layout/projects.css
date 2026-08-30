@@ -945,10 +945,35 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
   padding: 0 10px;
 }
 
-.sidebar-settings-nav .settings-sidebar-item svg {
-  flex-shrink: 0;
-  opacity: 0.6;
-  transition: opacity 0.12s;
+.settings-sidebar-icon {
+  --nav-grad-top: currentColor;
+  --nav-grad-bottom: currentColor;
+
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: grid;
+  place-items: center;
+  color: currentColor;
+  opacity: 0.68;
+  transition: opacity 0.12s ease;
+}
+
+.settings-sidebar-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: none;
+  stroke-width: 1.7;
+  shape-rendering: geometricprecision;
+}
+
+.settings-sidebar-icon svg .nav-icon-cutout,
+.settings-sidebar-icon svg .nav-icon-hole,
+.settings-sidebar-icon svg .nav-icon-stroke,
+.settings-sidebar-icon svg .nav-icon-fill {
+  fill: none;
+  stroke-width: 1.7;
 }
 
 .sidebar-settings-nav .settings-sidebar-item:hover {
@@ -957,8 +982,8 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
   box-shadow: none;
 }
 
-.sidebar-settings-nav .settings-sidebar-item:hover svg {
-  opacity: 0.78;
+.sidebar-settings-nav .settings-sidebar-item:hover .settings-sidebar-icon {
+  opacity: 0.84;
 }
 
 .sidebar-settings-nav .settings-sidebar-item.is-active {
@@ -971,7 +996,7 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
   -webkit-backdrop-filter: none;
 }
 
-.sidebar-settings-nav .settings-sidebar-item.is-active svg {
+.sidebar-settings-nav .settings-sidebar-item.is-active .settings-sidebar-icon {
   opacity: 1;
   color: var(--tone, var(--tone-purple));
 }

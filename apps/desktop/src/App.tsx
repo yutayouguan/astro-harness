@@ -970,7 +970,9 @@ export default function App() {
                         aria-current={settingsTab === item.id ? "page" : undefined}
                         onClick={() => setSettingsTab(item.id)}
                       >
-                        <item.Icon size={18} strokeWidth={1.7} aria-hidden />
+                        <span className="settings-sidebar-icon" aria-hidden>
+                          <item.Icon width={18} height={18} strokeWidth={1.7} />
+                        </span>
                         <span className="sidebar-item-label">{item.label}</span>
                       </button>
                     ))}

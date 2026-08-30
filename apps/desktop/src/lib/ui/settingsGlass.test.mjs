@@ -14,6 +14,10 @@ const a11yStyles = await readFile(
   new URL("../../styles/tokens/a11y.css", import.meta.url),
   "utf8",
 );
+const settingsTabsSource = await readFile(
+  new URL("settingsTabs.ts", import.meta.url),
+  "utf8",
+);
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -63,6 +67,22 @@ test("settings sidebar uses grouped compact navigation and a quiet search field"
   assert.ok(item, "missing settings navigation item rule");
   assert.match(item, /min-height:\s*36px;/);
   assert.match(item, /border-radius:\s*10px;/);
+});
+
+test("settings navigation uses one Astro icon family and one optical canvas", () => {
+  assert.match(settingsTabsSource, /from "\.\.\/\.\.\/components\/icons"/);
+  assert.doesNotMatch(settingsTabsSource, /from "lucide-react"/);
+  assert.match(settingsTabsSource, /IconContext/);
+  assert.match(settingsTabsSource, /IconDiagnostics/);
+
+  const icon = rule(projectStyles, ".settings-sidebar-icon");
+  const iconSvg = rule(projectStyles, ".settings-sidebar-icon svg");
+  assert.ok(icon, "missing settings icon canvas rule");
+  assert.ok(iconSvg, "missing settings icon svg rule");
+  assert.match(icon, /width:\s*20px;/);
+  assert.match(icon, /flex:\s*0 0 20px;/);
+  assert.match(iconSvg, /width:\s*18px;/);
+  assert.match(iconSvg, /stroke-width:\s*1\.7;/);
 });
 
 test("preference category navigation keeps the shared glass material", () => {

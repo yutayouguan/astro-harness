@@ -281,6 +281,26 @@ export function IconProviders(props: IconProps) {
   );
 }
 
+/** 上下文与压缩 — 两层内容栈，避免三层图标在小尺寸下显得过密。 */
+export function IconContext(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+      <path className="nav-icon-stroke" d="m3 13 9 5 9-5" />
+    </NavIconBase>
+  );
+}
+
+/** 诊断 — 统一圆角轮廓中的状态脉冲。 */
+export function IconDiagnostics(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <rect x="3" y="3" width="18" height="18" rx="4" />
+      <path className="nav-icon-cutout" d="M7 12h2l1.5-3 3 6 1.5-3h2" />
+    </NavIconBase>
+  );
+}
+
 /** 偏好设置 — 默认空心+中心圆线稿；选中填实后中心变透镜孔 */
 export function IconSettings(props: IconProps) {
   return (
