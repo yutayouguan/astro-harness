@@ -102,11 +102,11 @@
 
 | 字段 | 内容 |
 | --- | --- |
-| 状态 | `Open` |
+| 状态 | `Closed` |
 | 严重度 | Medium |
 | 发现日期 | 2026-08-29 |
 | 发现阶段 | H-001 相关 crate 回归测试 |
-| 是否已修复 | 否；与本次数据库路径修复分离 |
+| 是否已修复 | 是；已由 `37b254b9` 完成异步化，本轮复核并关闭记录 |
 
 ### 问题描述
 
@@ -126,6 +126,17 @@ CARGO_TARGET_DIR=/tmp/astro-harness-doc-check \
 ### 建议处理
 
 单独设计 test-support 的异步边界：将辅助 API 整体异步化，或通过明确的测试 runtime 适配；不要在零散调用点使用阻塞嵌套 runtime。修复后恢复 `subagents` 及依赖 `agent/test-support` 的测试覆盖。
+
+### 已采用的修复
+
+- `LifecycleTestApp::new`、`restart_with`、`dispatch_at`、`status`、`pending_mailbox`、`session_contents`、`session_ids` 和依赖方法统一改为 async。
+- `AgentGraphStore`、`AgentControl`、`SessionStore` 调用在原 Tokio runtime 中直接 `.await`，没有引入阻塞式嵌套 runtime。
+- `crates/agent-subagents/tests/v2_lifecycle.rs` 的所有调用点同步改为 async 调用。
+
+### 验证结果
+
+- `cargo test -p subagents --test v2_lifecycle -- --nocapture`：1 项通过。
+- `cargo test -p subagents --tests`：101 项通过。
 
 ## H-003 Legacy Provider 的 Namespace 工具名不符合 Function 协议
 
