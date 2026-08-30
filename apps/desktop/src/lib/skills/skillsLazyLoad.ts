@@ -68,8 +68,13 @@ export const STORE_CACHE_TTL_MS = 5 * 60 * 1000;
 /** 已安装 / 本机列表 TTL（同 Agent 切 Tab 时在此窗口内可跳过请求） */
 export const LOCAL_SKILLS_TTL_MS = 60 * 1000;
 
-export function storeCacheKey(query: string): string {
-  return query.trim().toLowerCase();
+export function storeCacheKey(
+  query: string,
+  sort = "all",
+  category = "all",
+  apiKey = "all",
+): string {
+  return [query.trim().toLowerCase(), sort, category, apiKey].join("\u0000");
 }
 
 export function isStoreCacheFresh(

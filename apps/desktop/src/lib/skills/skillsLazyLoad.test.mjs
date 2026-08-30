@@ -113,10 +113,15 @@ test("pageHasMore stops when append adds nothing new", () => {
   assert.equal(pageHasMore(10, 24, 10), false);
 });
 
-test("store cache key normalizes query", async () => {
+test("store cache key normalizes query and isolates marketplace filters", async () => {
   const { storeCacheKey, isStoreCacheFresh, STORE_CACHE_TTL_MS, LOCAL_SKILLS_TTL_MS } =
     await import("./skillsLazyLoad.ts");
   assert.equal(storeCacheKey("  Weather "), storeCacheKey("weather"));
+  assert.notEqual(storeCacheKey("weather", "all"), storeCacheKey("weather", "trending"));
+  assert.notEqual(
+    storeCacheKey("weather", "all", "dev-programming"),
+    storeCacheKey("weather", "all", "data-analysis"),
+  );
   assert.equal(isStoreCacheFresh(Date.now() - 1000), true);
   assert.equal(
     isStoreCacheFresh(Date.now() - STORE_CACHE_TTL_MS - 1),

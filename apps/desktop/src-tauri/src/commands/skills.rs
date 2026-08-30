@@ -11,7 +11,7 @@ use skills::{
     list_skill_files_ex, load_skill_by_name, open_skill_file_externally as open_skill_file_fs,
     open_skill_folder as open_skill_folder_fs, preview_skill_update as skills_preview_skill_update,
     read_skill_file_ex, reveal_skill_backup as skills_reveal_skill_backup,
-    reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
+    reveal_skill_file as reveal_skill_file_fs, search_with_filters, set_enabled_for_agent,
     update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
     InstalledSkill, SkillBackupEntry, SkillBundle, SkillSnapshot, SkillUpdateCheckResult,
     SkillUpdateItemResult, SkillUpdatePreview, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
@@ -162,10 +162,22 @@ pub async fn search_store_skills(
     query: String,
     limit: Option<usize>,
     page: Option<usize>,
+    sort: Option<String>,
+    category: Option<String>,
+    api_key: Option<String>,
 ) -> Result<Vec<StoreSkill>, String> {
     let limit = limit.unwrap_or(24);
     let page = page.unwrap_or(1);
-    search(&query, limit, page).await.map_err(|e| e.to_string())
+    search_with_filters(
+        &query,
+        limit,
+        page,
+        sort.as_deref(),
+        category.as_deref(),
+        api_key.as_deref(),
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Tauri 命令：get_store_skill_detail。

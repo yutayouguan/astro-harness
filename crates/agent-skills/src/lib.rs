@@ -81,7 +81,7 @@ pub use skill::{LoadedSkill, SkillMetadata};
 pub use snapshots::{
     list_snapshots, restore_latest as restore_skill_snapshot, save_snapshot, SkillSnapshot,
 };
-pub use store::{fetch_detail, search};
+pub use store::{fetch_detail, search, search_with_filters};
 pub use update::{
     backup_skill_dir, update_all_with_origin, update_installed_skill, update_installed_skill_ex,
     update_outdated_skills,

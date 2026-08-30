@@ -84,16 +84,55 @@ fn map_skillhub(s: SkillHubSkill) -> StoreSkill {
     }
 }
 
-async fn fetch_skillhub(query: &str, limit: usize, page: usize) -> Result<Vec<StoreSkill>> {
-    let client = http_client()?;
-    let page = page.max(1);
+fn skillhub_list_url(
+    query: &str,
+    limit: usize,
+    page: usize,
+    sort: Option<&str>,
+    category: Option<&str>,
+    api_key: Option<&str>,
+) -> String {
     let mut url = format!(
-        "{SKILLHUB_API}/api/skills?page={page}&pageSize={}&sortBy=score",
-        limit.min(50)
+        "{SKILLHUB_API}/api/skills?page={}&pageSize={}",
+        page.max(1),
+        limit.clamp(1, 50)
     );
+    let sort_by = match sort.map(str::trim) {
+        Some("trending") => Some("score"),
+        Some("downloads") => Some("downloads"),
+        Some("recent") => Some("updated_at"),
+        _ => None,
+    };
+    if let Some(sort_by) = sort_by {
+        url.push_str(&format!("&sortBy={sort_by}&order=desc"));
+    }
     if !query.trim().is_empty() {
         url.push_str(&format!("&keyword={}", urlencoding::encode(query.trim())));
     }
+    if let Some(category) = category.map(str::trim).filter(|value| !value.is_empty()) {
+        url.push_str(&format!("&category={}", urlencoding::encode(category)));
+    }
+    let api_key_label = match api_key.map(str::trim) {
+        Some("required") => Some("requires_api_key:true"),
+        Some("not-required") => Some("requires_api_key:false"),
+        _ => None,
+    };
+    if let Some(label) = api_key_label {
+        url.push_str(&format!("&labels={}", urlencoding::encode(label)));
+    }
+    url
+}
+
+async fn fetch_skillhub(
+    query: &str,
+    limit: usize,
+    page: usize,
+    sort: Option<&str>,
+    category: Option<&str>,
+    api_key: Option<&str>,
+) -> Result<Vec<StoreSkill>> {
+    let client = http_client()?;
+    let url = skillhub_list_url(query, limit, page, sort, category, api_key);
 
     let resp = client
         .get(&url)
@@ -117,9 +156,19 @@ async fn fetch_skillhub(query: &str, limit: usize, page: usize) -> Result<Vec<St
 
 /// 从 SkillHub 搜索技能（支持 page 分页，从 1 起）。
 pub async fn search(query: &str, limit: usize, page: usize) -> Result<Vec<StoreSkill>> {
-    let limit = limit.clamp(1, 50);
-    let page = page.max(1);
-    fetch_skillhub(query.trim(), limit, page).await
+    search_with_filters(query, limit, page, Some("trending"), None, None).await
+}
+
+/// 从 SkillHub 搜索并按官方列表接口的排序、场景和 API Key 标签筛选。
+pub async fn search_with_filters(
+    query: &str,
+    limit: usize,
+    page: usize,
+    sort: Option<&str>,
+    category: Option<&str>,
+    api_key: Option<&str>,
+) -> Result<Vec<StoreSkill>> {
+    fetch_skillhub(query.trim(), limit, page, sort, category, api_key).await
 }
 
 /// SkillHub `/api/v1/skills/{slug}` 详情响应。
@@ -336,6 +385,34 @@ mod tests {
             "https://skillhub.cn/skills/web-tools-guide"
         );
         assert_eq!(detail.slug, "web-tools-guide");
+    }
+
+    #[test]
+    fn skillhub_list_url_maps_marketplace_filters() {
+        let url = skillhub_list_url(
+            "  rust agent  ",
+            80,
+            0,
+            Some("recent"),
+            Some("dev-programming"),
+            Some("not-required"),
+        );
+        assert_eq!(
+            url,
+            "https://api.skillhub.cn/api/skills?page=1&pageSize=50&sortBy=updated_at&order=desc&keyword=rust%20agent&category=dev-programming&labels=requires_api_key%3Afalse"
+        );
+    }
+
+    #[test]
+    fn skillhub_list_url_keeps_all_unsorted_and_maps_trending_to_score() {
+        let all = skillhub_list_url("", 24, 1, Some("all"), None, None);
+        assert_eq!(all, "https://api.skillhub.cn/api/skills?page=1&pageSize=24");
+
+        let trending = skillhub_list_url("", 24, 1, Some("trending"), None, None);
+        assert_eq!(
+            trending,
+            "https://api.skillhub.cn/api/skills?page=1&pageSize=24&sortBy=score&order=desc"
+        );
     }
 
     #[test]

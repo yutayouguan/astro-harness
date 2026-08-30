@@ -75,7 +75,6 @@ import {
   isStoreSkillInstalled as matchStoreSkillInstalled,
 } from "../../lib/skills/skillInstalledMatch";
 import {
-  filterStoreSkills,
   STORE_CATEGORY_IDS,
   type StoreApiKeyFilter,
   type StoreCategory,
@@ -178,7 +177,7 @@ type CallSort = "name" | "calls";
 /** 本机技能链接过滤 */
 type MachineLinkFilter = "all" | "linked" | "unlinked";
 /** 商店列表排序 */
-type StoreSort = "default" | "installs";
+type StoreSort = "all" | "trending" | "downloads" | "recent";
 
 const UPDATE_FILTERS: {
   id: SkillUpdateFilter;
@@ -482,7 +481,7 @@ export default function SkillsPanel({
   const [machineSort, setMachineSort] = useState<CallSort>("name");
   const [machineLinkFilter, setMachineLinkFilter] =
     useState<MachineLinkFilter>("all");
-  const [storeSort, setStoreSort] = useState<StoreSort>("default");
+  const [storeSort, setStoreSort] = useState<StoreSort>("all");
   const [storeDetail, setStoreDetail] = useState<StoreSkillDetail | null>(null);
   const [loadingStoreDetail, setLoadingStoreDetail] = useState(false);
   const [origins, setOrigins] = useState<SkillOriginRecord[]>([]);
@@ -538,11 +537,17 @@ export default function SkillsPanel({
   const galleryScrollRef = useRef<HTMLDivElement | null>(null);
   const detailListRef = useRef<HTMLDivElement | null>(null);
   const queryRef = useRef(query);
+  const storeSortRef = useRef(storeSort);
+  const storeCategoryRef = useRef(storeCategory);
+  const storeApiKeyFilterRef = useRef(storeApiKeyFilter);
   const storeResultsRef = useRef<StoreSkill[]>([]);
   const loadMoreRef = useRef<() => Promise<void>>(async () => {});
   const loadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
   queryRef.current = query;
+  storeSortRef.current = storeSort;
+  storeCategoryRef.current = storeCategory;
+  storeApiKeyFilterRef.current = storeApiKeyFilter;
   storeResultsRef.current = storeResults;
   loadingMoreRef.current = loadingMore;
   hasMoreRef.current = hasMore;
@@ -843,7 +848,10 @@ export default function SkillsPanel({
       const silent = !append && mode === "silent";
       const gen = append ? storeFetchGen.current : ++storeFetchGen.current;
       const q = queryRef.current.trim();
-      const cacheKey = storeCacheKey(q);
+      const sort = storeSortRef.current;
+      const category = storeCategoryRef.current;
+      const apiKey = storeApiKeyFilterRef.current;
+      const cacheKey = storeCacheKey(q, sort, category, apiKey);
 
       if (append) {
         if (loadMoreLock.current) return;
@@ -875,6 +883,9 @@ export default function SkillsPanel({
           query: q,
           limit: STORE_PAGE_SIZE,
           page,
+          sort,
+          category: category === "all" ? null : category,
+          apiKey: apiKey === "all" ? null : apiKey,
         });
         if (gen !== storeFetchGen.current) return;
         if (!append) {
@@ -1013,7 +1024,12 @@ export default function SkillsPanel({
 
     // SWR：先写入上一 Tab 快照，再恢复缓存；过期则后台静默刷新
     persistActiveStoreCache();
-    const key = storeCacheKey(queryRef.current);
+    const key = storeCacheKey(
+      queryRef.current,
+      storeSort,
+      storeCategory,
+      storeApiKeyFilter,
+    );
     const cached = storeCacheRef.current.get(key);
     activeStoreCacheKeyRef.current = key;
 
@@ -1029,6 +1045,9 @@ export default function SkillsPanel({
   }, [
     active,
     personalTab,
+    storeSort,
+    storeCategory,
+    storeApiKeyFilter,
     fetchStorePage,
     persistActiveStoreCache,
     applyStoreCache,
@@ -1672,20 +1691,7 @@ export default function SkillsPanel({
     );
   };
 
-  const sortedStoreResults = useMemo(() => {
-    const filtered = filterStoreSkills(
-      storeResults,
-      storeCategory,
-      storeApiKeyFilter,
-    );
-    if (storeSort !== "installs") return filtered;
-    return [...filtered].sort((a, b) => {
-      const ai = a.installs ?? -1;
-      const bi = b.installs ?? -1;
-      if (bi !== ai) return bi - ai;
-      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-    });
-  }, [storeResults, storeSort, storeCategory, storeApiKeyFilter]);
+  const sortedStoreResults = storeResults;
 
   const detailItems = useMemo(() => {
     if (personalTab === "machine") return filteredMachine.map((s) => s.id);
@@ -1757,8 +1763,10 @@ export default function SkillsPanel({
 
   const storeSortOptions = useMemo(
     () => [
-      { value: "default", label: t("skills.sort.default") },
-      { value: "installs", label: t("skills.sort.installs") },
+      { value: "all", label: t("skills.sort.all") },
+      { value: "trending", label: t("skills.sort.trending") },
+      { value: "downloads", label: t("skills.sort.installs") },
+      { value: "recent", label: t("skills.sort.recent") },
     ],
     [t],
   );
@@ -3258,38 +3266,58 @@ export default function SkillsPanel({
           </header>
 
           <div className="skills-store-toolbar">
+            <div
+              className="skills-store-sort-tabs"
+              role="tablist"
+              aria-label={t("skills.sort.label")}
+            >
+              {storeSortOptions.map((option) => {
+                const activeSort = storeSort === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeSort}
+                    className={`skills-store-sort-tab ${activeSort ? "is-active" : ""}`}
+                    onClick={() => setStoreSort(option.value as StoreSort)}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
             <div className="skills-store-toolbar-row">
               <div
-                className="skills-store-filters"
+                className="skills-store-category-tags"
                 role="group"
-                aria-label={t("skills.filters")}
+                aria-label={t("skills.filter.categoryAll")}
               >
-                <SelectMenu
-                  size="sm"
-                  className="skills-store-category-filter"
-                  value={storeCategory}
-                  onChange={(value) => setStoreCategory(value as StoreCategoryFilter)}
-                  options={storeCategoryOptions}
-                  aria-label={t("skills.filter.categoryAll")}
-                  selectionIndicator="radio"
-                  menuMaxHeight={620}
-                />
-                <SelectMenu
-                  size="sm"
-                  className="skills-store-api-key-filter"
-                  value={storeApiKeyFilter}
-                  onChange={(value) => setStoreApiKeyFilter(value as StoreApiKeyFilter)}
-                  options={storeApiKeyOptions}
-                  aria-label={t("skills.filter.apiKeyAll")}
-                  selectionIndicator="radio"
-                />
+                {storeCategoryOptions.map((option) => {
+                  const activeCategory = storeCategory === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={activeCategory}
+                      className={`skills-store-category-tag ${activeCategory ? "is-active" : ""}`}
+                      onClick={() =>
+                        setStoreCategory(option.value as StoreCategoryFilter)
+                      }
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
               </div>
               <SelectMenu
                 size="sm"
-                value={storeSort}
-                onChange={(v) => setStoreSort(v as StoreSort)}
-                options={storeSortOptions}
-                aria-label={t("skills.sort.label")}
+                className="skills-store-api-key-filter"
+                value={storeApiKeyFilter}
+                onChange={(value) => setStoreApiKeyFilter(value as StoreApiKeyFilter)}
+                options={storeApiKeyOptions}
+                aria-label={t("skills.filter.apiKeyAll")}
+                selectionIndicator="radio"
               />
             </div>
           </div>

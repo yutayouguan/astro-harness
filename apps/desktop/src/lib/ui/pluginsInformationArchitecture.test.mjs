@@ -149,13 +149,16 @@ test("public MCP directory has category metadata and a scrollable filter rail", 
   );
 });
 
-test("online Skills expose scene and API Key filters", () => {
+test("online Skills expose sort tabs, flattened scenes, and API Key filter", () => {
   assert.doesNotMatch(panel, /className="skills-store-source-filter"/);
-  assert.match(panel, /className="skills-store-category-filter"/);
+  assert.match(panel, /className="skills-store-sort-tabs"/);
+  assert.match(panel, /className="skills-store-category-tags"/);
+  assert.match(panel, /skills-store-category-tag/);
   assert.match(panel, /className="skills-store-api-key-filter"/);
-  assert.equal(panel.match(/selectionIndicator="radio"/g)?.length, 2);
+  assert.equal(panel.match(/selectionIndicator="radio"/g)?.length, 1);
   assert.match(panel, /STORE_CATEGORY_IDS\.map/);
-  assert.match(styles, /\.skills-store-filters\s*\{[\s\S]*?flex-wrap:\s*wrap;/);
+  assert.match(styles, /\.skills-store-category-tags\s*\{[\s\S]*?flex-wrap:\s*wrap;/);
+  assert.match(panel, /"all"[\s\S]*"trending"[\s\S]*"downloads"[\s\S]*"recent"/);
 });
 
 test("public MCP directory is config-driven and covers every public category", () => {
