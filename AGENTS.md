@@ -202,7 +202,7 @@ rollout snapshot + live boundary。
 
 ### 三总线 Hook 系统
 
-Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`、`TransformToolResult`、`TransformLlmOutput`、`PostLlmCall`、`PostToolUse`。事件名只接受 canonical 精确匹配；Hook 返回值：`Continue`、`Block`、`Modify`、`ReplaceText`、`InjectContext`、`KeepGoing`。
+Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`、`TransformToolResult`、`TransformFinalLlmOutput`、`PostLlmCall`、`PostToolUse`。事件名只接受 canonical 精确匹配；Hook 返回值：`Continue`、`Block`、`Modify`、`ReplaceText`、`InjectContext`、`KeepGoing`。
 
 ### 上下文压缩
 

@@ -181,7 +181,7 @@ reasoning = true
 
 ### 三总线 Hook 系统
 
-Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`PermissionRequest`、`Stop`、`PreCompact`、`PostCompact`、`SessionStart`、`SessionEnd`、`UserPromptSubmit`、`SubagentStart`、`SubagentStop`、`PreApiRequest`、`PostApiRequest`、`TransformTerminalOutput`。事件名只接受 canonical 精确匹配。
+Plugin bus 事件（Codex 对齐命名 + Astro 扩展）：`PreLlmCall`、`PreToolUse`、`PermissionRequest`、`Stop`、`PreCompact`、`PostCompact`、`SessionStart`、`SessionEnd`、`UserPromptSubmit`、`SubagentStart`、`SubagentStop`、`PreApiRequest`、`PostApiRequest`、`TransformTerminalOutput`、`TransformToolResult`、`TransformFinalLlmOutput`、`PostLlmCall`。事件名只接受 canonical 精确匹配。
 
 ### 上下文压缩
 

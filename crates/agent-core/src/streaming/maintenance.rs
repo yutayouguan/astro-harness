@@ -1,6 +1,7 @@
 //! 多轮循环中的上下文维护：LLM 前后的压缩/摘要、工具结果记录、hook 集成。
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use agent_protocol::{
     ContextUsageEvent, ContextUsageItem, ContextUsageSegment, DeltaEvent, EventMsg, ToolStatus,
@@ -391,9 +392,27 @@ pub(super) async fn record_tool_outcomes(
     true
 }
 
+pub(super) struct SamplingRequest {
+    pub stream: super::types::AssistantContentStream,
+    pub provider: Option<String>,
+    pub model: String,
+    pub attempt: usize,
+    pub started_at: Instant,
+}
+
+fn primary_sampling_identity(streamer: &ProviderStreamer) -> (Option<String>, String) {
+    match streamer.targets.first() {
+        Some(target) => (
+            (!target.backend_id.is_empty()).then(|| target.backend_id.clone()),
+            target.model.clone(),
+        ),
+        None => (None, streamer.base_config.model.clone()),
+    }
+}
+
 /// 触发 PRE/POST_API_REQUEST hook 并发起 LLM 流式请求。
 ///
-/// 成功返回 `Ok(stream)`；失败返回 `Err(error_string)` 并已在 hook 中记录。
+/// 成功返回 stream 与本次 sampling telemetry；失败返回错误并已在 hook 中记录。
 pub(super) async fn run_sampling_request(
     session: &Arc<AgentLoop>,
     turn_context: &TurnContext,
@@ -402,7 +421,10 @@ pub(super) async fn run_sampling_request(
     prompt_context: &[crate::prompt::context_state::PromptContextEvent],
     history: &[types::message::Message],
     tool_specs: Vec<serde_json::Value>,
-) -> Result<super::types::AssistantContentStream, String> {
+    attempt: usize,
+) -> Result<SamplingRequest, String> {
+    let started_at = Instant::now();
+    let (initial_provider, initial_model) = primary_sampling_identity(streamer);
     {
         let agent = session.as_ref();
         let sid = agent.session_id().to_string();
@@ -413,6 +435,17 @@ pub(super) async fn run_sampling_request(
             ::hooks::HookPayload {
                 session_id: sid,
                 turn_id,
+                provider: initial_provider.clone(),
+                model: initial_model.clone(),
+                attempt: Some(attempt),
+                duration_ms: Some(0),
+                status: Some("started".into()),
+                detail: format!(
+                    "provider={} model={} attempt={} status=started",
+                    initial_provider.as_deref().unwrap_or(""),
+                    initial_model,
+                    attempt
+                ),
                 ..Default::default()
             },
         );
@@ -423,6 +456,11 @@ pub(super) async fn run_sampling_request(
         .await
     {
         Ok(s) => {
+            let (provider, model) = streamer
+                .last_hit_meta()
+                .map(|meta| (Some(meta.backend_id), meta.model))
+                .unwrap_or_else(|| (initial_provider.clone(), initial_model.clone()));
+            let duration_ms = started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
@@ -433,13 +471,32 @@ pub(super) async fn run_sampling_request(
                 ::hooks::HookPayload {
                     session_id: sid,
                     turn_id,
+                    provider: provider.clone(),
+                    model: model.clone(),
+                    attempt: Some(attempt),
+                    duration_ms: Some(duration_ms),
+                    status: Some("succeeded".into()),
+                    detail: format!(
+                        "provider={} model={} attempt={} duration_ms={} status=succeeded",
+                        provider.as_deref().unwrap_or(""),
+                        model,
+                        attempt,
+                        duration_ms
+                    ),
                     ..Default::default()
                 },
             );
             emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_API_REQUEST).await;
-            Ok(s)
+            Ok(SamplingRequest {
+                stream: s,
+                provider,
+                model,
+                attempt,
+                started_at,
+            })
         }
         Err(err) => {
+            let duration_ms = started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
@@ -450,8 +507,19 @@ pub(super) async fn run_sampling_request(
                 ::hooks::HookPayload {
                     session_id: sid,
                     turn_id,
+                    provider: initial_provider.clone(),
+                    model: initial_model.clone(),
+                    attempt: Some(attempt),
+                    duration_ms: Some(duration_ms),
+                    status: Some("failed".into()),
                     error: Some(err.to_string()),
-                    detail: format!("error={err}"),
+                    detail: format!(
+                        "provider={} model={} attempt={} duration_ms={} status=failed error={err}",
+                        initial_provider.as_deref().unwrap_or(""),
+                        initial_model,
+                        attempt,
+                        duration_ms
+                    ),
                     ..Default::default()
                 },
             );

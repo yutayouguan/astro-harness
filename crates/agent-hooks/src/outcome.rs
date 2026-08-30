@@ -11,6 +11,18 @@ pub struct HookInput {
     pub cwd: String,
     pub hook_event_name: String,
     pub model: String,
+    /// Provider backend identifier for LLM/API telemetry events.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Sampling attempt ordinal within the current turn (1-based).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempt: Option<usize>,
+    /// Elapsed wall-clock time for the observed phase.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// Stable telemetry status such as `started`, `succeeded`, or `failed`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
     /// 当前流式回合 id（= agent `current_turn_id` / run_id）；与 `turn`（轮次计数）不同。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
@@ -164,6 +176,36 @@ mod wire_tests {
                 "cwd": "",
                 "hook_event_name": "",
                 "model": ""
+            })
+        );
+    }
+
+    #[test]
+    fn llm_telemetry_fields_are_serialized_when_present() {
+        let input = HookInput {
+            session_id: "session-1".into(),
+            cwd: "/workspace".into(),
+            hook_event_name: "PostLlmCall".into(),
+            model: "gpt-5.6-sol".into(),
+            provider: Some("openai".into()),
+            attempt: Some(2),
+            duration_ms: Some(1234),
+            status: Some("succeeded".into()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            to_value(input).unwrap(),
+            json!({
+                "session_id": "session-1",
+                "transcript_path": null,
+                "cwd": "/workspace",
+                "hook_event_name": "PostLlmCall",
+                "model": "gpt-5.6-sol",
+                "provider": "openai",
+                "attempt": 2,
+                "duration_ms": 1234,
+                "status": "succeeded"
             })
         );
     }

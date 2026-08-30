@@ -20,7 +20,7 @@ pub enum HookEvent {
     PostApiRequest,
     TransformTerminalOutput,
     TransformToolResult,
-    TransformLlmOutput,
+    TransformFinalLlmOutput,
     PostLlmCall,
     PostApprovalResponse,
     PreGatewayDispatch,
@@ -67,7 +67,7 @@ impl HookEvent {
             Self::PostApiRequest => "PostApiRequest",
             Self::TransformTerminalOutput => "TransformTerminalOutput",
             Self::TransformToolResult => "TransformToolResult",
-            Self::TransformLlmOutput => "TransformLlmOutput",
+            Self::TransformFinalLlmOutput => "TransformFinalLlmOutput",
             Self::PostLlmCall => "PostLlmCall",
             Self::PostApprovalResponse => "PostApprovalResponse",
             Self::PreGatewayDispatch => "PreGatewayDispatch",
@@ -84,12 +84,12 @@ impl HookEvent {
 mod tests {
     use super::*;
     use crate::names::{
-        is_mutating_hook, AGENT_END, COMMAND_NEW_CHAT, GATEWAY_STARTUP, INTERRUPT, PERMISSION_REQUEST,
-        POST_API_REQUEST, POST_APPROVAL_RESPONSE, POST_COMPACT, POST_LLM_CALL, POST_TOOL_USE,
-        PRE_API_REQUEST, PRE_COMPACT, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL, PRE_TOOL_USE,
-        SESSION_END, SESSION_FINALIZE, SESSION_RESET, SESSION_START, STOP, SUBAGENT_START,
-        SUBAGENT_STOP, TRANSFORM_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT, TRANSFORM_TOOL_RESULT,
-        USER_PROMPT_SUBMIT,
+        is_mutating_hook, AGENT_END, COMMAND_NEW_CHAT, GATEWAY_STARTUP, INTERRUPT,
+        PERMISSION_REQUEST, POST_API_REQUEST, POST_APPROVAL_RESPONSE, POST_COMPACT, POST_LLM_CALL,
+        POST_TOOL_USE, PRE_API_REQUEST, PRE_COMPACT, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL,
+        PRE_TOOL_USE, SESSION_END, SESSION_FINALIZE, SESSION_RESET, SESSION_START, STOP,
+        SUBAGENT_START, SUBAGENT_STOP, TRANSFORM_FINAL_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT,
+        TRANSFORM_TOOL_RESULT, USER_PROMPT_SUBMIT,
     };
     #[test]
     fn hook_events_have_exact_names_and_order() {
@@ -136,7 +136,7 @@ mod tests {
         assert_eq!(POST_API_REQUEST, "PostApiRequest");
         assert_eq!(TRANSFORM_TERMINAL_OUTPUT, "TransformTerminalOutput");
         assert_eq!(TRANSFORM_TOOL_RESULT, "TransformToolResult");
-        assert_eq!(TRANSFORM_LLM_OUTPUT, "TransformLlmOutput");
+        assert_eq!(TRANSFORM_FINAL_LLM_OUTPUT, "TransformFinalLlmOutput");
         assert_eq!(POST_LLM_CALL, "PostLlmCall");
         assert_eq!(POST_APPROVAL_RESPONSE, "PostApprovalResponse");
         assert_eq!(PRE_GATEWAY_DISPATCH, "PreGatewayDispatch");
@@ -164,13 +164,14 @@ mod tests {
             STOP,
             TRANSFORM_TOOL_RESULT,
             TRANSFORM_TERMINAL_OUTPUT,
-            TRANSFORM_LLM_OUTPUT,
+            TRANSFORM_FINAL_LLM_OUTPUT,
         ] {
             assert!(is_mutating_hook(canonical), "{canonical}");
         }
 
         assert!(!is_mutating_hook("post_tool_call"));
         assert!(!is_mutating_hook("pre_tool_call"));
+        assert!(!is_mutating_hook("TransformLlmOutput"));
         assert!(!is_mutating_hook("acme:custom_event"));
     }
 }

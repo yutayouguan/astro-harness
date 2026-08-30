@@ -41,7 +41,7 @@ Astro 有三条 Hook 通道：
 | `PostApiRequest` | Provider API 请求后 |
 | `TransformTerminalOutput` | 替换 terminal 输出 |
 | `TransformToolResult` | 替换工具结果 |
-| `TransformLlmOutput` | 替换普通 candidate 的 assistant 文本（summary 除外） |
+| `TransformFinalLlmOutput` | 完整流已发出后，替换普通 candidate 的最终 assistant 文本（summary 除外） |
 | `PostLlmCall` | 普通 candidate 已完成 transform 后（summary 除外） |
 | `PostApprovalResponse` | 审批结果产生后 |
 | `PreGatewayDispatch` | Gateway 入队前 |
@@ -68,8 +68,8 @@ Plugin 注册与触发、Gateway manifest、Shell config key 均按字符串精�
 | `SessionStart` | Codex | 首次**成功（非 `Block`）**的 prompt admission 时、`UserPromptSubmit` 前；`source` 为 `startup`（空历史）或 `resume`（已恢复历史） | `Block(reason)` / `InjectContext(context)` |
 | `UserPromptSubmit` | Codex | 每个初始或 steer 用户输入持久化前；带输入 `prompt` 和活跃 `turn_id`（若已有） | `Block(reason)` / `InjectContext(context)` |
 | `PreLlmCall` | Astro | 初始用户输入已经接纳、system prompt 构建后，在首个 sampling 前 | `InjectContext` |
-| `PreApiRequest` | Astro | 每次**普通主循环** Provider sampling request 前 | 观察 |
-| `PostApiRequest` | Astro | 每次**普通主循环** `ProviderStreamer::stream_chat` 返回 stream 或 error 后；当前不等待 token stream 消费完毕 | 观察 |
+| `PreApiRequest` | Astro | 每次**普通主循环** Provider sampling request 前；带初始 provider/model、sampling `attempt`、`duration_ms=0`、`status=started` | 观察 |
+| `PostApiRequest` | Astro | 每次**普通主循环** `ProviderStreamer::stream_chat` 返回 stream 或 error 后；带实际命中的 provider/model、建连/首包 `duration_ms`与 `succeeded|failed` status，不等待 token stream 消费完毕 | 观察 |
 | `PermissionRequest` | Codex | 串行工具权限 preflight 需要审批时，在决议与 `PreToolUse` 前 | deny 优先；否则 allow；全 abstain 进入原审批流 |
 | `PostApprovalResponse` | Astro | 审批决议后、`PreToolUse` 前；`choice` 当前可为 `allowlist`、`auto`、`allow`、`allow_once`、`deny`、`timeout` 或 `unavailable` | 观察 |
 | `PreToolUse` | Codex | 所有 preflight 均已授权或无需授权后，在工具 dispatch 前；被拒绝/超时/无审批通道的调用不会 fire | `Block(reason)` / `Modify(args)` |
@@ -81,8 +81,8 @@ Plugin 注册与触发、Gateway manifest、Shell config key 均按字符串精�
 | `SubagentStart` | Codex | 子 Agent startup admission、首次 Provider request 前；继承完整 `HookRuntime` | 仅 `InjectContext`；阻断/停止请求按 Codex 语义忽略 |
 | `SubagentStop` | Codex | 子 Agent 每个 terminal turn；错误/中断也触发；Desktop close 不重复触发 | `KeepGoing(prompt)` 与主 Agent `Stop` 相同 |
 | `Stop` | Codex | 每个无工具的普通 terminal candidate，以及 budget-exhaustion summary 的完整 terminal candidate | `KeepGoing(prompt)` |
-| `TransformLlmOutput` | Astro | 每个通过 Stop guard 的普通 candidate（含 tool-call 中间轮）定稿、`PostLlmCall` 前 | `ReplaceText(text)` |
-| `PostLlmCall` | Astro | 每个通过 Stop guard 的普通 candidate，且已应用 `TransformLlmOutput` | 观察 |
+| `TransformFinalLlmOutput` | Astro | 每个通过 Stop guard 的普通 candidate（含 tool-call 中间轮）的流已全部发出后、持久化前 | `ReplaceText(text)` |
+| `PostLlmCall` | Astro | 每个通过 Stop guard 的普通 candidate，且已应用 `TransformFinalLlmOutput`；携带 LLM telemetry 字段 | 观察 |
 | `AgentEnd` | Astro | `RegularTask` 在每次 regular run 收尾时唯一派发：成功、runtime failure、准备失败、取消或 receiver close 都恰好一次 | 观察 |
 | `PreGatewayDispatch` | Astro | gRPC/Tauri chat 入站、加载会话前 | `Allow` / `Skip(reason)` / `Rewrite(message)` |
 | `SessionReset` | Astro | UI `new_chat` 释放旧会话时 | 观察 |
@@ -106,7 +106,7 @@ PreGatewayDispatch
       → 无 tool calls？Stop
           → KeepGoing：持久化 assistant + hook bridge 后 continue；不 fire Transform/PostLlm
           → 否：跳过 Stop
-      → TransformLlmOutput → PostLlmCall           # 通过 Stop guard，或本轮有 tool calls
+      → TransformFinalLlmOutput → PostLlmCall      # 通过 Stop guard，或本轮有 tool calls
       → assistant 持久化
       → 有 tool calls？
           → PermissionRequest? → 审批 → PostApprovalResponse?
@@ -132,7 +132,7 @@ PreGatewayDispatch
 预算耗尽 summary（独立分支）：
   → 直接 ProviderStreamer::stream_chat（无 PreApiRequest/PostApiRequest）
   → Stop → KeepGoing 时持久化 bridge 并继续 summary sampling
-  → 通过 guard 时持久化/收尾（无 TransformLlmOutput/PostLlmCall）
+  → 通过 guard 时持久化/收尾（无 TransformFinalLlmOutput/PostLlmCall）
 ```
 
 ### `Stop` continuation guard
@@ -141,7 +141,7 @@ PreGatewayDispatch
 
 每个 response chain 最多接受两次 `KeepGoing(prompt)`：接受时持久化 candidate assistant 与 `[astro:hook-context]` bridge user，再继续 sampling。第三个及之后的 candidate 仍派发 `Stop`（且 `stop_hook_active=true`），但忽略 `KeepGoing` 并正常收尾。新的已持久化 steer 输入会开始独立 response chain 并重置这个配额。budget summary 与主循环共享同一配额；summary instruction 是 request-local，notice 只出现一次。
 
-普通主循环每个 provider request 都会 fire `PreApiRequest` / `PostApiRequest`。每个普通 candidate（包括含 tool-call 的中间轮）只有在没有被 `Stop::KeepGoing` 提前 continue 后，才 fire `TransformLlmOutput` 和 `PostLlmCall`。budget summary 则直接调用 `ProviderStreamer::stream_chat`：它只处理 summary candidate 的 `Stop`、持久化与 continuation，不 fire `PreApiRequest`、`PostApiRequest`、`TransformLlmOutput` 或 `PostLlmCall`。
+普通主循环每个 provider request 都会 fire `PreApiRequest` / `PostApiRequest`。每个普通 candidate（包括含 tool-call 的中间轮）只有在没有被 `Stop::KeepGoing` 提前 continue 后，才 fire `TransformFinalLlmOutput` 和 `PostLlmCall`。`TransformFinalLlmOutput` 的命名明确表示它修改的是完整流结束后的定稿文本，不会回溯改写已发出的 streaming delta。budget summary 则直接调用 `ProviderStreamer::stream_chat`：它只处理 summary candidate 的 `Stop`、持久化与 continuation，不 fire `PreApiRequest`、`PostApiRequest`、`TransformFinalLlmOutput` 或 `PostLlmCall`。
 
 为了维持角色交替，Stop bridge 后已排队的 steer 会先让 provider 响应 bridge；bridge 经过 reasoning-only retry 时这个顺序仍被保留。terminal assistant 持久化后才会消费 queued input；其绑定 context 也只在相应新 chain 的 sampling 使用。
 
@@ -201,6 +201,10 @@ PreGatewayDispatch
 | `agent_transcript_path` | string | Subagent transcript 路径 |
 | `stop_hook_active` | boolean | Stop hook 是否正在处理 |
 | `last_assistant_message` | string | 最近的 assistant 文本 |
+| `provider` | string | LLM/API telemetry 的 provider backend；`PostApiRequest`/`PostLlmCall` 使用实际命中的 fallback 目标 |
+| `attempt` | integer | 当前 turn 内的 sampling 序号，从 1 开始；不是 fallback 子尝试序号 |
+| `duration_ms` | integer | 阶段墙钟耗时；`PostApiRequest` 为打开流，`PostLlmCall` 为完整流 |
+| `status` | string | telemetry 状态：`started`、`succeeded` 或 `failed` |
 
 ### Astro 私有字段
 
@@ -290,13 +294,18 @@ Shell Hook 异步执行，默认超时 5 秒，失败只记录日志。`HookRunt
 | `ASTRO_HOOK_TURN` | `turn_id` 为非空字符串时 | `turn_id`；不是轮次计数 `turn` |
 | `ASTRO_HOOK_TOOL` | `tool_name` 有值时 | `tool_name` |
 | `ASTRO_HOOK_MESSAGE` | `prompt` 或 `last_assistant_message` 有值时 | 优先 `prompt`，否则 `last_assistant_message`；不从 `tool_input` 猜测文本 |
+| `ASTRO_HOOK_PROVIDER` | `provider` 有值时 | provider backend |
+| `ASTRO_HOOK_MODEL` | `model` 非空时 | 模型 ID |
+| `ASTRO_HOOK_ATTEMPT` | `attempt` 有值时 | turn 内从 1 开始的 sampling 序号 |
+| `ASTRO_HOOK_DURATION_MS` | `duration_ms` 有值时 | 毫秒耗时 |
+| `ASTRO_HOOK_STATUS` | `status` 有值时 | `started`、`succeeded` 或 `failed` |
 
 `tool_input` 和 `tool_response` 不写入环境变量，避免通过进程环境扩大敏感数据暴露面。
-每次启动子进程时，Astro 会先从继承环境中移除上表六个保留变量，再应用本次 payload；因此缺失的可选值不会读到父进程旧值。其他父进程环境仍正常继承。
+每次启动子进程时，Astro 会先从继承环境中移除上表十一个保留变量，再应用本次 payload；因此缺失的可选值不会读到父进程旧值。其他父进程环境仍正常继承。
 
 ### 遥测旁路与安全
 
-[`docs/examples/hooks/telemetry-webhook.sh`](./examples/hooks/telemetry-webhook.sh) 把 `ASTRO_HOOK_EVENT`、session、turn 和 tool 序列化为 JSON 并 POST 到 `ASTRO_TELEMETRY_URL`；默认把 `detail` 留空，只有显式设置 `ASTRO_TELEMETRY_INCLUDE_DETAIL=1` 才发送。可选 token 通过 `Authorization: Bearer` 头发送。脚本需要 `curl` 和 `jq`，未配置 URL 时静默退出，发送失败不阻塞 Agent。
+[`docs/examples/hooks/telemetry-webhook.sh`](./examples/hooks/telemetry-webhook.sh) 把 `ASTRO_HOOK_EVENT`、session、turn、tool 以及 provider/model/attempt/duration/status 序列化为 JSON 并 POST 到 `ASTRO_TELEMETRY_URL`；默认把 `detail` 留空，只有显式设置 `ASTRO_TELEMETRY_INCLUDE_DETAIL=1` 才发送。可选 token 通过 `Authorization: Bearer` 头发送。脚本需要 `curl` 和 `jq`，未配置 URL 时静默退出，发送失败不阻塞 Agent。
 
 推荐从已接线的 `GatewayStartup`、`PreGatewayDispatch`、`UserPromptSubmit` 或 `CommandNewChat` 开始配置该脚本。`PostToolUse`、`PreLlmCall`、`PostLlmCall` 等同样通过统一 runtime 路由；它们可用于 telemetry，但 Shell 失败仍只会留下日志。
 

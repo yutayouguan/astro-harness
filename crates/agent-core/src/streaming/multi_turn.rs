@@ -28,7 +28,7 @@ use super::lifecycle::{
 };
 use super::maintenance::{
     emit_context_usage, post_tool_maintenance, pre_llm_maintenance, record_tool_outcomes,
-    run_sampling_request,
+    run_sampling_request, SamplingRequest,
 };
 use super::provider::ProviderStreamer;
 use super::run_state::{RunPhase, RunState};
@@ -579,7 +579,7 @@ pub(crate) async fn run_turn(
         )
         .await;
 
-        let raw_stream = match run_sampling_request(
+        let sampling = match run_sampling_request(
             &session,
             &turn_context,
             &streamer,
@@ -587,6 +587,7 @@ pub(crate) async fn run_turn(
             &prompt_context,
             &history,
             tool_specs,
+            raw_rounds,
         )
         .await
         {
@@ -602,6 +603,13 @@ pub(crate) async fn run_turn(
                 .await;
             }
         };
+        let SamplingRequest {
+            stream: raw_stream,
+            provider: sampling_provider,
+            model: sampling_model,
+            attempt: sampling_attempt,
+            started_at: sampling_started_at,
+        } = sampling;
 
         let (abort_handle, abort_reg) = AbortHandle::new_pair();
         pause.attach_abort(abort_handle);
@@ -967,9 +975,10 @@ pub(crate) async fn run_turn(
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
             let transform_hook =
-                emit_hook_started(&session, &turn_context, ::hooks::TRANSFORM_LLM_OUTPUT).await;
+                emit_hook_started(&session, &turn_context, ::hooks::TRANSFORM_FINAL_LLM_OUTPUT)
+                    .await;
             let transformed = agent.fire_hook(
-                ::hooks::TRANSFORM_LLM_OUTPUT,
+                ::hooks::TRANSFORM_FINAL_LLM_OUTPUT,
                 ::hooks::HookPayload {
                     session_id: sid.clone(),
                     turn_id: turn_id.clone(),
@@ -983,7 +992,7 @@ pub(crate) async fn run_turn(
                 &session,
                 &turn_context,
                 transform_hook,
-                ::hooks::TRANSFORM_LLM_OUTPUT,
+                ::hooks::TRANSFORM_FINAL_LLM_OUTPUT,
             )
             .await;
             if let ::hooks::HookOutcome::ReplaceText(s) = transformed {
@@ -991,13 +1000,29 @@ pub(crate) async fn run_turn(
             }
             let post_hook =
                 emit_hook_started(&session, &turn_context, ::hooks::POST_LLM_CALL).await;
+            let duration_ms = sampling_started_at
+                .elapsed()
+                .as_millis()
+                .min(u64::MAX as u128) as u64;
             let _ = agent.fire_hook(
                 ::hooks::POST_LLM_CALL,
                 ::hooks::HookPayload {
                     session_id: sid,
                     turn_id,
+                    provider: sampling_provider.clone(),
+                    model: sampling_model.clone(),
+                    attempt: Some(sampling_attempt),
+                    duration_ms: Some(duration_ms),
+                    status: Some("succeeded".into()),
                     assistant_chars: Some(full_response.len()),
-                    detail: format!("assistant_chars={}", full_response.len()),
+                    detail: format!(
+                        "provider={} model={} attempt={} duration_ms={} status=succeeded assistant_chars={}",
+                        sampling_provider.as_deref().unwrap_or(""),
+                        sampling_model,
+                        sampling_attempt,
+                        duration_ms,
+                        full_response.len()
+                    ),
                     ..Default::default()
                 },
             );

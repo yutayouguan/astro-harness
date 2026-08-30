@@ -11,13 +11,18 @@ use tracing::{debug, warn};
 use crate::outcome::HookPayload;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
-const RESERVED_HOOK_ENV: [&str; 6] = [
+const RESERVED_HOOK_ENV: [&str; 11] = [
     "ASTRO_HOOK_EVENT",
     "ASTRO_HOOK_SESSION",
     "ASTRO_HOOK_DETAIL",
     "ASTRO_HOOK_TURN",
     "ASTRO_HOOK_TOOL",
     "ASTRO_HOOK_MESSAGE",
+    "ASTRO_HOOK_PROVIDER",
+    "ASTRO_HOOK_MODEL",
+    "ASTRO_HOOK_ATTEMPT",
+    "ASTRO_HOOK_DURATION_MS",
+    "ASTRO_HOOK_STATUS",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -109,6 +114,21 @@ pub(crate) fn env_from_payload(event: &str, payload: &HookPayload) -> Vec<(Strin
         .or(payload.last_assistant_message.as_ref());
     if let Some(message) = message {
         env.push(("ASTRO_HOOK_MESSAGE".into(), message.clone()));
+    }
+    if let Some(provider) = payload.provider.as_ref().filter(|value| !value.is_empty()) {
+        env.push(("ASTRO_HOOK_PROVIDER".into(), provider.clone()));
+    }
+    if !payload.model.is_empty() {
+        env.push(("ASTRO_HOOK_MODEL".into(), payload.model.clone()));
+    }
+    if let Some(attempt) = payload.attempt {
+        env.push(("ASTRO_HOOK_ATTEMPT".into(), attempt.to_string()));
+    }
+    if let Some(duration_ms) = payload.duration_ms {
+        env.push(("ASTRO_HOOK_DURATION_MS".into(), duration_ms.to_string()));
+    }
+    if let Some(status) = payload.status.as_ref().filter(|value| !value.is_empty()) {
+        env.push(("ASTRO_HOOK_STATUS".into(), status.clone()));
     }
     env
 }
@@ -255,6 +275,27 @@ mod tests {
     }
 
     #[test]
+    fn telemetry_fields_are_forwarded_to_shell_env() {
+        let env = env_from_payload(
+            crate::names::POST_LLM_CALL,
+            &HookPayload {
+                model: "gpt-5.6-sol".into(),
+                provider: Some("openai".into()),
+                attempt: Some(3),
+                duration_ms: Some(987),
+                status: Some("succeeded".into()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(env_value(&env, "ASTRO_HOOK_PROVIDER"), Some("openai"));
+        assert_eq!(env_value(&env, "ASTRO_HOOK_MODEL"), Some("gpt-5.6-sol"));
+        assert_eq!(env_value(&env, "ASTRO_HOOK_ATTEMPT"), Some("3"));
+        assert_eq!(env_value(&env, "ASTRO_HOOK_DURATION_MS"), Some("987"));
+        assert_eq!(env_value(&env, "ASTRO_HOOK_STATUS"), Some("succeeded"));
+    }
+
+    #[test]
     fn event_label_is_forwarded_without_rewrite() {
         let env = env_from_payload("pre_tool_call", &HookPayload::default());
 
@@ -363,6 +404,11 @@ mod tests {
             ("ASTRO_HOOK_TURN", "parent-turn"),
             ("ASTRO_HOOK_TOOL", "parent-tool"),
             ("ASTRO_HOOK_MESSAGE", "parent-message"),
+            ("ASTRO_HOOK_PROVIDER", "parent-provider"),
+            ("ASTRO_HOOK_MODEL", "parent-model"),
+            ("ASTRO_HOOK_ATTEMPT", "parent-attempt"),
+            ("ASTRO_HOOK_DURATION_MS", "parent-duration"),
+            ("ASTRO_HOOK_STATUS", "parent-status"),
             ("HOOK_TEST_PASSTHROUGH", "parent-visible"),
         ]);
         let dir = tempfile::tempdir().unwrap();
@@ -381,7 +427,7 @@ mod tests {
         ));
 
         run_shell(
-            r#"printf '%s\n' "$ASTRO_HOOK_EVENT" "$ASTRO_HOOK_SESSION" "$ASTRO_HOOK_DETAIL" "${ASTRO_HOOK_TURN-unset}" "${ASTRO_HOOK_TOOL-unset}" "${ASTRO_HOOK_MESSAGE-unset}" "$HOOK_TEST_PASSTHROUGH" > "$HOOK_TEST_OUTPUT""#,
+            r#"printf '%s\n' "$ASTRO_HOOK_EVENT" "$ASTRO_HOOK_SESSION" "$ASTRO_HOOK_DETAIL" "${ASTRO_HOOK_TURN-unset}" "${ASTRO_HOOK_TOOL-unset}" "${ASTRO_HOOK_MESSAGE-unset}" "${ASTRO_HOOK_PROVIDER-unset}" "${ASTRO_HOOK_MODEL-unset}" "${ASTRO_HOOK_ATTEMPT-unset}" "${ASTRO_HOOK_DURATION_MS-unset}" "${ASTRO_HOOK_STATUS-unset}" "$HOOK_TEST_PASSTHROUGH" > "$HOOK_TEST_OUTPUT""#,
             &env,
             DEFAULT_TIMEOUT,
         )
@@ -390,7 +436,7 @@ mod tests {
 
         assert_eq!(
             std::fs::read_to_string(output).unwrap(),
-            "PostToolUse\nchild-session\nchild-detail\nunset\nunset\nunset\nparent-visible\n"
+            "PostToolUse\nchild-session\nchild-detail\nunset\nunset\nunset\nunset\nunset\nunset\nunset\nunset\nparent-visible\n"
         );
     }
 

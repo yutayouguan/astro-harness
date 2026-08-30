@@ -1717,6 +1717,19 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     let agent = AgentLoop::with_session_id(config, "completion-hook".into()).await.unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+    let telemetry: Arc<std::sync::Mutex<Vec<::hooks::HookInput>>> =
+        Arc::new(std::sync::Mutex::new(vec![]));
+    for event in [
+        ::hooks::PRE_API_REQUEST,
+        ::hooks::POST_API_REQUEST,
+        ::hooks::POST_LLM_CALL,
+    ] {
+        let telemetry = Arc::clone(&telemetry);
+        agent.hook_bus().register(event, move |payload| {
+            telemetry.lock().unwrap().push(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
+    }
     agent
         .record_items(vec![types::message::Message::user("say hi")])
         .await;
@@ -1759,10 +1772,36 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
         events.iter().any(|e| e == "PostLlmCall:5"),
         "expected PostLlmCall for \"hello\" (5 chars), events={events:?}"
     );
+
+    let telemetry = telemetry.lock().unwrap();
+    assert_eq!(telemetry.len(), 3, "telemetry={telemetry:?}");
+    let pre_api = &telemetry[0];
+    assert_eq!(pre_api.hook_event_name, ::hooks::PRE_API_REQUEST);
+    assert_eq!(pre_api.provider.as_deref(), Some("scripted"));
+    assert_eq!(pre_api.model, "test");
+    assert_eq!(pre_api.attempt, Some(1));
+    assert_eq!(pre_api.duration_ms, Some(0));
+    assert_eq!(pre_api.status.as_deref(), Some("started"));
+
+    let post_api = &telemetry[1];
+    assert_eq!(post_api.hook_event_name, ::hooks::POST_API_REQUEST);
+    assert_eq!(post_api.provider.as_deref(), Some("scripted"));
+    assert_eq!(post_api.model, "test");
+    assert_eq!(post_api.attempt, Some(1));
+    assert!(post_api.duration_ms.is_some());
+    assert_eq!(post_api.status.as_deref(), Some("succeeded"));
+
+    let post_llm = &telemetry[2];
+    assert_eq!(post_llm.hook_event_name, ::hooks::POST_LLM_CALL);
+    assert_eq!(post_llm.provider.as_deref(), Some("scripted"));
+    assert_eq!(post_llm.model, "test");
+    assert_eq!(post_llm.attempt, Some(1));
+    assert!(post_llm.duration_ms.is_some());
+    assert_eq!(post_llm.status.as_deref(), Some("succeeded"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn transform_llm_output_replaces_before_post_llm_call() {
+async fn transform_final_llm_output_replaces_before_post_llm_call() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "transform-llm-session".into()).await.unwrap();
@@ -1770,7 +1809,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
         .hook_bus()
-        .register(::hooks::TRANSFORM_LLM_OUTPUT, |_| {
+        .register(::hooks::TRANSFORM_FINAL_LLM_OUTPUT, |_| {
             ::hooks::HookOutcome::ReplaceText("REPLACED".into())
         });
     agent
@@ -1812,11 +1851,13 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     }
 
     let events = log.lock().unwrap().clone();
-    let transform_idx = events.iter().position(|e| e == "TransformLlmOutput:11");
+    let transform_idx = events
+        .iter()
+        .position(|e| e == "TransformFinalLlmOutput:11");
     let post_idx = events.iter().position(|e| e == "PostLlmCall:8");
     assert!(
         transform_idx.is_some() && post_idx.is_some() && transform_idx < post_idx,
-        "expected TransformLlmOutput before PostLlmCall with replaced length, events={events:?}"
+        "expected TransformFinalLlmOutput before PostLlmCall with replaced length, events={events:?}"
     );
 
     let agent = session_for_check.as_ref();
@@ -1824,7 +1865,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     assert_eq!(
         history.last().map(|m| m.content_str().to_string()),
         Some("REPLACED".to_string()),
-        "final assistant message should reflect TransformLlmOutput replacement"
+        "final assistant message should reflect TransformFinalLlmOutput replacement"
     );
 }
 
@@ -2117,6 +2158,14 @@ async fn error_has_single_error_terminal_before_done() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "err-session".into()).await.unwrap();
+    let post_api = Arc::new(std::sync::Mutex::new(None));
+    let post_api_capture = Arc::clone(&post_api);
+    agent
+        .hook_bus()
+        .register(::hooks::POST_API_REQUEST, move |payload| {
+            *post_api_capture.lock().unwrap() = Some(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
@@ -2161,6 +2210,13 @@ async fn error_has_single_error_terminal_before_done() {
         .collect();
     assert_eq!(terminal_outcomes, ["error"]);
     assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
+    let post_api = post_api.lock().unwrap();
+    let post_api = post_api.as_ref().expect("PostApiRequest payload");
+    assert_eq!(post_api.provider.as_deref(), Some("scripted"));
+    assert_eq!(post_api.model, "test");
+    assert_eq!(post_api.attempt, Some(1));
+    assert!(post_api.duration_ms.is_some());
+    assert_eq!(post_api.status.as_deref(), Some("failed"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
