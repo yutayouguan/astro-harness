@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence } from "framer-motion";
 
 import AboutDialog from "./components/ui/AboutDialog";
+import DynamicPaletteButton from "./components/ui/DynamicPaletteButton";
 import ChatRightPanel, { type ChatRightTab } from "./components/chat/ChatRightPanel";
 import ChatReviewPanel from "./components/chat/ChatReviewPanel";
 import SideChatPanel from "./components/chat/SideChatPanel";
@@ -1583,7 +1584,9 @@ export default function App() {
                     "--project-files-current-width": `${projectFilesWidth}px`,
                   } as CSSProperties}
                 >
-                  <div className="chat-main">
+                  <div
+                    className={`chat-main${colorStyle === "dynamic" ? " has-dynamic-palette" : ""}`}
+                  >
                     {chat.sessionEphemeral && (
                       <div className="chat-side-banner" role="status">
                         <span className="chat-side-mark" aria-hidden>
@@ -1706,6 +1709,12 @@ export default function App() {
                           : null
                       }
                     />
+                    {colorStyle === "dynamic" ? (
+                      <DynamicPaletteButton
+                        label={t("prefs.colorStyle.reshuffle")}
+                        onReshuffle={reshuffleDynamic}
+                      />
+                    ) : null}
                   </div>
                   <ProjectFilesPanel
                     open={activeChatRightDock === "project-files"}
