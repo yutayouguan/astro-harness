@@ -39,15 +39,23 @@ function SessionRow({
   time,
   status,
   unread = false,
+  active = false,
 }: {
   title: string;
   time?: string;
   status: "idle" | "running" | "awaiting" | "error";
   unread?: boolean;
+  active?: boolean;
 }) {
   return (
-    <div className={`sidebar-session-item ${unread ? "is-unread" : ""}`}>
-      <button type="button" className="sidebar-session-main">
+    <div
+      className={`sidebar-session-item ${active ? "is-active" : ""} ${unread ? "is-unread" : ""}`.trim()}
+    >
+      <button
+        type="button"
+        className="sidebar-session-main"
+        aria-current={active ? "page" : undefined}
+      >
         <span className="sidebar-session-title-wrap">
           <span className="sidebar-session-title">{title}</span>
         </span>
@@ -135,8 +143,16 @@ function SidebarSessionStates() {
                   <span className="sidebar-item-label">主空间</span>
                 </button>
               </div>
+              <div className="sidebar-sessions">
+                <SessionRow
+                  title="请用 Python 写一个简单的 Web 爬虫"
+                  time="15 小时前"
+                  status="idle"
+                  active
+                />
+              </div>
             </div>
-            <div className="sidebar-project is-active">
+            <div className="sidebar-project">
               <div className="sidebar-project-header">
                 <button type="button" className="sidebar-project-name">
                   <ProjectFolderIcon iconId="folder-rust" expanded size={18} />

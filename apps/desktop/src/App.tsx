@@ -888,6 +888,8 @@ export default function App() {
     reviewOpen: reviewState != null,
   });
   const hasChatRightDock = activeChatRightDock !== null;
+  const selectedSidebarProjectId =
+    nav === "chat" && chat.sessionId === null ? activeProjectId : null;
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -1136,7 +1138,7 @@ export default function App() {
                     {!collapsedSections.has("projects") && projects.map((proj) => (
                       <div
                         key={proj.id}
-                        className={`sidebar-project ${activeProjectId === proj.id ? "is-active" : ""}`}
+                        className={`sidebar-project ${selectedSidebarProjectId === proj.id ? "is-active" : ""}`}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -1148,6 +1150,7 @@ export default function App() {
                             type="button"
                             className="sidebar-project-name"
                             title={proj.name}
+                            aria-current={selectedSidebarProjectId === proj.id ? "page" : undefined}
                             onClick={() => {
                               if (activeProjectId !== proj.id) {
                                 if (!switchActiveProject(proj.id)) return;
@@ -1156,6 +1159,11 @@ export default function App() {
                                   next.delete(proj.id);
                                   return next;
                                 });
+                                setNav("chat");
+                                void startNewChat();
+                                return;
+                              }
+                              if (chat.sessionId) {
                                 setNav("chat");
                                 void startNewChat();
                                 return;

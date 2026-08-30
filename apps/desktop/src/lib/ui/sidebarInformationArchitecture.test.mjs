@@ -79,6 +79,31 @@ test("project and recent actions stay with the section they affect", () => {
   );
 });
 
+test("project and nested session selection are mutually exclusive", () => {
+  assert.match(
+    app,
+    /const selectedSidebarProjectId =\s*nav === "chat" && chat\.sessionId === null \? activeProjectId : null;/,
+    "a project should only be selected on the project-level chat surface",
+  );
+  assert.match(
+    app,
+    /className=\{`sidebar-project \$\{selectedSidebarProjectId === proj\.id \? "is-active" : ""\}`\}/,
+  );
+  assert.match(
+    app,
+    /aria-current=\{selectedSidebarProjectId === proj\.id \? "page" : undefined\}/,
+  );
+  assert.match(
+    app,
+    /if \(chat\.sessionId\) \{[\s\S]*?void startNewChat\(\);[\s\S]*?return;/,
+    "selecting the current project should leave its active session",
+  );
+  assert.match(
+    sessionList,
+    /aria-current=\{isActive \? "page" : undefined\}/,
+  );
+});
+
 test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   const pinnedSidebar = rule(sidebarPolishStyles, ".sidebar.is-pinned");
   const labelledSidebar = rule(sidebarPolishStyles, ".sidebar.is-labels");

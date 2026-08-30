@@ -355,7 +355,12 @@ function SessionItem({
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }}
       onMouseEnter={handleMouseEnter}
     >
-      <button type="button" className="sidebar-session-main" onClick={onOpen}>
+      <button
+        type="button"
+        className="sidebar-session-main"
+        aria-current={isActive ? "page" : undefined}
+        onClick={onOpen}
+      >
         <span className="sidebar-session-title-wrap">
           <span className="sidebar-session-title" ref={titleRef}>
             {s.summary || t("chat.rightPanel.untitledSession")}
