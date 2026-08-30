@@ -51,12 +51,12 @@ test("chat header chrome stays anchored while project files animate", () => {
   );
 
   assert.ok(header, "missing chat header rule");
-  assert.match(header, /min-height:\s*48px;/);
-  assert.match(header, /padding:\s*7px 16px;/);
+  assert.match(header, /min-height:\s*38px;/);
+  assert.match(header, /padding:\s*2px 16px;/);
   assert.ok(actions, "missing chat header action rule");
   assert.match(actions, /position:\s*absolute;/);
   assert.match(actions, /right:\s*16px;/);
-  assert.match(actions, /bottom:\s*7px;/);
+  assert.match(actions, /bottom:\s*2px;/);
   assert.doesNotMatch(actions, /transition:\s*right/);
   assert.equal(projectFileActions, undefined);
 });
@@ -65,8 +65,8 @@ test("conversation title keeps a compact optical type scale", () => {
   const title = rule(headerStyles, ".content-header--chat .conversation-title");
 
   assert.ok(title, "missing conversation title rule");
-  assert.match(title, /font-size:\s*16px;/);
-  assert.match(title, /letter-spacing:\s*-0\.015em;/);
+  assert.match(title, /font-size:\s*12px;/);
+  assert.match(title, /letter-spacing:\s*0\.01em;/);
 });
 
 test("right-side chat surfaces share one inset container material", () => {
