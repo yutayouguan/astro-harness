@@ -1,0 +1,159 @@
+/* Assistant reasoning and tool calls are timeline rows, not nested glass cards. */
+.bubble.assistant {
+  --activity-flat-divider: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, var(--accent))) 9%,
+    color-mix(in srgb, var(--ink) 7%, transparent)
+  );
+  --activity-flat-hover: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, var(--accent))) 5%,
+    transparent
+  );
+}
+
+.bubble.assistant .msg-reasoning,
+.bubble.assistant .msg-timeline-body > .msg-activity,
+.bubble.assistant .msg-reasoning.is-open,
+.bubble.assistant .msg-timeline-body > .msg-activity.is-open {
+  margin: 0 4px 0 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-bottom: 0.5px solid var(--activity-flat-divider);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="dark"] .bubble.assistant .msg-reasoning,
+html[data-theme="dark"] .bubble.assistant .msg-timeline-body > .msg-activity,
+html[data-theme="dark"] .bubble.assistant .msg-reasoning.is-open,
+html[data-theme="dark"]
+  .bubble.assistant
+  .msg-timeline-body
+  > .msg-activity.is-open {
+  background: transparent;
+  box-shadow: none;
+}
+
+.bubble.assistant .msg-reasoning-toggle,
+.bubble.assistant .msg-timeline-body > .msg-activity .msg-activity-toggle,
+.bubble.assistant .msg-timeline-body > .msg-activity .msg-activity-summary {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 0 2px;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+.bubble.assistant .msg-reasoning-toggle:hover,
+.bubble.assistant
+  .msg-timeline-body
+  > .msg-activity
+  .msg-activity-toggle:hover {
+  background: var(--activity-flat-hover);
+}
+
+.bubble.assistant .msg-reasoning-toggle:focus-visible,
+.bubble.assistant
+  .msg-timeline-body
+  > .msg-activity
+  .msg-activity-toggle:focus-visible {
+  outline: 0;
+  box-shadow: inset 0 -1.5px
+    color-mix(
+      in srgb,
+      var(--tl-tone, var(--tone, var(--accent))) 58%,
+      transparent
+    );
+}
+
+.bubble.assistant .msg-reasoning-icon,
+.bubble.assistant .msg-activity-kind-icon,
+.bubble.assistant .msg-reasoning-chevron,
+.bubble.assistant .msg-activity-chevron,
+.bubble.assistant .msg-activity-meta {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.bubble.assistant .msg-reasoning-icon,
+.bubble.assistant .msg-activity-kind-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.bubble.assistant .msg-reasoning-label,
+.bubble.assistant .msg-activity-title,
+.bubble.assistant .msg-reasoning-duration,
+.bubble.assistant .msg-activity-meta {
+  min-height: 18px;
+  line-height: 18px;
+}
+
+.bubble.assistant .msg-reasoning-chevron,
+.bubble.assistant .msg-activity-chevron {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+}
+
+/* Center the rail glyph against the shared 34px row rather than the old card. */
+.bubble.assistant
+  .msg-timeline-step:has(
+    > .msg-timeline-body > :is(.msg-reasoning, .msg-activity)
+  )
+  > .msg-timeline-rail {
+  padding-top: 5px;
+}
+
+.bubble.assistant .msg-reasoning-body {
+  margin-top: 0;
+  border-top-color: var(--activity-flat-divider);
+  background: transparent;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .bubble.assistant .msg-reasoning,
+  .bubble.assistant .msg-timeline-body > .msg-activity {
+    background: transparent;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .bubble.assistant .msg-reasoning,
+  .bubble.assistant .msg-timeline-body > .msg-activity {
+    border-bottom-color: color-mix(in srgb, var(--ink) 34%, transparent);
+  }
+}
+
+@media (max-width: 480px) {
+  .bubble.assistant .msg-activity-summary,
+  .bubble.assistant .msg-activity-toggle {
+    flex-wrap: nowrap;
+  }
+
+  .bubble.assistant .msg-activity-title {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .bubble.assistant .msg-activity-meta {
+    width: auto;
+    margin-left: auto;
+  }
+
+  .bubble.assistant .msg-activity-chevron {
+    margin-left: 0;
+  }
+}
