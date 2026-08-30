@@ -25,7 +25,7 @@
 
 .content-header--chat .content-heading {
   flex: 1 1 0;
-  gap: 3px;
+  gap: 2px;
   overflow: visible;
 }
 
@@ -51,6 +51,7 @@
   min-width: 0;
   width: 100%;
   font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--ink);
 }
@@ -97,7 +98,7 @@
   position: absolute;
   top: auto;
   right: 16px;
-  bottom: 2px;
+  bottom: 4px;
   flex-wrap: nowrap;
 }
 
@@ -132,8 +133,8 @@
 }
 
 .conversation-menu-trigger {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
   border-radius: 7px;
@@ -203,14 +204,14 @@ html[data-theme="dark"] .conversation-menu-popover {
 
 /* 操作组：与状态芯片 / 模型选择器同为胶囊形态 */
 /* 高度与 .model-picker-trigger 保持一致，两枚胶囊在同一行才齐平。
-   34 = 28(按钮) + 3*2(内边距)，改任一侧都要一起改。 */
+   30 = 26(按钮) + 2*2(内边距)，改任一侧都要一起改。 */
 .chat-header-tools {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 34px;
-  padding: 3px 4px;
+  height: 30px;
+  padding: 2px 3px;
   border-radius: 999px;
   background: var(--glass-layer, var(--glass-panel));
   border: 0.5px solid var(--glass-edge);
@@ -225,10 +226,10 @@ html[data-theme="dark"] .conversation-menu-popover {
 }
 
 .chat-header-tools .chat-header-agent-picker .agent-picker-chip {
-  min-height: 28px;
-  height: 28px;
+  min-height: 26px;
+  height: 26px;
   border-radius: 999px;
-  padding: 0 10px 0 8px;
+  padding: 0 9px 0 7px;
   background: transparent;
   border: none;
   box-shadow: none;
@@ -237,8 +238,8 @@ html[data-theme="dark"] .conversation-menu-popover {
 }
 
 .header-icon-btn {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -369,7 +370,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   display: inline-flex;
   align-items: center;
   gap: 0;
-  height: 34px;
+  height: 30px;
   max-width: 100%;
   min-width: 130px;
   padding: 0;
@@ -402,8 +403,8 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 .model-picker.is-empty {
   display: inline-flex;
   align-items: center;
-  height: 34px;
-  padding: 0 13px;
+  height: 30px;
+  padding: 0 12px;
   border-radius: 999px;
   background: var(--glass-layer, var(--glass-panel));
   border: 0.5px solid var(--glass-edge);
@@ -418,9 +419,9 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  margin: 5px 0 5px 5px;
+  width: 22px;
+  height: 22px;
+  margin: 4px 0 4px 4px;
   border-radius: 50%;
   color: var(--ink);
   background:
@@ -437,16 +438,16 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 .model-picker-icon .model-brand-icon,
 .model-picker-icon .model-brand-icon svg {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .model-picker-icon .model-brand-icon.is-letter {
-  width: 14px;
-  height: 14px;
-  font-size: 10px;
+  width: 13px;
+  height: 13px;
+  font-size: 9px;
   font-weight: 700;
-  line-height: 14px;
+  line-height: 13px;
   text-align: center;
 }
 
@@ -1120,11 +1121,11 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
 }
 
 .header-actions .header-agent-picker .agent-picker-chip {
-  min-height: 34px;
-  height: 34px;
+  min-height: 30px;
+  height: 30px;
   min-width: 0;
   border-radius: 999px;
-  padding: 0 11px 0 5px;
+  padding: 0 9px 0 4px;
   gap: 6px;
   background: var(--header-chip-bg);
   border: 0.75px solid var(--header-chip-border);
@@ -1143,8 +1144,8 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
 }
 
 .header-actions .header-agent-picker .agent-picker-chip .agent-avatar {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   margin: 0;
   background:
     radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.62), transparent 55%),
@@ -1199,7 +1200,7 @@ html[data-theme="dark"] .header-actions .model-picker-icon {
 
 /* 标题栏「浏览 / 产物」分段：沿用统一 Tab 外观，只把胶囊压到标题栏高度 */
 .header-actions .files-mode-switch {
-  height: 36px;
+  height: 30px;
   box-sizing: border-box;
 }
 

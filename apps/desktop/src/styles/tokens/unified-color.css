@@ -45,6 +45,16 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .content-tit
   color: var(--unified-tone, var(--tone-blue));
 }
 
+/* 会话名是窗口标题，不与页面级标题争抢强调色。 */
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-header--chat
+  .conversation-title,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-header--chat
+  .conversation-title[data-tone] {
+  color: var(--ink);
+}
+
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-logo,
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-brand-text {
   --tone: var(--unified-tone, var(--tone-blue));
