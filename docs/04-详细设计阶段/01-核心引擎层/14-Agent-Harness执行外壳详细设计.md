@@ -4,7 +4,7 @@
 >
 > 状态：当前实现基线
 >
-> 更新：2026-08-29
+> 更新：2026-08-30
 
 ## 1. 目标与定义
 
@@ -179,6 +179,30 @@ Code Mode 不是绕过 Harness 的后门；它是 Harness 内的另一种工具�
 3. live event 交付。
 
 在需要持久化的事件上，不得先推送 live 再尝试写入 rollout，否则 UI 已观察到的状态可能在重启后消失。
+
+### 10.1 Token usage 双口径
+
+Provider 的单次 usage 先归一化为：
+
+```text
+input_tokens              = 未缓存输入
+cache_read_tokens         = 缓存命中输入
+cache_write_tokens        = 缓存写入输入
+output_tokens             = 总输出（包含 reasoning）
+reasoning_tokens          = output_tokens 子集
+reported_total_tokens     = Provider wire total（可缺失）
+calculated_total_tokens   = input + cache_read + cache_write + output
+```
+
+Responses API 官方 response usage 同时定义 `input_tokens`、`input_tokens_details.cached_tokens/cache_write_tokens`、`output_tokens`、`output_tokens_details.reasoning_tokens` 和 `total_tokens`。Astro 保留 wire total 用于审计，而不只保留本地重算值。官方字段见 [Responses API create response](https://developers.openai.com/api/reference/resources/responses/methods/create)。
+
+`Usage::add_assign` 只用于 turn aggregate。上下文占用使用当前 sampling 的 `FinalUsage`，在同一分层基线上发出第二个 `ContextUsage`：
+
+1. sampling 前：`local_estimate`，包含当前 `StepContext` 已暴露的工具；
+2. usage 到达：`provider_reported` 或 `provider_recomputed`，top-line 替换为实际计数；
+3. 下一 step：重新 capture，因此 `tool_search`/MCP 新激活 schema 才从此时进入分层估算。
+
+`TokenCount` 与 `ContextUsage` 都是 durable rollout 事件。前者保存 turn aggregate，后者保存最近快照、数据来源和本地分层，使恢复后不需要猜测。
 
 ## 11. 中断、错误和降级
 

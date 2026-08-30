@@ -193,7 +193,12 @@ async fn collect_background_events(
             EventMsg::ItemStarted(_) => event_kinds.push("item_started"),
             EventMsg::ItemCompleted(_) => event_kinds.push("item_completed"),
             EventMsg::TokenCount(tokens) => {
-                usage.input_tokens = u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX);
+                let uncached_input_tokens = if tokens.input_tokens_include_cache {
+                    tokens.uncached_input_tokens
+                } else {
+                    tokens.input_tokens
+                };
+                usage.input_tokens = u32::try_from(uncached_input_tokens).unwrap_or(u32::MAX);
                 usage.output_tokens = u32::try_from(tokens.output_tokens).unwrap_or(u32::MAX);
                 usage.cache_read_tokens =
                     u32::try_from(tokens.cache_read_tokens).unwrap_or(u32::MAX);
@@ -201,6 +206,12 @@ async fn collect_background_events(
                     u32::try_from(tokens.cache_write_tokens).unwrap_or(u32::MAX);
                 usage.reasoning_tokens = u32::try_from(tokens.reasoning_tokens).unwrap_or(u32::MAX);
                 usage.request_count = u32::try_from(tokens.request_count).unwrap_or(u32::MAX);
+                usage.reported_total_tokens = tokens
+                    .provider_total_tokens
+                    .and_then(|value| u32::try_from(value).ok());
+                usage.cache_read_reported = tokens.cache_read_reported;
+                usage.cache_write_reported = tokens.cache_write_reported;
+                usage.reasoning_reported = tokens.reasoning_reported;
             }
             EventMsg::Error(error) | EventMsg::StreamError(error) => {
                 stream_error = Some(error.message)
@@ -389,13 +400,19 @@ mod tests {
             id: "turn-1".into(),
             msg: EventMsg::TokenCount(TokenCountEvent {
                 turn_id: Some("turn-1".into()),
-                input_tokens: 12,
+                input_tokens: 18,
+                input_tokens_include_cache: true,
+                uncached_input_tokens: 12,
                 output_tokens: 3,
-                total_tokens: 15,
+                total_tokens: 21,
+                provider_total_tokens: Some(21),
                 cache_read_tokens: 4,
                 cache_write_tokens: 2,
                 reasoning_tokens: 1,
                 request_count: 2,
+                cache_read_reported: true,
+                cache_write_reported: true,
+                reasoning_reported: true,
             }),
         })
         .await
@@ -416,6 +433,8 @@ mod tests {
         assert_eq!(usage.input_tokens, 12);
         assert_eq!(usage.output_tokens, 3);
         assert_eq!(usage.cache_read_tokens, 4);
+        assert_eq!(usage.reported_total_tokens, Some(21));
+        assert!(usage.reasoning_reported);
     }
 
     #[tokio::test]

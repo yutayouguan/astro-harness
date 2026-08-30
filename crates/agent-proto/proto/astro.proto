@@ -286,6 +286,17 @@ message ThreadTokenCount {
   uint64 input_tokens = 1;
   uint64 output_tokens = 2;
   uint64 total_tokens = 3;
+  uint64 uncached_input_tokens = 4;
+  uint64 cache_read_tokens = 5;
+  uint64 cache_write_tokens = 6;
+  uint64 reasoning_tokens = 7;
+  uint64 request_count = 8;
+  uint64 provider_total_tokens = 9;
+  bool provider_total_tokens_reported = 10;
+  bool cache_read_reported = 11;
+  bool cache_write_reported = 12;
+  bool reasoning_reported = 13;
+  bool input_tokens_include_cache = 14;
 }
 
 message ThreadTurnComplete {

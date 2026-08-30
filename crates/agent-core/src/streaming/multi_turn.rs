@@ -27,8 +27,8 @@ use super::lifecycle::{
     emit_text_item_started, emit_usage, tool_turn_item,
 };
 use super::maintenance::{
-    emit_context_usage, post_tool_maintenance, pre_llm_maintenance, record_tool_outcomes,
-    run_sampling_request, SamplingRequest,
+    emit_context_usage, emit_provider_context_usage, post_tool_maintenance, pre_llm_maintenance,
+    record_tool_outcomes, run_sampling_request, SamplingRequest,
 };
 use super::provider::ProviderStreamer;
 use super::run_state::{RunPhase, RunState};
@@ -570,7 +570,7 @@ pub(crate) async fn run_turn(
         let prompt_context = step_context.prompt_context.clone();
         let tool_specs = step_context.tool_router.model_visible_specs().to_vec();
 
-        emit_context_usage(
+        let context_usage_snapshot = emit_context_usage(
             &session,
             &turn_context,
             &prompt,
@@ -777,6 +777,13 @@ pub(crate) async fn run_turn(
                 }
                 Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
                     round_usage = Some(u);
+                    emit_provider_context_usage(
+                        &session,
+                        &turn_context,
+                        &context_usage_snapshot,
+                        u,
+                    )
+                    .await;
                 }
                 Some(Ok(StreamedAssistantContent::Citations(cites))) => {
                     let _ = cites;

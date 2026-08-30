@@ -452,6 +452,10 @@ fn parse_anthropic_usage(u: &Value) -> Option<crate::types::stream::Usage> {
         cache_write_tokens: cache_write,
         reasoning_tokens: 0,
         request_count: 1,
+        reported_total_tokens: None,
+        cache_read_reported: u.get("cache_read_input_tokens").is_some(),
+        cache_write_reported: u.get("cache_creation_input_tokens").is_some(),
+        reasoning_reported: false,
     })
 }
 

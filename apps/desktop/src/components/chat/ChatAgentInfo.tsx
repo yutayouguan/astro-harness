@@ -207,7 +207,8 @@ export default function ChatAgentInfo({
                       : t("chat.contextUsage")}
                   </span>
                   <span className="chat-agent-usage-tokens">
-                    ~{formatTokenCount(used)}
+                    {contextUsage.source === "local_estimate" ? "~" : ""}
+                    {formatTokenCount(used)}
                     {win > 0 ? ` / ${formatTokenCount(win)}` : ""}
                   </span>
                 </div>

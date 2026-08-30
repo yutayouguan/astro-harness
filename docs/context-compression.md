@@ -161,6 +161,8 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 | 会话压实 | `session/.../compact_and_split`，`apps/desktop/.../compaction_commands.rs` |
 | 辅模型压实 | `AuxiliaryTask::Compaction` → `compact_chat_session` / mid-run |
 | 前端提示 | `ContextUsage.recommendCompact` → toast（60s 冷却） |
+| 占用真值 | 最近 Provider total → 分项重算 → 本地字符估算 |
+| 分层解释 | 始终保留 sampling 前 system/tools/MCP/memory/conversation 估算 |
 
 ---
 
@@ -224,7 +226,7 @@ UI：占用查看仍在聊天右栏 Context Explorer；辅模型页的 `auxiliar
 1. **长工具链桌面 Agent**：依赖窗口比例 + spill，勿把条数阈值调太低。
 2. **仍频繁触顶**：用户主动 `/compact`；关注 `recommendCompact` toast（仅建议，前端不会自动拆 session）。上下文条/详情只展示后端 `context_usage` 与真实 `context_window`，不按 128K 估算。
 3. **调试**：`RUST_LOG=agent=debug` 查看 `tool context maintenance` / `tool LLM compress` / `gateway pre-maintain` / `mid-run summary` / `thrashing` 日志。
-4. **跨厂商**：`context_window` 由 Tauri 从 models 缓存 / LiteLLM 注入；未知模型 agent 侧缺省 128k，前端未知则显示「—」而非假百分比。
+4. **跨厂商**：`context_window` 由 Tauri 从 models 缓存 / LiteLLM 注入；未知模型 agent 侧缺省 128k，前端未知则显示「—」而非假百分比。占用来源显式区分 `provider_reported`、`provider_recomputed` 和 `local_estimate`。
 5. **辅模型**：配置 `AuxiliaryTask::Compaction` 目标；未配置时自动退回 head/tail，不影响主对话。
 
 ---
@@ -233,5 +235,6 @@ UI：占用查看仍在聊天右栏 Context Explorer；辅模型页的 `auxiliar
 
 - [x] Hard 阶段自动调用辅模型做 **mid-run 中间轮次摘要**（仍不拆 session）
 - [x] `ContextUsage` 事件增加 `recommendCompact` 供前端 toast
+- [x] Provider actual + local segments 混合快照，支持 cache/reasoning 明细与 rollout 回放
 - [x] Gateway 85% 预压安全网（进 LLM 前 `maintain_tool_context`）
 - [x] Agno 式 **逐条 LLM 摘要 tool**（失败回退 head/tail）

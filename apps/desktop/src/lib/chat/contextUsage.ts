@@ -25,9 +25,31 @@ export type ContextUsageSegment = {
   items?: ContextUsageItem[];
 };
 
+export type ContextUsageSource =
+  | "provider_reported"
+  | "provider_recomputed"
+  | "local_estimate";
+
+export type ContextTokenUsage = {
+  inputTokens: number;
+  uncachedInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  providerTotalTokens?: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  cacheReadReported: boolean;
+  cacheWriteReported: boolean;
+  reasoningReported: boolean;
+};
+
 export type ContextUsageSnapshot = {
   contextWindow: number;
   totalTokens: number;
+  estimatedTotalTokens: number;
+  source: ContextUsageSource;
+  latestUsage?: ContextTokenUsage;
   segments: ContextUsageSegment[];
   updatedAt: number;
   /** 后端建议执行会话级 /compact（占用临界）；流式中仅 toast，不自动拆分 */
@@ -81,6 +103,11 @@ export function usagePercent(used: number, window: number): number {
   return Math.min(100, Math.round((used / window) * 100));
 }
 
+export function cacheHitPercent(usage: ContextTokenUsage): number | null {
+  if (!usage.cacheReadReported || usage.inputTokens <= 0) return null;
+  return Math.min(100, Math.round((usage.cacheReadTokens / usage.inputTokens) * 100));
+}
+
 export function visibleSegments(snap: ContextUsageSnapshot): ContextUsageSegment[] {
   return snap.segments
     .filter((s) => s.tokens > 0 || (s.items?.length ?? 0) > 0)
@@ -116,9 +143,26 @@ type RawSegment = {
   items?: Array<{ id?: string; label?: string; tokens?: number } | null> | null;
 };
 
+type RawTokenUsage = {
+  input_tokens?: number;
+  uncached_input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  provider_total_tokens?: number;
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
+  reasoning_tokens?: number;
+  cache_read_reported?: boolean;
+  cache_write_reported?: boolean;
+  reasoning_reported?: boolean;
+};
+
 export function normalizeContextUsageEvent(payload: {
   context_window?: number;
   total_tokens?: number;
+  estimated_total_tokens?: number;
+  source?: string;
+  latest_usage?: RawTokenUsage | null;
   segments?: RawSegment[];
   updated_at?: number;
   recommend_compact?: boolean;
@@ -126,9 +170,32 @@ export function normalizeContextUsageEvent(payload: {
 }): ContextUsageSnapshot {
   const recommendCompact =
     payload.recommend_compact === true || payload.recommendCompact === true;
+  const source: ContextUsageSource =
+    payload.source === "provider_reported" || payload.source === "provider_recomputed"
+      ? payload.source
+      : "local_estimate";
+  const rawUsage = payload.latest_usage;
+  const latestUsage: ContextTokenUsage | undefined = rawUsage
+    ? {
+        inputTokens: rawUsage.input_tokens ?? 0,
+        uncachedInputTokens: rawUsage.uncached_input_tokens ?? 0,
+        outputTokens: rawUsage.output_tokens ?? 0,
+        totalTokens: rawUsage.total_tokens ?? 0,
+        providerTotalTokens: rawUsage.provider_total_tokens,
+        cacheReadTokens: rawUsage.cache_read_tokens ?? 0,
+        cacheWriteTokens: rawUsage.cache_write_tokens ?? 0,
+        reasoningTokens: rawUsage.reasoning_tokens ?? 0,
+        cacheReadReported: rawUsage.cache_read_reported === true,
+        cacheWriteReported: rawUsage.cache_write_reported === true,
+        reasoningReported: rawUsage.reasoning_reported === true,
+      }
+    : undefined;
   return {
     contextWindow: payload.context_window ?? 0,
     totalTokens: payload.total_tokens ?? 0,
+    estimatedTotalTokens: payload.estimated_total_tokens ?? payload.total_tokens ?? 0,
+    source,
+    latestUsage,
     updatedAt: payload.updated_at ?? 0,
     recommendCompact: recommendCompact || undefined,
     segments: (payload.segments ?? []).map((segment) => {

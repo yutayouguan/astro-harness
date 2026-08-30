@@ -57,14 +57,7 @@ impl StreamedAssistantContent {
                     signature: None,
                 }))
             }
-            StreamChunk::Usage(u) => Some(Self::FinalUsage(Usage {
-                input_tokens: u.input_tokens,
-                output_tokens: u.output_tokens,
-                cache_read_tokens: u.cache_read_tokens,
-                cache_write_tokens: u.cache_write_tokens,
-                reasoning_tokens: u.reasoning_tokens,
-                request_count: u.request_count,
-            })),
+            StreamChunk::Usage(u) => Some(Self::FinalUsage(u)),
             StreamChunk::Citation(v) => Some(Self::Citations(vec![v])),
             StreamChunk::InteractionId(id) => Some(Self::InteractionId(id)),
             StreamChunk::Done { .. } | StreamChunk::Error(_) => None,

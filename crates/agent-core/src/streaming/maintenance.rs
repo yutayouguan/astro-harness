@@ -4,9 +4,11 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use agent_protocol::{
-    ContextUsageEvent, ContextUsageItem, ContextUsageSegment, DeltaEvent, EventMsg, ToolStatus,
+    ContextUsageBreakdown, ContextUsageEvent, ContextUsageItem, ContextUsageSegment,
+    ContextUsageSource, DeltaEvent, EventMsg, ToolStatus,
 };
 use providers::types::message::Role as ProviderRole;
+use providers::Usage;
 
 use super::lifecycle::{
     bounded_tool_completed_event, emit, emit_context_compacted, emit_extension_completed,
@@ -70,7 +72,7 @@ pub(super) async fn pre_llm_maintenance(
     hook_stopped
 }
 
-/// 构建并推送上下文占用估算快照。
+/// 构建并推送上下文占用估算快照，并返回该 sampling 的分层基线。
 pub(super) async fn emit_context_usage(
     session: &Arc<AgentLoop>,
     turn_context: &TurnContext,
@@ -78,7 +80,7 @@ pub(super) async fn emit_context_usage(
     prompt_context: &[crate::prompt::context_state::PromptContextEvent],
     history: &[types::message::Message],
     tools: &[serde_json::Value],
-) {
+) -> crate::prompt::context_usage::ContextUsageSnapshot {
     let agent = session.as_ref();
     let mut layers = AgentLoop::prompt_contract_layer_breakdown(prompt);
     let actual_developer_chars = prompt_context
@@ -138,33 +140,82 @@ pub(super) async fn emit_context_usage(
             recommend_compact_ratio,
         },
     );
+    emit_context_usage_snapshot(session, turn_context, &snap, None).await;
+    snap
+}
+
+/// 用最近一次 Provider usage 校准 top-line，分层仍保留 sampling 前本地估算。
+pub(super) async fn emit_provider_context_usage(
+    session: &Arc<AgentLoop>,
+    turn_context: &TurnContext,
+    snap: &crate::prompt::context_usage::ContextUsageSnapshot,
+    usage: Usage,
+) {
+    emit_context_usage_snapshot(session, turn_context, snap, Some(usage)).await;
+}
+
+async fn emit_context_usage_snapshot(
+    session: &Arc<AgentLoop>,
+    turn_context: &TurnContext,
+    snap: &crate::prompt::context_usage::ContextUsageSnapshot,
+    usage: Option<Usage>,
+) {
+    let source = match usage.and_then(|value| value.reported_total_tokens) {
+        Some(_) => ContextUsageSource::ProviderReported,
+        None if usage.is_some() => ContextUsageSource::ProviderRecomputed,
+        None => ContextUsageSource::LocalEstimate,
+    };
+    let total_tokens = usage
+        .map(|value| value.total_tokens())
+        .unwrap_or(snap.total_tokens);
+    let latest_usage = usage.map(|value| ContextUsageBreakdown {
+        input_tokens: u64::from(value.prompt_tokens()),
+        uncached_input_tokens: u64::from(value.input_tokens),
+        output_tokens: u64::from(value.output_tokens),
+        total_tokens: u64::from(value.total_tokens()),
+        provider_total_tokens: value.reported_total_tokens.map(u64::from),
+        cache_read_tokens: u64::from(value.cache_read_tokens),
+        cache_write_tokens: u64::from(value.cache_write_tokens),
+        reasoning_tokens: u64::from(value.reasoning_tokens),
+        cache_read_reported: value.cache_read_reported,
+        cache_write_reported: value.cache_write_reported,
+        reasoning_reported: value.reasoning_reported,
+    });
+    let recommend_compact = snap.recommend_compact
+        || (snap.context_window > 0
+            && (total_tokens as f64 / snap.context_window as f64)
+                >= f64::from(session.compression_config().recommend_compact_ratio));
+
     emit(
         session,
         turn_context,
         EventMsg::ContextUsage(ContextUsageEvent {
             turn_id: turn_context.sub_id().to_string(),
             context_window: snap.context_window,
-            total_tokens: snap.total_tokens,
+            total_tokens,
+            estimated_total_tokens: snap.total_tokens,
+            source,
+            latest_usage,
             segments: snap
                 .segments
-                .into_iter()
+                .iter()
                 .map(|segment| ContextUsageSegment {
-                    id: segment.id,
+                    id: segment.id.clone(),
                     tokens: segment.tokens,
-                    count: segment.meta.and_then(|meta| meta.count),
+                    count: segment.meta.as_ref().and_then(|meta| meta.count),
                     items: segment
                         .items
-                        .into_iter()
+                        .iter()
                         .map(|item| ContextUsageItem {
-                            id: item.id,
-                            label: item.label,
+                            id: item.id.clone(),
+                            label: item.label.clone(),
                             tokens: item.tokens,
                         })
                         .collect(),
                 })
                 .collect(),
             updated_at: snap.updated_at,
-            recommend_compact: snap.recommend_compact,
+            recommend_compact,
         }),
     )
     .await;

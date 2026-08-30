@@ -2,7 +2,7 @@
 
 > 规则：在 Agent/Harness 对齐过程中发现代码缺陷时，先记录证据、影响、复现和建议，不直接修改实现。
 >
-> 更新时间：2026-08-29
+> 更新时间：2026-08-30
 
 ## 状态约定
 
@@ -173,6 +173,135 @@ DeepSeek 返回 HTTP 400：`tools[28].function.name` 不匹配 `^[a-zA-Z0-9\_-]+
 - Responses API 的原生 Namespace JSON 保持不变。
 - 模型返回 `{namespace}__{child}` 时能执行原 registered handler，不扩大可调用工具集。
 - DeepSeek/OpenAI-compatible Chat Completions 的请求体回归测试不再包含点分隔 Function name。
+
+## H-004 Provider 真实用量与上下文占用脱节
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | High |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | Agent Harness usage/context 对齐 |
+| 是否已修复 | 是；Provider、事件、回放、上下文与桌面展示已贯通 |
+
+### 问题描述
+
+Astro 已能从部分 Provider 读取 input、output、cache read/write 和 reasoning 用量，但目前会丢弃 Provider 原始 `total_tokens`，且用数值 `0` 同时表示“Provider 明确上报为零”和“Provider 没有上报该字段”。运行时会将累计 usage 写入事件，但桌面端只保留 prompt/completion/total 三项；上下文占用则另外使用本地字符估算，不会用 Provider 最近一次采样的实际 usage 校准。
+
+### 源码证据
+
+- `crates/agent-providers/src/compat/mod.rs`：`parse_openai_usage()` 读取 prompt/output 明细，但不保留 Provider 返回的 `total_tokens`。
+- `crates/agent-providers/src/types/stream.rs`：`Usage::total_tokens()` 始终由本地分项重算；所有可选明细都是非可选整数，无法区分未上报与零值。
+- `crates/agent-protocol/src/event.rs`：`TokenCountEvent` 包含 cache read/write 和 reasoning，但未传递原始 total 的报告状态。
+- `apps/desktop/src/hooks/chat/useSend.ts`：`usage` 事件仅映射 prompt/completion/total，丢弃 cache read/write、reasoning 和 request count。
+- `crates/agent-core/src/streaming/maintenance.rs`：每次采样前的 `context_usage` 仅由本地 prompt/history/tool schema 估算构建。
+- `apps/desktop/src/components/chat/ContextUsagePopover.tsx`：占用量恒以 `~` 标识为估算，不显示数据来源、缓存命中或 reasoning 明细。
+
+### 用户影响
+
+1. 用户无法判断当前上下文环是 Provider 实际计数还是本地估算。
+2. 对于 Responses API，缓存命中和 reasoning 已产生成本，但 UI 不可见。
+3. 非 OpenAI Provider 或兼容层字段缺失时，会被误解为“明确为零”。
+4. 如果 Provider 原始 total 与 Astro 分项重算不一致，当前没有审计信号，也无法在回放时复原。
+
+### 建议修复方向
+
+- Provider 层保留归一化分项、Provider 原始 total 以及可选明细的“是否上报”状态；`reasoning_tokens` 明确为 `output_tokens` 的子集，不重复计入 total。
+- 累计用量继续用于计费/单轮统计；另保留最近一次 Provider usage，专用于上下文占用校准。
+- 上下文快照采用混合模式：Provider actual 可用时作为顶层占用真值，本地 estimate 保留分类解释；实际数缺失时明确降级为 estimate。
+- UI 展示 input、cached input、cache write、output、reasoning output、total、cache hit rate 和数据来源；缓存不作为新的上下文 segment 重复堆叠。
+
+### 验收标准
+
+- Responses API 的五类 usage 字段全部传递，Provider 原始 `total_tokens` 可审计。
+- 缓存/reasoning 未上报与明确为零可区分。
+- 上下文环优先显示最近 Provider actual，并保留本地分段估算；降级状态可见。
+- `tool_search`/MCP 激活后，新暴露的工具 schema 从下一次 sampling 快照起进入本地估算。
+- rollout/history 回放能复原该轮实际/估算来源与用量明细。
+
+### 验证结果
+
+- `cargo test -p providers --lib -p agent-protocol -p agent-rollout`：271 项通过。
+- `cargo test -p agent --test streaming_test billing_token_count_total_includes_cached_tokens -- --nocapture`：通过。
+- `cargo check -p agent -p server -p astro-agent`：通过。
+- `node --test src/lib/chat/contextUsage.test.ts`：8 项通过。
+
+## H-005 Context usage 分类测试与实现数量脱节
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Low |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | Context usage 前端回归 |
+| 是否已修复 | 是；改为断言完整的 11 类稳定集合 |
+
+### 问题与证据
+
+`apps/desktop/src/lib/chat/contextUsage.ts` 的 `SEGMENT_ORDER` 已包含 11 类，但 `contextUsage.test.ts` 仍固定断言长度为 9。执行 `node --test src/lib/chat/contextUsage.test.ts` 时稳定失败：`11 !== 9`。
+
+### 影响与修复方向
+
+该失配会遮蔽 context usage 真实回归结果。测试应断言完整的稳定分类集合，而不只检查一个已过期的数量。
+
+### 验收标准
+
+- 聚焦测试通过。
+- 缺失、重复或顺序意外变更仍能被测试检出。
+
+### 验证结果
+
+`node --test src/lib/chat/contextUsage.test.ts`：8 项通过。
+
+## H-006 Desktop compaction 测试未跟随异步 Session API
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Low |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | Tauri usage 事件投影回归 |
+| 是否已修复 | 是；两个用例已切换为 Tokio async test 并 await Session 构造 |
+
+### 问题与证据
+
+`apps/desktop/src-tauri/src/commands/compaction.rs` 的两个测试仍对已异步化的 `agent::Session::new()` 直接调用 `.unwrap()`。执行 `cargo test -p astro-agent matching_ack_drains_provisional_nonterminal_events_before_terminal_in_order` 时在目标测试前报 `E0599`，建议将两个用例改为 Tokio async test 并 `await` Session 构造。
+
+### 验收标准
+
+- `astro-agent` 测试目标可编译。
+- 两个 manual compaction hook 用例保持原断言。
+
+### 验证结果
+
+- `cargo test -p astro-agent manual_compaction -- --nocapture`：通过。
+- `cargo test -p astro-agent manual_pre_compact_can_stop_before_side_effects -- --nocapture`：通过。
+
+## H-007 旧 TokenCount rollout 的未缓存输入投影为零
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Low |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | Usage rollout 向后兼容审计 |
+| 是否已修复 | 是；桌面投影按版本标记恢复旧语义 |
+
+### 问题与证据
+
+旧版 `TokenCountEvent.input_tokens` 表示未缓存输入，且不存在
+`input_tokens_include_cache` / `uncached_input_tokens`。当前桌面事件投影已经用版本标记恢复
+`prompt_tokens`，但仍直接读取默认值为 0 的 `uncached_input_tokens`，因此历史回放会把真实的未缓存输入显示为 0。
+
+### 验收标准
+
+- 新事件继续直接使用显式的 `uncached_input_tokens`。
+- 旧事件在版本标记缺失时回退到旧语义的 `input_tokens`。
+- 同一投影测试同时覆盖新旧两类事件。
+
+### 验证结果
+
+`cargo test -p astro-agent token_count_projection_preserves_cache_reasoning_and_reporting_state -- --nocapture`：通过。
 
 ## 后续缺陷记录模板
 

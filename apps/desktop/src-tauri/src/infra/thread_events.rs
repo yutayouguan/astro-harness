@@ -1944,9 +1944,33 @@ fn map_thread_event(event: proto::ThreadEvent) -> Vec<ChatStreamEvent> {
         | Some(Payload::PatchDelta(delta)) => map_output_delta(delta),
         Some(Payload::ControlRequest(control)) => map_control_request(turn_id, control),
         Some(Payload::TokenCount(tokens)) => vec![ChatStreamEvent::Usage {
-            prompt_tokens: tokens.input_tokens.min(u32::MAX.into()) as u32,
+            prompt_tokens: (if tokens.input_tokens_include_cache {
+                tokens.input_tokens
+            } else {
+                tokens
+                    .input_tokens
+                    .saturating_add(tokens.cache_read_tokens)
+                    .saturating_add(tokens.cache_write_tokens)
+            })
+            .min(u32::MAX.into()) as u32,
+            uncached_input_tokens: (if tokens.input_tokens_include_cache {
+                tokens.uncached_input_tokens
+            } else {
+                tokens.input_tokens
+            })
+            .min(u32::MAX.into()) as u32,
             completion_tokens: tokens.output_tokens.min(u32::MAX.into()) as u32,
             total_tokens: tokens.total_tokens.min(u32::MAX.into()) as u32,
+            cache_read_tokens: tokens.cache_read_tokens.min(u32::MAX.into()) as u32,
+            cache_write_tokens: tokens.cache_write_tokens.min(u32::MAX.into()) as u32,
+            reasoning_tokens: tokens.reasoning_tokens.min(u32::MAX.into()) as u32,
+            request_count: tokens.request_count.min(u32::MAX.into()) as u32,
+            provider_total_tokens: tokens
+                .provider_total_tokens_reported
+                .then_some(tokens.provider_total_tokens.min(u32::MAX.into()) as u32),
+            cache_read_reported: tokens.cache_read_reported,
+            cache_write_reported: tokens.cache_write_reported,
+            reasoning_reported: tokens.reasoning_reported,
         }],
         Some(Payload::Error(error)) => vec![ChatStreamEvent::Error {
             message: error.message,
@@ -2239,9 +2263,21 @@ fn memory_update_from_payload(payload: MemoryExtensionPayload) -> ChatStreamEven
 
 fn context_usage_event(payload: &str) -> ChatStreamEvent {
     let value = serde_json::from_str::<serde_json::Value>(payload).unwrap_or_default();
+    let total_tokens = json_u32(&value, "total_tokens");
     ChatStreamEvent::ContextUsage {
         context_window: json_u32(&value, "context_window"),
-        total_tokens: json_u32(&value, "total_tokens"),
+        total_tokens,
+        estimated_total_tokens: value
+            .get("estimated_total_tokens")
+            .and_then(serde_json::Value::as_u64)
+            .map(|number| number.min(u64::from(u32::MAX)) as u32)
+            .unwrap_or(total_tokens),
+        source: value
+            .get("source")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("local_estimate")
+            .to_string(),
+        latest_usage: value.get("latest_usage").cloned(),
         segments: value
             .get("segments")
             .and_then(serde_json::Value::as_array)
@@ -2688,6 +2724,88 @@ mod tests {
 
     fn terminal_projection(turn_id: &str) -> Vec<ChatStreamEvent> {
         map_thread_event(terminal_event("session-1", turn_id))
+    }
+
+    #[test]
+    fn token_count_projection_preserves_cache_reasoning_and_reporting_state() {
+        let projected = map_thread_event(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::TokenCount(
+                proto::ThreadTokenCount {
+                    input_tokens: 100,
+                    output_tokens: 25,
+                    total_tokens: 125,
+                    uncached_input_tokens: 60,
+                    cache_read_tokens: 40,
+                    cache_write_tokens: 0,
+                    reasoning_tokens: 20,
+                    request_count: 1,
+                    provider_total_tokens: 125,
+                    provider_total_tokens_reported: true,
+                    cache_read_reported: true,
+                    cache_write_reported: false,
+                    reasoning_reported: true,
+                    input_tokens_include_cache: true,
+                },
+            )),
+        });
+
+        assert!(matches!(
+            projected.as_slice(),
+            [ChatStreamEvent::Usage {
+                prompt_tokens: 100,
+                uncached_input_tokens: 60,
+                completion_tokens: 25,
+                total_tokens: 125,
+                cache_read_tokens: 40,
+                reasoning_tokens: 20,
+                provider_total_tokens: Some(125),
+                cache_read_reported: true,
+                reasoning_reported: true,
+                ..
+            }]
+        ));
+
+        let legacy = map_thread_event(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-legacy".into(),
+            payload: Some(proto::thread_event::Payload::TokenCount(
+                proto::ThreadTokenCount {
+                    input_tokens: 60,
+                    output_tokens: 25,
+                    total_tokens: 125,
+                    cache_read_tokens: 40,
+                    ..Default::default()
+                },
+            )),
+        });
+        assert!(matches!(
+            legacy.as_slice(),
+            [ChatStreamEvent::Usage {
+                prompt_tokens: 100,
+                uncached_input_tokens: 60,
+                ..
+            }]
+        ));
+    }
+
+    #[test]
+    fn context_usage_projection_preserves_actual_source_and_breakdown() {
+        let projected = context_usage_event(
+            r#"{"context_window":128000,"total_tokens":125,"estimated_total_tokens":120,"source":"provider_reported","latest_usage":{"input_tokens":100,"output_tokens":25,"total_tokens":125},"segments":[],"updated_at":7}"#,
+        );
+
+        assert!(matches!(
+            projected,
+            ChatStreamEvent::ContextUsage {
+                total_tokens: 125,
+                estimated_total_tokens: 120,
+                ref source,
+                latest_usage: Some(_),
+                ..
+            } if source == "provider_reported"
+        ));
     }
 
     fn agent_message_item(id: &str, content: &str) -> proto::ThreadItem {
@@ -4607,8 +4725,17 @@ mod tests {
             },
             ChatStreamEvent::Usage {
                 prompt_tokens: 1,
+                uncached_input_tokens: 1,
                 completion_tokens: 2,
                 total_tokens: 3,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+                reasoning_tokens: 0,
+                request_count: 1,
+                provider_total_tokens: Some(3),
+                cache_read_reported: true,
+                cache_write_reported: false,
+                reasoning_reported: true,
             },
             ChatStreamEvent::Error {
                 message: "buffered error".into(),

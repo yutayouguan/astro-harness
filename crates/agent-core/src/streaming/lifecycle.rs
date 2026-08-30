@@ -587,7 +587,8 @@ pub(super) async fn record_llm_usage(
         },
         None,
         Some(agent.sessions()),
-    ).await;
+    )
+    .await;
 }
 
 pub(crate) async fn emit_usage(
@@ -605,16 +606,19 @@ pub(crate) async fn emit_usage(
         turn_context,
         EventMsg::TokenCount(TokenCountEvent {
             turn_id: Some(turn_context.sub_id().to_string()),
-            input_tokens: u64::from(usage.input_tokens),
+            input_tokens: u64::from(usage.prompt_tokens()),
+            input_tokens_include_cache: true,
+            uncached_input_tokens: u64::from(usage.input_tokens),
             output_tokens: u64::from(usage.output_tokens),
-            total_tokens: u64::from(usage.input_tokens)
-                .saturating_add(u64::from(usage.output_tokens))
-                .saturating_add(u64::from(usage.cache_read_tokens))
-                .saturating_add(u64::from(usage.cache_write_tokens)),
+            total_tokens: u64::from(usage.total_tokens()),
+            provider_total_tokens: usage.reported_total_tokens.map(u64::from),
             cache_read_tokens: u64::from(usage.cache_read_tokens),
             cache_write_tokens: u64::from(usage.cache_write_tokens),
             reasoning_tokens: u64::from(usage.reasoning_tokens),
             request_count: u64::from(usage.request_count),
+            cache_read_reported: usage.cache_read_reported,
+            cache_write_reported: usage.cache_write_reported,
+            reasoning_reported: usage.reasoning_reported,
         }),
     )
     .await;
@@ -632,7 +636,8 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "event-helper-test".into(),
             )
-            .await.unwrap(),
+            .await
+            .unwrap(),
         );
         let context = session.create_turn_context("turn-1".into()).await;
         (dir, session, context)

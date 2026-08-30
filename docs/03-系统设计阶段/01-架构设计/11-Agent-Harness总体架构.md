@@ -4,7 +4,7 @@
 >
 > 状态：当前实现基线
 >
-> 更新：2026-08-29
+> 更新：2026-08-30
 >
 > 适用范围：Astro 中包裹模型、驱动多步任务并把意图落到真实环境的工程化运行系统
 
@@ -199,6 +199,23 @@ Server 端每 Thread listener 向 gRPC/Tauri 投影 live stream；重启或订�
 - SQLite message row 不是完整的执行事件源；
 - 恢复不应通过猜测最后一条消息来重执行副作用；
 - 历史和 live 事件需通过稳定 item/turn identity 去重。
+
+### 10.1 Usage 与上下文占用
+
+Harness 同时维护两种不可混用的口径：
+
+- **Turn aggregate usage**：一条用户输入引发的所有 sampling 请求之和，用于计费、单轮统计和 `TokenCount` 事件。
+- **Latest sampling usage**：最近一次 Provider 请求的用量，用于校准当前上下文环，不能用整个 turn 的累计值替代。
+
+`ContextUsage` 采用混合快照：顶层 `total_tokens` 优先使用 Provider 原始 total；Provider 未上报 total 时用其分项重算；整个 usage 缺失时才回退到本地字符估算。本地 `segments` 始终保留，用于解释 system、tools、MCP、memory 和 conversation 的组成。
+
+```text
+provider_reported  >  provider_recomputed  >  local_estimate
+       top-line                top-line             top-line
+                 + local estimated segments for explanation
+```
+
+`reasoning_tokens` 是 `output_tokens` 的子集，不再加到 total；`cached_input_tokens` 是 input 的子集，用于缓存命中率和差异化计价，不是额外上下文 segment。
 
 ## 11. 多 Agent 编排
 

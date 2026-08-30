@@ -387,7 +387,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
 
     // Token 用量（usageMetadata）
     if let Some(u) = v.get("usageMetadata") {
-        let input = u
+        let input_total = u
             .get("promptTokenCount")
             .and_then(|x| x.as_u64())
             .unwrap_or(0) as u32;
@@ -403,14 +403,22 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
             .get("cachedContentTokenCount")
             .and_then(|x| x.as_u64())
             .unwrap_or(0) as u32;
-        if input > 0 || output > 0 {
+        let reported_total_tokens = u
+            .get("totalTokenCount")
+            .and_then(|x| x.as_u64())
+            .map(|x| x.min(u64::from(u32::MAX)) as u32);
+        if input_total > 0 || output > 0 || reasoning > 0 {
             chunks.push(StreamChunk::Usage(Usage {
-                input_tokens: input,
-                output_tokens: output,
+                input_tokens: input_total.saturating_sub(cached),
+                output_tokens: output.saturating_add(reasoning),
                 cache_read_tokens: cached,
                 cache_write_tokens: 0,
                 reasoning_tokens: reasoning,
                 request_count: 1,
+                reported_total_tokens,
+                cache_read_reported: u.get("cachedContentTokenCount").is_some(),
+                cache_write_reported: false,
+                reasoning_reported: u.get("thoughtsTokenCount").is_some(),
             }));
         }
     }
@@ -474,7 +482,7 @@ mod tests {
 
     #[test]
     fn extract_usage_metadata() {
-        let data = r#"{"candidates":[{"content":{"parts":[{"text":"done"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5}}"#;
+        let data = r#"{"candidates":[{"content":{"parts":[{"text":"done"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5,"thoughtsTokenCount":3,"cachedContentTokenCount":4,"totalTokenCount":18}}"#;
         let chunks = extract_native_chunks(data);
         let types: Vec<&str> = chunks
             .iter()
@@ -487,8 +495,13 @@ mod tests {
             .collect();
         assert_eq!(types, vec!["Text", "Done", "Usage"]);
         if let StreamChunk::Usage(u) = &chunks[2] {
-            assert_eq!(u.input_tokens, 10);
-            assert_eq!(u.output_tokens, 5);
+            assert_eq!(u.input_tokens, 6);
+            assert_eq!(u.cache_read_tokens, 4);
+            assert_eq!(u.output_tokens, 8);
+            assert_eq!(u.reasoning_tokens, 3);
+            assert_eq!(u.reported_total_tokens, Some(18));
+            assert!(u.cache_read_reported);
+            assert!(u.reasoning_reported);
         }
     }
 

@@ -1,6 +1,6 @@
 # Agent 事件与恢复详细设计
 
-> **Harness 当前基线（2026-08-29）**：Core 产生 `agent-protocol::EventMsg/TurnItem`，Session 在 `event_dispatch` 中序列化状态归约、rollout 持久化和 live 交付。Server listener 投影到 gRPC/Tauri，恢复使用 rollout snapshot + live boundary。Core EventBus、SessionEventHub 及独立转换链仅是已被取代的历史架构。
+> **Harness 当前基线（2026-08-30）**：Core 产生 `agent-protocol::EventMsg/TurnItem`，Session 在 `event_dispatch` 中序列化状态归约、rollout 持久化和 live 交付。Server listener 投影到 gRPC/Tauri，恢复使用 rollout snapshot + live boundary。Core EventBus、SessionEventHub 及独立转换链仅是已被取代的历史架构。
 
 > 版本：v1.0
 > 日期：2026-08-20
@@ -75,6 +75,8 @@ Server listener 是 Core → proto 的唯一映射层。Tauri、exec 和外部�
 emitter。
 
 ## 4. Snapshot + live 恢复
+
+`TokenCount` 和 `ContextUsage` 都持久化到 rollout。`TokenCount` 是 turn aggregate，包含总 input、未缓存 input、cache read/write、output、reasoning、request count、Provider 原始 total 及报告状态。`ContextUsage` 是 step snapshot，包含 `provider_reported | provider_recomputed | local_estimate` 来源、Provider 明细和本地分层估算。回放时客户端必须展示事件中的来源，不得将未上报字段填充为“Provider 报告 0”。
 
 恢复协议不提供 transient replay cursor：
 

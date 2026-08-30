@@ -96,9 +96,19 @@ export type PendingInterrupt = {
 
 /** 单条助手回复的 token 用量（来自流式 usage 事件） */
 export type MessageTokenUsage = {
+  /** Provider 语义的总输入，包含 cache read/write。 */
   promptTokens: number;
+  uncachedInputTokens: number;
   completionTokens: number;
   totalTokens: number;
+  providerTotalTokens?: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  requestCount: number;
+  cacheReadReported: boolean;
+  cacheWriteReported: boolean;
+  reasoningReported: boolean;
 };
 
 /** 聊天列表中的用户或助手消息 */

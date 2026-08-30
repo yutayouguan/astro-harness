@@ -1,6 +1,6 @@
 # Codex 原生工具协议与 Code Mode 详细设计
 
-> **Harness 定位（2026-08-29）**：本文描述 Agent Harness 的 Tool + Environment 子系统。Model 只产生原生调用意图；工具发现、历史成对、V8 cell、真实执行、审批、沙箱和观测均由 Harness 负责。总体闭环见 [Agent Harness 执行外壳](../01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。
+> **Harness 定位（2026-08-30）**：本文描述 Agent Harness 的 Tool + Environment 子系统。Model 只产生原生调用意图；工具发现、历史成对、V8 cell、真实执行、审批、沙箱和观测均由 Harness 负责。总体闭环见 [Agent Harness 执行外壳](../01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。
 
 > 阶段：详细设计
 >
@@ -237,6 +237,8 @@ Namespace 的两种 wire name 属于明确的 Provider 边界：Responses API �
 - 相似工具描述之间的选择干扰；
 - MCP Server 连接越多，首轮请求越大；
 - 热重载后已加载工具意外恢复为不可见。
+
+Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样前的快照只计入当时已可见 schema；`tool_search` 返回并激活 Deferred/MCP 工具后，新 schema 从下一 step 的本地分层估算开始计入。Provider 返回的 usage 只校准已完成 sampling 的 top-line，不倒推修改当时的工具暴露集。
 
 ### 5.2 当前实际给模型的工具
 

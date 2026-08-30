@@ -338,11 +338,12 @@ mod tests {
         assert!(next_compaction_target(&targets, Some(0)).is_none());
     }
 
-    #[test]
-    fn manual_compaction_fires_canonical_boundaries() {
+    #[tokio::test]
+    async fn manual_compaction_fires_canonical_boundaries() {
         let dir = tempfile::tempdir().unwrap();
-        let session =
-            agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf())).unwrap();
+        let session = agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf()))
+            .await
+            .unwrap();
         let observed = Arc::new(Mutex::new(Vec::new()));
         for event in [hooks::PRE_COMPACT, hooks::POST_COMPACT] {
             let captured = Arc::clone(&observed);
@@ -367,11 +368,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn manual_pre_compact_can_stop_before_side_effects() {
+    #[tokio::test]
+    async fn manual_pre_compact_can_stop_before_side_effects() {
         let dir = tempfile::tempdir().unwrap();
-        let session =
-            agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf())).unwrap();
+        let session = agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf()))
+            .await
+            .unwrap();
         session.hook_bus().register(hooks::PRE_COMPACT, |payload| {
             assert_eq!(payload.trigger.as_deref(), Some("manual"));
             hooks::HookOutcome::Block("keep current transcript".into())

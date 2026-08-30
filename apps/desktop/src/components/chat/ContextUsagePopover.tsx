@@ -6,6 +6,7 @@ import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import {
+  cacheHitPercent,
   displayContextWindow,
   formatTokenCount,
   usagePercent,
@@ -103,6 +104,12 @@ export default function ContextUsagePopover({
   const used = snapshot?.totalTokens ?? 0;
   const pct = win > 0 ? usagePercent(used, win) : 0;
   const segs = snapshot ? visibleSegments(snapshot) : [];
+  const latest = snapshot?.latestUsage;
+  const cacheHit = latest ? cacheHitPercent(latest) : null;
+  const isEstimate = snapshot?.source === "local_estimate";
+  const sourceLabel = snapshot
+    ? t(`chat.contextUsageSource.${snapshot.source}` as MessageKey)
+    : "";
 
   return createPortal(
     <div
@@ -147,9 +154,50 @@ export default function ContextUsagePopover({
               : t("chat.contextUsageEmpty")}
           </p>
           <p className="ctx-usage-popover-tokens">
-            ~{formatTokenCount(used)}
+            {isEstimate ? "~" : ""}
+            {formatTokenCount(used)}
             {win > 0 ? ` / ${formatTokenCount(win)}` : ""}
           </p>
+          <p className="ctx-usage-popover-source">{sourceLabel}</p>
+          {latest ? (
+            <dl className="ctx-usage-metrics">
+              <div>
+                <dt>{t("chat.contextUsageInput")}</dt>
+                <dd>{formatTokenCount(latest.inputTokens)}</dd>
+              </div>
+              {latest.cacheReadReported ? (
+                <div>
+                  <dt>{t("chat.contextUsageCacheRead")}</dt>
+                  <dd>
+                    {formatTokenCount(latest.cacheReadTokens)}
+                    {cacheHit != null ? ` (${cacheHit}%)` : ""}
+                  </dd>
+                </div>
+              ) : null}
+              {latest.cacheWriteReported ? (
+                <div>
+                  <dt>{t("chat.contextUsageCacheWrite")}</dt>
+                  <dd>{formatTokenCount(latest.cacheWriteTokens)}</dd>
+                </div>
+              ) : null}
+              <div>
+                <dt>{t("chat.contextUsageOutput")}</dt>
+                <dd>{formatTokenCount(latest.outputTokens)}</dd>
+              </div>
+              {latest.reasoningReported ? (
+                <div>
+                  <dt>{t("chat.contextUsageReasoning")}</dt>
+                  <dd>{formatTokenCount(latest.reasoningTokens)}</dd>
+                </div>
+              ) : null}
+              {snapshot.estimatedTotalTokens !== snapshot.totalTokens ? (
+                <div>
+                  <dt>{t("chat.contextUsageLocalEstimate")}</dt>
+                  <dd>~{formatTokenCount(snapshot.estimatedTotalTokens)}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
           <ContextUsageBar snapshot={snapshot} windowTokens={win} />
           <ul className="ctx-usage-legend">
             {segs.map((s) => {

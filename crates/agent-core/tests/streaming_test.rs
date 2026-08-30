@@ -158,12 +158,23 @@ fn project_event(event: Event) -> Vec<ProjectedStreamItem> {
         )],
         EventMsg::TokenCount(tokens) => vec![ProjectedStreamItem::Assistant(
             StreamedAssistantContent::FinalUsage(Usage {
-                input_tokens: u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX),
+                input_tokens: u32::try_from(if tokens.input_tokens_include_cache {
+                    tokens.uncached_input_tokens
+                } else {
+                    tokens.input_tokens
+                })
+                .unwrap_or(u32::MAX),
                 output_tokens: u32::try_from(tokens.output_tokens).unwrap_or(u32::MAX),
                 cache_read_tokens: u32::try_from(tokens.cache_read_tokens).unwrap_or(u32::MAX),
                 cache_write_tokens: u32::try_from(tokens.cache_write_tokens).unwrap_or(u32::MAX),
                 reasoning_tokens: u32::try_from(tokens.reasoning_tokens).unwrap_or(u32::MAX),
                 request_count: u32::try_from(tokens.request_count).unwrap_or(u32::MAX),
+                reported_total_tokens: tokens
+                    .provider_total_tokens
+                    .and_then(|value| u32::try_from(value).ok()),
+                cache_read_reported: tokens.cache_read_reported,
+                cache_write_reported: tokens.cache_write_reported,
+                reasoning_reported: tokens.reasoning_reported,
             }),
         )],
         EventMsg::Error(error) => vec![ProjectedStreamItem::Error(error.message)],
@@ -737,6 +748,11 @@ async fn billing_token_count_total_includes_cached_tokens() {
         cache_write_tokens: 2,
         reasoning_tokens: 0,
         request_count: 1,
+        reported_total_tokens: Some(21),
+        cache_read_reported: true,
+        cache_write_reported: true,
+        reasoning_reported: true,
+        ..Default::default()
     };
     let chat = scripted_chat(vec![vec![
         StreamChunk::Text("done".into()),
@@ -766,6 +782,31 @@ async fn billing_token_count_total_includes_cached_tokens() {
         })
         .expect("billing TokenCount event");
     assert_eq!(billing.total_tokens, 21);
+    assert_eq!(billing.input_tokens, 16);
+    assert_eq!(billing.uncached_input_tokens, 10);
+    assert_eq!(billing.provider_total_tokens, Some(21));
+    assert!(billing.cache_read_reported);
+
+    let context = events
+        .iter()
+        .rev()
+        .find_map(|event| match &event.msg {
+            EventMsg::ContextUsage(context) => Some(context),
+            _ => None,
+        })
+        .expect("provider-calibrated context usage event");
+    assert_eq!(
+        context.source,
+        agent_protocol::ContextUsageSource::ProviderReported
+    );
+    assert_eq!(context.total_tokens, 21);
+    assert_eq!(
+        context
+            .latest_usage
+            .as_ref()
+            .map(|usage| usage.cache_read_tokens),
+        Some(4)
+    );
 }
 
 #[tokio::test]

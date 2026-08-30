@@ -220,6 +220,10 @@ function MessageTokenStats({
         s: formatElapsedSec(generationDurationSec!),
       })
     : null;
+  const cacheHit =
+    usage?.cacheReadReported && usage.promptTokens > 0
+      ? Math.min(100, Math.round((usage.cacheReadTokens / usage.promptTokens) * 100))
+      : null;
   const aria = t("chat.tokenStatsAria", {
     total: String(usage?.totalTokens ?? 0),
     prompt: String(usage?.promptTokens ?? 0),
@@ -233,6 +237,19 @@ function MessageTokenStats({
         <span className="msg-token-stats-duration">{durationLabel}</span>
       ) : null}
       {label ? <span className="msg-token-stats-usage">{label}</span> : null}
+      {cacheHit != null ? (
+        <span className="msg-token-stats-speed">
+          {t("chat.tokenCacheHit", {
+            tokens: String(usage?.cacheReadTokens ?? 0),
+            pct: String(cacheHit),
+          })}
+        </span>
+      ) : null}
+      {usage?.reasoningReported ? (
+        <span className="msg-token-stats-speed">
+          {t("chat.tokenReasoning", { tokens: String(usage.reasoningTokens) })}
+        </span>
+      ) : null}
       {speed != null ? (
         <span className="msg-token-stats-speed">
           {t("chat.tokenSpeed", { n: speed })}

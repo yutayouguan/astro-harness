@@ -1,6 +1,6 @@
 # Agent Harness 文档一致性审查
 
-> 审查日期：2026-08-29
+> 审查日期：2026-08-30
 >
 > 审查范围：`docs/03-系统设计阶段/`、`docs/04-详细设计阶段/` 的当前正式设计文档
 >
@@ -34,6 +34,8 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 | Code Mode | `exec` 是 V8 cell，`wait` 恢复已 yield 的 cell；嵌套调用仍经 ToolRouter | 已实现 |
 | 安全 | interaction mode、approval、hooks、sandbox 和 attempt-scoped network lease 共同裁决 | 已实现/部分实现 |
 | 事件 | Core 产生 `EventMsg`；rollout 先记录，Server 再做 live projection | 已实现 |
+| Usage | turn aggregate 用于计费，latest sampling 校准上下文；保留 Provider total 和报告状态 | 已实现 |
+| 上下文 | provider reported/recomputed 优先，local estimate 保留分层解释与降级 | 已实现 |
 | 恢复 | rollout 是稳定事件事实源，SessionStore 是查询投影 | 已实现 |
 | 子 Agent | V2 Agent Threads + Graph/mailbox/status；真实对话仍进入 Session 时间线 | 已实现 |
 | 存储路径 | SQLite 职责库统一位于 `{base}/data/`；旧库只经启动迁移读取 | 已实现 |

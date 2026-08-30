@@ -20,7 +20,14 @@ export function loadContextUsageForSession(
     const map = JSON.parse(raw) as Record<string, ContextUsageSnapshot>;
     const snap = map?.[sessionId];
     if (!snap || typeof snap.totalTokens !== "number") return null;
-    return snap;
+    return {
+      ...snap,
+      estimatedTotalTokens: snap.estimatedTotalTokens ?? snap.totalTokens,
+      source:
+        snap.source === "provider_reported" || snap.source === "provider_recomputed"
+          ? snap.source
+          : "local_estimate",
+    };
   } catch {
     return null;
   }

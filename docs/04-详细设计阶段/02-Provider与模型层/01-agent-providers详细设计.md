@@ -1,6 +1,6 @@
 # agent-providers 详细设计
 
-> **Agent Harness 边界（2026-08-29）**：Provider 层不拥有 turn loop、工具权限或恢复策略。它接收带 `PromptContract` 投影、history 和 `Vec<ToolDefinition>` 的 `CompletionRequest`，输出统一 `StreamChunk`。Function/Freeform/Namespace/ToolSearch/WebSearch 必须在支持的 Provider 中原生传输，仅在不支持时按可保真语义降级。
+> **Agent Harness 边界（2026-08-30）**：Provider 层不拥有 turn loop、工具权限或恢复策略。它接收带 `PromptContract` 投影、history 和 `Vec<ToolDefinition>` 的 `CompletionRequest`，输出统一 `StreamChunk`。Function/Freeform/Namespace/ToolSearch/WebSearch 必须在支持的 Provider 中原生传输，仅在不支持时按可保真语义降级。Usage 同时保留归一化计费桶、Provider 原始 total 和可选明细的报告状态。
 
 > 阶段：详细设计 | 状态：草稿 | 说明：各 Provider 客户端实现、ProviderRegistry 路由、流式响应
 
@@ -95,6 +95,23 @@ pub trait EmbeddingClient: Send + Sync {
 ---
 
 ## 3. 各客户端实现细节
+
+### 3.0 统一 Usage 合约
+
+`providers::Usage` 不是对单一 Provider JSON 的原样镜像，而是 Harness 的规范化边界：
+
+| 字段 | 规范语义 | 是否计入 total |
+| --- | --- | --- |
+| `input_tokens` | 未缓存输入 | 是 |
+| `cache_read_tokens` | 缓存命中的输入子集 | 是，与 input 互斥 |
+| `cache_write_tokens` | 写入缓存的输入子集 | 是，与 input 互斥 |
+| `output_tokens` | 总输出，含 reasoning | 是 |
+| `reasoning_tokens` | output 的推理子集 | 否，仅供解释/定价 |
+| `reported_total_tokens` | Provider 原始 total | 权威总数，缺失时重算 |
+
+`cache_*_reported` / `reasoning_reported` 区分明确零值和未上报。多请求累加时，只有每个请求都报告了某明细或 total，聚合结果才保持对应 reported 状态，避免把部分数据伪装成完整值。
+
+Responses API 的 `input_tokens` 已包含 cached input，因此适配器会扣除 `cached_tokens`/`cache_write_tokens` 得到未缓存桶；`reasoning_tokens` 已包含在 `output_tokens` 中。Gemini/Interactions 若将 thought 独立报告，适配器先将 thought 并入 output，再保留 reasoning 子集。官方 Responses 字段参考 [OpenAI Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create)。
 
 ### 3.1 AnthropicClient
 

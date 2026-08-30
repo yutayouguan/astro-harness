@@ -160,7 +160,10 @@ export default function ContextExplorer({
             <Coins size={16} strokeWidth={2} />
           </span>
           <span className="ctx-explorer-metric-label">{t("chat.contextExplorer.tokensUsed")}</span>
-          <span className="ctx-explorer-metric-value">~{formatTokenCount(used)}</span>
+          <span className="ctx-explorer-metric-value">
+            {snapshot?.source === "local_estimate" ? "~" : ""}
+            {formatTokenCount(used)}
+          </span>
         </div>
       </div>
 

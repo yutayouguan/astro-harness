@@ -597,7 +597,7 @@ fn parse_interactions_usage(v: &Value) -> Option<crate::types::stream::Usage> {
         .or_else(|| v.get("prompt_tokens"))
         .and_then(|x| x.as_u64())
         .unwrap_or(0) as u32;
-    let output = v
+    let visible_output = v
         .get("total_output_tokens")
         .or_else(|| v.get("completion_tokens"))
         .and_then(|x| x.as_u64())
@@ -612,16 +612,26 @@ fn parse_interactions_usage(v: &Value) -> Option<crate::types::stream::Usage> {
         .or_else(|| v.get("cached_tokens"))
         .and_then(|x| x.as_u64())
         .unwrap_or(0) as u32;
-    if input == 0 && output == 0 {
+    let reported_total_tokens = v
+        .get("total_tokens")
+        .and_then(|x| x.as_u64())
+        .map(|x| x.min(u64::from(u32::MAX)) as u32);
+    if input == 0 && visible_output == 0 && reasoning == 0 {
         return None;
     }
     Some(Usage {
-        input_tokens: input,
-        output_tokens: output,
+        input_tokens: input.saturating_sub(cache_read),
+        output_tokens: visible_output.saturating_add(reasoning),
         cache_read_tokens: cache_read,
         cache_write_tokens: 0,
         reasoning_tokens: reasoning,
         request_count: 1,
+        reported_total_tokens,
+        cache_read_reported: v.get("total_cached_tokens").is_some()
+            || v.get("cached_tokens").is_some(),
+        cache_write_reported: false,
+        reasoning_reported: v.get("total_thought_tokens").is_some()
+            || v.get("reasoning_tokens").is_some(),
     })
 }
 
@@ -1068,6 +1078,25 @@ mod tests {
     fn google_has_chat() {
         let client = ProviderClient::new("test-key", Google);
         let _model = client.completion_model("gemini-3.5-flash");
+    }
+
+    #[test]
+    fn interactions_usage_normalizes_cache_and_reasoning_without_double_counting() {
+        let usage = parse_interactions_usage(&serde_json::json!({
+            "total_input_tokens": 66,
+            "total_output_tokens": 16,
+            "total_thought_tokens": 51,
+            "total_cached_tokens": 6,
+            "total_tokens": 133
+        }))
+        .expect("usage");
+
+        assert_eq!(usage.input_tokens, 60);
+        assert_eq!(usage.cache_read_tokens, 6);
+        assert_eq!(usage.output_tokens, 67);
+        assert_eq!(usage.reasoning_tokens, 51);
+        assert_eq!(usage.reported_total_tokens, Some(133));
+        assert_eq!(usage.total_tokens(), 133);
     }
 
     #[test]

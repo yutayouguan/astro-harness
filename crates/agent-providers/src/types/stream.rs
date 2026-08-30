@@ -12,12 +12,24 @@ use tokio::sync::watch;
 /// Token 用量。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Usage {
+    /// 未命中缓存、且未计入 cache write 的输入 token。
     pub input_tokens: u32,
+    /// 总输出 token；`reasoning_tokens` 是其子集，不另行加总。
     pub output_tokens: u32,
     pub cache_read_tokens: u32,
     pub cache_write_tokens: u32,
     pub reasoning_tokens: u32,
     pub request_count: u32,
+    /// Provider wire response 中的原始 total；缺失时由分项重算。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reported_total_tokens: Option<u32>,
+    /// 区分“明确上报 0”与“未上报”。
+    #[serde(default)]
+    pub cache_read_reported: bool,
+    #[serde(default)]
+    pub cache_write_reported: bool,
+    #[serde(default)]
+    pub reasoning_reported: bool,
 }
 
 impl Usage {
@@ -40,9 +52,15 @@ impl Usage {
         self.output_tokens
     }
 
-    pub fn total_tokens(&self) -> u32 {
+    pub fn calculated_total_tokens(&self) -> u32 {
         self.prompt_tokens()
             .saturating_add(self.completion_tokens())
+    }
+
+    /// 优先返回 Provider 的权威 total，缺失时才用归一化分项重算。
+    pub fn total_tokens(&self) -> u32 {
+        self.reported_total_tokens
+            .unwrap_or_else(|| self.calculated_total_tokens())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -51,6 +69,7 @@ impl Usage {
             && self.cache_read_tokens == 0
             && self.cache_write_tokens == 0
             && self.reasoning_tokens == 0
+            && self.reported_total_tokens.unwrap_or(0) == 0
     }
 
     /// 将另一份用量累加到当前值（饱和加法）；空 other 不累加 request_count。
@@ -58,6 +77,7 @@ impl Usage {
         if other.is_empty() {
             return;
         }
+        let was_empty = self.is_empty() && self.request_count == 0;
         self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
         self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
         self.cache_read_tokens = self
@@ -67,6 +87,28 @@ impl Usage {
             .cache_write_tokens
             .saturating_add(other.cache_write_tokens);
         self.reasoning_tokens = self.reasoning_tokens.saturating_add(other.reasoning_tokens);
+        self.reported_total_tokens = if was_empty {
+            other.reported_total_tokens
+        } else {
+            self.reported_total_tokens
+                .zip(other.reported_total_tokens)
+                .map(|(left, right)| left.saturating_add(right))
+        };
+        self.cache_read_reported = if was_empty {
+            other.cache_read_reported
+        } else {
+            self.cache_read_reported && other.cache_read_reported
+        };
+        self.cache_write_reported = if was_empty {
+            other.cache_write_reported
+        } else {
+            self.cache_write_reported && other.cache_write_reported
+        };
+        self.reasoning_reported = if was_empty {
+            other.reasoning_reported
+        } else {
+            self.reasoning_reported && other.reasoning_reported
+        };
         self.request_count = self
             .request_count
             .saturating_add(if other.request_count > 0 {
@@ -267,6 +309,53 @@ mod tests {
         a.add_assign(Usage::default());
         assert_eq!(a.input_tokens, 10);
         assert_eq!(a.request_count, 1);
+    }
+
+    #[test]
+    fn usage_prefers_reported_total_and_preserves_complete_reporting() {
+        let mut usage = Usage {
+            input_tokens: 8,
+            output_tokens: 2,
+            cache_read_tokens: 4,
+            reported_total_tokens: Some(14),
+            cache_read_reported: true,
+            reasoning_reported: true,
+            request_count: 1,
+            ..Default::default()
+        };
+        assert_eq!(usage.calculated_total_tokens(), 14);
+        assert_eq!(usage.total_tokens(), 14);
+
+        usage.add_assign(Usage {
+            input_tokens: 3,
+            output_tokens: 1,
+            reported_total_tokens: Some(4),
+            cache_read_reported: true,
+            reasoning_reported: true,
+            request_count: 1,
+            ..Default::default()
+        });
+        assert_eq!(usage.reported_total_tokens, Some(18));
+        assert!(usage.cache_read_reported);
+        assert!(usage.reasoning_reported);
+        assert_eq!(usage.request_count, 2);
+    }
+
+    #[test]
+    fn aggregate_marks_provider_total_and_details_partial_when_any_request_omits_them() {
+        let mut usage = Usage {
+            input_tokens: 8,
+            output_tokens: 2,
+            reported_total_tokens: Some(10),
+            cache_read_reported: true,
+            request_count: 1,
+            ..Default::default()
+        };
+        usage.add_assign(Usage::from_parts(3, 1));
+
+        assert_eq!(usage.reported_total_tokens, None);
+        assert!(!usage.cache_read_reported);
+        assert_eq!(usage.total_tokens(), 14);
     }
 
     #[tokio::test]

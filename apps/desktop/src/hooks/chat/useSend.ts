@@ -406,9 +406,33 @@ export function useSend(deps: UseSendDeps) {
           outcome?: string;
           index?: number;
           prompt_tokens?: number;
+          uncached_input_tokens?: number;
           completion_tokens?: number;
           total_tokens?: number;
+          provider_total_tokens?: number;
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          reasoning_tokens?: number;
+          request_count?: number;
+          cache_read_reported?: boolean;
+          cache_write_reported?: boolean;
+          reasoning_reported?: boolean;
           context_window?: number;
+          estimated_total_tokens?: number;
+          source?: string;
+          latest_usage?: {
+            input_tokens?: number;
+            uncached_input_tokens?: number;
+            output_tokens?: number;
+            total_tokens?: number;
+            provider_total_tokens?: number;
+            cache_read_tokens?: number;
+            cache_write_tokens?: number;
+            reasoning_tokens?: number;
+            cache_read_reported?: boolean;
+            cache_write_reported?: boolean;
+            reasoning_reported?: boolean;
+          } | null;
           segments?: Array<{ id: string; tokens: number; count?: number | null }>;
           updated_at?: number;
           thread_id?: string;
@@ -500,8 +524,17 @@ export function useSend(deps: UseSendDeps) {
           } else if (payload.type === "usage") {
             const usage: MessageTokenUsage = {
               promptTokens: payload.prompt_tokens ?? 0,
+              uncachedInputTokens: payload.uncached_input_tokens ?? payload.prompt_tokens ?? 0,
               completionTokens: payload.completion_tokens ?? 0,
               totalTokens: payload.total_tokens ?? 0,
+              providerTotalTokens: payload.provider_total_tokens,
+              cacheReadTokens: payload.cache_read_tokens ?? 0,
+              cacheWriteTokens: payload.cache_write_tokens ?? 0,
+              reasoningTokens: payload.reasoning_tokens ?? 0,
+              requestCount: payload.request_count ?? 0,
+              cacheReadReported: payload.cache_read_reported === true,
+              cacheWriteReported: payload.cache_write_reported === true,
+              reasoningReported: payload.reasoning_reported === true,
             };
             pendingUsageRef.current.set(assistantId, usage);
             setTokenUsage(usage);

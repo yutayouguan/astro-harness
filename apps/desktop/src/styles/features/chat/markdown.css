@@ -1069,6 +1069,48 @@ html[data-theme="light"] .composer-mode-menu {
   color: var(--ink-mute);
 }
 
+.ctx-usage-popover-source {
+  align-self: flex-start;
+  margin: -3px 0 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
+  color: var(--tone, var(--accent));
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.ctx-usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 12px;
+  margin: 2px 0;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctx-usage-metrics > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ctx-usage-metrics dt {
+  color: var(--ink-mute);
+}
+
+.ctx-usage-metrics dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 620;
+  white-space: nowrap;
+}
+
 .ctx-usage-popover-empty {
   margin: 4px 12px 14px;
   font-size: 0.82rem;
