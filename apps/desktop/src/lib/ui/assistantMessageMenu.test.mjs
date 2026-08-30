@@ -21,6 +21,9 @@ test("assistant answers expose one accessible context menu from pointer and tool
   assert.match(menu, /role="menuitemradio"/);
   assert.match(menu, /\["ArrowDown", "ArrowUp", "Home", "End"\]/);
   assert.match(menu, /event\.key === "Escape"/);
+  assert.match(menu, /onClose\(true\)/);
+  assert.match(chatView, /assistantMenuReturnFocusRef/);
+  assert.match(chatView, /returnFocus\.focus\(\)/);
 });
 
 test("per-answer layout overrides remain separate from the global default", async () => {
@@ -33,6 +36,29 @@ test("per-answer layout overrides remain separate from the global default", asyn
   assert.match(chatView, /onDefaultAnswerLayoutChange\(layout\)/);
   assert.match(chatView, /action === "layout-default"/);
   assert.match(chatView, /action === "layout-timeline" \|\| action === "layout-grouped"/);
+  assert.match(chatView, /setMessageLayoutOverrides\(\{\}\)/);
+  assert.match(chatView, /setMessageProcessExpanded\(\{\}\)/);
+});
+
+test("copy actions are disabled when an answer has no text", async () => {
+  const [chatView, menu] = await Promise.all([
+    source("components/chat/ChatView.tsx"),
+    source("components/chat/AssistantMessageContextMenu.tsx"),
+  ]);
+
+  assert.match(chatView, /hasAnswer=\{Boolean\(contextMenuMessage\.content\.trim\(\)\)\}/);
+  assert.match(menu, /action: "copy-answer"[\s\S]*?disabled: !hasAnswer/);
+  assert.match(menu, /action: "copy-markdown"[\s\S]*?disabled: !hasAnswer/);
+});
+
+test("side chat can promote a per-answer layout to the global default", async () => {
+  const [app, sideChat] = await Promise.all([
+    source("App.tsx"),
+    source("components/chat/SideChatPanel.tsx"),
+  ]);
+
+  assert.match(app, /<SideChatPanel[\s\S]*?onDefaultAnswerLayoutChange=\{setAnswerLayout\}/);
+  assert.match(sideChat, /<ChatView[\s\S]*?onDefaultAnswerLayoutChange=\{onDefaultAnswerLayoutChange\}/);
 });
 
 test("full-process controls reach reasoning and tool groups", async () => {

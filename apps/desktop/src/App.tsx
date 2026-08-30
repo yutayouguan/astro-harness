@@ -1738,6 +1738,7 @@ export default function App() {
                           provider={activeProvider}
                           providers={providers}
                           displayPrefs={chatDisplayPrefs}
+                          onDefaultAnswerLayoutChange={setAnswerLayout}
                           interactionMode={chatMode}
                           thinkingPrefs={thinkingPrefs}
                           showThinkingControls={showThinking}

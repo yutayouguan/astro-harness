@@ -41,12 +41,13 @@ type Props = {
   defaultLayout: ChatAnswerLayout;
   layoutOverride?: ChatAnswerLayout;
   processExpanded: boolean;
+  hasAnswer: boolean;
   hasProcess: boolean;
   canSetDefault: boolean;
   canRegenerate: boolean;
   canBranch: boolean;
   onAction: (action: AssistantMessageMenuAction) => void;
-  onClose: () => void;
+  onClose: (restoreFocus?: boolean) => void;
 };
 
 type ActionItem = {
@@ -64,6 +65,7 @@ export default function AssistantMessageContextMenu({
   defaultLayout,
   layoutOverride,
   processExpanded,
+  hasAnswer,
   hasProcess,
   canSetDefault,
   canRegenerate,
@@ -76,12 +78,12 @@ export default function AssistantMessageContextMenu({
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) onClose();
+      if (!ref.current?.contains(event.target as Node)) onClose(false);
     };
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onClose(true);
     };
-    const onViewportChange = () => onClose();
+    const onViewportChange = () => onClose(false);
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", onViewportChange);
@@ -109,9 +111,10 @@ export default function AssistantMessageContextMenu({
     menu.style.left = `${position.left}px`;
     menu.style.top = `${position.top}px`;
     menu.style.maxHeight = `${position.maxHeight}px`;
-    window.requestAnimationFrame(() => {
+    const frame = window.requestAnimationFrame(() => {
       menu.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
     });
+    return () => window.cancelAnimationFrame(frame);
   }, [x, y]);
 
   const activeLayout = layoutOverride ?? defaultLayout;
@@ -163,12 +166,14 @@ export default function AssistantMessageContextMenu({
       action: "copy-answer",
       label: t("chat.messageMenu.copyAnswer"),
       Icon: Copy,
+      disabled: !hasAnswer,
       separatorBefore: true,
     },
     {
       action: "copy-markdown",
       label: t("chat.messageMenu.copyMarkdown"),
       Icon: FileText,
+      disabled: !hasAnswer,
     },
     {
       action: "copy-process",
@@ -225,7 +230,7 @@ export default function AssistantMessageContextMenu({
       style={{ left: x, top: y }}
       onKeyDown={handleKeyDown}
     >
-      <div className="assistant-message-menu-label">
+      <div className="assistant-message-menu-label" role="presentation">
         {t("chat.messageMenu.display")}
       </div>
       {layoutItems.map(({ action, label, Icon, checked }) => (
@@ -237,7 +242,7 @@ export default function AssistantMessageContextMenu({
           className="assistant-message-menu-item"
           onClick={() => {
             onAction(action);
-            onClose();
+            onClose(true);
           }}
         >
           <Icon size={15} strokeWidth={1.9} aria-hidden />
@@ -253,6 +258,7 @@ export default function AssistantMessageContextMenu({
       {actions.map(({ action, label, Icon, disabled, separatorBefore }) => (
         <div
           key={action}
+          role="presentation"
           className={
             separatorBefore ? "assistant-message-menu-group" : undefined
           }
@@ -271,7 +277,7 @@ export default function AssistantMessageContextMenu({
             onClick={() => {
               if (disabled) return;
               onAction(action);
-              onClose();
+              onClose(true);
             }}
           >
             <Icon size={15} strokeWidth={1.9} aria-hidden />

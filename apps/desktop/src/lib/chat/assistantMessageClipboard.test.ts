@@ -14,6 +14,15 @@ test("converts an answer to readable plain text", () => {
   );
 });
 
+test("preserves literal underscores and home-relative paths", () => {
+  assert.equal(
+    assistantAnswerPlainText(
+      "Run `fetch_title` in `~/generated_code` and keep snake_case.",
+    ),
+    "Run fetch_title in ~/generated_code and keep snake_case.",
+  );
+});
+
 test("serializes reasoning, tools, and answer in categorized order", () => {
   const result = assistantProcessMarkdown({
     id: "a1",

@@ -843,6 +843,7 @@ export default function ChatView({
     x: number;
     y: number;
   } | null>(null);
+  const assistantMenuReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const [messageLayoutOverrides, setMessageLayoutOverrides] = useState<
     Record<string, ChatAnswerLayout>
   >({});
@@ -927,6 +928,10 @@ export default function ChatView({
   useEffect(() => {
     setComposerContexts([]);
     setPreviewTarget(null);
+    setAssistantMenu(null);
+    assistantMenuReturnFocusRef.current = null;
+    setMessageLayoutOverrides({});
+    setMessageProcessExpanded({});
   }, [sessionId]);
 
   useEffect(() => {
@@ -2271,18 +2276,43 @@ export default function ChatView({
   );
 
   const openAssistantMessageMenu = useCallback(
-    (messageId: string, x: number, y: number, respectTextSelection = true) => {
+    (
+      messageId: string,
+      x: number,
+      y: number,
+      respectTextSelection = true,
+      returnFocus: HTMLButtonElement | null = null,
+    ) => {
       if (respectTextSelection) {
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed && selection.toString().trim()) {
           return false;
         }
       }
+      assistantMenuReturnFocusRef.current = returnFocus;
       setAssistantMenu({ messageId, x, y });
       return true;
     },
     [],
   );
+
+  const closeAssistantMessageMenu = useCallback((restoreFocus = false) => {
+    const returnFocus = assistantMenuReturnFocusRef.current;
+    assistantMenuReturnFocusRef.current = null;
+    setAssistantMenu(null);
+    if (restoreFocus && returnFocus?.isConnected) {
+      window.requestAnimationFrame(() => returnFocus.focus());
+    }
+  }, []);
+
+  useEffect(() => {
+    if (
+      assistantMenu &&
+      !messages.some((message) => message.id === assistantMenu.messageId)
+    ) {
+      closeAssistantMessageMenu(false);
+    }
+  }, [assistantMenu, closeAssistantMessageMenu, messages]);
 
   const copyAssistantMessageText = useCallback(async (text: string) => {
     if (!text) return;
@@ -2387,6 +2417,7 @@ export default function ChatView({
           defaultLayout={displayPrefs.answerLayout}
           layoutOverride={messageLayoutOverrides[contextMenuMessage.id]}
           processExpanded={Boolean(messageProcessExpanded[contextMenuMessage.id])}
+          hasAnswer={Boolean(contextMenuMessage.content.trim())}
           hasProcess={Boolean(
             contextMenuMessage.reasoning?.trim() || contextMenuMessage.activities?.length,
           )}
@@ -2394,7 +2425,7 @@ export default function ChatView({
           canRegenerate={!streaming && Boolean(onRegenerateMessage)}
           canBranch={!streaming && Boolean(onBranchMessage)}
           onAction={handleAssistantMessageMenuAction}
-          onClose={() => setAssistantMenu(null)}
+          onClose={closeAssistantMessageMenu}
         />
       ) : null}
       {cronRun && !workspaceContent ? (
@@ -2901,6 +2932,7 @@ export default function ChatView({
                             rect.right,
                             rect.bottom + 4,
                             false,
+                            anchor,
                           );
                         } : undefined}
                       />

@@ -2,7 +2,10 @@ import { useCallback, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { MessageSquare, X } from "lucide-react";
 import { useChatSession } from "../../hooks/chat/useChatSession";
-import type { ChatDisplayPrefs } from "../../hooks/chat/useChatDisplayPrefs";
+import type {
+  ChatAnswerLayout,
+  ChatDisplayPrefs,
+} from "../../hooks/chat/useChatDisplayPrefs";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { ChatWorkMode } from "../../lib/chat/chatMode";
@@ -29,6 +32,7 @@ type Props = {
   provider: ProviderDto;
   providers: ProviderDto[];
   displayPrefs: ChatDisplayPrefs;
+  onDefaultAnswerLayoutChange?: (layout: ChatAnswerLayout) => void;
   interactionMode: ChatWorkMode;
   thinkingPrefs: ChatThinkingPrefs;
   showThinkingControls: boolean;
@@ -55,6 +59,7 @@ export default function SideChatPanel({
   provider,
   providers,
   displayPrefs,
+  onDefaultAnswerLayoutChange,
   interactionMode,
   thinkingPrefs,
   showThinkingControls,
@@ -177,6 +182,7 @@ export default function SideChatPanel({
                 : undefined
           }
           displayPrefs={displayPrefs}
+          onDefaultAnswerLayoutChange={onDefaultAnswerLayoutChange}
           emptyMode={chat.emptyMode}
           focusMessageId={chat.focusMessageId}
           onFocusConsumed={() => chat.setFocusMessageId(null)}
