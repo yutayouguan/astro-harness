@@ -1,9 +1,10 @@
 //! 技能更新状态比对与批量检查。
 
 use anyhow::Result;
+use std::path::Path;
 
 use crate::agent_id::normalize as normalize_agent_id;
-use crate::install::agent_skills_dir;
+use crate::install::scoped_skills_dir;
 use crate::models::{
     SkillOriginRecord, SkillUpdateCheckResult, SkillUpdateStatus, StoreSkillDetail,
 };
@@ -66,26 +67,35 @@ pub fn check_origin_against_detail(
     }
 }
 
-fn installed_skill_folder_exists(agent_id: Option<&str>, folder: &str) -> Result<bool> {
-    let skills_dir = agent_skills_dir(agent_id)?;
+fn installed_skill_folder_exists(
+    scope: &str,
+    project_root: Option<&Path>,
+    folder: &str,
+) -> Result<bool> {
+    let skills_dir = scoped_skills_dir(scope, project_root)?;
     Ok(skills_dir.join(folder).is_dir())
 }
 
 /// 检查当前 Agent 下所有有来源记录的技能更新状态；不写回 origin baseline `remote_*`。
 pub async fn check_updates_for_agent(
     agent_id: Option<&str>,
+    scope: &str,
+    project_root: Option<&Path>,
 ) -> Result<Vec<SkillUpdateCheckResult>> {
     let target = normalize_agent_id(agent_id);
     let file = load_origins()?;
     let origins: Vec<SkillOriginRecord> = file
         .records
         .into_iter()
-        .filter(|r| normalize_agent_id(r.agent_id.as_deref()) == target)
+        .filter(|r| {
+            normalize_agent_id(r.agent_id.as_deref()) == target
+                && r.scope.as_deref() == Some(scope)
+        })
         .collect();
 
     let mut results = Vec::with_capacity(origins.len());
     for origin in origins {
-        match installed_skill_folder_exists(agent_id, &origin.folder) {
+        match installed_skill_folder_exists(scope, project_root, &origin.folder) {
             Ok(false) => continue,
             Ok(true) => {
                 let store_skill = origin_to_store_skill(&origin);

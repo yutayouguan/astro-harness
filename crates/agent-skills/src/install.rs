@@ -276,22 +276,12 @@ pub struct InstallOriginHint {
     pub folder: Option<String>,
 }
 
-/// 安装成功后写入 `skill-origins.json`；无法推断 folder 时仅告警，不使安装失败。
-pub async fn record_after_install(
-    install_ref: &str,
-    agent_id: Option<&str>,
-    hint: &InstallOriginHint,
-) -> Result<()> {
-    let skills_dir = agent_skills_dir(agent_id)?;
-    record_after_install_in_dir(install_ref, agent_id, hint, &skills_dir, None).await
-}
-
 async fn record_after_install_in_dir(
     install_ref: &str,
     agent_id: Option<&str>,
     hint: &InstallOriginHint,
     skills_dir: &Path,
-    scope: Option<&str>,
+    scope: &str,
 ) -> Result<()> {
     let folder = hint
         .folder
@@ -318,7 +308,7 @@ async fn record_after_install_in_dir(
         .unwrap_or_else(|| folder.clone());
 
     let normalized_agent = normalize_agent_id(agent_id);
-    let existing = find_origin(Some(&normalized_agent), &folder)?;
+    let existing = find_origin(Some(&normalized_agent), scope, &folder)?;
     let now = chrono::Utc::now().timestamp();
     let installed_at = existing.as_ref().map(|r| r.installed_at).unwrap_or(now);
     let is_update = existing.is_some();
@@ -342,7 +332,7 @@ async fn record_after_install_in_dir(
         store: "skillhub".to_string(),
         install_ref: install_ref.to_string(),
         agent_id: Some(normalized_agent.clone()),
-        scope: scope.map(str::to_string),
+        scope: Some(scope.to_string()),
         installed_at,
         last_updated_at: if is_update { Some(now) } else { None },
         remote_version: None,
@@ -350,17 +340,7 @@ async fn record_after_install_in_dir(
         content_digest,
     })?;
 
-    fill_origin_remote_baseline(Some(&normalized_agent), &folder).await
-}
-
-/// 安装 SkillHub 技能到指定 Agent 工作区的 `skills/`。
-pub async fn install_from_ref(
-    install_ref: &str,
-    agent_id: Option<&str>,
-    hint: Option<InstallOriginHint>,
-) -> Result<String> {
-    let skills_dir = agent_skills_dir(agent_id)?;
-    install_from_ref_into(install_ref, agent_id, hint, skills_dir, None).await
+    fill_origin_remote_baseline(Some(&normalized_agent), scope, &folder).await
 }
 
 /// 按个人或项目作用域安装在线 Skill。
@@ -372,7 +352,7 @@ pub async fn install_from_ref_scoped(
     project_root: Option<&Path>,
 ) -> Result<String> {
     let skills_dir = scoped_skills_dir(scope, project_root)?;
-    install_from_ref_into(install_ref, agent_id, hint, skills_dir, Some(scope)).await
+    install_from_ref_into(install_ref, agent_id, hint, skills_dir, scope).await
 }
 
 async fn install_from_ref_into(
@@ -380,7 +360,7 @@ async fn install_from_ref_into(
     agent_id: Option<&str>,
     hint: Option<InstallOriginHint>,
     skills_dir: PathBuf,
-    scope: Option<&str>,
+    scope: &str,
 ) -> Result<String> {
     let hint = hint.unwrap_or_default();
     if !is_skillhub_http_ref(install_ref) {

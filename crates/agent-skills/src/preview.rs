@@ -1,19 +1,25 @@
 //! 更新前预览本地技能目录是否与安装 baseline digest 一致。
 
 use anyhow::Result;
+use std::path::Path;
 
 use crate::digest::skill_content_digest;
-use crate::install::agent_skills_dir;
+use crate::install::scoped_skills_dir;
 use crate::models::SkillUpdatePreview;
 use crate::origins::find_origin;
 
 /// 比对 origin `content_digest` 与当前技能目录 digest，判断是否有本地改动。
-pub fn preview_skill_update(agent_id: Option<&str>, folder: &str) -> Result<SkillUpdatePreview> {
-    let origin = find_origin(agent_id, folder)?;
+pub fn preview_skill_update(
+    agent_id: Option<&str>,
+    scope: &str,
+    project_root: Option<&Path>,
+    folder: &str,
+) -> Result<SkillUpdatePreview> {
+    let origin = find_origin(agent_id, scope, folder)?;
     let baseline_digest = origin.as_ref().and_then(|o| o.content_digest.clone());
     let has_baseline_digest = baseline_digest.is_some();
 
-    let current_digest = match agent_skills_dir(agent_id) {
+    let current_digest = match scoped_skills_dir(scope, project_root) {
         Ok(skills_dir) => {
             let skill_path = skills_dir.join(folder);
             if skill_path.is_dir() {
@@ -43,7 +49,7 @@ pub fn preview_skill_update(agent_id: Option<&str>, folder: &str) -> Result<Skil
 mod tests {
     use super::*;
     use crate::digest::skill_content_digest;
-    use crate::install::agent_skills_dir;
+    use crate::install::scoped_skills_dir;
     use crate::models::SkillOriginRecord;
     use crate::origins::upsert_origin;
     use crate::ENV_TEST_LOCK;
@@ -80,12 +86,13 @@ mod tests {
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        let skills_dir = agent_skills_dir(Some("workspace")).unwrap();
+        let skills_dir = scoped_skills_dir("global", None).unwrap();
         write_skill_md(&skills_dir.join("demo-skill"), "# Demo");
 
         upsert_test_origin("demo-skill", None);
 
-        let preview = preview_skill_update(Some("workspace"), "demo-skill").unwrap();
+        let preview =
+            preview_skill_update(Some("workspace"), "global", None, "demo-skill").unwrap();
         assert!(!preview.has_baseline_digest);
         assert!(!preview.has_local_changes);
         assert!(preview.baseline_digest.is_none());
@@ -98,14 +105,15 @@ mod tests {
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        let skills_dir = agent_skills_dir(Some("workspace")).unwrap();
+        let skills_dir = scoped_skills_dir("global", None).unwrap();
         let skill_dir = skills_dir.join("demo-skill");
         write_skill_md(&skill_dir, "# Demo");
         let digest = skill_content_digest(&skill_dir).unwrap();
 
         upsert_test_origin("demo-skill", Some(digest.clone()));
 
-        let preview = preview_skill_update(Some("workspace"), "demo-skill").unwrap();
+        let preview =
+            preview_skill_update(Some("workspace"), "global", None, "demo-skill").unwrap();
         assert!(preview.has_baseline_digest);
         assert!(!preview.has_local_changes);
         assert_eq!(preview.baseline_digest.as_deref(), Some(digest.as_str()));
@@ -118,14 +126,15 @@ mod tests {
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        let skills_dir = agent_skills_dir(Some("workspace")).unwrap();
+        let skills_dir = scoped_skills_dir("global", None).unwrap();
         let skill_dir = skills_dir.join("demo-skill");
         write_skill_md(&skill_dir, "# Changed locally");
         let current = skill_content_digest(&skill_dir).unwrap();
 
         upsert_test_origin("demo-skill", Some("stale-baseline-digest".into()));
 
-        let preview = preview_skill_update(Some("workspace"), "demo-skill").unwrap();
+        let preview =
+            preview_skill_update(Some("workspace"), "global", None, "demo-skill").unwrap();
         assert!(preview.has_baseline_digest);
         assert!(preview.has_local_changes);
         assert_eq!(

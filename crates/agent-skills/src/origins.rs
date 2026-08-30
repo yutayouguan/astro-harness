@@ -10,7 +10,7 @@ use crate::models::{SkillOriginRecord, SkillOriginsFile, StoreSkill, StoreSkillD
 use crate::store::fetch_detail;
 
 const ORIGINS_FILE: &str = "skill-origins.json";
-const ORIGINS_VERSION: u32 = 2;
+const ORIGINS_VERSION: u32 = 3;
 
 /// 解析本机 Astro 数据根目录。
 fn memory_dir() -> PathBuf {
@@ -24,8 +24,20 @@ fn memory_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(".astro"))
 }
 
-fn origin_key(agent_id: Option<&str>, folder: &str) -> (String, String) {
-    (normalize_agent_id(agent_id), folder.to_string())
+fn valid_scope(scope: Option<&str>) -> Option<&str> {
+    match scope.map(str::trim) {
+        Some("global") => Some("global"),
+        Some("project") => Some("project"),
+        _ => None,
+    }
+}
+
+fn origin_key(agent_id: Option<&str>, scope: &str, folder: &str) -> (String, String, String) {
+    (
+        normalize_agent_id(agent_id),
+        scope.to_string(),
+        folder.to_string(),
+    )
 }
 
 fn is_skillhub_install_ref(install_ref: &str) -> bool {
@@ -63,6 +75,7 @@ pub fn load_origins() -> Result<SkillOriginsFile> {
     file.records.retain(|record| {
         record.store.eq_ignore_ascii_case("skillhub")
             && is_skillhub_install_ref(&record.install_ref)
+            && valid_scope(record.scope.as_deref()).is_some()
     });
     let needs_migration = file.version != ORIGINS_VERSION || file.records.len() != original_len;
     file.version = ORIGINS_VERSION;
@@ -83,21 +96,30 @@ pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
     Ok(())
 }
 
-/// 按 `(agent_id, folder)` 插入或更新；更新时写入新记录的 `last_updated_at`。
+/// 按 `(agent_id, scope, folder)` 插入或更新。
 pub fn upsert_origin(mut record: SkillOriginRecord) -> Result<()> {
     if !record.store.eq_ignore_ascii_case("skillhub")
         || !is_skillhub_install_ref(&record.install_ref)
     {
         bail!("仅支持记录 SkillHub 安装来源");
     }
+    let scope = valid_scope(record.scope.as_deref())
+        .ok_or_else(|| anyhow::anyhow!("SkillHub 安装来源缺少有效 scope"))?
+        .to_string();
     record.store = "skillhub".to_string();
     record.agent_id = Some(normalize_agent_id(record.agent_id.as_deref()));
-    let key = origin_key(record.agent_id.as_deref(), &record.folder);
+    record.scope = Some(scope.clone());
+    let key = origin_key(record.agent_id.as_deref(), &scope, &record.folder);
     let mut file = load_origins()?;
     if let Some(existing) = file
         .records
         .iter_mut()
-        .find(|r| origin_key(r.agent_id.as_deref(), &r.folder) == key)
+        .find(|r| {
+            valid_scope(r.scope.as_deref())
+                .map(|record_scope| origin_key(r.agent_id.as_deref(), record_scope, &r.folder))
+                .as_ref()
+                == Some(&key)
+        })
     {
         *existing = record;
     } else {
@@ -106,14 +128,25 @@ pub fn upsert_origin(mut record: SkillOriginRecord) -> Result<()> {
     save_origins(&file)
 }
 
-/// 按 Agent 与文件夹名查找来源记录。
-pub fn find_origin(agent_id: Option<&str>, folder: &str) -> Result<Option<SkillOriginRecord>> {
-    let key = origin_key(agent_id, folder);
+/// 按 Agent、作用域与文件夹名查找来源记录。
+pub fn find_origin(
+    agent_id: Option<&str>,
+    scope: &str,
+    folder: &str,
+) -> Result<Option<SkillOriginRecord>> {
+    let scope = valid_scope(Some(scope))
+        .ok_or_else(|| anyhow::anyhow!("无效 Skill scope: {scope}"))?;
+    let key = origin_key(agent_id, scope, folder);
     let file = load_origins()?;
     Ok(file
         .records
         .into_iter()
-        .find(|r| origin_key(r.agent_id.as_deref(), &r.folder) == key))
+        .find(|r| {
+            valid_scope(r.scope.as_deref())
+                .map(|record_scope| origin_key(r.agent_id.as_deref(), record_scope, &r.folder))
+                .as_ref()
+                == Some(&key)
+        }))
 }
 
 /// 从 `install_ref` 推断本地技能文件夹名。
@@ -182,8 +215,12 @@ pub fn origin_with_remote_baseline(
 }
 
 /// 安装成功后 best-effort 拉取远端元数据并写回 origin baseline；fetch 失败不报错。
-pub async fn fill_origin_remote_baseline(agent_id: Option<&str>, folder: &str) -> Result<()> {
-    let Some(origin) = find_origin(agent_id, folder)? else {
+pub async fn fill_origin_remote_baseline(
+    agent_id: Option<&str>,
+    scope: &str,
+    folder: &str,
+) -> Result<()> {
+    let Some(origin) = find_origin(agent_id, scope, folder)? else {
         return Ok(());
     };
     let store_skill = origin_to_store_skill(&origin);
