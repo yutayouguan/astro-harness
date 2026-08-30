@@ -4,6 +4,7 @@ import {
   applyCheckResults,
   filterUpdateRows,
   mergeUpdateRows,
+  summarizeUpdateRows,
 } from "./skillUpdateRows.ts";
 
 const pptInstalled = {
@@ -331,4 +332,54 @@ test("filter updatable excludes machine-scoped rows with origin", () => {
   );
   assert.equal(filterUpdateRows(rows, "with_origin").length, 1);
   assert.equal(filterUpdateRows(rows, "updatable").length, 0);
+});
+
+test("summarizeUpdateRows separates updates, current, attention and missing origins", () => {
+  const base = mergeUpdateRows(
+    [
+      pptInstalled,
+      { ...pptInstalled, id: "/tmp/current", name: "current" },
+      { ...pptInstalled, id: "/tmp/error", name: "error" },
+      { ...pptInstalled, id: "/tmp/orphan", name: "orphan" },
+    ],
+    [],
+    [
+      pptOrigin,
+      { ...pptOrigin, folder: "current", name: "current" },
+      { ...pptOrigin, folder: "error", name: "error" },
+    ],
+    "workspace",
+  );
+  const rows = applyCheckResults(base, [
+    {
+      folder: "ppt-generator-skill",
+      status: "outdated",
+      remote_version: "2.0.0",
+      remote_updated_at: 99,
+      message: "",
+    },
+    {
+      folder: "current",
+      status: "current",
+      remote_version: "1.0.0",
+      remote_updated_at: 1,
+      message: "",
+    },
+    {
+      folder: "error",
+      status: "error",
+      remote_version: null,
+      remote_updated_at: null,
+      message: "network error",
+    },
+  ]);
+
+  assert.deepEqual(summarizeUpdateRows(rows), {
+    total: 4,
+    tracked: 3,
+    outdated: 1,
+    current: 1,
+    attention: 1,
+    noOrigin: 1,
+  });
 });

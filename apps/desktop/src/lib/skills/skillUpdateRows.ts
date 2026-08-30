@@ -7,6 +7,15 @@ import type {
   SkillUpdateRow,
 } from "../../types";
 
+export type SkillUpdateSummary = {
+  total: number;
+  tracked: number;
+  outdated: number;
+  current: number;
+  attention: number;
+  noOrigin: number;
+};
+
 /** 从路径 id 取文件夹名（与 `skillInstalledMatch` 一致） */
 function folderFromId(id: string): string | undefined {
   const parts = id.split(/[/\\]/).filter(Boolean);
@@ -144,4 +153,22 @@ export function filterUpdateRows(
     return rows.filter((r) => r.status === "outdated");
   }
   return rows.filter((r) => r.origin !== null);
+}
+
+/** 更新页摘要计数；unknown/error 合并为需要关注，避免把检查失败误报为最新。 */
+export function summarizeUpdateRows(rows: SkillUpdateRow[]): SkillUpdateSummary {
+  return rows.reduce<SkillUpdateSummary>(
+    (summary, row) => {
+      summary.total += 1;
+      if (row.origin) summary.tracked += 1;
+      if (row.status === "outdated") summary.outdated += 1;
+      if (row.status === "current") summary.current += 1;
+      if (row.status === "unknown" || row.status === "error") {
+        summary.attention += 1;
+      }
+      if (row.status === "no_origin") summary.noOrigin += 1;
+      return summary;
+    },
+    { total: 0, tracked: 0, outdated: 0, current: 0, attention: 0, noOrigin: 0 },
+  );
 }

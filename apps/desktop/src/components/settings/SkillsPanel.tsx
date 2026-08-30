@@ -89,6 +89,7 @@ import {
   filterUpdateRows,
   mergeUpdateRows,
   originMatchesSkill,
+  summarizeUpdateRows,
 } from "../../lib/skills/skillUpdateRows";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { normalizeAgentId } from "../../types/agent";
@@ -395,6 +396,16 @@ function formatBackupTime(entry: SkillBackupEntry, locale: Locale): string {
   );
 }
 
+function formatUpdateCheckTime(timestamp: number, locale: Locale): string {
+  return new Date(timestamp).toLocaleTimeString(
+    locale === "zh" ? "zh-CN" : "en-US",
+    {
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+  );
+}
+
 /** 加载中旋转图标 */
 /** 加载中旋转图标 */
 function IconLoader(props: SVGProps<SVGSVGElement>) {
@@ -563,6 +574,7 @@ export default function SkillsPanel({
   const [lastCheckResults, setLastCheckResults] = useState<
     SkillUpdateCheckResult[]
   >([]);
+  const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updatingFolder, setUpdatingFolder] = useState<string | null>(null);
   const [updatingAll, setUpdatingAll] = useState(false);
@@ -635,6 +647,7 @@ export default function SkillsPanel({
 
   useEffect(() => {
     setLastCheckResults([]);
+    setLastCheckedAt(null);
     updateCheckMetaRef.current = null;
     setSkillBackups([]);
   }, [agentId]);
@@ -788,7 +801,7 @@ export default function SkillsPanel({
   }, [agentId]);
 
   const checkSkillUpdates = useCallback(
-    async (opts?: { force?: boolean }) => {
+    async (opts?: { force?: boolean; notify?: boolean }) => {
       if (!isTauri()) return;
       const force = opts?.force ?? false;
       const meta = updateCheckMetaRef.current;
@@ -802,9 +815,11 @@ export default function SkillsPanel({
           agentId,
         });
         setLastCheckResults(checks);
-        updateCheckMetaRef.current = { agentId, checkedAt: Date.now() };
+        const checkedAt = Date.now();
+        setLastCheckedAt(checkedAt);
+        updateCheckMetaRef.current = { agentId, checkedAt };
         const count = checks.filter((c) => c.status === "outdated").length;
-        if (force) {
+        if (force && opts?.notify !== false) {
           showToast(
             count > 0
               ? t("skills.checkUpdatesDone").replace("{count}", String(count))
@@ -1354,7 +1369,7 @@ export default function SkillsPanel({
     try {
       await invokeUpdateInstalled(folder, opts);
       await refreshUpdatesData();
-      setLastCheckResults([]);
+      await checkSkillUpdates({ force: true, notify: false });
       showToast(t("skills.updateDone").replace("{name}", row.skill.name), {
         tone: "success",
       });
@@ -1400,7 +1415,7 @@ export default function SkillsPanel({
         }
       }
       await refreshUpdatesData();
-      setLastCheckResults([]);
+      await checkSkillUpdates({ force: true, notify: false });
       const ok = results.filter((r) => r.ok).length;
       const fail = results.length - ok;
       showToast(
@@ -1760,6 +1775,16 @@ export default function SkillsPanel({
   const outdatedCount = useMemo(
     () => updateRows.filter((row) => row.status === "outdated").length,
     [updateRows],
+  );
+
+  const updateSummary = useMemo(
+    () => summarizeUpdateRows(updateRows),
+    [updateRows],
+  );
+
+  const updateChecksByFolder = useMemo(
+    () => new Map(lastCheckResults.map((check) => [check.folder, check])),
+    [lastCheckResults],
   );
 
   const agentOrigins = useMemo(
@@ -2167,9 +2192,12 @@ export default function SkillsPanel({
   const renderUpdateCard = (row: SkillUpdateRow) => {
     const { skill, origin } = row;
     const folder = updateFolderForRow(row);
+    const check = origin ? updateChecksByFolder.get(origin.folder) : undefined;
     const canUpdate = canUpdateSkillFromOrigin(skill, origin);
-    const isUpdating =
-      updatingFolder === folder || (updatingAll && canUpdate);
+    const isUpdating = updatingFolder === folder;
+    const remoteUpdatedLabel = check?.remote_updated_at
+      ? formatStoreUpdatedAt(check.remote_updated_at, t)
+      : null;
     return (
       <article
         key={skill.id}
@@ -2205,8 +2233,22 @@ export default function SkillsPanel({
                   {t("skills.upToDate")}
                 </span>
               )}
+              {row.status === "error" && (
+                <span className="skill-card-link-badge is-error">
+                  {t("skills.updateCheckFailed")}
+                </span>
+              )}
+              {(row.status === "with_origin" || row.status === "unknown") && (
+                <span className="skill-card-link-badge">
+                  {t(
+                    row.status === "unknown"
+                      ? "skills.updateStatusUnknown"
+                      : "skills.updatePendingCheck",
+                  )}
+                </span>
+              )}
               <span className="skill-card-tag" title={origin.install_ref}>
-                {storeBadge()} {origin.store}
+                {t("skills.store.skillhub")}
               </span>
             </>
           ) : (
@@ -2215,36 +2257,66 @@ export default function SkillsPanel({
         </header>
         <div className="skill-card-desc">
           <p>{skill.description || skill.path}</p>
-          {origin &&
-            updateFilter === "with_origin" &&
-            (row.status === "unknown" || row.status === "error") && (
-              <p className="skill-card-status-hint">
-                {t(
+          <div className="skill-update-meta">
+            {origin?.remote_version && (
+              <span>
+                {t("skills.installedVersion").replace(
+                  "{version}",
+                  origin.remote_version,
+                )}
+              </span>
+            )}
+            {check?.remote_version &&
+              check.remote_version !== origin?.remote_version && (
+                <span className="is-remote">
+                  {t("skills.remoteVersion").replace(
+                    "{version}",
+                    check.remote_version,
+                  )}
+                </span>
+              )}
+            {remoteUpdatedLabel && <span>{remoteUpdatedLabel}</span>}
+            <span title={skill.source_dir}>{formatTildePath(skill.source_dir)}</span>
+          </div>
+          {(row.status === "unknown" || row.status === "error") && (
+            <p className="skill-card-status-hint">
+              {check?.message ||
+                t(
                   row.status === "error"
                     ? "skills.updateCheckFailed"
                     : "skills.updateStatusUnknown",
                 )}
-              </p>
-            )}
-          <span className="skill-card-tag" title={skill.source_dir}>
-            {formatTildePath(skill.source_dir)}
-          </span>
+            </p>
+          )}
+          {!origin && (
+            <p className="skill-card-status-hint">{t("skills.noOriginHint")}</p>
+          )}
         </div>
         <div className="skill-card-actions">
           <button
             type="button"
             className="skills-action-btn primary skill-card-primary"
-            disabled={!canUpdate || isUpdating || updatingAll}
+            disabled={!canUpdate || isUpdating || updatingAll || checkingUpdates}
             aria-busy={isUpdating}
             onClick={() => void updateSkillRow(row)}
-            title={canUpdate ? t("skills.update") : t("skills.noOriginHint")}
+            title={
+              canUpdate
+                ? t(row.status === "outdated" ? "skills.update" : "skills.reinstall")
+                : t("skills.noOriginHint")
+            }
           >
             {isUpdating ? (
               <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
             ) : (
               <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
             )}
-            <span>{isUpdating ? t("skills.updating") : t("skills.update")}</span>
+            <span>
+              {isUpdating
+                ? t("skills.updating")
+                : row.status === "outdated"
+                  ? t("skills.update")
+                  : t("skills.reinstall")}
+            </span>
           </button>
         </div>
       </article>
@@ -3229,19 +3301,76 @@ export default function SkillsPanel({
               </p>
             </div>
             <div className="skills-toolbar-end">
-              <button type="button" className="skills-action-btn" onClick={() => void checkSkillUpdates({ force: true })} disabled={checkingUpdates}>
-                <RefreshCw size={14} />
-                {t("skills.checkUpdates")}
+              <button
+                type="button"
+                className="skills-action-btn"
+                onClick={() => void checkSkillUpdates({ force: true })}
+                disabled={checkingUpdates || updatingAll}
+                aria-busy={checkingUpdates}
+              >
+                <RefreshCw
+                  size={14}
+                  className={checkingUpdates ? "is-spin" : undefined}
+                />
+                {checkingUpdates
+                  ? t("skills.checkingUpdates")
+                  : t("skills.checkUpdates")}
               </button>
-              <button type="button" className="skills-action-btn primary" onClick={() => void updateAllSkills()} disabled={outdatedCount === 0 || updatingAll}>
+              <button
+                type="button"
+                className="skills-action-btn primary"
+                onClick={() => void updateAllSkills()}
+                disabled={outdatedCount === 0 || updatingAll || checkingUpdates}
+                aria-busy={updatingAll}
+              >
                 <CloudDownload size={14} />
-                {t("skills.updateAll")}
+                {updatingAll
+                  ? t("skills.updating")
+                  : t("skills.updateAllCount").replace(
+                      "{count}",
+                      String(outdatedCount),
+                    )}
               </button>
-            <button type="button" className="skills-icon-btn" onClick={() => { setDrawer(null); setPersonalTab("installed"); }} aria-label={t("common.close")}>
-              <X size={16} />
-            </button>
+              <button
+                type="button"
+                className="skills-icon-btn"
+                onClick={() => {
+                  setDrawer(null);
+                  setPersonalTab("installed");
+                }}
+                aria-label={t("common.close")}
+              >
+                <X size={16} />
+              </button>
             </div>
           </header>
+
+          <div className="skills-update-overview" aria-live="polite">
+            <div className="skills-update-metric">
+              <strong>{updateSummary.tracked}</strong>
+              <span>{t("skills.trackedBySkillHub")}</span>
+            </div>
+            <div className="skills-update-metric is-outdated">
+              <strong>{lastCheckedAt ? updateSummary.outdated : "—"}</strong>
+              <span>{t("skills.updatesFilter.updatable")}</span>
+            </div>
+            <div className="skills-update-metric is-current">
+              <strong>{lastCheckedAt ? updateSummary.current : "—"}</strong>
+              <span>{t("skills.upToDate")}</span>
+            </div>
+            <div className="skills-update-metric is-attention">
+              <strong>{updateSummary.noOrigin + updateSummary.attention}</strong>
+              <span>{t("skills.needsAttention")}</span>
+            </div>
+            <p className="skills-update-checked-at">
+              {lastCheckedAt
+                ? t("skills.lastCheckedAt").replace(
+                    "{time}",
+                    formatUpdateCheckTime(lastCheckedAt, locale),
+                  )
+                : t("skills.neverChecked")}
+            </p>
+          </div>
 
           <div className="skills-updates-toolbar">
             <div
@@ -3258,7 +3387,14 @@ export default function SkillsPanel({
                   className={`skills-update-filter ${updateFilter === id ? "active" : ""}`}
                   onClick={() => setUpdateFilter(id)}
                 >
-                  {t(labelKey)}
+                  <span>{t(labelKey)}</span>
+                  <span className="skills-update-filter-count">
+                    {id === "updatable"
+                      ? updateSummary.outdated
+                      : id === "with_origin"
+                        ? updateSummary.tracked
+                        : updateSummary.noOrigin}
+                  </span>
                 </button>
               ))}
             </div>
@@ -3292,7 +3428,7 @@ export default function SkillsPanel({
                     updateFilter === "updatable"
                       ? checkingUpdates
                         ? t("skills.checkingUpdates")
-                        : lastCheckResults.length === 0
+                        : lastCheckedAt === null
                           ? t("skills.updatesNeedCheck")
                           : t("skills.upToDate")
                       : t("skills.installedSearchEmpty")
