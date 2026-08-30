@@ -16,6 +16,7 @@ import {
 import { consumeBufferedTextReconcile } from "../../lib/chat/streamReconcile";
 import { upsertAsyncAssistantMessage } from "../../lib/chat/asyncMessage";
 import { resolveParallelTaskCompletion } from "../../lib/chat/taskCompletion";
+import { resolveToolActivityStatus } from "../../lib/chat/toolActivityStatus";
 import {
   countRunningParallel,
   isParallelTaskActive,
@@ -617,12 +618,7 @@ export function useParallelTasks(deps: Deps) {
             title: name,
             input: payload.arguments_json ?? payload.arguments,
             output: payload.result,
-            status:
-              payload.phase === "failed"
-                ? "error"
-                : payload.phase === "completed" || payload.result
-                  ? "done"
-                  : "running",
+            status: resolveToolActivityStatus(payload.phase, payload.result),
             at: Date.now(),
             batchId: payload.batch_id,
             executionMode: payload.execution_mode,

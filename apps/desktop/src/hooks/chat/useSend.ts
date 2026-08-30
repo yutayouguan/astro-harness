@@ -22,6 +22,7 @@ import {
 import { resolveComposerTurn } from "../../lib/chat/composerResolve";
 import { parseHitlRunFinished } from "../../lib/chat/hitlRunFinished";
 import { resolveTaskCompletion } from "../../lib/chat/taskCompletion";
+import { resolveToolActivityStatus } from "../../lib/chat/toolActivityStatus";
 import {
   loadPickerGlobals,
   loadModelPrefs,
@@ -741,12 +742,7 @@ export function useSend(deps: UseSendDeps) {
               input: payload.arguments_json || undefined,
               output: payload.result || undefined,
               detail: payload.result || payload.arguments_json || undefined,
-              status:
-                payload.phase === "failed"
-                  ? "error"
-                  : payload.phase === "completed" || payload.result
-                    ? "done"
-                    : "running",
+              status: resolveToolActivityStatus(payload.phase, payload.result),
               at: Date.now(),
               batchId: payload.batch_id,
               executionMode: payload.execution_mode,

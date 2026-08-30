@@ -2,6 +2,7 @@
 import type {
   ChatActivity,
   ChatActivityKind,
+  ChatActivityStatus,
   ChatHistoryActivityDto,
   ChatHistoryMessageDto,
   ChatMessage,
@@ -9,6 +10,7 @@ import type {
   UiSurface,
 } from "../../types";
 import { elapsedSecSince } from "./elapsedSec.ts";
+import { isLiveActivityStatus } from "./toolActivityStatus.ts";
 
 const ACTIVITY_KINDS = new Set<ChatActivityKind>([
   "tool",
@@ -17,6 +19,15 @@ const ACTIVITY_KINDS = new Set<ChatActivityKind>([
   "hook",
   "memory",
   "status",
+]);
+const ACTIVITY_STATUSES = new Set<ChatActivityStatus>([
+  "waiting",
+  "running",
+  "retrying",
+  "done",
+  "partial",
+  "error",
+  "interrupted",
 ]);
 
 function sumReasoningDurations(
@@ -202,13 +213,9 @@ function mapActivity(a: ChatHistoryActivityDto): ChatActivity {
   const kind = ACTIVITY_KINDS.has(a.kind as ChatActivityKind)
     ? (a.kind as ChatActivityKind)
     : "tool";
-  const status =
-    a.status === "running" ||
-    a.status === "done" ||
-    a.status === "error" ||
-    a.status === "interrupted"
-      ? a.status
-      : undefined;
+  const status = ACTIVITY_STATUSES.has(a.status as ChatActivityStatus)
+    ? (a.status as ChatActivityStatus)
+    : undefined;
   const media = Array.isArray(a.media)
     ? a.media
         .map((item) => {
@@ -245,13 +252,13 @@ export function settleRestoredActivities(
   settledAt = Date.now(),
 ): ChatMessage[] {
   return messages.map((message) => {
-    if (!message.activities?.some((activity) => activity.status === "running")) {
+    if (!message.activities?.some((activity) => isLiveActivityStatus(activity.status))) {
       return message;
     }
     return {
       ...message,
       activities: message.activities.map((activity) => {
-        if (activity.status !== "running") return activity;
+        if (!isLiveActivityStatus(activity.status)) return activity;
         const durationSec =
           activity.durationSec ??
           (activity.at != null

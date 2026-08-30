@@ -160,7 +160,7 @@ test("mapHistoryMessages restores durationSec from segment timestamps", () => {
   assert.equal(msgs[0]!.activities?.[0]?.durationSec, 1.5);
 });
 
-test("restored history settles orphaned running activity after restart", () => {
+test("restored history settles orphaned live activity after restart", () => {
   const msgs = settleRestoredActivities(
     mapHistoryMessages([
       {
@@ -180,6 +180,26 @@ test("restored history settles orphaned running activity after restart", () => {
   assert.equal(msgs[0]!.activities?.[0]?.durationSec, 3.5);
 });
 
+test("restored history recognizes extended activity states", () => {
+  const [message] = mapHistoryMessages([
+    {
+      id: "a1",
+      role: "assistant",
+      content: "",
+      activities: [
+        { id: "waiting", kind: "tool", title: "terminal", status: "waiting" },
+        { id: "retrying", kind: "tool", title: "terminal", status: "retrying" },
+        { id: "partial", kind: "tool", title: "terminal", status: "partial" },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(
+    message?.activities?.map((activity) => activity.status),
+    ["waiting", "retrying", "partial"],
+  );
+});
+
 test("settleRestoredActivities preserves terminal states and existing duration", () => {
   const [message] = settleRestoredActivities(
     [
@@ -197,6 +217,20 @@ test("settleRestoredActivities preserves terminal states and existing duration",
             durationSec: 1.25,
           },
           {
+            id: "waiting",
+            kind: "tool",
+            title: "terminal",
+            status: "waiting",
+            at: 1_500,
+          },
+          {
+            id: "retrying",
+            kind: "tool",
+            title: "terminal",
+            status: "retrying",
+            at: 1_750,
+          },
+          {
             id: "done",
             kind: "tool",
             title: "read",
@@ -211,7 +245,9 @@ test("settleRestoredActivities preserves terminal states and existing duration",
 
   assert.equal(message!.activities?.[0]?.status, "interrupted");
   assert.equal(message!.activities?.[0]?.durationSec, 1.25);
-  assert.equal(message!.activities?.[1]?.status, "done");
+  assert.equal(message!.activities?.[1]?.status, "interrupted");
+  assert.equal(message!.activities?.[2]?.status, "interrupted");
+  assert.equal(message!.activities?.[3]?.status, "done");
 });
 
 test("enrichTimelineDurations keeps existing durationSec", () => {

@@ -45,6 +45,14 @@ export type ChatAttachment = {
 /** 聊天活动条类型 */
 export type ChatActivityKind = "tool" | "skill" | "mcp" | "hook" | "memory" | "status";
 export type ToolExecutionMode = "serial" | "parallel";
+export type ChatActivityStatus =
+  | "waiting"
+  | "running"
+  | "retrying"
+  | "done"
+  | "partial"
+  | "error"
+  | "interrupted";
 
 /** 助手气泡旁的活动记录 */
 export type ChatActivity = {
@@ -56,7 +64,7 @@ export type ChatActivity = {
   input?: string;
   /** 工具 result / 记忆 content */
   output?: string;
-  status?: "running" | "done" | "error" | "interrupted";
+  status?: ChatActivityStatus;
   /** 开始时刻（ms） */
   at?: number;
   /** 调用耗时（秒），完成态写入 */

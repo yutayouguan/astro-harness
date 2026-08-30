@@ -25,8 +25,11 @@ const KIND_KEYS: Record<ChatActivityKind, MessageKey> = {
 };
 
 const STATUS_KEYS: Record<NonNullable<ChatActivity["status"]>, MessageKey> = {
+  waiting: "chat.activity.status.waiting",
   running: "chat.activity.status.running",
+  retrying: "chat.activity.status.retrying",
   done: "chat.activity.status.done",
+  partial: "chat.activity.status.partial",
   error: "chat.activity.status.error",
   interrupted: "chat.activity.status.interrupted",
 };
