@@ -277,32 +277,37 @@ function resolveActivityTitle(
   t: ReturnType<typeof useI18n>["t"],
 ): string {
   const target = activityDisplayTarget(activity);
-  const completed = activity.status === "done" ? ".done" : "";
+  const state =
+    activity.status === "done"
+      ? ".done"
+      : activity.status === "running"
+        ? ".running"
+        : "";
   switch (kind) {
     case "read":
       return target
-        ? t(`chat.activity.item${completed}.read`, { target })
-        : t(`chat.activity.action${completed}.read`);
+        ? t(`chat.activity.item${state}.read`, { target })
+        : t(`chat.activity.action${state}.read`);
     case "search":
       return target
-        ? t(`chat.activity.item${completed}.search`, { target })
-        : t(`chat.activity.action${completed}.search`);
+        ? t(`chat.activity.item${state}.search`, { target })
+        : t(`chat.activity.action${state}.search`);
     case "run":
       return target
-        ? t(`chat.activity.item${completed}.run`, { target })
-        : t(`chat.activity.action${completed}.run`);
+        ? t(`chat.activity.item${state}.run`, { target })
+        : t(`chat.activity.action${state}.run`);
     case "edit":
       return target
-        ? t(`chat.activity.item${completed}.edit`, { target })
-        : t(`chat.activity.action${completed}.edit`);
+        ? t(`chat.activity.item${state}.edit`, { target })
+        : t(`chat.activity.action${state}.edit`);
     case "browse":
       return target
-        ? t(`chat.activity.item${completed}.browse`, { target })
-        : t(`chat.activity.action${completed}.browse`);
+        ? t(`chat.activity.item${state}.browse`, { target })
+        : t(`chat.activity.action${state}.browse`);
     case "media":
       return target
-        ? t(`chat.activity.item${completed}.media`, { target })
-        : t(`chat.activity.action${completed}.media`);
+        ? t(`chat.activity.item${state}.media`, { target })
+        : t(`chat.activity.action${state}.media`);
     default:
       return activity.title;
   }
