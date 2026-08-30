@@ -31,14 +31,28 @@ impl SessionStore {
         icon: &str,
         root: &str,
     ) -> Result<Project> {
-        let mut tx = self.pool.begin().await?;
-        let exists = sqlx::query("SELECT 1 FROM projects WHERE id = ?1")
-            .bind(DEFAULT_PROJECT_ID)
-            .fetch_optional(&mut *tx)
-            .await?
-            .is_some();
+        if let Some(project) = self.get_project(DEFAULT_PROJECT_ID).await? {
+            if project.roots.len() == 1 && project.roots[0] == root {
+                return Ok(project);
+            }
+        }
 
-        if !exists {
+        let mut tx = self.pool.begin().await?;
+        // 先执行一次写入来取得 SQLite writer lock。`INSERT OR IGNORE` 既让并发调用
+        // 串行化，也避免两个连接都在只读快照中判断项目不存在后再竞争插入。
+        let inserted = sqlx::query(
+            "INSERT OR IGNORE INTO projects (id, name, icon, position)
+             VALUES (?1, ?2, ?3, 0)",
+        )
+            .bind(DEFAULT_PROJECT_ID)
+            .bind(name)
+            .bind(icon)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected()
+            == 1;
+
+        if inserted {
             let legacy = sqlx::query(
                 "SELECT p.id, p.position
                  FROM projects p
@@ -54,25 +68,14 @@ impl SessionStore {
             .fetch_optional(&mut *tx)
             .await?;
 
-            let position = if let Some(row) = legacy.as_ref() {
-                row.get::<i64, _>(1)
-            } else {
-                sqlx::query("UPDATE projects SET position = position + 1")
-                    .execute(&mut *tx)
-                    .await?;
-                0
-            };
-
-            sqlx::query("INSERT INTO projects (id, name, icon, position) VALUES (?1, ?2, ?3, ?4)")
-                .bind(DEFAULT_PROJECT_ID)
-                .bind(name)
-                .bind(icon)
-                .bind(position)
-                .execute(&mut *tx)
-                .await?;
-
             if let Some(row) = legacy {
                 let legacy_id: String = row.get(0);
+                let legacy_position: i64 = row.get(1);
+                sqlx::query("UPDATE projects SET position = ?1 WHERE id = ?2")
+                    .bind(legacy_position)
+                    .bind(DEFAULT_PROJECT_ID)
+                    .execute(&mut *tx)
+                    .await?;
                 sqlx::query("UPDATE sessions SET project_id = ?1 WHERE project_id = ?2")
                     .bind(DEFAULT_PROJECT_ID)
                     .bind(&legacy_id)
@@ -82,6 +85,13 @@ impl SessionStore {
                     .bind(&legacy_id)
                     .execute(&mut *tx)
                     .await?;
+            } else {
+                sqlx::query(
+                    "UPDATE projects SET position = position + 1 WHERE id != ?1",
+                )
+                .bind(DEFAULT_PROJECT_ID)
+                .execute(&mut *tx)
+                .await?;
             }
         }
 
@@ -434,13 +444,46 @@ mod tests {
         assert_eq!(default.roots, vec!["/home/user/.astro/workspace"]);
         assert_eq!(default.position, 0);
 
+        sqlx::query("INSERT INTO project_roots (project_id, path) VALUES (?1, '/stale')")
+            .bind(DEFAULT_PROJECT_ID)
+            .execute(&store.pool)
+            .await
+            .unwrap();
         let ensured_again = store
             .ensure_default_project("主空间", "astro-space", "/home/user/.astro/workspace")
             .await
             .unwrap();
         assert_eq!(ensured_again.id, DEFAULT_PROJECT_ID);
+        assert_eq!(ensured_again.roots, vec!["/home/user/.astro/workspace"]);
         let projects = store.list_projects().await.unwrap();
         assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0].id, DEFAULT_PROJECT_ID);
+    }
+
+    #[tokio::test]
+    async fn concurrent_stores_ensure_only_one_default_project() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("state.db");
+        let store_a = SessionStore::open(&path).await.unwrap();
+        let store_b = SessionStore::open(&path).await.unwrap();
+
+        let (result_a, result_b) = tokio::join!(
+            store_a.ensure_default_project(
+                "主空间",
+                "astro-space",
+                "/home/user/.astro/workspace"
+            ),
+            store_b.ensure_default_project(
+                "主空间",
+                "astro-space",
+                "/home/user/.astro/workspace"
+            ),
+        );
+        assert_eq!(result_a.unwrap().id, DEFAULT_PROJECT_ID);
+        assert_eq!(result_b.unwrap().id, DEFAULT_PROJECT_ID);
+
+        let projects = store_a.list_projects().await.unwrap();
+        assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].id, DEFAULT_PROJECT_ID);
     }
 
