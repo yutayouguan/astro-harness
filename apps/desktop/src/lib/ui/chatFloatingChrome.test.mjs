@@ -66,7 +66,7 @@ test("conversation title keeps a compact optical type scale", () => {
   const title = rule(headerStyles, ".content-header--chat .conversation-title");
 
   assert.ok(title, "missing conversation title rule");
-  assert.match(title, /font-size:\s*16px;/);
+  assert.match(title, /font-size:\s*14px;/);
   assert.match(title, /font-weight:\s*600;/);
   assert.match(title, /letter-spacing:\s*0\.01em;/);
 });
