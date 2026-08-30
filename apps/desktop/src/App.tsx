@@ -96,7 +96,6 @@ import {
 } from "./lib/chat/contextUsage";
 import {
   NAV,
-  PAGE_META,
   type NavId,
   type SettingsTabId,
 } from "./lib/ui/navConfig";
@@ -836,9 +835,6 @@ export default function App() {
   const showHeaderStatus = chat.statusPhase !== "ready";
   const featureNav =
     nav === "cron" || nav === "loop" || nav === "skills" ? nav : null;
-  const FeatureIcon = featureNav
-    ? (NAV.find((item) => item.id === featureNav)?.Icon ?? IconChat)
-    : IconChat;
   const conversationTitle = useActiveSessionTitle(chat.sessionId);
   const { label: settingsTitle, Icon: SettingsIcon } = settingsTabMeta(settingsTab);
   const activeChatRightDock = resolveChatRightDock({
@@ -1360,24 +1356,6 @@ export default function App() {
             </>
           ) : featureNav ? (
             <>
-              {featureNav !== "cron" && featureNav !== "loop" && featureNav !== "skills" && (
-                <div className="content-header">
-                  <div className="content-heading">
-                    <div className="page-title-block">
-                      <div className="page-title-icon" data-tone={shellTone} aria-hidden>
-                        <FeatureIcon width={15} height={15} />
-                      </div>
-                      <div className="page-title-text">
-                        <h1 className="content-title" data-tone={shellTone}>
-                          <span className="content-title-main">
-                            {t(PAGE_META[featureNav].titleKey)}
-                          </span>
-                        </h1>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
               <div className="page-body page-body--bare">
                 <div className="feature-content-inline">
                   {featureNav === "cron" && (

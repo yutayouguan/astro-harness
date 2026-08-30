@@ -36,17 +36,14 @@ test("plugin catalog remounts after hook-signature edits during Fast Refresh", (
   );
 });
 
-test("plugin navigation keeps type and scope in one primary command row", () => {
+test("plugin primary row keeps type, scope, and controls together", () => {
   const commandBar = panel.indexOf('className="plugins-command-bar"');
   const primaryRow = panel.indexOf(
     'className="plugins-command-row plugins-command-row--primary"',
   );
   const typeTabs = panel.indexOf('className="skills-main-tabs"', primaryRow);
   const scopeTabs = panel.indexOf('className="plugins-scope-tabs"', primaryRow);
-  const contextRow = panel.indexOf(
-    'className="skills-toolbar plugins-context-toolbar"',
-    primaryRow,
-  );
+  const controls = panel.indexOf('className="skills-toolbar-end"', scopeTabs);
 
   assert.ok(commandBar >= 0, "missing unified plugin command bar");
   assert.ok(primaryRow > commandBar, "missing primary command row");
@@ -56,36 +53,33 @@ test("plugin navigation keeps type and scope in one primary command row", () => 
   );
   assert.ok(scopeTabs > typeTabs, "scope tabs should follow plugin type tabs");
   assert.ok(
-    contextRow > scopeTabs,
-    "context controls should follow primary navigation",
+    controls > scopeTabs,
+    "sort, search, view, and refresh controls should stay in the primary row",
   );
 });
 
-test("personal Skill sources share the contextual toolbar", () => {
-  const contextRow = panel.indexOf(
-    'className="skills-toolbar plugins-context-toolbar"',
+test("personal Skill sources use a second underline row", () => {
+  const primaryRow = panel.indexOf(
+    'className="plugins-command-row plugins-command-row--primary"',
   );
+  const controls = panel.indexOf('className="skills-toolbar-end"', primaryRow);
   const sourceTabs = panel.indexOf(
-    'className="plugins-personal-tabs"',
-    contextRow,
+    'className="plugins-personal-tabs plugins-personal-tabs--underline"',
+    controls,
   );
-  const controls = panel.indexOf('className="skills-toolbar-end"', sourceTabs);
 
   assert.ok(
-    sourceTabs > contextRow,
-    "source navigation must live in the context row",
+    sourceTabs > controls,
+    "personal source navigation should follow the primary command row",
   );
-  assert.ok(
-    controls > sourceTabs,
-    "source navigation and controls must share one row",
-  );
-  assert.match(panel, /\["installed", "online", "machine"\]/);
-  assert.match(panel, /item === "machine" \? "is-import"/);
+  assert.match(panel, /\["installed", "online", "machine", "updates"\]/);
+  assert.match(panel, /plugins-personal-tab--underline/);
   assert.doesNotMatch(panel, /className="plugins-primary-row"/);
   assert.doesNotMatch(
     panel,
     /className="skills-toolbar plugins-scope-toolbar"/,
   );
+  assert.doesNotMatch(panel, /className="skills-toolbar plugins-context-toolbar"/);
 });
 
 test("Skill and MCP navigation expose different source taxonomies", () => {

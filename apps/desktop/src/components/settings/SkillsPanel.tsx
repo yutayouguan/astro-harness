@@ -1538,7 +1538,6 @@ export default function SkillsPanel({
     }
   };
 
-  const enabledCount = installed.filter((s) => s.enabled).length;
   const linkedCount = machineSkills.filter((s) => s.linked).length;
 
   /** 当前 Agent 可用：Astro 已安装，或本机技能已链接（含目录名，因 frontmatter name 常与商店名不同） */

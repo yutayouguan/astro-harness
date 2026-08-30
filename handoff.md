@@ -314,6 +314,114 @@ Astro 已能从部分 Provider 读取 input、output、cache read/write 和 reas
 
 `cargo test -p astro-agent token_count_projection_preserves_cache_reasoning_and_reporting_state -- --nocapture`：通过。
 
+## H-008 Desktop 全量 TypeScript 检查被不可达分支与死变量阻塞
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Low |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | Agent/Harness usage UI 全量验证 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+- `apps/desktop/src/App.tsx` 中 `featureNav` 只可能是 `cron | loop | skills`，但标题分支同时排除这三个值，TypeScript 因此将分支内的 `featureNav` 收窄为 `never`，访问 `PAGE_META[featureNav].titleKey` 报 `TS2339`。
+- `apps/desktop/src/components/settings/SkillsPanel.tsx` 计算 `enabledCount` 后没有任何消费者，`noUnusedLocals` 报 `TS6133`。
+
+### 修复方向
+
+删除已经不可达的 feature header 分支及其专用变量/import；删除无消费者的 `enabledCount`。不恢复已被新页面布局取代的旧标题或统计 UI。
+
+### 验收标准
+
+- `npx tsc --noEmit` 全量通过。
+- Cron、Loop、Skills 三个 feature 页面仍由各自现有组件渲染，不改变导航行为。
+
+### 修复与验证
+
+已删除不可达的 feature header 分支、它的专用 import/变量及未使用的 `enabledCount`。`npx tsc --noEmit` 全量通过。
+
+## H-009 Plugin 信息架构测试仍断言已替换的双行布局
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Low |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | Desktop 全量前端回归 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+`9bc5abc5` 已明确将 sort/search/view/refresh 控件合并到第一行，并把个人 Skill 来源改成第二行 underline tabs；但 `pluginsInformationArchitecture.test.mjs` 仍要求旧的 `plugins-context-toolbar` 包裹来源与控件，并继续匹配旧的三项来源与 `is-import` 类。`npm test` 因此有 2 项失败，实际 JSX、提交意图和当前 CSS 则一致。
+
+### 修复方向
+
+更新静态结构契约：第一行包含类型、scope 和操作控件；第二行包含 `installed / online / machine / updates` underline tabs。保留对旧 `plugins-primary-row`、`plugins-scope-toolbar` 和 `plugins-context-toolbar` 的否定断言，防止旧布局回流。
+
+### 验收标准
+
+- `pluginsInformationArchitecture.test.mjs` 全部通过。
+- `npm test` 全量通过。
+
+### 修复与验证
+
+已将契约更新为当前两行结构，并保留对旧容器的否定断言。定向测试 6/6 通过，前端全量 419/419 通过。
+
+## H-010 Composer 玻璃材质测试过度绑定视觉参数
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Low |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | Desktop 全量前端回归 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+`chatFloatingChrome.test.mjs` 的测试名仅要求 composer 与 sidebar 共用玻璃材质，却把边框、阴影和 focus ring 精确锁定为 `1px` / `2px 8px` / `1px`。当工作区进行不改变材质语义的轻量化视觉调整时，全量 `npm test` 仍会被这些外观常量阻断。
+
+### 修复方向
+
+保留对 sidebar surface token、glass edge、backdrop filter、shadow/focus outline 和 dark variant 的语义断言，放宽不影响契约的像素常量。
+
+### 验收标准
+
+- 测试仍能拦截透明 composer、丢失 glass edge/backdrop/shadow 或过厚 `2px` focus ring。
+- `chatFloatingChrome.test.mjs` 与 `npm test` 全量通过。
+
+### 修复与验证
+
+已改为语义约束：边框必须为正宽度并使用 `--glass-edge`，阴影必须同时包含 `--glass-rim` 与 `--shadow-ink`，focus outline 必须为不超过 `1px` 的正宽度。定向测试 7/7 通过，前端全量 419/419 通过。
+
+## H-011 Sidebar 样式文件尾部遗留无选择器声明
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Low |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | 未提交样式改动边界检查 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+`sidebar-polish.css` 在最后一个 `@media` 块结束后遗留两行重复的 `border-width: 0.75px;`，不属于任何选择器，是无效 CSS 声明。
+
+### 修复方向
+
+仅删除这两行孤立声明，不改动同一工作区中其他未提交的玻璃样式参数。
+
+### 验收标准
+
+- 文件结尾是完整的 `@media` 块，不再存在无选择器声明。
+
+### 修复与验证
+
+已只删除两行孤立声明，其他未提交样式参数保持不变；前端全量 419/419 通过。
+
 ## 后续缺陷记录模板
 
 ```markdown

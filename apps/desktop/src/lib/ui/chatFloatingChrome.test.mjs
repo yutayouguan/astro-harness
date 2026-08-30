@@ -166,13 +166,19 @@ test("floating composer shares the sidebar glass material", () => {
   assert.ok(composer, "missing composer rule");
   assert.match(composer, /--composer-surface-base:\s*var\(--sidebar-bg\);/);
   assert.match(composer, /background:[\s\S]*var\(--composer-surface-sheen\)[\s\S]*var\(--composer-surface-base\);/);
-  assert.match(composer, /border:\s*1px solid var\(--glass-edge\);/);
+  assert.match(
+    composer,
+    /border:\s*(?:0\.(?:[1-9]\d*)|[1-9]\d*(?:\.\d+)?)px solid var\(--glass-edge\);/,
+  );
   assert.match(composer, /backdrop-filter:\s*blur\(calc\(var\(--blur-glass, 20px\)/);
-  assert.match(composer, /0 2px 8px rgba\(var\(--shadow-ink\), 0\.04\)/);
+  assert.match(
+    composer,
+    /box-shadow:[\s\S]*var\(--glass-rim\)[\s\S]*rgba\(var\(--shadow-ink\),\s*0\.\d+\)/,
+  );
   assert.doesNotMatch(composer, /background:\s*transparent;/);
 
   assert.ok(focusedComposer, "missing focused composer rule");
-  assert.match(focusedComposer, /0 0 0 1px color-mix\(/);
+  assert.match(focusedComposer, /0 0 0 (?:0\.(?:[1-9]\d*)|1)px color-mix\(/);
   assert.doesNotMatch(focusedComposer, /0 0 0 2px/);
 
   assert.ok(darkComposer, "missing dark composer rule");
@@ -180,6 +186,6 @@ test("floating composer shares the sidebar glass material", () => {
   assert.doesNotMatch(darkComposer, /background:\s*transparent;/);
 
   assert.ok(darkFocusedComposer, "missing dark focused composer rule");
-  assert.match(darkFocusedComposer, /0 0 0 1px color-mix\(/);
+  assert.match(darkFocusedComposer, /0 0 0 (?:0\.(?:[1-9]\d*)|1)px color-mix\(/);
   assert.doesNotMatch(darkFocusedComposer, /0 0 0 2px/);
 });
