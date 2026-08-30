@@ -212,47 +212,44 @@ export function reconcileText(
 export function projectCanonicalTimelineSegments(
   message: ChatMessage,
 ): ChatTimelineSegment[] {
-  let projected: ChatMessage = { ...message, segments: ensureSegments(message) };
-  const initialSegments = projected.segments ?? [];
-  const fallbackAt = initialSegments[initialSegments.length - 1]?.at ?? 0;
+  const segments = ensureSegments(message);
+  const canonicalText = message.content;
+  if (!canonicalText) return segments;
 
-  const segmentedReasoning = initialSegments
-    .filter((segment) => segment.type === "reasoning")
-    .map((segment) => segment.text)
-    .join("");
-  const canonicalReasoning = message.reasoning ?? segmentedReasoning;
-  if (canonicalReasoning !== segmentedReasoning) {
-    projected = reconcileReasoning(projected, canonicalReasoning, fallbackAt);
+  // History coalescing inserts paragraph separators between assistant rounds,
+  // while their timeline segments retain the original per-round text. Match
+  // each existing text span in order instead of comparing raw concatenation.
+  // If any span cannot be located, keep the timeline untouched rather than
+  // collapsing it into categorized-view order.
+  let cursor = 0;
+  for (const segment of segments) {
+    if (segment.type !== "text") continue;
+    const needle = segment.text.trim();
+    if (!needle) continue;
+    const index = canonicalText.indexOf(needle, cursor);
+    if (index < 0) return segments;
+    cursor = index + needle.length;
   }
 
-  const segmentedText = (projected.segments ?? [])
-    .filter((segment) => segment.type === "text")
-    .map((segment) => segment.text)
-    .join("");
-  const canonicalText = message.content || segmentedText;
-  if (canonicalText !== segmentedText) {
-    if (canonicalText.startsWith(segmentedText)) {
-      const suffix = canonicalText.slice(segmentedText.length);
-      const segments = ensureSegments(projected);
-      const lastIndex = segments.length - 1;
-      const last = segments[lastIndex];
-      if (last?.type === "text") {
-        segments[lastIndex] = { ...last, text: last.text + suffix };
-      } else if (suffix) {
-        segments.push({
-          type: "text",
-          id: `txt-canonical-${message.id}`,
-          text: suffix,
-          at: fallbackAt,
-        });
-      }
-      projected = { ...projected, content: canonicalText, segments };
-    } else {
-      projected = reconcileText(projected, canonicalText, fallbackAt);
-    }
-  }
+  const suffix = canonicalText.slice(cursor);
+  if (!suffix.trim()) return segments;
 
-  return ensureSegments(projected);
+  const fallbackAt = segments[segments.length - 1]?.at ?? 0;
+  const lastIndex = segments.length - 1;
+  const last = segments[lastIndex];
+  if (last?.type === "text") {
+    segments[lastIndex] = { ...last, text: last.text + suffix };
+    return segments;
+  }
+  return [
+    ...segments,
+    {
+      type: "text",
+      id: `txt-canonical-${message.id}`,
+      text: suffix,
+      at: fallbackAt,
+    },
+  ];
 }
 
 /** Replace recovered reasoning with one canonical segment while preserving non-reasoning order. */

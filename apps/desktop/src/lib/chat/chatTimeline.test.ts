@@ -194,7 +194,7 @@ test("timeline projection restores a missing canonical answer tail without reord
   const original: ChatMessage = {
     id: "a1",
     role: "assistant",
-    content: "先写脚本。脚本已写好。最终答案。",
+    content: "先写脚本。\n\n脚本已写好。\n\n最终答案。",
     reasoning: "分析验证",
     activities: [
       { id: "t1", kind: "tool", title: "apply_patch", at: 2 },
@@ -224,8 +224,10 @@ test("timeline projection restores a missing canonical answer tail without reord
     projected
       .filter((segment) => segment.type === "text")
       .map((segment) => segment.text)
-      .join(""),
-    original.content,
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim(),
+    original.content.replace(/\s+/g, " ").trim(),
   );
   assert.equal(original.segments?.at(-1)?.type, "text");
   assert.equal(
@@ -254,6 +256,24 @@ test("timeline projection appends a missing final answer after a trailing tool",
     "text",
   ]);
   assert.equal(projected[2]?.type === "text" ? projected[2].text : "", "最终答案。");
+});
+
+test("timeline projection never collapses interleaved events on divergent text", () => {
+  const segments: ChatMessage["segments"] = [
+    { type: "reasoning", id: "r1", text: "第一次思考", at: 1 },
+    { type: "text", id: "txt1", text: "中间说明", at: 2 },
+    { type: "activity", id: "t1", at: 3 },
+    { type: "reasoning", id: "r2", text: "第二次思考", at: 4 },
+  ];
+  const projected = projectCanonicalTimelineSegments({
+    id: "a3",
+    role: "assistant",
+    content: "完全不同的最终正文",
+    reasoning: "归类后的思考文本",
+    segments,
+  });
+
+  assert.deepEqual(projected, segments);
 });
 
 test("canonical reasoning reconciliation replaces divergent text and keeps activities", () => {
