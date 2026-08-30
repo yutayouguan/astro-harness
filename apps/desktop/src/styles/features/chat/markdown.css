@@ -385,10 +385,10 @@ html[data-theme="dark"] .bubble.assistant {
   background:
     var(--composer-surface-sheen),
     var(--composer-surface-base);
-  border: 1px solid var(--glass-edge);
+  border: 0.75px solid var(--glass-edge);
   box-shadow:
     var(--glass-rim),
-    0 2px 8px rgba(var(--shadow-ink), 0.04);
+    0 1px 4px rgba(var(--shadow-ink), 0.035);
   backdrop-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.25));
   -webkit-backdrop-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
@@ -406,9 +406,9 @@ html[data-theme="dark"] .bubble.assistant {
     var(--composer-surface-focus);
   box-shadow:
     var(--glass-rim),
-    0 3px 10px rgba(var(--shadow-ink), 0.045),
-    0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    0 2px 6px rgba(var(--shadow-ink), 0.04),
+    0 0 0 0.75px color-mix(in srgb, var(--tone, var(--accent)) 9%, transparent),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.18);
 }
 
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
@@ -3757,7 +3757,7 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   width: 240px;
   min-width: 240px;
   flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  border: 0.75px solid color-mix(in srgb, var(--glass-edge) 84%, transparent);
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 80%, transparent);
@@ -3892,8 +3892,8 @@ html[data-theme="dark"] .chat-welcome-card::after {
   transform: translateY(-4px) scale(1.01);
   border-color: color-mix(in srgb, var(--tone) 42%, var(--glass-border));
   box-shadow:
-    0 16px 32px color-mix(in srgb, var(--tone) 18%, transparent),
-    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 10px 22px color-mix(in srgb, var(--tone) 14%, transparent),
+    0 2px 5px rgba(0, 0, 0, 0.045),
     var(--glass-rim);
 }
 
@@ -3932,19 +3932,19 @@ html[data-theme="dark"] .chat-welcome-card::after {
   background:
     radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.55), transparent 58%),
     linear-gradient(155deg, color-mix(in srgb, var(--tone-soft) 100%, transparent), color-mix(in srgb, var(--tone-soft) 62%, transparent));
-  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.35));
+  border: 0.75px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.3));
   box-shadow:
-    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    0 1px 5px color-mix(in srgb, var(--tone) 10%, transparent),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.42);
   transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .chat-welcome-card:hover .chat-welcome-card-lens {
   border-color: color-mix(in srgb, var(--tone) 35%, rgba(255, 255, 255, 0.35));
   box-shadow:
-    0 4px 16px color-mix(in srgb, var(--tone) 25%, transparent),
-    0 0 0 3px color-mix(in srgb, var(--tone) 8%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    0 2px 9px color-mix(in srgb, var(--tone) 20%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--tone) 7%, transparent),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.48);
   transform: scale(1.06);
   transition: transform 0.28s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)),
               border-color 0.18s ease,
@@ -4078,13 +4078,13 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   width: 26px;
   height: 26px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
+  border: 0.75px solid color-mix(in srgb, var(--glass-edge) 78%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--glass-panel) 72%, transparent);
   color: var(--ink-mute);
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
   backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
   -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
   transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
