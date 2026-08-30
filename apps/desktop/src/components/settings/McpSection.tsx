@@ -916,6 +916,7 @@ function McpCatalogCard({
   onInstall: (server: McpServer) => void;
 }) {
   const { t } = useI18n();
+  const installable = server.catalogInstallable !== false;
   const credentialNames = [
     ...server.envVars,
     ...(server.bearerTokenEnvVar ? [server.bearerTokenEnvVar] : []),
@@ -931,16 +932,44 @@ function McpCatalogCard({
         <div className="mcp-server-meta">
           <div className="mcp-server-title-row">
             <span className="mcp-server-name">{server.name}</span>
-            <span className="mcp-server-type">{t(MCP_TYPE_LABEL[server.type])}</span>
+            <span className="mcp-server-type">
+              {installable
+                ? t(MCP_TYPE_LABEL[server.type])
+                : t("plugins.mcpPublic.discoveryOnly")}
+            </span>
           </div>
-          <code className="mcp-server-cmd">{serverEndpoint(server)}</code>
+          <code className="mcp-server-cmd">
+            {installable
+              ? serverEndpoint(server)
+              : [server.catalogSource, server.catalogNativeCategory ?? server.category]
+                  .filter(Boolean)
+                  .join(" · ")}
+          </code>
         </div>
       </header>
       <p className="mcp-server-desc">{server.description}</p>
-      {credentialNames.length > 0 ? (
+      {installable && credentialNames.length > 0 ? (
         <div className="mcp-server-env">
           {credentialNames.map((name) => (
             <span key={name} className="mcp-server-env-key">{name} ← env</span>
+          ))}
+        </div>
+      ) : null}
+      {!installable ? (
+        <div className="mcp-server-env">
+          {server.catalogOfficial ? (
+            <span className="mcp-server-env-key">
+              <ShieldCheck size={11} aria-hidden />
+              {t("plugins.mcpPublic.officialClaim")}
+            </span>
+          ) : null}
+          {server.catalogSponsored ? (
+            <span className="mcp-server-env-key">
+              {t("plugins.mcpPublic.sponsored")}
+            </span>
+          ) : null}
+          {server.catalogTags?.slice(0, 3).map((tag) => (
+            <span key={tag} className="mcp-server-env-key">{tag}</span>
           ))}
         </div>
       ) : null}
@@ -952,18 +981,22 @@ function McpCatalogCard({
             onClick={() => void open(server.websiteUrl!)}
           >
             <ExternalLink size={13} aria-hidden />
-            {t("mcpTools.documentation")}
+            {installable
+              ? t("mcpTools.documentation")
+              : t("plugins.mcpPublic.viewSource")}
           </button>
         ) : null}
-        <button
-          type="button"
-          className="mcp-btn-primary mcp-install-btn"
-          disabled={installed || !installReady}
-          onClick={() => onInstall(server)}
-        >
-          {installed ? <Check size={13} aria-hidden /> : <Download size={13} aria-hidden />}
-          {installed ? t("mcpTools.installed") : t("mcpTools.install")}
-        </button>
+        {installable ? (
+          <button
+            type="button"
+            className="mcp-btn-primary mcp-install-btn"
+            disabled={installed || !installReady}
+            onClick={() => onInstall(server)}
+          >
+            {installed ? <Check size={13} aria-hidden /> : <Download size={13} aria-hidden />}
+            {installed ? t("mcpTools.installed") : t("mcpTools.install")}
+          </button>
+        ) : null}
       </div>
     </article>
   );
@@ -1038,7 +1071,11 @@ export function useMcpSection({
     [configuredServers],
   );
   const installCatalogServer = (server: McpServer) => {
-    if (!configuredServersReady || installedServerIds.has(server.id)) return;
+    if (
+      server.catalogInstallable === false ||
+      !configuredServersReady ||
+      installedServerIds.has(server.id)
+    ) return;
     addServers([installableMcpServer(server)]);
   };
   const query = rawQuery.trim().toLowerCase();
@@ -1061,7 +1098,10 @@ export function useMcpSection({
         server.type.toLowerCase().includes(query) ||
         server.command.toLowerCase().includes(query) ||
         server.url.toLowerCase().includes(query) ||
-        server.args.join(" ").toLowerCase().includes(query)
+        server.args.join(" ").toLowerCase().includes(query) ||
+        server.catalogSource?.toLowerCase().includes(query) ||
+        server.catalogNativeCategory?.toLowerCase().includes(query) ||
+        server.catalogTags?.some((tag) => tag.toLowerCase().includes(query))
       );
     });
   }, [servers, query, scope, publicCategory]);
@@ -1120,7 +1160,9 @@ export function useMcpSection({
                     <span className="tools-detail-item-meta">
                       {!catalogMode && runtimeStatuses[server.id]
                         ? t(MCP_STATUS_LABEL[runtimeStatuses[server.id]!.status])
-                        : t(MCP_TYPE_LABEL[server.type])}
+                        : server.catalogInstallable === false
+                          ? t("plugins.mcpPublic.discoveryOnly")
+                          : t(MCP_TYPE_LABEL[server.type])}
                     </span>
                   </button>
                 ))}
@@ -1153,24 +1195,28 @@ export function useMcpSection({
                                 onClick={() => void open(selectedServer.websiteUrl!)}
                               >
                                 <ExternalLink size={13} aria-hidden />
-                                {t("mcpTools.documentation")}
+                                {selectedServer.catalogInstallable === false
+                                  ? t("plugins.mcpPublic.viewSource")
+                                  : t("mcpTools.documentation")}
                               </button>
                             ) : null}
-                            <button
-                              type="button"
-                              className="mcp-btn-primary mcp-install-btn"
-                              disabled={
-                                !configuredServersReady || installedServerIds.has(selectedServer.id)
-                              }
-                              onClick={() => installCatalogServer(selectedServer)}
-                            >
-                              {installedServerIds.has(selectedServer.id)
-                                ? <Check size={13} aria-hidden />
-                                : <Download size={13} aria-hidden />}
-                              {installedServerIds.has(selectedServer.id)
-                                ? t("mcpTools.installed")
-                                : t("mcpTools.install")}
-                            </button>
+                            {selectedServer.catalogInstallable !== false ? (
+                              <button
+                                type="button"
+                                className="mcp-btn-primary mcp-install-btn"
+                                disabled={
+                                  !configuredServersReady || installedServerIds.has(selectedServer.id)
+                                }
+                                onClick={() => installCatalogServer(selectedServer)}
+                              >
+                                {installedServerIds.has(selectedServer.id)
+                                  ? <Check size={13} aria-hidden />
+                                  : <Download size={13} aria-hidden />}
+                                {installedServerIds.has(selectedServer.id)
+                                  ? t("mcpTools.installed")
+                                  : t("mcpTools.install")}
+                              </button>
+                            ) : null}
                           </>
                         ) : (
                           <>
@@ -1263,40 +1309,55 @@ export function useMcpSection({
                           )}
                         </div>
                       ) : null}
-                      <div className="tools-detail-meta-item">
-                        <span className="tools-detail-label">
-                          {t("tools.detail.type")}
-                        </span>
-                        <span>{t(MCP_TYPE_LABEL[selectedServer.type])}</span>
-                      </div>
-                      <div className="tools-detail-meta-item">
-                        <span className="tools-detail-label">
-                          {t("tools.detail.endpoint")}
-                        </span>
-                        <code>{serverEndpoint(selectedServer)}</code>
-                      </div>
-                      <div className="tools-detail-meta-item">
-                        <span className="tools-detail-label">
-                          {t("mcpTools.startupTimeout")}
-                        </span>
-                        <span>{selectedServer.startupTimeoutSecs}s</span>
-                      </div>
-                      <div className="tools-detail-meta-item">
-                        <span className="tools-detail-label">
-                          {t("mcpTools.toolTimeout")}
-                        </span>
-                        <span>{selectedServer.toolTimeoutSecs}s</span>
-                      </div>
-                      <div className="tools-detail-meta-item">
-                        <span className="tools-detail-label">
-                          {t("mcpTools.required")}
-                        </span>
-                        <span>
-                          {selectedServer.required
-                            ? t("mcpTools.enabled")
-                            : t("mcpTools.disabled")}
-                        </span>
-                      </div>
+                      {selectedServer.catalogInstallable === false ? (
+                        <>
+                          <div className="tools-detail-meta-item">
+                            <span className="tools-detail-label">{t("plugins.mcpScopes")}</span>
+                            <span>{selectedServer.catalogSource}</span>
+                          </div>
+                          <div className="tools-detail-meta-item">
+                            <span className="tools-detail-label">{t("tools.detail.type")}</span>
+                            <span>{selectedServer.catalogNativeCategory ?? selectedServer.category}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="tools-detail-meta-item">
+                            <span className="tools-detail-label">
+                              {t("tools.detail.type")}
+                            </span>
+                            <span>{t(MCP_TYPE_LABEL[selectedServer.type])}</span>
+                          </div>
+                          <div className="tools-detail-meta-item">
+                            <span className="tools-detail-label">
+                              {t("tools.detail.endpoint")}
+                            </span>
+                            <code>{serverEndpoint(selectedServer)}</code>
+                          </div>
+                          <div className="tools-detail-meta-item">
+                            <span className="tools-detail-label">
+                              {t("mcpTools.startupTimeout")}
+                            </span>
+                            <span>{selectedServer.startupTimeoutSecs}s</span>
+                          </div>
+                          <div className="tools-detail-meta-item">
+                            <span className="tools-detail-label">
+                              {t("mcpTools.toolTimeout")}
+                            </span>
+                            <span>{selectedServer.toolTimeoutSecs}s</span>
+                          </div>
+                          <div className="tools-detail-meta-item">
+                            <span className="tools-detail-label">
+                              {t("mcpTools.required")}
+                            </span>
+                            <span>
+                              {selectedServer.required
+                                ? t("mcpTools.enabled")
+                                : t("mcpTools.disabled")}
+                            </span>
+                          </div>
+                        </>
+                      )}
                       {selectedServer.cwd ? (
                         <div className="tools-detail-meta-item">
                           <span className="tools-detail-label">{t("mcpTools.cwd")}</span>

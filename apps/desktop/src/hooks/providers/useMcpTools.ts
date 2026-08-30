@@ -181,6 +181,18 @@ export type McpServer = {
   websiteUrl?: string;
   /** 公开目录品牌图标的本地资源标识。 */
   icon?: string;
+  /** false 表示仅供发现，不能直接写入 MCP 运行配置。 */
+  catalogInstallable?: boolean;
+  /** 目录数据来源及上游元数据，仅用于公开目录展示。 */
+  catalogSource?: string;
+  catalogSourceUrl?: string;
+  catalogUpstreamUrl?: string;
+  catalogNativeCategory?: string;
+  catalogOfficial?: boolean;
+  catalogSponsored?: boolean;
+  catalogTags?: string[];
+  catalogUpdatedAt?: string;
+  catalogIdentity?: string;
 };
 
 export function isMcpToolEnabled(server: McpServer, toolName: string): boolean {
@@ -351,6 +363,19 @@ export function normalizeMcpServer(raw: Partial<McpServer> & { id?: string; name
     featured: config.featured === true,
     websiteUrl: readOptionalString(config, ["websiteUrl", "website_url"]),
     icon: readOptionalString(config, ["icon"]),
+    catalogInstallable:
+      typeof config.catalogInstallable === "boolean" ? config.catalogInstallable : undefined,
+    catalogSource: readOptionalString(config, ["catalogSource"]),
+    catalogSourceUrl: readOptionalString(config, ["catalogSourceUrl"]),
+    catalogUpstreamUrl: readOptionalString(config, ["catalogUpstreamUrl"]),
+    catalogNativeCategory: readOptionalString(config, ["catalogNativeCategory"]),
+    catalogOfficial:
+      typeof config.catalogOfficial === "boolean" ? config.catalogOfficial : undefined,
+    catalogSponsored:
+      typeof config.catalogSponsored === "boolean" ? config.catalogSponsored : undefined,
+    catalogTags: readStringArray(config, ["catalogTags"]),
+    catalogUpdatedAt: readOptionalString(config, ["catalogUpdatedAt"]),
+    catalogIdentity: readOptionalString(config, ["catalogIdentity"]),
   };
 }
 

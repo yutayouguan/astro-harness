@@ -1,4 +1,5 @@
 import catalog from "./mcp-public-catalog.json";
+import communityCatalog from "./mcp-community-catalog.json";
 import {
   MCP_PUBLIC_CATEGORY_IDS,
   normalizeMcpServer,
@@ -17,12 +18,39 @@ type CatalogDocument = {
   servers?: unknown;
 };
 
+type CommunityCatalogEntry = {
+  id?: string;
+  name?: string;
+  description?: string;
+  category?: string;
+  icon?: string;
+  featured?: boolean;
+  catalogInstallable?: boolean;
+  catalogSource?: string;
+  catalogSourceUrl?: string;
+  catalogUpstreamUrl?: string;
+  catalogNativeCategory?: string;
+  catalogOfficial?: boolean;
+  catalogSponsored?: boolean;
+  catalogTags?: string[];
+  catalogUpdatedAt?: string;
+  catalogIdentity?: string;
+};
+
 function isCatalogCategory(category: string | undefined): category is Exclude<McpPublicCategory, "featured"> {
   return !!category && category !== "featured" && MCP_PUBLIC_CATEGORY_IDS.includes(category as McpPublicCategory);
 }
 
 /** Validate and normalize the packaged public directory before it reaches the UI. */
-export function loadPublicMcpCatalog(): McpServer[] {
+function normalizedIdentity(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b(model context protocol|mcp|servers?)\b/g, "")
+    .replace(/[^a-z0-9\p{L}]+/gu, "")
+    .trim();
+}
+
+function loadCuratedCatalog(): McpServer[] {
   const document = catalog as CatalogDocument;
   if (document.version !== 1 || !Array.isArray(document.servers)) {
     throw new Error("Invalid public MCP catalog document");
@@ -46,16 +74,80 @@ export function loadPublicMcpCatalog(): McpServer[] {
       editable: false,
       category: entry.category,
       featured: entry.featured === true,
+      catalogInstallable: true,
     };
   });
+}
+
+function loadCommunityCatalog(curated: McpServer[]): McpServer[] {
+  const document = communityCatalog as CatalogDocument;
+  if (document.version !== 1 || !Array.isArray(document.servers)) {
+    throw new Error("Invalid community MCP catalog document");
+  }
+
+  const curatedIdentities = new Set(
+    curated.flatMap((entry) => [entry.id, normalizedIdentity(entry.name)]),
+  );
+  const ids = new Set(curated.map((entry) => entry.id));
+
+  return (document.servers as CommunityCatalogEntry[]).flatMap((entry) => {
+    const identity = entry.catalogIdentity ?? normalizedIdentity(entry.name ?? "");
+    if (
+      !entry.id?.trim() ||
+      !entry.name?.trim() ||
+      !entry.catalogSourceUrl?.trim() ||
+      !isCatalogCategory(entry.category) ||
+      entry.catalogInstallable !== false ||
+      ids.has(entry.id) ||
+      curatedIdentities.has(identity)
+    ) {
+      return [];
+    }
+    ids.add(entry.id);
+    return [{
+      ...normalizeMcpServer({
+        ...entry,
+        category: entry.category as Exclude<McpPublicCategory, "featured">,
+        type: "stdio",
+        command: "",
+        enabled: false,
+        websiteUrl: entry.catalogSourceUrl,
+      }),
+      scope: "builtin" as const,
+      provenance: entry.catalogSource ?? "community-catalog",
+      editable: false,
+      category: entry.category,
+      featured: entry.featured === true,
+      catalogInstallable: false,
+    }];
+  });
+}
+
+export function loadPublicMcpCatalog(): McpServer[] {
+  const curated = loadCuratedCatalog();
+  return [...curated, ...loadCommunityCatalog(curated)];
 }
 
 export const PUBLIC_MCP_CATALOG = loadPublicMcpCatalog();
 
 /** Convert a read-only directory template into a normal personal MCP config. */
 export function installableMcpServer(server: McpServer): McpServer {
+  if (server.catalogInstallable === false) {
+    throw new Error("Discovery-only MCP entries cannot be installed");
+  }
+  const runtimeServer = { ...server };
+  delete runtimeServer.catalogInstallable;
+  delete runtimeServer.catalogSource;
+  delete runtimeServer.catalogSourceUrl;
+  delete runtimeServer.catalogUpstreamUrl;
+  delete runtimeServer.catalogNativeCategory;
+  delete runtimeServer.catalogOfficial;
+  delete runtimeServer.catalogSponsored;
+  delete runtimeServer.catalogTags;
+  delete runtimeServer.catalogUpdatedAt;
+  delete runtimeServer.catalogIdentity;
   return {
-    ...server,
+    ...runtimeServer,
     enabled: true,
     scope: "global",
     provenance: "public-catalog",

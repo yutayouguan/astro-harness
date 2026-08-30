@@ -28,6 +28,14 @@ const publicMcpCatalogLoaderUrl = new URL(
   "../../config/mcpPublicCatalog.ts",
   import.meta.url,
 );
+const communityMcpCatalogUrl = new URL(
+  "../../config/mcp-community-catalog.json",
+  import.meta.url,
+);
+const mcpCatalogSourcesUrl = new URL(
+  "../../config/mcp-catalog-sources.json",
+  import.meta.url,
+);
 const mcpBrandIconUrl = new URL(
   "../../components/icons/McpBrandIcon.tsx",
   import.meta.url,
@@ -45,6 +53,12 @@ const publicMcpCatalog = JSON.parse(
 const publicMcpCatalogLoader = await readFile(
   publicMcpCatalogLoaderUrl,
   "utf8",
+);
+const communityMcpCatalog = JSON.parse(
+  await readFile(communityMcpCatalogUrl, "utf8"),
+);
+const mcpCatalogSources = JSON.parse(
+  await readFile(mcpCatalogSourcesUrl, "utf8"),
 );
 const mcpBrandIcon = await readFile(mcpBrandIconUrl, "utf8");
 
@@ -203,6 +217,27 @@ test("public MCP brands are config-driven bundled assets with a safe fallback", 
   assert.match(mcpSection, /<McpBrandIcon icon=\{server\.icon\}/);
   assert.match(mcpBrandIcon, /src=\{`\/mcp-icons\/\$\{validIcon\}\.svg`\}/);
   assert.match(mcpBrandIcon, /return <McpIcon/);
+});
+
+test("community MCP discovery uses an offline snapshot and never enables direct install", () => {
+  assert.ok(communityMcpCatalog.servers.length > 50);
+  for (const server of communityMcpCatalog.servers) {
+    assert.equal(server.catalogInstallable, false);
+    assert.equal(server.catalogSource, "mcpservers.org");
+    assert.match(server.catalogSourceUrl, /^https:\/\/mcpservers\.org\/zh-CN\/servers\//);
+    assert.equal(server.command, undefined);
+    assert.equal(server.url, undefined);
+  }
+
+  for (const source of mcpCatalogSources.sources) {
+    assert.doesNotMatch(source.baseUrl, /\/api(?:\/|$)/);
+    for (const feed of source.feeds) assert.doesNotMatch(feed.path, /\/api(?:\/|$)/);
+  }
+
+  assert.match(publicMcpCatalogLoader, /mcp-community-catalog\.json/);
+  assert.match(publicMcpCatalogLoader, /Discovery-only MCP entries cannot be installed/);
+  assert.match(mcpSection, /server\.catalogInstallable === false/);
+  assert.match(mcpSection, /selectedServer\.catalogInstallable !== false/);
 });
 
 test("plugin toolbar is compact and degrades to stacked rows on narrow screens", () => {
