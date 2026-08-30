@@ -18,9 +18,9 @@
 .content-header--chat {
   position: relative;
   gap: 12px;
-  min-height: var(--titlebar-h, 52px);
+  min-height: 48px;
   box-sizing: border-box;
-  padding: 8px 16px;
+  padding: 7px 16px;
 }
 
 .content-header--chat .content-heading {
@@ -50,8 +50,8 @@
 .content-header--chat .conversation-title {
   min-width: 0;
   width: 100%;
-  font-size: 17px;
-  letter-spacing: -0.02em;
+  font-size: 16px;
+  letter-spacing: -0.015em;
   color: var(--ink);
 }
 
@@ -97,7 +97,7 @@
   position: absolute;
   top: auto;
   right: 16px;
-  bottom: 9px;
+  bottom: 7px;
   flex-wrap: nowrap;
 }
 
