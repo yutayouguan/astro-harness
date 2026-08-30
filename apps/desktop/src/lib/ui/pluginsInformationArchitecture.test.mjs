@@ -20,6 +20,14 @@ const mcpToolsUrl = new URL(
   import.meta.url,
 );
 const messagesUrl = new URL("../../i18n/messages.ts", import.meta.url);
+const publicMcpCatalogUrl = new URL(
+  "../../config/mcp-public-catalog.json",
+  import.meta.url,
+);
+const publicMcpCatalogLoaderUrl = new URL(
+  "../../config/mcpPublicCatalog.ts",
+  import.meta.url,
+);
 
 const panel = await readFile(panelUrl, "utf8");
 const styles = await readFile(coreCssUrl, "utf8");
@@ -27,6 +35,13 @@ const tabs = await readFile(tabsCssUrl, "utf8");
 const mcpSection = await readFile(mcpSectionUrl, "utf8");
 const mcpTools = await readFile(mcpToolsUrl, "utf8");
 const messages = await readFile(messagesUrl, "utf8");
+const publicMcpCatalog = JSON.parse(
+  await readFile(publicMcpCatalogUrl, "utf8"),
+);
+const publicMcpCatalogLoader = await readFile(
+  publicMcpCatalogLoaderUrl,
+  "utf8",
+);
 
 test("plugin catalog remounts after hook-signature edits during Fast Refresh", () => {
   assert.match(
@@ -113,6 +128,53 @@ test("public MCP directory has category metadata and a scrollable filter rail", 
     tabs,
     /\.plugins-public-categories\s*\{[\s\S]*?overflow-x:\s*auto;/,
   );
+});
+
+test("public MCP directory is config-driven and covers every public category", () => {
+  assert.equal(publicMcpCatalog.version, 1);
+  assert.ok(publicMcpCatalog.servers.length >= 20);
+  assert.equal(
+    new Set(publicMcpCatalog.servers.map((server) => server.id)).size,
+    publicMcpCatalog.servers.length,
+    "public MCP ids must be unique",
+  );
+
+  const configuredCategories = new Set(
+    publicMcpCatalog.servers.map((server) => server.category),
+  );
+  for (const category of [
+    "productivity",
+    "development",
+    "finance",
+    "travel",
+    "health",
+    "research",
+    "education",
+    "communication",
+    "analytics",
+    "other",
+  ]) {
+    assert.ok(
+      configuredCategories.has(category),
+      `missing ${category} catalog entries`,
+    );
+  }
+
+  for (const server of publicMcpCatalog.servers) {
+    assert.ok(server.name && server.description);
+    assert.ok(server.type === "stdio" || server.type === "streamableHttp");
+    assert.ok(
+      server.type === "stdio" ? server.command : server.url,
+      `${server.id} must provide a usable transport configuration`,
+    );
+    assert.equal(server.env, undefined, `${server.id} must not embed secret values`);
+    assert.equal(server.headers, undefined, `${server.id} must not embed secret headers`);
+  }
+
+  assert.match(publicMcpCatalogLoader, /mcp-public-catalog\.json/);
+  assert.match(mcpSection, /PUBLIC_MCP_CATALOG/);
+  assert.match(mcpSection, /installableMcpServer/);
+  assert.match(mcpSection, /mcpTools\.install/);
 });
 
 test("plugin toolbar is compact and degrades to stacked rows on narrow screens", () => {

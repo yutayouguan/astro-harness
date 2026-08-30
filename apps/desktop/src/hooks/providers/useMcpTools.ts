@@ -177,6 +177,8 @@ export type McpServer = {
   category?: Exclude<McpPublicCategory, "featured">;
   /** 是否进入公开目录的精选集合。 */
   featured?: boolean;
+  /** 公开目录中的官方文档或源码地址。 */
+  websiteUrl?: string;
 };
 
 export function isMcpToolEnabled(server: McpServer, toolName: string): boolean {
@@ -280,7 +282,7 @@ function readToolSettings(raw: Record<string, unknown>): {
   return { enabled, approvalModes };
 }
 
-function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string }): McpServer {
+export function normalizeMcpServer(raw: Partial<McpServer> & { id?: string; name?: string }): McpServer {
   const config = raw as unknown as Record<string, unknown>;
   const type = inferType(config);
   const toolSettings = readToolSettings(config);
@@ -345,6 +347,7 @@ function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string 
     editable: config.editable !== false,
     category,
     featured: config.featured === true,
+    websiteUrl: readOptionalString(config, ["websiteUrl", "website_url"]),
   };
 }
 
@@ -353,7 +356,7 @@ function readLocalStored(): McpServer[] {
     const raw = localStorage.getItem("mcp-tools");
     if (!raw) return [];
     const list = JSON.parse(raw) as Partial<McpServer>[];
-    return Array.isArray(list) ? list.map((s) => normalizeServer(s)) : [];
+    return Array.isArray(list) ? list.map((s) => normalizeMcpServer(s)) : [];
   } catch {
     return [];
   }
@@ -384,7 +387,7 @@ export function parseMcpJson(raw: string): McpServer[] {
   if (obj.mcpServers && typeof obj.mcpServers === "object") {
     const servers = obj.mcpServers as Record<string, Record<string, unknown>>;
     return Object.entries(servers).map(([name, cfg]) =>
-      normalizeServer({
+      normalizeMcpServer({
         name,
         description: typeof cfg.description === "string" ? cfg.description : "",
         type: inferType(cfg),
@@ -436,7 +439,7 @@ export function parseMcpJson(raw: string): McpServer[] {
     typeof obj.url === "string" ||
     typeof obj.name === "string"
   ) {
-    return [normalizeServer(obj as Partial<McpServer>)];
+    return [normalizeMcpServer(obj as Partial<McpServer>)];
   }
 
   throw new Error("Unrecognized MCP JSON format");
@@ -465,7 +468,7 @@ export function useMcpTools(
         if (!cancelled) {
           try {
             const raw = localStorage.getItem("mcp-tools");
-            setServers(raw ? (JSON.parse(raw) as McpServer[]).map(normalizeServer) : []);
+            setServers(raw ? (JSON.parse(raw) as McpServer[]).map(normalizeMcpServer) : []);
           } catch {
             setServers([]);
           }
@@ -476,7 +479,7 @@ export function useMcpTools(
       try {
         const list = await invoke<Partial<McpServer>[]>("get_mcp_servers", { scope });
         if (!cancelled) {
-          setServers(list.map((s) => normalizeServer(s)));
+          setServers(list.map((s) => normalizeMcpServer(s)));
           setReady(true);
         }
       } catch {
@@ -608,7 +611,7 @@ export function useMcpTools(
   }, [servers, ready, skipNextSave, scope]);
 
   const addServers = useCallback((incoming: McpServer[]) => {
-    setServers((prev) => [...prev, ...incoming.map((s) => normalizeServer(s))]);
+    setServers((prev) => [...prev, ...incoming.map((s) => normalizeMcpServer(s))]);
   }, []);
 
   const toggleServer = useCallback((id: string) => {
@@ -679,7 +682,7 @@ export function useMcpTools(
         });
         const list = await invoke<Partial<McpServer>[]>("get_mcp_servers", { scope });
         setSkipNextSave(true);
-        setServers(list.map((s) => normalizeServer(s)));
+        setServers(list.map((s) => normalizeMcpServer(s)));
       } finally {
         setRefreshing(false);
       }
@@ -689,6 +692,7 @@ export function useMcpTools(
 
   return {
     servers,
+    ready,
     addServers,
     toggleServer,
     toggleTool,

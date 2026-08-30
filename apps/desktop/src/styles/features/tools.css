@@ -507,6 +507,13 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   margin-top: 0;
 }
 
+.mcp-install-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .mcp-reconnect-btn {
   display: inline-flex;
   align-items: center;

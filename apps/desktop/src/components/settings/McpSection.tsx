@@ -9,10 +9,14 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { open } from "@tauri-apps/plugin-shell";
 import {
   AlignLeft,
   Braces,
+  Check,
   Clock3,
+  Download,
+  ExternalLink,
   FileText,
   FormInput,
   Globe,
@@ -29,6 +33,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import {
+  PUBLIC_MCP_CATALOG,
+  installableMcpServer,
+} from "../../config/mcpPublicCatalog";
 import {
   parseMcpJson,
   LegacySseTransportError,
@@ -894,6 +902,72 @@ function McpServerCard({
   );
 }
 
+/** 公开目录卡片只展示模板信息，接入后才生成可编辑的个人配置。 */
+function McpCatalogCard({
+  server,
+  installed,
+  installReady,
+  onInstall,
+}: {
+  server: McpServer;
+  installed: boolean;
+  installReady: boolean;
+  onInstall: (server: McpServer) => void;
+}) {
+  const { t } = useI18n();
+  const credentialNames = [
+    ...server.envVars,
+    ...(server.bearerTokenEnvVar ? [server.bearerTokenEnvVar] : []),
+    ...Object.values(server.envHttpHeaders),
+  ];
+
+  return (
+    <article className="mcp-server-card is-on">
+      <header className="mcp-server-head">
+        <div className="mcp-server-icon" aria-hidden>
+          <McpIcon size={22} />
+        </div>
+        <div className="mcp-server-meta">
+          <div className="mcp-server-title-row">
+            <span className="mcp-server-name">{server.name}</span>
+            <span className="mcp-server-type">{t(MCP_TYPE_LABEL[server.type])}</span>
+          </div>
+          <code className="mcp-server-cmd">{serverEndpoint(server)}</code>
+        </div>
+      </header>
+      <p className="mcp-server-desc">{server.description}</p>
+      {credentialNames.length > 0 ? (
+        <div className="mcp-server-env">
+          {credentialNames.map((name) => (
+            <span key={name} className="mcp-server-env-key">{name} ← env</span>
+          ))}
+        </div>
+      ) : null}
+      <div className="mcp-server-actions">
+        {server.websiteUrl ? (
+          <button
+            type="button"
+            className="mcp-btn-ghost"
+            onClick={() => void open(server.websiteUrl!)}
+          >
+            <ExternalLink size={13} aria-hidden />
+            {t("mcpTools.documentation")}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="mcp-btn-primary mcp-install-btn"
+          disabled={installed || !installReady}
+          onClick={() => onInstall(server)}
+        >
+          {installed ? <Check size={13} aria-hidden /> : <Download size={13} aria-hidden />}
+          {installed ? t("mcpTools.installed") : t("mcpTools.install")}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 /** 宿主页面挂载 MCP 区块所需的入参 */
 type McpSectionOptions = {
   /** 区块是否可见（决定是否轮询运行时状态） */
@@ -934,7 +1008,8 @@ export function useMcpSection({
   const [showAdd, setShowAdd] = useState(false);
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const {
-    servers,
+    servers: configuredServers,
+    ready: configuredServersReady,
     addServers,
     toggleServer,
     toggleTool,
@@ -950,7 +1025,21 @@ export function useMcpSection({
     authenticateServer,
     logoutServer,
     authenticatingServerIds,
-  } = useMcpTools(agentId, active, scope);
+  } = useMcpTools(
+    agentId,
+    active && scope !== "builtin",
+    scope === "builtin" ? "global" : scope,
+  );
+  const catalogMode = scope === "builtin";
+  const servers = catalogMode ? PUBLIC_MCP_CATALOG : configuredServers;
+  const installedServerIds = useMemo(
+    () => new Set(configuredServers.map((server) => server.id)),
+    [configuredServers],
+  );
+  const installCatalogServer = (server: McpServer) => {
+    if (!configuredServersReady || installedServerIds.has(server.id)) return;
+    addServers([installableMcpServer(server)]);
+  };
   const query = rawQuery.trim().toLowerCase();
 
   const filteredServers = useMemo(() => {
@@ -985,13 +1074,13 @@ export function useMcpSection({
   }, [viewMode, filteredServers, selectedDetailId]);
 
   const selectedServer = filteredServers.find((s) => s.id === selectedDetailId);
-  const selectedRuntimeStatus = selectedServer
+  const selectedRuntimeStatus = !catalogMode && selectedServer
     ? runtimeStatuses[selectedServer.id]
     : undefined;
 
   const content = (
     <>
-          {runtimeStatusError ? (
+          {!catalogMode && runtimeStatusError ? (
             <p className="mcp-runtime-error mcp-runtime-error--global" role="alert">
               <ShieldAlert size={13} strokeWidth={2.2} aria-hidden />
               <span>{t("mcpTools.statusUnavailable")}: {runtimeStatusError}</span>
@@ -1023,12 +1112,12 @@ export function useMcpSection({
                     key={server.id}
                     type="button"
                     role="listitem"
-                    className={`tools-detail-item ${selectedDetailId === server.id ? "is-selected" : ""} ${server.enabled ? "" : "is-disabled"}`}
+                    className={`tools-detail-item ${selectedDetailId === server.id ? "is-selected" : ""} ${catalogMode || server.enabled ? "" : "is-disabled"}`}
                     onClick={() => setSelectedDetailId(server.id)}
                   >
                     <span className="tools-detail-item-title">{server.name}</span>
                     <span className="tools-detail-item-meta">
-                      {runtimeStatuses[server.id]
+                      {!catalogMode && runtimeStatuses[server.id]
                         ? t(MCP_STATUS_LABEL[runtimeStatuses[server.id]!.status])
                         : t(MCP_TYPE_LABEL[server.type])}
                     </span>
@@ -1041,71 +1130,105 @@ export function useMcpSection({
                     <header className="tools-detail-head">
                       <div>
                         <h3 className="tools-detail-title">{selectedServer.name}</h3>
-                        <button
-                          type="button"
-                          role="switch"
-                          className="tool-toggle"
-                          aria-checked={selectedServer.enabled}
-                          onClick={() => toggleServer(selectedServer.id)}
-                        >
-                          <span className="tool-toggle-thumb" />
-                        </button>
+                        {!catalogMode ? (
+                          <button
+                            type="button"
+                            role="switch"
+                            className="tool-toggle"
+                            aria-checked={selectedServer.enabled}
+                            onClick={() => toggleServer(selectedServer.id)}
+                          >
+                            <span className="tool-toggle-thumb" />
+                          </button>
+                        ) : null}
                       </div>
                       <div className="mcp-server-actions">
-                        {selectedRuntimeStatus?.status === "auth-required" ? (
-                          <button
-                            type="button"
-                            className="mcp-btn-ghost"
-                            disabled={authenticatingServerIds.has(selectedServer.id)}
-                            onClick={() => void authenticateServer(selectedServer.id)}
-                          >
-                            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
-                            {authenticatingServerIds.has(selectedServer.id)
-                              ? t("mcpTools.authenticating")
-                              : t("mcpTools.authenticate")}
-                          </button>
-                        ) : null}
-                        {selectedRuntimeStatus?.authenticated ? (
-                          <button
-                            type="button"
-                            className="mcp-btn-ghost"
-                            disabled={authenticatingServerIds.has(selectedServer.id)}
-                            onClick={() => void logoutServer(selectedServer.id)}
-                          >
-                            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
-                            {authenticatingServerIds.has(selectedServer.id)
-                              ? t("mcpTools.loggingOut")
-                              : t("mcpTools.logout")}
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="mcp-btn-ghost mcp-reconnect-btn"
-                          disabled={reconnectingServerIds.has(selectedServer.id)}
-                          onClick={() => void reconnectServer(selectedServer.id)}
-                        >
-                          <IconRefresh
-                            width={13}
-                            height={13}
-                            className={
-                              reconnectingServerIds.has(selectedServer.id)
-                                ? "is-spin"
-                                : undefined
-                            }
-                          />
-                          {reconnectingServerIds.has(selectedServer.id)
-                            ? t("mcpTools.reconnecting")
-                            : t("mcpTools.reconnect")}
-                        </button>
-                        <button
-                          type="button"
-                          className="mcp-server-remove"
-                          onClick={() => removeServer(selectedServer.id)}
-                          aria-label={t("mcpTools.remove")}
-                        >
-                          <Trash2 size={13} strokeWidth={2.25} aria-hidden />
-                          {t("mcpTools.remove")}
-                        </button>
+                        {catalogMode ? (
+                          <>
+                            {selectedServer.websiteUrl ? (
+                              <button
+                                type="button"
+                                className="mcp-btn-ghost"
+                                onClick={() => void open(selectedServer.websiteUrl!)}
+                              >
+                                <ExternalLink size={13} aria-hidden />
+                                {t("mcpTools.documentation")}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="mcp-btn-primary mcp-install-btn"
+                              disabled={
+                                !configuredServersReady || installedServerIds.has(selectedServer.id)
+                              }
+                              onClick={() => installCatalogServer(selectedServer)}
+                            >
+                              {installedServerIds.has(selectedServer.id)
+                                ? <Check size={13} aria-hidden />
+                                : <Download size={13} aria-hidden />}
+                              {installedServerIds.has(selectedServer.id)
+                                ? t("mcpTools.installed")
+                                : t("mcpTools.install")}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {selectedRuntimeStatus?.status === "auth-required" ? (
+                              <button
+                                type="button"
+                                className="mcp-btn-ghost"
+                                disabled={authenticatingServerIds.has(selectedServer.id)}
+                                onClick={() => void authenticateServer(selectedServer.id)}
+                              >
+                                <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                                {authenticatingServerIds.has(selectedServer.id)
+                                  ? t("mcpTools.authenticating")
+                                  : t("mcpTools.authenticate")}
+                              </button>
+                            ) : null}
+                            {selectedRuntimeStatus?.authenticated ? (
+                              <button
+                                type="button"
+                                className="mcp-btn-ghost"
+                                disabled={authenticatingServerIds.has(selectedServer.id)}
+                                onClick={() => void logoutServer(selectedServer.id)}
+                              >
+                                <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                                {authenticatingServerIds.has(selectedServer.id)
+                                  ? t("mcpTools.loggingOut")
+                                  : t("mcpTools.logout")}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="mcp-btn-ghost mcp-reconnect-btn"
+                              disabled={reconnectingServerIds.has(selectedServer.id)}
+                              onClick={() => void reconnectServer(selectedServer.id)}
+                            >
+                              <IconRefresh
+                                width={13}
+                                height={13}
+                                className={
+                                  reconnectingServerIds.has(selectedServer.id)
+                                    ? "is-spin"
+                                    : undefined
+                                }
+                              />
+                              {reconnectingServerIds.has(selectedServer.id)
+                                ? t("mcpTools.reconnecting")
+                                : t("mcpTools.reconnect")}
+                            </button>
+                            <button
+                              type="button"
+                              className="mcp-server-remove"
+                              onClick={() => removeServer(selectedServer.id)}
+                              aria-label={t("mcpTools.remove")}
+                            >
+                              <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+                              {t("mcpTools.remove")}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </header>
                     {selectedServer.description && (
@@ -1119,7 +1242,7 @@ export function useMcpSection({
                         </p>
                       </section>
                     )}
-                    {selectedRuntimeStatus?.error ? (
+                    {!catalogMode && selectedRuntimeStatus?.error ? (
                       <p className="mcp-runtime-error" role="alert">
                         <ShieldAlert size={13} strokeWidth={2.2} aria-hidden />
                         <span>{selectedRuntimeStatus.error}</span>
@@ -1127,16 +1250,18 @@ export function useMcpSection({
                     ) : null}
                     <McpRetryNote status={selectedRuntimeStatus} />
                     <section className="tools-detail-meta-grid">
-                      <div className="tools-detail-meta-item">
-                        <span className="tools-detail-label">
-                          {t("mcpTools.runtimeStatus")}
-                        </span>
-                        {selectedRuntimeStatus ? (
-                          <McpStatusBadge status={selectedRuntimeStatus} />
-                        ) : (
-                          <span>{t("mcpTools.status.loading")}</span>
-                        )}
-                      </div>
+                      {!catalogMode ? (
+                        <div className="tools-detail-meta-item">
+                          <span className="tools-detail-label">
+                            {t("mcpTools.runtimeStatus")}
+                          </span>
+                          {selectedRuntimeStatus ? (
+                            <McpStatusBadge status={selectedRuntimeStatus} />
+                          ) : (
+                            <span>{t("mcpTools.status.loading")}</span>
+                          )}
+                        </div>
+                      ) : null}
                       <div className="tools-detail-meta-item">
                         <span className="tools-detail-label">
                           {t("tools.detail.type")}
@@ -1178,7 +1303,7 @@ export function useMcpSection({
                         </div>
                       ) : null}
                     </section>
-                    <section className="tools-detail-section">
+                    {!catalogMode ? <section className="tools-detail-section">
                       <h4 className="tools-detail-label">
                         <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
                         {t("mcpTools.approval.default")}
@@ -1203,8 +1328,8 @@ export function useMcpSection({
                           `mcpTools.approval.hint.${selectedServer.defaultToolsApprovalMode}` as MessageKey,
                         )}
                       </p>
-                    </section>
-                    <section className="tools-detail-section">
+                    </section> : null}
+                    {!catalogMode ? <section className="tools-detail-section">
                       <div className="mcp-tool-list-head">
                         <h4 className="tools-detail-label">{t("mcpTools.tools")}</h4>
                         <button
@@ -1288,7 +1413,7 @@ export function useMcpSection({
                           </div>
                         );
                       })}
-                    </section>
+                    </section> : null}
                   </>
                 ) : (
                   <p className="agent-tools-empty">{t("tools.detail.selectHint")}</p>
@@ -1298,23 +1423,33 @@ export function useMcpSection({
           ) : (
             <div className={`mcp-server-grid is-${viewMode}`}>
               {filteredServers.map((s) => (
-                <McpServerCard
-                  key={s.id}
-                  server={s}
-                  onToggle={toggleServer}
-                  onToggleTool={toggleTool}
-                  onSetServerApprovalMode={setServerApprovalMode}
-                  onSetToolApprovalMode={setToolApprovalMode}
-                  onRefresh={(id) => void refreshTools(id)}
-                  onRemove={removeServer}
-                  onReconnect={(id) => void reconnectServer(id)}
-                  onAuthenticate={(id) => void authenticateServer(id)}
-                  onLogout={(id) => void logoutServer(id)}
-                  refreshing={refreshing}
-                  reconnecting={reconnectingServerIds.has(s.id)}
-                  authenticating={authenticatingServerIds.has(s.id)}
-                  runtimeStatus={runtimeStatuses[s.id]}
-                />
+                catalogMode ? (
+                  <McpCatalogCard
+                    key={s.id}
+                    server={s}
+                    installed={installedServerIds.has(s.id)}
+                    installReady={configuredServersReady}
+                    onInstall={installCatalogServer}
+                  />
+                ) : (
+                  <McpServerCard
+                    key={s.id}
+                    server={s}
+                    onToggle={toggleServer}
+                    onToggleTool={toggleTool}
+                    onSetServerApprovalMode={setServerApprovalMode}
+                    onSetToolApprovalMode={setToolApprovalMode}
+                    onRefresh={(id) => void refreshTools(id)}
+                    onRemove={removeServer}
+                    onReconnect={(id) => void reconnectServer(id)}
+                    onAuthenticate={(id) => void authenticateServer(id)}
+                    onLogout={(id) => void logoutServer(id)}
+                    refreshing={refreshing}
+                    reconnecting={reconnectingServerIds.has(s.id)}
+                    authenticating={authenticatingServerIds.has(s.id)}
+                    runtimeStatus={runtimeStatuses[s.id]}
+                  />
+                )
               ))}
             </div>
           )}

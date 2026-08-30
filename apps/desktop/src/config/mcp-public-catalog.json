@@ -1,0 +1,320 @@
+{
+  "version": 1,
+  "sources": [
+    "https://registry.modelcontextprotocol.io/",
+    "https://github.com/punkpeye/awesome-mcp-servers",
+    "https://mcpservers.org/",
+    "https://mcp-awesome.com/",
+    "https://mcplist.ai/",
+    "https://mcpatlas.dev/"
+  ],
+  "servers": [
+    {
+      "id": "notion",
+      "name": "Notion",
+      "description": "读写 Notion 页面、数据库与工作区。",
+      "category": "productivity",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.notion.com/mcp",
+      "auth": "oauth",
+      "websiteUrl": "https://developers.notion.com/docs/mcp"
+    },
+    {
+      "id": "linear",
+      "name": "Linear",
+      "description": "管理议题、项目、迭代周期与团队。",
+      "category": "productivity",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.linear.app/mcp",
+      "auth": "oauth",
+      "websiteUrl": "https://linear.app/docs/mcp"
+    },
+    {
+      "id": "atlassian",
+      "name": "Atlassian",
+      "description": "连接 Jira、Confluence 与 Compass 工作流。",
+      "category": "productivity",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "auth": "oauth",
+      "websiteUrl": "https://www.atlassian.com/platform/remote-mcp-server"
+    },
+    {
+      "id": "asana",
+      "name": "Asana",
+      "description": "管理 Asana 项目、任务与团队工作。",
+      "category": "productivity",
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcparmory-asana"],
+      "envVars": ["ASANA_ACCESS_TOKEN"],
+      "websiteUrl": "https://registry.modelcontextprotocol.io/"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "操作仓库、Issue、Pull Request、代码搜索与 Actions。",
+      "category": "development",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "bearerTokenEnvVar": "GITHUB_PERSONAL_ACCESS_TOKEN",
+      "websiteUrl": "https://github.com/github/github-mcp-server"
+    },
+    {
+      "id": "gitlab",
+      "name": "GitLab",
+      "description": "管理 GitLab 项目、Merge Request 与 CI/CD。",
+      "category": "development",
+      "type": "streamableHttp",
+      "url": "https://gitlab.com/api/v4/mcp",
+      "auth": "oauth",
+      "websiteUrl": "https://docs.gitlab.com/user/gitlab_duo/model_context_protocol/mcp_server/"
+    },
+    {
+      "id": "sentry",
+      "name": "Sentry",
+      "description": "查询错误、发布与应用性能信息。",
+      "category": "development",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.sentry.dev/mcp",
+      "auth": "oauth",
+      "websiteUrl": "https://docs.sentry.io/product/sentry-mcp/"
+    },
+    {
+      "id": "playwright",
+      "name": "Playwright",
+      "description": "通过结构化页面状态执行浏览器自动化与测试。",
+      "category": "development",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "websiteUrl": "https://github.com/microsoft/playwright-mcp"
+    },
+    {
+      "id": "context7",
+      "name": "Context7",
+      "description": "为编程任务提供实时、版本特定的库文档。",
+      "category": "development",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.context7.com/mcp",
+      "websiteUrl": "https://github.com/upstash/context7"
+    },
+    {
+      "id": "deepwiki",
+      "name": "DeepWiki",
+      "description": "针对公开 GitHub 代码库进行 AI 问答与结构探索。",
+      "category": "development",
+      "type": "streamableHttp",
+      "url": "https://mcp.deepwiki.com/mcp",
+      "websiteUrl": "https://docs.devin.ai/work-with-devin/deepwiki-mcp"
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "description": "管理支付、客户、订阅与发票。",
+      "category": "finance",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.stripe.com",
+      "auth": "oauth",
+      "websiteUrl": "https://docs.stripe.com/mcp"
+    },
+    {
+      "id": "paypal",
+      "name": "PayPal",
+      "description": "处理 PayPal 发票、支付与交易。",
+      "category": "finance",
+      "type": "streamableHttp",
+      "url": "https://mcp.paypal.com/mcp",
+      "bearerTokenEnvVar": "PAYPAL_ACCESS_TOKEN",
+      "websiteUrl": "https://developer.paypal.com/tools/mcp-server/"
+    },
+    {
+      "id": "google-maps",
+      "name": "Google Maps",
+      "description": "地理编码、路线规划与地点搜索。",
+      "category": "travel",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-google-maps"],
+      "envVars": ["GOOGLE_MAPS_API_KEY"],
+      "websiteUrl": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/google-maps"
+    },
+    {
+      "id": "pubmed",
+      "name": "PubMed",
+      "description": "搜索 PubMed 与 NIH 医学文献。",
+      "category": "health",
+      "type": "streamableHttp",
+      "url": "https://server.smithery.ai/@lineex/pubmed-mcp-smithery/mcp",
+      "bearerTokenEnvVar": "SMITHERY_API_KEY",
+      "websiteUrl": "https://registry.modelcontextprotocol.io/"
+    },
+    {
+      "id": "exa",
+      "name": "Exa",
+      "description": "面向 AI 工作流的语义网页搜索。",
+      "category": "research",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.exa.ai/mcp",
+      "websiteUrl": "https://exa.ai/docs/reference/exa-mcp"
+    },
+    {
+      "id": "tavily",
+      "name": "Tavily",
+      "description": "面向 Agent 的网页搜索与内容提取。",
+      "category": "research",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@toolsdk.ai/tavily-mcp"],
+      "envVars": ["TAVILY_API_KEY"],
+      "websiteUrl": "https://registry.modelcontextprotocol.io/"
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "description": "使用 Brave Search 进行网页与本地搜索。",
+      "category": "research",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "envVars": ["BRAVE_API_KEY"],
+      "websiteUrl": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/brave-search"
+    },
+    {
+      "id": "firecrawl",
+      "name": "Firecrawl",
+      "description": "抓取网页并转换为适合 LLM 使用的内容。",
+      "category": "research",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "envVars": ["FIRECRAWL_API_KEY"],
+      "websiteUrl": "https://github.com/mendableai/firecrawl-mcp-server"
+    },
+    {
+      "id": "anki",
+      "name": "Anki",
+      "description": "管理 Anki 记忆卡牌与间隔复习内容。",
+      "category": "education",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@ankimcp/anki-mcp-server"],
+      "websiteUrl": "https://registry.modelcontextprotocol.io/"
+    },
+    {
+      "id": "hugging-face",
+      "name": "Hugging Face",
+      "description": "搜索并使用 Hugging Face 模型、数据集与 Spaces。",
+      "category": "education",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://huggingface.co/mcp",
+      "bearerTokenEnvVar": "HF_TOKEN",
+      "websiteUrl": "https://huggingface.co/settings/mcp"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "description": "读写 Slack 消息、频道与用户信息。",
+      "category": "communication",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "envVars": ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"],
+      "websiteUrl": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/slack"
+    },
+    {
+      "id": "neon",
+      "name": "Neon",
+      "description": "管理 Neon Postgres 项目、分支与 SQL 查询。",
+      "category": "analytics",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.neon.tech/mcp",
+      "auth": "oauth",
+      "websiteUrl": "https://neon.com/docs/ai/neon-mcp-server"
+    },
+    {
+      "id": "supabase",
+      "name": "Supabase",
+      "description": "管理 Supabase Postgres、Auth、Storage 与项目配置。",
+      "category": "analytics",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.supabase.com/mcp",
+      "auth": "oauth",
+      "websiteUrl": "https://supabase.com/docs/guides/getting-started/mcp"
+    },
+    {
+      "id": "grafana",
+      "name": "Grafana",
+      "description": "查询仪表盘、数据源、告警与可观测信息。",
+      "category": "analytics",
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-grafana"],
+      "envVars": ["GRAFANA_URL", "GRAFANA_SERVICE_ACCOUNT_TOKEN"],
+      "websiteUrl": "https://github.com/grafana/mcp-grafana"
+    },
+    {
+      "id": "figma",
+      "name": "Figma",
+      "description": "读取 Figma 设计上下文、变量与原型信息。",
+      "category": "other",
+      "featured": true,
+      "type": "streamableHttp",
+      "url": "https://mcp.figma.com/mcp",
+      "auth": "oauth",
+      "websiteUrl": "https://help.figma.com/hc/en-us/articles/32132100833559-Guide-to-the-Dev-Mode-MCP-Server"
+    },
+    {
+      "id": "blender",
+      "name": "Blender",
+      "description": "通过自然语言控制 Blender 场景与 3D 建模。",
+      "category": "other",
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["blender-mcp"],
+      "envVars": ["DISABLE_TELEMETRY"],
+      "websiteUrl": "https://github.com/ahujasid/blender-mcp"
+    },
+    {
+      "id": "memory",
+      "name": "Memory",
+      "description": "使用本地知识图谱为 Agent 提供持久记忆。",
+      "category": "other",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "websiteUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory"
+    },
+    {
+      "id": "sequential-thinking",
+      "name": "Sequential Thinking",
+      "description": "为复杂问题提供可修订的分步思考工具。",
+      "category": "other",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "websiteUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking"
+    },
+    {
+      "id": "time",
+      "name": "Time",
+      "description": "获取当前时间并执行时区转换。",
+      "category": "other",
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-time"],
+      "websiteUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/time"
+    }
+  ]
+}
