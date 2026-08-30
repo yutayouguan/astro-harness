@@ -408,6 +408,7 @@ html[data-theme="dark"] .skill-card-desc {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
   flex-wrap: wrap;
 }
 
@@ -429,6 +430,12 @@ html[data-theme="dark"] .skill-card-desc {
   color: var(--tone-orange, #d97706);
   border-color: color-mix(in srgb, var(--tone-orange, #f59e0b) 24%, transparent);
   background: color-mix(in srgb, var(--tone-orange, #f59e0b) 9%, transparent);
+}
+
+.skill-card-taxonomy > .source {
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 22%, transparent);
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
 }
 
 html[data-theme="dark"] .skill-card-taxonomy > span {

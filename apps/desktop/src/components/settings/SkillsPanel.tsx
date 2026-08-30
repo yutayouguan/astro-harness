@@ -2222,8 +2222,13 @@ export default function SkillsPanel({
             </span>
           ) : null}
         </header>
-        {(skill.category || skill.requires_api_key === true) && (
+        {(skill.source || skill.category || skill.requires_api_key === true) && (
           <div className="skill-card-taxonomy">
+            {skill.source && (
+              <span className="source" title={skill.source}>
+                {skill.source}
+              </span>
+            )}
             {skill.category && (
               <span>{storeCategoryLabel(skill.category)}</span>
             )}
@@ -2236,9 +2241,6 @@ export default function SkillsPanel({
           <p>
             {storeCardDescription(skill, t("skills.detailInstalls"))}
           </p>
-          <span className="skill-card-tag" title={skill.source}>
-            {skill.source}
-          </span>
         </div>
         <div className="skill-card-actions">
           {already ? (
