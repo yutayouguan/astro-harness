@@ -269,10 +269,13 @@ test("public MCP brands accept bundled assets and HTTPS catalog icons with a saf
     /src=\{validIcon \? `\/mcp-icons\/\$\{validIcon\}\.svg` : remoteIcon\}/,
   );
   assert.match(mcpBrandIcon, /const HTTPS_ICON_URL = \/\^https:/);
+  assert.match(mcpBrandIcon, /loadedIcon !== resolvedIcon \? \(/);
   assert.match(mcpBrandIcon, /className="mcp-brand-icon-placeholder"/);
   assert.match(mcpBrandIcon, /loading=\{remoteIcon \? "lazy" : "eager"\}/);
   assert.match(mcpBrandIcon, /referrerPolicy="no-referrer"/);
   assert.match(toolsCss, /\.mcp-brand-icon\.is-loaded/);
+  assert.match(toolsCss, /\.mcp-brand-icon-shell \{[\s\S]*?width: 100%;[\s\S]*?height: 100%;/);
+  assert.match(toolsCss, /\.mcp-brand-icon \{[\s\S]*?padding: 0;[\s\S]*?object-fit: cover;/);
   assert.match(mcpBrandIcon, /return <McpIcon/);
 });
 

@@ -316,6 +316,7 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   border-radius: 12px;
   color: var(--tone);
   background:
@@ -327,19 +328,16 @@ html[data-theme="dark"] .mcp-add-btn:hover {
 }
 
 .mcp-brand-icon-shell {
-  --mcp-brand-icon-size: 22px;
   position: relative;
   display: grid;
   place-items: center;
-  width: var(--mcp-brand-icon-size);
-  height: var(--mcp-brand-icon-size);
+  width: 100%;
+  height: 100%;
   box-sizing: border-box;
   overflow: hidden;
   color: color-mix(in srgb, var(--tone) 72%, #586174);
-  border: 1px solid rgba(25, 31, 45, 0.08);
-  border-radius: 7px;
+  border-radius: inherit;
   background: linear-gradient(145deg, #fff, #eef1f6);
-  box-shadow: 0 1px 2px rgba(22, 28, 45, 0.08);
 }
 
 .mcp-brand-icon-placeholder {
@@ -353,10 +351,10 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  padding: 2px;
-  border-radius: 6px;
-  background: transparent;
-  object-fit: contain;
+  padding: 0;
+  border-radius: inherit;
+  background: #fff;
+  object-fit: cover;
   opacity: 0;
   transform: scale(0.92);
   transition: opacity 140ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -368,9 +366,7 @@ html[data-theme="dark"] .mcp-add-btn:hover {
 }
 
 html[data-theme="dark"] .mcp-brand-icon-shell {
-  border-color: rgba(255, 255, 255, 0.12);
   background: linear-gradient(145deg, #fff, #e8ebf2);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
 }
 
 .mcp-server-meta {
@@ -1386,13 +1382,11 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
 }
 
 .mcp-server-grid.is-list .mcp-brand-icon-shell {
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
+  border-radius: inherit;
 }
 
 .mcp-server-grid.is-list .mcp-brand-icon {
-  border-radius: 4px;
+  border-radius: inherit;
 }
 
 .mcp-server-grid.is-list .mcp-server-desc {

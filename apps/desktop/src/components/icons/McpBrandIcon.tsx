@@ -32,9 +32,11 @@ export default function McpBrandIcon({
     <span
       aria-hidden
       className={["mcp-brand-icon-shell", className].filter(Boolean).join(" ")}
-      style={{ ...style, "--mcp-brand-icon-size": `${size}px` } as CSSProperties}
+      style={style}
     >
-      <McpIcon className="mcp-brand-icon-placeholder" size={Math.max(12, size - 6)} />
+      {loadedIcon !== resolvedIcon ? (
+        <McpIcon className="mcp-brand-icon-placeholder" size={Math.max(12, size - 6)} />
+      ) : null}
       <img
         alt=""
         className={`mcp-brand-icon${loadedIcon === resolvedIcon ? " is-loaded" : ""}`}
