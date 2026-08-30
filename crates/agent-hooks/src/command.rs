@@ -3,24 +3,29 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
+use std::time::Instant;
 
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use tokio::task::JoinSet;
 use tracing::warn;
 
+use crate::run::{HookRunRecord, HookRunStatus, HookRunStore};
 use crate::{HookEvent, HookPayload};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
 const SESSION_END_TIMEOUT: Duration = Duration::from_secs(1);
 const MAX_SESSION_END_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HooksFile {
     #[serde(default)]
@@ -29,7 +34,7 @@ pub struct HooksFile {
     pub hooks: HashMap<String, Vec<MatcherGroup>>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct MatcherGroup {
     #[serde(default)]
     pub matcher: Option<String>,
@@ -37,7 +42,7 @@ pub struct MatcherGroup {
     pub hooks: Vec<HookHandlerConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum HookHandlerConfig {
     #[serde(rename = "command")]
@@ -87,15 +92,29 @@ pub struct CommandHookDecision {
 
 #[derive(Debug, Clone)]
 struct ConfiguredCommand {
+    id: String,
+    source: String,
     matcher: Option<Regex>,
     command: String,
     timeout: Duration,
     asynchronous: bool,
+    status_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct CommandHookRunner {
     handlers: HashMap<String, Vec<ConfiguredCommand>>,
+    runs: HookRunStore,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CommandHookSummary {
+    pub id: String,
+    pub event_name: String,
+    pub matcher: Option<String>,
+    pub command: String,
+    pub source: String,
+    pub asynchronous: bool,
 }
 
 impl CommandHookRunner {
@@ -119,7 +138,8 @@ impl CommandHookRunner {
                 warn!(%event, source = %source.display(), "ignoring unsupported command hook event");
                 continue;
             }
-            for group in groups {
+            for (group_index, group) in groups.into_iter().enumerate() {
+                let matcher_source = group.matcher.clone();
                 let matcher = match compile_matcher(group.matcher.as_deref()) {
                     Ok(matcher) => matcher,
                     Err(error) => {
@@ -127,13 +147,13 @@ impl CommandHookRunner {
                         continue;
                     }
                 };
-                for handler in group.hooks {
+                for (handler_index, handler) in group.hooks.into_iter().enumerate() {
                     let HookHandlerConfig::Command {
                         command,
                         command_windows,
                         timeout_sec,
                         r#async,
-                        status_message: _,
+                        status_message,
                     } = handler
                     else {
                         warn!(%event, source = %source.display(), "hook handler type is parsed but not executable");
@@ -151,18 +171,31 @@ impl CommandHookRunner {
                     } else {
                         requested.unwrap_or(DEFAULT_TIMEOUT)
                     };
+                    let id = handler_id(
+                        &event,
+                        group_index,
+                        handler_index,
+                        matcher_source.as_deref(),
+                        &command,
+                    );
                     handlers.entry(event.clone()).or_insert_with(Vec::new).push(
                         ConfiguredCommand {
+                            id,
+                            source: source.to_string_lossy().into_owned(),
                             matcher: matcher.clone(),
                             command,
                             timeout,
                             asynchronous: r#async && event != crate::SESSION_END,
+                            status_message,
                         },
                     );
                 }
             }
         }
-        Ok(Self { handlers })
+        Ok(Self {
+            handlers,
+            runs: HookRunStore::default(),
+        })
     }
 
     pub fn is_empty(&self) -> bool {
@@ -171,6 +204,32 @@ impl CommandHookRunner {
 
     pub fn handler_count(&self) -> usize {
         self.handlers.values().map(Vec::len).sum()
+    }
+
+    pub fn list(&self) -> Vec<CommandHookSummary> {
+        let mut hooks = self
+            .handlers
+            .iter()
+            .flat_map(|(event_name, handlers)| {
+                handlers.iter().map(|handler| CommandHookSummary {
+                    id: handler.id.clone(),
+                    event_name: event_name.clone(),
+                    matcher: handler
+                        .matcher
+                        .as_ref()
+                        .map(|matcher| matcher.as_str().to_string()),
+                    command: handler.command.clone(),
+                    source: handler.source.clone(),
+                    asynchronous: handler.asynchronous,
+                })
+            })
+            .collect::<Vec<_>>();
+        hooks.sort_by(|left, right| left.id.cmp(&right.id));
+        hooks
+    }
+
+    pub fn recent_runs(&self) -> Vec<HookRunRecord> {
+        self.runs.recent()
     }
 
     pub async fn run(&self, event: &str, payload: &HookPayload) -> Vec<CommandHookDecision> {
@@ -199,11 +258,27 @@ impl CommandHookRunner {
             })
             .cloned()
         {
+            let run_id = format!("hook-run-{}", NEXT_RUN_ID.fetch_add(1, Ordering::Relaxed));
+            self.runs.start(HookRunRecord {
+                id: run_id.clone(),
+                event_name: event.to_string(),
+                handler_id: handler.id.clone(),
+                source: handler.source.clone(),
+                status: HookRunStatus::Running,
+                summary: handler
+                    .status_message
+                    .clone()
+                    .unwrap_or_else(|| "running command hook".into()),
+                duration_ms: None,
+            });
             let input = input.clone();
             let cwd = cwd.clone();
             let environment = environment.clone();
             if handler.asynchronous {
+                let runs = self.runs.clone();
+                let run_event = event.to_string();
                 std::thread::spawn(move || {
+                    let started = Instant::now();
                     let runtime = tokio::runtime::Builder::new_current_thread()
                         .enable_all()
                         .build();
@@ -213,26 +288,86 @@ impl CommandHookRunner {
                         }
                         Err(error) => Err(error.into()),
                     };
-                    if let Err(error) = result {
+                    if let Err(error) = &result {
                         warn!(%error, "asynchronous command hook failed");
                     }
+                    finish_run(&runs, &run_id, &run_event, started, result.as_ref());
                 });
             } else {
-                synchronous
-                    .spawn(async move { run_command(&handler, &input, &cwd, &environment).await });
+                let run_event = event.to_string();
+                synchronous.spawn(async move {
+                    let started = Instant::now();
+                    let result = run_command(&handler, &input, &cwd, &environment).await;
+                    (run_id, run_event, started, result)
+                });
             }
         }
 
         let mut decisions = Vec::new();
         while let Some(result) = synchronous.join_next().await {
             match result {
-                Ok(Ok(output)) => decisions.push(parse_output(event, &output)),
-                Ok(Err(error)) => warn!(%event, %error, "command hook failed open"),
+                Ok((run_id, run_event, started, Ok(output))) => {
+                    let decision = parse_output(event, &output);
+                    finish_run(&self.runs, &run_id, &run_event, started, Ok(&output));
+                    decisions.push(decision);
+                }
+                Ok((run_id, run_event, started, Err(error))) => {
+                    finish_run(&self.runs, &run_id, &run_event, started, Err(&error));
+                    warn!(%event, %error, "command hook failed open");
+                }
                 Err(error) => warn!(%event, %error, "command hook task failed open"),
             }
         }
         decisions
     }
+}
+
+fn handler_id(
+    event: &str,
+    group_index: usize,
+    handler_index: usize,
+    matcher: Option<&str>,
+    command: &str,
+) -> String {
+    let mut digest = Sha256::new();
+    for part in [
+        event,
+        &group_index.to_string(),
+        &handler_index.to_string(),
+        matcher.unwrap_or(""),
+        command,
+    ] {
+        digest.update(part.as_bytes());
+        digest.update([0]);
+    }
+    format!("command-{:x}", digest.finalize())
+}
+
+fn finish_run(
+    runs: &HookRunStore,
+    run_id: &str,
+    event: &str,
+    started: Instant,
+    result: Result<&CommandOutput, &anyhow::Error>,
+) {
+    let duration_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+    let (status, summary) = match result {
+        Ok(output) if output.status.code() == Some(2) => (
+            HookRunStatus::Blocked,
+            stderr_reason(output).unwrap_or_else(|| format!("{event} command blocked")),
+        ),
+        Ok(output) if output.status.success() => (
+            HookRunStatus::Completed,
+            format!("{event} command completed"),
+        ),
+        Ok(output) => (
+            HookRunStatus::Failed,
+            stderr_reason(output)
+                .unwrap_or_else(|| format!("{event} command exited with status {}", output.status)),
+        ),
+        Err(error) => (HookRunStatus::Failed, error.to_string()),
+    };
+    runs.finish(run_id, status, summary, duration_ms);
 }
 
 fn compile_matcher(matcher: Option<&str>) -> anyhow::Result<Option<Regex>> {
@@ -411,6 +546,11 @@ const fn default_true() -> bool {
     true
 }
 
+fn stderr_reason(output: &CommandOutput) -> Option<String> {
+    let reason = output.stderr.trim();
+    (!reason.is_empty()).then(|| reason.to_string())
+}
+
 fn parse_output(event: &str, output: &CommandOutput) -> CommandHookDecision {
     let stderr = output.stderr.trim();
     if output.status.code() == Some(2) {
@@ -553,6 +693,10 @@ mod tests {
             Path::new("hooks.json"),
         )
         .unwrap();
+        let listed = runner.list();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].event_name, crate::PRE_TOOL_USE);
+        assert_eq!(listed[0].matcher.as_deref(), Some("^Bash$"));
         let decisions = runner
             .run(
                 crate::PRE_TOOL_USE,
@@ -571,6 +715,11 @@ mod tests {
             decisions[0].updated_input,
             Some(serde_json::json!({"safe": true}))
         );
+        let runs = runner.recent_runs();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].handler_id, listed[0].id);
+        assert_eq!(runs[0].status, HookRunStatus::Completed);
+        assert!(runs[0].duration_ms.is_some());
     }
 
     #[tokio::test]
@@ -594,5 +743,8 @@ mod tests {
             )
             .await;
         assert_eq!(decisions[0].block_reason.as_deref(), Some("denied"));
+        let runs = runner.recent_runs();
+        assert_eq!(runs[0].status, HookRunStatus::Blocked);
+        assert_eq!(runs[0].summary, "denied");
     }
 }

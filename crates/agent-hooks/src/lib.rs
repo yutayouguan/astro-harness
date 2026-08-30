@@ -10,12 +10,13 @@ pub mod gateway;
 pub mod names;
 pub mod outcome;
 pub mod plugin;
+pub mod run;
 pub mod shell;
 pub mod ui;
 
 pub use command::{
-    CommandHookDecision, CommandHookRunner, HookHandlerConfig, HooksFile, MatcherGroup,
-    PermissionVote,
+    CommandHookDecision, CommandHookRunner, CommandHookSummary, HookHandlerConfig, HooksFile,
+    MatcherGroup, PermissionVote,
 };
 pub use config::{default_astro_root, load_config, load_config_or_default, AstroConfig};
 pub use context::PluginContext;
@@ -26,6 +27,7 @@ pub use outcome::{
     HookInput, HookOutcome, HookPayload, PermissionRequestDecision, PostToolUseDecision,
 };
 pub use plugin::PluginHookBus;
+pub use run::{HookRunRecord, HookRunStatus, HookRunStore};
 pub use shell::{load_shell_runner, ShellHookRunner};
 pub use ui::{
     install_recording, install_ui_timeline, UiHookEvent, UiTimelineGeneration, UiTimelineSlot,
@@ -88,6 +90,14 @@ impl HookRuntime {
 
     pub fn plugin_context(&self) -> PluginContext<'_> {
         PluginContext::new(&self.plugin, &self.gateway)
+    }
+
+    pub fn list_command_hooks(&self) -> Vec<CommandHookSummary> {
+        self.command.list()
+    }
+
+    pub fn recent_command_hook_runs(&self) -> Vec<HookRunRecord> {
+        self.command.recent_runs()
     }
 
     /// 统一向 Plugin、Gateway、Shell 三套 transport 投递事件。
