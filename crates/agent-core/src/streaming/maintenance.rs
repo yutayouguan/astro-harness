@@ -400,6 +400,48 @@ pub(super) struct SamplingRequest {
     pub started_at: Instant,
 }
 
+/// 为每次普通主循环 sampling 派发一次完整的 LLM telemetry。
+pub(super) async fn emit_post_llm_telemetry(
+    session: &Arc<AgentLoop>,
+    turn_context: &TurnContext,
+    provider: Option<String>,
+    model: String,
+    attempt: usize,
+    started_at: Instant,
+    status: &str,
+    assistant_chars: usize,
+    error: Option<String>,
+) {
+    let duration_ms = started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
+    let agent = session.as_ref();
+    let hook_item = emit_hook_started(session, turn_context, ::hooks::POST_LLM_CALL).await;
+    let _ = agent.fire_hook(
+        ::hooks::POST_LLM_CALL,
+        ::hooks::HookPayload {
+            session_id: agent.session_id().to_string(),
+            turn_id: agent.current_turn_id().await,
+            provider: provider.clone(),
+            model: model.clone(),
+            attempt: Some(attempt),
+            duration_ms: Some(duration_ms),
+            status: Some(status.into()),
+            assistant_chars: Some(assistant_chars),
+            error,
+            detail: format!(
+                "provider={} model={} attempt={} duration_ms={} status={} assistant_chars={}",
+                provider.as_deref().unwrap_or(""),
+                model,
+                attempt,
+                duration_ms,
+                status,
+                assistant_chars
+            ),
+            ..Default::default()
+        },
+    );
+    emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_LLM_CALL).await;
+}
+
 fn primary_sampling_identity(streamer: &ProviderStreamer) -> (Option<String>, String) {
     match streamer.targets.first() {
         Some(target) => (
@@ -497,6 +539,10 @@ pub(super) async fn run_sampling_request(
         }
         Err(err) => {
             let duration_ms = started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
+            let (failed_provider, failed_model) = streamer
+                .last_attempt_meta()
+                .map(|meta| (Some(meta.backend_id), meta.model))
+                .unwrap_or_else(|| (initial_provider.clone(), initial_model.clone()));
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
@@ -507,16 +553,16 @@ pub(super) async fn run_sampling_request(
                 ::hooks::HookPayload {
                     session_id: sid,
                     turn_id,
-                    provider: initial_provider.clone(),
-                    model: initial_model.clone(),
+                    provider: failed_provider.clone(),
+                    model: failed_model.clone(),
                     attempt: Some(attempt),
                     duration_ms: Some(duration_ms),
                     status: Some("failed".into()),
                     error: Some(err.to_string()),
                     detail: format!(
                         "provider={} model={} attempt={} duration_ms={} status=failed error={err}",
-                        initial_provider.as_deref().unwrap_or(""),
-                        initial_model,
+                        failed_provider.as_deref().unwrap_or(""),
+                        failed_model,
                         attempt,
                         duration_ms
                     ),
@@ -524,6 +570,18 @@ pub(super) async fn run_sampling_request(
                 },
             );
             emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_API_REQUEST).await;
+            emit_post_llm_telemetry(
+                session,
+                turn_context,
+                failed_provider,
+                failed_model,
+                attempt,
+                started_at,
+                "failed",
+                0,
+                Some(err.to_string()),
+            )
+            .await;
             Err(err.to_string())
         }
     }

@@ -40,6 +40,7 @@ use super::types::StreamedAssistantContent;
 use crate::control::hitl::HitlGate;
 use crate::runtime::turn_context::{QueuedTurnInput, TerminalInputDecision};
 use crate::runtime::{Session, TurnContext};
+use crate::streaming::maintenance::emit_post_llm_telemetry;
 use crate::tasks::{RegularTask, SessionTaskResult, TurnCancelled};
 
 /// `Stop` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
@@ -630,6 +631,18 @@ pub(crate) async fn run_turn(
         loop {
             if !pause.wait_if_paused().await {
                 pause.clear_abort();
+                emit_post_llm_telemetry(
+                    &session,
+                    &turn_context,
+                    sampling_provider.clone(),
+                    sampling_model.clone(),
+                    sampling_attempt,
+                    sampling_started_at,
+                    "cancelled",
+                    full_response.len(),
+                    None,
+                )
+                .await;
                 return finish_task_cancelled(&session, &turn_context, &streamer, {
                     if let Some(u) = round_usage {
                         total_usage.add_assign(u);
@@ -644,6 +657,17 @@ pub(crate) async fn run_turn(
                 biased;
                 _ = cancellation_token.cancelled() => {
                     pause.clear_abort();
+                    emit_post_llm_telemetry(
+                        &session,
+                        &turn_context,
+                        sampling_provider.clone(),
+                        sampling_model.clone(),
+                        sampling_attempt,
+                        sampling_started_at,
+                        "cancelled",
+                        full_response.len(),
+                        None,
+                    ).await;
                     return finish_task_cancelled(
                         &session,
                         &turn_context,
@@ -654,6 +678,17 @@ pub(crate) async fn run_turn(
                 }
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
+                    emit_post_llm_telemetry(
+                        &session,
+                        &turn_context,
+                        sampling_provider.clone(),
+                        sampling_model.clone(),
+                        sampling_attempt,
+                        sampling_started_at,
+                        "cancelled",
+                        full_response.len(),
+                        None,
+                    ).await;
                     return finish_task_cancelled(
                     &session,
                     &turn_context,
@@ -749,6 +784,18 @@ pub(crate) async fn run_turn(
                 Some(Ok(StreamedAssistantContent::InteractionId(_))) => {}
                 Some(Err(err)) => {
                     pause.clear_abort();
+                    emit_post_llm_telemetry(
+                        &session,
+                        &turn_context,
+                        sampling_provider.clone(),
+                        sampling_model.clone(),
+                        sampling_attempt,
+                        sampling_started_at,
+                        "failed",
+                        full_response.len(),
+                        Some(err.to_string()),
+                    )
+                    .await;
                     if let Some(u) = round_usage {
                         total_usage.add_assign(u);
                         saw_usage = true;
@@ -768,6 +815,18 @@ pub(crate) async fn run_turn(
         pause.clear_abort();
 
         if pause.is_cancelled() {
+            emit_post_llm_telemetry(
+                &session,
+                &turn_context,
+                sampling_provider.clone(),
+                sampling_model.clone(),
+                sampling_attempt,
+                sampling_started_at,
+                "cancelled",
+                full_response.len(),
+                None,
+            )
+            .await;
             if let Some(u) = round_usage {
                 total_usage.add_assign(u);
                 saw_usage = true;
@@ -785,6 +844,19 @@ pub(crate) async fn run_turn(
             total_usage.add_assign(u);
             saw_usage = true;
         }
+
+        emit_post_llm_telemetry(
+            &session,
+            &turn_context,
+            sampling_provider.clone(),
+            sampling_model.clone(),
+            sampling_attempt,
+            sampling_started_at,
+            "succeeded",
+            full_response.len(),
+            None,
+        )
+        .await;
 
         for index in &tool_call_indices {
             let pending = tool_argument_events
@@ -998,35 +1070,6 @@ pub(crate) async fn run_turn(
             if let ::hooks::HookOutcome::ReplaceText(s) = transformed {
                 full_response = s;
             }
-            let post_hook =
-                emit_hook_started(&session, &turn_context, ::hooks::POST_LLM_CALL).await;
-            let duration_ms = sampling_started_at
-                .elapsed()
-                .as_millis()
-                .min(u64::MAX as u128) as u64;
-            let _ = agent.fire_hook(
-                ::hooks::POST_LLM_CALL,
-                ::hooks::HookPayload {
-                    session_id: sid,
-                    turn_id,
-                    provider: sampling_provider.clone(),
-                    model: sampling_model.clone(),
-                    attempt: Some(sampling_attempt),
-                    duration_ms: Some(duration_ms),
-                    status: Some("succeeded".into()),
-                    assistant_chars: Some(full_response.len()),
-                    detail: format!(
-                        "provider={} model={} attempt={} duration_ms={} status=succeeded assistant_chars={}",
-                        sampling_provider.as_deref().unwrap_or(""),
-                        sampling_model,
-                        sampling_attempt,
-                        duration_ms,
-                        full_response.len()
-                    ),
-                    ..Default::default()
-                },
-            );
-            emit_hook_completed(&session, &turn_context, post_hook, ::hooks::POST_LLM_CALL).await;
             let cancelled = agent.cancel_signal().is_cancelled();
             if cancelled {
                 return finish_task_cancelled(

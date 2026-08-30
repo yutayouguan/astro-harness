@@ -36,6 +36,8 @@ pub struct ProviderStreamer {
     pub base_config: ProviderConfig,
     /// 最近一次成功补全命中的目标元数据（供 usage 记录）。
     last_hit: StdMutex<Option<ActiveTargetMeta>>,
+    /// 最近一次已尝试的目标，包括最终失败的 fallback 目标。
+    last_attempt: StdMutex<Option<ActiveTargetMeta>>,
     /// Google Interactions：上一轮 `interaction.id`，供工具多轮 `previous_interaction_id`。
     previous_interaction_id: Arc<StdMutex<Option<String>>>,
     /// 测试覆盖：非空时跳过 dispatch，直接使用此函数获取 CompletionStream。
@@ -48,6 +50,7 @@ impl ProviderStreamer {
             targets,
             base_config,
             last_hit: StdMutex::new(None),
+            last_attempt: StdMutex::new(None),
             previous_interaction_id: Arc::new(StdMutex::new(None)),
             chat_override: None,
         }
@@ -63,6 +66,7 @@ impl ProviderStreamer {
             targets,
             base_config,
             last_hit: StdMutex::new(None),
+            last_attempt: StdMutex::new(None),
             previous_interaction_id: Arc::new(StdMutex::new(None)),
             chat_override: Some(chat_override),
         }
@@ -71,6 +75,11 @@ impl ProviderStreamer {
     /// 最近一次成功 stream 的命中元数据。
     pub fn last_hit_meta(&self) -> Option<ActiveTargetMeta> {
         self.last_hit.lock().ok().and_then(|g| g.clone())
+    }
+
+    /// 最近一次实际发起请求的目标，失败时也可用。
+    pub fn last_attempt_meta(&self) -> Option<ActiveTargetMeta> {
+        self.last_attempt.lock().ok().and_then(|g| g.clone())
     }
 
     pub(crate) fn api_key_for(&self, meta: &ActiveTargetMeta) -> String {
@@ -128,6 +137,10 @@ impl StreamingCompletion for ProviderStreamer {
             .ok()
             .and_then(|g| g.clone());
 
+        if let Ok(mut guard) = self.last_attempt.lock() {
+            *guard = self.targets.first().map(ActiveTargetMeta::from_target);
+        }
+
         let (stream, meta) = if let Some(ref chat_fn) = self.chat_override {
             // 测试覆盖路径：直接调用自定义函数
             let stream = chat_fn(messages, tools, config.clone()).await?;
@@ -161,6 +174,9 @@ impl StreamingCompletion for ProviderStreamer {
                 tools,
                 &config,
                 |from, to, err| {
+                    if let Ok(mut guard) = self.last_attempt.lock() {
+                        *guard = Some(ActiveTargetMeta::from_target(to));
+                    }
                     tracing::warn!(
                         from_backend = %from.backend_id,
                         from_model = %from.model,

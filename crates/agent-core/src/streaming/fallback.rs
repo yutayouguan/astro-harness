@@ -16,7 +16,7 @@ pub struct ActiveTargetMeta {
 }
 
 impl ActiveTargetMeta {
-    fn from_target(t: &ChatTarget) -> Self {
+    pub(super) fn from_target(t: &ChatTarget) -> Self {
         Self {
             provider_id: t.provider_id.clone(),
             backend_id: t.backend_id.clone(),

@@ -1801,7 +1801,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn transform_final_llm_output_replaces_before_post_llm_call() {
+async fn post_llm_call_observes_raw_candidate_before_final_transform() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "transform-llm-session".into()).await.unwrap();
@@ -1851,13 +1851,13 @@ async fn transform_final_llm_output_replaces_before_post_llm_call() {
     }
 
     let events = log.lock().unwrap().clone();
+    let post_idx = events.iter().position(|e| e == "PostLlmCall:11");
     let transform_idx = events
         .iter()
         .position(|e| e == "TransformFinalLlmOutput:11");
-    let post_idx = events.iter().position(|e| e == "PostLlmCall:8");
     assert!(
-        transform_idx.is_some() && post_idx.is_some() && transform_idx < post_idx,
-        "expected TransformFinalLlmOutput before PostLlmCall with replaced length, events={events:?}"
+        post_idx.is_some() && transform_idx.is_some() && post_idx < transform_idx,
+        "expected PostLlmCall to observe the raw candidate before final transform, events={events:?}"
     );
 
     let agent = session_for_check.as_ref();
@@ -2027,8 +2027,8 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         .filter(|e| e.starts_with("PostLlmCall"))
         .count();
     assert_eq!(
-        post_llm_count, 2,
-        "PostLlmCall must be skipped while Stop keeps going; only the tool round and the final round should fire it, events={events:?}"
+        post_llm_count, 4,
+        "PostLlmCall must fire once for every sampling, including Stop continuation candidates, events={events:?}"
     );
 
     assert!(items.iter().any(|i| matches!(
@@ -2166,6 +2166,14 @@ async fn error_has_single_error_terminal_before_done() {
             *post_api_capture.lock().unwrap() = Some(payload.clone());
             ::hooks::HookOutcome::Continue
         });
+    let post_llm = Arc::new(std::sync::Mutex::new(None));
+    let post_llm_capture = Arc::clone(&post_llm);
+    agent
+        .hook_bus()
+        .register(::hooks::POST_LLM_CALL, move |payload| {
+            *post_llm_capture.lock().unwrap() = Some(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
@@ -2217,13 +2225,85 @@ async fn error_has_single_error_terminal_before_done() {
     assert_eq!(post_api.attempt, Some(1));
     assert!(post_api.duration_ms.is_some());
     assert_eq!(post_api.status.as_deref(), Some("failed"));
+    let post_llm = post_llm.lock().unwrap();
+    let post_llm = post_llm.as_ref().expect("PostLlmCall payload");
+    assert_eq!(post_llm.provider.as_deref(), Some("scripted"));
+    assert_eq!(post_llm.model, "test");
+    assert_eq!(post_llm.attempt, Some(1));
+    assert!(post_llm.duration_ms.is_some());
+    assert_eq!(post_llm.status.as_deref(), Some("failed"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stream_failure_emits_one_failed_post_llm_call_with_partial_length() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let agent = AgentLoop::with_session_id(config, "stream-error-session".into())
+        .await
+        .unwrap();
+    let post_llm = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let post_llm_capture = Arc::clone(&post_llm);
+    agent
+        .hook_bus()
+        .register(::hooks::POST_LLM_CALL, move |payload| {
+            post_llm_capture.lock().unwrap().push(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
+    agent
+        .record_items(vec![types::message::Message::user("x")])
+        .await;
+    let session = Arc::new(agent);
+    let chat_fn: ChatOverride = Arc::new(move |_messages, _tools, _config| {
+        Box::pin(async move {
+            let chunks: Vec<anyhow::Result<StreamChunk>> = vec![
+                Ok(StreamChunk::Text("partial".into())),
+                Err(anyhow::anyhow!("stream boom")),
+            ];
+            Ok(Box::pin(futures::stream::iter(chunks)) as CompletionStream)
+        })
+    });
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+
+    tokio::spawn(async move {
+        run_projected_stream_with_chat_fn(
+            session,
+            chat_fn,
+            ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            "sys".into(),
+            PauseControl::new(),
+            None,
+            tx,
+        )
+        .await;
+    });
+    while let Some(item) = rx.recv().await {
+        item.unwrap();
+    }
+
+    let post_llm = post_llm.lock().unwrap();
+    assert_eq!(post_llm.len(), 1);
+    assert_eq!(post_llm[0].status.as_deref(), Some("failed"));
+    assert_eq!(post_llm[0].assistant_chars, Some("partial".len()));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cancellation_has_single_interrupt_terminal_before_done() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "cancel-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "cancel-session".into())
+        .await
+        .unwrap();
+    let post_llm = Arc::new(std::sync::Mutex::new(None));
+    let post_llm_capture = Arc::clone(&post_llm);
+    agent
+        .hook_bus()
+        .register(::hooks::POST_LLM_CALL, move |payload| {
+            *post_llm_capture.lock().unwrap() = Some(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
     let session = Arc::new(agent);
     {
         let agent = session.as_ref();
@@ -2271,6 +2351,9 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
         .collect();
     assert_eq!(terminal_outcomes, ["interrupt"]);
     assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
+    let post_llm = post_llm.lock().unwrap();
+    let post_llm = post_llm.as_ref().expect("PostLlmCall payload");
+    assert_eq!(post_llm.status.as_deref(), Some("cancelled"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
