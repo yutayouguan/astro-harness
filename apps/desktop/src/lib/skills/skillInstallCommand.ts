@@ -45,6 +45,20 @@ export function storeInstallCommand(
   );
 }
 
+/** 安装完成后，让 Agent 只检查凭据要求，不在对话或文件中收集密钥。 */
+export function storeConfigureCommand(
+  skill: StoreSkill,
+  target: SkillInstallTarget,
+): string {
+  const targetPath =
+    target === "project" ? "<当前项目>/.astro/skills" : "~/.astro/skills";
+  return (
+    `SkillHub 技能「${skill.name}」已经安装到 ${targetPath}。\n` +
+    "请读取已安装的 SKILL.md，确认它实际需要的凭据名称、申请地址和配置方式，并用简短步骤告诉我。\n" +
+    "不要要求我在对话中粘贴 API Key，不要把密钥写入 Skill、项目文件或日志；如果当前 Astro 没有对应的安全凭据入口，请明确说明，不要假装已经配置完成。\n"
+  );
+}
+
 export function storeSkillDetailUrl(skill: StoreSkill): string | null {
   // 勿用 homepage（api.skillhub.cn/...）或 owner/slug：官网详情路由仅为 /skills/:slug。
   return `https://skillhub.cn/skills/${skillhubDetailSlug(skill)}`;

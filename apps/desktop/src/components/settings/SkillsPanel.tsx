@@ -30,6 +30,7 @@ import {
   Globe2,
   HardDrive,
   Image as ImageIcon,
+  KeyRound,
   LayoutGrid,
   Library,
   Link2,
@@ -55,8 +56,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
+import type { ComposerContextToken } from "../../lib/chat/composerContext";
 import {
   storeCardDescription,
+  storeConfigureCommand,
   storeInstallCommand,
   storeSkillDetailUrl,
   type SkillInstallTarget,
@@ -157,7 +160,7 @@ export type SkillsPanelProps = {
   /** 面板是否可见（用于懒加载 / 刷新） */
   active: boolean;
   /** 跳转对话并用 Agent 安装（填入安装 Prompt） */
-  onInstallWithAgent?: (prompt: string) => void;
+  onInstallWithAgent?: (prompt: string, contextToken?: ComposerContextToken) => void;
   /** 打开时落到该 tab；消费后通知父级清空 */
   initialTab?: PluginsPrimaryTab | null;
   onInitialTabConsumed?: () => void;
@@ -170,6 +173,10 @@ type McpScopeTab = "personal" | "public";
 type PersonalSkillsTab = "installed" | "machine" | "online" | "updates";
 type SkillsDrawer = "updates";
 type SkillInstallMode = "direct" | "agent";
+type SkillCredentialPrompt = {
+  skill: StoreSkill;
+  target: SkillInstallTarget;
+};
 /** 内容布局：画廊 / 列表 / 详情 */
 type SkillsView = "gallery" | "list" | "detail";
 /** 已安装列表排序 */
@@ -476,6 +483,8 @@ export default function SkillsPanel({
   const [installPromptSkill, setInstallPromptSkill] = useState<StoreSkill | null>(null);
   const [installTarget, setInstallTarget] = useState<SkillInstallTarget>("global");
   const [installMode, setInstallMode] = useState<SkillInstallMode>("direct");
+  const [credentialPrompt, setCredentialPrompt] =
+    useState<SkillCredentialPrompt | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { activeAgentId: agentId } = useActiveAgent();
@@ -502,6 +511,14 @@ export default function SkillsPanel({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [installPromptSkill, installingId]);
+  useEffect(() => {
+    if (!credentialPrompt) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCredentialPrompt(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [credentialPrompt]);
   const mcp = useMcpSection({
     active: active && primaryTab === "mcp",
     query: mcpQuery,
@@ -1228,8 +1245,15 @@ export default function SkillsPanel({
       setInstallPromptSkill(null);
       setScope(target);
       setPersonalTab("installed");
+      if (skill.requires_api_key === true) {
+        setCredentialPrompt({ skill, target });
+      }
       showToast(
-        t("skills.installDoneTarget")
+        t(
+          skill.requires_api_key === true
+            ? "skills.installDoneNeedsKey"
+            : "skills.installDoneTarget",
+        )
           .replace("{name}", skill.name)
           .replace(
             "{target}",
@@ -1248,6 +1272,11 @@ export default function SkillsPanel({
   const installWithAgent = (skill: StoreSkill, target: SkillInstallTarget) => {
     setInstallPromptSkill(null);
     onInstallWithAgent?.(storeInstallCommand(skill, target));
+  };
+
+  const inspectCredentialSetupWithAgent = (prompt: SkillCredentialPrompt) => {
+    setCredentialPrompt(null);
+    onInstallWithAgent?.(storeConfigureCommand(prompt.skill, prompt.target));
   };
 
   const updateFolderForRow = (row: SkillUpdateRow): string =>
@@ -3549,6 +3578,13 @@ export default function SkillsPanel({
                 ))}
               </div>
 
+              {installPromptSkill.requires_api_key === true && (
+                <div className="skills-install-key-note">
+                  <KeyRound size={16} strokeWidth={2.15} aria-hidden />
+                  <span>{t("skills.apiKeyInstallNotice")}</span>
+                </div>
+              )}
+
               <footer className="skills-install-target-foot">
                 <button
                   type="button"
@@ -3825,6 +3861,77 @@ export default function SkillsPanel({
                 )}
               </div>
             </aside>
+          </div>,
+          document.body,
+        )}
+
+      {credentialPrompt &&
+        createPortal(
+          <div
+            className="skills-install-target-backdrop"
+            role="presentation"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setCredentialPrompt(null);
+            }}
+          >
+            <div
+              className="skills-install-target-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="skills-credential-title"
+            >
+              <header className="skills-install-target-head">
+                <span className="skills-install-target-mark" aria-hidden>
+                  <KeyRound size={19} strokeWidth={2.2} />
+                </span>
+                <div>
+                  <p className="skills-install-target-kicker">
+                    {t("skills.apiKeySetupKicker")}
+                  </p>
+                  <h3 id="skills-credential-title">{credentialPrompt.skill.name}</h3>
+                  <p>
+                    {t("skills.apiKeySetupBody", {
+                      target: t(
+                        credentialPrompt.target === "global"
+                          ? "plugins.scope.global"
+                          : "plugins.scope.project",
+                      ),
+                    })}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="skills-icon-btn"
+                  onClick={() => setCredentialPrompt(null)}
+                  aria-label={t("common.close")}
+                >
+                  <X size={16} />
+                </button>
+              </header>
+
+              <div className="skills-install-key-note is-complete">
+                <KeyRound size={16} strokeWidth={2.15} aria-hidden />
+                <span>{t("skills.apiKeySafetyHint")}</span>
+              </div>
+
+              <footer className="skills-install-target-foot">
+                <button
+                  type="button"
+                  className="skills-action-btn"
+                  onClick={() => setCredentialPrompt(null)}
+                >
+                  {t("skills.apiKeySetupLater")}
+                </button>
+                <button
+                  type="button"
+                  className="skills-action-btn primary"
+                  onClick={() => inspectCredentialSetupWithAgent(credentialPrompt)}
+                >
+                  <Bot size={15} aria-hidden />
+                  {t("skills.apiKeyInspectWithAgent")}
+                </button>
+              </footer>
+            </div>
           </div>,
           document.body,
         )}

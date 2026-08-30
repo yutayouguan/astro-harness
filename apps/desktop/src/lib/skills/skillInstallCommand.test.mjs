@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  storeConfigureCommand,
   storeInstallCommand,
   storeSkillDetailUrl,
 } from "./skillInstallCommand.ts";
@@ -43,7 +44,7 @@ test("SkillHub install prompt pins Astro installer and target scope", () => {
 });
 
 test("API-key Skill prompt keeps secrets out of chat and files", () => {
-  const cmd = storeInstallCommand({
+  const skill = {
     id: "skillhub:user_x/keyed-skill",
     name: "keyed-skill",
     description: "",
@@ -53,8 +54,15 @@ test("API-key Skill prompt keeps secrets out of chat and files", () => {
     install_ref: "skillhub:user_x/keyed-skill",
     homepage: null,
     requires_api_key: true,
-  });
+  };
+  const cmd = storeInstallCommand(skill);
   assert.match(cmd, /requires_api_key=true/);
   assert.match(cmd, /不要让我在对话中粘贴密钥/);
   assert.match(cmd, /不要把密钥写入 Skill 或项目文件/);
+
+  const configure = storeConfigureCommand(skill, "project");
+  assert.match(configure, /<当前项目>\/\.astro\/skills/);
+  assert.match(configure, /读取已安装的 SKILL\.md/);
+  assert.match(configure, /不要要求我在对话中粘贴 API Key/);
+  assert.match(configure, /不要假装已经配置完成/);
 });

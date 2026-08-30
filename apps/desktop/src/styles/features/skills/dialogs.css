@@ -176,6 +176,29 @@ html[data-theme="dark"] .skills-install-target-dialog {
   padding: 0 22px 20px;
 }
 
+.skills-install-key-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 22px 18px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 32%, var(--glass-edge));
+  border-radius: 13px;
+  color: color-mix(in srgb, var(--warning, #f59e0b) 72%, var(--ink));
+  background: color-mix(in srgb, var(--warning, #f59e0b) 9%, var(--glass-panel));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.skills-install-key-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.skills-install-key-note.is-complete {
+  margin-top: 0;
+}
+
 .skills-install-target-option {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
