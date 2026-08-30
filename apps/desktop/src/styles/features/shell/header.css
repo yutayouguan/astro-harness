@@ -155,13 +155,13 @@
 
 /* 操作组：与状态芯片 / 模型选择器同为胶囊形态 */
 /* 高度与 .model-picker-trigger 保持一致，两枚胶囊在同一行才齐平。
-   30 = 26(按钮) + 2*2(内边距)，改任一侧都要一起改。 */
+   32 = 28(按钮) + 2*2(内边距)，改任一侧都要一起改。 */
 .chat-header-tools {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 30px;
+  height: 32px;
   padding: 2px 3px;
   border-radius: 999px;
   background: var(--glass-layer, var(--glass-panel));
@@ -177,8 +177,8 @@
 }
 
 .chat-header-tools .chat-header-agent-picker .agent-picker-chip {
-  min-height: 26px;
-  height: 26px;
+  min-height: 28px;
+  height: 28px;
   border-radius: 999px;
   padding: 0 9px 0 7px;
   background: transparent;
@@ -189,8 +189,8 @@
 }
 
 .header-icon-btn {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -321,7 +321,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   display: inline-flex;
   align-items: center;
   gap: 0;
-  height: 30px;
+  height: 32px;
   max-width: 100%;
   min-width: 130px;
   padding: 0;
@@ -354,7 +354,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 .model-picker.is-empty {
   display: inline-flex;
   align-items: center;
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
   border-radius: 999px;
   background: var(--glass-layer, var(--glass-panel));
@@ -370,8 +370,8 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   margin: 4px 0 4px 4px;
   border-radius: 50%;
   color: var(--ink);
@@ -389,16 +389,16 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 .model-picker-icon .model-brand-icon,
 .model-picker-icon .model-brand-icon svg {
   display: block;
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 .model-picker-icon .model-brand-icon.is-letter {
-  width: 13px;
-  height: 13px;
-  font-size: 9px;
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 13px;
+  line-height: 14px;
   text-align: center;
 }
 
@@ -408,7 +408,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   flex: 1;
   min-width: 0;
   padding: 0 4px 0 7px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -1072,8 +1072,8 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
 }
 
 .header-actions .header-agent-picker .agent-picker-chip {
-  min-height: 30px;
-  height: 30px;
+  min-height: 32px;
+  height: 32px;
   min-width: 0;
   border-radius: 999px;
   padding: 0 9px 0 4px;
@@ -1095,8 +1095,8 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
 }
 
 .header-actions .header-agent-picker .agent-picker-chip .agent-avatar {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   background:
     radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.62), transparent 55%),
@@ -1151,7 +1151,7 @@ html[data-theme="dark"] .header-actions .model-picker-icon {
 
 /* 标题栏「浏览 / 产物」分段：沿用统一 Tab 外观，只把胶囊压到标题栏高度 */
 .header-actions .files-mode-switch {
-  height: 30px;
+  height: 32px;
   box-sizing: border-box;
 }
 

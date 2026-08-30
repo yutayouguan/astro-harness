@@ -46,17 +46,17 @@ test("header tool groups reuse the assistant answer surface recipe", async () =>
   }
 });
 
-test("compact header controls share the 30px height contract", async () => {
+test("compact header controls share the 32px height contract", async () => {
   const css = await readFile(cssUrl, "utf8");
 
   for (const selector of [".chat-header-tools", ".model-picker-trigger"]) {
     const blocks = [
       ...css.matchAll(new RegExp(`\\${selector} \\{([\\s\\S]*?)\\n\\}`, "g")),
     ].map((match) => match[1]);
-    assert.ok(blocks.some((block) => /height:\s*30px;/.test(block)));
+    assert.ok(blocks.some((block) => /height:\s*32px;/.test(block)));
   }
 
-  assert.match(css, /\.header-icon-btn\s*\{[\s\S]*?width:\s*26px;[\s\S]*?height:\s*26px;/);
+  assert.match(css, /\.header-icon-btn\s*\{[\s\S]*?width:\s*28px;[\s\S]*?height:\s*28px;/);
 });
 
 test("unified color modes keep the conversation title neutral", async () => {
