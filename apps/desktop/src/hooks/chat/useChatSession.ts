@@ -161,6 +161,7 @@ export function useChatSession({
   const modeSwitchArmedRef = useRef(false);
   const [streaming, setStreaming] = useState(false);
   const [turnInFlight, setTurnInFlight] = useState(false);
+  const [completionCelebrationId, setCompletionCelebrationId] = useState(0);
   const turnInFlightRef = useRef(false);
   const lastStreamActivityAtRef = useRef(0);
   const sessionWorktreeRef = useRef<{
@@ -265,6 +266,10 @@ export function useChatSession({
     streamRafRef,
   } = useChatStreamBuffers(setMessages);
 
+  const celebrateTaskCompletion = useCallback(() => {
+    setCompletionCelebrationId((current) => current + 1);
+  }, []);
+
   const {
     parallelTasks,
     startParallelTask,
@@ -279,6 +284,7 @@ export function useChatSession({
     setAttachments,
     showTransientToast,
     t,
+    onTaskSucceeded: celebrateTaskCompletion,
   });
 
   // ── Send ──────────────────────────────────────────────────────────────────
@@ -367,6 +373,7 @@ export function useChatSession({
     onModeSwitchDetected,
     onModeSwitchPrompt,
     onUserInputCommitted,
+    onTurnSucceeded: celebrateTaskCompletion,
     persistContextUsage: persistClientState,
   });
 
@@ -1848,6 +1855,7 @@ export function useChatSession({
     sessionReadOnly,
     sessionEndReason,
     currentTurnId,
+    completionCelebrationId,
     focusMessageId,
     isCompacting,
     status,

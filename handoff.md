@@ -422,6 +422,92 @@ Astro 已能从部分 Provider 读取 input、output、cache read/write 和 reas
 
 已只删除两行孤立声明，其他未提交样式参数保持不变；前端全量 419/419 通过。
 
+## H-012 并行任务丢失终态语义并误触发庆祝
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Medium |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | 任务完成庆祝状态链审查 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+- Desktop 事件桥对终止回合按 `RunFinished(outcome_type) → Done` 顺序投影。
+- `useParallelTasks` 只在 `run_finished` 中处理局部分支，没有保留 `outcome_type`；后续 `done` 仅根据 `terminalError` 调用 `finish("done")`。因此 `interrupt` 会被覆盖为成功，并调用 `onTaskSucceeded`。
+- 主任务和并行任务在后端报告 `success` 但没有可渲染输出时，UI 会写入“空响应”错误，但成功回调仍可能触发。
+
+### 修复方向
+
+统一保留终态 outcome，将 `success / error / interrupt / hitl_waiting / legacy done` 显式映射为并行任务状态；只有“明确 success + 有可渲染输出 + 无终端错误”才触发庆祝。
+
+### 验收标准
+
+- `interrupt` 结算为 `cancelled`，`hitl_waiting` 保持未结算，两者都不庆祝。
+- 错误和空响应不庆祝；仅真实成功触发。
+- 用行为单元测试覆盖全部终态。
+
+### 修复与验证
+
+已抽取 `taskCompletion.ts` 作为主任务和并行任务共用的终态判定；并行流保留 `terminalOutcome`，显式区分 success、error、interrupt、HITL 和旧版无 outcome 的 done。新增行为单元测试覆盖成功、空响应、终端错误、interrupt、HITL 及 legacy done。
+
+## H-013 庆祝组件重新挂载时重放旧事件
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Low |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | 任务完成庆祝组件审查 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+`TaskCompletionCelebration` 的 effect 在每次挂载时都执行，当会话中已有 `trigger > 0` 时，从设置页返回聊天、重建侧聊面板或其他 remount 都会将旧的完成事件再播放一次。
+
+### 修复方向
+
+将当前 trigger 作为挂载基线，仅当后续 trigger 严格递增时播放；归零或降低不播放。
+
+### 验收标准
+
+- 首次挂载且 trigger 已大于 0 时不播放。
+- 只有严格递增触发播放；重复值、归零和降低值均不播放。
+
+### 修复与验证
+
+组件现在用初始 trigger 建立挂载基线，并通过 `shouldStartCompletionCelebration` 只接受严格递增的新事件。单元测试已覆盖递增、重复、归零和倒退。
+
+## H-014 庆祝 canvas 结束后长期保留高分辨率 backing store
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Low |
+| 发现日期 | 2026-08-30 |
+| 发现阶段 | 任务完成庆祝性能审查 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+`TaskCompletionCelebration` 按面板尺寸和最高 2x DPR 创建 canvas backing store，但动画自然结束和 reduced-motion 定时结束时只调用 `clearRect`。透明像素虽被清除，大尺寸图形缓冲区仍由长驻 ChatView 持有，多个面板会叠加内存占用。
+
+### 修复方向
+
+引入幂等的 backing-store 释放函数，在普通动画结束、reduced-motion 定时结束、trigger 更新和组件卸载时将 canvas 回收为最小尺寸。
+
+### 验收标准
+
+- 所有结束路径共用同一个释放函数。
+- 释放后下一次 trigger 仍会按当前容器尺寸重新初始化并播放。
+
+### 修复与验证
+
+已将普通动画结束、reduced-motion 定时结束和 effect cleanup 统一到幂等的 `releaseCanvasBackingStore`，回收后 backing store 缩为 `1×1`；下次 trigger 会在播放前重新按容器尺寸与 DPR 初始化。
+
+本批验证：定向庆祝/终态测试 5/5、前端全量 424/424、`npx tsc --noEmit`、`npm run lint:css`、`npm run build`、`npm run build-storybook` 均通过；Rust 事件桥 `terminal_thread_event_maps_to_run_finished_then_done` 1/1 通过。
+
 ## 后续缺陷记录模板
 
 ```markdown

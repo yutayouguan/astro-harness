@@ -15,6 +15,7 @@ import {
 } from "../../lib/chat/chatTimeline";
 import { consumeBufferedTextReconcile } from "../../lib/chat/streamReconcile";
 import { upsertAsyncAssistantMessage } from "../../lib/chat/asyncMessage";
+import { resolveParallelTaskCompletion } from "../../lib/chat/taskCompletion";
 import {
   countRunningParallel,
   isParallelTaskActive,
@@ -58,6 +59,8 @@ type Deps = {
   setAttachments: Dispatch<SetStateAction<ChatAttachment[]>>;
   showTransientToast: ShowToastFn;
   t: TFn;
+  /** 独立任务成功完成；失败、取消或等待审批均不触发。 */
+  onTaskSucceeded?: () => void;
 };
 
 export function useParallelTasks(deps: Deps) {
@@ -397,7 +400,11 @@ export function useParallelTasks(deps: Deps) {
         )
       : { thinkingEnabled: false, reasoningEffort: "high" as const };
 
-    const finish = (status: ParallelChatTask["status"], error?: string) => {
+    const finish = (
+      status: ParallelChatTask["status"],
+      error?: string,
+      celebrate = false,
+    ) => {
       cleanupTaskStream(taskId, assistantId);
       setParallelTasks((prev) =>
         prev.map((t) =>
@@ -412,11 +419,16 @@ export function useParallelTasks(deps: Deps) {
             : t,
         ),
       );
+      if (celebrate) depsRef.current.onTaskSucceeded?.();
     };
 
     try {
       const eventName = `chat_stream_${sessionId}`;
       let terminalError: string | undefined;
+      let terminalOutcome: string | null = null;
+      let hasTextOutput = false;
+      let hasStructuredOutput = false;
+      let completionSettled = false;
       const unlisten = await listen<{
         type: string;
         content?: string;
@@ -441,6 +453,7 @@ export function useParallelTasks(deps: Deps) {
       }>(eventName, (event) => {
         const payload = event.payload;
         if (payload.type === "token" && payload.content) {
+          if (payload.content.trim()) hasTextOutput = true;
           enqueueToken(assistantId, payload.content);
         } else if (
           payload.type === "async_message" &&
@@ -463,6 +476,7 @@ export function useParallelTasks(deps: Deps) {
             buffered,
             payload.content ?? "",
           );
+          hasTextOutput = reconciled.content.trim().length > 0;
           streamBufRef.current.set(assistantId, reconciled.buffered);
           setMessages((prev) =>
             prev.map((message) =>
@@ -490,6 +504,7 @@ export function useParallelTasks(deps: Deps) {
             ),
           );
         } else if (payload.type === "activity") {
+          hasStructuredOutput = true;
           flushToken(assistantId);
           let operations: unknown[] = [];
           try {
@@ -519,6 +534,7 @@ export function useParallelTasks(deps: Deps) {
           (payload.outcome_type === "interrupt" ||
             payload.outcome_type === "hitl_waiting")
         ) {
+          terminalOutcome = payload.outcome_type ?? null;
           let interrupts: PendingInterrupt[] = [];
           try {
             const arr = JSON.parse(payload.interrupts_json || "[]") as unknown;
@@ -578,14 +594,19 @@ export function useParallelTasks(deps: Deps) {
             }),
           );
         } else if (payload.type === "run_finished" && payload.outcome_type === "success") {
+          terminalOutcome = payload.outcome_type;
           setParallelTasks((prev) =>
             prev.map((t) =>
               t.id === taskId ? { ...t, pendingInterrupts: undefined } : t,
             ),
           );
         } else if (payload.type === "run_finished" && payload.outcome_type === "error") {
+          terminalOutcome = payload.outcome_type;
           terminalError ??= t("status.unknownError");
+        } else if (payload.type === "run_finished") {
+          terminalOutcome = payload.outcome_type ?? null;
         } else if (payload.type === "tool_call") {
+          hasStructuredOutput = true;
           flushToken(assistantId);
           const name = payload.name ?? "tool";
           const activity: ChatActivity = {
@@ -623,6 +644,15 @@ export function useParallelTasks(deps: Deps) {
             }),
           );
         } else if (payload.type === "done") {
+          const completion = resolveParallelTaskCompletion({
+            outcome: terminalOutcome,
+            terminalError,
+            hasRenderableOutput: hasTextOutput || hasStructuredOutput,
+            emptyResponseError: t("status.emptyResponse"),
+          });
+          if (completion.status == null) return;
+          if (completionSettled) return;
+          completionSettled = true;
           const raf = rafMapRef.current.get(assistantId);
           if (raf != null) {
             cancelAnimationFrame(raf);
@@ -654,14 +684,21 @@ export function useParallelTasks(deps: Deps) {
               ) {
                 return {
                   ...sealed,
-                  content: t("status.emptyResponse"),
-                  error: true,
+                  content:
+                    completion.status === "cancelled"
+                      ? t("chat.task.cancelled")
+                      : completion.error ?? t("status.emptyResponse"),
+                  error: completion.status === "error",
                 };
               }
               return sealed;
             }),
           );
-          finish(terminalError ? "error" : "done", terminalError);
+          finish(
+            completion.status,
+            completion.error ?? undefined,
+            completion.celebrate,
+          );
         } else if (payload.type === "error") {
           const errMsg = payload.message || t("status.unknownError");
           terminalError = errMsg;

@@ -73,6 +73,7 @@ import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
 import { countRunningParallel, countSettledByStatus, isParallelTaskActive } from "../../lib/chat/parallelTasks";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
+import TaskCompletionCelebration from "./TaskCompletionCelebration";
 import {
   attachmentsFromOsClipboard,
   filesFromClipboardRead,
@@ -275,6 +276,8 @@ type Props = {
   streaming: boolean;
   /** 主会话整轮未结束（含 HITL）；用于软边界入队 */
   turnInFlight?: boolean;
+  /** 成功任务完成序号；递增时播放内容区庆祝动画。 */
+  completionCelebrationId?: number;
   /** 流是否已暂停 */
   streamPaused?: boolean;
   /** 禁止发送（压实中 / 只读会话等） */
@@ -727,6 +730,7 @@ export default function ChatView({
   attachments,
   streaming,
   turnInFlight = false,
+  completionCelebrationId = 0,
   streamPaused = false,
   sendBlocked = false,
   sendBlockedReason,
@@ -2129,6 +2133,7 @@ export default function ChatView({
       onDrop={(e) => void onDrop(e)}
     >
       {toastHost}
+      <TaskCompletionCelebration trigger={completionCelebrationId} />
       {cronRun && !workspaceContent ? (
         <aside className="chat-cron-run-float">
           <CronRunFloatingCard

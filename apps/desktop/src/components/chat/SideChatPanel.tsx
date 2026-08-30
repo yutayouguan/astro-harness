@@ -146,6 +146,7 @@ export default function SideChatPanel({
           attachments={chat.attachments}
           streaming={chat.streaming}
           turnInFlight={chat.turnInFlight}
+          completionCelebrationId={chat.completionCelebrationId}
           streamPaused={chat.streamPaused}
           sendBlocked={chat.isCompacting || chat.sessionReadOnly}
           sendBlockedReason={

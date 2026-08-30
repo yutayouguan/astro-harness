@@ -21,6 +21,7 @@ import {
 } from "../../lib/chat/chatMode";
 import { resolveComposerTurn } from "../../lib/chat/composerResolve";
 import { parseHitlRunFinished } from "../../lib/chat/hitlRunFinished";
+import { resolveTaskCompletion } from "../../lib/chat/taskCompletion";
 import {
   loadPickerGlobals,
   loadModelPrefs,
@@ -146,6 +147,8 @@ export interface UseSendDeps {
   onModeSwitchPrompt?: (req: ModeSwitchRequest) => void;
   /** A steered queue item is durable in the active turn history. */
   onUserInputCommitted?: (clientMessageId: string) => void;
+  /** 整轮成功完成；错误、中断和 HITL 等待均不触发。 */
+  onTurnSucceeded?: () => void;
   /** 独立临时聊天不覆盖主聊天的 context usage 快照。 */
   persistContextUsage?: boolean;
 }
@@ -223,6 +226,7 @@ export function useSend(deps: UseSendDeps) {
         onModeSwitchDetected,
         onModeSwitchPrompt,
         onUserInputCommitted,
+        onTurnSucceeded,
       } = depsRef.current;
 
       const markTurnEnded = () => {
@@ -381,6 +385,9 @@ export function useSend(deps: UseSendDeps) {
         const gen = ++streamGenRef.current;
         let terminalOutcome: string | null = null;
         let terminalError: string | null = null;
+        let hasTextOutput = false;
+        let hasStructuredOutput = false;
+        let completionSettled = false;
         toolDeltaIdsRef.current.clear();
         unlistenRef.current = await listen<{
           type: string;
@@ -450,6 +457,7 @@ export function useSend(deps: UseSendDeps) {
           const payload = event.payload;
 
           if (payload.type === "token" && payload.content) {
+            if (payload.content.trim()) hasTextOutput = true;
             if (toolDeltaRafRef.current != null) {
               cancelAnimationFrame(toolDeltaRafRef.current);
               flushToolDeltas();
@@ -475,6 +483,7 @@ export function useSend(deps: UseSendDeps) {
             }
             flushStreamTokens();
             const canonical = payload.content ?? "";
+            hasTextOutput = canonical.trim().length > 0;
             setMessages((prev) =>
               prev.map((message) =>
                 message.id === assistantId
@@ -563,6 +572,7 @@ export function useSend(deps: UseSendDeps) {
           ) {
             onUserInputCommitted?.(payload.client_message_id);
           } else if (payload.type === "activity") {
+            hasStructuredOutput = true;
             if (streamRafRef.current != null) {
               cancelAnimationFrame(streamRafRef.current);
               flushStreamTokens();
@@ -657,6 +667,7 @@ export function useSend(deps: UseSendDeps) {
             });
             setStatusPhase("generating");
           } else if (payload.type === "tool_call") {
+            hasStructuredOutput = true;
             touchActivity();
             if (streamRafRef.current != null) {
               cancelAnimationFrame(streamRafRef.current);
@@ -782,6 +793,7 @@ export function useSend(deps: UseSendDeps) {
             );
             setStatusPhase("generating");
           } else if (payload.type === "memory_update") {
+            hasStructuredOutput = true;
             const activity: ChatActivity = {
               id: `mem-${Date.now()}`,
               kind: "memory",
@@ -804,6 +816,7 @@ export function useSend(deps: UseSendDeps) {
               showTransientToast(payload.content);
             }
           } else if (payload.type === "hook") {
+            hasStructuredOutput = true;
             const title = payload.name || "hook";
             const detail = [payload.detail, payload.outcome]
               .filter((s) => typeof s === "string" && s.trim())
@@ -823,7 +836,15 @@ export function useSend(deps: UseSendDeps) {
               ),
             );
           } else if (payload.type === "done") {
-            const runFailed = terminalOutcome === "error" || terminalError != null;
+            if (completionSettled || terminalOutcome === "hitl_waiting") return;
+            completionSettled = true;
+            const completion = resolveTaskCompletion({
+              outcome: terminalOutcome,
+              terminalError,
+              hasRenderableOutput: hasTextOutput || hasStructuredOutput,
+              emptyResponseError: t("status.emptyResponse"),
+            });
+            const runFailed = completion.failed;
             if (streamRafRef.current != null) {
               cancelAnimationFrame(streamRafRef.current);
               flushStreamTokens();
@@ -873,8 +894,11 @@ export function useSend(deps: UseSendDeps) {
                 ) {
                   return {
                     ...withUsage,
-                    content: t("status.emptyResponse"),
-                    error: true,
+                    content:
+                      !completion.failed && terminalOutcome === "interrupt"
+                        ? t("chat.task.cancelled")
+                        : completion.error ?? t("status.emptyResponse"),
+                    error: completion.failed,
                   };
                 }
                 return withUsage;
@@ -892,7 +916,10 @@ export function useSend(deps: UseSendDeps) {
             markTurnEnded();
             setStatus(runFailed ? "error" : "ready");
             setStatusPhase(runFailed ? "error" : "ready");
-            setStatusDetail(runFailed ? terminalError : null);
+            setStatusDetail(runFailed ? completion.error : null);
+            if (completion.celebrate) {
+              onTurnSucceeded?.();
+            }
             if (pendingModeSwitch) {
               onModeSwitchPrompt?.(pendingModeSwitch);
             }

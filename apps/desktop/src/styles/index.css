@@ -45,6 +45,7 @@
 @import "./components/segmented-tabs.css" layer(components);
 @import "./components/overlay.css" layer(components);
 @import "./features/chat/core.css" layer(features);
+@import "./features/chat/completion-celebration.css" layer(features);
 @import "./features/chat/activity.css" layer(features);
 @import "./features/chat/navigation.css" layer(features);
 @import "./features/chat/markdown.css" layer(features);
