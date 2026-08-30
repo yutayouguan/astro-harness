@@ -59,6 +59,7 @@ import {
   storeCardDescription,
   storeInstallCommand,
   storeSkillDetailUrl,
+  type SkillInstallTarget,
 } from "../../lib/skills/skillInstallCommand";
 import { resolveFileType } from "../../lib/filespace/fileTypeIcon";
 import {
@@ -168,7 +169,7 @@ type PluginScope = "global" | "builtin" | "project";
 type McpScopeTab = "personal" | "public";
 type PersonalSkillsTab = "installed" | "machine" | "online" | "updates";
 type SkillsDrawer = "updates";
-type SkillInstallTarget = "global" | "project";
+type SkillInstallMode = "direct" | "agent";
 /** 内容布局：画廊 / 列表 / 详情 */
 type SkillsView = "gallery" | "list" | "detail";
 /** 已安装列表排序 */
@@ -474,6 +475,7 @@ export default function SkillsPanel({
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [installPromptSkill, setInstallPromptSkill] = useState<StoreSkill | null>(null);
   const [installTarget, setInstallTarget] = useState<SkillInstallTarget>("global");
+  const [installMode, setInstallMode] = useState<SkillInstallMode>("direct");
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { activeAgentId: agentId } = useActiveAgent();
@@ -507,6 +509,7 @@ export default function SkillsPanel({
     hostRef: pageRef,
     scope: mcpScope === "public" ? "builtin" : "global",
     publicCategory: mcpScope === "public" ? mcpPublicCategory : undefined,
+    onInstallWithAgent,
   });
   const updateMcpQuery = useCallback((value: string) => {
     setMcpQuery(value);
@@ -1203,8 +1206,9 @@ export default function SkillsPanel({
     }
   };
 
-  const beginInstallSkill = (skill: StoreSkill) => {
+  const beginInstallSkill = (skill: StoreSkill, mode: SkillInstallMode) => {
     setInstallTarget(scope === "project" ? "project" : "global");
+    setInstallMode(mode);
     setInstallPromptSkill(skill);
   };
 
@@ -1241,8 +1245,9 @@ export default function SkillsPanel({
     }
   };
 
-  const installWithAgent = (skill: StoreSkill) => {
-    onInstallWithAgent?.(storeInstallCommand(skill));
+  const installWithAgent = (skill: StoreSkill, target: SkillInstallTarget) => {
+    setInstallPromptSkill(null);
+    onInstallWithAgent?.(storeInstallCommand(skill, target));
   };
 
   const updateFolderForRow = (row: SkillUpdateRow): string =>
@@ -1433,7 +1438,8 @@ export default function SkillsPanel({
   };
 
   const copyStoreInstallCommand = async (skill: StoreSkill) => {
-    await copyText(`${skill.id}:cmd`, storeInstallCommand(skill));
+    const target = scope === "project" ? "project" : "global";
+    await copyText(`${skill.id}:cmd`, storeInstallCommand(skill, target));
   };
 
   const viewSkill = async (skill: InstalledSkill | string) => {
@@ -2258,7 +2264,7 @@ export default function SkillsPanel({
               className="skills-action-btn primary skill-card-primary"
               disabled={installingId === skill.id}
               aria-busy={installingId === skill.id}
-              onClick={() => beginInstallSkill(skill)}
+              onClick={() => beginInstallSkill(skill, "direct")}
             >
               {installingId === skill.id ? (
                 <LoaderCircle
@@ -2282,7 +2288,7 @@ export default function SkillsPanel({
               <button
                 type="button"
                 className="skills-action-btn is-icon"
-                onClick={() => installWithAgent(skill)}
+                onClick={() => beginInstallSkill(skill, "agent")}
                 title={t("skills.installWithAgent")}
                 aria-label={t("skills.installWithAgent")}
               >
@@ -2724,7 +2730,7 @@ export default function SkillsPanel({
                           type="button"
                           className="skills-action-btn primary"
                           disabled={installingId === selectedStore.id}
-                          onClick={() => beginInstallSkill(selectedStore)}
+                          onClick={() => beginInstallSkill(selectedStore, "direct")}
                         >
                           {installingId === selectedStore.id ? (
                             <LoaderCircle size={14} strokeWidth={2.25} className="is-spin" aria-hidden />
@@ -2738,7 +2744,7 @@ export default function SkillsPanel({
                         <button
                           type="button"
                           className="skills-action-btn"
-                          onClick={() => installWithAgent(selectedStore)}
+                          onClick={() => beginInstallSkill(selectedStore, "agent")}
                         >
                           <Bot size={14} strokeWidth={2.25} aria-hidden />
                           {t("skills.installWithAgent")}
@@ -3463,14 +3469,24 @@ export default function SkillsPanel({
             >
               <header className="skills-install-target-head">
                 <span className="skills-install-target-mark" aria-hidden>
-                  <Download size={19} strokeWidth={2.2} />
+                  {installMode === "agent" ? (
+                    <Bot size={19} strokeWidth={2.2} />
+                  ) : (
+                    <Download size={19} strokeWidth={2.2} />
+                  )}
                 </span>
                 <div>
                   <p className="skills-install-target-kicker">
                     {t("skills.installTargetKicker")}
                   </p>
                   <h3 id="skills-install-target-title">{installPromptSkill.name}</h3>
-                  <p>{t("skills.installTargetHint")}</p>
+                  <p>
+                    {t(
+                      installMode === "agent"
+                        ? "skills.installAgentTargetHint"
+                        : "skills.installTargetHint",
+                    )}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -3545,23 +3561,36 @@ export default function SkillsPanel({
                 <button
                   type="button"
                   className="skills-action-btn primary"
-                  onClick={() => void installSkill(installPromptSkill, installTarget)}
+                  onClick={() => {
+                    if (installMode === "agent") {
+                      installWithAgent(installPromptSkill, installTarget);
+                    } else {
+                      void installSkill(installPromptSkill, installTarget);
+                    }
+                  }}
                   disabled={installingId === installPromptSkill.id}
                 >
                   {installingId === installPromptSkill.id ? (
                     <LoaderCircle size={15} className="is-spin" aria-hidden />
+                  ) : installMode === "agent" ? (
+                    <Bot size={15} aria-hidden />
                   ) : (
                     <Download size={15} aria-hidden />
                   )}
                   {installingId === installPromptSkill.id
                     ? t("skills.installing")
-                    : t("skills.installToTarget", {
+                    : t(
+                        installMode === "agent"
+                          ? "skills.installViaAgentToTarget"
+                          : "skills.installToTarget",
+                        {
                         target: t(
                           installTarget === "global"
                             ? "plugins.scope.global"
                             : "plugins.scope.project",
                         ),
-                      })}
+                        },
+                      )}
                 </button>
               </footer>
             </div>
