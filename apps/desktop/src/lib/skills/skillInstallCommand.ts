@@ -35,6 +35,7 @@ export function storeInstallCommand(
   const detailUrl = `https://skillhub.cn/skills/${skillhubDetailSlug(skill)}`;
   const targetPath =
     target === "project" ? "<当前项目>/.astro/skills" : "~/.astro/skills";
+  const folder = skillhubDetailSlug(skill);
   const apiKeyNote =
     skill.requires_api_key === true
       ? "- 凭据：安装后读取 SKILL.md 确认准确的 API Key 名称；不要让我在对话中粘贴密钥，也不要把密钥写入 Skill 或项目文件。\n"
@@ -43,11 +44,11 @@ export function storeInstallCommand(
     ? "这个 SkillHub 技能"
     : `SkillHub 技能「${skill.name}」`;
   return (
-    `请通过 Astro 内置的 request_plugin_install 工具安装${subject}，不要运行 SkillHub CLI，也不要安装到 .agents、.codex 或 ./skills。\n` +
+    `请通过 Astro 内置的 request_plugin_install 工具安装${subject}；如果该工具尚未加载，先用 tool_search 搜索并激活它。不要运行 SkillHub CLI，也不要安装到 .agents、.codex 或 ./skills。\n` +
     `- 安装引用：${installHint}\n` +
     `- 安装作用域：${target}\n` +
     `- 目标目录：${targetPath}\n` +
-    `- 工具参数：skill_id=${ownerSlug}，install_ref=${installHint}，scope=${target}，requires_api_key=${skill.requires_api_key === true}\n` +
+    `- 工具参数：skill_id=${ownerSlug}，install_ref=${installHint}，folder=${folder}，scope=${target}，requires_api_key=${skill.requires_api_key === true}\n` +
     apiKeyNote +
     `- 详情：${detailUrl}\n`
   );
@@ -57,12 +58,17 @@ export function storeInstallCommand(
 export function storeConfigureCommand(
   skill: StoreSkill,
   target: SkillInstallTarget,
+  options: StoreInstallCommandOptions = {},
 ): string {
-  const targetPath =
-    target === "project" ? "<当前项目>/.astro/skills" : "~/.astro/skills";
+  const folder = skillhubDetailSlug(skill);
+  const skillPath =
+    target === "project"
+      ? `<当前项目>/.astro/skills/${folder}/SKILL.md`
+      : `~/.astro/skills/${folder}/SKILL.md`;
+  const subject = options.contextual ? "这个 SkillHub 技能" : `SkillHub 技能「${skill.name}」`;
   return (
-    `SkillHub 技能「${skill.name}」已经安装到 ${targetPath}。\n` +
-    "请读取已安装的 SKILL.md，确认它实际需要的凭据名称、申请地址和配置方式，并用简短步骤告诉我。\n" +
+    `${subject}已经安装。\n` +
+    `请读取 ${skillPath}，确认它实际需要的凭据名称、申请地址和配置方式，并用简短步骤告诉我。\n` +
     "不要要求我在对话中粘贴 API Key，不要把密钥写入 Skill、项目文件或日志；如果当前 Astro 没有对应的安全凭据入口，请明确说明，不要假装已经配置完成。\n"
   );
 }

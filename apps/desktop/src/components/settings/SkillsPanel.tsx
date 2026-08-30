@@ -1285,7 +1285,16 @@ export default function SkillsPanel({
 
   const inspectCredentialSetupWithAgent = (prompt: SkillCredentialPrompt) => {
     setCredentialPrompt(null);
-    onInstallWithAgent?.(storeConfigureCommand(prompt.skill, prompt.target));
+    onInstallWithAgent?.(
+      storeConfigureCommand(prompt.skill, prompt.target, { contextual: true }),
+      {
+        id: prompt.skill.id,
+        kind: "skill",
+        name: prompt.skill.name,
+        description: prompt.skill.description,
+        path: storeSkillDetailUrl(prompt.skill) ?? undefined,
+      },
+    );
   };
 
   const updateFolderForRow = (row: SkillUpdateRow): string =>

@@ -139,4 +139,30 @@ mod tests {
         assert_eq!(normalized_scope(Some("project")).unwrap(), "project");
         assert!(normalized_scope(Some("machine")).is_err());
     }
+
+    #[test]
+    fn registers_as_confirmation_gated_deferred_tool() {
+        let mut registry = ToolRegistry::new();
+        register(&mut registry);
+        let entry = registry
+            .get("request_plugin_install")
+            .expect("request_plugin_install registered");
+        assert!(entry.needs_confirmation);
+        assert_eq!(entry.exposure, types::ToolExposure::Deferred);
+        let properties = entry.schema["properties"]
+            .as_object()
+            .expect("object properties");
+        for field in [
+            "skill_id",
+            "install_ref",
+            "folder",
+            "scope",
+            "requires_api_key",
+        ] {
+            assert!(
+                properties.contains_key(field),
+                "missing schema field {field}"
+            );
+        }
+    }
 }

@@ -39,6 +39,8 @@ test("SkillHub install prompt pins Astro installer and target scope", () => {
   assert.match(cmd, /request_plugin_install/);
   assert.match(cmd, /安装作用域：project/);
   assert.match(cmd, /<当前项目>\/\.astro\/skills/);
+  assert.match(cmd, /tool_search/);
+  assert.match(cmd, /folder=demo-skill/);
   assert.match(cmd, /不要运行 SkillHub CLI/);
   assert.doesNotMatch(cmd, /api\.skillhub\.cn/);
 });
@@ -76,9 +78,15 @@ test("API-key Skill prompt keeps secrets out of chat and files", () => {
   assert.match(cmd, /不要让我在对话中粘贴密钥/);
   assert.match(cmd, /不要把密钥写入 Skill 或项目文件/);
 
-  const configure = storeConfigureCommand(skill, "project");
-  assert.match(configure, /<当前项目>\/\.astro\/skills/);
-  assert.match(configure, /读取已安装的 SKILL\.md/);
+  const configure = storeConfigureCommand(skill, "project", {
+    contextual: true,
+  });
+  assert.match(configure, /这个 SkillHub 技能已经安装/);
+  assert.doesNotMatch(configure, /技能「keyed-skill」/);
+  assert.match(
+    configure,
+    /读取 <当前项目>\/\.astro\/skills\/keyed-skill\/SKILL\.md/,
+  );
   assert.match(configure, /不要要求我在对话中粘贴 API Key/);
   assert.match(configure, /不要假装已经配置完成/);
 });
