@@ -21,6 +21,8 @@ import ProjectContextMenu from "./components/chat/ProjectContextMenu";
 import ProjectEditDialog from "./components/chat/ProjectEditDialog";
 import ProjectFolderIcon from "./components/chat/ProjectFolderIcon";
 import SidebarSessionList from "./components/chat/SidebarSessionList";
+import SessionActionsMenu from "./components/chat/SessionActionsMenu";
+import { resolveSessionStatus } from "./components/chat/SessionStatusIcon";
 import ChatView from "./components/chat/ChatView";
 import ProjectFileEditor from "./components/chat/ProjectFileEditor";
 import ProjectFilesPanel from "./components/chat/ProjectFilesPanel";
@@ -46,11 +48,10 @@ import {
   IconPanelClose,
   IconPanelOpen,
   IconPlugin,
-  IconRightPanel,
   IconSearch,
 } from "./components/icons";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
-import { useActiveSessionTitle } from "./hooks/chat/useActiveSessionTitle";
+import { useActiveSessionMetadata } from "./hooks/chat/useActiveSessionTitle";
 import { useChatSession } from "./hooks/chat/useChatSession";
 import { useProjectFileWorkbench } from "./hooks/chat/useProjectFileWorkbench";
 import { useSessionStatusMap } from "./hooks/chat/useSessionStatusMap";
@@ -115,7 +116,6 @@ import {
   MessageSquare,
   MoreHorizontal,
   Settings2,
-  Sparkles,
 } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import { dynamicGradientForTab } from "./lib/ui/dynamicGradient";
@@ -211,8 +211,10 @@ export default function App() {
   const [projectDialog, setProjectDialog] = useState<
     { mode: "create" } | { mode: "edit"; project: ProjectDto } | null
   >(null);
-  const [conversationMenuOpen, setConversationMenuOpen] = useState(false);
-  const conversationMenuRef = useRef<HTMLDivElement | null>(null);
+  const [conversationMenuAnchor, setConversationMenuAnchor] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   // 侧栏会话检索：搜索与归档视图跨全部项目生效
   const [sessionQuery, setSessionQuery] = useState("");
   const [sessionListKind, setSessionListKind] = useState<SessionListKind>("active");
@@ -854,7 +856,9 @@ export default function App() {
   const showHeaderStatus = chat.statusPhase !== "ready";
   const featureNav =
     nav === "cron" || nav === "loop" || nav === "skills" ? nav : null;
-  const conversationTitle = useActiveSessionTitle(chat.sessionId);
+  const activeSession = useActiveSessionMetadata(chat.sessionId);
+  const conversationTitle = activeSession?.summary ?? null;
+  useEffect(() => setConversationMenuAnchor(null), [chat.sessionId]);
   const renameConversation = useCallback(async () => {
     if (!chat.sessionId || !conversationTitle) return;
     const next = await promptForTitle({
@@ -886,24 +890,6 @@ export default function App() {
     reviewOpen: reviewState != null,
   });
   const hasChatRightDock = activeChatRightDock !== null;
-
-  useEffect(() => {
-    if (!conversationMenuOpen) return;
-    const closeOnPointerDown = (event: PointerEvent) => {
-      if (!conversationMenuRef.current?.contains(event.target as Node)) {
-        setConversationMenuOpen(false);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setConversationMenuOpen(false);
-    };
-    window.addEventListener("pointerdown", closeOnPointerDown);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("pointerdown", closeOnPointerDown);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [conversationMenuOpen]);
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -1482,54 +1468,48 @@ export default function App() {
                           </h1>
                         </div>
                       </div>
-                      <div className="conversation-menu" ref={conversationMenuRef}>
+                      <div className="conversation-menu">
                         <button
                           type="button"
-                          className={`conversation-menu-trigger ${conversationMenuOpen ? "is-open" : ""}`}
+                          className={`conversation-menu-trigger ${conversationMenuAnchor ? "is-open" : ""}`}
                           aria-label={t("sessions.moreActions")}
                           aria-haspopup="menu"
-                          aria-expanded={conversationMenuOpen}
-                          onClick={() => setConversationMenuOpen((open) => !open)}
+                          aria-expanded={Boolean(conversationMenuAnchor)}
+                          onClick={(event) => {
+                            if (conversationMenuAnchor) {
+                              setConversationMenuAnchor(null);
+                              return;
+                            }
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            setConversationMenuAnchor({
+                              x: rect.left,
+                              y: rect.bottom + 6,
+                            });
+                          }}
                         >
                           <MoreHorizontal size={16} strokeWidth={2} />
                         </button>
-                        {conversationMenuOpen && (
-                          <div className="conversation-menu-popover" role="menu">
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                setConversationMenuOpen(false);
-                                void startNewChat();
-                              }}
-                            >
-                              <IconNewChat width={15} height={15} />
-                              <span>{t("chat.newSession")}</span>
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              disabled={chat.streaming || chat.isCompacting}
-                              onClick={() => {
-                                setConversationMenuOpen(false);
-                                void runCompactSession();
-                              }}
-                            >
-                              <Sparkles size={15} strokeWidth={1.9} />
-                              <span>{t("chat.slashCompact")}</span>
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                setConversationMenuOpen(false);
-                                openChatRightDock("context");
-                              }}
-                            >
-                              <IconRightPanel width={15} height={15} />
-                              <span>{t("chat.rightPanel.context")}</span>
-                            </button>
-                          </div>
+                        {conversationMenuAnchor && activeSession && (
+                          <SessionActionsMenu
+                            session={activeSession}
+                            x={conversationMenuAnchor.x}
+                            y={conversationMenuAnchor.y}
+                            status={resolveSessionStatus(
+                              sessionStatuses[activeSession.sessionId],
+                            )}
+                            activeSessionId={chat.sessionId}
+                            onClose={() => setConversationMenuAnchor(null)}
+                            onOpenSession={(sessionId) => {
+                              void openSessionFromFilespace(sessionId);
+                            }}
+                            showToast={showTransientToast}
+                            onPrepareDeleteCurrentSession={
+                              prepareDeleteCurrentSession
+                            }
+                            onClearDeletedCurrentSession={
+                              clearDeletedCurrentSession
+                            }
+                          />
                         )}
                       </div>
                     </>

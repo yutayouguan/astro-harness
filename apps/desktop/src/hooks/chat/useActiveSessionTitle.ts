@@ -13,12 +13,14 @@ type SessionEventPayload = {
  * 当前会话的标题。标题由后端在首轮结束后生成，所以新会话在拿到
  * session_event 之前一直是 null——调用方据此决定是否渲染标题。
  */
-export function useActiveSessionTitle(sessionId: string | null): string | null {
-  const [title, setTitle] = useState<string | null>(null);
+export function useActiveSessionMetadata(
+  sessionId: string | null,
+): RecentSessionDto | null {
+  const [session, setSession] = useState<RecentSessionDto | null>(null);
 
   const load = useCallback(async () => {
     if (!sessionId) {
-      setTitle(null);
+      setSession(null);
       return;
     }
     try {
@@ -35,14 +37,14 @@ export function useActiveSessionTitle(sessionId: string | null): string | null {
       const match = [...(active ?? []), ...(archived ?? [])].find(
         (row) => row.sessionId === sessionId,
       );
-      setTitle(match?.summary?.trim() || null);
+      setSession(match?.summary?.trim() ? match : null);
     } catch {
-      setTitle(null);
+      setSession(null);
     }
   }, [sessionId]);
 
   useEffect(() => {
-    setTitle(null);
+    setSession(null);
     void load();
   }, [load]);
 
@@ -58,7 +60,13 @@ export function useActiveSessionTitle(sessionId: string | null): string | null {
     void listen<SessionEventPayload>("session_event", ({ payload }) => {
       if (payload.sessionId?.trim() !== sessionId) return;
       const next = payload.sessionMetadataChanged?.title?.trim();
-      if (next) setTitle(next);
+      if (next) {
+        setSession((current) =>
+          current
+            ? { ...current, summary: next }
+            : { sessionId, summary: next, createdAt: null },
+        );
+      }
     })
       .then((stop) => {
         if (disposed) stop();
@@ -71,5 +79,9 @@ export function useActiveSessionTitle(sessionId: string | null): string | null {
     };
   }, [sessionId]);
 
-  return title;
+  return session;
+}
+
+export function useActiveSessionTitle(sessionId: string | null): string | null {
+  return useActiveSessionMetadata(sessionId)?.summary ?? null;
 }
