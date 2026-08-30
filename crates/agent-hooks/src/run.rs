@@ -14,7 +14,6 @@ pub enum HookRunStatus {
     Completed,
     Failed,
     Blocked,
-    Skipped,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

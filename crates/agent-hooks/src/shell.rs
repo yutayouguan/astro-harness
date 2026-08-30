@@ -167,12 +167,11 @@ pub fn load_shell_runner(_root: &Path, hooks: HashMap<String, String>) -> ShellH
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
-    use std::sync::Mutex;
 
     use super::*;
     use crate::outcome::HookPayload;
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     struct EnvRestore {
         previous: Vec<(&'static str, Option<OsString>)>,
@@ -394,9 +393,7 @@ mod tests {
 
     #[tokio::test]
     async fn child_does_not_inherit_reserved_hook_env_for_missing_payload_fields() {
-        let _lock = ENV_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _lock = ENV_LOCK.lock().await;
         let _restore = EnvRestore::preset(&[
             ("ASTRO_HOOK_EVENT", "parent-event"),
             ("ASTRO_HOOK_SESSION", "parent-session"),

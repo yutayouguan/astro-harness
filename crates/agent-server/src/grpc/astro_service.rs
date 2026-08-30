@@ -662,8 +662,6 @@ pub struct AstroServiceImpl {
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
     pub(crate) hook_runtime: Arc<::hooks::HookRuntime>,
-    /// canonical project root → trusted command-hook runtime.
-    project_hook_runtimes: Arc<StdMutex<HashMap<PathBuf, Arc<::hooks::HookRuntime>>>>,
     /// root thread → 当前 V2 AgentControl generation。
     agent_thread_watchers: Arc<Mutex<HashMap<String, Weak<subagents::AgentControl>>>>,
 }
@@ -699,7 +697,6 @@ impl AstroServiceImpl {
             hitl_registry: HitlRegistry::new(),
             memory_dir,
             hook_runtime,
-            project_hook_runtimes: Arc::new(StdMutex::new(HashMap::new())),
             agent_thread_watchers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -716,27 +713,11 @@ impl AstroServiceImpl {
                 return Arc::clone(&self.hook_runtime);
             }
         };
-        if let Some(runtime) = self
-            .project_hook_runtimes
-            .lock()
-            .expect("project hook runtime cache mutex poisoned")
-            .get(&project_root)
-            .cloned()
-        {
-            return runtime;
-        }
         match self
             .hook_runtime
             .with_project_commands(&self.memory_dir, &project_root)
         {
-            Ok(runtime) => {
-                let runtime = Arc::new(runtime);
-                self.project_hook_runtimes
-                    .lock()
-                    .expect("project hook runtime cache mutex poisoned")
-                    .insert(project_root, Arc::clone(&runtime));
-                runtime
-            }
+            Ok(runtime) => Arc::new(runtime),
             Err(error) => {
                 tracing::warn!(%error, project_root = %project_root.display(), "failed to discover project command hooks");
                 Arc::clone(&self.hook_runtime)
@@ -1164,10 +1145,22 @@ impl AstroServiceImpl {
         Ok(candidate)
     }
 
+    #[cfg(test)]
     pub(crate) async fn configure_thread_from_chat(
         &self,
         thread: &agent::AstroThread,
         req: &proto::ChatRequest,
+    ) -> Result<(), Status> {
+        let hook_runtime = self.hook_runtime_for_project(&req.project_root);
+        self.configure_thread_from_chat_with_hooks(thread, req, hook_runtime)
+            .await
+    }
+
+    pub(crate) async fn configure_thread_from_chat_with_hooks(
+        &self,
+        thread: &agent::AstroThread,
+        req: &proto::ChatRequest,
+        hook_runtime: Arc<::hooks::HookRuntime>,
     ) -> Result<(), Status> {
         // Validate the complete request before mutating the reusable session. Invalid legacy
         // modes or malformed provider parameters must not partially reconfigure a live thread.
@@ -1233,7 +1226,7 @@ impl AstroServiceImpl {
             api_mode: fallback.api_mode.trim().to_string(),
         }));
         let session = thread.session();
-        session.set_hook_runtime(self.hook_runtime_for_project(&req.project_root));
+        session.set_hook_runtime(hook_runtime);
         let (_, hitl_gate, _) = session.ensure_thread_controls();
         if !self
             .hitl_registry

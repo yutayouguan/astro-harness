@@ -1,6 +1,7 @@
 //! Command hook configuration and execution.
 
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -24,6 +25,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
 const SESSION_END_TIMEOUT: Duration = Duration::from_secs(1);
 const MAX_SESSION_END_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+const MAX_ENV_VALUE_BYTES: usize = 8 * 1024;
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -269,7 +271,7 @@ impl CommandHookRunner {
                     );
                     self.handlers
                         .entry(event.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(ConfiguredCommand {
                             id,
                             source: source.to_string_lossy().into_owned(),
@@ -322,6 +324,15 @@ impl CommandHookRunner {
         self.sources.clone()
     }
 
+    pub(crate) fn share_run_store(mut self, runs: HookRunStore) -> Self {
+        self.runs = runs;
+        self
+    }
+
+    pub(crate) fn run_store(&self) -> HookRunStore {
+        self.runs.clone()
+    }
+
     pub async fn run(&self, event: &str, payload: &HookPayload) -> Vec<CommandHookDecision> {
         let Some(handlers) = self.handlers.get(event) else {
             return Vec::new();
@@ -341,12 +352,13 @@ impl CommandHookRunner {
             crate::USER_PROMPT_SUBMIT | crate::STOP | crate::INTERRUPT
         );
         let mut synchronous = JoinSet::new();
-        for handler in handlers
+        for (configured_order, handler) in handlers
             .iter()
             .filter(|handler| {
                 ignore_matcher || matcher_matches(handler.matcher.as_ref(), &matcher_values)
             })
             .cloned()
+            .enumerate()
         {
             let run_id = format!("hook-run-{}", NEXT_RUN_ID.fetch_add(1, Ordering::Relaxed));
             self.runs.start(HookRunRecord {
@@ -381,34 +393,45 @@ impl CommandHookRunner {
                     if let Err(error) = &result {
                         warn!(%error, "asynchronous command hook failed");
                     }
-                    finish_run(&runs, &run_id, &run_event, started, result.as_ref());
+                    finish_run(&runs, &run_id, &run_event, started, result.as_ref(), None);
                 });
             } else {
                 let run_event = event.to_string();
                 synchronous.spawn(async move {
                     let started = Instant::now();
                     let result = run_command(&handler, &input, &cwd, &environment).await;
-                    (run_id, run_event, started, result)
+                    (configured_order, run_id, run_event, started, result)
                 });
             }
         }
 
-        let mut decisions = Vec::new();
+        let mut completed = Vec::new();
         while let Some(result) = synchronous.join_next().await {
             match result {
-                Ok((run_id, run_event, started, Ok(output))) => {
+                Ok((configured_order, run_id, run_event, started, Ok(output))) => {
                     let decision = parse_output(event, &output);
-                    finish_run(&self.runs, &run_id, &run_event, started, Ok(&output));
-                    decisions.push(decision);
+                    finish_run(
+                        &self.runs,
+                        &run_id,
+                        &run_event,
+                        started,
+                        Ok(&output),
+                        Some(&decision),
+                    );
+                    completed.push((configured_order, decision));
                 }
-                Ok((run_id, run_event, started, Err(error))) => {
-                    finish_run(&self.runs, &run_id, &run_event, started, Err(&error));
+                Ok((_, run_id, run_event, started, Err(error))) => {
+                    finish_run(&self.runs, &run_id, &run_event, started, Err(&error), None);
                     warn!(%event, %error, "command hook failed open");
                 }
                 Err(error) => warn!(%event, %error, "command hook task failed open"),
             }
         }
-        decisions
+        completed.sort_by_key(|(configured_order, _)| *configured_order);
+        completed
+            .into_iter()
+            .map(|(_, decision)| decision)
+            .collect()
     }
 }
 
@@ -462,13 +485,22 @@ fn finish_run(
     event: &str,
     started: Instant,
     result: Result<&CommandOutput, &anyhow::Error>,
+    decision: Option<&CommandHookDecision>,
 ) {
     let duration_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
     let (status, summary) = match result {
-        Ok(output) if output.status.code() == Some(2) => (
-            HookRunStatus::Blocked,
-            stderr_reason(output).unwrap_or_else(|| format!("{event} command blocked")),
-        ),
+        Ok(output)
+            if output.status.code() == Some(2)
+                || decision.is_some_and(|decision| decision.block_reason.is_some()) =>
+        {
+            (
+                HookRunStatus::Blocked,
+                decision
+                    .and_then(|decision| decision.block_reason.clone())
+                    .or_else(|| stderr_reason(output))
+                    .unwrap_or_else(|| format!("{event} command blocked")),
+            )
+        }
         Ok(output) if output.status.success() => (
             HookRunStatus::Completed,
             format!("{event} command completed"),
@@ -521,25 +553,23 @@ fn matcher_matches(matcher: Option<&Regex>, values: &[String]) -> bool {
 }
 
 fn hook_environment(event: &str, payload: &HookPayload) -> Vec<(String, String)> {
-    let mut environment = vec![
-        ("ASTRO_HOOK_EVENT".into(), event.into()),
-        ("ASTRO_HOOK_SESSION".into(), payload.session_id.clone()),
-        ("ASTRO_HOOK_DETAIL".into(), payload.detail.clone()),
-    ];
-    if let Some(turn_id) = payload.turn_id.as_ref().filter(|value| !value.is_empty()) {
-        environment.push(("ASTRO_HOOK_TURN".into(), turn_id.clone()));
+    crate::shell::env_from_payload(event, payload)
+        .into_iter()
+        .map(|(key, value)| (key, truncate_env_value(&value)))
+        .collect()
+}
+
+fn truncate_env_value(value: &str) -> String {
+    if value.len() <= MAX_ENV_VALUE_BYTES {
+        return value.to_string();
     }
-    if let Some(tool_name) = &payload.tool_name {
-        environment.push(("ASTRO_HOOK_TOOL".into(), tool_name.clone()));
-    }
-    if let Some(message) = payload
-        .prompt
-        .as_ref()
-        .or(payload.last_assistant_message.as_ref())
-    {
-        environment.push(("ASTRO_HOOK_MESSAGE".into(), message.clone()));
-    }
-    environment
+    let boundary = value
+        .char_indices()
+        .map(|(index, _)| index)
+        .take_while(|index| *index <= MAX_ENV_VALUE_BYTES)
+        .last()
+        .unwrap_or(0);
+    value[..boundary].to_string()
 }
 
 #[derive(Debug)]
@@ -570,29 +600,70 @@ async fn run_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    #[cfg(unix)]
+    command.process_group(0);
     let mut child = command.spawn()?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(input).await?;
-        stdin.shutdown().await?;
-    }
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
-    let stdout_task = tokio::spawn(read_capped(stdout));
-    let stderr_task = tokio::spawn(read_capped(stderr));
-    let status = match tokio::time::timeout(handler.timeout, child.wait()).await {
-        Ok(status) => status?,
+    let mut stdout_task = tokio::spawn(read_capped(stdout));
+    let mut stderr_task = tokio::spawn(read_capped(stderr));
+    let mut stdin = child.stdin.take();
+    let execution = async {
+        if let Some(mut stdin) = stdin.take() {
+            match stdin.write_all(input).await {
+                Ok(()) => {
+                    if let Err(error) = stdin.shutdown().await {
+                        if error.kind() != ErrorKind::BrokenPipe {
+                            return Err(error.into());
+                        }
+                    }
+                }
+                Err(error) if error.kind() == ErrorKind::BrokenPipe => {}
+                Err(error) => {
+                    return Err(error.into());
+                }
+            }
+        }
+        // Wait for the process and both pipe readers together. A reader can fail early when
+        // the output limit is exceeded; observing that failure immediately prevents the child
+        // from blocking forever on a full pipe until the outer timeout expires.
+        let (status, stdout, stderr) = tokio::try_join!(
+            async { child.wait().await.map_err(anyhow::Error::from) },
+            async { (&mut stdout_task).await.map_err(anyhow::Error::from)? },
+            async { (&mut stderr_task).await.map_err(anyhow::Error::from)? },
+        )?;
+        Ok::<_, anyhow::Error>(CommandOutput {
+            status,
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+        })
+    };
+    match tokio::time::timeout(handler.timeout, execution).await {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(error)) => {
+            terminate_child_tree(&mut child).await;
+            stdout_task.abort();
+            stderr_task.abort();
+            Err(error)
+        }
         Err(_) => {
-            let _ = child.kill().await;
+            terminate_child_tree(&mut child).await;
+            stdout_task.abort();
+            stderr_task.abort();
             anyhow::bail!("timeout after {}s", handler.timeout.as_secs());
         }
-    };
-    let stdout = stdout_task.await??;
-    let stderr = stderr_task.await??;
-    Ok(CommandOutput {
-        status,
-        stdout: String::from_utf8_lossy(&stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&stderr).into_owned(),
-    })
+    }
+}
+
+async fn terminate_child_tree(child: &mut tokio::process::Child) {
+    #[cfg(unix)]
+    if let Some(process_id) = child.id().and_then(|id| i32::try_from(id).ok()) {
+        // The child is its own process-group leader, so a negative pid targets descendants too.
+        unsafe {
+            libc::kill(-process_id, libc::SIGKILL);
+        }
+    }
+    let _ = child.kill().await;
 }
 
 async fn read_capped(reader: impl AsyncRead + Unpin) -> anyhow::Result<Vec<u8>> {
@@ -853,6 +924,62 @@ mod tests {
         );
     }
 
+    #[test]
+    fn project_trust_is_re_evaluated_on_each_load() {
+        let (_root, astro_home, cwd) = project_fixture(
+            "trusted",
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"true"}]}]}}"#,
+        );
+        assert_eq!(
+            CommandHookRunner::load_for_project(&astro_home, &cwd)
+                .unwrap()
+                .handler_count(),
+            1
+        );
+        let project = cwd.parent().unwrap();
+        std::fs::write(
+            astro_home.join("config.toml"),
+            format!(
+                "[projects.{:?}]\ntrust_level = 'untrusted'\n",
+                project.to_string_lossy()
+            ),
+        )
+        .unwrap();
+
+        let reloaded = CommandHookRunner::load_for_project(&astro_home, &cwd).unwrap();
+
+        assert_eq!(reloaded.handler_count(), 0);
+        assert_eq!(reloaded.sources()[0].trust, CommandHookTrust::Untrusted);
+        assert!(!reloaded.sources()[0].enabled);
+    }
+
+    #[test]
+    fn command_environment_includes_llm_telemetry_fields() {
+        let environment = hook_environment(
+            crate::POST_LLM_CALL,
+            &HookPayload {
+                provider: Some("provider-a".into()),
+                model: "model-a".into(),
+                attempt: Some(3),
+                duration_ms: Some(42),
+                status: Some("succeeded".into()),
+                ..Default::default()
+            },
+        );
+        let value = |key: &str| {
+            environment
+                .iter()
+                .find(|(candidate, _)| candidate == key)
+                .map(|(_, value)| value.as_str())
+        };
+
+        assert_eq!(value("ASTRO_HOOK_PROVIDER"), Some("provider-a"));
+        assert_eq!(value("ASTRO_HOOK_MODEL"), Some("model-a"));
+        assert_eq!(value("ASTRO_HOOK_ATTEMPT"), Some("3"));
+        assert_eq!(value("ASTRO_HOOK_DURATION_MS"), Some("42"));
+        assert_eq!(value("ASTRO_HOOK_STATUS"), Some("succeeded"));
+    }
+
     #[tokio::test]
     async fn command_receives_json_and_can_modify_matching_tool_input() {
         let command = r#"read payload; printf '%s' "$payload" | grep -q '"hook_event_name":"PreToolUse"' || exit 1; printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"safe":true}}}'"#;
@@ -891,6 +1018,123 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fast_exiting_hook_keeps_stdout_when_it_does_not_read_large_stdin() {
+        let history_owner = CommandHookRunner::default();
+        let runner = CommandHookRunner::from_file(
+            file(
+                r#"printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"safe":true}}}'"#.into(),
+                None,
+                false,
+            ),
+            Path::new("hooks.json"),
+        )
+        .unwrap()
+        .share_run_store(history_owner.run_store());
+
+        let decisions = runner
+            .run(
+                crate::PRE_TOOL_USE,
+                &HookPayload {
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    tool_name: Some("terminal".into()),
+                    detail: "x".repeat(1024 * 1024),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert_eq!(decisions.len(), 1, "runs: {:?}", runner.recent_runs());
+        assert_eq!(
+            decisions[0].updated_input,
+            Some(serde_json::json!({"safe": true}))
+        );
+        assert_eq!(history_owner.recent_runs().len(), 1);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn timeout_covers_stdin_and_descendant_output_pipes() {
+        let runner = CommandHookRunner::from_file(
+            HooksFile {
+                hooks: HashMap::from([(
+                    crate::PRE_TOOL_USE.into(),
+                    vec![MatcherGroup {
+                        matcher: None,
+                        hooks: vec![HookHandlerConfig::Command {
+                            command: "sleep 10 & wait".into(),
+                            command_windows: None,
+                            timeout_sec: Some(1),
+                            r#async: false,
+                            status_message: None,
+                        }],
+                    }],
+                )]),
+                ..Default::default()
+            },
+            Path::new("hooks.json"),
+        )
+        .unwrap();
+
+        let decisions = tokio::time::timeout(
+            Duration::from_secs(3),
+            runner.run(
+                crate::PRE_TOOL_USE,
+                &HookPayload {
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    tool_name: Some("terminal".into()),
+                    detail: "x".repeat(1024 * 1024),
+                    ..Default::default()
+                },
+            ),
+        )
+        .await
+        .expect("hook timeout must include stdin and output pipe handling");
+
+        assert!(decisions.is_empty());
+        let runs = runner.recent_runs();
+        assert_eq!(runs[0].status, HookRunStatus::Failed);
+        assert!(runs[0].summary.contains("timeout after 1s"));
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn oversized_output_fails_without_waiting_for_command_timeout() {
+        let runner = CommandHookRunner::from_file(
+            file("yes x".into(), None, false),
+            Path::new("hooks.json"),
+        )
+        .unwrap();
+
+        let decisions = tokio::time::timeout(
+            Duration::from_secs(3),
+            runner.run(
+                crate::PRE_TOOL_USE,
+                &HookPayload {
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    tool_name: Some("terminal".into()),
+                    ..Default::default()
+                },
+            ),
+        )
+        .await
+        .expect("output limit failure must interrupt the command immediately");
+
+        assert!(decisions.is_empty());
+        let runs = runner.recent_runs();
+        assert_eq!(runs[0].status, HookRunStatus::Failed);
+        assert!(runs[0].summary.contains("hook output exceeds 1 MiB"));
+    }
+
+    #[tokio::test]
     async fn exit_two_blocks_with_stderr_reason() {
         let runner = CommandHookRunner::from_file(
             file("printf denied >&2; exit 2".into(), None, false),
@@ -914,5 +1158,91 @@ mod tests {
         let runs = runner.recent_runs();
         assert_eq!(runs[0].status, HookRunStatus::Blocked);
         assert_eq!(runs[0].summary, "denied");
+    }
+
+    #[tokio::test]
+    async fn successful_process_with_deny_decision_is_recorded_as_blocked() {
+        let runner = CommandHookRunner::from_file(
+            file(
+                r#"printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"unsafe"}}'"#.into(),
+                None,
+                false,
+            ),
+            Path::new("hooks.json"),
+        )
+        .unwrap();
+
+        let decisions = runner
+            .run(
+                crate::PRE_TOOL_USE,
+                &HookPayload {
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    tool_name: Some("terminal".into()),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert_eq!(decisions[0].block_reason.as_deref(), Some("unsafe"));
+        let runs = runner.recent_runs();
+        assert_eq!(runs[0].status, HookRunStatus::Blocked);
+        assert_eq!(runs[0].summary, "unsafe");
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn concurrent_hook_results_keep_configuration_order() {
+        let output =
+            |reason: &str| format!(r#"printf '%s' '{{"continue":false,"stopReason":"{reason}"}}'"#);
+        let runner = CommandHookRunner::from_file(
+            HooksFile {
+                hooks: HashMap::from([(
+                    crate::USER_PROMPT_SUBMIT.into(),
+                    vec![MatcherGroup {
+                        matcher: None,
+                        hooks: vec![
+                            HookHandlerConfig::Command {
+                                command: format!("sleep 1; {}", output("first")),
+                                command_windows: None,
+                                timeout_sec: Some(2),
+                                r#async: false,
+                                status_message: None,
+                            },
+                            HookHandlerConfig::Command {
+                                command: output("second"),
+                                command_windows: None,
+                                timeout_sec: Some(2),
+                                r#async: false,
+                                status_message: None,
+                            },
+                        ],
+                    }],
+                )]),
+                ..Default::default()
+            },
+            Path::new("hooks.json"),
+        )
+        .unwrap();
+
+        let decisions = runner
+            .run(
+                crate::USER_PROMPT_SUBMIT,
+                &HookPayload {
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    prompt: Some("hello".into()),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert_eq!(decisions.len(), 2);
+        assert_eq!(decisions[0].block_reason.as_deref(), Some("first"));
+        assert_eq!(decisions[1].block_reason.as_deref(), Some("second"));
     }
 }

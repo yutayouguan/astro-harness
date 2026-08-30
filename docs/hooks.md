@@ -18,7 +18,7 @@ Command Hooks 从用户级 `~/.astro/hooks.json` 加载；项目根到当前工�
 
 ### Codex 公开事件
 
-以下 11 个名称是 Codex 对外事件集，拼写和大小写都是契约的一部分：
+以下 12 个名称是 Codex 对外事件集，拼写和大小写都是契约的一部分：
 
 | Canonical 名称 | 契约含义 |
 |---|---|
@@ -33,10 +33,11 @@ Command Hooks 从用户级 `~/.astro/hooks.json` 加载；项目根到当前工�
 | `SubagentStart` | 子 Agent 首轮开始前（每 thread 一次） |
 | `SubagentStop` | 子 Agent 每个 turn 准备结束时；可 `KeepGoing` |
 | `Stop` | Agent 准备停止 |
+| `Interrupt` | 用户显式中断根 Agent turn 后 |
 
 ### Astro 扩展事件
 
-以下名称不属于 Codex 的 11 个公开事件，是 Astro 的扩展：
+以下名称不属于 Codex 的 12 个公开事件，是 Astro 的扩展：
 
 | Canonical 名称 | 用途 |
 |---|---|
@@ -46,7 +47,7 @@ Command Hooks 从用户级 `~/.astro/hooks.json` 加载；项目根到当前工�
 | `TransformTerminalOutput` | 替换 terminal 输出 |
 | `TransformToolResult` | 替换工具结果 |
 | `TransformFinalLlmOutput` | 完整流已发出后，替换普通 candidate 的最终 assistant 文本（summary 除外） |
-| `PostLlmCall` | 普通 candidate 已完成 transform 后（summary 除外） |
+| `PostLlmCall` | 每次普通 sampling 完成、失败或取消后（summary 除外） |
 | `PostApprovalResponse` | 审批结果产生后 |
 | `PreGatewayDispatch` | Gateway 入队前 |
 | `SessionReset` | 会话重置 |
@@ -85,7 +86,7 @@ Plugin 注册与触发、Gateway manifest、Shell config key 均按字符串精�
 | `SubagentStop` | Codex | 子 Agent 每个 terminal turn；错误/中断也触发；Desktop close 不重复触发 | `KeepGoing(prompt)` 与主 Agent `Stop` 相同 |
 | `Stop` | Codex | 每个无工具的普通 terminal candidate，以及 budget-exhaustion summary 的完整 terminal candidate | `KeepGoing(prompt)` |
 | `TransformFinalLlmOutput` | Astro | 每个通过 Stop guard 的普通 candidate（含 tool-call 中间轮）的流已全部发出后、持久化前 | `ReplaceText(text)` |
-| `PostLlmCall` | Astro | 每个通过 Stop guard 的普通 candidate，且已应用 `TransformFinalLlmOutput`；携带 LLM telemetry 字段 | 观察 |
+| `PostLlmCall` | Astro | 每次普通主循环 sampling 结束时恰好一次；位于 Stop guard 和 final transform 前，带实际 provider/model、完整流耗时及 `succeeded|failed|cancelled` status | 观察 |
 | `AgentEnd` | Astro | `RegularTask` 在每次 regular run 收尾时唯一派发：成功、runtime failure、准备失败、取消或 receiver close 都恰好一次 | 观察 |
 | `PreGatewayDispatch` | Astro | gRPC/Tauri chat 入站、加载会话前 | `Allow` / `Skip(reason)` / `Rewrite(message)` |
 | `SessionReset` | Astro | UI `new_chat` 释放旧会话时 | 观察 |
@@ -106,10 +107,11 @@ PreGatewayDispatch
   → SessionStart (startup | resume；首个 non-Block admission 后一次) → UserPromptSubmit
   → 输入持久化 → PreLlmCall → [sampling / 工具循环]
       → PreApiRequest → Provider API → PostApiRequest    # 每个主循环 request
+      → PostLlmCall                                # 每次 sampling 恰好一次
       → 无 tool calls？Stop
-          → KeepGoing：持久化 assistant + hook bridge 后 continue；不 fire Transform/PostLlm
+          → KeepGoing：持久化 assistant + hook bridge 后 continue；不 fire Transform
           → 否：跳过 Stop
-      → TransformFinalLlmOutput → PostLlmCall      # 通过 Stop guard，或本轮有 tool calls
+      → TransformFinalLlmOutput                    # 通过 Stop guard，或本轮有 tool calls
       → assistant 持久化
       → 有 tool calls？
           → PermissionRequest? → 审批 → PostApprovalResponse?
@@ -144,7 +146,7 @@ PreGatewayDispatch
 
 每个 response chain 最多接受两次 `KeepGoing(prompt)`：接受时持久化 candidate assistant 与 `[astro:hook-context]` bridge user，再继续 sampling。第三个及之后的 candidate 仍派发 `Stop`（且 `stop_hook_active=true`），但忽略 `KeepGoing` 并正常收尾。新的已持久化 steer 输入会开始独立 response chain 并重置这个配额。budget summary 与主循环共享同一配额；summary instruction 是 request-local，notice 只出现一次。
 
-普通主循环每个 provider request 都会 fire `PreApiRequest` / `PostApiRequest`。每个普通 candidate（包括含 tool-call 的中间轮）只有在没有被 `Stop::KeepGoing` 提前 continue 后，才 fire `TransformFinalLlmOutput` 和 `PostLlmCall`。`TransformFinalLlmOutput` 的命名明确表示它修改的是完整流结束后的定稿文本，不会回溯改写已发出的 streaming delta。budget summary 则直接调用 `ProviderStreamer::stream_chat`：它只处理 summary candidate 的 `Stop`、持久化与 continuation，不 fire `PreApiRequest`、`PostApiRequest`、`TransformFinalLlmOutput` 或 `PostLlmCall`。
+普通主循环每个 provider request 都会 fire `PreApiRequest` / `PostApiRequest`。每次普通 sampling 都会在流结束、失败或取消时恰好 fire 一次 `PostLlmCall`；它观察原始 candidate，因此位于 `Stop` 和 `TransformFinalLlmOutput` 之前。每个普通 candidate（包括含 tool-call 的中间轮）只有在没有被 `Stop::KeepGoing` 提前 continue 后，才 fire `TransformFinalLlmOutput`。`TransformFinalLlmOutput` 的命名明确表示它修改的是完整流结束后的定稿文本，不会回溯改写已发出的 streaming delta。budget summary 则直接调用 `ProviderStreamer::stream_chat`：它只处理 summary candidate 的 `Stop`、持久化与 continuation，不 fire `PreApiRequest`、`PostApiRequest`、`TransformFinalLlmOutput` 或 `PostLlmCall`。
 
 为了维持角色交替，Stop bridge 后已排队的 steer 会先让 provider 响应 bridge；bridge 经过 reasoning-only retry 时这个顺序仍被保留。terminal assistant 持久化后才会消费 queued input；其绑定 context 也只在相应新 chain 的 sampling 使用。
 
@@ -207,7 +209,7 @@ PreGatewayDispatch
 | `provider` | string | LLM/API telemetry 的 provider backend；`PostApiRequest`/`PostLlmCall` 使用实际命中的 fallback 目标 |
 | `attempt` | integer | 当前 turn 内的 sampling 序号，从 1 开始；不是 fallback 子尝试序号 |
 | `duration_ms` | integer | 阶段墙钟耗时；`PostApiRequest` 为打开流，`PostLlmCall` 为完整流 |
-| `status` | string | telemetry 状态：`started`、`succeeded` 或 `failed` |
+| `status` | string | telemetry 状态：`started`、`succeeded`、`failed` 或 `cancelled` |
 
 ### Astro 私有字段
 
@@ -228,7 +230,7 @@ PreGatewayDispatch
 }
 ```
 
-这是载荷的 serialization 契约，不是 Shell/Command Hook 的 JSON stdin/stdout 协议。Batch A 不会把该 JSON 自动写入 shell stdin，也不解析 shell stdout 为新的 command response。
+Command Hook 会把该 canonical JSON 写入 stdin，并解析 stdout 控制结果；Shell Hook 继续只使用环境变量，输出不参与同步决策。
 
 ## 4. 注册与配置
 
@@ -273,6 +275,14 @@ ctx.register_gateway_handler("audit", |event, payload| {
 });
 ```
 
+### Command Hooks
+
+用户级配置位于 `~/.astro/hooks.json`；可信项目还可在项目根到当前工作目录之间添加 `.astro/hooks.json`。同一事件的匹配 handler 并发执行，但结果始终按配置顺序聚合。当前执行 `type: "command"`；`prompt`、`agent` 和 `mcp_tool` 仅可解析，尚不执行。
+
+同步 handler 的 stdout 支持 canonical JSON 控制结果，退出码 `2` 表示阻断并使用 stderr 作为原因。异步 handler 不改变当前流程。普通超时默认 600 秒；`SessionEnd` 默认 1 秒且最多 3 秒。stdout/stderr 各限制为 1 MiB，超时会终止 Unix 进程组。
+
+可通过 `HookRuntime::list_command_hooks()`、`command_hook_sources()` 和 `recent_command_hook_runs()` 查询已加载 handler、信任状态及最近 200 次执行记录。
+
 ### Shell Hooks
 
 `~/.astro/config.yaml`（数据根可用 `ASTRO_MEMORY_DIR` 覆盖）：
@@ -285,7 +295,7 @@ hooks:
 
 Shell Hook 异步执行，默认超时 5 秒，失败只记录日志。`HookRuntime::dispatch` 会在同一次标准化 dispatch 中同步调用 Plugin、通知 Gateway，并旁路调度同名 Shell Hook；因此所有 `Session::fire_hook` 事件都能到达 Shell。Shell 的异步结果不参与 Plugin outcome 聚合，也不会阻塞 Agent。
 
-11 个 Codex 事件及 Astro 扩展事件都可经统一 runtime 到达 Shell；代表事件包括 `PreCompact`、`PostCompact`、`SessionEnd`、`PermissionRequest`、`PostToolUse`、`SubagentStart`、`SubagentStop`、`Stop`、`AgentEnd` 与 `CommandNewChat`。Shell 是异步观察面，不参与同步决策。
+12 个 Codex 事件及 Astro 扩展事件都可经统一 runtime 到达 Shell；代表事件包括 `PreCompact`、`PostCompact`、`SessionEnd`、`PermissionRequest`、`PostToolUse`、`SubagentStart`、`SubagentStop`、`Stop`、`Interrupt`、`AgentEnd` 与 `CommandNewChat`。Shell 是异步观察面，不参与同步决策。
 
 一版兼容环境变量：
 
@@ -301,7 +311,9 @@ Shell Hook 异步执行，默认超时 5 秒，失败只记录日志。`HookRunt
 | `ASTRO_HOOK_MODEL` | `model` 非空时 | 模型 ID |
 | `ASTRO_HOOK_ATTEMPT` | `attempt` 有值时 | turn 内从 1 开始的 sampling 序号 |
 | `ASTRO_HOOK_DURATION_MS` | `duration_ms` 有值时 | 毫秒耗时 |
-| `ASTRO_HOOK_STATUS` | `status` 有值时 | `started`、`succeeded` 或 `failed` |
+| `ASTRO_HOOK_STATUS` | `status` 有值时 | `started`、`succeeded`、`failed` 或 `cancelled` |
+
+Command Hook 的 `ASTRO_HOOK_DETAIL` 与 `ASTRO_HOOK_MESSAGE` 最多保留 8 KiB，完整 canonical payload 仍通过 stdin JSON 提供，避免超大环境变量导致子进程无法启动。
 
 `tool_input` 和 `tool_response` 不写入环境变量，避免通过进程环境扩大敏感数据暴露面。
 每次启动子进程时，Astro 会先从继承环境中移除上表十一个保留变量，再应用本次 payload；因此缺失的可选值不会读到父进程旧值。其他父进程环境仍正常继承。
@@ -334,9 +346,9 @@ B1 与 Codex lifecycle alignment 完成：
 - Permission allow/deny 与 PostToolUse block/context/feedback；
 - Subagent 的完整 runtime transport、startup 与每-turn stop/continuation。
 
-后续范围是 Batch C 的 Codex `hooks.json` Command Hook JSON stdin/stdout、matcher、multi-handler 聚合/冲突和 trust 模型/UI 管理。当前 Gateway/Shell transport 是观察型，只有同步 Plugin handlers 返回业务决策。`SessionStart(source=clear|compact)` 的 durable handoff 也仍属于后续 Session lifecycle 扩展；它不影响本轮 compact 边界事件。
+Command Hook 的 JSON stdin/stdout、matcher、multi-handler 聚合、运行历史和项目 trust 门禁已完成。Gateway/Shell transport 仍是观察型；同步 Plugin 与 Command handlers 可按各事件契约返回业务决策。`prompt`、`agent`、`mcp_tool` handler、持久化运行历史和 UI 管理仍未实现。
 
-不要从 canonical 名称推断尚未实现的 Command Hook matcher、trust 或 JSON I/O 语义。
+`SessionStart(source=clear|compact)` 的 durable handoff 仍属于后续 Session lifecycle 扩展；它不影响本轮 compact 边界事件。
 
 ## 6. 验证
 

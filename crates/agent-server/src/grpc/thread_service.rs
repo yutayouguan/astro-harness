@@ -246,7 +246,7 @@ pub(crate) async fn submit_turn(
             .first_mut()
             .expect("validated non-resume chat must contain one input");
         if let Some(reason) =
-            apply_pre_gateway_hook(&request_hook_runtime, thread_id, &chat.project_root, input)
+            apply_pre_gateway_hook(&request_hook_runtime, thread_id, &chat.project_root, input)?
         {
             return Ok(submit_turn_response(
                 String::new(),
@@ -276,7 +276,11 @@ pub(crate) async fn submit_turn(
     resume(&managed, subscription.clone(), false).await?;
     let submit = async {
         service
-            .configure_thread_from_chat(&managed.runtime, &chat)
+            .configure_thread_from_chat_with_hooks(
+                &managed.runtime,
+                &chat,
+                std::sync::Arc::clone(&request_hook_runtime),
+            )
             .await?;
         debug_assert_eq!(
             managed.runtime.session().interaction_mode().await,
@@ -334,7 +338,7 @@ fn apply_pre_gateway_hook(
     session_id: &str,
     cwd: &str,
     input: &mut TurnInput,
-) -> Option<String> {
+) -> Result<Option<String>, Status> {
     let outcome = runtime.dispatch(
         ::hooks::PRE_GATEWAY_DISPATCH,
         &::hooks::HookPayload {
@@ -345,7 +349,13 @@ fn apply_pre_gateway_hook(
             ..Default::default()
         },
     );
-    apply_pre_gateway_outcome(input, outcome)
+    let skipped = apply_pre_gateway_outcome(input, outcome);
+    if skipped.is_none() && input.content.trim().is_empty() && input.image_data_urls.is_empty() {
+        return Err(Status::invalid_argument(
+            "PreGatewayDispatch produced an empty chat input",
+        ));
+    }
+    Ok(skipped)
 }
 
 fn apply_pre_gateway_outcome(
@@ -600,7 +610,8 @@ mod tests {
             client_message_id: None,
         };
 
-        let skipped = apply_pre_gateway_hook(&runtime, "session-1", "/workspace", &mut input);
+        let skipped =
+            apply_pre_gateway_hook(&runtime, "session-1", "/workspace", &mut input).unwrap();
 
         assert_eq!(input.content, "rewritten");
         assert_eq!(skipped, None);
@@ -619,6 +630,24 @@ mod tests {
 
         assert_eq!(input.content, "original");
         assert_eq!(skipped.as_deref(), Some("policy"));
+    }
+
+    #[test]
+    fn pre_gateway_rewrite_cannot_create_an_empty_input() {
+        let runtime = ::hooks::HookRuntime::new();
+        runtime.plugin.register(::hooks::PRE_GATEWAY_DISPATCH, |_| {
+            ::hooks::HookOutcome::Rewrite(String::new())
+        });
+        let mut input = TurnInput {
+            content: "original".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        };
+
+        let error = apply_pre_gateway_hook(&runtime, "session-1", "/workspace", &mut input)
+            .expect_err("empty rewritten input must be rejected");
+
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
     }
 
     #[test]

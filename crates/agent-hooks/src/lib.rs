@@ -110,8 +110,11 @@ impl HookRuntime {
         astro_home: &std::path::Path,
         cwd: &std::path::Path,
     ) -> anyhow::Result<Self> {
+        let runs = self.command.run_store();
         Ok(Self {
-            command: Arc::new(CommandHookRunner::load_for_project(astro_home, cwd)?),
+            command: Arc::new(
+                CommandHookRunner::load_for_project(astro_home, cwd)?.share_run_store(runs),
+            ),
             ..self.clone()
         })
     }
