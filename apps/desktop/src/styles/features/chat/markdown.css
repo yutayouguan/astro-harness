@@ -1,5 +1,17 @@
 /* —— Markdown 玻璃内容 —— */
 .msg-md {
+  --msg-md-surface-bg: color-mix(
+    in srgb,
+    var(--tone-soft, var(--glass-inner, rgba(255, 255, 255, 0.1))) 42%,
+    transparent
+  );
+  --msg-md-surface-header-bg: color-mix(
+    in srgb,
+    var(--tone-soft, var(--glass-inner, rgba(255, 255, 255, 0.1))) 58%,
+    transparent
+  );
+  --msg-md-surface-border: color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  --msg-md-surface-divider: color-mix(in srgb, var(--glass-edge) 70%, transparent);
   color: var(--ink);
   font-size: 14.5px;
   line-height: 1.65;
@@ -104,8 +116,13 @@
 .msg-md :not(pre) > code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.86em;
-  padding: 0.12em 0.4em;
-  border-radius: calc(var(--chat-inset-radius, 10px) - 2px);
+  padding: 0.1em 0.34em;
+  border: 1px solid var(--msg-md-surface-border);
+  border-radius: 5px;
+  background: var(--msg-md-surface-header-bg);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   color: var(--ink);
 }
 
@@ -113,9 +130,9 @@
   margin: 0.75em 0;
   position: relative;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border: 1px solid var(--msg-md-surface-border);
   border-radius: 11px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  background: var(--msg-md-surface-bg);
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -128,7 +145,8 @@
   gap: 8px;
   min-height: 38px;
   padding: 0 8px 0 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  border-bottom: 1px solid var(--msg-md-surface-divider);
+  background: var(--msg-md-surface-header-bg);
 }
 
 .msg-md-code-lang {
@@ -241,9 +259,19 @@
   margin-top: 0;
 }
 
-html[data-theme="dark"] .msg-md-codeblock {
-  border-color: color-mix(in srgb, #fff 9%, transparent);
-  background: color-mix(in srgb, #fff 4%, transparent);
+html[data-theme="dark"] .msg-md {
+  --msg-md-surface-bg: color-mix(
+    in srgb,
+    var(--tone-soft, rgba(96, 165, 250, 0.14)) 30%,
+    rgba(255, 255, 255, 0.025)
+  );
+  --msg-md-surface-header-bg: color-mix(
+    in srgb,
+    var(--tone-soft, rgba(96, 165, 250, 0.14)) 44%,
+    rgba(255, 255, 255, 0.035)
+  );
+  --msg-md-surface-border: color-mix(in srgb, var(--glass-edge) 86%, transparent);
+  --msg-md-surface-divider: color-mix(in srgb, var(--glass-edge) 74%, transparent);
 }
 
 html[data-theme="dark"] .msg-md-code-copy-feedback {
@@ -278,7 +306,8 @@ html[data-theme="dark"] .msg-md-code-copy-feedback {
   margin: 0.7em 0;
   overflow-x: auto;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  border: 1px solid var(--msg-md-surface-border);
+  background: var(--msg-md-surface-bg);
   overscroll-behavior-inline: contain;
 }
 
@@ -293,7 +322,7 @@ html[data-theme="dark"] .msg-md-code-copy-feedback {
 .msg-md th,
 .msg-md td {
   padding: 0.45em 0.65em;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  border-bottom: 1px solid var(--msg-md-surface-divider);
   text-align: left;
   word-break: normal;
   overflow-wrap: break-word;
@@ -306,8 +335,15 @@ html[data-theme="dark"] .msg-md-code-copy-feedback {
 }
 
 .msg-md th {
-  background: color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.1)) 55%, transparent);
+  background: var(--msg-md-surface-header-bg);
   font-weight: 650;
+}
+
+@media (prefers-contrast: more) {
+  .msg-md {
+    --msg-md-surface-border: color-mix(in srgb, var(--ink) 32%, transparent);
+    --msg-md-surface-divider: color-mix(in srgb, var(--ink) 24%, transparent);
+  }
 }
 
 .msg-md tr:last-child td {

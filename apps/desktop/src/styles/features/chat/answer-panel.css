@@ -223,7 +223,6 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
 .bubble.assistant .msg-md-code-header {
   min-height: 38px;
   padding: 0 8px 0 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
 .bubble.assistant .msg-md-pre {

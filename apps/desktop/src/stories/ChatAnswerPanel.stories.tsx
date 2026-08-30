@@ -67,11 +67,24 @@ const answer = `当前工作目录为：
 
 我已按类型整理了当前目录，可以继续帮你查看文件或总结内容。`;
 
-const codeBlockShowcase = `### 单行命令
+const codeBlockShowcase = `### 实测结果
+
+| URL | 抓到的标题 |
+| --- | --- |
+| example.com | Example Domain |
+| python.org | Welcome to Python.org |
+| github.com | GitHub · Change is constant... |
+
+### 用法
 
 \`\`\`bash
 python3 fetch_title.py https://www.python.org
 \`\`\`
+
+### 实现要点
+
+- 用 \`urllib.request\` 请求，\`html.parser.HTMLParser\` 提取 \`<title>\` 内容
+- 带 \`User-Agent\` 头，避免部分站点拒绝默认 UA
 
 ### 多行代码
 

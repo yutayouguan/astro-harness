@@ -26,18 +26,29 @@ function rule(css, selector) {
   )?.groups?.body;
 }
 
-test("markdown code blocks use a compact matte surface", () => {
+test("tables and code blocks share one compact markdown surface", () => {
+  const markdown = rule(markdownStyles, ".msg-md");
   const block = rule(markdownStyles, ".msg-md-codeblock");
   const header = rule(markdownStyles, ".msg-md-code-header");
+  const table = rule(markdownStyles, ".msg-md-table-wrap");
   const language = rule(markdownStyles, ".msg-md-code-lang");
   const pre = rule(markdownStyles, ".msg-md-pre");
 
+  assert.ok(markdown, "missing markdown surface tokens");
+  assert.match(markdown, /--msg-md-surface-bg:/);
+  assert.match(markdown, /--msg-md-surface-border:/);
   assert.ok(block, "missing shared code block surface");
+  assert.match(block, /border:\s*1px solid var\(--msg-md-surface-border\);/);
+  assert.match(block, /background:\s*var\(--msg-md-surface-bg\);/);
   assert.match(block, /border-radius:\s*11px;/);
   assert.match(block, /box-shadow:\s*none;/);
   assert.match(block, /backdrop-filter:\s*none;/);
+  assert.ok(table, "missing markdown table surface");
+  assert.match(table, /border:\s*1px solid var\(--msg-md-surface-border\);/);
+  assert.match(table, /background:\s*var\(--msg-md-surface-bg\);/);
   assert.ok(header, "missing compact code header");
   assert.match(header, /min-height:\s*38px;/);
+  assert.match(header, /background:\s*var\(--msg-md-surface-header-bg\);/);
   assert.ok(language, "missing language label styles");
   assert.match(language, /font-size:\s*11px;/);
   assert.doesNotMatch(language, /text-transform:\s*uppercase;/);
@@ -45,6 +56,21 @@ test("markdown code blocks use a compact matte surface", () => {
   assert.match(pre, /padding:\s*14px 16px 16px;/);
   assert.match(pre, /font-size:\s*13\.5px;/);
   assert.match(pre, /overflow-x:\s*auto;/);
+});
+
+test("inline code is a quiet compact variant of the markdown surface", () => {
+  const inline = rule(
+    markdownStyles,
+    ".msg-md-inline-code,\n.msg-md :not(pre) > code",
+  );
+
+  assert.ok(inline, "missing inline code surface");
+  assert.match(inline, /padding:\s*0\.1em 0\.34em;/);
+  assert.match(inline, /border-radius:\s*5px;/);
+  assert.match(inline, /background:\s*var\(--msg-md-surface-header-bg\);/);
+  assert.match(inline, /box-shadow:\s*none;/);
+  assert.match(inline, /backdrop-filter:\s*none;/);
+  assert.doesNotMatch(coreStyles, /\.bubble\.assistant \.msg-md-inline-code/);
 });
 
 test("copy feedback is visible, accessible, and self-clearing", () => {
