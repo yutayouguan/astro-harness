@@ -395,6 +395,16 @@
   background: var(--accent);
 }
 
+.plugins-personal-tab-count.is-update {
+  color: var(--warning, #f59e0b);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
+}
+
+.plugins-personal-tab-count.is-muted {
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--text-tertiary) 10%, transparent);
+}
+
 .skills-page .plugins-personal-tab.is-import {
   margin-left: 4px;
   border: 1px solid color-mix(in srgb, var(--tone) 18%, var(--plugins-shell-border));

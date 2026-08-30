@@ -101,7 +101,7 @@ test("plugin primary row keeps type, scope, and controls together", () => {
   );
 });
 
-test("personal Skill sources use a second underline row", () => {
+test("personal Skill navigation uses the intended lifecycle order", () => {
   const primaryRow = panel.indexOf(
     'className="plugins-command-row plugins-command-row--primary"',
   );
@@ -113,9 +113,13 @@ test("personal Skill sources use a second underline row", () => {
 
   assert.ok(
     sourceTabs > controls,
-    "personal source navigation should follow the primary command row",
+    "personal Skill navigation should follow the primary command row",
   );
-  assert.match(panel, /\["installed", "online", "machine", "updates"\]/);
+  assert.match(panel, /\["installed", "updates", "online", "machine"\]/);
+  assert.match(panel, /plugins-personal-tab-count is-update/);
+  assert.match(panel, /plugins-personal-tab-count is-muted/);
+  assert.match(messages, /"plugins\.personalTabs": "个人 Skills"/);
+  assert.match(messages, /"plugins\.personalTab\.machine": "本机 Skills"/);
   assert.match(panel, /plugins-personal-tab--underline/);
   assert.doesNotMatch(panel, /className="plugins-primary-row"/);
   assert.doesNotMatch(

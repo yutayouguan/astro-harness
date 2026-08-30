@@ -3153,7 +3153,7 @@ export default function SkillsPanel({
 
         {primaryTab === "skills" && scope === "global" && (
           <nav className="plugins-personal-tabs plugins-personal-tabs--underline" role="tablist" aria-label={t("plugins.personalTabs")}>
-            {(["installed", "online", "machine", "updates"] as const).map((item) => (
+            {(["installed", "updates", "online", "machine"] as const).map((item) => (
               <button
                 key={item}
                 type="button"
@@ -3167,10 +3167,10 @@ export default function SkillsPanel({
               >
                 {t(item === "updates" ? "plugins.action.updates" : `plugins.personalTab.${item}` as MessageKey)}
                 {item === "updates" && outdatedCount > 0 && (
-                  <span className="plugins-personal-tab-count">{outdatedCount}</span>
+                  <span className="plugins-personal-tab-count is-update">{outdatedCount}</span>
                 )}
                 {item === "machine" && machineSkills.length > 0 && (
-                  <span className="plugins-personal-tab-count">{machineSkills.length}</span>
+                  <span className="plugins-personal-tab-count is-muted">{machineSkills.length}</span>
                 )}
               </button>
             ))}
