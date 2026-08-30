@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const projectStyles = await readFile(
-  new URL("../../styles/features/shell/layout/projects.css", import.meta.url),
-  "utf8",
-);
 const sidebarPolishStyles = await readFile(
   new URL("../../styles/features/shell/layout/sidebar-polish.css", import.meta.url),
   "utf8",
@@ -18,47 +14,48 @@ function rule(css, selector) {
   )?.groups?.body;
 }
 
-test("sidebar search trigger uses a restrained tinted glass surface", () => {
+test("sidebar search trigger uses the same quiet navigation surface", () => {
   const trigger = rule(
-    projectStyles,
+    sidebarPolishStyles,
     ".sidebar-global-search .expandable-search-btn",
   );
 
   assert.ok(trigger, "missing sidebar search trigger styles");
-  assert.match(trigger, /var\(--tone-soft/);
-  assert.match(trigger, /backdrop-filter:\s*blur/);
-  assert.match(trigger, /inset 0 1px 0 rgba\(255, 255, 255, 0\.18\)/);
-  assert.doesNotMatch(trigger, /var\(--glass\) 88%/);
+  assert.match(trigger, /background:\s*transparent;/);
+  assert.match(trigger, /box-shadow:\s*none;/);
+  assert.match(trigger, /backdrop-filter:\s*none;/);
+  assert.match(trigger, /border-radius:\s*10px;/);
 });
 
-test("expanded sidebar search has a focused tinted treatment", () => {
+test("expanded sidebar search uses a matte focused treatment", () => {
   const field = rule(
-    projectStyles,
+    sidebarPolishStyles,
     ".sidebar-global-search .expandable-search-field",
   );
   const focus = rule(
-    projectStyles,
+    sidebarPolishStyles,
     ".sidebar-global-search .expandable-search-field:focus-within",
   );
 
   assert.ok(field, "missing expanded sidebar search styles");
-  assert.match(field, /var\(--tone-soft/);
-  assert.match(field, /backdrop-filter:\s*blur/);
+  assert.match(field, /background:\s*color-mix\(in srgb, var\(--ink\) 4%, transparent\);/);
+  assert.match(field, /box-shadow:\s*none;/);
+  assert.match(field, /backdrop-filter:\s*none;/);
   assert.ok(focus, "missing expanded sidebar search focus treatment");
   assert.match(focus, /border-color:\s*color-mix/);
-  assert.match(focus, /inset 0 0 0 1px/);
+  assert.match(focus, /box-shadow:\s*none;/);
 });
 
 test("dark sidebar search has a scoped low-white override", () => {
   const dark = rule(
-    projectStyles,
+    sidebarPolishStyles,
     'html[data-theme="dark"] .sidebar-global-search .expandable-search-btn,\nhtml[data-theme="dark"] .sidebar-global-search .expandable-search-field',
   );
 
   assert.ok(dark, "missing dark sidebar search styles");
-  assert.match(dark, /rgba\(255, 255, 255, 0\.05\)/);
-  assert.match(dark, /rgba\(8, 6, 18, 0\.48\)/);
-  assert.doesNotMatch(dark, /rgba\(255, 255, 255, 0\.3\)/);
+  assert.match(dark, /color-mix\(in srgb, #fff 4%, transparent\)/);
+  assert.match(dark, /box-shadow:\s*none;/);
+  assert.doesNotMatch(dark, /backdrop-filter:\s*blur/);
 });
 
 test("collapsed and expanded sidebar search keep the same row height", () => {
@@ -73,6 +70,6 @@ test("collapsed and expanded sidebar search keep the same row height", () => {
 
   assert.ok(trigger, "missing polished sidebar search trigger styles");
   assert.ok(field, "missing polished expanded sidebar search styles");
-  assert.match(trigger, /height:\s*42px;/);
-  assert.match(field, /height:\s*42px;/);
+  assert.match(trigger, /height:\s*40px;/);
+  assert.match(field, /height:\s*40px;/);
 });

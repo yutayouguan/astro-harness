@@ -15,8 +15,16 @@ const sessionStyles = await readFile(
   new URL("../../styles/features/shell/layout/sessions.css", import.meta.url),
   "utf8",
 );
+const sidebarPolishStyles = await readFile(
+  new URL("../../styles/features/shell/layout/sidebar-polish.css", import.meta.url),
+  "utf8",
+);
 const sessionList = await readFile(
   new URL("../../components/chat/SidebarSessionList.tsx", import.meta.url),
+  "utf8",
+);
+const sessionActionsMenu = await readFile(
+  new URL("../../components/chat/SessionActionsMenu.tsx", import.meta.url),
   "utf8",
 );
 const statusIcon = await readFile(
@@ -72,68 +80,67 @@ test("project and recent actions stay with the section they affect", () => {
 });
 
 test("sidebar hierarchy stays compact and keeps a separated footer", () => {
-  const primaryActions = rule(projectStyles, ".sidebar-primary-actions");
-  const newChat = rule(projectStyles, ".sidebar-new-chat");
-  const newChatActive = rule(projectStyles, ".sidebar-new-chat:active");
-  const groupLabel = rule(projectStyles, ".sidebar-group-label");
-  const activeNav = rule(projectStyles, ".sidebar-feature-tab.is-active::before");
-  const sectionToggle = rule(projectStyles, ".sidebar-section-toggle");
-  const interactiveSectionToggle = rule(
-    projectStyles,
-    ".sidebar-section-toggle:is(:hover, :focus-visible, :active)",
+  const pinnedSidebar = rule(sidebarPolishStyles, ".sidebar.is-pinned");
+  const labelledSidebar = rule(sidebarPolishStyles, ".sidebar.is-labels");
+  const primaryActions = rule(sidebarPolishStyles, ".sidebar-primary-actions");
+  const newChat = rule(sidebarPolishStyles, ".sidebar-new-chat");
+  const groupLabel = rule(sidebarPolishStyles, ".sidebar-group-label");
+  const activeNav = rule(sidebarPolishStyles, ".sidebar-feature-tab.is-active");
+  const sectionToggle = rule(sidebarPolishStyles, ".sidebar-section-toggle");
+  const sectionChevron = rule(sidebarPolishStyles, ".sidebar-section-chevron");
+  const sectionTitle = rule(sidebarPolishStyles, ".sidebar-section-title");
+  const activeProject = rule(
+    sidebarPolishStyles,
+    ".sidebar-project.is-active > .sidebar-project-header",
   );
-  const sectionChevron = rule(projectStyles, ".sidebar-section-chevron");
-  const sectionActions = rule(projectStyles, ".sidebar-section-actions");
-  const sectionTitle = rule(projectStyles, ".sidebar-section-title");
-  const activeProjectIndicator = rule(
-    projectStyles,
-    ".sidebar-project.is-active > .sidebar-project-header::before",
+  const projectGuide = rule(
+    sidebarPolishStyles,
+    ".sidebar-project > .sidebar-sessions::before",
   );
-  const footer = rule(projectStyles, ".sidebar-footer");
-  const footerDivider = rule(projectStyles, ".sidebar-footer::before");
+  const session = rule(sidebarPolishStyles, ".sidebar-session-item");
+  const activeSession = rule(sidebarPolishStyles, ".sidebar-session-item.is-active");
+  const footer = rule(sidebarPolishStyles, ".sidebar-footer");
+  const footerDivider = rule(sidebarPolishStyles, ".sidebar-footer::before");
 
+  assert.ok(pinnedSidebar, "missing stable pinned sidebar surface");
+  assert.match(pinnedSidebar, /box-shadow:\s*none;/);
+  assert.match(pinnedSidebar, /backdrop-filter:\s*none;/);
+  assert.ok(labelledSidebar, "missing labelled sidebar spacing");
+  assert.match(labelledSidebar, /padding-inline:\s*16px;/);
   assert.ok(primaryActions, "missing primary action row styles");
-  assert.match(primaryActions, /display:\s*flex;/);
+  assert.match(primaryActions, /gap:\s*4px;/);
+  assert.match(primaryActions, /margin:\s*0 0 20px;/);
   assert.ok(newChat, "missing new-chat styles");
   assert.match(newChat, /min-height:\s*40px;/);
   assert.match(newChat, /font-size:\s*14px;/);
   assert.match(newChat, /box-shadow:\s*none;/, "new chat should sit flat in the sidebar");
   assert.match(newChat, /backdrop-filter:\s*none;/, "new chat should not stack another glass layer");
-  assert.match(
-    projectStyles,
-    /\.sidebar-new-chat:hover\s*\{[\s\S]*?box-shadow:\s*none;/,
-    "hover should preserve the flat surface treatment",
-  );
-  assert.ok(newChatActive, "missing new-chat pressed feedback");
-  assert.match(newChatActive, /scale\(0\.99\)/);
-  const globalSearch = rule(
-    projectStyles,
-    ".sidebar-global-search .expandable-search-btn",
-  );
-  assert.ok(globalSearch, "missing global search action styles");
-  assert.match(globalSearch, /box-shadow:/, "search should remain a floating action");
-  assert.match(globalSearch, /backdrop-filter:/, "search should retain the glass material");
   assert.ok(groupLabel, "missing workspace group heading styles");
-  assert.match(groupLabel, /font-size:\s*14px;/);
-  assert.ok(activeNav, "active workspace navigation needs a position marker");
-  assert.match(activeNav, /width:\s*2px;/);
+  assert.match(groupLabel, /margin:\s*0 4px 6px;/);
+  assert.match(sidebarPolishStyles, /font-size:\s*12px;/);
+  assert.ok(activeNav, "active workspace navigation needs a quiet selected state");
+  assert.match(activeNav, /background:\s*color-mix\(in srgb, var\(--ink\) 8%, transparent\);/);
+  assert.match(activeNav, /border-color:\s*transparent;/);
+  assert.match(activeNav, /box-shadow:\s*none;/);
   assert.ok(sectionToggle, "missing collapsible section toggle styles");
-  assert.match(sectionToggle, /gap:\s*6px;/);
-  assert.ok(interactiveSectionToggle, "section headings need explicit interaction styles");
-  assert.match(interactiveSectionToggle, /background:\s*transparent;/);
+  assert.match(sectionToggle, /gap:\s*5px;/);
   assert.ok(sectionChevron, "missing section chevron styles");
-  assert.match(sectionChevron, /opacity:\s*0;/);
-  assert.ok(sectionActions, "missing section action styles");
-  assert.match(sectionActions, /opacity:\s*0;/);
-  assert.match(sectionActions, /pointer-events:\s*none;/);
+  assert.match(sectionChevron, /opacity:\s*0\.4;/);
   assert.ok(sectionTitle, "missing section heading styles");
-  assert.match(sectionTitle, /font-size:\s*14px;/);
-  assert.match(sectionTitle, /font-weight:\s*650;/);
-  assert.ok(activeProjectIndicator, "active project needs a position marker");
-  assert.match(activeProjectIndicator, /left:\s*4px;/);
+  assert.ok(activeProject, "active project needs a quiet selected state");
+  assert.match(activeProject, /background:\s*color-mix\(in srgb, var\(--ink\) 8%, transparent\);/);
+  assert.match(activeProject, /box-shadow:\s*none;/);
+  assert.ok(projectGuide, "project nesting should explicitly remove the long guide line");
+  assert.match(projectGuide, /display:\s*none;/);
+  assert.ok(session, "missing session row density styles");
+  assert.match(session, /min-height:\s*38px;/);
+  assert.ok(activeSession, "missing active session state");
+  assert.match(activeSession, /border-color:\s*transparent;/);
+  assert.match(activeSession, /box-shadow:\s*none;/);
   assert.ok(footer, "missing fixed sidebar footer");
-  assert.match(footer, /margin-top:\s*auto;/);
+  assert.match(footer, /min-height:\s*54px;/);
   assert.ok(footerDivider, "sidebar footer should be visually separated");
+  assert.match(footerDivider, /height:\s*1px;/);
 });
 
 test("session activity uses trailing status and hover-revealed tools", () => {
@@ -169,25 +176,25 @@ test("session activity uses trailing status and hover-revealed tools", () => {
 });
 
 test("session action menu stays inside the app viewport", () => {
-  assert.match(sessionList, /useLayoutEffect\(\(\) => \{/);
-  assert.match(sessionList, /const size = measurePopoverSize\(el\);/);
+  assert.match(sessionActionsMenu, /useLayoutEffect\(\(\) => \{/);
+  assert.match(sessionActionsMenu, /const size = measurePopoverSize\(element\);/);
   assert.match(
-    sessionList,
-    /anchorRect:\s*pointAnchor\(sessionMenu\.x, sessionMenu\.y\)/,
+    sessionActionsMenu,
+    /anchorRect:\s*pointAnchor\(x, y\)/,
   );
   assert.match(
-    sessionList,
-    /const bounds = resolveClipBoundsAt\(sessionMenu\.x, sessionMenu\.y\);/,
+    sessionActionsMenu,
+    /const bounds = resolveClipBoundsAt\(x, y\);/,
   );
   assert.match(
-    sessionList,
+    sessionActionsMenu,
     /size\.height > spaceBelow && spaceAbove > spaceBelow \? "above" : "below"/,
   );
-  assert.match(sessionList, /placement,/);
-  assert.match(sessionList, /el\.style\.maxHeight = `\$\{pos\.maxHeight\}px`;/);
+  assert.match(sessionActionsMenu, /placement,/);
+  assert.match(sessionActionsMenu, /element\.style\.maxHeight = `\$\{position\.maxHeight\}px`;/);
   assert.match(
-    sessionList,
-    /el\.style\.overflowY = pos\.maxHeight < size\.height \? "auto" : "";/,
+    sessionActionsMenu,
+    /element\.style\.overflowY = position\.maxHeight < size\.height \? "auto" : "";/,
   );
 });
 
