@@ -580,17 +580,30 @@ export default function App() {
   }, [colorStyle, gradient, dynamicSeed, nav, resolved]);
   // ── Tone crossfade overlay ─────────────────────────────────────────────
   const prevToneRef = useRef(shellTone);
-  const [toneFadeBg, setToneFadeBg] = useState<string | null>(null);
+  const prevDynamicSeedRef = useRef(dynamicSeed);
+  const toneFadeRevisionRef = useRef(0);
+  const [toneFade, setToneFade] = useState<{
+    background: string;
+    revision: number;
+  } | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
 
   // layout：在绘制前写 CSS 变量，并刷新玻璃层（避免 backdrop-filter 缓存旧色）
   useLayoutEffect(() => {
     const root = document.documentElement;
-    if (prevToneRef.current !== shellTone && colorStyle === "colorful" && shellRef.current) {
+    const colorfulToneChanged =
+      prevToneRef.current !== shellTone && colorStyle === "colorful";
+    const dynamicPaletteChanged =
+      prevDynamicSeedRef.current !== dynamicSeed && colorStyle === "dynamic";
+    if ((colorfulToneChanged || dynamicPaletteChanged) && shellRef.current) {
       const bg = getComputedStyle(shellRef.current).background;
-      if (bg) setToneFadeBg(bg);
+      if (bg) {
+        toneFadeRevisionRef.current += 1;
+        setToneFade({ background: bg, revision: toneFadeRevisionRef.current });
+      }
     }
     prevToneRef.current = shellTone;
+    prevDynamicSeedRef.current = dynamicSeed;
     root.setAttribute("data-tone", shellTone);
     root.setAttribute("data-color-style", colorStyle);
     if (activeShellGradient) {
@@ -600,7 +613,7 @@ export default function App() {
       clearShellGradientVars(root);
     }
     reassert();
-  }, [shellTone, colorStyle, activeShellGradient, resolved, reassert]);
+  }, [shellTone, colorStyle, dynamicSeed, activeShellGradient, resolved, reassert]);
   useEffect(() => {
     void syncWindowUnderlay(resolved, shellTone, activeShellGradient);
   }, [resolved, shellTone, activeShellGradient]);
@@ -899,11 +912,16 @@ export default function App() {
       data-color-style={colorStyle}
       data-sidebar-state={sidebar.sidebarVisible ? "visible" : "collapsed"}
     >
-      {toneFadeBg && (
+      {toneFade && (
         <div
+          key={toneFade.revision}
           className="shell-tone-crossfade"
-          style={{ background: toneFadeBg }}
-          onAnimationEnd={() => setToneFadeBg(null)}
+          style={{ background: toneFade.background }}
+          onAnimationEnd={() =>
+            setToneFade((current) =>
+              current?.revision === toneFade.revision ? null : current,
+            )
+          }
           aria-hidden
         />
       )}

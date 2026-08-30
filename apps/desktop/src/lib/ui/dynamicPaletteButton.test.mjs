@@ -19,6 +19,17 @@ test("dynamic palette button is limited to the main chat surface", () => {
   assert.match(app, /label=\{t\("prefs\.colorStyle\.reshuffle"\)\}/);
 });
 
+test("dynamic seed changes crossfade from the current shell palette", () => {
+  assert.match(app, /prevDynamicSeedRef\s*=\s*useRef\(dynamicSeed\)/);
+  assert.match(
+    app,
+    /prevDynamicSeedRef\.current\s*!==\s*dynamicSeed\s*&&\s*colorStyle\s*===\s*"dynamic"/,
+  );
+  assert.match(app, /getComputedStyle\(shellRef\.current\)\.background/);
+  assert.match(app, /key=\{toneFade\.revision\}/);
+  assert.match(styles, /shell-tone-fade-out 260ms cubic-bezier\(0\.23, 1, 0\.32, 1\)/);
+});
+
 test("each activation restarts the pinwheel feedback", () => {
   assert.match(component, /setSpinRevision\(\(revision\) => revision \+ 1\)/);
   assert.match(component, /key=\{spinRevision\}/);

@@ -185,7 +185,8 @@ html[data-theme="dark"] .shell-dynamic-palette-button {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  animation: shell-tone-fade-out 0.28s ease-out forwards;
+  will-change: opacity;
+  animation: shell-tone-fade-out 260ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
 @keyframes shell-tone-fade-out {
