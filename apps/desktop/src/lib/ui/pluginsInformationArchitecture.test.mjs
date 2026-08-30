@@ -279,6 +279,16 @@ test("discovery-only MCP entries can hand a guarded install request to the Agent
   assert.match(messages, /"plugins\.mcpPublic\.installWithAgent": "Install with Agent"/);
 });
 
+test("SkillHub Agent installs carry the skill as a structured composer token", () => {
+  assert.match(
+    panel,
+    /storeInstallCommand\(skill, target, \{ contextual: true \}\)/,
+  );
+  assert.match(panel, /kind: "skill"/);
+  assert.match(panel, /name: skill\.name/);
+  assert.match(panel, /path: storeSkillDetailUrl\(skill\) \?\? undefined/);
+});
+
 test("public MCP brands accept bundled assets and HTTPS catalog icons with a safe fallback", async () => {
   const brandedServers = publicMcpCatalog.servers.filter((server) => server.icon);
   assert.ok(brandedServers.length >= 20, "most public MCP entries should have brand icons");

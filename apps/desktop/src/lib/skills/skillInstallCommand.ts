@@ -3,6 +3,10 @@ import type { StoreSkill } from "../../types";
 
 export type SkillInstallTarget = "global" | "project";
 
+export type StoreInstallCommandOptions = {
+  contextual?: boolean;
+};
+
 /** 安装引用用的 owner/slug（来自 id `skillhub:owner/slug`） */
 function skillhubOwnerSlug(skill: StoreSkill): string {
   const fromId = skill.id.replace(/^skillhub:/, "");
@@ -24,6 +28,7 @@ function skillhubDetailSlug(skill: StoreSkill): string {
 export function storeInstallCommand(
   skill: StoreSkill,
   target: SkillInstallTarget = "global",
+  options: StoreInstallCommandOptions = {},
 ): string {
   const ownerSlug = skillhubOwnerSlug(skill);
   const installHint = skill.install_ref || `skillhub:${ownerSlug}`;
@@ -34,8 +39,11 @@ export function storeInstallCommand(
     skill.requires_api_key === true
       ? "- 凭据：安装后读取 SKILL.md 确认准确的 API Key 名称；不要让我在对话中粘贴密钥，也不要把密钥写入 Skill 或项目文件。\n"
       : "";
+  const subject = options.contextual
+    ? "这个 SkillHub 技能"
+    : `SkillHub 技能「${skill.name}」`;
   return (
-    `请通过 Astro 内置的 request_plugin_install 工具安装 SkillHub 技能「${skill.name}」，不要运行 SkillHub CLI，也不要安装到 .agents、.codex 或 ./skills。\n` +
+    `请通过 Astro 内置的 request_plugin_install 工具安装${subject}，不要运行 SkillHub CLI，也不要安装到 .agents、.codex 或 ./skills。\n` +
     `- 安装引用：${installHint}\n` +
     `- 安装作用域：${target}\n` +
     `- 目标目录：${targetPath}\n` +

@@ -43,6 +43,22 @@ test("SkillHub install prompt pins Astro installer and target scope", () => {
   assert.doesNotMatch(cmd, /api\.skillhub\.cn/);
 });
 
+test("contextual SkillHub prompt lets the composer token carry the skill name", () => {
+  const skill = {
+    id: "skillhub:user_x/demo-skill",
+    name: "demo-skill",
+    description: "Demo skill",
+    source: "community",
+    store: "skillhub",
+    installs: null,
+    install_ref: "skillhub:user_x/demo-skill",
+    homepage: null,
+  };
+  const cmd = storeInstallCommand(skill, "global", { contextual: true });
+  assert.match(cmd, /安装这个 SkillHub 技能/);
+  assert.doesNotMatch(cmd, /技能「demo-skill」/);
+});
+
 test("API-key Skill prompt keeps secrets out of chat and files", () => {
   const skill = {
     id: "skillhub:user_x/keyed-skill",

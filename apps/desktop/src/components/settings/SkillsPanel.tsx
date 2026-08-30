@@ -1271,7 +1271,16 @@ export default function SkillsPanel({
 
   const installWithAgent = (skill: StoreSkill, target: SkillInstallTarget) => {
     setInstallPromptSkill(null);
-    onInstallWithAgent?.(storeInstallCommand(skill, target));
+    onInstallWithAgent?.(
+      storeInstallCommand(skill, target, { contextual: true }),
+      {
+        id: skill.id,
+        kind: "skill",
+        name: skill.name,
+        description: skill.description,
+        path: storeSkillDetailUrl(skill) ?? undefined,
+      },
+    );
   };
 
   const inspectCredentialSetupWithAgent = (prompt: SkillCredentialPrompt) => {
