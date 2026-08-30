@@ -5,6 +5,9 @@ use anyhow::{anyhow, Result};
 
 use super::SessionStore;
 
+/// 内置主空间项目的稳定 ID。
+pub const DEFAULT_PROJECT_ID: &str = "default";
+
 /// 从库中读出的 Project 实体。
 #[derive(Debug, Clone)]
 pub struct Project {
@@ -18,6 +21,99 @@ pub struct Project {
 }
 
 impl SessionStore {
+    /// 确保内置主空间项目存在，并固定绑定到规范工作区根目录。
+    ///
+    /// 旧版桌面端曾在空库中创建随机 ID、无 root 的 `Default` 项目；这里会原地迁移
+    /// 该记录及其会话关联，避免升级后出现两个默认项目。
+    pub async fn ensure_default_project(
+        &self,
+        name: &str,
+        icon: &str,
+        root: &str,
+    ) -> Result<Project> {
+        let mut tx = self.pool.begin().await?;
+        let exists = sqlx::query("SELECT 1 FROM projects WHERE id = ?1")
+            .bind(DEFAULT_PROJECT_ID)
+            .fetch_optional(&mut *tx)
+            .await?
+            .is_some();
+
+        if !exists {
+            let legacy = sqlx::query(
+                "SELECT p.id, p.position
+                 FROM projects p
+                 WHERE p.id != ?1
+                   AND p.name = 'Default'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM project_roots r WHERE r.project_id = p.id
+                   )
+                 ORDER BY p.position ASC
+                 LIMIT 1",
+            )
+            .bind(DEFAULT_PROJECT_ID)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            let position = if let Some(row) = legacy.as_ref() {
+                row.get::<i64, _>(1)
+            } else {
+                sqlx::query("UPDATE projects SET position = position + 1")
+                    .execute(&mut *tx)
+                    .await?;
+                0
+            };
+
+            sqlx::query("INSERT INTO projects (id, name, icon, position) VALUES (?1, ?2, ?3, ?4)")
+                .bind(DEFAULT_PROJECT_ID)
+                .bind(name)
+                .bind(icon)
+                .bind(position)
+                .execute(&mut *tx)
+                .await?;
+
+            if let Some(row) = legacy {
+                let legacy_id: String = row.get(0);
+                sqlx::query("UPDATE sessions SET project_id = ?1 WHERE project_id = ?2")
+                    .bind(DEFAULT_PROJECT_ID)
+                    .bind(&legacy_id)
+                    .execute(&mut *tx)
+                    .await?;
+                sqlx::query("DELETE FROM projects WHERE id = ?1")
+                    .bind(&legacy_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+
+        let current_roots =
+            sqlx::query("SELECT path FROM project_roots WHERE project_id = ?1 ORDER BY path")
+                .bind(DEFAULT_PROJECT_ID)
+                .fetch_all(&mut *tx)
+                .await?;
+        let root_is_current =
+            current_roots.len() == 1 && current_roots[0].get::<String, _>(0) == root;
+        if !root_is_current {
+            sqlx::query("DELETE FROM project_roots WHERE project_id = ?1")
+                .bind(DEFAULT_PROJECT_ID)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("INSERT INTO project_roots (project_id, path) VALUES (?1, ?2)")
+                .bind(DEFAULT_PROJECT_ID)
+                .bind(root)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("UPDATE projects SET updated_at = datetime('now') WHERE id = ?1")
+                .bind(DEFAULT_PROJECT_ID)
+                .execute(&mut *tx)
+                .await?;
+        }
+
+        tx.commit().await?;
+        self.get_project(DEFAULT_PROJECT_ID)
+            .await?
+            .ok_or_else(|| anyhow!("default project not found after ensure"))
+    }
+
     /// 按 position 升序列出所有项目（含 roots）。
     pub async fn list_projects(&self) -> Result<Vec<Project>> {
         let rows = sqlx::query(
@@ -120,6 +216,9 @@ impl SessionStore {
         icon: Option<Option<&str>>,
         roots: Option<&[&str]>,
     ) -> Result<Project> {
+        if id == DEFAULT_PROJECT_ID && roots.is_some() {
+            anyhow::bail!("update_project: default project root is immutable");
+        }
         if self.get_project(id).await?.is_none() {
             anyhow::bail!("update_project: project not found");
         }
@@ -173,6 +272,9 @@ impl SessionStore {
 
     /// 删除项目，返回孤儿会话 ID 列表（原先关联到该项目的会话）。
     pub async fn delete_project(&self, id: &str) -> Result<Vec<String>> {
+        if id == DEFAULT_PROJECT_ID {
+            anyhow::bail!("delete_project: default project cannot be deleted");
+        }
         let mut tx = self.pool.begin().await?;
         let rows = sqlx::query("SELECT id FROM sessions WHERE project_id = ?1")
             .bind(id)
@@ -278,6 +380,9 @@ impl SessionStore {
 
 #[cfg(test)]
 mod tests {
+    use agent_db::sqlx::{self, Row};
+
+    use super::DEFAULT_PROJECT_ID;
     use crate::store::SessionStore;
 
     async fn test_store() -> (tempfile::TempDir, SessionStore) {
@@ -309,6 +414,77 @@ mod tests {
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].name, "My App");
         assert_eq!(all[1].name, "Backend");
+    }
+
+    #[tokio::test]
+    async fn ensure_default_project_is_stable_rooted_and_first() {
+        let (_dir, store) = test_store().await;
+        store
+            .create_project("Existing", &["/existing"])
+            .await
+            .unwrap();
+
+        let default = store
+            .ensure_default_project("主空间", "astro-space", "/home/user/.astro/workspace")
+            .await
+            .unwrap();
+        assert_eq!(default.id, DEFAULT_PROJECT_ID);
+        assert_eq!(default.name, "主空间");
+        assert_eq!(default.icon.as_deref(), Some("astro-space"));
+        assert_eq!(default.roots, vec!["/home/user/.astro/workspace"]);
+        assert_eq!(default.position, 0);
+
+        let ensured_again = store
+            .ensure_default_project("主空间", "astro-space", "/home/user/.astro/workspace")
+            .await
+            .unwrap();
+        assert_eq!(ensured_again.id, DEFAULT_PROJECT_ID);
+        let projects = store.list_projects().await.unwrap();
+        assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0].id, DEFAULT_PROJECT_ID);
+    }
+
+    #[tokio::test]
+    async fn ensure_default_project_migrates_legacy_empty_project() {
+        let (_dir, store) = test_store().await;
+        let legacy = store.create_project("Default", &[]).await.unwrap();
+        store.ensure_session("s1", "tauri").await.unwrap();
+        store
+            .assign_session_to_project("s1", &legacy.id)
+            .await
+            .unwrap();
+
+        let default = store
+            .ensure_default_project("主空间", "astro-space", "/home/user/.astro/workspace")
+            .await
+            .unwrap();
+        assert_eq!(default.id, DEFAULT_PROJECT_ID);
+        assert_eq!(default.roots, vec!["/home/user/.astro/workspace"]);
+        assert!(store.get_project(&legacy.id).await.unwrap().is_none());
+
+        let row = sqlx::query("SELECT project_id FROM sessions WHERE id = 's1'")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(row.get::<String, _>(0), DEFAULT_PROJECT_ID);
+    }
+
+    #[tokio::test]
+    async fn default_project_cannot_change_root_or_be_deleted() {
+        let (_dir, store) = test_store().await;
+        store
+            .ensure_default_project("主空间", "astro-space", "/home/user/.astro/workspace")
+            .await
+            .unwrap();
+
+        let update_error = store
+            .update_project(DEFAULT_PROJECT_ID, None, None, Some(&["/other"]))
+            .await
+            .unwrap_err();
+        assert!(update_error.to_string().contains("root is immutable"));
+
+        let delete_error = store.delete_project(DEFAULT_PROJECT_ID).await.unwrap_err();
+        assert!(delete_error.to_string().contains("cannot be deleted"));
     }
 
     #[tokio::test]

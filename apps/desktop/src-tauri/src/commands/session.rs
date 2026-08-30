@@ -533,6 +533,9 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
 // Project commands
 // ---------------------------------------------------------------------------
 
+const DEFAULT_PROJECT_NAME: &str = "主空间";
+const DEFAULT_PROJECT_ICON: &str = "astro-space";
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectDto {
@@ -557,9 +560,28 @@ fn project_to_dto(p: session::Project) -> ProjectDto {
     }
 }
 
+fn default_project_root() -> Result<String, String> {
+    let root = home::agent_workspace_dir(&home::default_memory_dir(), home::DEFAULT_AGENT_ID);
+    std::fs::create_dir_all(&root)
+        .map_err(|e| format!("create default project workspace {}: {e}", root.display()))?;
+    Ok(root.to_string_lossy().into_owned())
+}
+
+async fn ensure_default_project_in_store(
+    store: &session::SessionStore,
+) -> Result<ProjectDto, String> {
+    let root = default_project_root()?;
+    let project = store
+        .ensure_default_project(DEFAULT_PROJECT_NAME, DEFAULT_PROJECT_ICON, &root)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(project_to_dto(project))
+}
+
 #[tauri::command]
 pub async fn list_projects() -> Result<Vec<ProjectDto>, String> {
     let store = open_sessions().await?;
+    ensure_default_project_in_store(&store).await?;
     Ok(store
         .list_projects()
         .await
@@ -661,15 +683,7 @@ pub async fn discard_side_session(session_id: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn ensure_default_project() -> Result<ProjectDto, String> {
     let store = open_sessions().await?;
-    let projects = store.list_projects().await.map_err(|e| e.to_string())?;
-    if let Some(p) = projects.into_iter().next() {
-        return Ok(project_to_dto(p));
-    }
-    let proj = store
-        .create_project("Default", &[])
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(project_to_dto(proj))
+    ensure_default_project_in_store(&store).await
 }
 
 /// Assign session to project only if it is not already assigned.
