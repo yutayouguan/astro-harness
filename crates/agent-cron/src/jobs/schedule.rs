@@ -4,13 +4,6 @@ use chrono::{DateTime, Datelike, Duration, Local, Timelike};
 
 pub fn compute_next_run(schedule: &str, after: DateTime<Local>) -> anyhow::Result<DateTime<Local>> {
     let schedule = schedule.trim();
-    if let Some(rest) = schedule.strip_prefix("once:") {
-        let dt = DateTime::parse_from_rfc3339(rest.trim())
-            .or_else(|_| DateTime::parse_from_str(rest.trim(), "%Y-%m-%dT%H:%M:%S%z"))
-            .map_err(|e| anyhow::anyhow!("无效 once 时间: {e}"))?
-            .with_timezone(&Local);
-        return Ok(dt);
-    }
     if let Some(rest) = schedule.strip_prefix("every:") {
         return parse_every(rest, after);
     }

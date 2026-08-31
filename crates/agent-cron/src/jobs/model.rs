@@ -35,7 +35,7 @@ pub struct CronJob {
     /// 上次实际触发时间（手动 touch 或 claim_due）
     #[serde(default)]
     pub last_run_at: Option<String>,
-    /// 下次计划触发时间；`once:` 触发后为 null
+    /// 下次计划触发时间
     #[serde(default)]
     pub next_run_at: Option<String>,
     /// 是否在聊天时间线展示本次执行
@@ -65,7 +65,7 @@ pub struct NewCronJob {
 /// 自然语言 → 定时任务的结构化抽取目标（Extractor `submit`）。
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct CronJobExtract {
-    /// `every:5m` / `every:1h` / 五段 cron / `once:RFC3339`
+    /// `every:5m` / `every:1h` / 五段 cron
     pub schedule: String,
     /// 到期时交给 Agent 执行的指令
     pub task: String,
@@ -81,7 +81,6 @@ pub fn cron_extract_preamble() -> &'static str {
 1. schedule 必须是下列之一：
    - every:Nm / every:Nh / every:Nd（N 为正整数；可选 ;wd=1,2,3 限定周几，0=周日）
    - 五段 cron：分 时 日 月 周（例如每天 09:00 → 0 9 * * *）
-   - once:RFC3339（必须带时区，如 2026-07-12T15:00:00+08:00）
 2. task 是到期时要执行的完整指令，保留用户意图，不要空。
 3. title 可选，简短中文标题；不确定时可省略。
 4. 不要编造用户没说的调度细节；缺省时间可用每天 09:00。"#

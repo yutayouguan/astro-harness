@@ -190,26 +190,17 @@ impl CronStore {
         Ok(true)
     }
 
-    /// 启用或禁用任务；启用时会重算过期的 `next_run_at`（`once:` 过期则报错）
+    /// 启用或禁用任务；启用时会补算缺失的 `next_run_at`。
     pub fn set_enabled(&self, id_or_prefix: &str, enabled: bool) -> anyhow::Result<bool> {
         let mut file = self.load()?;
         let mut found = false;
         for job in &mut file.jobs {
             if job.id == id_or_prefix || job.id.starts_with(id_or_prefix) {
-                if enabled {
-                    if job.schedule.trim().starts_with("once:") {
-                        let next = compute_next_run(&job.schedule, Local::now())?;
-                        if next <= Local::now() {
-                            anyhow::bail!("无法启用已过期的单次任务");
-                        }
-                        job.next_run_at =
-                            Some(next.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
-                    } else if job.next_run_at.is_none() {
-                        job.next_run_at = Some(
-                            compute_next_run(&job.schedule, Local::now())?
-                                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-                        );
-                    }
+                if enabled && job.next_run_at.is_none() {
+                    job.next_run_at = Some(
+                        compute_next_run(&job.schedule, Local::now())?
+                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                    );
                 }
                 job.enabled = enabled;
                 found = true;
@@ -246,15 +237,10 @@ impl CronStore {
 
             let fired_at = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
             job.last_run_at = Some(fired_at);
-            if job.schedule.trim().starts_with("once:") {
-                job.enabled = false;
-                job.next_run_at = None;
-            } else {
-                job.next_run_at = Some(
-                    compute_next_run(&job.schedule, now + Duration::seconds(1))?
-                        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-                );
-            }
+            job.next_run_at = Some(
+                compute_next_run(&job.schedule, now + Duration::seconds(1))?
+                    .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            );
             fired.push(job.clone());
         }
 

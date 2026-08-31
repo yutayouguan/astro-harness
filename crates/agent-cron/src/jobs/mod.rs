@@ -2,13 +2,12 @@
 //!
 //! 职责：
 //! - 将任务定义持久化到 `~/.astro/cron/jobs.json`
-//! - 解析 `every:` / 五段 cron / `once:` 调度表达式并计算下次运行时间
+//! - 解析 `every:` / 五段 cron 调度表达式并计算下次运行时间
 //! - `claim_due` / `tick` 扫描到期任务并推进 `next_run_at`
 //! - 为 Agent 工具与 Extractor 提供自然语言 → 结构化任务的入口
 //!
 //! 不变量：
 //! - 任务 id 为 UUID，持久化前会校验 schedule 可解析
-//! - `once:` 任务触发后自动禁用且清空 `next_run_at`
 //! - `jobs.json` 通过临时文件原子写入，避免半写损坏
 
 mod dispatch;
@@ -26,7 +25,7 @@ pub use tick::tick_default;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{DateTime, Datelike, Local, Timelike};
+    use chrono::{Datelike, Local, Timelike};
     use tempfile::TempDir;
 
     #[test]
@@ -108,6 +107,13 @@ mod tests {
     }
 
     #[test]
+    fn one_time_schedule_is_rejected() {
+        use chrono::TimeZone;
+        let after = Local.with_ymd_and_hms(2026, 7, 11, 4, 0, 0).unwrap();
+        assert!(compute_next_run("once:2026-07-11T04:22:00+08:00", after).is_err());
+    }
+
+    #[test]
     fn remove_by_prefix() {
         let dir = TempDir::new().unwrap();
         let store = CronStore::open(dir.path()).unwrap();
@@ -139,61 +145,6 @@ mod tests {
         assert_eq!(jobs[0].agent_id, "default");
         assert!(jobs[0].provider_id.is_none());
         assert!(jobs[0].model.is_none());
-    }
-
-    #[test]
-    fn once_schedule_next_run_is_that_instant() {
-        use chrono::TimeZone;
-        let after = Local.with_ymd_and_hms(2026, 7, 11, 4, 0, 0).unwrap();
-        let next = compute_next_run("once:2026-07-11T04:22:00+08:00", after).unwrap();
-        let expected = DateTime::parse_from_rfc3339("2026-07-11T04:22:00+08:00")
-            .unwrap()
-            .with_timezone(&Local);
-        assert_eq!(next, expected);
-    }
-
-    #[test]
-    fn tick_disables_once_job() {
-        let dir = TempDir::new().unwrap();
-        let store = CronStore::open(dir.path()).unwrap();
-        let job = store
-            .add("once:2000-01-01T00:00:00+00:00", "一次性任务")
-            .unwrap();
-        assert!(job.enabled);
-        let fired = store.tick().unwrap();
-        assert_eq!(fired.len(), 1);
-        let jobs = store.list().unwrap();
-        assert!(!jobs[0].enabled);
-        assert!(jobs[0].next_run_at.is_none());
-        assert!(jobs[0].last_run_at.is_some());
-    }
-
-    #[test]
-    fn set_enabled_rejects_expired_once_job() {
-        let dir = TempDir::new().unwrap();
-        let store = CronStore::open(dir.path()).unwrap();
-        let job = store
-            .add("once:2000-01-01T00:00:00+00:00", "已过期单次")
-            .unwrap();
-        let fired = store.tick().unwrap();
-        assert_eq!(fired.len(), 1);
-        assert!(!store.list().unwrap()[0].enabled);
-
-        let err = store.set_enabled(&job.id, true).unwrap_err();
-        assert!(
-            err.to_string().contains("无法启用已过期的单次任务"),
-            "unexpected error: {err}"
-        );
-        assert!(!store.list().unwrap()[0].enabled);
-    }
-
-    #[test]
-    fn once_in_the_past_errors_or_returns_past_for_tick() {
-        use chrono::TimeZone;
-        let after = Local.with_ymd_and_hms(2026, 7, 12, 0, 0, 0).unwrap();
-        // 约定：once 时间已过则 compute_next_run 仍返回该时刻（让 tick 能判定 due）
-        let next = compute_next_run("once:2026-07-11T04:22:00+08:00", after).unwrap();
-        assert!(next < after);
     }
 
     #[test]
