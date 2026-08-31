@@ -7,6 +7,10 @@ const workbenchSource = await readFile(
   new URL("../../hooks/chat/useProjectFileWorkbench.ts", import.meta.url),
   "utf8",
 );
+const rightPanelStyles = await readFile(
+  new URL("../../styles/features/chat/right-panel.css", import.meta.url),
+  "utf8",
+);
 
 test("project files dock starts closed instead of restoring an open state", () => {
   assert.match(workbenchSource, /const \[panelOpen, setPanelOpenState\] = useState\(false\);/);
@@ -66,4 +70,11 @@ test("the pinned summary entry opens the reorganized three-tab inspector", async
     /export type ChatRightTab = "summary" \| "context" \| "branches"/,
   );
   assert.doesNotMatch(panelSource, /const tabs:[^;]+\["agent", "monitor"/);
+});
+
+test("the shared inspector body reserves its scrollbar gutter across tabs", () => {
+  assert.match(
+    rightPanelStyles,
+    /\.chat-right-body\s*\{[\s\S]*?overflow:\s*auto;[\s\S]*?scrollbar-gutter:\s*stable;/,
+  );
 });

@@ -295,6 +295,7 @@
 .chat-right-body {
   flex: 1;
   overflow: auto;
+  scrollbar-gutter: stable;
   padding: 14px 12px 16px;
   min-height: 0;
   mask-image: linear-gradient(
