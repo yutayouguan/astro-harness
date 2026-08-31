@@ -49,6 +49,7 @@ import {
   IconPanelOpen,
   IconPlugin,
   IconSearch,
+  IconSettings,
 } from "./components/icons";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
 import { useActiveSessionMetadata } from "./hooks/chat/useActiveSessionTitle";
@@ -115,7 +116,6 @@ import {
   FolderTree,
   MessageSquare,
   MoreHorizontal,
-  Settings2,
 } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import { dynamicGradientForTab } from "./lib/ui/dynamicGradient";
@@ -1332,7 +1332,7 @@ export default function App() {
                   onClick={() => setNav("settings")}
                   title={t("nav.settings")}
                 >
-                  <Settings2 size={18} strokeWidth={1.8} aria-hidden />
+                  <IconSettings width={17} height={17} strokeWidth={1.8} />
                   <span className="sidebar-item-label">{t("nav.settings")}</span>
                   {chat.memoryPendingCount > 0 && (
                     <span className="nav-badge">

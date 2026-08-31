@@ -389,8 +389,8 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
 }
 
 .sidebar-footer {
-  min-height: 54px;
-  padding: 9px 0 0;
+  min-height: 46px;
+  padding: 6px 0 0;
 }
 
 .sidebar-footer::before {
@@ -401,15 +401,19 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
 }
 
 .sidebar-settings-btn {
-  min-height: 40px;
-  gap: 10px;
-  padding-inline: 10px;
+  min-height: 36px;
+  gap: 9px;
+  padding-inline: 9px;
   border-radius: 10px;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 520;
   transition:
     color 120ms ease,
     background-color 120ms ease;
+}
+
+.sidebar-settings-btn svg {
+  flex-basis: 17px;
 }
 
 .sidebar-new-chat:active,

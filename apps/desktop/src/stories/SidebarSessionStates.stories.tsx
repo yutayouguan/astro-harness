@@ -9,7 +9,6 @@ import {
   MoreVertical,
   Pin,
   Plus,
-  Settings2,
   Wrench,
 } from "lucide-react";
 import { useState, type CSSProperties } from "react";
@@ -17,7 +16,13 @@ import ProjectFolderIcon from "../components/chat/ProjectFolderIcon";
 import SidebarSessionList from "../components/chat/SidebarSessionList";
 import SessionStatusIcon from "../components/chat/SessionStatusIcon";
 import { AstroLogoMark } from "../components/icons/AstroLogoMark";
-import { IconCron, IconLoop, IconNewChat, IconPlugin } from "../components/icons/NavIcons";
+import {
+  IconCron,
+  IconLoop,
+  IconNewChat,
+  IconPlugin,
+  IconSettings,
+} from "../components/icons/NavIcons";
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import { DialogProvider } from "../hooks/ui/DialogContext";
 import ExpandableSearch from "../components/ui/ExpandableSearch";
@@ -198,7 +203,7 @@ function SidebarSessionStates() {
           </div>
           <div className="sidebar-footer">
             <button type="button" className="sidebar-settings-btn">
-              <Settings2 size={18} strokeWidth={1.8} aria-hidden />
+              <IconSettings width={17} height={17} strokeWidth={1.8} />
               <span className="sidebar-item-label">偏好设置</span>
             </button>
           </div>

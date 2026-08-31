@@ -136,6 +136,7 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   const session = rule(sidebarPolishStyles, ".sidebar-session-item");
   const activeSession = rule(sidebarPolishStyles, ".sidebar-session-item.is-active");
   const footer = rule(sidebarPolishStyles, ".sidebar-footer");
+  const settingsButton = rule(sidebarPolishStyles, ".sidebar-settings-btn");
   const footerDivider = rule(sidebarPolishStyles, ".sidebar-footer::before");
 
   assert.ok(pinnedSidebar, "missing stable pinned sidebar surface");
@@ -172,7 +173,20 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.match(activeSession, /border-color:\s*transparent;/);
   assert.match(activeSession, /box-shadow:\s*none;/);
   assert.ok(footer, "missing fixed sidebar footer");
-  assert.match(footer, /min-height:\s*54px;/);
+  assert.match(footer, /min-height:\s*46px;/);
+  assert.match(footer, /padding:\s*6px 0 0;/);
+  assert.ok(settingsButton, "missing sidebar settings button styles");
+  assert.match(settingsButton, /min-height:\s*36px;/);
+  assert.match(settingsButton, /font-size:\s*13\.5px;/);
+  assert.match(
+    rule(sidebarPolishStyles, ".sidebar-settings-btn svg"),
+    /flex-basis:\s*17px;/,
+  );
+  assert.match(
+    app,
+    /<IconSettings width=\{17\} height=\{17\} strokeWidth=\{1\.8\} \/>/,
+    "sidebar preferences should use the dedicated gear icon",
+  );
   assert.ok(footerDivider, "sidebar footer should be visually separated");
   assert.match(footerDivider, /height:\s*1px;/);
 });
