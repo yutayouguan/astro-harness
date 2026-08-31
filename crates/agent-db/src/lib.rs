@@ -96,11 +96,28 @@ impl AstroDb {
             .log_statements(tracing::log::LevelFilter::Debug)
             .log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_secs(1));
 
-        let pool = SqlitePoolOptions::new()
-            .max_connections(spec.max_connections)
-            .acquire_timeout(Duration::from_secs(10))
-            .connect_with(opts)
-            .await?;
+        // `PRAGMA journal_mode=WAL` needs an exclusive lock and SQLite's busy
+        // timeout does not apply while changing journal mode. Agent children
+        // may open independent pools for the same state database concurrently,
+        // so retry that short startup race instead of failing the whole turn.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let pool = loop {
+            match SqlitePoolOptions::new()
+                .max_connections(spec.max_connections)
+                .acquire_timeout(Duration::from_secs(10))
+                .connect_with(opts.clone())
+                .await
+            {
+                Ok(pool) => break pool,
+                Err(error)
+                    if is_sqlite_busy_or_locked(&error)
+                        && tokio::time::Instant::now() < deadline =>
+                {
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+                Err(error) => return Err(error.into()),
+            }
+        };
 
         tracing::debug!(db = spec.label, path = %path.display(), "SQLite 连接池已打开");
         Ok(pool)
@@ -115,6 +132,14 @@ impl AstroDb {
         sqlx::query(ddl).execute(&pool).await?;
         Ok(pool)
     }
+}
+
+fn is_sqlite_busy_or_locked(error: &sqlx::Error) -> bool {
+    matches!(
+        error,
+        sqlx::Error::Database(database)
+            if matches!(database.code().as_deref(), Some("5" | "6"))
+    )
 }
 
 #[cfg(test)]

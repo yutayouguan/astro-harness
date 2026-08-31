@@ -28,6 +28,24 @@ async fn collect_next_terminal(thread: &agent::AstroThread) -> Vec<Event> {
     }
 }
 
+async fn collect_next_terminal_from_receiver(
+    receiver: &mut tokio::sync::mpsc::Receiver<anyhow::Result<Event>>,
+) -> Vec<Event> {
+    let mut events = Vec::new();
+    loop {
+        let event = receiver
+            .recv()
+            .await
+            .expect("turn event channel closed before terminal event")
+            .expect("turn event stream returned an error");
+        let terminal = event.msg.is_terminal();
+        events.push(event);
+        if terminal {
+            return events;
+        }
+    }
+}
+
 fn provider_error_chat() -> ChatOverride {
     Arc::new(|_messages, _tools, _config| {
         Box::pin(async { Err(anyhow::anyhow!("provider failed")) })
@@ -117,8 +135,8 @@ async fn rollout_shutdown_error_is_live_and_precedes_shutdown_complete() {
 
 #[tokio::test]
 async fn provider_error_emits_one_error_and_complete_with_error() {
-    let (_dir, session, thread, _recorder, _path) = new_thread().await;
-    let (event_tx, _event_rx) = tokio::sync::mpsc::channel(8);
+    let (_dir, session, _thread, _recorder, _path) = new_thread().await;
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
     let run = tokio::spawn(run_multi_turn_events_with_chat_fn(
         Arc::clone(&session),
         provider_error_chat(),
@@ -129,7 +147,7 @@ async fn provider_error_emits_one_error_and_complete_with_error() {
         event_tx,
     ));
 
-    let events = collect_next_terminal(&thread).await;
+    let events = collect_next_terminal_from_receiver(&mut event_rx).await;
     run.await.unwrap();
     assert_eq!(
         events
@@ -146,7 +164,7 @@ async fn provider_error_emits_one_error_and_complete_with_error() {
 
 #[tokio::test]
 async fn pause_control_cancel_emits_only_turn_aborted() {
-    let (_dir, session, thread, _recorder, _path) = new_thread().await;
+    let (_dir, session, _thread, _recorder, _path) = new_thread().await;
     let pause = PauseControl::new();
     let entered = Arc::new(Notify::new());
     let chat: ChatOverride = {
@@ -159,7 +177,7 @@ async fn pause_control_cancel_emits_only_turn_aborted() {
             })
         })
     };
-    let (event_tx, _event_rx) = tokio::sync::mpsc::channel(8);
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
     let run = tokio::spawn(run_multi_turn_events_with_chat_fn(
         Arc::clone(&session),
         chat,
@@ -172,7 +190,7 @@ async fn pause_control_cancel_emits_only_turn_aborted() {
     entered.notified().await;
     pause.cancel();
 
-    let events = collect_next_terminal(&thread).await;
+    let events = collect_next_terminal_from_receiver(&mut event_rx).await;
     run.await.unwrap();
     assert!(matches!(
         events.last().unwrap().msg,
