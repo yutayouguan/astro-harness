@@ -182,6 +182,10 @@ impl TurnContext {
         }
     }
 
+    pub(crate) fn has_live_children(&self) -> bool {
+        self.child_tracker.active.load(Ordering::Acquire) != 0
+    }
+
     /// 等待 turn 准备完成后获取输入预留，admission 关闭则返回 None。
     pub(crate) async fn reserve_input(self: &Arc<Self>) -> Option<TurnInputReservation> {
         loop {

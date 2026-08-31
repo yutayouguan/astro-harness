@@ -11,11 +11,22 @@ use super::{SessionTask, SessionTaskResult, TaskKind, TurnCancelled, TurnInput};
 /// 标准的模型与工具 turn。
 pub(crate) struct RegularTask {
     args: RunTurnArgs,
+    recovery: bool,
 }
 
 impl RegularTask {
     pub(crate) fn new(args: RunTurnArgs) -> Self {
-        Self { args }
+        Self {
+            args,
+            recovery: false,
+        }
+    }
+
+    pub(crate) fn recovery(args: RunTurnArgs) -> Self {
+        Self {
+            args,
+            recovery: true,
+        }
     }
 
     async fn run_with_args(
@@ -41,7 +52,12 @@ impl RegularTask {
                 );
                 Ok(prompt)
             }
-            None => match args.session().prepare_turn(&input).await {
+            None => match if self.recovery {
+                anyhow::ensure!(input.is_empty(), "recovery turn cannot append new input");
+                args.session().prepare_recovery_turn().await
+            } else {
+                args.session().prepare_turn(&input).await
+            } {
                 Err(error) => Err(error),
                 Ok(TurnResult::Continue { prompt, .. }) => Ok(prompt),
                 Ok(TurnResult::BudgetExhausted) => {

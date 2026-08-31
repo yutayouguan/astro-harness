@@ -200,6 +200,67 @@ impl Session {
         Ok(TurnInputSubmission::Started { turn_id })
     }
 
+    pub(crate) async fn recover_turn(
+        self: &Arc<Self>,
+        turn_id: String,
+        chat_override: Option<crate::streaming::ChatOverride>,
+    ) -> Result<TurnInputSubmission, TurnInputError> {
+        if self.active_turn_id().await.is_some() || self.terminating_turn_id().await.is_some() {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "not_idle".into(),
+            });
+        }
+        if !self
+            .is_recoverable_turn(&turn_id)
+            .await
+            .map_err(|error| TurnInputError::Invalid(error.to_string()))?
+        {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "turn_not_recoverable".into(),
+            });
+        }
+        let context = self.create_turn_context(turn_id.clone()).await;
+        let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
+            Arc::clone(self),
+            Arc::clone(&context),
+            chat_override,
+        );
+        self.spawn_task(context, Vec::new(), RegularTask::recovery(args))
+            .await
+            .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
+        Ok(TurnInputSubmission::Started { turn_id })
+    }
+
+    async fn is_recoverable_turn(&self, turn_id: &str) -> anyhow::Result<bool> {
+        let rollout_root = self.memory_dir().join("sessions").join("rollouts");
+        let Some(path) = agent_rollout::find_rollout(&rollout_root, self.session_id())? else {
+            return Ok(false);
+        };
+        let mut started = false;
+        let mut recoverable_terminal = None;
+        for item in agent_rollout::read_rollout(&path).await? {
+            let agent_rollout::RolloutItem::EventMsg(event) = item else {
+                continue;
+            };
+            match event {
+                agent_protocol::EventMsg::TurnStarted(event) if event.turn_id == turn_id => {
+                    started = true;
+                }
+                agent_protocol::EventMsg::TurnAborted(event)
+                    if event.turn_id.as_deref() == Some(turn_id) =>
+                {
+                    recoverable_terminal =
+                        Some(event.reason == agent_protocol::TurnAbortReason::Interrupted);
+                }
+                agent_protocol::EventMsg::TurnComplete(event) if event.turn_id == turn_id => {
+                    recoverable_terminal = Some(false);
+                }
+                _ => {}
+            }
+        }
+        Ok(started && recoverable_terminal.unwrap_or(true))
+    }
+
     async fn steer_turn(
         &self,
         expected_turn_id: Option<&str>,
@@ -296,6 +357,16 @@ impl Session {
             .await
     }
 
+    pub(crate) async fn prepare_recovery_turn(&self) -> anyhow::Result<TurnResult> {
+        self.cancel.reset();
+        if self.is_budget_exhausted().await {
+            return Ok(TurnResult::BudgetExhausted);
+        }
+        self.begin_user_turn().await;
+        self.reload_tools_and_mcp().await?;
+        self.finish_prepared_turn("", None).await
+    }
+
     /// 准备后续轮次，其持久化邮箱输入在采样前与序列标记一起持久化。
     /// 重试会收敛到已有标记，因此不会追加重复的用户消息。
     pub(crate) async fn prepare_mailbox_turn(&self) -> anyhow::Result<TurnResult> {
@@ -356,7 +427,8 @@ impl Session {
         } else {
             None
         };
-        let recalled = if let Some(keywords) = fts_keywords {
+        let recalled = if let Some(keywords) = fts_keywords.filter(|value| !value.trim().is_empty())
+        {
             let visible_history = self
                 .provider_history()
                 .await

@@ -76,6 +76,38 @@ impl AstroThread {
         Ok((submission_id, submission))
     }
 
+    pub async fn recover_turn(
+        &self,
+        turn_id: impl Into<String>,
+    ) -> Result<(String, TurnInputSubmission), agent_protocol::TurnInputError> {
+        let (reply, reply_rx) = oneshot::channel();
+        let submission_id = self
+            .io
+            .submit(Op::RecoverTurn {
+                turn_id: turn_id.into(),
+                reply,
+            })
+            .await
+            .map_err(|_| agent_protocol::TurnInputError::QueueClosed)?;
+        let submission = reply_rx
+            .await
+            .map_err(|_| agent_protocol::TurnInputError::ReplyClosed)??;
+        Ok((submission_id, submission))
+    }
+
+    pub async fn suspend_turn_and_shutdown(
+        &self,
+    ) -> Result<agent_protocol::SuspendTurnOutcome, agent_protocol::TurnInputError> {
+        let (reply, reply_rx) = oneshot::channel();
+        self.io
+            .submit(Op::SuspendTurnAndShutdown { reply })
+            .await
+            .map_err(|_| agent_protocol::TurnInputError::QueueClosed)?;
+        reply_rx
+            .await
+            .map_err(|_| agent_protocol::TurnInputError::ReplyClosed)?
+    }
+
     pub async fn next_event(&self) -> anyhow::Result<agent_protocol::Event> {
         self.io.next_event().await.map_err(anyhow::Error::from)
     }
@@ -561,6 +593,148 @@ mod tests {
 
         thread.submit(Op::Shutdown).await.unwrap();
         timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn suspended_turn_recovers_under_the_same_turn_id_after_runtime_restart() {
+        let dir = TempDir::new().unwrap();
+        let session_id = "actor-recovery-loop";
+        let rollout_root = dir.path().join("sessions").join("rollouts");
+        let rollout_path =
+            agent_rollout::new_rollout_path(&rollout_root, session_id, chrono::Utc::now());
+        let first_session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                session_id.into(),
+            )
+            .await
+            .unwrap(),
+        );
+        first_session.set_chat_targets(vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }]);
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let first_chat: crate::streaming::ChatOverride = {
+            let entered = Arc::clone(&entered);
+            Arc::new(move |_messages, _tools, _config| {
+                entered.notify_one();
+                Box::pin(async {
+                    Ok(
+                        Box::pin(futures::stream::pending::<anyhow::Result<StreamChunk>>())
+                            as CompletionStream,
+                    )
+                })
+            })
+        };
+        let first_thread = AstroThread::spawn_with_chat_override(
+            first_session,
+            RolloutRecorder::open(rollout_path.clone()).await.unwrap(),
+            first_chat,
+        )
+        .unwrap();
+        let (_, submitted) = first_thread
+            .submit_turn(
+                TurnInputRequest {
+                    input: vec![agent_protocol::TurnInput {
+                        content: "persist this once".into(),
+                        image_data_urls: Vec::new(),
+                        client_message_id: None,
+                    }],
+                },
+                TurnInputMode::StartIfIdle,
+            )
+            .await
+            .unwrap();
+        let turn_id = submitted.turn_id().unwrap().to_string();
+        timeout(Duration::from_secs(2), entered.notified())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            first_thread.suspend_turn_and_shutdown().await.unwrap(),
+            agent_protocol::SuspendTurnOutcome::Suspended {
+                turn_id: turn_id.clone()
+            }
+        );
+        timeout(Duration::from_secs(2), first_thread.wait_terminated())
+            .await
+            .unwrap();
+
+        let second_session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                session_id.into(),
+            )
+            .await
+            .unwrap(),
+        );
+        second_session.set_chat_targets(vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }]);
+        let second_chat: crate::streaming::ChatOverride =
+            Arc::new(move |_messages, _tools, _config| {
+                Box::pin(async {
+                    Ok(Box::pin(futures::stream::iter(
+                        vec![
+                            StreamChunk::Text("recovered".into()),
+                            StreamChunk::Done {
+                                finish_reason: "stop".into(),
+                            },
+                        ]
+                        .into_iter()
+                        .map(Ok),
+                    )) as CompletionStream)
+                })
+            });
+        let second_thread = AstroThread::spawn_with_chat_override(
+            Arc::clone(&second_session),
+            RolloutRecorder::open(rollout_path.clone()).await.unwrap(),
+            second_chat,
+        )
+        .unwrap();
+        let (_, recovered) = second_thread.recover_turn(turn_id.clone()).await.unwrap();
+        assert_eq!(
+            recovered,
+            TurnInputSubmission::Started {
+                turn_id: turn_id.clone()
+            }
+        );
+        timeout(Duration::from_secs(2), async {
+            loop {
+                let event = second_thread.next_event().await.unwrap();
+                if matches!(
+                    event.msg,
+                    agent_protocol::EventMsg::TurnComplete(ref complete)
+                        if complete.turn_id == turn_id && complete.error.is_none()
+                ) {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            second_session
+                .clone_history()
+                .await
+                .iter()
+                .filter(|message| matches!(message.role, types::message::Role::User))
+                .count(),
+            1
+        );
+
+        second_thread.submit(Op::Shutdown).await.unwrap();
+        timeout(Duration::from_secs(1), second_thread.wait_terminated())
             .await
             .unwrap();
     }

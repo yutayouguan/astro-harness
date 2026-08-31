@@ -27,6 +27,26 @@ pub(crate) async fn submission_loop(
                 let _ = reply.send(result);
                 false
             }
+            Op::RecoverTurn { turn_id, reply } => {
+                let result = session.recover_turn(turn_id, chat_override.clone()).await;
+                let _ = reply.send(result);
+                false
+            }
+            Op::SuspendTurnAndShutdown { reply } => {
+                let result = session
+                    .suspend_active_regular_turn()
+                    .await
+                    .map_err(|error| agent_protocol::TurnInputError::Invalid(error.to_string()));
+                let should_exit = matches!(
+                    result,
+                    Ok(agent_protocol::SuspendTurnOutcome::Suspended { .. })
+                );
+                if should_exit {
+                    session.shutdown(submission.id).await;
+                }
+                let _ = reply.send(result);
+                should_exit
+            }
             Op::Interrupt => {
                 if let Err(error) = session
                     .abort_all_tasks(agent_protocol::TurnAbortReason::Interrupted)
@@ -185,7 +205,12 @@ impl Session {
                 self.emit_unsupported_op(submission_id, "inter_agent_communication")
                     .await;
             }
-            Op::TurnInput { .. } | Op::Interrupt | Op::EmitExtension { .. } | Op::Shutdown => {
+            Op::TurnInput { .. }
+            | Op::RecoverTurn { .. }
+            | Op::SuspendTurnAndShutdown { .. }
+            | Op::Interrupt
+            | Op::EmitExtension { .. }
+            | Op::Shutdown => {
                 unreachable!("submission loop routes primary control operations directly")
             }
         }

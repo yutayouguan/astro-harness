@@ -51,12 +51,31 @@ pub enum TurnInputError {
     Invalid(String),
 }
 
+/// Result of stopping an unfinished regular turn without recording a terminal event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SuspendTurnOutcome {
+    Suspended { turn_id: String },
+    NotActive,
+    HasLiveDescendants,
+    UnsupportedTask,
+}
+
 #[derive(Debug)]
 pub enum Op {
     TurnInput {
         request: TurnInputRequest,
         mode: TurnInputMode,
         reply: tokio::sync::oneshot::Sender<Result<TurnInputSubmission, TurnInputError>>,
+    },
+    /// Resume sampling for a persisted interrupted turn without appending user input.
+    RecoverTurn {
+        turn_id: String,
+        reply: tokio::sync::oneshot::Sender<Result<TurnInputSubmission, TurnInputError>>,
+    },
+    /// Stop a regular turn without a terminal event, flush it, then close the runtime.
+    SuspendTurnAndShutdown {
+        reply: tokio::sync::oneshot::Sender<Result<SuspendTurnOutcome, TurnInputError>>,
     },
     Interrupt,
     ThreadSettings {

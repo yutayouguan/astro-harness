@@ -9,7 +9,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub use agent_protocol::TurnInput;
-use agent_protocol::{ErrorEvent, EventMsg, TurnAbortReason, TurnAbortedEvent, TurnCompleteEvent};
+use agent_protocol::{
+    ErrorEvent, EventMsg, SuspendTurnOutcome, TurnAbortReason, TurnAbortedEvent, TurnCompleteEvent,
+};
 use futures::FutureExt;
 use tokio::sync::{oneshot, Notify};
 use tokio::task::JoinHandle;
@@ -191,6 +193,71 @@ impl ActiveTurn {
 }
 
 impl Session {
+    /// Detach an unfinished regular turn for recovery by another runtime.
+    ///
+    /// Unlike interruption, suspension deliberately emits no terminal turn event.
+    pub(crate) async fn suspend_active_regular_turn(
+        self: &Arc<Self>,
+    ) -> anyhow::Result<SuspendTurnOutcome> {
+        let _admission = self.task_admission.lock().await;
+        {
+            let active_turn = self.active_turn.lock().await;
+            let Some(running) = active_turn.as_ref().and_then(|turn| turn.task.as_ref()) else {
+                return Ok(SuspendTurnOutcome::NotActive);
+            };
+            if running.kind != TaskKind::Regular {
+                return Ok(SuspendTurnOutcome::UnsupportedTask);
+            }
+            if running.turn_context.has_live_children() {
+                return Ok(SuspendTurnOutcome::HasLiveDescendants);
+            }
+        }
+
+        self.flush_rollout().await?;
+        let mut running = {
+            let mut active_turn = self.active_turn.lock().await;
+            let Some(turn) = active_turn.as_mut() else {
+                return Ok(SuspendTurnOutcome::NotActive);
+            };
+            let Some(running) = turn.task.as_ref() else {
+                return Ok(SuspendTurnOutcome::NotActive);
+            };
+            if running.kind != TaskKind::Regular {
+                return Ok(SuspendTurnOutcome::UnsupportedTask);
+            }
+            if running.turn_context.has_live_children() {
+                return Ok(SuspendTurnOutcome::HasLiveDescendants);
+            }
+            let running = turn
+                .task
+                .take()
+                .ok_or_else(|| anyhow::anyhow!("accepted turn suspension lost its task"))?;
+            *active_turn = None;
+            running
+        };
+        let turn_id = running.turn_context.sub_id().to_string();
+        running.turn_context.close_input_admission();
+        running.cancellation_token.cancel();
+        self.cancel_signal().cancel();
+        if tokio::time::timeout(TASK_ABORT_TIMEOUT, &mut running.handle)
+            .await
+            .is_err()
+        {
+            running.handle.abort();
+            let _ = (&mut running.handle).await;
+        }
+        running.turn_context.wait_for_children().await;
+        drop(running.task);
+        Self::await_auxiliary_handles(&mut running.auxiliary_handles).await;
+        if self.current_turn_id().await.as_deref() == Some(&turn_id) {
+            self.clear_current_turn_id().await;
+        }
+        self.complete_task_lifecycle(&turn_id, &running.completion)
+            .await;
+        self.flush_rollout().await?;
+        Ok(SuspendTurnOutcome::Suspended { turn_id })
+    }
+
     /// 启动一个 session 任务，若已有活跃任务则先中止。
     pub(crate) async fn spawn_task<T: SessionTask>(
         self: &Arc<Self>,
