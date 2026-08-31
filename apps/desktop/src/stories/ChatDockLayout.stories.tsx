@@ -251,7 +251,7 @@ function ChatDockLayout({
     <main
       style={{ minHeight: "100vh", display: "flex", background: "var(--shell-bg)" }}
     >
-      <section className="content-pane">
+      <section className="content-pane content-pane--chat">
         <div className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}`}>
           <div className="content-heading">
             <div className="page-title-block">

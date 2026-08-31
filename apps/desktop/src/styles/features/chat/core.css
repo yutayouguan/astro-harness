@@ -20,6 +20,19 @@
   gap: 16px;
 }
 
+/* 主对话首屏避开悬浮标题栏；滚动容器自身从窗顶开始，内容滚动后会进入玻璃层背后。
+   选择器刻意限定 direct main chat，避免侧边聊天重复获得顶部留白。 */
+.content-pane--chat
+  > .page-body--chat
+  > .chat-layout-with-right
+  > .chat-main
+  > .chat-pane
+  > .message-list-wrap
+  > .message-list {
+  padding-top: var(--chat-header-overlay-height, 54px);
+  scroll-padding-block-start: var(--chat-header-overlay-height, 54px);
+}
+
 .message-list::-webkit-scrollbar {
   width: 4px;
   background: transparent;

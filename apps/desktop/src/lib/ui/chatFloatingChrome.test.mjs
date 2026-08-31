@@ -30,10 +30,15 @@ const sideChatStyles = await readFile(
   new URL("../../styles/features/chat/side-chat.css", import.meta.url),
   "utf8",
 );
+const cronRunStyles = await readFile(
+  new URL("../../styles/features/cron/run-drawer.css", import.meta.url),
+  "utf8",
+);
 const chatView = await readFile(
   new URL("../../components/chat/ChatView.tsx", import.meta.url),
   "utf8",
 );
+const app = await readFile(new URL("../../App.tsx", import.meta.url), "utf8");
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -51,6 +56,11 @@ test("chat header chrome stays anchored while project files animate", () => {
   );
 
   assert.ok(header, "missing chat header rule");
+  assert.match(header, /position:\s*absolute;/);
+  assert.match(header, /z-index:\s*42;/);
+  assert.match(header, /top:\s*4px;/);
+  assert.match(header, /right:\s*8px;/);
+  assert.match(header, /left:\s*8px;/);
   assert.match(header, /min-height:\s*42px;/);
   assert.match(header, /padding:\s*4px 16px;/);
   assert.ok(actions, "missing chat header action rule");
@@ -60,6 +70,51 @@ test("chat header chrome stays anchored while project files animate", () => {
   assert.match(actions, /transform:\s*translateY\(-50%\);/);
   assert.doesNotMatch(actions, /transition:\s*right/);
   assert.equal(projectFileActions, undefined);
+});
+
+test("chat header shares composer glass while messages scroll underneath", () => {
+  const header = rule(headerStyles, ".content-header--chat");
+  const chatPane = rule(headerStyles, ".content-pane--chat");
+
+  assert.ok(header, "missing chat header rule");
+  assert.ok(chatPane, "missing chat content pane rule");
+  assert.match(chatPane, /position:\s*relative;/);
+  assert.match(headerStyles, /\.chat-main\s*\{\s*--chat-header-overlay-height:\s*54px;/);
+  assert.match(header, /--chat-header-surface-base:\s*var\(--sidebar-bg\);/);
+  assert.match(
+    header,
+    /background:[\s\S]*var\(--chat-header-surface-sheen\)[\s\S]*var\(--chat-header-surface-base\);/,
+  );
+  assert.match(header, /border:\s*0\.75px solid var\(--glass-edge\);/);
+  assert.match(header, /box-shadow:[\s\S]*var\(--glass-rim\)/);
+  assert.match(
+    header,
+    /backdrop-filter:\s*blur\(calc\(var\(--blur-glass, 20px\)/,
+  );
+  assert.match(header, /pointer-events:\s*none;/);
+  assert.match(
+    headerStyles,
+    /\.content-header--chat \.page-title-block,[\s\S]*?\.content-header--chat \.conversation-menu\s*\{[\s\S]*?pointer-events:\s*auto;/,
+  );
+  assert.match(
+    rule(headerStyles, ".content-header--chat .header-actions"),
+    /pointer-events:\s*auto;/,
+  );
+  assert.match(app, /content-pane--chat/);
+  assert.match(
+    coreStyles,
+    /\.content-pane--chat[\s\S]*?> \.message-list\s*\{[\s\S]*?padding-top:\s*var\(--chat-header-overlay-height, 54px\);[\s\S]*?scroll-padding-block-start:/,
+  );
+  assert.match(headerStyles, /@media \(prefers-reduced-transparency: reduce\)/);
+  assert.match(headerStyles, /@media \(prefers-contrast: more\)/);
+  assert.match(
+    cronRunStyles,
+    /top:\s*calc\(var\(--chat-header-overlay-height, 0px\) \+ 12px\);/,
+  );
+  assert.match(
+    sideChatStyles,
+    /margin:\s*calc\(var\(--chat-header-overlay-height, 0px\) \+ 8px\) 12px 0;/,
+  );
 });
 
 test("conversation title keeps a compact optical type scale", () => {

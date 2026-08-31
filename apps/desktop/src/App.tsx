@@ -1332,7 +1332,9 @@ export default function App() {
           />
         ) : null}
 
-        <section className="content-pane">
+        <section
+          className={`content-pane${nav === "chat" ? " content-pane--chat" : ""}`}
+        >
           {nav === "settings" ? (
             <>
               <div className="content-header">

@@ -11,16 +11,54 @@
   app-region: no-drag;
 }
 
-/* 对话页标题栏：左侧是当前会话，右侧集中放身份与窗口操作。
-   整体比通用 .content-header 更贴窗顶：这里的标题是会话名而非页面名，
-   压低后让正文更早开始。标题区不含交互元素（「⋯」菜单自带 z-index 51），
-   所以压进 --titlebar-h 52px 的拖拽区里不影响点击。 */
-.content-header--chat {
+/* 对话页标题栏与底部输入框使用同一类悬浮玻璃材质。
+   标题栏不参与 content-pane 的 flex 高度分配，消息滚动视口因此可以延伸到窗顶；
+   空白区域透传滚轮和窗口拖动，只有标题与操作控件恢复命中。 */
+.content-pane--chat {
   position: relative;
+}
+
+.content-pane--chat
+  > .page-body--chat
+  > .chat-layout-with-right
+  > .chat-main {
+  --chat-header-overlay-height: 54px;
+}
+
+.content-header--chat {
+  --chat-header-surface-base: var(--sidebar-bg);
+  --chat-header-surface-sheen: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
+    transparent 72%
+  );
+  position: absolute;
+  z-index: 42;
+  top: 4px;
+  right: 8px;
+  left: 8px;
   gap: 12px;
   min-height: 42px;
   box-sizing: border-box;
   padding: 4px 16px;
+  border: 0.75px solid var(--glass-edge);
+  border-radius: 16px;
+  background:
+    var(--chat-header-surface-sheen),
+    var(--chat-header-surface-base);
+  box-shadow:
+    var(--glass-rim),
+    0 1px 4px rgba(var(--shadow-ink), 0.035);
+  backdrop-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  pointer-events: none;
+}
+
+.content-header--chat .page-title-block,
+.content-header--chat .conversation-menu {
+  pointer-events: auto;
 }
 
 .content-header--chat .content-heading {
@@ -101,6 +139,27 @@
   bottom: auto;
   transform: translateY(-50%);
   flex-wrap: nowrap;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .content-header--chat {
+    --chat-header-surface-base: var(--surface-panel-background);
+    --chat-header-surface-sheen: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .content-header--chat {
+    --chat-header-surface-base: color-mix(
+      in srgb,
+      var(--surface-panel-background) 94%,
+      transparent
+    );
+    border-color: color-mix(in srgb, var(--ink) 28%, transparent);
+  }
 }
 
 /* 只有真正的窄屏才折叠模型文案，普通桌面尺寸仍保留当前模型信息。 */

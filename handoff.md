@@ -613,6 +613,67 @@ Astro 已能从部分 Provider 读取 input、output、cache read/write 和 reas
 - `npm run build` 通过；仅保留既有 Vite 大 chunk 和动态/静态 import 提示。
 - Storybook 实际交互验证得到 8 项菜单：置顶、重命名、重新生成标题、导出、分支、移动到项目、归档、永久删除；菜单尺寸 `180 × 266px`，视口内自动上翻且使用同一 `project-context-menu` 视觉规格。
 
+## H-018 聊天标题栏阻断消息滚动视口且缺少玻璃层次
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | Medium |
+| 发现日期 | 2026-08-31 |
+| 发现阶段 | 聊天标题栏滚动与材质审查 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+`App.tsx` 将 `.content-header--chat` 作为 `.content-pane` 的普通 flex 子项放在 `.page-body--chat` 之前；标题栏虽然已收紧到 42px，但仍会先占据纵向布局空间，导致 `ChatView` 的 `.message-list` 滚动视口只能从标题栏下缘开始。与之相对，底部 `.composer-shell` 已采用绝对定位，并通过消息列表动态尾部留白实现“内容在玻璃层下滚动”的连续体验。
+
+标题栏自身目前只有透明背景，没有复用输入框的半透明底色、玻璃描边、内高光、阴影与 backdrop blur，因此滚动内容即使延伸到顶层也缺少稳定的前后景分离。
+
+### 用户影响
+
+- 消息内容无法滚动到窗口顶部，顶部 42px 始终是不可利用的固定空带。
+- 顶部标题栏与底部输入框使用不同的空间模型和材质语言，界面上下不一致。
+- 直接取消标题栏占位而不补首屏安全间距，会让第一条消息初始状态被控件遮挡。
+
+### 修复方向与验收标准
+
+- 将聊天标题栏改为相对 `content-pane` 的悬浮层，不再参与页面主体的 flex 高度分配。
+- 复用输入框的玻璃材质配方：半透明基底、轻量 sheen、玻璃边缘、内高光和 backdrop blur；滚动文字应能透过材质被感知。
+- 主消息列表仅在初始顶部增加与标题栏等高的安全留白，滚动后内容可继续进入标题栏背后；侧边聊天不继承该留白。
+- 空白区域继续支持窗口拖动和滚轮透传，标题、菜单与右侧操作控件保持可点击。
+- 覆盖浅色、深色、窄屏、降低透明度和实际滚动场景。
+
+### 修复结果
+
+- `.content-header--chat` 已改为不占据正文高度的绝对定位玻璃层，并复用输入框的半透明基底、sheen、玻璃边缘、内高光与 backdrop blur 配方。
+- 主消息滚动容器从窗顶开始，首屏使用 54px 安全留白；滚动后文字会进入玻璃标题栏背后。侧边聊天不继承该留白，定时任务浮卡和临时会话提示同步避让。
+- 空白区域保持事件透传，标题、会话菜单和右侧操作区保持可点击；补充降低透明度和高对比度回退。
+- `chatFloatingChrome.test.mjs` 11 项测试、TypeScript、CSS lint 与生产构建通过；Storybook 浅色/深色及真实滚动验证确认标题栏高 42px、消息视口顶点为 0，滚动时存在内容进入标题栏背后；640px 窄屏无控件重叠。
+
+## H-019 活动组进度参数存在重复字段导致前端无法构建
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | High |
+| 发现日期 | 2026-08-31 |
+| 发现阶段 | H-018 生产构建回归 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+`MsgActivityGroup.tsx` 在组装 `chat.activityGroup.progress` 参数时，同时声明了两次 `completed`：一次取 `progress.resolved`，一次取 `progress.done`。TypeScript 报告 `TS1117: An object literal cannot have multiple properties with the same name`，使桌面前端生产构建在进入 Vite 前直接失败。
+
+### 修复方向与验收标准
+
+- 保留与“完成”文案语义一致的成功完成数 `progress.done`，移除重复的 `progress.resolved` 字段。
+- 活动状态聚合测试、TypeScript 和生产构建恢复通过。
+
+### 修复结果
+
+- 已移除重复的 `progress.resolved` 映射，`completed` 唯一取值为成功完成数 `progress.done`。
+- 活动呈现相关测试 17 项、TypeScript 与生产构建均通过。
+
 ```markdown
 ## H-NNN 标题
 

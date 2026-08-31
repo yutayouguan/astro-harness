@@ -220,7 +220,7 @@
   align-items: center;
   gap: 9px;
   min-height: 40px;
-  margin: 8px 12px 0;
+  margin: calc(var(--chat-header-overlay-height, 0px) + 8px) 12px 0;
   padding: 7px 9px 7px 10px;
   border: 1px dashed
     color-mix(in srgb, var(--side-tone) 32%, var(--glass-edge, transparent));

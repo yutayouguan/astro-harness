@@ -2,7 +2,7 @@
 .chat-cron-run-float {
   position: absolute;
   z-index: 18;
-  top: 12px;
+  top: calc(var(--chat-header-overlay-height, 0px) + 12px);
   left: 50%;
   width: min(680px, calc(100% - 40px));
   pointer-events: none;
@@ -16,8 +16,8 @@
 }
 
 .chat-pane.has-cron-run .message-list {
-  padding-top: 108px;
-  scroll-padding-block-start: 108px;
+  padding-top: calc(var(--chat-header-overlay-height, 0px) + 108px);
+  scroll-padding-block-start: calc(var(--chat-header-overlay-height, 0px) + 108px);
 }
 
 @keyframes chat-cron-run-float-in {
@@ -382,13 +382,13 @@ html[data-theme="dark"] .cron-job-drawer-action {
 
 @media (max-width: 520px) {
   .chat-cron-run-float {
-    top: 8px;
+    top: calc(var(--chat-header-overlay-height, 0px) + 8px);
     width: calc(100% - 24px);
   }
 
   .chat-pane.has-cron-run .message-list {
-    padding-top: 96px;
-    scroll-padding-block-start: 96px;
+    padding-top: calc(var(--chat-header-overlay-height, 0px) + 96px);
+    scroll-padding-block-start: calc(var(--chat-header-overlay-height, 0px) + 96px);
   }
 
   .chat-cron-run-card {
