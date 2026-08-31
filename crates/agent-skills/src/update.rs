@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::agent_id::normalize as normalize_agent_id;
 use crate::check::{check_updates_for_agent, filter_outdated_folders};
-use crate::install::{install_from_ref_scoped, scoped_skills_path, InstallOriginHint};
+use crate::install::{install_from_ref_scoped_as, scoped_skills_path, InstallOriginHint};
 use crate::models::{SkillOriginRecord, SkillUpdateItemResult, UpdateSkillOpts};
 use crate::origins::{find_origin, load_origins};
 use crate::preview::preview_skill_update;
@@ -98,12 +98,13 @@ pub async fn update_installed_skill_ex(
     let install_ref = record.install_ref.clone();
     let mut retries_left = opts.max_retries;
     loop {
-        match install_from_ref_scoped(
+        match install_from_ref_scoped_as(
             &install_ref,
             agent_id,
             Some(hint.clone()),
             scope,
             project_root,
+            folder,
         )
         .await
         {

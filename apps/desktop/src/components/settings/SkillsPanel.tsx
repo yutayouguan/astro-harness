@@ -75,7 +75,7 @@ import {
 import {
   collectInstalledSkillKeys,
   inferFolderFromInstallRef,
-  isStoreSkillInstalled as matchStoreSkillInstalled,
+  isStoreSkillInstalledWithOrigins,
 } from "../../lib/skills/skillInstalledMatch";
 import {
   STORE_CATEGORY_IDS,
@@ -1710,8 +1710,18 @@ export default function SkillsPanel({
     [installed, machineSkills],
   );
 
+  const agentOrigins = useMemo(
+    () =>
+      origins.filter(
+        (origin) =>
+          normalizeAgentId(origin.agent_id ?? null) === normalizeAgentId(agentId) &&
+          origin.scope === scope,
+      ),
+    [origins, agentId, scope],
+  );
+
   const isStoreSkillInstalled = (skill: StoreSkill) =>
-    matchStoreSkillInstalled(skill, availableSkillKeys);
+    isStoreSkillInstalledWithOrigins(skill, availableSkillKeys, agentOrigins);
 
   const filteredInstalled = useMemo(() => {
     const q = installedQuery.trim().toLowerCase();
@@ -1800,15 +1810,6 @@ export default function SkillsPanel({
   const updateChecksByFolder = useMemo(
     () => new Map(lastCheckResults.map((check) => [check.folder, check])),
     [lastCheckResults],
-  );
-
-  const agentOrigins = useMemo(
-    () =>
-      origins.filter(
-        (origin) =>
-          normalizeAgentId(origin.agent_id ?? null) === normalizeAgentId(agentId),
-      ),
-    [origins, agentId],
   );
 
   const originForSkill = useCallback(

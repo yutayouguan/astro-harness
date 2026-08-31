@@ -1,5 +1,9 @@
 /** 商店 Skill 与本机已安装列表的匹配（名称 / 目录 / slug 可能不一致）。 */
-import type { InstalledSkill, StoreSkill } from "../../types";
+import type {
+  InstalledSkill,
+  SkillOriginRecord,
+  StoreSkill,
+} from "../../types";
 
 function addKey(keys: Set<string>, value: string | undefined | null) {
   const v = value?.trim().toLowerCase();
@@ -78,4 +82,79 @@ export function isStoreSkillInstalled(
   availableKeys: Set<string>,
 ): boolean {
   return storeSkillMatchKeys(skill).some((k) => availableKeys.has(k));
+}
+
+function skillHubIdentity(value: string | undefined | null): string | undefined {
+  const raw = value?.trim().toLowerCase();
+  if (!raw) return undefined;
+  if (raw.startsWith("skillhub:")) {
+    return raw.slice("skillhub:".length).split("/").filter(Boolean).pop();
+  }
+  try {
+    const url = new URL(raw);
+    if (url.hostname !== "skillhub.cn" && url.hostname !== "api.skillhub.cn") {
+      return undefined;
+    }
+    const parts = url.pathname.split("/").filter(Boolean);
+    const skillsIndex = parts.indexOf("skills");
+    const identity =
+      skillsIndex >= 0 ? parts[skillsIndex + 1] : parts[parts.length - 1];
+    return identity || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storeSkillIdentities(skill: StoreSkill): Set<string> {
+  const identities = new Set<string>();
+  for (const value of [skill.id, skill.install_ref]) {
+    const identity = skillHubIdentity(value);
+    if (identity) identities.add(identity);
+  }
+  return identities;
+}
+
+function originIdentities(origin: SkillOriginRecord): Set<string> {
+  const identities = new Set<string>();
+  for (const value of [origin.skill_id, origin.install_ref]) {
+    const identity = skillHubIdentity(value);
+    if (identity) identities.add(identity);
+  }
+  return identities;
+}
+
+/**
+ * 来源记录存在时按 SkillHub 条目身份匹配，避免同名的多个商店条目同时显示“已安装”。
+ * 没有来源记录的旧安装仍保留名称/目录兼容匹配。
+ */
+export function isStoreSkillInstalledWithOrigins(
+  skill: StoreSkill,
+  availableKeys: Set<string>,
+  origins: SkillOriginRecord[],
+): boolean {
+  const matchKeys = new Set(storeSkillMatchKeys(skill));
+  const identities = storeSkillIdentities(skill);
+  const installedOrigins = origins.filter((origin) => {
+    const folder = origin.folder.trim().toLowerCase();
+    const name = origin.name.trim().toLowerCase();
+    return availableKeys.has(folder) || availableKeys.has(name);
+  });
+  if (
+    installedOrigins.some((origin) =>
+      [...originIdentities(origin)].some((identity) => identities.has(identity)),
+    )
+  ) {
+    return true;
+  }
+
+  if (![...matchKeys].some((key) => availableKeys.has(key))) return false;
+
+  const relatedOrigins = installedOrigins.filter((origin) => {
+    const folder = origin.folder.trim().toLowerCase();
+    const name = origin.name.trim().toLowerCase();
+    return matchKeys.has(folder) || matchKeys.has(name);
+  });
+  if (relatedOrigins.length === 0) return true;
+
+  return false;
 }

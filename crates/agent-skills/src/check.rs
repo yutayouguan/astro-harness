@@ -9,7 +9,7 @@ use crate::models::{
     SkillOriginRecord, SkillUpdateCheckResult, SkillUpdateStatus, StoreSkillDetail,
 };
 pub use crate::origins::origin_to_store_skill;
-use crate::origins::{ensure_bundled_skillhub_origins, load_origins};
+use crate::origins::{ensure_known_skillhub_origins, load_origins};
 use crate::store::fetch_detail_strict;
 
 /// 用本地 origin 快照与远端快照判定更新状态。
@@ -32,9 +32,11 @@ pub fn classify_update_status(
     }
 
     if let (Some(local_v), Some(remote_v)) = (&origin.remote_version, remote_version) {
-        if local_v.trim() != remote_v.trim() {
-            return SkillUpdateStatus::Outdated;
-        }
+        return if local_v.trim() == remote_v.trim() {
+            SkillUpdateStatus::Current
+        } else {
+            SkillUpdateStatus::Outdated
+        };
     }
 
     if let Some(remote_ts) = remote_updated_at {
@@ -84,7 +86,7 @@ pub async fn check_updates_for_agent(
 ) -> Result<Vec<SkillUpdateCheckResult>> {
     let target = normalize_agent_id(agent_id);
     if scope == "global" {
-        ensure_bundled_skillhub_origins(Some(&target))?;
+        ensure_known_skillhub_origins(Some(&target))?;
     }
     let file = load_origins()?;
     let origins: Vec<SkillOriginRecord> = file
@@ -222,6 +224,15 @@ mod tests {
         let origin = sample_origin(Some("1.0.0"), None, None, 100);
         assert_eq!(
             classify_update_status(&origin, Some("1.0.0"), None),
+            SkillUpdateStatus::Current
+        );
+    }
+
+    #[test]
+    fn classify_equal_version_ignores_newer_catalog_timestamp() {
+        let origin = sample_origin(Some("1.0.0"), Some(100), None, 50);
+        assert_eq!(
+            classify_update_status(&origin, Some("1.0.0"), Some(200)),
             SkillUpdateStatus::Current
         );
     }

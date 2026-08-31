@@ -28,21 +28,54 @@ pub const BUNDLED_SKILLS: &[(&str, &str)] = &[
     ("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD),
 ];
 
-/// 由 SkillHub 承接后续更新的内置 Skill 基线。
+/// 已知安装 Skill 与 SkillHub 官方/上游镜像的映射。
 #[derive(Debug, Clone, Copy)]
-pub struct BundledSkillHubSource {
+pub struct KnownSkillHubSource {
     pub folder: &'static str,
     pub install_ref: &'static str,
     pub version: &'static str,
     pub updated_at: i64,
+    /// 需在 `skills-lock.json` 中精确匹配的 GitHub 上游；内置 Skill 为 `None`。
+    pub lock_source: Option<&'static str>,
 }
 
-pub const BUNDLED_SKILLHUB_SOURCES: &[BundledSkillHubSource] = &[BundledSkillHubSource {
-    folder: "aihot",
-    install_ref: "skillhub:kkkkhazix/aihot",
-    version: "0.1.1",
-    updated_at: 1_788_148_472_699,
-}];
+pub const KNOWN_SKILLHUB_SOURCES: &[KnownSkillHubSource] = &[
+    KnownSkillHubSource {
+        folder: "aihot",
+        install_ref: "skillhub:kkkkhazix/aihot",
+        version: "0.1.1",
+        updated_at: 1_788_148_472_699,
+        lock_source: None,
+    },
+    KnownSkillHubSource {
+        folder: "find-skills",
+        install_ref: "skillhub:org-eyw2ohcx/vercel-labs-skills",
+        version: "1.0.0",
+        updated_at: 1_788_155_499_462,
+        lock_source: Some("vercel-labs/skills"),
+    },
+    KnownSkillHubSource {
+        folder: "brainstorming",
+        install_ref: "skillhub:user_38ad8922/brainstorming-obra-share",
+        version: "1.1.2",
+        updated_at: 1_787_990_186_192,
+        lock_source: Some("obra/superpowers"),
+    },
+    KnownSkillHubSource {
+        folder: "agent-browser",
+        install_ref: "skillhub:org-eyw2ohcx/vercel-labs-agent-browser",
+        version: "1.0.0",
+        updated_at: 1_788_155_202_545,
+        lock_source: Some("vercel-labs/agent-browser"),
+    },
+    KnownSkillHubSource {
+        folder: "skill-creator",
+        install_ref: "skillhub:org-eyw2ohcx/anthropics-skills-skill-creator",
+        version: "1.0.0",
+        updated_at: 1_788_127_007_697,
+        lock_source: Some("anthropics/skills"),
+    },
+];
 
 /// 已从产品中退役、需清理旧播种副本的内置 Skill。
 const RETIRED_BUNDLED_SKILLS: &[&str] = &["create-agent"];
@@ -61,7 +94,7 @@ fn bundled_rev_in(body: &str) -> u32 {
 }
 
 fn is_skillhub_managed(name: &str) -> bool {
-    BUNDLED_SKILLHUB_SOURCES
+    KNOWN_SKILLHUB_SOURCES
         .iter()
         .any(|source| source.folder == name)
 }

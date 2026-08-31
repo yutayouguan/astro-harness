@@ -9,7 +9,7 @@ use crate::agent_id::normalize as normalize_agent_id;
 use crate::digest::skill_content_digest;
 use crate::install::{is_safe_skill_folder, is_skillhub_http_ref};
 use crate::models::{SkillOriginRecord, SkillOriginsFile, StoreSkill, StoreSkillDetail};
-use crate::seed::BUNDLED_SKILLHUB_SOURCES;
+use crate::seed::KNOWN_SKILLHUB_SOURCES;
 use crate::store::fetch_detail_strict;
 
 const ORIGINS_FILE: &str = "skill-origins.json";
@@ -92,18 +92,40 @@ pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
     Ok(())
 }
 
-/// 为可由 SkillHub 更新的内置 Skill 建立一次性基线。
+fn locked_upstream_matches(base: &std::path::Path, folder: &str, expected: Option<&str>) -> bool {
+    let Some(expected) = expected else {
+        return true;
+    };
+    let Ok(body) = fs::read_to_string(base.join("skills-lock.json")) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) else {
+        return false;
+    };
+    value
+        .get("skills")
+        .and_then(|skills| skills.get(folder))
+        .and_then(|entry| entry.get("source"))
+        .and_then(serde_json::Value::as_str)
+        == Some(expected)
+}
+
+/// 为可由 SkillHub 更新的已知 Skill 建立一次性基线。
 ///
-/// 用户已安装或更新过的来源记录优先，不会被内置基线覆盖。
-pub fn ensure_bundled_skillhub_origins(agent_id: Option<&str>) -> Result<()> {
+/// 外部安装的 Skill 必须同时匹配 `skills-lock.json` 中的上游，避免仅凭同名误认领。
+/// 用户已安装或更新过的来源记录优先，不会被基线覆盖。
+pub fn ensure_known_skillhub_origins(agent_id: Option<&str>) -> Result<()> {
     let agent_id = normalize_agent_id(agent_id);
-    let skills_dir = memory_dir().join("skills");
+    let base = memory_dir();
+    let skills_dir = base.join("skills");
     let mut file = load_origins()?;
     let mut changed = false;
 
-    for source in BUNDLED_SKILLHUB_SOURCES {
+    for source in KNOWN_SKILLHUB_SOURCES {
         let skill_dir = skills_dir.join(source.folder);
-        if !skill_dir.join("SKILL.md").is_file() {
+        if !skill_dir.join("SKILL.md").is_file()
+            || !locked_upstream_matches(&base, source.folder, source.lock_source)
+        {
             continue;
         }
         let key = origin_key(Some(&agent_id), "global", source.folder);
@@ -276,14 +298,14 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn ensure_bundled_skillhub_origins_adds_aihot_once() {
+    fn ensure_known_skillhub_origins_adds_aihot_once() {
         let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
         seed_bundled_into(dir.path());
 
-        ensure_bundled_skillhub_origins(Some("workspace")).unwrap();
-        ensure_bundled_skillhub_origins(Some("workspace")).unwrap();
+        ensure_known_skillhub_origins(Some("workspace")).unwrap();
+        ensure_known_skillhub_origins(Some("workspace")).unwrap();
 
         let file = load_origins().unwrap();
         assert_eq!(file.records.len(), 1);
@@ -299,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn ensure_bundled_skillhub_origins_preserves_existing_origin() {
+    fn ensure_known_skillhub_origins_preserves_existing_origin() {
         let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
@@ -320,7 +342,7 @@ mod tests {
         })
         .unwrap();
 
-        ensure_bundled_skillhub_origins(Some("workspace")).unwrap();
+        ensure_known_skillhub_origins(Some("workspace")).unwrap();
 
         let origin = find_origin(Some("workspace"), "global", "aihot")
             .unwrap()
@@ -329,6 +351,89 @@ mod tests {
         assert_eq!(origin.remote_version.as_deref(), Some("9.9.9"));
         assert_eq!(origin.content_digest.as_deref(), Some("custom-digest"));
         assert_eq!(load_origins().unwrap().records.len(), 1);
+    }
+
+    #[test]
+    fn ensure_known_skillhub_origins_claims_locked_upstream_skills() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        for folder in [
+            "find-skills",
+            "brainstorming",
+            "agent-browser",
+            "skill-creator",
+        ] {
+            let skill_dir = dir.path().join("skills").join(folder);
+            fs::create_dir_all(&skill_dir).unwrap();
+            fs::write(
+                skill_dir.join("SKILL.md"),
+                format!("---\nname: {folder}\n---\n# {folder}\n"),
+            )
+            .unwrap();
+        }
+        fs::write(
+            dir.path().join("skills-lock.json"),
+            r#"{
+  "version": 1,
+  "skills": {
+    "find-skills": {"source": "vercel-labs/skills"},
+    "brainstorming": {"source": "obra/superpowers"},
+    "agent-browser": {"source": "vercel-labs/agent-browser"},
+    "skill-creator": {"source": "anthropics/skills"}
+  }
+}"#,
+        )
+        .unwrap();
+
+        ensure_known_skillhub_origins(Some("workspace")).unwrap();
+
+        let file = load_origins().unwrap();
+        assert_eq!(file.records.len(), 4);
+        let refs = file
+            .records
+            .iter()
+            .map(|record| (record.folder.as_str(), record.install_ref.as_str()))
+            .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(
+            refs.get("find-skills"),
+            Some(&"skillhub:org-eyw2ohcx/vercel-labs-skills")
+        );
+        assert_eq!(
+            refs.get("brainstorming"),
+            Some(&"skillhub:user_38ad8922/brainstorming-obra-share")
+        );
+        assert_eq!(
+            refs.get("agent-browser"),
+            Some(&"skillhub:org-eyw2ohcx/vercel-labs-agent-browser")
+        );
+        assert_eq!(
+            refs.get("skill-creator"),
+            Some(&"skillhub:org-eyw2ohcx/anthropics-skills-skill-creator")
+        );
+        assert!(file
+            .records
+            .iter()
+            .all(|record| record.content_digest.is_some()));
+    }
+
+    #[test]
+    fn ensure_known_skillhub_origins_rejects_mismatched_lock_source() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let skill_dir = dir.path().join("skills/find-skills");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), "# custom").unwrap();
+        fs::write(
+            dir.path().join("skills-lock.json"),
+            r#"{"skills":{"find-skills":{"source":"someone/custom"}}}"#,
+        )
+        .unwrap();
+
+        ensure_known_skillhub_origins(Some("workspace")).unwrap();
+
+        assert!(load_origins().unwrap().records.is_empty());
     }
 
     #[test]

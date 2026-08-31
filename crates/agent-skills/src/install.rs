@@ -241,10 +241,16 @@ fn http_client() -> Result<reqwest::Client> {
         .context("build HTTP client")
 }
 
-/// 从 api.skillhub.cn 拉取文件并写入本地 skills 目录。
-async fn install_skillhub_http(slug: &str, skills_dir: &Path) -> Result<String> {
+/// 从 api.skillhub.cn 拉取 `remote_slug` 并写入本地 `target_folder`。
+///
+/// 官方镜像的 SkillHub slug 可能带上游前缀，而本地安装目录仍保持原名。
+async fn install_skillhub_http_as(
+    remote_slug: &str,
+    target_folder: &str,
+    skills_dir: &Path,
+) -> Result<String> {
     let client = http_client()?;
-    let list_url = format!("{SKILLHUB_API}/api/v1/skills/{slug}/files");
+    let list_url = format!("{SKILLHUB_API}/api/v1/skills/{remote_slug}/files");
     let resp = client
         .get(&list_url)
         .header("Accept", "application/json")
@@ -253,19 +259,19 @@ async fn install_skillhub_http(slug: &str, skills_dir: &Path) -> Result<String> 
         .with_context(|| format!("GET {list_url}"))?;
     if !resp.status().is_success() {
         bail!(
-            "SkillHub 文件列表失败 HTTP {}（slug={slug}）",
+            "SkillHub 文件列表失败 HTTP {}（slug={remote_slug}）",
             resp.status()
         );
     }
     let listing: SkillHubFilesResponse = resp.json().await.context("parse SkillHub files JSON")?;
     if listing.files.is_empty() {
-        bail!("SkillHub 未返回任何文件: {slug}");
+        bail!("SkillHub 未返回任何文件: {remote_slug}");
     }
 
     let mut files = Vec::with_capacity(listing.files.len());
     for meta in &listing.files {
         let file_url = format!(
-            "{SKILLHUB_API}/api/v1/skills/{slug}/file?path={}",
+            "{SKILLHUB_API}/api/v1/skills/{remote_slug}/file?path={}",
             urlencoding::encode(&meta.path)
         );
         let file_resp = client
@@ -284,12 +290,17 @@ async fn install_skillhub_http(slug: &str, skills_dir: &Path) -> Result<String> 
         files.push((meta.path.clone(), bytes));
     }
 
-    let dest = write_skill_files(skills_dir, slug, &files)?;
+    let dest = write_skill_files(skills_dir, target_folder, &files)?;
     Ok(format!(
-        "已从 SkillHub 安装 {slug} → {}（{} 个文件）",
+        "已从 SkillHub 安装 {remote_slug} → {}（{} 个文件）",
         dest.display(),
         files.len()
     ))
+}
+
+#[cfg(test)]
+async fn install_skillhub_http(slug: &str, skills_dir: &Path) -> Result<String> {
+    install_skillhub_http_as(slug, slug, skills_dir).await
 }
 
 /// 安装时附带的来源提示（展示名 / 本地文件夹名）。
@@ -298,6 +309,7 @@ pub struct InstallOriginHint {
     pub name: Option<String>,
 }
 
+#[cfg(test)]
 pub(crate) async fn record_after_install_in_dir(
     install_ref: &str,
     agent_id: Option<&str>,
@@ -306,6 +318,19 @@ pub(crate) async fn record_after_install_in_dir(
     scope: &str,
 ) -> Result<()> {
     let folder = skillhub_slug(install_ref)?;
+    record_after_install_for_folder_in_dir(install_ref, agent_id, hint, skills_dir, scope, &folder)
+        .await
+}
+
+async fn record_after_install_for_folder_in_dir(
+    install_ref: &str,
+    agent_id: Option<&str>,
+    hint: &InstallOriginHint,
+    skills_dir: &Path,
+    scope: &str,
+    folder: &str,
+) -> Result<()> {
+    validate_path_component(folder, "skill folder")?;
 
     let name = hint
         .name
@@ -313,15 +338,15 @@ pub(crate) async fn record_after_install_in_dir(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| folder.clone());
+        .unwrap_or_else(|| folder.to_string());
 
     let normalized_agent = normalize_agent_id(agent_id);
-    let existing = find_origin(Some(&normalized_agent), scope, &folder)?;
+    let existing = find_origin(Some(&normalized_agent), scope, folder)?;
     let now = chrono::Utc::now().timestamp();
     let installed_at = existing.as_ref().map(|r| r.installed_at).unwrap_or(now);
     let is_update = existing.is_some();
 
-    let content_digest = match skill_content_digest(&skills_dir.join(&folder)) {
+    let content_digest = match skill_content_digest(&skills_dir.join(folder)) {
         Ok(digest) => Some(digest),
         Err(e) => {
             tracing::debug!(
@@ -334,7 +359,7 @@ pub(crate) async fn record_after_install_in_dir(
     };
 
     upsert_origin(SkillOriginRecord {
-        folder: folder.clone(),
+        folder: folder.to_string(),
         skill_id: existing.as_ref().and_then(|record| record.skill_id.clone()),
         name,
         store: "skillhub".to_string(),
@@ -352,7 +377,7 @@ pub(crate) async fn record_after_install_in_dir(
         content_digest,
     })?;
 
-    fill_origin_remote_baseline(Some(&normalized_agent), scope, &folder).await
+    fill_origin_remote_baseline(Some(&normalized_agent), scope, folder).await
 }
 
 /// 按个人或项目作用域安装在线 Skill。
@@ -364,7 +389,28 @@ pub async fn install_from_ref_scoped(
     project_root: Option<&Path>,
 ) -> Result<String> {
     let skills_dir = scoped_skills_dir(scope, project_root)?;
-    install_from_ref_into(install_ref, agent_id, hint, skills_dir, scope).await
+    install_from_ref_into(install_ref, agent_id, hint, skills_dir, scope, None).await
+}
+
+/// 从 SkillHub 更新已有本地目录；远程 slug 与本地 folder 可不同。
+pub(crate) async fn install_from_ref_scoped_as(
+    install_ref: &str,
+    agent_id: Option<&str>,
+    hint: Option<InstallOriginHint>,
+    scope: &str,
+    project_root: Option<&Path>,
+    target_folder: &str,
+) -> Result<String> {
+    let skills_dir = scoped_skills_dir(scope, project_root)?;
+    install_from_ref_into(
+        install_ref,
+        agent_id,
+        hint,
+        skills_dir,
+        scope,
+        Some(target_folder),
+    )
+    .await
 }
 
 async fn install_from_ref_into(
@@ -373,15 +419,26 @@ async fn install_from_ref_into(
     hint: Option<InstallOriginHint>,
     skills_dir: PathBuf,
     scope: &str,
+    target_folder: Option<&str>,
 ) -> Result<String> {
     let hint = hint.unwrap_or_default();
     if !is_skillhub_http_ref(install_ref) {
         bail!("仅支持 SkillHub 安装引用: {install_ref}");
     }
     let slug = skillhub_slug(install_ref)?;
-    let result = install_skillhub_http(&slug, &skills_dir).await?;
+    let target_folder = target_folder.unwrap_or(&slug);
+    validate_path_component(target_folder, "skill folder")?;
+    let result = install_skillhub_http_as(&slug, target_folder, &skills_dir).await?;
 
-    record_after_install_in_dir(install_ref, agent_id, &hint, &skills_dir, scope).await?;
+    record_after_install_for_folder_in_dir(
+        install_ref,
+        agent_id,
+        &hint,
+        &skills_dir,
+        scope,
+        target_folder,
+    )
+    .await?;
 
     Ok(result)
 }

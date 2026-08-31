@@ -71,12 +71,12 @@ pub use models::{
     InstalledSkill, SkillBundle, SkillFileEntry, SkillUpdateCheckResult, SkillUpdateItemResult,
     SkillUpdatePreview, SkillUpdateStatus, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
 };
-pub use origins::ensure_bundled_skillhub_origins;
+pub use origins::ensure_known_skillhub_origins;
 pub use preview::preview_skill_update;
 pub use registry::SkillRegistry;
 pub use seed::{
-    seed_bundled_into, seed_bundled_skills, BundledSkillHubSource, SeedReport,
-    BUNDLED_SKILLHUB_SOURCES, BUNDLED_SKILLS,
+    seed_bundled_into, seed_bundled_skills, KnownSkillHubSource, SeedReport, BUNDLED_SKILLS,
+    KNOWN_SKILLHUB_SOURCES,
 };
 pub use skill::{LoadedSkill, SkillMetadata};
 pub use snapshots::{
