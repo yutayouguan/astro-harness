@@ -1139,20 +1139,17 @@ html[data-theme="dark"] .settings-overlay-panel {
   min-width: 180px;
   padding: 4px;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
-  background: var(--composer-bg, #fff);
-  box-shadow:
-    0 8px 28px rgba(15, 23, 42, 0.14),
-    0 2px 6px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  border: 1px solid var(--titlebar-menu-border);
+  background: var(--titlebar-menu-bg);
+  box-shadow: var(--titlebar-menu-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
 }
 
 html[data-theme="dark"] .project-context-menu {
-  background: color-mix(in srgb, var(--glass-fill, #1a1625) 92%, transparent);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow:
-    0 10px 32px rgba(0, 0, 0, 0.45),
-    0 2px 8px rgba(0, 0, 0, 0.3);
+  background: var(--titlebar-menu-bg);
+  border-color: var(--titlebar-menu-border);
+  box-shadow: var(--titlebar-menu-shadow);
 }
 
 .project-context-menu-item {

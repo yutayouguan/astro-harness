@@ -25,6 +25,13 @@ html[data-theme="dark"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.09);
   --menu-overlay-blur: blur(calc(28px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.35));
+  --titlebar-menu-bg: var(--composer-bg, rgba(12, 10, 24, 0.42));
+  --titlebar-menu-border: rgba(255, 255, 255, 0.1);
+  --titlebar-menu-shadow:
+    0 10px 32px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+  --titlebar-menu-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
 }
 
 html[data-theme="light"] {
@@ -55,4 +62,11 @@ html[data-theme="light"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
   --menu-overlay-blur: blur(calc(28px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.35));
+  --titlebar-menu-bg: var(--composer-bg, #fff);
+  --titlebar-menu-border: color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  --titlebar-menu-shadow:
+    0 8px 28px rgba(15, 23, 42, 0.14),
+    0 2px 6px rgba(15, 23, 42, 0.06);
+  --titlebar-menu-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
 }

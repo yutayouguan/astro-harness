@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { Check } from "lucide-react";
 import {
   ChevronDown as ChevronDownData,
@@ -263,10 +264,10 @@ export default function ModelPicker({
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: globalThis.MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) {
-        setOpen(false);
-        setEditing(null);
-      }
+      const target = e.target as Node;
+      if (ref.current?.contains(target) || flyoutRef.current?.contains(target)) return;
+      setOpen(false);
+      setEditing(null);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -277,15 +278,12 @@ export default function ModelPicker({
     anchorRef: ref,
     popoverRef: flyoutRef,
     sizeKey: `${editing ? `${editing.providerId}:${editing.modelId}` : ""}:${options.length}`,
-    mode: "relative",
+    mode: "fixed",
     preferAlign: "end",
     placement: "below",
     gap: 8,
   });
-  // 仅水平钳制；竖直仍用 CSS top: calc(100% + 8px)
-  const flyoutStyle: CSSProperties | undefined = clampedStyle
-    ? { left: clampedStyle.left, right: "auto" }
-    : undefined;
+  const flyoutStyle: CSSProperties = clampedStyle ?? { visibility: "hidden" };
 
   const grouped = useMemo(() => {
     const map = new Map<
@@ -455,7 +453,7 @@ export default function ModelPicker({
         />
       </button>
 
-      {open && (
+      {open && typeof document !== "undefined" ? createPortal(
         <div
           ref={flyoutRef}
           className={`model-picker-flyout ${editing ? "has-edit" : ""}`}
@@ -712,8 +710,9 @@ export default function ModelPicker({
               ) : null}
             </div>
           ) : null}
-        </div>
-      )}
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 }

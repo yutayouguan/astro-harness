@@ -10,6 +10,8 @@ const unifiedColorUrl = new URL(
 const titleUrl = new URL("../../components/chat/ConversationTitle.tsx", import.meta.url);
 const tipsUrl = new URL("../../hooks/ui/useBeautifyTips.ts", import.meta.url);
 const appUrl = new URL("../../App.tsx", import.meta.url);
+const modelPickerUrl = new URL("../../components/agents/ModelPicker.tsx", import.meta.url);
+const projectStylesUrl = new URL("../../styles/features/shell/layout/projects.css", import.meta.url);
 
 test("conversation title truncates and only exposes its full text when overflowing", async () => {
   const [css, source, tips] = await Promise.all([
@@ -27,13 +29,13 @@ test("conversation title truncates and only exposes its full text when overflowi
   assert.match(tips, /showFor\(el, true\)/);
 });
 
-test("header tool groups reuse the assistant answer surface recipe", async () => {
+test("header tool groups reuse the titlebar session-menu surface recipe", async () => {
   const css = await readFile(cssUrl, "utf8");
   const expectedSurface = [
-    "background: var(--glass-layer, var(--glass-panel));",
-    "border: 0.5px solid var(--glass-edge);",
-    "box-shadow: var(--shadow-card), var(--glass-rim);",
-    "backdrop-filter: var(--backdrop-glass);",
+    "background: var(--titlebar-menu-bg);",
+    "border: 1px solid var(--titlebar-menu-border);",
+    "box-shadow: var(--titlebar-menu-shadow);",
+    "backdrop-filter: var(--titlebar-menu-blur);",
   ];
 
   for (const selector of [".chat-header-tools", ".model-picker-trigger"]) {
@@ -59,17 +61,38 @@ test("compact header controls share the 32px height contract", async () => {
   assert.match(css, /\.header-icon-btn\s*\{[\s\S]*?width:\s*28px;[\s\S]*?height:\s*28px;/);
 });
 
-test("model picker panel shares the AI answer context-menu surface", async () => {
-  const css = await readFile(cssUrl, "utf8");
+test("model picker panel shares the titlebar session-menu surface", async () => {
+  const [css, projectStyles] = await Promise.all([
+    readFile(cssUrl, "utf8"),
+    readFile(projectStylesUrl, "utf8"),
+  ]);
   const panel = css.match(
     /\.model-picker-panel\s*\{(?<body>[\s\S]*?)\n\}/,
   )?.groups?.body;
+  const titlebarMenu = projectStyles.match(
+    /\.project-context-menu\s*\{(?<body>[\s\S]*?)\n\}/,
+  )?.groups?.body;
 
   assert.ok(panel, "missing model picker panel styles");
-  assert.match(panel, /background:\s*var\(--menu-overlay-bg\);/);
-  assert.match(panel, /border:\s*1px solid var\(--menu-overlay-border\);/);
-  assert.match(panel, /box-shadow:\s*var\(--menu-overlay-shadow\);/);
-  assert.match(panel, /backdrop-filter:\s*var\(--menu-overlay-blur\);/);
+  assert.ok(titlebarMenu, "missing titlebar session menu styles");
+  for (const declaration of [
+    "background: var(--titlebar-menu-bg);",
+    "border: 1px solid var(--titlebar-menu-border);",
+    "box-shadow: var(--titlebar-menu-shadow);",
+    "backdrop-filter: var(--titlebar-menu-blur);",
+  ]) {
+    assert.ok(panel.includes(declaration), `model picker is missing ${declaration}`);
+    assert.ok(titlebarMenu.includes(declaration), `titlebar menu is missing ${declaration}`);
+  }
+});
+
+test("model picker flyout portals beyond the frosted header compositing layer", async () => {
+  const source = await readFile(modelPickerUrl, "utf8");
+
+  assert.match(source, /import \{ createPortal \} from "react-dom";/);
+  assert.match(source, /mode:\s*"fixed"/);
+  assert.match(source, /flyoutRef\.current\?\.contains\(target\)/);
+  assert.match(source, /createPortal\([\s\S]*?document\.body/);
 });
 
 test("active header tools remain distinct from hover in light and dark themes", async () => {

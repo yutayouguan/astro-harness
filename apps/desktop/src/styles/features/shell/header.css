@@ -212,7 +212,7 @@
   background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
-/* 操作组：与状态芯片 / 模型选择器同为胶囊形态 */
+/* 操作组：沿用标题栏会话菜单的玻璃配方，与模型选择器保持一致。 */
 /* 高度与 .model-picker-trigger 保持一致，两枚胶囊在同一行才齐平。
    32 = 28(按钮) + 2*2(内边距)，改任一侧都要一起改。 */
 .chat-header-tools {
@@ -223,11 +223,11 @@
   height: 32px;
   padding: 2px 3px;
   border-radius: 999px;
-  background: var(--glass-layer, var(--glass-panel));
-  border: 0.5px solid var(--glass-edge);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: var(--backdrop-glass);
-  -webkit-backdrop-filter: var(--backdrop-glass);
+  background: var(--titlebar-menu-bg);
+  border: 1px solid var(--titlebar-menu-border);
+  box-shadow: var(--titlebar-menu-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
 }
 
 /* AgentPicker 嵌入 chat-header-tools 时去掉自带玻璃背景，融入胶囊容器 */
@@ -413,13 +413,12 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   max-width: 100%;
   min-width: 130px;
   padding: 0;
-  border: none;
   border-radius: 999px;
-  background: var(--glass-layer, var(--glass-panel));
-  border: 0.5px solid var(--glass-edge);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: var(--backdrop-glass);
-  -webkit-backdrop-filter: var(--backdrop-glass);
+  background: var(--titlebar-menu-bg);
+  border: 1px solid var(--titlebar-menu-border);
+  box-shadow: var(--titlebar-menu-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
   color: var(--ink);
   cursor: pointer;
   text-align: left;
@@ -511,10 +510,9 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .model-picker-flyout {
-  position: absolute;
-  z-index: 50;
-  top: calc(100% + 8px);
-  right: 0;
+  /* Portal 到 body，避开标题栏的 backdrop 合成层，才能真正模糊聊天内容。 */
+  position: fixed;
+  z-index: var(--z-menu, 1400);
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -535,11 +533,11 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   width: min(320px, 78vw);
   max-width: min(360px, 78vw);
   border-radius: 16px;
-  border: 1px solid var(--menu-overlay-border);
-  background: var(--menu-overlay-bg);
-  box-shadow: var(--menu-overlay-shadow);
-  backdrop-filter: var(--menu-overlay-blur);
-  -webkit-backdrop-filter: var(--menu-overlay-blur);
+  border: 1px solid var(--titlebar-menu-border);
+  background: var(--titlebar-menu-bg);
+  box-shadow: var(--titlebar-menu-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
   overflow: hidden;
   isolation: isolate;
 }
@@ -1094,7 +1092,7 @@ html[data-theme="dark"] .model-picker-group + .model-picker-group {
 }
 
 html[data-theme="dark"] .model-picker-panel {
-  border-color: var(--menu-overlay-border);
+  border-color: var(--titlebar-menu-border);
 }
 
 html[data-theme="dark"] .model-picker-globals,
