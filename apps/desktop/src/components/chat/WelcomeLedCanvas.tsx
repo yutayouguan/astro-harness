@@ -238,5 +238,37 @@ export function WelcomeLedCanvas() {
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="chat-welcome-led-canvas" aria-hidden />;
+  return (
+    <>
+      <canvas ref={canvasRef} className="chat-welcome-led-canvas" aria-hidden />
+      <svg
+        className="chat-welcome-led-fallback"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden
+      >
+        <defs>
+          <linearGradient id="welcome-led-edge" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#f8fbff" />
+            <stop offset="0.36" stopColor="#5799ff" />
+            <stop offset="0.68" stopColor="#9b57ff" />
+            <stop offset="1" stopColor="#20d3ec" />
+          </linearGradient>
+          <radialGradient id="welcome-led-floor">
+            <stop offset="0" stopColor="#739dff" stopOpacity="0.34" />
+            <stop offset="0.5" stopColor="#7c4dff" stopOpacity="0.12" />
+            <stop offset="1" stopColor="#142d56" stopOpacity="0" />
+          </radialGradient>
+          <filter id="welcome-led-blur" x="-120%" y="-120%" width="340%" height="340%">
+            <feGaussianBlur stdDeviation="4" />
+          </filter>
+        </defs>
+        <ellipse className="chat-welcome-led-floor" cx="50" cy="67" rx="34" ry="18" />
+        <path className="chat-welcome-led-halo" d="M 50 21 L 29 62 L 71 62 Z" pathLength="1" />
+        <path className="chat-welcome-led-edge" d="M 50 21 L 29 62 L 71 62 Z" pathLength="1" />
+        <path className="chat-welcome-led-dots" d="M 50 21 L 29 62 L 71 62 Z" pathLength="1" />
+        <path className="chat-welcome-led-body" d="M 50 22 L 30 61 L 70 61 Z" />
+      </svg>
+    </>
+  );
 }

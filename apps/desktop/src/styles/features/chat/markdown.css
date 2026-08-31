@@ -3282,6 +3282,70 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
   opacity: 0.92;
 }
 
+.chat-welcome-led-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0.94;
+  filter: saturate(1.08);
+  transition: opacity 420ms ease;
+}
+
+.chat-welcome-led-floor {
+  fill: url("#welcome-led-floor");
+  transform-origin: 50px 67px;
+  animation: welcome-led-floor-breathe 5.2s ease-in-out infinite;
+}
+
+.chat-welcome-led-halo,
+.chat-welcome-led-edge,
+.chat-welcome-led-dots {
+  fill: none;
+  stroke: url("#welcome-led-edge");
+  stroke-linejoin: round;
+}
+
+.chat-welcome-led-halo {
+  stroke-width: 4.2;
+  opacity: 0.62;
+  filter: url("#welcome-led-blur");
+}
+
+.chat-welcome-led-edge {
+  stroke-width: 0.72;
+  opacity: 0.96;
+}
+
+.chat-welcome-led-dots {
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-dasharray: 0.008 0.022;
+  animation: welcome-led-dots-travel 7s linear infinite;
+}
+
+.chat-welcome-led-body {
+  fill: color-mix(in srgb, var(--shell-bg) 88%, #030712);
+  opacity: 0.82;
+}
+
+.chat-welcome-led-canvas[data-ready="true"] + .chat-welcome-led-fallback {
+  opacity: 0;
+}
+
+@keyframes welcome-led-dots-travel {
+  to { stroke-dashoffset: -1; }
+}
+
+@keyframes welcome-led-floor-breathe {
+  50% {
+    opacity: 0.72;
+    transform: scale(1.08);
+  }
+}
+
 .chat-welcome-hero:has(.chat-welcome-led-canvas[data-ready="true"]) .chat-welcome-orb {
   opacity: 0.18;
 }
@@ -3292,6 +3356,11 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
 
 html[data-theme="dark"] .chat-welcome-led-canvas[data-ready="true"] {
   opacity: 1;
+}
+
+html[data-theme="dark"] .chat-welcome-led-body {
+  fill: #02040a;
+  opacity: 0.96;
 }
 
 .chat-welcome-particles {
@@ -4344,6 +4413,13 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   }
 
   .chat-welcome-led-canvas {
+    transition: none;
+  }
+
+  .chat-welcome-led-fallback,
+  .chat-welcome-led-floor,
+  .chat-welcome-led-dots {
+    animation: none;
     transition: none;
   }
 }

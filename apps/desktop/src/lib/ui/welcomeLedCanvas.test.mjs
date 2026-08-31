@@ -28,6 +28,8 @@ test("LED backdrop follows pointer and respects reduced motion and fallback", ()
   assert.match(canvas, /prefers-reduced-motion: reduce/);
   assert.match(canvas, /frame\(gpu, \(currentFrame\) => draw\(currentFrame, 0\)\)/);
   assert.match(canvas, /canvas\.dataset\.ready = "false"/);
-  assert.match(styles, /\.chat-welcome-led-canvas\[data-ready="true"\]/);
+  assert.match(canvas, /className="chat-welcome-led-fallback"/);
+  assert.match(styles, /\.chat-welcome-led-canvas\[data-ready="true"\] \+ \.chat-welcome-led-fallback/);
+  assert.match(styles, /@keyframes welcome-led-dots-travel/);
   assert.match(styles, /\.chat-welcome-orb/);
 });
