@@ -53,6 +53,12 @@ export type ChatActivityStatus =
   | "partial"
   | "error"
   | "interrupted";
+export type ChatTurnStatus =
+  | "waiting"
+  | "running"
+  | "done"
+  | "error"
+  | "interrupted";
 
 /** 助手气泡旁的活动记录 */
 export type ChatActivity = {
@@ -103,6 +109,8 @@ export type PendingInterrupt = {
   reason: string;
   message?: string;
   responseSchema?: unknown;
+  /** 被暂停的工具调用；用于把活动行切换为“等待”状态。 */
+  toolCallId?: string;
   /** 所属助手消息 id */
   assistantMessageId?: string;
 };
@@ -147,6 +155,8 @@ export type ChatMessage = {
    */
   tokensPerSec?: number;
   error?: boolean;
+  /** 当前助手回合的终态，供思考与过程摘要展示。 */
+  turnStatus?: ChatTurnStatus;
   attachments?: ChatAttachment[];
   activities?: ChatActivity[];
   /** Anthropic citations（引用信息） */

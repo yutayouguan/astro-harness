@@ -90,7 +90,11 @@ test("chat header shares composer glass while messages scroll underneath", () =>
     header,
     /background:[\s\S]*var\(--chat-header-surface-sheen\)[\s\S]*var\(--chat-header-surface-base\);/,
   );
-  assert.match(header, /border:\s*0\.75px solid var\(--glass-edge\);/);
+  assert.match(header, /border:\s*0;/);
+  assert.match(header, /border-bottom:\s*0\.5px solid var\(--glass-edge\);/);
+  assert.doesNotMatch(header, /border-top:/);
+  assert.doesNotMatch(header, /border-left:/);
+  assert.doesNotMatch(header, /border-right:/);
   assert.match(header, /box-shadow:[\s\S]*var\(--glass-rim\)/);
   assert.match(
     header,
@@ -147,7 +151,7 @@ test("right-side chat surfaces share one flush square glass material", () => {
   assert.match(layoutBase, /--chat-dock-inset:\s*0px;/);
   assert.match(layoutBase, /--chat-dock-radius:\s*0px;/);
   assert.match(layoutBase, /--chat-workbench-radius:\s*18px;/);
-  assert.match(layoutBase, /--chat-dock-surface-border:/);
+  assert.match(layoutBase, /--chat-dock-surface-border:\s*0\.5px solid/);
   assert.match(layoutBase, /--chat-dock-surface-background:/);
   assert.match(layoutBase, /--chat-dock-surface-shadow:/);
   assert.match(layoutBase, /--chat-dock-surface-filter:/);
@@ -191,7 +195,7 @@ test("project files dock animates layout in both directions", () => {
 
   assert.ok(openPanel, "missing expanded project files panel rule");
   assert.match(openPanel, /flex-basis:\s*min\(var\(--project-files-width, 264px\), 42%\);/);
-  assert.match(openPanel, /border-width:\s*1px;/);
+  assert.match(openPanel, /border-width:\s*0\.5px;/);
   assert.match(openPanel, /visibility:\s*visible;/);
   assert.match(openPanel, /pointer-events:\s*auto;/);
   assert.match(projectFilesPanel, /new ResizeObserver\(reportRenderedWidth\)/);

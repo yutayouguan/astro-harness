@@ -106,7 +106,10 @@ mod tests {
         assert!(dir.path().join("skills/aihot/SKILL.md").is_file());
         assert!(dir.path().join("skills/create-agent/SKILL.md").is_file());
         assert!(dir.path().join("skills/creative-media/SKILL.md").is_file());
-        assert!(dir.path().join("skills/storyboard-video/SKILL.md").is_file());
+        assert!(dir
+            .path()
+            .join("skills/storyboard-video/SKILL.md")
+            .is_file());
         let body = fs::read_to_string(dir.path().join("skills/create-agent/SKILL.md")).unwrap();
         assert!(body.contains("create-agent"));
         assert!(body.contains("astro_bundled_rev:"));
@@ -149,7 +152,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let r1 = seed_bundled_into(dir.path());
         assert!(r1.installed.contains(&"storyboard-video".to_string()));
-        assert!(dir.path().join("skills/storyboard-video/SKILL.md").is_file());
+        assert!(dir
+            .path()
+            .join("skills/storyboard-video/SKILL.md")
+            .is_file());
         let body = fs::read_to_string(dir.path().join("skills/storyboard-video/SKILL.md")).unwrap();
         assert!(body.contains("storyboard-video"));
         assert!(body.contains("astro_bundled_rev:"));
@@ -175,5 +181,4 @@ mod tests {
         assert!(bundled_rev_in(&body) >= 2);
         assert!(body.contains("先出图再出视频"));
     }
-
 }

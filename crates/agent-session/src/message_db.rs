@@ -28,7 +28,9 @@ pub async fn build_conversation_context(
 
     if let Some(keywords) = fts_keywords {
         for anchor_id in store.recall_message_ids(session_id, keywords, 3).await? {
-            let window = store.scroll_context_window(session_id, anchor_id, 5).await?;
+            let window = store
+                .scroll_context_window(session_id, anchor_id, 5)
+                .await?;
             context.extend(window);
         }
         context.sort_by_key(|m| m.id);

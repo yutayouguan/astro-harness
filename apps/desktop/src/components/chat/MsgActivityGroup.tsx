@@ -3,6 +3,7 @@ import { ChevronDown as ChevronDownData, ChevronUp as ChevronUpData } from "luci
 import { Layers3 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
+  activityGroupProgress,
   activityGroupSummary,
   type ActivityGroupSummary,
 } from "../../lib/chat/activityPresentation";
@@ -26,60 +27,71 @@ export default function MsgActivityGroup({
   mediaBaseDir,
 }: Props) {
   const { t } = useI18n();
-  const running = activities.some((activity) => activity.status === "running");
-  const failed = activities.some((activity) => activity.status === "error");
-  const interrupted = activities.some(
-    (activity) => activity.status === "interrupted",
-  );
+  const progress = activityGroupProgress(activities);
+  const waiting = progress.waiting > 0;
+  const running = progress.running > 0;
+  const retrying = progress.retrying > 0;
+  const failed = progress.error > 0;
+  const interrupted = progress.interrupted > 0;
+  const partial = progress.hasPartialOutcome;
+  const needsAttention =
+    waiting || running || retrying || failed || interrupted || partial;
   const [open, setOpen] = useState(
-    () => defaultOpen || running || failed || interrupted,
+    () => defaultOpen || needsAttention,
   );
 
   useEffect(() => {
     if (forcedOpen != null) {
       setOpen(forcedOpen);
-    } else if (running || failed || interrupted) {
+    } else if (needsAttention) {
       setOpen(true);
     }
-  }, [failed, forcedOpen, interrupted, running]);
+  }, [forcedOpen, needsAttention]);
 
   const actionLabel = useMemo(
     () => activityGroupSummaryLabel(activityGroupSummary(activities), t),
     [activities, t],
   );
-  const completedCount = activities.filter(
-    (activity) => activity.status === "done",
-  ).length;
-  const failedCount = activities.filter(
-    (activity) => activity.status === "error",
-  ).length;
   const parallel =
     activities.length > 1 &&
     activities.every((activity) => activity.executionMode === "parallel");
   const metadata = [
-    running || failed || interrupted
+    partial
+      ? t("chat.activityGroup.partial", {
+          completed: String(progress.done),
+          total: String(progress.total),
+        })
+      : waiting || running || retrying || failed || interrupted
       ? t("chat.activityGroup.progress", {
-          completed: String(completedCount),
-          total: String(activities.length),
+          completed: String(progress.done),
+          total: String(progress.total),
         })
       : t("chat.activityGroup.completed", { count: String(activities.length) }),
     parallel
       ? t("chat.activityGroup.parallel", { count: String(activities.length) })
       : null,
-    running
-      ? t("chat.activity.status.running")
-      : failed
-        ? t("chat.activityGroup.failed", { count: String(failedCount) })
-        : interrupted
-          ? t("chat.activity.status.interrupted")
-          : null,
+    waiting
+      ? t("chat.activityGroup.waiting", { count: String(progress.waiting) })
+      : retrying
+        ? t("chat.activityGroup.retrying", { count: String(progress.retrying) })
+        : running
+          ? t("chat.activity.status.running")
+          : failed
+            ? t("chat.activityGroup.failed", { count: String(progress.error) })
+            : interrupted
+              ? t("chat.activityGroup.interrupted", {
+                  count: String(progress.interrupted),
+                })
+              : null,
   ].filter(Boolean);
 
   return (
     <section
       className={`msg-activity-group${open ? " is-open" : ""}${
         running ? " is-running" : ""
-      }${failed ? " is-error" : ""}${
+      }${retrying ? " is-retrying" : ""}${waiting ? " is-waiting" : ""}${
+        failed ? " is-error" : ""
+      }${partial ? " is-partial" : ""}${
         interrupted ? " is-interrupted" : ""
       }`}
     >
@@ -115,7 +127,8 @@ export default function MsgActivityGroup({
               activity={activity}
               defaultOpen={
                 forcedOpen ??
-                (activity.status === "error" ||
+                (activity.status === "waiting" ||
+                  activity.status === "error" ||
                   activity.status === "interrupted")
               }
               showTimestamp={showTimestamp}

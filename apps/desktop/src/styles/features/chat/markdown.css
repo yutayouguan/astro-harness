@@ -3264,6 +3264,33 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
   );
 }
 
+.chat-welcome-led-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 700ms ease;
+  filter: saturate(1.08);
+}
+
+.chat-welcome-led-canvas[data-ready="true"] {
+  opacity: 0.92;
+}
+
+.chat-welcome-hero:has(.chat-welcome-led-canvas[data-ready="true"]) .chat-welcome-orb {
+  opacity: 0.18;
+}
+
+.chat-welcome-hero:has(.chat-welcome-led-canvas[data-ready="true"]) .chat-welcome-particles {
+  opacity: 0.24;
+}
+
+html[data-theme="dark"] .chat-welcome-led-canvas[data-ready="true"] {
+  opacity: 1;
+}
+
 .chat-welcome-particles {
   position: absolute;
   inset: -40px -20%;
@@ -4311,6 +4338,10 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 
   .chat-welcome-marquee-copy {
     display: none;
+  }
+
+  .chat-welcome-led-canvas {
+    transition: none;
   }
 }
 

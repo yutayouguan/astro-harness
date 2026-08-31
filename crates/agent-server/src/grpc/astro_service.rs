@@ -2659,8 +2659,9 @@ impl AstroService for AstroServiceImpl {
         let memory = MemoryManager::new(self.memory_dir.clone())
             .map_err(|e| Status::internal(e.to_string()))?;
         let (memory_content, user_content) = memory.prompt_content();
-        let sessions =
-            open_sessions(&self.memory_dir).await.map_err(|e| Status::internal(e.to_string()))?;
+        let sessions = open_sessions(&self.memory_dir)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
 
         let sessions = sessions
             .search_messages(&query.query, None, None, query.limit.max(1) as i64)

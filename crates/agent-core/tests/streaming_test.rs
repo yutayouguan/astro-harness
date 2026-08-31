@@ -817,7 +817,8 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
         AgentConfig::with_defaults(dir.path().to_path_buf()),
         "media-tool-session".into(),
     )
-    .await.unwrap();
+    .await
+    .unwrap();
     agent.tool_registry_mut().register_dynamic(
         types::ToolEntry {
             name: "test_media".into(),
@@ -969,7 +970,8 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
         AgentConfig::with_defaults(dir.path().to_path_buf()),
         "large-media-tool-session".into(),
     )
-    .await.unwrap();
+    .await
+    .unwrap();
     agent.tool_registry_mut().register_dynamic(
         types::ToolEntry {
             name: "test_large_media".into(),
@@ -1154,8 +1156,11 @@ fn pending_chat() -> ChatOverride {
 async fn regular_task_owns_initial_input_persistence() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let session =
-        Arc::new(AgentLoop::with_session_id(config, "regular-task-input".into()).await.unwrap());
+    let session = Arc::new(
+        AgentLoop::with_session_id(config, "regular-task-input".into())
+            .await
+            .unwrap(),
+    );
     let saw_initial_input = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let chat_fn: ChatOverride = {
         let saw_initial_input = Arc::clone(&saw_initial_input);
@@ -1217,8 +1222,11 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
     let dir = tempfile::tempdir().unwrap();
     let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
     config.max_turns = 0;
-    let session =
-        Arc::new(AgentLoop::with_session_id(config, "regular-task-prepare-error".into()).await.unwrap());
+    let session = Arc::new(
+        AgentLoop::with_session_id(config, "regular-task-prepare-error".into())
+            .await
+            .unwrap(),
+    );
     let (tx, mut rx) = tokio::sync::mpsc::channel(8);
 
     run_projected_stream(ProjectedStreamArgs {
@@ -1270,7 +1278,8 @@ async fn regular_task_prepare_error_emits_error_then_done() {
             AgentConfig::with_defaults(dir.path().to_path_buf()),
             "regular-task-prepare-error".into(),
         )
-        .await.unwrap(),
+        .await
+        .unwrap(),
     );
     let (tx, mut rx) = tokio::sync::mpsc::channel(8);
 
@@ -1315,7 +1324,9 @@ async fn regular_task_prepare_error_emits_error_then_done() {
 async fn steered_input_is_consumed_by_the_active_regular_task() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "steer-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "steer-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     session
         .record_items(vec![types::message::Message::user("initial")])
@@ -1417,7 +1428,9 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
 async fn multi_turn_emits_text_tool_result_and_usage() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "test-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "test-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
@@ -1539,7 +1552,9 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
 async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "current-thread-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "current-thread-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     session
         .record_items(vec![types::message::Message::user("call a tool")])
@@ -1608,14 +1623,16 @@ async fn cold_start_hydrates_history_from_db() {
             AgentConfig::with_defaults(path.clone()),
             "hydrate-me".into(),
         )
-        .await.unwrap();
+        .await
+        .unwrap();
         agent.ensure_session("test").await.unwrap();
         agent.start_or_steer_turn("hello", "hydrate").await.unwrap();
         agent.record_assistant_message("world").await.unwrap();
     }
 
-    let agent =
-        AgentLoop::with_session_id(AgentConfig::with_defaults(path), "hydrate-me".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(AgentConfig::with_defaults(path), "hydrate-me".into())
+        .await
+        .unwrap();
     let history = agent.clone_history().await;
     assert_eq!(history.len(), 2);
     assert_eq!(history[0].content_str(), "hello");
@@ -1637,18 +1654,22 @@ async fn cold_start_preserves_projected_user_audio_and_video_media_kinds() {
     let mut user = types::message::Message::user("inspect cold media");
     user.media = projected_media.clone();
     {
-        let store = session::SessionStore::open_sessions_dir(&path.join("data")).await.unwrap();
+        let store = session::SessionStore::open_sessions_dir(&path.join("data"))
+            .await
+            .unwrap();
         session::store::rebuild_messages_from_rollout(
             &store,
             "hydrate-media",
             &[agent_rollout::RolloutItem::ResponseItem(user)],
         )
-        .await.unwrap();
+        .await
+        .unwrap();
     }
 
     let agent =
         AgentLoop::with_session_id(AgentConfig::with_defaults(path), "hydrate-media".into())
-            .await.unwrap();
+            .await
+            .unwrap();
     let history = agent.clone_history().await;
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].media, projected_media);
@@ -1666,7 +1687,9 @@ async fn cold_start_preserves_projected_user_audio_and_video_media_kinds() {
 async fn multi_turn_persists_reasoning_and_tool_activities() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "persist-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "persist-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
@@ -1728,8 +1751,13 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
         item.unwrap();
     }
 
-    let store = session::SessionStore::open(&dir.path().join("data/state.db")).await.unwrap();
-    let hist = store.build_chat_history("persist-session", 50).await.unwrap();
+    let store = session::SessionStore::open(&dir.path().join("data/state.db"))
+        .await
+        .unwrap();
+    let hist = store
+        .build_chat_history("persist-session", 50)
+        .await
+        .unwrap();
     assert!(
         hist.iter()
             .any(|m| m.reasoning.as_deref() == Some("deep thought")),
@@ -1755,7 +1783,9 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
 async fn multi_turn_fires_post_llm_call_after_model_stream() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "completion-hook".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "completion-hook".into())
+        .await
+        .unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     let telemetry: Arc<std::sync::Mutex<Vec<::hooks::HookInput>>> =
@@ -1845,7 +1875,9 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
 async fn post_llm_call_observes_raw_candidate_before_final_transform() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "transform-llm-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "transform-llm-session".into())
+        .await
+        .unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
@@ -1914,7 +1946,9 @@ async fn post_llm_call_observes_raw_candidate_before_final_transform() {
 async fn stop_fires_at_terminal_boundary_without_disk_write() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "pre-verify-no-write".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "pre-verify-no-write".into())
+        .await
+        .unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
@@ -1970,7 +2004,9 @@ async fn stop_fires_at_terminal_boundary_without_disk_write() {
 async fn pre_verify_keep_going_retries_capped_at_two() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into())
+        .await
+        .unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent.hook_bus().register(::hooks::STOP, |_| {
@@ -2149,7 +2185,9 @@ async fn pause_control_blocks_then_cancels() {
 async fn cumulative_usage_chunks_use_last_per_round() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "usage-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "usage-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
@@ -2198,7 +2236,9 @@ async fn cumulative_usage_chunks_use_last_per_round() {
 async fn error_has_single_error_terminal_before_done() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "err-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "err-session".into())
+        .await
+        .unwrap();
     let post_api = Arc::new(std::sync::Mutex::new(None));
     let post_api_capture = Arc::clone(&post_api);
     agent
@@ -2401,7 +2441,9 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
 async fn tool_call_delta_and_memory_path() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "mem-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "mem-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
@@ -2489,7 +2531,9 @@ async fn hitl_waiting_parks_then_continues_same_run() {
 
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "hitl-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "hitl-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
@@ -2602,7 +2646,9 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
 
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "approval-allow-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "approval-allow-session".into())
+        .await
+        .unwrap();
 
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
@@ -2791,7 +2837,9 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
 
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "approval-deny-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "approval-deny-session".into())
+        .await
+        .unwrap();
 
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
@@ -2940,7 +2988,9 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let dir = tempfile::tempdir().unwrap();
     let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
     config.multi_turn = 1;
-    let agent = AgentLoop::with_session_id(config, "budget-session".into()).await.unwrap();
+    let agent = AgentLoop::with_session_id(config, "budget-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     let recorder = agent_rollout::RolloutRecorder::open(dir.path().join("budget-rollout.jsonl"))
         .await

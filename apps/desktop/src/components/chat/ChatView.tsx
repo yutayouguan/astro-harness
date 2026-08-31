@@ -74,6 +74,7 @@ import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
 import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
 import { countRunningParallel, countSettledByStatus, isParallelTaskActive } from "../../lib/chat/parallelTasks";
 import { projectCanonicalTimelineSegments } from "../../lib/chat/chatTimeline";
+import { isLiveActivityStatus } from "../../lib/chat/toolActivityStatus";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
 import TaskCompletionCelebration from "./TaskCompletionCelebration";
@@ -2558,7 +2559,7 @@ export default function ChatView({
                           steps.push({
                             key: `act-${act.id}`,
                             kind: act.kind,
-                            active: act.status === "running",
+                            active: isLiveActivityStatus(act.status),
                             activity: act,
                             node: (
                               <MsgActivity
@@ -2605,6 +2606,17 @@ export default function ChatView({
                           answerLayout === "timeline"
                             ? projectCanonicalTimelineSegments(m)
                             : m.segments;
+                        const reasoningOutcome: "done" | "error" | "interrupted" =
+                          m.turnStatus === "error" || m.error
+                            ? "error"
+                            : m.turnStatus === "interrupted"
+                              ? "interrupted"
+                              : "done";
+                        const lastReasoningSegmentId = timelineSegments
+                          ? [...timelineSegments]
+                              .reverse()
+                              .find((segment) => segment.type === "reasoning")?.id
+                          : undefined;
 
                         if (timelineSegments && timelineSegments.length > 0) {
                           for (const [segmentIndex, seg] of timelineSegments.entries()) {
@@ -2622,6 +2634,11 @@ export default function ChatView({
                                   <MsgReasoning
                                     reasoning={seg.text}
                                     active={active}
+                                    outcome={
+                                      !active && seg.id === lastReasoningSegmentId
+                                        ? reasoningOutcome
+                                        : "done"
+                                    }
                                     durationSec={seg.durationSec}
                                     startedAtMs={active ? seg.at : undefined}
                                     forcedOpen={forcedProcessOpen}
@@ -2678,6 +2695,7 @@ export default function ChatView({
                                 <MsgReasoning
                                   reasoning={m.reasoning}
                                   active={reasoningActive}
+                                  outcome={reasoningOutcome}
                                   durationSec={m.reasoningDurationSec}
                                   forcedOpen={forcedProcessOpen}
                                 />
@@ -2720,6 +2738,7 @@ export default function ChatView({
                                 <MsgReasoning
                                   reasoning={groupedAnswer.reasoning}
                                   active={groupedReasoningActive}
+                                  outcome={reasoningOutcome}
                                   durationSec={groupedAnswer.reasoningDurationSec}
                                   forcedOpen={forcedProcessOpen}
                                 />
@@ -2737,7 +2756,7 @@ export default function ChatView({
                               key: `grouped-activities-${m.id}`,
                               kind: visibleActivities[0]?.kind ?? "tool",
                               active: visibleActivities.some(
-                                (activity) => activity.status === "running",
+                                (activity) => isLiveActivityStatus(activity.status),
                               ),
                               node: (
                                 <MsgActivityGroup

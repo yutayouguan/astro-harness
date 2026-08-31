@@ -180,8 +180,9 @@ test("left sidebar shares the flush glass chrome contract", () => {
   assert.ok(sidebar, "missing sidebar surface rule");
   assert.match(sidebar, /--sidebar-chrome-background:/);
   assert.match(sidebar, /border-radius:\s*0;/);
-  assert.match(sidebar, /border-right:\s*1px solid color-mix\(/);
+  assert.match(sidebar, /border-right:\s*0\.5px solid color-mix\(/);
   assert.match(sidebar, /background:\s*var\(--sidebar-chrome-background\);/);
+  assert.match(sidebar, /1px 0 2px rgba\(var\(--shadow-ink\), 0\.018\);/);
   assert.match(sidebar, /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/);
   assert.ok(unifiedSidebar, "missing unified sidebar sheen override");
   assert.match(unifiedSidebar, /--sidebar-chrome-sheen:\s*linear-gradient\(/);

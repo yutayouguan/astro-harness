@@ -202,7 +202,8 @@ impl AgentBuilder {
 
     /// 构建可运行的 [`AgentLoop`] 与对应规格。
     pub async fn build(self) -> anyhow::Result<(AgentLoop, BuiltAgentSpec)> {
-        self.build_with_session_id(uuid::Uuid::new_v4().to_string()).await
+        self.build_with_session_id(uuid::Uuid::new_v4().to_string())
+            .await
     }
 
     /// 使用指定 `session_id` 构建 [`AgentLoop`] 并完成配置注入。

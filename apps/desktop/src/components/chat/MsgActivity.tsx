@@ -22,6 +22,7 @@ import {
   resolveActivityIO,
 } from "../../lib/chat/resolveActivityIO";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
+import { isLiveActivityStatus } from "../../lib/chat/toolActivityStatus";
 import { parseGeneratedMedia } from "../../lib/media/parseGeneratedMedia";
 import {
   looksLikeRelativeLocalPath,
@@ -29,9 +30,8 @@ import {
 } from "../../lib/media/resolveMediaSrc";
 import type { ChatActivity } from "../../types";
 import {
-  activityDisplayTarget,
+  activityTitlePresentation,
   activityVisualKind,
-  type ActivityVisualKind,
 } from "../../lib/chat/activityPresentation";
 import McpIcon from "../icons/McpIcon";
 import GeneratedMediaCard from "../media/GeneratedMediaCard";
@@ -92,7 +92,7 @@ export default function MsgActivity({
   const hasBody = activityHasBody(activity);
   const { input, output } = resolveActivityIO(activity);
   const mediaItems = useMemo(() => {
-    if (activity.status === "running") return [];
+    if (isLiveActivityStatus(activity.status)) return [];
     if (activity.media && activity.media.length > 0) return activity.media;
     return parseGeneratedMedia(output);
   }, [activity.status, activity.media, output]);
@@ -115,7 +115,7 @@ export default function MsgActivity({
   const canToggle = hasBody || hasMedia;
   const [open, setOpen] = useState(() => defaultOpen && canToggle);
   const [inputOpen, setInputOpen] = useState(false);
-  const running = activity.status === "running";
+  const running = isLiveActivityStatus(activity.status);
   const liveSec = useLiveElapsedSec(running, activity.at ?? null);
 
   useEffect(() => {
@@ -124,11 +124,7 @@ export default function MsgActivity({
 
   const statusClass = activity.status ? `is-${activity.status}` : "";
   const openClass = open ? "is-open" : "";
-  const displayTitle = resolveActivityTitle(
-    activity,
-    activityVisualKind(activity),
-    t,
-  );
+  const displayTitle = resolveActivityTitle(activity, t);
 
   const durationLabel = running
     ? liveSec != null
@@ -273,42 +269,11 @@ export default function MsgActivity({
 
 function resolveActivityTitle(
   activity: ChatActivity,
-  kind: ActivityVisualKind,
   t: ReturnType<typeof useI18n>["t"],
 ): string {
-  const target = activityDisplayTarget(activity);
-  const state =
-    activity.status === "done"
-      ? ".done"
-      : activity.status === "running"
-        ? ".running"
-        : "";
-  switch (kind) {
-    case "read":
-      return target
-        ? t(`chat.activity.item${state}.read`, { target })
-        : t(`chat.activity.action${state}.read`);
-    case "search":
-      return target
-        ? t(`chat.activity.item${state}.search`, { target })
-        : t(`chat.activity.action${state}.search`);
-    case "run":
-      return target
-        ? t(`chat.activity.item${state}.run`, { target })
-        : t(`chat.activity.action${state}.run`);
-    case "edit":
-      return target
-        ? t(`chat.activity.item${state}.edit`, { target })
-        : t(`chat.activity.action${state}.edit`);
-    case "browse":
-      return target
-        ? t(`chat.activity.item${state}.browse`, { target })
-        : t(`chat.activity.action${state}.browse`);
-    case "media":
-      return target
-        ? t(`chat.activity.item${state}.media`, { target })
-        : t(`chat.activity.action${state}.media`);
-    default:
-      return activity.title;
-  }
+  const presentation = activityTitlePresentation(activity);
+  if (!presentation) return activity.title;
+  return presentation.target
+    ? t(presentation.key, { target: presentation.target })
+    : t(presentation.key);
 }

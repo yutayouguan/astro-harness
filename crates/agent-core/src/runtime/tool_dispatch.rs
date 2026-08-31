@@ -577,7 +577,8 @@ mod tests {
         let session = AgentLoop::new(super::super::Config::with_defaults(
             dir.path().to_path_buf(),
         ))
-        .await.unwrap();
+        .await
+        .unwrap();
         let bus = session.hook_bus();
         bus.register(::hooks::POST_TOOL_USE, |_| {
             ::hooks::HookOutcome::Block("policy rejected output".into())

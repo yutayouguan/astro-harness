@@ -28,7 +28,9 @@ fn format_recalled_marks_anchors() {
 #[tokio::test]
 async fn dispatch_session_search_and_record_message() {
     let dir = TempDir::new().unwrap();
-    let store = SessionStore::open_sessions_dir(&dir.path().join("sessions")).await.unwrap();
+    let store = SessionStore::open_sessions_dir(&dir.path().join("sessions"))
+        .await
+        .unwrap();
     store.ensure_session("s1", "test").await.unwrap();
     store
         .append_message(NewMessage {
@@ -48,6 +50,8 @@ async fn dispatch_session_search_and_record_message() {
     assert!(out.contains("相关历史消息"));
     assert!(out.contains("alpha"));
 
-    let id = record_message(&store, "s1", "assistant", "reply").await.unwrap();
+    let id = record_message(&store, "s1", "assistant", "reply")
+        .await
+        .unwrap();
     assert!(id > 0);
 }

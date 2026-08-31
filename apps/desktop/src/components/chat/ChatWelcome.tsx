@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { Pause as PauseData, Play as PlayData } from "lucide";
 import { MorphToggleIcon } from "../icons/MorphIcon";
+import { WelcomeLedCanvas } from "./WelcomeLedCanvas";
 
 const PAUSE_ICON = PauseData;
 const PLAY_ICON = PlayData;
@@ -292,6 +293,7 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
   return (
     <div className="chat-empty chat-welcome" role="region" aria-label={brandLabel}>
       <div className="chat-welcome-hero" aria-hidden>
+        <WelcomeLedCanvas />
         <span className="chat-welcome-orb" />
         <span className="chat-welcome-orb chat-welcome-orb--soft" />
         <span className="chat-welcome-orb chat-welcome-orb--spark" />

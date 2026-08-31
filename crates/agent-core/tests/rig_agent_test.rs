@@ -221,7 +221,8 @@ async fn test_agent_builder_from_runtime_config() {
         ))
         .dynamic_context(4)
         .build()
-        .await.unwrap();
+        .await
+        .unwrap();
 
     assert_eq!(spec.temperature, 0.3);
     assert_eq!(spec.multi_turn, 5);

@@ -105,7 +105,8 @@ pub async fn maybe_generate_session_title(
 ) -> anyhow::Result<Option<TitleChangedNotify>> {
     let store = open_store(&job.memory_dir).await?;
     let meta = store
-        .get_session(&job.session_id).await?
+        .get_session(&job.session_id)
+        .await?
         .ok_or_else(|| anyhow::anyhow!("session not found"))?;
     if meta
         .title
@@ -147,7 +148,9 @@ pub async fn maybe_generate_session_title(
     }
 
     let store = open_store(&job.memory_dir).await?;
-    let wrote = store.set_session_title_if_empty(&job.session_id, &title).await?;
+    let wrote = store
+        .set_session_title_if_empty(&job.session_id, &title)
+        .await?;
     if !wrote {
         info!(
             session = %job.session_id,

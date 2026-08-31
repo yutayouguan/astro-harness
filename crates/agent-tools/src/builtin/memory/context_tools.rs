@@ -130,7 +130,10 @@ crate::submit_builtin_tool! {
     async_named: dispatch,
 }
 
-async fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+async fn dispatch_search(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
     let parsed: SearchArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("search 参数无效: {e}"))?;
     let query = parsed.query.trim();

@@ -15,6 +15,8 @@ type Props = {
   reasoning: string;
   /** 流式且尚未产出正文时视为「思考中」 */
   active: boolean;
+  /** 整轮结束时最后一段思考的结果。 */
+  outcome?: "done" | "error" | "interrupted";
   /** 思考耗时（秒），有则展示「用时 Xs」 */
   durationSec?: number;
   /** 思考起点（ms）；缺省时在 active 瞬间本地闩锁 */
@@ -26,6 +28,7 @@ type Props = {
 export default function MsgReasoning({
   reasoning,
   active,
+  outcome = "done",
   durationSec,
   startedAtMs,
   forcedOpen,
@@ -60,12 +63,22 @@ export default function MsgReasoning({
   const liveStart = active ? (startedAtMs ?? localStart) : null;
   const liveSec = useLiveElapsedSec(active, liveStart);
 
-  const label = active ? t("chat.thinking") : t("chat.thinkingDone");
+  const label = active
+    ? t("chat.thinking")
+    : outcome === "error"
+      ? t("chat.thinkingFailed")
+      : outcome === "interrupted"
+        ? t("chat.thinkingInterrupted")
+        : t("chat.thinkingDone");
   const elapsedSec = active ? liveSec : durationSec;
 
   return (
     <div
-      className={`msg-reasoning ${active ? "is-active" : ""} ${open ? "is-open" : ""}`}
+      className={`msg-reasoning ${active ? "is-active" : ""} ${
+        outcome === "error" ? "is-error" : ""
+      } ${outcome === "interrupted" ? "is-interrupted" : ""} ${
+        open ? "is-open" : ""
+      }`}
     >
       <button
         type="button"

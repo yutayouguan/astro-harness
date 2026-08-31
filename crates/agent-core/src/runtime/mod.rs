@@ -284,7 +284,8 @@ impl Session {
         agent_path: subagents::AgentPath,
     ) -> anyhow::Result<Self> {
         let memory = MemoryManager::for_agent(config.memory_dir.clone(), agent_id)?;
-        Self::from_memory_with_agent_control(config, session_id, memory, agent_control, agent_path).await
+        Self::from_memory_with_agent_control(config, session_id, memory, agent_control, agent_path)
+            .await
     }
 
     async fn from_memory(
@@ -294,14 +295,16 @@ impl Session {
     ) -> anyhow::Result<Self> {
         let graph_db_path = home::subagents_db_path(&config.memory_dir);
         let agent_control = crate::exec::agent_control_directory::AgentControlDirectory::global()
-            .open_root_at(&session_id, &graph_db_path).await?;
+            .open_root_at(&session_id, &graph_db_path)
+            .await?;
         Self::from_memory_with_agent_control(
             config,
             session_id,
             memory,
             agent_control,
             subagents::AgentPath::root(),
-        ).await
+        )
+        .await
     }
 
     async fn from_memory_with_agent_control(
@@ -314,9 +317,8 @@ impl Session {
         // 新 session / 构造路径：显式固化 MEMORY/USER snapshot（open 已对齐 live，此处钉死契约）。
         memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
-        let sessions: Box<dyn ConversationStore> = Box::new(SessionStore::open_sessions_dir(
-            &home::data_dir(&config.memory_dir),
-        ).await?);
+        let sessions: Box<dyn ConversationStore> =
+            Box::new(SessionStore::open_sessions_dir(&home::data_dir(&config.memory_dir)).await?);
         let history = hydrate_history(&*sessions, &session_id).await?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
@@ -1565,10 +1567,7 @@ impl Session {
     }
 
     /// 如果 prompt 上下文快照自上次持久化以来发生了变更，则将其持久化到 rollout。
-    pub async fn persist_prompt_context_if_changed(
-        &self,
-        prompt: &crate::prompt::PromptContract,
-    ) {
+    pub async fn persist_prompt_context_if_changed(&self, prompt: &crate::prompt::PromptContract) {
         let new_snapshot = match crate::prompt::context_state::snapshot(prompt) {
             Ok(s) => s,
             Err(err) => {
@@ -1584,11 +1583,8 @@ impl Session {
                 .filter(|m| m.role == types::message::Role::User)
                 .count();
             let previous = state.prompt_context_snapshot.as_ref();
-            let rollout_item = crate::prompt::context_state::rollout_update(
-                previous,
-                &new_snapshot,
-                before_user,
-            );
+            let rollout_item =
+                crate::prompt::context_state::rollout_update(previous, &new_snapshot, before_user);
             let model_messages =
                 crate::prompt::context_state::model_updates(previous, &new_snapshot);
             state.prompt_context_snapshot = Some(new_snapshot);
@@ -1619,8 +1615,7 @@ impl Session {
             return;
         };
         let rebased_context =
-            crate::prompt::context_state::snapshot_messages(&rebased_snapshot)
-                .unwrap_or_default();
+            crate::prompt::context_state::snapshot_messages(&rebased_snapshot).unwrap_or_default();
         {
             let mut state = self.lock_state();
             state.prompt_context_snapshot = Some(rebased_snapshot.clone());
@@ -1636,11 +1631,8 @@ impl Session {
         if let Some(bindings) = self.runtime_io.get() {
             let compacted_item =
                 RolloutItem::Compacted(serde_json::json!({ "reason": "mid-run-summary" }));
-            let world_state_item = crate::prompt::context_state::rollout_update(
-                None,
-                &rebased_snapshot,
-                0,
-            );
+            let world_state_item =
+                crate::prompt::context_state::rollout_update(None, &rebased_snapshot, 0);
             let mut items = vec![compacted_item];
             if let Some(ws) = world_state_item {
                 items.push(ws);

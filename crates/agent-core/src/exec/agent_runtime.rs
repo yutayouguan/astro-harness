@@ -249,28 +249,34 @@ impl StartTurnOwnerGuard<'_> {
             } else {
                 "[astro:system]\nThe previous agent turn was interrupted because its runtime owner was dropped."
             };
-            ensure_interrupted_history_boundary(&self.memory_dir, &self.session_id, content).await?;
+            ensure_interrupted_history_boundary(&self.memory_dir, &self.session_id, content)
+                .await?;
         }
         if needs_interrupted_event {
-            self.manager.record_terminal_event(
-                self.control,
-                &self.thread_id,
-                RunnerEvent::TurnInterrupted {
-                    turn_id: self.turn_id.clone(),
-                    reason: if close_requested {
-                        "start_turn owner dropped after runtime termination was requested".into()
-                    } else {
-                        "start_turn future cancelled or owner dropped".into()
+            self.manager
+                .record_terminal_event(
+                    self.control,
+                    &self.thread_id,
+                    RunnerEvent::TurnInterrupted {
+                        turn_id: self.turn_id.clone(),
+                        reason: if close_requested {
+                            "start_turn owner dropped after runtime termination was requested"
+                                .into()
+                        } else {
+                            "start_turn future cancelled or owner dropped".into()
+                        },
                     },
-                },
-            ).await?;
+                )
+                .await?;
         }
         if close_requested {
-            self.manager.record_terminal_event(
-                self.control,
-                &self.thread_id,
-                RunnerEvent::RuntimeTerminated,
-            ).await?;
+            self.manager
+                .record_terminal_event(
+                    self.control,
+                    &self.thread_id,
+                    RunnerEvent::RuntimeTerminated,
+                )
+                .await?;
         }
         Ok(())
     }
@@ -431,7 +437,9 @@ impl AgentRuntimeManager {
         self.pause_before_followup_start(&request).await;
         let thread_id = request.thread.thread_id.clone();
         let control = Arc::clone(&request.control);
-        let current = control.resolve_desktop_target(request.thread.canonical_path.as_str()).await?;
+        let current = control
+            .resolve_desktop_target(request.thread.canonical_path.as_str())
+            .await?;
         if current.status == AgentStatusV2::Shutdown {
             let error =
                 anyhow::anyhow!("cannot start a runtime turn for Shutdown agent {thread_id:?}");
@@ -519,13 +527,16 @@ impl AgentRuntimeManager {
             return Err(error);
         }
 
-        if let Err(error) = self.record_terminal_event(
-            &control,
-            &thread_id,
-            RunnerEvent::TurnStarted {
-                turn_id: turn_id.clone(),
-            },
-        ).await {
+        if let Err(error) = self
+            .record_terminal_event(
+                &control,
+                &thread_id,
+                RunnerEvent::TurnStarted {
+                    turn_id: turn_id.clone(),
+                },
+            )
+            .await
+        {
             self.run_before_cleanup_hook();
             let active_result = self
                 .remove_active_if_turn(&thread_id, &turn_id)
@@ -555,7 +566,10 @@ impl AgentRuntimeManager {
             interrupt: Arc::new(move || runtime_interrupt.interrupt()),
             terminate: Arc::new(move || runtime_terminate.close()),
         };
-        if let Err(error) = control.register_runtime(&thread_id, runtime_handle.clone()).await {
+        if let Err(error) = control
+            .register_runtime(&thread_id, runtime_handle.clone())
+            .await
+        {
             let error = error.context("register agent runtime handle");
             self.finish_failed_start(
                 &control,
@@ -568,7 +582,8 @@ impl AgentRuntimeManager {
                     permit,
                     terminated_tx,
                 },
-            ).await?;
+            )
+            .await?;
             return Err(error);
         }
         let mut owner_guard = StartTurnOwnerGuard {
@@ -637,7 +652,8 @@ impl AgentRuntimeManager {
                 &request.memory_dir,
                 &request.thread.session_id,
                 "[astro:system]\nThe previous agent turn was interrupted by the parent.",
-            ).await
+            )
+            .await
         } else {
             Ok(())
         };
@@ -682,12 +698,19 @@ impl AgentRuntimeManager {
         };
 
         let durable_result = match terminal_boundary_result {
-            Ok(()) => match self.record_terminal_event(&control, &thread_id, event).await {
+            Ok(()) => match self
+                .record_terminal_event(&control, &thread_id, event)
+                .await
+            {
                 Ok(_) => {
                     if interrupt.is_closed() {
-                        self.record_terminal_event(&control, &thread_id, RunnerEvent::RuntimeTerminated)
-                            .await
-                            .map(|_| ())
+                        self.record_terminal_event(
+                            &control,
+                            &thread_id,
+                            RunnerEvent::RuntimeTerminated,
+                        )
+                        .await
+                        .map(|_| ())
                     } else {
                         Ok(())
                     }
@@ -742,7 +765,10 @@ impl AgentRuntimeManager {
                     "cannot start a follow-up after agent runtime shutdown"
                 ))
             } else {
-                match control.drain_mailbox(&pending.request.thread.canonical_path).await {
+                match control
+                    .drain_mailbox(&pending.request.thread.canonical_path)
+                    .await
+                {
                     Ok(messages) if messages.is_empty() => {
                         self.complete_starting_request(&pending.request, Ok(()));
                         Ok(())
@@ -814,7 +840,9 @@ impl AgentRuntimeManager {
         thread: &AgentThreadV2,
     ) -> anyhow::Result<CloseThreadStart> {
         let thread_id = thread.thread_id.as_str();
-        let current = control.resolve_desktop_target(thread.canonical_path.as_str()).await?;
+        let current = control
+            .resolve_desktop_target(thread.canonical_path.as_str())
+            .await?;
         match self.request_close_slot(thread_id)? {
             CloseSlotAdmission::TerminationRequested(terminated) => {
                 Ok(CloseThreadStart::TerminationRequested(terminated))
@@ -835,8 +863,9 @@ impl AgentRuntimeManager {
                 // RuntimeTerminated 事件即为此空闲代际的确认，
                 // 并原子关闭其 spawn 边。重新应用到 Shutdown 状态
                 // 还会清除过期的 runtime handle。
-                if let Err(error) =
-                    control.record_runner_event(thread_id, RunnerEvent::RuntimeTerminated).await
+                if let Err(error) = control
+                    .record_runner_event(thread_id, RunnerEvent::RuntimeTerminated)
+                    .await
                 {
                     self.clear_close_intent(thread_id);
                     return Err(error);
@@ -1519,11 +1548,13 @@ async fn ensure_interrupted_history_boundary(
         .last()
         .is_some_and(|message| message.role == "user")
     {
-        sessions.append_message(session::NewMessage {
-            content: Some(content),
-            finish_reason: Some("interrupted"),
-            ..session::NewMessage::empty(session_id, "assistant")
-        }).await?;
+        sessions
+            .append_message(session::NewMessage {
+                content: Some(content),
+                finish_reason: Some("interrupted"),
+                ..session::NewMessage::empty(session_id, "assistant")
+            })
+            .await?;
     }
     Ok(())
 }
@@ -1585,7 +1616,8 @@ async fn run_request(
         &request.runtime.parent_agent_id,
         Arc::clone(&request.control),
         request.thread.canonical_path.clone(),
-    ).await?;
+    )
+    .await?;
     // Runner 事件仅选择语义边界类型。是否需要边界由
     // 水合后的持久化历史幂等推导，因此失败的修复在记录
     // TurnErrored 后仍可重试。
@@ -1902,7 +1934,9 @@ mod tests {
         dir: &tempfile::TempDir,
         task_name: &str,
     ) -> (Arc<AgentControl>, subagents::AgentThreadV2) {
-        let store = AgentGraphStore::open(dir.path().join("agents.db")).await.unwrap();
+        let store = AgentGraphStore::open(dir.path().join("agents.db"))
+            .await
+            .unwrap();
         let control = AgentControl::open(
             "root".into(),
             store,
@@ -2010,7 +2044,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Completed {
                 last_message: "finished".into()
@@ -2048,7 +2083,8 @@ mod tests {
                 },
                 false,
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         control
             .enqueue_message(
                 &AgentPath::root(),
@@ -2058,7 +2094,8 @@ mod tests {
                 },
                 false,
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         let mut run = request(
             Arc::clone(&control),
             thread.clone(),
@@ -2077,11 +2114,13 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         let user_messages = sessions
             .get_messages(&thread.session_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .filter(|message| message.role == "user")
             .collect::<Vec<_>>();
@@ -2109,10 +2148,12 @@ mod tests {
                 },
                 false,
             )
-            .await.unwrap();
-        let pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", dir.path().join("agents.db").display()),
-        )
+            .await
+            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("agents.db").display()
+        ))
         .await
         .unwrap();
         sqlx::raw_sql(
@@ -2145,7 +2186,8 @@ mod tests {
 
         let retry_thread = control
             .resolve_target(&AgentPath::root(), "worker")
-            .await.unwrap();
+            .await
+            .unwrap();
         let mut retry = request(
             Arc::clone(&control),
             retry_thread,
@@ -2163,11 +2205,13 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         let user_messages = sessions
             .get_messages(&thread.session_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .filter(|message| message.role == "user")
             .collect::<Vec<_>>();
@@ -2273,7 +2317,11 @@ mod tests {
         }
         assert!(!manager.is_running(&thread.thread_id));
         assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
-        assert!(control.status_events(&thread.thread_id).await.unwrap().is_empty());
+        assert!(control
+            .status_events(&thread.thread_id)
+            .await
+            .unwrap()
+            .is_empty());
         let permit = control.acquire_execution(&thread.thread_id).unwrap();
         drop(permit);
     }
@@ -2292,10 +2340,12 @@ mod tests {
                 max_running: 1,
             },
         )
-        .await.unwrap();
+        .await
+        .unwrap();
         let reservation = initial_control
             .reserve_spawn(&AgentPath::root(), "worker")
-            .await.unwrap();
+            .await
+            .unwrap();
         let thread = reservation.thread().clone();
         reservation.commit().await.unwrap();
         initial_control
@@ -2305,28 +2355,34 @@ mod tests {
                     turn_id: "crashed-turn".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         drop(initial_control);
 
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .ensure_session(&thread.session_id, "tauri")
-            .await.unwrap();
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("unfinished request"),
                 ..session::NewMessage::empty(&thread.session_id, "user")
             })
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let recovered = crate::exec::agent_control_directory::AgentControlDirectory::global()
             .open_root_at("root", &graph_path)
-            .await.unwrap();
+            .await
+            .unwrap();
         let recovered_thread = recovered
             .resolve_target(&AgentPath::root(), "worker")
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(recovered_thread.status, AgentStatusV2::Interrupted);
         let captured_roles = Arc::new(std::sync::Mutex::new(Vec::new()));
         AgentRuntimeManager::default()
@@ -2339,13 +2395,15 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(captured_roles
-            .lock()
-            .unwrap()
-            .starts_with(&["user".into(), "assistant".into(), "user".into()]));
+        assert!(captured_roles.lock().unwrap().starts_with(&[
+            "user".into(),
+            "assistant".into(),
+            "user".into()
+        ]));
         let roles = sessions
             .get_messages(&thread.session_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .map(|message| message.role)
             .collect::<Vec<_>>();
@@ -2366,10 +2424,12 @@ mod tests {
                 max_running: 1,
             },
         )
-        .await.unwrap();
+        .await
+        .unwrap();
         let reservation = initial_control
             .reserve_spawn(&AgentPath::root(), "worker")
-            .await.unwrap();
+            .await
+            .unwrap();
         let thread = reservation.thread().clone();
         reservation.commit().await.unwrap();
         initial_control
@@ -2379,27 +2439,30 @@ mod tests {
                     turn_id: "crashed-turn".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         drop(initial_control);
 
         let memory_dir = dir.path().join("memory");
         let state_path = memory_dir.join("data/state.db");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .ensure_session(&thread.session_id, "tauri")
-            .await.unwrap();
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("unfinished request"),
                 ..session::NewMessage::empty(&thread.session_id, "user")
             })
-            .await.unwrap();
-        let raw_pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", state_path.display()),
-        )
-        .await
-        .unwrap();
+            .await
+            .unwrap();
+        let raw_pool =
+            agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}", state_path.display()))
+                .await
+                .unwrap();
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "CREATE TRIGGER fail_interrupted_boundary
              BEFORE INSERT ON messages
@@ -2416,11 +2479,13 @@ mod tests {
 
         let recovered = crate::exec::agent_control_directory::AgentControlDirectory::global()
             .open_root_at("root", &graph_path)
-            .await.unwrap();
+            .await
+            .unwrap();
         let manager = AgentRuntimeManager::default();
         let recovered_thread = recovered
             .resolve_target(&AgentPath::root(), "worker")
-            .await.unwrap();
+            .await
+            .unwrap();
         let first_error = manager
             .start_turn(request(
                 Arc::clone(&recovered),
@@ -2457,7 +2522,8 @@ mod tests {
         let captured_roles = Arc::new(std::sync::Mutex::new(Vec::new()));
         let retry_thread = recovered
             .resolve_target(&AgentPath::root(), "worker")
-            .await.unwrap();
+            .await
+            .unwrap();
         manager
             .start_turn(request(
                 Arc::clone(&recovered),
@@ -2468,13 +2534,15 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(captured_roles
-            .lock()
-            .unwrap()
-            .starts_with(&["user".into(), "assistant".into(), "user".into()]));
+        assert!(captured_roles.lock().unwrap().starts_with(&[
+            "user".into(),
+            "assistant".into(),
+            "user".into()
+        ]));
         let roles = sessions
             .get_messages(&thread.session_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .map(|message| message.role)
             .collect::<Vec<_>>();
@@ -2605,7 +2673,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Completed {
                 last_message: "finished".into()
@@ -2647,7 +2716,8 @@ mod tests {
         assert!(matches!(
             control
                 .resolve_target(&AgentPath::root(), "broken")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Errored { .. }
         ));
@@ -2702,16 +2772,19 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(captured_roles
-            .lock()
-            .unwrap()
-            .starts_with(&["user".into(), "assistant".into(), "user".into()]));
-        let stored =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        assert!(captured_roles.lock().unwrap().starts_with(&[
+            "user".into(),
+            "assistant".into(),
+            "user".into()
+        ]));
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         assert_eq!(
             stored
                 .get_messages(&thread.session_id)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .into_iter()
                 .map(|message| message.role)
                 .collect::<Vec<_>>(),
@@ -2749,9 +2822,11 @@ mod tests {
         ));
         assert_eq!(
             session::SessionStore::open_sessions_dir(&dir.path().join("memory/data"))
-                .await.unwrap()
+                .await
+                .unwrap()
                 .get_messages(&thread.session_id)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .into_iter()
                 .map(|message| message.role)
                 .collect::<Vec<_>>(),
@@ -2778,7 +2853,8 @@ mod tests {
                 assert_eq!(
                     control
                         .resolve_target(&AgentPath::root(), "worker")
-                        .await.unwrap()
+                        .await
+                        .unwrap()
                         .status,
                     AgentStatusV2::Running
                 );
@@ -2820,7 +2896,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Running
         );
@@ -2910,7 +2987,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Running
         );
@@ -2929,7 +3007,8 @@ mod tests {
         drop(permit);
         let status_after_abort = control
             .resolve_target(&AgentPath::root(), "worker")
-            .await.unwrap()
+            .await
+            .unwrap()
             .status;
 
         assert!(!active);
@@ -2965,7 +3044,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Completed {
                 last_message: "follow-up completed".into()
@@ -2973,9 +3053,11 @@ mod tests {
         );
         assert_eq!(
             session::SessionStore::open_sessions_dir(&dir.path().join("memory/data"))
-                .await.unwrap()
+                .await
+                .unwrap()
                 .get_messages(&thread.session_id)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .into_iter()
                 .map(|message| message.role)
                 .collect::<Vec<_>>(),
@@ -3023,7 +3105,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Running
         );
@@ -3086,18 +3169,24 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
-        let pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", dir.path().join("agents.db").display())
-        ).await.unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("agents.db").display()
+        ))
+        .await
+        .unwrap();
         let (edge_state,): (String,) = agent_db::sqlx::query_as(
             "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
         )
         .bind(&thread.thread_id)
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         assert_eq!(edge_state, "closed");
         assert!(matches!(
             control
@@ -3161,7 +3250,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Interrupted
         );
@@ -3208,7 +3298,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -3258,7 +3349,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Interrupted
         );
@@ -3277,7 +3369,8 @@ mod tests {
                     turn_id: stale_turn_id.clone(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         let permit = control.acquire_execution(&thread.thread_id).unwrap();
         let stale_handle = AgentRuntimeHandle {
             interrupt: Arc::new(|| {}),
@@ -3289,11 +3382,13 @@ mod tests {
         };
         control
             .register_runtime(&thread.thread_id, stale_handle.clone())
-            .await.unwrap();
+            .await
+            .unwrap();
         control.remove_runtime(&thread.thread_id).unwrap();
         control
             .register_runtime(&thread.thread_id, replacement_handle.clone())
-            .await.unwrap();
+            .await
+            .unwrap();
         let replacement_control = Arc::new(AgentThreadControl::default());
         let (_replacement_tx, replacement_rx) = watch::channel(None);
         manager.lock_active().unwrap().insert(
@@ -3350,9 +3445,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker").await;
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session(&thread.session_id, "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session(&thread.session_id, "test")
+            .await
+            .unwrap();
         let manager = AgentRuntimeManager::default();
         let admission = manager
             .request_or_start_followup(
@@ -3467,7 +3566,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -3530,7 +3630,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -3591,7 +3692,8 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Interrupted
         );
@@ -3611,20 +3713,24 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker").await;
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .create_session("root", "tauri", None, None, None)
-            .await.unwrap();
+            .await
+            .unwrap();
         sessions
             .create_session(&thread.session_id, "tauri", None, None, Some("root"))
-            .await.unwrap();
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("first question"),
                 ..session::NewMessage::empty(&thread.session_id, "user")
             })
-            .await.unwrap();
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("calling tool"),
@@ -3633,7 +3739,8 @@ mod tests {
                 }])),
                 ..session::NewMessage::empty(&thread.session_id, "assistant")
             })
-            .await.unwrap();
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("tool result"),
@@ -3641,7 +3748,8 @@ mod tests {
                 tool_name: Some("inspect"),
                 ..session::NewMessage::empty(&thread.session_id, "tool")
             })
-            .await.unwrap();
+            .await
+            .unwrap();
         control
             .record_runner_event(
                 &thread.thread_id,
@@ -3649,7 +3757,8 @@ mod tests {
                     turn_id: "old-turn".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         control
             .record_runner_event(
                 &thread.thread_id,
@@ -3658,7 +3767,8 @@ mod tests {
                     reason: "parent interrupt".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let saw_structured_tool = Arc::new(AtomicBool::new(false));
         AgentRuntimeManager::default()

@@ -9,6 +9,7 @@ import { useI18n } from "../../i18n/LocaleContext";
 import {
   createAgentTreeRootLifecycle,
   flattenAgentTree,
+  summarizeAgentActivity,
   type AgentThreadStatus,
   type AgentTreeNode,
 } from "../../hooks/chat/subagentTree";
@@ -53,6 +54,10 @@ export default function SubagentActivityBar({
     [roots],
   );
   const visible = useMemo(() => flattenAgentTree(visibleRoots), [visibleRoots]);
+  const summary = useMemo(
+    () => summarizeAgentActivity(visibleRoots),
+    [visibleRoots],
+  );
   const running = useMemo(
     () => visible.filter((node) => node.thread.status.kind === "running"),
     [visible],
@@ -66,6 +71,23 @@ export default function SubagentActivityBar({
 
   if (!root && !showEmpty) return null;
   if (visible.length === 0 && !showEmpty) return null;
+
+  const summaryParts = [
+    summary.pending > 0
+      ? t("subagents.activity.pending", { count: String(summary.pending) })
+      : null,
+    summary.running > 0
+      ? t("subagents.activity.running", { count: String(summary.running) })
+      : null,
+    summary.errored > 0
+      ? t("subagents.activity.errored", { count: String(summary.errored) })
+      : null,
+    summary.interrupted > 0
+      ? t("subagents.activity.interrupted", {
+          count: String(summary.interrupted),
+        })
+      : null,
+  ].filter(Boolean);
 
   const stopAll = async () => {
     if (running.length === 0 || stopping) return;
@@ -139,9 +161,11 @@ export default function SubagentActivityBar({
                 ? t("subagents.noSession")
                 : visible.length === 0
                   ? t("subagents.empty")
-                  : running.length > 0
-                    ? t("subagents.activity.running", { count: String(running.length) })
-                    : t("subagents.activity.done")}
+                  : stopping
+                    ? t("subagents.activity.stopping")
+                    : summaryParts.length > 0
+                      ? summaryParts.join(" · ")
+                      : t("subagents.activity.done")}
             </small>
           </span>
           <MorphToggleIcon

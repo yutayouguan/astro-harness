@@ -15,8 +15,7 @@ fn make_ctx(
     let workspace = dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
     let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions =
-        session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
+    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data")).unwrap();
     let targets = tools::ImageGenTargets::default();
     let creds = tools::ModelCredentials::default();
     (

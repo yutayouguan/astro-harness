@@ -64,7 +64,9 @@ impl PromptContextEvent {
     }
 }
 
-pub(crate) fn snapshot_messages(snapshot: &Value) -> Option<Vec<providers::types::message::Message>> {
+pub(crate) fn snapshot_messages(
+    snapshot: &Value,
+) -> Option<Vec<providers::types::message::Message>> {
     serde_json::from_value(snapshot.get("messages")?.clone()).ok()
 }
 

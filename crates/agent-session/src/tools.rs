@@ -11,10 +11,12 @@ pub async fn record_message(
     content: &str,
 ) -> anyhow::Result<i64> {
     store.ensure_session(session_id, "tauri").await?;
-    store.append_message(NewMessage {
-        content: Some(content),
-        ..NewMessage::empty(session_id, role)
-    }).await
+    store
+        .append_message(NewMessage {
+            content: Some(content),
+            ..NewMessage::empty(session_id, role)
+        })
+        .await
 }
 
 pub async fn dispatch_session_tool(
@@ -28,7 +30,9 @@ pub async fn dispatch_session_tool(
                 .as_str()
                 .ok_or_else(|| anyhow!("缺少 query 参数"))?;
             let limit = args["limit"].as_u64().unwrap_or(5).clamp(1, 10) as usize;
-            let hits = store.search_messages(query, None, None, limit as i64).await?;
+            let hits = store
+                .search_messages(query, None, None, limit as i64)
+                .await?;
             Ok(format_session_search_hits(&hits))
         }
         other => anyhow::bail!("未知会话工具: {other}"),

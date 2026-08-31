@@ -457,10 +457,7 @@ mod tests {
     }
 
     fn assert_vendor_safe_parameters(schema: &serde_json::Value) {
-        if let Some(children) = schema
-            .get("tools")
-            .and_then(serde_json::Value::as_array)
-        {
+        if let Some(children) = schema.get("tools").and_then(serde_json::Value::as_array) {
             for child in children {
                 assert_vendor_safe_parameters(child);
             }

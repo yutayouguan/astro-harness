@@ -20,7 +20,8 @@ pub(crate) async fn new_thread() -> (
             Config::with_defaults(dir.path().to_path_buf()),
             "thread-event-test".into(),
         )
-        .await.unwrap(),
+        .await
+        .unwrap(),
     );
     let thread = AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
     (dir, session, thread, recorder_control, path)

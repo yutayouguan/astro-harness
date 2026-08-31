@@ -525,19 +525,44 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
     //    默认由 profile.supports_responses 决定；用户可通过 api_mode="responses" 强制开启。
     if responses {
         match provider {
-            "openai" => reg.upgrade_to_responses::<crate::impls::openai::OpenAI>(provider, key, base, model),
-            "deepseek" => reg.upgrade_to_responses::<crate::impls::deepseek::DeepSeek>(provider, key, base, model),
-            "azure" => reg.upgrade_to_responses::<crate::impls::azure::Azure>(provider, key, base, model),
-            "bailian" => reg.upgrade_to_responses::<crate::impls::bailian::Bailian>(provider, key, base, model),
-            "minimax" | "minmax" => reg.upgrade_to_responses::<crate::impls::minimax_chat::MiniMax>("minimax", key, base, model),
-            "mimo" => reg.upgrade_to_responses::<crate::impls::mimo::Mimo>(provider, key, base, model),
-            "ollama" => reg.upgrade_to_responses::<crate::impls::ollama::Ollama>(provider, key, base, model),
-            "openrouter" => reg.upgrade_to_responses::<crate::impls::openrouter::OpenRouter>(provider, key, base, model),
-            "zhipu" => reg.upgrade_to_responses::<crate::impls::zhipu::Zhipu>(provider, key, base, model),
-            "moonshot" => reg.upgrade_to_responses::<crate::impls::moonshot::Moonshot>(provider, key, base, model),
-            "nvidia" => reg.upgrade_to_responses::<crate::impls::nvidia::Nvidia>(provider, key, base, model),
-            "volcengine" => reg.upgrade_to_responses::<crate::impls::volcengine::Volcengine>(provider, key, base, model),
-            "hunyuan" => reg.upgrade_to_responses::<crate::impls::hunyuan::Hunyuan>(provider, key, base, model),
+            "openai" => {
+                reg.upgrade_to_responses::<crate::impls::openai::OpenAI>(provider, key, base, model)
+            }
+            "deepseek" => reg.upgrade_to_responses::<crate::impls::deepseek::DeepSeek>(
+                provider, key, base, model,
+            ),
+            "azure" => {
+                reg.upgrade_to_responses::<crate::impls::azure::Azure>(provider, key, base, model)
+            }
+            "bailian" => reg
+                .upgrade_to_responses::<crate::impls::bailian::Bailian>(provider, key, base, model),
+            "minimax" | "minmax" => reg
+                .upgrade_to_responses::<crate::impls::minimax_chat::MiniMax>(
+                    "minimax", key, base, model,
+                ),
+            "mimo" => {
+                reg.upgrade_to_responses::<crate::impls::mimo::Mimo>(provider, key, base, model)
+            }
+            "ollama" => {
+                reg.upgrade_to_responses::<crate::impls::ollama::Ollama>(provider, key, base, model)
+            }
+            "openrouter" => reg.upgrade_to_responses::<crate::impls::openrouter::OpenRouter>(
+                provider, key, base, model,
+            ),
+            "zhipu" => {
+                reg.upgrade_to_responses::<crate::impls::zhipu::Zhipu>(provider, key, base, model)
+            }
+            "moonshot" => reg.upgrade_to_responses::<crate::impls::moonshot::Moonshot>(
+                provider, key, base, model,
+            ),
+            "nvidia" => {
+                reg.upgrade_to_responses::<crate::impls::nvidia::Nvidia>(provider, key, base, model)
+            }
+            "volcengine" => reg.upgrade_to_responses::<crate::impls::volcengine::Volcengine>(
+                provider, key, base, model,
+            ),
+            "hunyuan" => reg
+                .upgrade_to_responses::<crate::impls::hunyuan::Hunyuan>(provider, key, base, model),
             _ => {}
         }
     }

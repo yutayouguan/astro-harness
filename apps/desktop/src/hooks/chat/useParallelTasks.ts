@@ -16,7 +16,12 @@ import {
 import { consumeBufferedTextReconcile } from "../../lib/chat/streamReconcile";
 import { upsertAsyncAssistantMessage } from "../../lib/chat/asyncMessage";
 import { resolveParallelTaskCompletion } from "../../lib/chat/taskCompletion";
-import { resolveToolActivityStatus } from "../../lib/chat/toolActivityStatus";
+import {
+  isLiveActivityStatus,
+  isSettledActivityStatus,
+  resolveToolActivityStatus,
+} from "../../lib/chat/toolActivityStatus";
+import { parseHitlRunFinished } from "../../lib/chat/hitlRunFinished";
 import {
   countRunningParallel,
   isParallelTaskActive,
@@ -35,7 +40,6 @@ import type {
   ChatActivity,
   ChatAttachment,
   ChatMessage,
-  PendingInterrupt,
   ProviderDto,
   UiSurface,
 } from "../../types";
@@ -377,6 +381,7 @@ export function useParallelTasks(deps: Deps) {
         role: "assistant",
         content: "",
         activities: [],
+        turnStatus: "running",
         createdAt,
         generationStartedAt: createdAt,
       },
@@ -538,35 +543,15 @@ export function useParallelTasks(deps: Deps) {
             payload.outcome_type === "hitl_waiting")
         ) {
           terminalOutcome = payload.outcome_type ?? null;
-          let interrupts: PendingInterrupt[] = [];
-          try {
-            const arr = JSON.parse(payload.interrupts_json || "[]") as unknown;
-            if (Array.isArray(arr)) {
-              interrupts = arr
-                .map((raw) => {
-                  const i = raw as Record<string, unknown>;
-                  let responseSchema: unknown;
-                  const schemaRaw = i.response_schema_json;
-                  if (typeof schemaRaw === "string" && schemaRaw.trim()) {
-                    try {
-                      responseSchema = JSON.parse(schemaRaw);
-                    } catch {
-                      responseSchema = undefined;
-                    }
-                  }
-                  return {
-                    id: String(i.id ?? ""),
-                    reason: String(i.reason ?? ""),
-                    message: typeof i.message === "string" ? i.message : undefined,
-                    responseSchema,
-                    assistantMessageId: assistantId,
-                  } satisfies PendingInterrupt;
-                })
-                .filter((i) => i.id);
-            }
-          } catch {
-            interrupts = [];
-          }
+          const { interrupts } = parseHitlRunFinished(
+            payload.interrupts_json,
+            assistantId,
+          );
+          const waitingToolIds = new Set(
+            interrupts
+              .map((interrupt) => interrupt.toolCallId)
+              .filter((id): id is string => Boolean(id)),
+          );
           setParallelTasks((prev) =>
             prev.map((t) =>
               t.id === taskId
@@ -577,7 +562,28 @@ export function useParallelTasks(deps: Deps) {
           setMessages((prev) =>
             prev.map((m) => {
               if (m.id !== assistantId) return m;
-              let next = m;
+              let next: ChatMessage = {
+                ...m,
+                turnStatus:
+                  payload.outcome_type === "interrupt"
+                    ? ("interrupted" as const)
+                    : ("waiting" as const),
+                activities: m.activities?.map((activity) => {
+                  if (
+                    payload.outcome_type === "hitl_waiting" &&
+                    waitingToolIds.has(activity.id)
+                  ) {
+                    return { ...activity, status: "waiting" as const };
+                  }
+                  if (
+                    payload.outcome_type === "interrupt" &&
+                    isLiveActivityStatus(activity.status)
+                  ) {
+                    return { ...activity, status: "interrupted" as const };
+                  }
+                  return activity;
+                }),
+              };
               const surfaces = [...(m.uiSurfaces ?? [])];
               if (surfaces.length > 0) {
                 const last = surfaces[surfaces.length - 1]!;
@@ -638,7 +644,7 @@ export function useParallelTasks(deps: Deps) {
             prev.map((m) => {
               if (m.id !== assistantId) return m;
               const existing = (m.activities ?? []).find((a) => a.id === id);
-              if (!existing || existing.status === "done") return m;
+              if (!existing || isSettledActivityStatus(existing.status)) return m;
               const output = `${existing.output ?? ""}${delta}`;
               return applyActivityUpsert(m, {
                 ...existing,
@@ -672,6 +678,12 @@ export function useParallelTasks(deps: Deps) {
               const sealed = sealOpenReasoning(
                 {
                   ...m,
+                  turnStatus:
+                    completion.status === "cancelled"
+                      ? ("interrupted" as const)
+                      : completion.status === "error"
+                        ? ("error" as const)
+                        : ("done" as const),
                   generationStartedAt: undefined,
                   generationDurationSec:
                     m.generationDurationSec ??
@@ -714,6 +726,7 @@ export function useParallelTasks(deps: Deps) {
               return sealOpenReasoning(
                 {
                   ...m,
+                  turnStatus: "error" as const,
                   content: base ? `${base}\n\n⚠️ ${errMsg}` : errMsg,
                   error: true,
                   generationStartedAt: undefined,
@@ -763,7 +776,13 @@ export function useParallelTasks(deps: Deps) {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? { ...m, content: errMsg, error: true, generationStartedAt: undefined }
+            ? {
+                ...m,
+                content: errMsg,
+                error: true,
+                turnStatus: "error",
+                generationStartedAt: undefined,
+              }
             : m,
         ),
       );

@@ -132,16 +132,15 @@ pub fn filter_schemas(
                 });
                 return (!tools.is_empty()).then_some(schema);
             }
-            let name = if schema.get("type").and_then(serde_json::Value::as_str)
-                == Some("tool_search")
-            {
-                Some("tool_search")
-            } else {
-                schema
-                    .get("name")
-                    .or_else(|| schema.pointer("/function/name"))
-                    .and_then(serde_json::Value::as_str)
-            };
+            let name =
+                if schema.get("type").and_then(serde_json::Value::as_str) == Some("tool_search") {
+                    Some("tool_search")
+                } else {
+                    schema
+                        .get("name")
+                        .or_else(|| schema.pointer("/function/name"))
+                        .and_then(serde_json::Value::as_str)
+                };
             name.is_some_and(|name| tool_visible_in_mode(mode, name))
                 .then_some(schema)
         })

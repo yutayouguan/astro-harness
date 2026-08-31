@@ -163,11 +163,8 @@ impl Registry {
         base_url: Option<&str>,
         model: &str,
     ) where
-        Ext: crate::compat::OpenAICompatible
-            + crate::traits::ProviderExt
-            + Default
-            + Copy
-            + 'static,
+        Ext:
+            crate::compat::OpenAICompatible + crate::traits::ProviderExt + Default + Copy + 'static,
     {
         use crate::traits::FromClient;
         let ext = Ext::default();
@@ -182,7 +179,6 @@ impl Registry {
             provider.replace_completion(completion);
         }
     }
-
 
     /// 注册 Gemini Native provider（仅 Chat — streamGenerateContent）。
     pub fn register_gemini_native(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {

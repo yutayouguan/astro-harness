@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ChatActivity } from "../../types.ts";
 import {
+  activityGroupProgress,
   activityGroupSummary,
   activityDisplayTarget,
+  activityTitlePresentation,
   activityVisualKind,
   distinctActivityVisualKinds,
 } from "./activityPresentation.ts";
@@ -124,4 +126,50 @@ test("summarizes the batch intent instead of exposing a raw verb list", () => {
     activityGroupSummary([activity("web_search"), activity("read_file")]),
     "research",
   );
+});
+
+test("summarizes live and partial group progress", () => {
+  const activities = [
+    { ...activity("read_file"), status: "done" as const },
+    { ...activity("exec_command"), status: "retrying" as const },
+    { ...activity("apply_patch"), status: "error" as const },
+  ];
+  assert.deepEqual(activityGroupProgress(activities), {
+    total: 3,
+    waiting: 0,
+    running: 0,
+    retrying: 1,
+    done: 1,
+    partial: 0,
+    error: 1,
+    interrupted: 0,
+    resolved: 2,
+    hasPartialOutcome: true,
+  });
+});
+
+test("selects semantic title keys for all seven activity states", () => {
+  const states = [
+    "waiting",
+    "running",
+    "retrying",
+    "done",
+    "partial",
+    "error",
+    "interrupted",
+  ] as const;
+  assert.deepEqual(
+    states.map((status) =>
+      activityTitlePresentation({
+        ...activity("exec_command"),
+        input: '{"cmd":"npm test"}',
+        status,
+      }),
+    ),
+    states.map((status) => ({
+      key: `chat.activity.item.${status}.run`,
+      target: "npm test",
+    })),
+  );
+  assert.equal(activityTitlePresentation(activity("custom_tool")), null);
 });

@@ -127,11 +127,13 @@ async fn apply_session_outcome(
     match outcome {
         SessionRunOutcome::Success { output } => {
             let summary = summary_from_output(output);
-            db.finish_success(run_id, &summary, output, finished_at).await?;
+            db.finish_success(run_id, &summary, output, finished_at)
+                .await?;
             Ok(true)
         }
         SessionRunOutcome::Incomplete | SessionRunOutcome::NoSession => {
-            db.finish_failure(run_id, CRON_INTERRUPTED_BY_EXIT, "", finished_at).await?;
+            db.finish_failure(run_id, CRON_INTERRUPTED_BY_EXIT, "", finished_at)
+                .await?;
             Ok(true)
         }
     }
@@ -153,7 +155,9 @@ pub async fn reconcile_orphaned_runs_with_roots(
 ) -> anyhow::Result<u32> {
     let memory_dir = memory_dir.as_ref();
     let db = CronRunDb::new(cron_db_path(cron_root.as_ref())).await?;
-    let sessions = SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await.ok();
+    let sessions = SessionStore::open_sessions_dir(&home::data_dir(memory_dir))
+        .await
+        .ok();
     let finished_at = now_rfc3339();
     let mut changed = 0u32;
 
@@ -173,7 +177,8 @@ pub async fn reconcile_orphaned_runs_with_roots(
             session_run_outcome(sessions.as_ref(), row.session_id.as_deref()).await
         {
             let summary = summary_from_output(&output);
-            db.finish_success(&row.id, &summary, &output, &finished_at).await?;
+            db.finish_success(&row.id, &summary, &output, &finished_at)
+                .await?;
             changed += 1;
         }
     }
@@ -322,7 +327,9 @@ async fn execute_job_with_roots_local(
     // 与 run_agent_job / Session 共用同一 memory_dir 下的 SessionStore。
     // show_in_chat 仅影响侧栏展示；执行记录 / Tracing 始终需要 session。
     let memory_dir = default_memory_dir();
-    let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir)).await.ok();
+    let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir))
+        .await
+        .ok();
 
     if let Some(ref sid) = session_id {
         let summary = format!("定时任务 · {}", job.title);
@@ -334,16 +341,18 @@ async fn execute_job_with_roots_local(
 
     let fired_at = now_rfc3339();
     let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
-    let run_id = db.insert_running(NewCronRun {
-        job_id: job.id.clone(),
-        title: job.title.clone(),
-        agent_id: agent_id.clone(),
-        schedule: job.schedule.clone(),
-        task: job.task.clone(),
-        fired_at,
-        trigger: trigger.to_string(),
-        session_id: session_id.clone(),
-    }).await?;
+    let run_id = db
+        .insert_running(NewCronRun {
+            job_id: job.id.clone(),
+            title: job.title.clone(),
+            agent_id: agent_id.clone(),
+            schedule: job.schedule.clone(),
+            task: job.task.clone(),
+            fired_at,
+            trigger: trigger.to_string(),
+            session_id: session_id.clone(),
+        })
+        .await?;
     let _active = ActiveCronRunGuard::acquire(&run_id);
 
     if creds.api_key.trim().is_empty() {
@@ -352,9 +361,11 @@ async fn execute_job_with_roots_local(
             "未配置 API Key，无法执行定时任务",
             "",
             &now_rfc3339(),
-        ).await?;
+        )
+        .await?;
         return db
-            .get(&run_id).await?
+            .get(&run_id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"));
     }
 
@@ -390,18 +401,22 @@ async fn execute_job_with_roots_local(
         Ok(Ok((output, usage))) => {
             llm_usage = usage;
             let summary = summary_from_output(&output);
-            db.finish_success(&run_id, &summary, &output, &now_rfc3339()).await?;
+            db.finish_success(&run_id, &summary, &output, &now_rfc3339())
+                .await?;
         }
         Ok(Err(err)) => {
-            db.finish_failure(&run_id, &err.to_string(), "", &now_rfc3339()).await?;
+            db.finish_failure(&run_id, &err.to_string(), "", &now_rfc3339())
+                .await?;
         }
         Err(_) => {
-            db.finish_failure(&run_id, "执行超时（600s）", "", &now_rfc3339()).await?;
+            db.finish_failure(&run_id, "执行超时（600s）", "", &now_rfc3339())
+                .await?;
         }
     }
 
     let row = db
-        .get(&run_id).await?
+        .get(&run_id)
+        .await?
         .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"))?;
 
     if row.status == "success" {
@@ -428,7 +443,8 @@ async fn execute_job_with_roots_local(
             meta_json: Some(
                 serde_json::json!({ "title": job.title, "trigger": trigger }).to_string(),
             ),
-        }).await;
+        })
+        .await;
     }
 
     // 有真实 usage 时额外记 llm（成功或失败均尽力写，与聊天错误路径一致）
@@ -451,7 +467,8 @@ async fn execute_job_with_roots_local(
             sessions
                 .as_ref()
                 .map(|s| s as &dyn ::session::ConversationStore),
-        ).await;
+        )
+        .await;
     }
 
     Ok(row)
@@ -528,7 +545,9 @@ async fn begin_job_local(
 
     let session_id = Some(Uuid::new_v4().to_string());
     let memory_dir = default_memory_dir();
-    let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir)).await.ok();
+    let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir))
+        .await
+        .ok();
     if let Some(ref sid) = session_id {
         let summary = format!("定时任务 · {}", job.title);
         if let Some(ref store) = sessions {
@@ -539,20 +558,23 @@ async fn begin_job_local(
 
     let fired_at = now_rfc3339();
     let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
-    let run_id = db.insert_running(NewCronRun {
-        job_id: job.id.clone(),
-        title: job.title.clone(),
-        agent_id: agent_id.clone(),
-        schedule: job.schedule.clone(),
-        task: job.task.clone(),
-        fired_at,
-        trigger: trigger.to_string(),
-        session_id: session_id.clone(),
-    }).await?;
+    let run_id = db
+        .insert_running(NewCronRun {
+            job_id: job.id.clone(),
+            title: job.title.clone(),
+            agent_id: agent_id.clone(),
+            schedule: job.schedule.clone(),
+            task: job.task.clone(),
+            fired_at,
+            trigger: trigger.to_string(),
+            session_id: session_id.clone(),
+        })
+        .await?;
     // 在 complete 接手前先占住，避免 list/get 把刚插入的行当孤儿回收。
     mark_active_cron_run(&run_id);
 
-    db.get(&run_id).await?
+    db.get(&run_id)
+        .await?
         .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"))
 }
 
@@ -568,7 +590,9 @@ async fn complete_job_local(
     let _active = ActiveCronRunGuard::acquire(run_id);
     let db = CronRunDb::new(cron_db_path(cron_root)).await?;
     let memory_dir = default_memory_dir();
-    let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir)).await.ok();
+    let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir))
+        .await
+        .ok();
     let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
 
     if creds.api_key.trim().is_empty() {
@@ -577,9 +601,11 @@ async fn complete_job_local(
             "未配置 API Key，无法执行定时任务",
             "",
             &now_rfc3339(),
-        ).await?;
+        )
+        .await?;
         return db
-            .get(run_id).await?
+            .get(run_id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"));
     }
 
@@ -615,18 +641,22 @@ async fn complete_job_local(
         Ok(Ok((output, usage))) => {
             llm_usage = usage;
             let summary = summary_from_output(&output);
-            db.finish_success(run_id, &summary, &output, &now_rfc3339()).await?;
+            db.finish_success(run_id, &summary, &output, &now_rfc3339())
+                .await?;
         }
         Ok(Err(err)) => {
-            db.finish_failure(run_id, &err.to_string(), "", &now_rfc3339()).await?;
+            db.finish_failure(run_id, &err.to_string(), "", &now_rfc3339())
+                .await?;
         }
         Err(_) => {
-            db.finish_failure(run_id, "执行超时（600s）", "", &now_rfc3339()).await?;
+            db.finish_failure(run_id, "执行超时（600s）", "", &now_rfc3339())
+                .await?;
         }
     }
 
     let row = db
-        .get(run_id).await?
+        .get(run_id)
+        .await?
         .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"))?;
 
     if row.status == "success" {
@@ -653,7 +683,8 @@ async fn complete_job_local(
             meta_json: Some(
                 serde_json::json!({ "title": job.title, "trigger": trigger }).to_string(),
             ),
-        }).await;
+        })
+        .await;
     }
 
     if !llm_usage.is_empty() {
@@ -675,7 +706,8 @@ async fn complete_job_local(
             sessions
                 .as_ref()
                 .map(|s| s as &dyn ::session::ConversationStore),
-        ).await;
+        )
+        .await;
     }
 
     Ok(row)
@@ -815,7 +847,9 @@ mod tests {
         let mem_dir = TempDir::new().unwrap();
         let sessions_dir = home::data_dir(mem_dir.path());
         std::fs::create_dir_all(&sessions_dir).unwrap();
-        let store = SessionStore::open_sessions_dir(&sessions_dir).await.unwrap();
+        let store = SessionStore::open_sessions_dir(&sessions_dir)
+            .await
+            .unwrap();
         store.ensure_session("sess-ok", "cron").await.unwrap();
         store
             .append_message(NewMessage {
@@ -836,7 +870,9 @@ mod tests {
             .await
             .unwrap();
 
-        let db = CronRunDb::new(cron_dir.path().join("cron_v1.db")).await.unwrap();
+        let db = CronRunDb::new(cron_dir.path().join("cron_v1.db"))
+            .await
+            .unwrap();
         let ok_id = db
             .insert_running(NewCronRun {
                 job_id: "j1".into(),
@@ -864,7 +900,9 @@ mod tests {
             .await
             .unwrap();
 
-        let n = reconcile_orphaned_runs_with_roots(cron_dir.path(), mem_dir.path()).await.unwrap();
+        let n = reconcile_orphaned_runs_with_roots(cron_dir.path(), mem_dir.path())
+            .await
+            .unwrap();
         assert_eq!(n, 2);
         let ok = db.get(&ok_id).await.unwrap().unwrap();
         assert_eq!(ok.status, "success");
@@ -880,10 +918,14 @@ mod tests {
         let mem_dir = TempDir::new().unwrap();
         let sessions_dir = home::data_dir(mem_dir.path());
         std::fs::create_dir_all(&sessions_dir).unwrap();
-        let store = SessionStore::open_sessions_dir(&sessions_dir).await.unwrap();
+        let store = SessionStore::open_sessions_dir(&sessions_dir)
+            .await
+            .unwrap();
         store.ensure_session("sess-later", "cron").await.unwrap();
 
-        let db = CronRunDb::new(cron_dir.path().join("cron_v1.db")).await.unwrap();
+        let db = CronRunDb::new(cron_dir.path().join("cron_v1.db"))
+            .await
+            .unwrap();
         let id = db
             .insert_running(NewCronRun {
                 job_id: "j".into(),
@@ -925,7 +967,9 @@ mod tests {
             .await
             .unwrap();
 
-        let n = reconcile_orphaned_runs_with_roots(cron_dir.path(), mem_dir.path()).await.unwrap();
+        let n = reconcile_orphaned_runs_with_roots(cron_dir.path(), mem_dir.path())
+            .await
+            .unwrap();
         assert_eq!(n, 1);
         let row = db.get(&id).await.unwrap().unwrap();
         assert_eq!(row.status, "success");

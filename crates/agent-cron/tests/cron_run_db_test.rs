@@ -86,7 +86,10 @@ async fn list_running_and_failure_with_error() {
     assert_eq!(running.len(), 1);
     assert_eq!(running[0].id, running_id);
 
-    let interrupted = db.list_failure_with_error("应用退出，执行中断").await.unwrap();
+    let interrupted = db
+        .list_failure_with_error("应用退出，执行中断")
+        .await
+        .unwrap();
     assert_eq!(interrupted.len(), 1);
     assert_eq!(interrupted[0].id, fail_id);
 }

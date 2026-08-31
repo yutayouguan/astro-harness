@@ -14,12 +14,12 @@
   --sidebar-chrome-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.25));
   border: 0;
-  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  border-right: 0.5px solid color-mix(in srgb, var(--glass-edge) 62%, transparent);
   border-radius: 0;
   background: var(--sidebar-chrome-background);
   box-shadow:
     var(--glass-rim),
-    1px 0 8px rgba(var(--shadow-ink), 0.045);
+    1px 0 2px rgba(var(--shadow-ink), 0.018);
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
   font-optical-sizing: auto;
@@ -29,7 +29,7 @@
   background: var(--sidebar-chrome-background);
   box-shadow:
     var(--glass-rim),
-    1px 0 8px rgba(var(--shadow-ink), 0.045);
+    1px 0 2px rgba(var(--shadow-ink), 0.018);
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }
@@ -48,7 +48,7 @@ html[data-theme="dark"] .sidebar.is-pinned {
   background: var(--sidebar-chrome-background);
   box-shadow:
     var(--glass-rim),
-    1px 0 8px rgba(var(--shadow-ink), 0.045);
+    1px 0 2px rgba(var(--shadow-ink), 0.018);
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }

@@ -71,8 +71,9 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
             }
 
             Message::Assistant { content } => {
-                let had_any_tool_call =
-                    content.iter().any(|c| matches!(c, AssistantContent::ToolCall(_)));
+                let had_any_tool_call = content
+                    .iter()
+                    .any(|c| matches!(c, AssistantContent::ToolCall(_)));
                 for part in content {
                     if let AssistantContent::ToolCall(ToolCall {
                         id,
@@ -313,9 +314,7 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
                             .and_then(Value::as_str)
                             .filter(|input| !input.is_empty())
                             .and_then(|input| serde_json::to_string(input).ok()),
-                        Some("tool_search_call") => {
-                            item.get("arguments").map(Value::to_string)
-                        }
+                        Some("tool_search_call") => item.get("arguments").map(Value::to_string),
                         _ => item
                             .get("arguments")
                             .and_then(Value::as_str)
@@ -323,10 +322,7 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
                             .map(str::to_string),
                     };
                     if let Some(arguments) = arguments {
-                        one!(StreamChunk::ToolCallDelta {
-                            index,
-                            arguments
-                        });
+                        one!(StreamChunk::ToolCallDelta { index, arguments });
                     }
                 }
             }
@@ -532,7 +528,9 @@ mod tests {
     #[test]
     fn orphan_tool_calls_preserve_text() {
         let msgs = vec![Message::assistant(vec![
-            AssistantContent::Text { text: "analysis done".into() },
+            AssistantContent::Text {
+                text: "analysis done".into(),
+            },
             AssistantContent::ToolCall(ToolCall {
                 id: "call_orphan".into(),
                 name: "dangling".into(),

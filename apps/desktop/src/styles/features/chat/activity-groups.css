@@ -112,13 +112,21 @@
   border-bottom: 0;
 }
 
-.bubble.assistant .msg-activity-group.is-running .msg-activity-group-icon {
+.bubble.assistant
+  .msg-activity-group:is(.is-running, .is-retrying)
+  .msg-activity-group-icon {
   animation: msg-live-glow 1.8s ease-in-out infinite;
 }
 
 .bubble.assistant .msg-activity-group.is-error .msg-activity-group-icon,
 .bubble.assistant .msg-activity-group.is-error .msg-activity-group-count {
   color: var(--danger, #ef4444);
+}
+
+.bubble.assistant
+  .msg-activity-group:is(.is-waiting, .is-partial):not(.is-error)
+  :is(.msg-activity-group-icon, .msg-activity-group-count) {
+  color: var(--tone-amber, #d97706);
 }
 
 .bubble.assistant
@@ -146,7 +154,9 @@
     transition: none;
   }
 
-  .bubble.assistant .msg-activity-group.is-running .msg-activity-group-icon {
+  .bubble.assistant
+    .msg-activity-group:is(.is-running, .is-retrying)
+    .msg-activity-group-icon {
     animation: none;
   }
 }

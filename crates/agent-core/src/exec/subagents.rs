@@ -72,7 +72,8 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(
         let pending = session
             .services
             .agent_control
-            .drain_mailbox(&session.services.agent_path).await?;
+            .drain_mailbox(&session.services.agent_path)
+            .await?;
         if pending.is_empty() {
             return Ok(total);
         }
@@ -102,7 +103,8 @@ async fn drain_mailbox_batch_at_safe_boundary(
     let persisted_through = session
         .services
         .sessions
-        .get_messages(session.session_id()).await?
+        .get_messages(session.session_id())
+        .await?
         .iter()
         .filter_map(|message| {
             message
@@ -176,7 +178,9 @@ async fn drain_mailbox_batch_at_safe_boundary(
         client_message_id: None,
     };
     if !durable {
-        session.persist_turn_input(&input, Some(&marker), Some(&marker)).await?;
+        session
+            .persist_turn_input(&input, Some(&marker), Some(&marker))
+            .await?;
     }
     if session.cancel_signal().is_cancelled() {
         anyhow::bail!("agent turn interrupted after durable mailbox history write");
@@ -207,7 +211,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn mailbox_is_acked_only_after_safe_boundary_history_acceptance() {
         let temp = tempfile::tempdir().unwrap();
-        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).await.unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db"))
+            .await
+            .unwrap();
         let root = subagents::AgentControl::open(
             "root-v2".into(),
             graph.clone(),
@@ -260,7 +266,10 @@ mod tests {
         assert!(drain_mailbox_at_safe_boundary(&{ interrupted })
             .await
             .is_err());
-        assert_eq!(graph.pending_for(&thread.thread_id, 0).await.unwrap().len(), 2);
+        assert_eq!(
+            graph.pending_for(&thread.thread_id, 0).await.unwrap().len(),
+            2
+        );
 
         let retry = Session::with_session_id_for_agent_thread(
             Config::with_defaults(memory_dir),
@@ -278,7 +287,11 @@ mod tests {
                 .delivered,
             2
         );
-        assert!(graph.pending_for(&thread.thread_id, 0).await.unwrap().is_empty());
+        assert!(graph
+            .pending_for(&thread.thread_id, 0)
+            .await
+            .unwrap()
+            .is_empty());
         assert_eq!(
             drain_mailbox_at_safe_boundary(&retry)
                 .await
@@ -298,7 +311,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn mailbox_atomic_history_write_survives_cancel_and_restart() {
         let temp = tempfile::tempdir().unwrap();
-        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).await.unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db"))
+            .await
+            .unwrap();
         let root = subagents::AgentControl::open(
             "root-v2".into(),
             graph.clone(),
@@ -329,8 +344,9 @@ mod tests {
         let sequence = graph.pending_for(&thread.thread_id, 0).await.unwrap()[0].sequence;
         let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
         let memory_dir = temp.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .create_session(&thread.session_id, "tauri", None, None, None)
             .await
@@ -359,7 +375,10 @@ mod tests {
             Some(marker.as_str())
         );
         assert!(retry.clone_history().await.is_empty());
-        assert_eq!(graph.pending_for(&thread.thread_id, 0).await.unwrap().len(), 1);
+        assert_eq!(
+            graph.pending_for(&thread.thread_id, 0).await.unwrap().len(),
+            1
+        );
         drop(retry);
 
         let retry = Session::with_session_id_for_agent_thread(
@@ -380,15 +399,28 @@ mod tests {
                 .delivered,
             1
         );
-        assert!(graph.pending_for(&thread.thread_id, 0).await.unwrap().is_empty());
-        assert_eq!(sessions.get_messages(&thread.session_id).await.unwrap().len(), 1);
+        assert!(graph
+            .pending_for(&thread.thread_id, 0)
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            sessions
+                .get_messages(&thread.session_id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
         assert_eq!(retry.clone_history().await.len(), 1);
     }
 
     #[tokio::test(flavor = "current_thread")]
     async fn mailbox_recovers_a_crash_after_user_insert_before_marker_update() {
         let temp = tempfile::tempdir().unwrap();
-        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).await.unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db"))
+            .await
+            .unwrap();
         let root = subagents::AgentControl::open(
             "root-v2".into(),
             graph.clone(),
@@ -420,8 +452,9 @@ mod tests {
         let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
         let memory_dir = temp.path().join("memory");
         {
-            let sessions =
-                session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+            let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+                .await
+                .unwrap();
             sessions
                 .create_session(&thread.session_id, "tauri", None, None, None)
                 .await
@@ -457,7 +490,11 @@ mod tests {
                 .delivered,
             1
         );
-        assert!(graph.pending_for(&thread.thread_id, 0).await.unwrap().is_empty());
+        assert!(graph
+            .pending_for(&thread.thread_id, 0)
+            .await
+            .unwrap()
+            .is_empty());
         assert_eq!(
             drain_mailbox_at_safe_boundary(&retry)
                 .await
@@ -495,7 +532,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn main_steer_recovers_a_finish_only_row_with_media() {
         let temp = tempfile::tempdir().unwrap();
-        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).await.unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db"))
+            .await
+            .unwrap();
         let root = subagents::AgentControl::open(
             "root-v2".into(),
             graph.clone(),
@@ -529,8 +568,9 @@ mod tests {
         .unwrap();
         let memory_dir = temp.path().join("memory");
         {
-            let sessions =
-                session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+            let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+                .await
+                .unwrap();
             sessions
                 .create_session("root-v2", "tauri", None, None, None)
                 .await
@@ -602,7 +642,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn mailbox_retry_repairs_a_memory_only_delivery_before_ack() {
         let temp = tempfile::tempdir().unwrap();
-        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).await.unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db"))
+            .await
+            .unwrap();
         let root = subagents::AgentControl::open(
             "root-v2".into(),
             graph.clone(),
@@ -633,8 +675,9 @@ mod tests {
         let sequence = graph.pending_for(&thread.thread_id, 0).await.unwrap()[0].sequence;
         let marker = format!("agent-mailbox-through:{sequence}");
         let memory_dir = temp.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .create_session(&thread.session_id, "tauri", None, None, None)
             .await
@@ -669,8 +712,18 @@ mod tests {
                 .delivered,
             1
         );
-        assert_eq!(graph.pending_for(&thread.thread_id, 0).await.unwrap().len(), 1);
-        assert_eq!(sessions.get_messages(&thread.session_id).await.unwrap().len(), 1);
+        assert_eq!(
+            graph.pending_for(&thread.thread_id, 0).await.unwrap().len(),
+            1
+        );
+        assert_eq!(
+            sessions
+                .get_messages(&thread.session_id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
         let provider = crate::prompt::messages::to_provider_messages("", &history);
@@ -688,13 +741,18 @@ mod tests {
                 .delivered,
             0
         );
-        assert_eq!(graph.pending_for(&thread.thread_id, 0).await.unwrap().len(), 1);
+        assert_eq!(
+            graph.pending_for(&thread.thread_id, 0).await.unwrap().len(),
+            1
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
     async fn mailbox_retry_with_both_sides_present_only_acks_once() {
         let temp = tempfile::tempdir().unwrap();
-        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).await.unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db"))
+            .await
+            .unwrap();
         let root = subagents::AgentControl::open(
             "root-v2".into(),
             graph.clone(),
@@ -723,8 +781,9 @@ mod tests {
         .await
         .unwrap();
         let memory_dir = temp.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .create_session(&thread.session_id, "tauri", None, None, None)
             .await
@@ -742,9 +801,19 @@ mod tests {
         retry.set_turn_input_after_memory_write_hook(Some(Arc::new(move || cancel.cancel())));
 
         assert!(drain_mailbox_at_safe_boundary(&retry).await.is_err());
-        assert_eq!(sessions.get_messages(&thread.session_id).await.unwrap().len(), 1);
+        assert_eq!(
+            sessions
+                .get_messages(&thread.session_id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
         assert_eq!(retry.clone_history().await.len(), 1);
-        assert_eq!(graph.pending_for(&thread.thread_id, 0).await.unwrap().len(), 1);
+        assert_eq!(
+            graph.pending_for(&thread.thread_id, 0).await.unwrap().len(),
+            1
+        );
         retry.set_turn_input_after_memory_write_hook(None);
         retry.cancel_signal().reset();
 
@@ -755,8 +824,19 @@ mod tests {
                 .delivered,
             1
         );
-        assert!(graph.pending_for(&thread.thread_id, 0).await.unwrap().is_empty());
-        assert_eq!(sessions.get_messages(&thread.session_id).await.unwrap().len(), 1);
+        assert!(graph
+            .pending_for(&thread.thread_id, 0)
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            sessions
+                .get_messages(&thread.session_id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(
@@ -778,7 +858,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn main_steer_retry_repairs_db_only_delivery_with_media() {
         let temp = tempfile::tempdir().unwrap();
-        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).await.unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db"))
+            .await
+            .unwrap();
         let root = subagents::AgentControl::open(
             "root-v2".into(),
             graph.clone(),
@@ -802,8 +884,9 @@ mod tests {
         .await
         .unwrap();
         let memory_dir = temp.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .create_session("root-v2", "tauri", None, None, None)
             .await
@@ -854,7 +937,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn mailbox_waits_until_the_current_user_turn_has_an_assistant_boundary() {
         let temp = tempfile::tempdir().unwrap();
-        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).await.unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db"))
+            .await
+            .unwrap();
         let root = subagents::AgentControl::open(
             "root-v2".into(),
             graph.clone(),

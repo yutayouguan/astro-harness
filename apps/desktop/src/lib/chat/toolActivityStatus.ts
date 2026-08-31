@@ -31,3 +31,14 @@ export function resolveToolActivityStatus(
 export function isLiveActivityStatus(status: ChatActivityStatus | undefined): boolean {
   return status === "waiting" || status === "running" || status === "retrying";
 }
+
+export function isSettledActivityStatus(
+  status: ChatActivityStatus | undefined,
+): boolean {
+  return (
+    status === "done" ||
+    status === "partial" ||
+    status === "error" ||
+    status === "interrupted"
+  );
+}

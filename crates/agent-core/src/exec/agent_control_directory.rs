@@ -12,7 +12,12 @@ const DEFAULT_LIMITS: Limits = Limits {
     max_running: 8,
 };
 
-type StoreFactory = dyn Fn(&Path) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<AgentGraphStore>> + Send>> + Send + Sync;
+type StoreFactory = dyn Fn(
+        &Path,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<AgentGraphStore>> + Send>,
+    > + Send
+    + Sync;
 
 /// 进程级 AgentControl 单例目录，按 root session 去重并弱引用缓存。
 pub struct AgentControlDirectory {
@@ -67,8 +72,11 @@ impl AgentControlDirectory {
         // 在锁外执行异步操作。
         let store = (self.store_factory)(&graph_db_path).await?;
         store.cleanup_pending_reservations(root_session_id).await?;
-        store.recover_running_as_interrupted(root_session_id).await?;
-        let control = AgentControl::open(root_session_id.to_string(), store, DEFAULT_LIMITS).await?;
+        store
+            .recover_running_as_interrupted(root_session_id)
+            .await?;
+        let control =
+            AgentControl::open(root_session_id.to_string(), store, DEFAULT_LIMITS).await?;
 
         // 重新获取锁以插入（或返回并发创建的实例）。
         let mut controls = self
@@ -149,7 +157,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn returns_one_live_control_per_root_and_rebuilds_expired_weak() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("agents.db")).await.unwrap();
+        let store = AgentGraphStore::open(dir.path().join("agents.db"))
+            .await
+            .unwrap();
         let opens = Arc::new(AtomicUsize::new(0));
         let directory = directory(store, Arc::clone(&opens));
 
@@ -202,9 +212,18 @@ mod tests {
             },
         };
 
-        let first = directory.open_root_at("shared-root", &first_path).await.unwrap();
-        let first_again = directory.open_root_at("shared-root", &first_path).await.unwrap();
-        let second = directory.open_root_at("shared-root", &second_path).await.unwrap();
+        let first = directory
+            .open_root_at("shared-root", &first_path)
+            .await
+            .unwrap();
+        let first_again = directory
+            .open_root_at("shared-root", &first_path)
+            .await
+            .unwrap();
+        let second = directory
+            .open_root_at("shared-root", &second_path)
+            .await
+            .unwrap();
 
         assert!(Arc::ptr_eq(&first, &first_again));
         assert!(!Arc::ptr_eq(&first, &second));
@@ -223,7 +242,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn open_root_is_the_single_recovery_boundary() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("agents.db")).await.unwrap();
+        let store = AgentGraphStore::open(dir.path().join("agents.db"))
+            .await
+            .unwrap();
         store.ensure_root_thread("root").await.unwrap();
         store
             .reserve_thread(&ThreadReservation {
@@ -312,7 +333,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn concurrent_open_of_one_root_runs_factory_and_recovery_once() {
         let dir = tempfile::tempdir().unwrap();
-        let store = AgentGraphStore::open(dir.path().join("agents.db")).await.unwrap();
+        let store = AgentGraphStore::open(dir.path().join("agents.db"))
+            .await
+            .unwrap();
         let opens = Arc::new(AtomicUsize::new(0));
         let directory = Arc::new(directory(store, Arc::clone(&opens)));
 

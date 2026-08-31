@@ -698,7 +698,8 @@ mod tests {
             crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
             "locked-active-turn".into(),
         )
-        .await.unwrap();
+        .await
+        .unwrap();
 
         let active_turn = session.active_turn.lock().await;
         assert!(active_turn.is_none());
@@ -760,7 +761,8 @@ mod tests {
                 crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
                 "abort-task-test".into(),
             )
-            .await.unwrap(),
+            .await
+            .unwrap(),
         );
         let turn_context = session.create_turn_context("turn-abort".into()).await;
         let started = Arc::new(Notify::new());
@@ -788,7 +790,8 @@ mod tests {
                 crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
                 "install-bind-abort-race".into(),
             )
-            .await.unwrap(),
+            .await
+            .unwrap(),
         );
         let context = session
             .create_turn_context("turn-install-bind-race".into())
@@ -909,7 +912,8 @@ mod tests {
             .unwrap();
         let session = Arc::new(
             Session::with_session_id(Config::with_defaults(dir.path().to_path_buf()), name.into())
-                .await.unwrap(),
+                .await
+                .unwrap(),
         );
         let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
         (dir, session, thread)
@@ -2080,7 +2084,8 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "concurrent-spawn-admission".into(),
             )
-            .await.unwrap(),
+            .await
+            .unwrap(),
         );
         let active_turn_guard = session.active_turn.lock().await;
 

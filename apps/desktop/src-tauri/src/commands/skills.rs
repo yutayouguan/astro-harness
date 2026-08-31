@@ -109,13 +109,8 @@ pub fn preview_skill_update(
 ) -> Result<SkillUpdatePreview, String> {
     let agent = normalize_agent_id(agent_id);
     let (scope, project_root) = resolve_skill_scope(scope, project_root)?;
-    skills_preview_skill_update(
-        agent.as_deref(),
-        &scope,
-        project_root.as_deref(),
-        &folder,
-    )
-    .map_err(|e| e.to_string())
+    skills_preview_skill_update(agent.as_deref(), &scope, project_root.as_deref(), &folder)
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri 命令：update_installed_skill。

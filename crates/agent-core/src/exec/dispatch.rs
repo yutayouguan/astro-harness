@@ -177,7 +177,9 @@ impl ForkedSessionGuard {
             child.parent_session_id.as_deref() == Some(self.parent_session_id.as_str()),
             "refusing to delete child session whose fork ownership changed"
         );
-        sessions.delete_session_permanently(&self.child_session_id).await?;
+        sessions
+            .delete_session_permanently(&self.child_session_id)
+            .await?;
         self.armed = false;
         Ok(())
     }
@@ -465,7 +467,8 @@ impl DefaultAgentThreadDispatch {
         })?;
         let descriptor = self
             .control
-            .runtime_descriptor(&target.thread_id).await?
+            .runtime_descriptor(&target.thread_id)
+            .await?
             .with_context(|| {
                 format!(
                     "runtime descriptor is unavailable for {}",
@@ -497,7 +500,8 @@ impl DefaultAgentThreadDispatch {
             let ancestor = self.control.resolve_desktop_target(path.as_str()).await?;
             let ancestor_descriptor = self
                 .control
-                .runtime_descriptor(&ancestor.thread_id).await?
+                .runtime_descriptor(&ancestor.thread_id)
+                .await?
                 .with_context(|| {
                     format!("runtime descriptor is unavailable for ancestor {path}")
                 })?;
@@ -566,7 +570,8 @@ impl DefaultAgentThreadDispatch {
             &runtime.chat_targets,
             runtime.model_request.model.as_deref(),
         )?;
-        validate_recovered_runtime_setup(&material.memory_dir, &self.control, target, &runtime).await?;
+        validate_recovered_runtime_setup(&material.memory_dir, &self.control, target, &runtime)
+            .await?;
         Ok(Arc::new(StoredRuntimeRequest {
             runtime,
             memory_dir: material.memory_dir.clone(),
@@ -646,12 +651,15 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             &thread,
             &runtime,
             &thread.session_id,
-        ).await {
+        )
+        .await
+        {
             return Err(rollback_fork_error(
                 &mut forked_session,
                 "validate agent runtime setup",
                 error,
-            ).await);
+            )
+            .await);
         }
 
         let stored = Arc::new(StoredRuntimeRequest {
@@ -666,7 +674,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 &mut forked_session,
                 "register agent runtime request",
                 error,
-            ).await);
+            )
+            .await);
         }
         if let Err(error) = reservation.commit().await {
             self.runtime_requests.remove(&thread.thread_id);
@@ -674,7 +683,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 &mut forked_session,
                 "commit agent thread reservation",
                 error,
-            ).await);
+            )
+            .await);
         }
         let sessions_dir = forked_session.sessions_dir.clone();
         let child_session_id = forked_session.child_session_id.clone();
@@ -693,13 +703,10 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                             .build()
                             .map_err(anyhow::Error::from)?;
                         let graph_result = runtime
-                            .block_on(cleanup_control.finalize_unaccepted_spawn(
-                                &cleanup_thread,
-                                turn_id,
-                            ))
-                            .map_err(|error| {
-                                error.context("spawn graph and identity rollback")
-                            });
+                            .block_on(
+                                cleanup_control.finalize_unaccepted_spawn(&cleanup_thread, turn_id),
+                            )
+                            .map_err(|error| error.context("spawn graph and identity rollback"));
                         let mut owned_session = ForkedSessionGuard {
                             sessions_dir: sessions_dir.clone(),
                             child_session_id: child_session_id.clone(),
@@ -747,7 +754,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         request: ListAgentsV2Request,
     ) -> anyhow::Result<Vec<subagents::AgentThreadV2>> {
         self.control
-            .list_agents(&self.current_path, request.path_prefix.as_deref()).await
+            .list_agents(&self.current_path, request.path_prefix.as_deref())
+            .await
     }
 
     async fn send_message(
@@ -756,7 +764,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
     ) -> anyhow::Result<MessageAgentV2Result> {
         let message = self
             .control
-            .enqueue_message(&self.current_path, request, false).await?;
+            .enqueue_message(&self.current_path, request, false)
+            .await?;
         Ok(MessageAgentV2Result {
             message_id: message.message_id,
             queued: true,
@@ -770,7 +779,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
     ) -> anyhow::Result<MessageAgentV2Result> {
         let resolved = self
             .control
-            .resolve_target(&self.current_path, &request.request.target).await?;
+            .resolve_target(&self.current_path, &request.request.target)
+            .await?;
         anyhow::ensure!(
             resolved.canonical_path != AgentPath::root(),
             "follow-up tasks cannot target the root agent"
@@ -780,31 +790,35 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         if let Some(hook) = self.before_followup_atomic_hook.as_ref() {
             let _ = self
                 .control
-                .resolve_target(&self.current_path, &request.request.target).await?;
+                .resolve_target(&self.current_path, &request.request.target)
+                .await?;
             hook.entered.notify_one();
             hook.release.notified().await;
         }
-        let (message, admission) = self.control.enqueue_followup_with_admission(
-            &self.current_path,
-            request.request,
-            |target| async move {
-                let stored = match self.runtime_requests.get(&target.thread_id)? {
-                    Some(stored) => stored,
-                    None => {
-                        let recovered = self
-                            .recover_runtime_request(&target, request.runtime.as_ref())
-                            .await?;
-                        self.runtime_requests
-                            .get_or_insert(&target.thread_id, recovered)?
-                    }
-                };
-                let mut turn_request = stored.as_ref().clone();
-                turn_request.runtime.model_request.message = followup_text;
-                let run = self.run_request(target.clone(), turn_request, true);
-                self.runtime_manager
-                    .request_or_start_followup(&target.thread_id, run)
-            },
-        ).await?;
+        let (message, admission) = self
+            .control
+            .enqueue_followup_with_admission(
+                &self.current_path,
+                request.request,
+                |target| async move {
+                    let stored = match self.runtime_requests.get(&target.thread_id)? {
+                        Some(stored) => stored,
+                        None => {
+                            let recovered = self
+                                .recover_runtime_request(&target, request.runtime.as_ref())
+                                .await?;
+                            self.runtime_requests
+                                .get_or_insert(&target.thread_id, recovered)?
+                        }
+                    };
+                    let mut turn_request = stored.as_ref().clone();
+                    turn_request.runtime.model_request.message = followup_text;
+                    let run = self.run_request(target.clone(), turn_request, true);
+                    self.runtime_manager
+                        .request_or_start_followup(&target.thread_id, run)
+                },
+            )
+            .await?;
         match admission {
             FollowupAdmission::StartNow { request, result_rx } => {
                 let start_tx = request
@@ -877,7 +891,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
     ) -> anyhow::Result<InterruptAgentV2Result> {
         let target = self
             .control
-            .resolve_target(&self.current_path, &request.target).await?;
+            .resolve_target(&self.current_path, &request.target)
+            .await?;
         anyhow::ensure!(
             target.canonical_path != AgentPath::root(),
             "the root agent cannot be interrupted through model tools"
@@ -892,7 +907,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             .await?;
         let thread = self
             .control
-            .resolve_target(&self.current_path, target.canonical_path.as_str()).await?;
+            .resolve_target(&self.current_path, target.canonical_path.as_str())
+            .await?;
         Ok(InterruptAgentV2Result {
             thread,
             previous_status,
@@ -953,11 +969,9 @@ async fn fork_parent_session(
     let sessions_dir = home::data_dir(memory_dir);
     let sessions = session::SessionStore::open_sessions_dir(&sessions_dir).await?;
     let recent_turns = parse_fork_turns(fork_turns.as_deref())?;
-    sessions.fork_session_recent_turns(
-        &runtime.parent_session_id,
-        child_session_id,
-        recent_turns,
-    ).await?;
+    sessions
+        .fork_session_recent_turns(&runtime.parent_session_id, child_session_id, recent_turns)
+        .await?;
     Ok(ForkedSessionGuard {
         sessions_dir,
         child_session_id: child_session_id.to_string(),
@@ -999,7 +1013,8 @@ async fn validate_runtime_setup(
         &runtime.parent_agent_id,
         Arc::clone(control),
         thread.canonical_path.clone(),
-    ).await?;
+    )
+    .await?;
     Ok(())
 }
 
@@ -1011,7 +1026,8 @@ async fn validate_recovered_runtime_setup(
 ) -> anyhow::Result<()> {
     let sessions = session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await?;
     let stored = sessions
-        .get_session(&thread.session_id).await?
+        .get_session(&thread.session_id)
+        .await?
         .with_context(|| format!("child session {:?} is unavailable", thread.session_id))?;
     anyhow::ensure!(
         stored.parent_session_id.as_deref() == thread.parent_thread_id.as_deref(),
@@ -1166,11 +1182,9 @@ async fn finish_close_operation(
                     continue;
                 }
                 runtime_manager.clear_close_intent(&thread.thread_id);
-                return Err(close_subtree_error(
-                    control.as_ref(),
-                    &thread.canonical_path,
-                    error,
-                ).await);
+                return Err(
+                    close_subtree_error(control.as_ref(), &thread.canonical_path, error).await,
+                );
             }
         }
     }
@@ -1290,8 +1304,10 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
     ) -> anyhow::Result<AgentThreadDetailV2> {
         let control = self.control(root_session_id).await?;
         let thread = control.resolve_desktop_target(target).await?;
-        let messages = session::SessionStore::open_sessions_dir(&home::data_dir(&self.memory_dir)).await?
-            .get_messages(&thread.session_id).await?
+        let messages = session::SessionStore::open_sessions_dir(&home::data_dir(&self.memory_dir))
+            .await?
+            .get_messages(&thread.session_id)
+            .await?
             .into_iter()
             .map(|message| AgentThreadMessageV2 {
                 id: message.id,
@@ -1351,7 +1367,9 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                 runtime,
             })
             .await?;
-        control.resolve_desktop_target(target_thread.canonical_path.as_str()).await
+        control
+            .resolve_desktop_target(target_thread.canonical_path.as_str())
+            .await
     }
 
     async fn interrupt(
@@ -1369,7 +1387,9 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         self.runtime_manager
             .interrupt(&target_thread.thread_id)
             .await?;
-        let thread = control.resolve_desktop_target(target_thread.canonical_path.as_str()).await?;
+        let thread = control
+            .resolve_desktop_target(target_thread.canonical_path.as_str())
+            .await?;
         Ok(InterruptAgentV2Result {
             thread,
             previous_status,
@@ -1413,7 +1433,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                     control.as_ref(),
                     &target_thread.canonical_path,
                     "timed out waiting for in-flight agent spawn reservations",
-                ).await);
+                )
+                .await);
             }
         }
         #[cfg(test)]
@@ -1422,7 +1443,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
             hook.release.notified().await;
         }
         let mut threads = control
-            .snapshot().await?
+            .snapshot()
+            .await?
             .threads
             .into_iter()
             .filter(|thread| {
@@ -1504,7 +1526,9 @@ mod tests {
         root_thread_id: &str,
         runtime_manager: Arc<AgentRuntimeManager>,
     ) -> DefaultAgentThreadDispatch {
-        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         let control = AgentControl::open(
             root_thread_id.into(),
             store,
@@ -1514,7 +1538,8 @@ mod tests {
                 max_running: 2,
             },
         )
-        .await.unwrap();
+        .await
+        .unwrap();
         DefaultAgentThreadDispatch::for_test(
             control,
             AgentPath::root(),
@@ -1530,7 +1555,8 @@ mod tests {
         let reservation = dispatch
             .control
             .reserve_spawn(&AgentPath::root(), name)
-            .await.unwrap();
+            .await
+            .unwrap();
         let thread = reservation.thread().clone();
         reservation.commit().await.unwrap();
         thread
@@ -1816,17 +1842,20 @@ mod tests {
         let memory_dir = dir.path().join("memory");
         let dispatch = dispatch(&dir).await;
         let child = committed_child(&dispatch, "worker").await;
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .ensure_session(&child.session_id, "agent-thread")
-            .await.unwrap();
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("user task"),
                 ..session::NewMessage::empty(&child.session_id, "user")
             })
-            .await.unwrap();
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("calling tool"),
@@ -1840,7 +1869,8 @@ mod tests {
                 media_json: Some(r#"[{"kind":"image","path":"artifact.png"}]"#),
                 ..session::NewMessage::empty(&child.session_id, "assistant")
             })
-            .await.unwrap();
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("tool output"),
@@ -1848,7 +1878,8 @@ mod tests {
                 tool_name: Some("terminal"),
                 ..session::NewMessage::empty(&child.session_id, "tool")
             })
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let detail = desktop_control(&dispatch, &memory_dir)
             .read_thread("root-session", "/root/worker")
@@ -1894,7 +1925,8 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&child.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
         assert!(dispatch
             .runtime_requests
@@ -1908,9 +1940,13 @@ mod tests {
     async fn desktop_cold_followup_recovers_from_exact_live_root_session() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let request = spawn_request(&memory_dir);
@@ -1929,7 +1965,8 @@ mod tests {
                 Config::with_defaults(memory_dir.clone()),
                 "root-session".into(),
             )
-            .await.unwrap(),
+            .await
+            .unwrap(),
         );
         register_active_root_session(&memory_dir, "root-session", &root_session).unwrap();
         root_session.set_chat_targets(root_material.chat_targets);
@@ -1968,21 +2005,22 @@ mod tests {
         let make_session = |api_key: &'static str, permission: &'static str| {
             let memory_dir = memory_dir.clone();
             async move {
-            let session = Session::with_session_id(
-                Config::with_defaults(memory_dir),
-                "root-session".into(),
-            )
-            .await.unwrap();
-            session.set_chat_targets(vec![types::ChatTarget {
-                provider_id: "openai".into(),
-                backend_id: "openai".into(),
-                model: "test".into(),
-                api_key: api_key.into(),
-                base_url: "https://openai.invalid".into(),
-                api_mode: String::new(),
-            }]);
-            session.set_permission_profile(Some(permission.into()));
-            Arc::new(session)
+                let session = Session::with_session_id(
+                    Config::with_defaults(memory_dir),
+                    "root-session".into(),
+                )
+                .await
+                .unwrap();
+                session.set_chat_targets(vec![types::ChatTarget {
+                    provider_id: "openai".into(),
+                    backend_id: "openai".into(),
+                    model: "test".into(),
+                    api_key: api_key.into(),
+                    base_url: "https://openai.invalid".into(),
+                    api_mode: String::new(),
+                }]);
+                session.set_permission_profile(Some(permission.into()));
+                Arc::new(session)
             }
         };
         let old = make_session("old-key-must-not-win", types::DANGER_FULL_ACCESS_PROFILE).await;
@@ -2028,11 +2066,13 @@ mod tests {
                     last_message: "parent done".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         let reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "child")
-            .await.unwrap();
+            .await
+            .unwrap();
         let child = reservation.thread().clone();
         reservation.commit().await.unwrap();
         dispatch
@@ -2044,7 +2084,8 @@ mod tests {
                     reason: "stopped".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         let desktop = desktop_control(&dispatch, &memory_dir);
 
         let first = desktop
@@ -2068,7 +2109,8 @@ mod tests {
             dispatch
                 .control
                 .status_events(&parent.thread_id)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             2
         );
@@ -2076,7 +2118,8 @@ mod tests {
             dispatch
                 .control
                 .status_events(&child.thread_id)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             2
         );
@@ -2115,7 +2158,8 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&child.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
 
         let root_close = desktop
@@ -2137,9 +2181,13 @@ mod tests {
     async fn desktop_close_partial_failure_keeps_parent_open_and_retryable() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let bus = Arc::new(hooks::PluginHookBus::new());
         let stopped_paths = Arc::new(Mutex::new(Vec::<String>::new()));
         let observed = Arc::clone(&stopped_paths);
@@ -2177,9 +2225,12 @@ mod tests {
         while dispatch.runtime_manager.is_running(&leaf.thread_id) {
             tokio::task::yield_now().await;
         }
-        let pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
-        ).await.unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("subagents-v2.db").display()
+        ))
+        .await
+        .unwrap();
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "CREATE TRIGGER fail_parent_shutdown
              BEFORE UPDATE OF status_kind ON agent_threads
@@ -2189,7 +2240,9 @@ mod tests {
              END;",
             parent.thread_id
         )))
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
         let desktop = desktop_control(&dispatch, &memory_dir);
 
         let error = desktop
@@ -2258,9 +2311,13 @@ mod tests {
     async fn desktop_close_active_runtime_waits_for_shutdown_ack_and_cleanup() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
@@ -2293,7 +2350,8 @@ mod tests {
             dispatch
                 .control
                 .status_events(&spawned.thread.thread_id)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .into_iter()
                 .map(|event| event.event)
                 .filter(|event| matches!(event, RunnerEvent::RuntimeTerminated))
@@ -2306,9 +2364,13 @@ mod tests {
     async fn close_timeout_after_terminate_keeps_admission_closed_until_runner_ack() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
@@ -2346,7 +2408,8 @@ mod tests {
         assert!(dispatch
             .control
             .reserve_spawn(&spawned.thread.canonical_path, "too_late")
-            .await.is_err());
+            .await
+            .is_err());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -2359,13 +2422,17 @@ mod tests {
         let mut dispatch_a = dispatch_for_root(&dir_a, "root-a", Arc::clone(&manager)).await;
         let dispatch_b = dispatch_for_root(&dir_b, "root-b", Arc::clone(&manager)).await;
         session::SessionStore::open_sessions_dir(&memory_a.join("data"))
-            .await.unwrap()
+            .await
+            .unwrap()
             .ensure_session("root-a", "test")
-            .await.unwrap();
+            .await
+            .unwrap();
         session::SessionStore::open_sessions_dir(&memory_b.join("data"))
-            .await.unwrap()
+            .await
+            .unwrap()
             .ensure_session("root-b", "test")
-            .await.unwrap();
+            .await
+            .unwrap();
         dispatch_a.chat_override = Some(pending_chat());
         let worker_a = AgentThreadDispatch::spawn_agent(&dispatch_a, spawn_request(&memory_a))
             .await
@@ -2420,9 +2487,13 @@ mod tests {
     async fn same_root_close_lock_wait_is_bounded_by_the_caller_deadline() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let worker = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
@@ -2473,9 +2544,13 @@ mod tests {
     async fn caller_cancellation_after_starting_close_keeps_background_convergence_owner() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
@@ -2539,9 +2614,13 @@ mod tests {
     async fn close_retries_after_old_generation_completes_before_atomic_signal() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let provider_entered = Arc::new(tokio::sync::Notify::new());
         let provider_release = Arc::new(tokio::sync::Notify::new());
         let mut dispatch = dispatch(&dir).await;
@@ -2606,14 +2685,19 @@ mod tests {
             .runtime_handle(&spawned.thread.thread_id)
             .unwrap()
             .is_none());
-        let pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
-        ).await.unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("subagents-v2.db").display()
+        ))
+        .await
+        .unwrap();
         let (edge_state,): (String,) = agent_db::sqlx::query_as(
             "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
         )
         .bind(&spawned.thread.thread_id)
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         assert_eq!(edge_state, "closed");
     }
 
@@ -2621,9 +2705,13 @@ mod tests {
     async fn close_rejects_previously_admitted_handoff_without_starting_a_new_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let dispatch = Arc::new(dispatch);
@@ -2649,7 +2737,8 @@ mod tests {
             while dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .is_empty()
             {
                 tokio::task::yield_now().await;
@@ -2678,7 +2767,8 @@ mod tests {
             dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             1
         );
@@ -2689,9 +2779,13 @@ mod tests {
     async fn close_cancels_starting_followup_without_missing_its_state_change() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
@@ -2756,9 +2850,13 @@ mod tests {
     async fn cancelled_close_after_terminate_keeps_admission_closed_until_runner_ack() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
@@ -2794,9 +2892,13 @@ mod tests {
     async fn leaf_timeout_never_requests_parent_shutdown_before_leaf_ack() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut root_dispatch = dispatch(&dir).await;
         root_dispatch.chat_override = Some(pending_chat());
         let parent = AgentThreadDispatch::spawn_agent(&root_dispatch, spawn_request(&memory_dir))
@@ -2845,7 +2947,8 @@ mod tests {
             root_dispatch
                 .control
                 .resolve_desktop_target(parent.canonical_path.as_str())
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -2863,7 +2966,8 @@ mod tests {
             root_dispatch
                 .control
                 .resolve_desktop_target(leaf.canonical_path.as_str())
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -2905,7 +3009,8 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&thread.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
     }
 
@@ -2918,7 +3023,8 @@ mod tests {
                 let current = dispatch
                     .control
                     .resolve_desktop_target(thread.canonical_path.as_str())
-                    .await.unwrap();
+                    .await
+                    .unwrap();
                 if current.status == AgentStatusV2::Shutdown
                     && !dispatch
                         .control
@@ -2938,9 +3044,13 @@ mod tests {
     async fn desktop_interrupt_is_ack_driven_and_reports_previous_status() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
@@ -2980,7 +3090,8 @@ mod tests {
             dispatch
                 .control
                 .status_events(&child.thread_id)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .into_iter()
                 .filter(|event| matches!(event.event, RunnerEvent::RuntimeTerminated))
                 .count(),
@@ -2997,7 +3108,8 @@ mod tests {
         let child_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "child")
-            .await.unwrap();
+            .await
+            .unwrap();
         let child = child_reservation.thread().clone();
         child_reservation.commit().await.unwrap();
         let hook = super::super::agent_runtime::AckSubscribeHook {
@@ -3016,11 +3128,13 @@ mod tests {
         assert!(dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "late_child")
-            .await.is_err());
+            .await
+            .is_err());
         assert!(dispatch
             .control
             .reserve_spawn(&child.canonical_path, "late_grandchild")
-            .await.is_err());
+            .await
+            .is_err());
         assert!(dispatch
             .control
             .enqueue_message(
@@ -3031,7 +3145,8 @@ mod tests {
                 },
                 false,
             )
-            .await.is_err());
+            .await
+            .is_err());
         assert!(dispatch
             .control
             .enqueue_followup_with_admission(
@@ -3042,15 +3157,18 @@ mod tests {
                 },
                 |_| async { Ok(()) },
             )
-            .await.is_err());
+            .await
+            .is_err());
         assert!(dispatch
             .control
             .drain_mailbox(&parent.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
         assert!(!dispatch
             .control
-            .snapshot().await
+            .snapshot()
+            .await
             .unwrap()
             .threads
             .iter()
@@ -3074,7 +3192,8 @@ mod tests {
         let reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "late_child")
-            .await.unwrap();
+            .await
+            .unwrap();
         let late_child = reservation.thread().clone();
         let desktop = Arc::new(desktop_control(&dispatch, &memory_dir));
         let close = tokio::spawn({
@@ -3123,16 +3242,22 @@ mod tests {
         assert!(dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "after_shutdown")
-            .await.is_err());
+            .await
+            .is_err());
 
         assert_eq!(dispatch.control.snapshot().await.unwrap(), before);
-        let pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
-        ).await.unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("subagents-v2.db").display()
+        ))
+        .await
+        .unwrap();
         let (count,): (i64,) = agent_db::sqlx::query_as(
             "SELECT COUNT(*) FROM agent_threads WHERE status_kind = 'pending_init'",
         )
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -3164,14 +3289,17 @@ mod tests {
         dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "allowed_after_cancel")
-            .await.unwrap()
+            .await
+            .unwrap()
             .abort()
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_ne!(
             dispatch
                 .control
                 .resolve_desktop_target(parent.canonical_path.as_str())
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -3181,9 +3309,13 @@ mod tests {
     async fn desktop_followup_reuses_runtime_manager_handoff() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
@@ -3216,13 +3348,15 @@ mod tests {
             dispatch
                 .control
                 .resolve_desktop_target("/root/worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Completed { .. }
         ));
         assert!(sessions
             .get_messages(&spawned.thread.session_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .iter()
             .any(|message| message.content.as_deref() == Some("desktop continuation")));
     }
@@ -3231,9 +3365,13 @@ mod tests {
     async fn spawn_commits_only_after_preflight_and_starts_the_turn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
 
@@ -3247,7 +3385,8 @@ mod tests {
             let current = dispatch
                 .control
                 .list_agents(&AgentPath::root(), Some("worker"))
-                .await.unwrap()
+                .await
+                .unwrap()
                 .into_iter()
                 .find(|thread| thread.thread_id == result.thread.thread_id)
                 .unwrap();
@@ -3264,9 +3403,13 @@ mod tests {
     async fn spawn_start_hook_fires_once_after_acceptance_and_not_for_followup() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
@@ -3323,9 +3466,13 @@ mod tests {
     async fn subagent_stop_keep_going_continues_the_same_turn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
@@ -3351,7 +3498,10 @@ mod tests {
         }
 
         assert_eq!(stop_count.load(Ordering::SeqCst), 2);
-        let messages = sessions.get_messages(&spawned.thread.session_id).await.unwrap();
+        let messages = sessions
+            .get_messages(&spawned.thread.session_id)
+            .await
+            .unwrap();
         assert_eq!(
             messages
                 .iter()
@@ -3370,9 +3520,13 @@ mod tests {
     async fn stop_hook_observes_each_terminal_turn_and_close_does_not_duplicate_it() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
@@ -3405,7 +3559,8 @@ mod tests {
             dispatch
                 .control
                 .resolve_desktop_target("/root/worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Completed { .. }
         ));
@@ -3439,9 +3594,13 @@ mod tests {
     async fn interrupted_and_errored_turns_emit_stop_at_turn_end_not_close() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         let bus = Arc::new(hooks::PluginHookBus::new());
         let stop_count = Arc::new(AtomicUsize::new(0));
@@ -3468,7 +3627,8 @@ mod tests {
             dispatch
                 .control
                 .resolve_desktop_target("/root/worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Errored { .. }
         ));
@@ -3532,9 +3692,13 @@ mod tests {
     async fn spawn_preflight_failure_rolls_back_path_row_edge_and_runtime_request() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let dispatch = dispatch(&dir).await;
         let bus = Arc::new(hooks::PluginHookBus::new());
         let start_count = Arc::new(AtomicUsize::new(0));
@@ -3555,21 +3719,28 @@ mod tests {
             dispatch
                 .control
                 .list_agents(&AgentPath::root(), None)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             1
         );
-        let pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
-        ).await.unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("subagents-v2.db").display()
+        ))
+        .await
+        .unwrap();
         let (child_rows,): (i64,) = agent_db::sqlx::query_as(
             "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
         )
-        .fetch_one(&pool).await.unwrap();
-        let (edge_rows,): (i64,) = agent_db::sqlx::query_as(
-            "SELECT COUNT(*) FROM agent_spawn_edges",
-        )
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let (edge_rows,): (i64,) =
+            agent_db::sqlx::query_as("SELECT COUNT(*) FROM agent_spawn_edges")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(child_rows, 0);
         assert_eq!(edge_rows, 0);
         assert!(dispatch
@@ -3582,7 +3753,8 @@ mod tests {
         assert_eq!(
             sessions
                 .list_sessions(session::SessionListFilter::Active, 10)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             1
         );
@@ -3592,9 +3764,13 @@ mod tests {
     async fn spawn_accepts_durable_start_even_when_provider_errors_immediately() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(immediate_error_chat());
 
@@ -3609,7 +3785,8 @@ mod tests {
             .is_some());
         assert!(sessions
             .get_session(&spawned.thread.session_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_some());
         while dispatch
             .runtime_manager
@@ -3621,7 +3798,8 @@ mod tests {
             dispatch
                 .control
                 .resolve_target(&AgentPath::root(), "worker")
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Errored { .. }
         ));
@@ -3631,10 +3809,16 @@ mod tests {
     async fn runtime_admission_failure_rolls_back_committed_pending_spawn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
-        let graph = AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
+        let graph = AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+            .await
+            .unwrap();
         let control = AgentControl::open(
             "root-session".into(),
             graph.clone(),
@@ -3644,7 +3828,8 @@ mod tests {
                 max_running: 0,
             },
         )
-        .await.unwrap();
+        .await
+        .unwrap();
         let mut dispatch = DefaultAgentThreadDispatch::for_test(
             Arc::clone(&control),
             AgentPath::root(),
@@ -3669,12 +3854,16 @@ mod tests {
             "{error:#}"
         );
         assert_eq!(control.identity_count().unwrap(), 0);
-        assert_eq!(graph.snapshot("root-session").await.unwrap().threads.len(), 1);
+        assert_eq!(
+            graph.snapshot("root-session").await.unwrap().threads.len(),
+            1
+        );
         assert_eq!(start_count.load(Ordering::SeqCst), 0);
         assert_eq!(
             sessions
                 .list_sessions(session::SessionListFilter::Active, 10)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             1
         );
@@ -3684,15 +3873,20 @@ mod tests {
     async fn startup_status_failure_removes_forked_session_and_all_spawn_state() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("parent history"),
                 ..session::NewMessage::empty("root-session", "user")
             })
-            .await.unwrap();
+            .await
+            .unwrap();
         let dispatch = dispatch(&dir).await;
         dispatch
             .runtime_manager
@@ -3714,7 +3908,8 @@ mod tests {
         assert_eq!(
             sessions
                 .list_sessions(session::SessionListFilter::Active, 10)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             1
         );
@@ -3733,15 +3928,20 @@ mod tests {
     async fn cancelling_spawn_before_startup_acceptance_rolls_back_every_artifact() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         sessions
             .append_message(session::NewMessage {
                 content: Some("parent history"),
                 ..session::NewMessage::empty("root-session", "user")
             })
-            .await.unwrap();
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("must not survive cancellation"));
         let hook = super::super::agent_runtime::AckSubscribeHook {
@@ -3775,7 +3975,8 @@ mod tests {
         let child = dispatch
             .control
             .list_agents(&AgentPath::root(), Some("worker"))
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .find(|thread| thread.canonical_path.as_str() == "/root/worker")
             .unwrap();
@@ -3796,21 +3997,28 @@ mod tests {
             dispatch
                 .control
                 .list_agents(&AgentPath::root(), None)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             1
         );
-        let pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
-        ).await.unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("subagents-v2.db").display()
+        ))
+        .await
+        .unwrap();
         let (child_rows,): (i64,) = agent_db::sqlx::query_as(
             "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
         )
-        .fetch_one(&pool).await.unwrap();
-        let (edge_rows,): (i64,) = agent_db::sqlx::query_as(
-            "SELECT COUNT(*) FROM agent_spawn_edges",
-        )
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let (edge_rows,): (i64,) =
+            agent_db::sqlx::query_as("SELECT COUNT(*) FROM agent_spawn_edges")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(child_rows, 0);
         assert_eq!(edge_rows, 0);
         assert!(dispatch
@@ -3824,8 +4032,15 @@ mod tests {
             .runtime_handle(&child.thread_id)
             .unwrap()
             .is_none());
-        assert!(sessions.get_session(&child.session_id).await.unwrap().is_none());
-        assert_eq!(sessions.get_messages("root-session").await.unwrap().len(), 1);
+        assert!(sessions
+            .get_session(&child.session_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            sessions.get_messages("root-session").await.unwrap().len(),
+            1
+        );
         assert_eq!(start_count.load(Ordering::SeqCst), 0);
 
         let retried = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
@@ -3844,9 +4059,13 @@ mod tests {
     async fn cancelling_spawn_after_permit_before_turn_started_releases_identity() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("must not survive cancellation"));
         let hook = super::super::agent_runtime::AckSubscribeHook {
@@ -3866,7 +4085,8 @@ mod tests {
         let child = dispatch
             .control
             .list_agents(&AgentPath::root(), Some("worker"))
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .find(|thread| thread.canonical_path.as_str() == "/root/worker")
             .unwrap();
@@ -3898,19 +4118,29 @@ mod tests {
             .runtime_handle(&child.thread_id)
             .unwrap()
             .is_none());
-        assert!(sessions.get_session(&child.session_id).await.unwrap().is_none());
-        let pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
-        ).await.unwrap();
+        assert!(sessions
+            .get_session(&child.session_id)
+            .await
+            .unwrap()
+            .is_none());
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("subagents-v2.db").display()
+        ))
+        .await
+        .unwrap();
         let (thread_count,): (i64,) = agent_db::sqlx::query_as(
             "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
         )
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         assert_eq!(thread_count, 0);
-        let (edge_count,): (i64,) = agent_db::sqlx::query_as(
-            "SELECT COUNT(*) FROM agent_spawn_edges",
-        )
-        .fetch_one(&pool).await.unwrap();
+        let (edge_count,): (i64,) =
+            agent_db::sqlx::query_as("SELECT COUNT(*) FROM agent_spawn_edges")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(edge_count, 0);
 
         let retried = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
@@ -3929,9 +4159,13 @@ mod tests {
     async fn interrupt_waits_for_runner_ack_and_returns_previous_status() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
@@ -3973,7 +4207,8 @@ mod tests {
                     last_message: "done".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let result = AgentThreadDispatch::interrupt_agent(
             &dispatch,
@@ -4057,7 +4292,8 @@ mod tests {
         dispatch
             .control
             .persist_main_steer(&AgentPath::root(), "new root input".into())
-            .await.unwrap();
+            .await
+            .unwrap();
         dispatch.control.notify_main_steer();
         let root_result = tokio::time::timeout(Duration::from_millis(100), root_wait.as_mut())
             .await
@@ -4111,7 +4347,8 @@ mod tests {
         let leaf_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "leaf")
-            .await.unwrap();
+            .await
+            .unwrap();
         let leaf = leaf_reservation.thread().clone();
         leaf_reservation.commit().await.unwrap();
         let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
@@ -4126,7 +4363,8 @@ mod tests {
                     last_message: "leaf done".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let parent_result = AgentThreadDispatch::wait_agent(
             &parent_dispatch,
@@ -4162,7 +4400,8 @@ mod tests {
         dispatch
             .control
             .persist_main_steer(&AgentPath::root(), "new root input".into())
-            .await.unwrap();
+            .await
+            .unwrap();
         dispatch.control.notify_main_steer();
 
         let root_result = AgentThreadDispatch::wait_agent(
@@ -4238,7 +4477,8 @@ mod tests {
         let leaf_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "leaf")
-            .await.unwrap();
+            .await
+            .unwrap();
         let leaf = leaf_reservation.thread().clone();
         leaf_reservation.commit().await.unwrap();
         let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
@@ -4247,7 +4487,8 @@ mod tests {
         dispatch
             .control
             .record_runner_event(&leaf.thread_id, RunnerEvent::RuntimeTerminated)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let parent_result = AgentThreadDispatch::wait_agent(
             &parent_dispatch,
@@ -4282,7 +4523,8 @@ mod tests {
         let leaf_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "leaf")
-            .await.unwrap();
+            .await
+            .unwrap();
         let leaf = leaf_reservation.thread().clone();
         leaf_reservation.commit().await.unwrap();
         let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
@@ -4295,11 +4537,13 @@ mod tests {
                     last_message: "done".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         let pending = dispatch
             .control
             .drain_mailbox(&parent.canonical_path)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].kind, subagents::MailboxKind::Result);
 
@@ -4334,7 +4578,8 @@ mod tests {
         let leaf_reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "leaf")
-            .await.unwrap();
+            .await
+            .unwrap();
         let leaf = leaf_reservation.thread().clone();
         leaf_reservation.commit().await.unwrap();
         let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
@@ -4348,7 +4593,8 @@ mod tests {
                     last_message: "first".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         let first_wait = AgentThreadDispatch::wait_agent(
             &parent_dispatch,
             WaitAgentV2Request {
@@ -4361,12 +4607,14 @@ mod tests {
         let first = dispatch
             .control
             .drain_mailbox(&parent.canonical_path)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(first.len(), 1);
         dispatch
             .control
             .ack_mailbox(&parent.canonical_path, first[0].sequence)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         dispatch
             .control
@@ -4376,7 +4624,8 @@ mod tests {
                     turn_id: "turn-2".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         dispatch
             .control
             .record_runner_event(
@@ -4386,7 +4635,8 @@ mod tests {
                     last_message: "second".into(),
                 },
             )
-            .await.unwrap();
+            .await
+            .unwrap();
         let second_wait = AgentThreadDispatch::wait_agent(
             &parent_dispatch,
             WaitAgentV2Request {
@@ -4399,7 +4649,8 @@ mod tests {
         let second = dispatch
             .control
             .drain_mailbox(&parent.canonical_path)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(second.len(), 1);
         assert_eq!(
             second[0].message_id,
@@ -4415,9 +4666,14 @@ mod tests {
         let steer = dispatch
             .control
             .persist_main_steer(&root, "already consumed".into())
-            .await.unwrap();
+            .await
+            .unwrap();
         dispatch.control.notify_main_steer();
-        dispatch.control.ack_mailbox(&root, steer.sequence).await.unwrap();
+        dispatch
+            .control
+            .ack_mailbox(&root, steer.sequence)
+            .await
+            .unwrap();
 
         let mut wait = Box::pin(AgentThreadDispatch::wait_agent(
             &dispatch,
@@ -4450,9 +4706,13 @@ mod tests {
     async fn active_followup_returns_after_queue_admission_before_turn_completion() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
@@ -4499,9 +4759,13 @@ mod tests {
     async fn active_followup_consumed_at_sampling_boundary_does_not_start_empty_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
@@ -4539,12 +4803,14 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
         let events = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(
             events
                 .iter()
@@ -4590,7 +4856,8 @@ mod tests {
         let mailbox = dispatch
             .control
             .drain_mailbox(&child.canonical_path)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(mailbox.len(), 1);
         assert!(!mailbox[0].trigger_turn);
     }
@@ -4616,9 +4883,13 @@ mod tests {
             "name = \"reviewer\"\ndescription = \"review\"\ndeveloper_instructions = \"review\"\nmodel = \"openai:original-model\"\n",
         )
         .unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut initial = dispatch(&dir).await;
         initial.chat_override = Some(scripted_chat("initial"));
         let mut spawn = spawn_request(&memory_dir);
@@ -4653,7 +4924,8 @@ mod tests {
             initial
                 .control
                 .runtime_descriptor(&child.thread_id)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .unwrap()
                 .model
                 .as_deref(),
@@ -4667,14 +4939,17 @@ mod tests {
 
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+                .await
+                .unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 2,
             },
         )
-        .await.unwrap();
+        .await
+        .unwrap();
         let mut recovered = DefaultAgentThreadDispatch::for_test(
             control,
             AgentPath::root(),
@@ -4740,9 +5015,13 @@ mod tests {
     async fn cold_followup_rejects_missing_descriptor_provider_without_ghosts() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut initial = dispatch(&dir).await;
         initial.chat_override = Some(scripted_chat("initial"));
         let mut spawn = spawn_request(&memory_dir);
@@ -4766,14 +5045,17 @@ mod tests {
         }];
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+                .await
+                .unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 2,
             },
         )
-        .await.unwrap();
+        .await
+        .unwrap();
         let recovered = DefaultAgentThreadDispatch::for_test(
             control,
             AgentPath::root(),
@@ -4798,7 +5080,8 @@ mod tests {
         assert!(recovered
             .control
             .drain_mailbox(&child.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
         assert!(recovered
             .runtime_requests
@@ -4812,9 +5095,13 @@ mod tests {
     async fn spawn_rejects_cross_provider_model_without_matching_credentials() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let dispatch = dispatch(&dir).await;
         let mut request = spawn_request(&memory_dir);
         request.request.model = Some("openai:pinned-model".into());
@@ -4837,7 +5124,8 @@ mod tests {
             dispatch
                 .control
                 .list_agents(&AgentPath::root(), None)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             1
         );
@@ -4874,9 +5162,13 @@ mod tests {
             "name = \"leaf\"\ndescription = \"leaf\"\ndeveloper_instructions = \"leaf\"\n[[skills.config]]\npath = \"skills/leaf/SKILL.md\"\nenabled = true\n",
         )
         .unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut initial = dispatch(&dir).await;
         initial.chat_override = Some(scripted_chat("done"));
         let mut parent_request = spawn_request(&memory_dir);
@@ -4926,14 +5218,17 @@ mod tests {
 
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+                .await
+                .unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 2,
             },
         )
-        .await.unwrap();
+        .await
+        .unwrap();
         let mut recovered = DefaultAgentThreadDispatch::for_test(
             control,
             AgentPath::root(),
@@ -4975,9 +5270,13 @@ mod tests {
     async fn cold_followup_rejects_sibling_runtime_material_without_ghosts() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut initial = dispatch(&dir).await;
         initial.chat_override = Some(scripted_chat("done"));
 
@@ -5026,14 +5325,17 @@ mod tests {
 
         let control = AgentControl::open(
             "root-session".into(),
-            AgentGraphStore::open(dir.path().join("subagents-v2.db")).await.unwrap(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db"))
+                .await
+                .unwrap(),
             Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 2,
             },
         )
-        .await.unwrap();
+        .await
+        .unwrap();
         let mut recovered = DefaultAgentThreadDispatch::for_test(
             control,
             alpha.canonical_path.clone(),
@@ -5059,7 +5361,8 @@ mod tests {
         assert!(recovered
             .control
             .drain_mailbox(&leaf.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
         assert!(recovered
             .runtime_requests
@@ -5073,9 +5376,13 @@ mod tests {
     async fn followup_retry_delivers_old_marker_and_new_message_in_order() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let captured = Arc::new(Mutex::new(Vec::new()));
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(capturing_chat(Arc::clone(&captured), Some(1)));
@@ -5089,9 +5396,12 @@ mod tests {
             tokio::task::yield_now().await;
         }
 
-        let pool = agent_db::sqlx::SqlitePool::connect(
-            &format!("sqlite:{}", dir.path().join("subagents-v2.db").display())
-        ).await.unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("subagents-v2.db").display()
+        ))
+        .await
+        .unwrap();
         sqlx::raw_sql(
             "CREATE TRIGGER fail_first_followup_ack
              BEFORE UPDATE OF delivery_state ON agent_mailbox
@@ -5100,7 +5410,9 @@ mod tests {
                SELECT RAISE(ABORT, 'injected first followup ack failure');
              END;",
         )
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
         let first = AgentThreadDispatch::followup_task(
             &dispatch,
             MessageAgentV2Request {
@@ -5113,7 +5425,9 @@ mod tests {
         .unwrap_err();
         assert!(format!("{first:#}").contains("injected first followup ack failure"));
         sqlx::raw_sql("DROP TRIGGER fail_first_followup_ack;")
-            .execute(&pool).await.unwrap();
+            .execute(&pool)
+            .await
+            .unwrap();
 
         AgentThreadDispatch::followup_task(
             &dispatch,
@@ -5144,11 +5458,13 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
         let child_users = sessions
             .get_messages(&spawned.thread.session_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .filter(|message| message.role == "user")
             .filter_map(|message| message.content)
@@ -5205,9 +5521,13 @@ mod tests {
     async fn followup_at_terminal_cleanup_is_handed_off_to_a_new_turn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
@@ -5271,7 +5591,8 @@ mod tests {
                 let queued = dispatch
                     .control
                     .drain_mailbox(&spawned.thread.canonical_path)
-                    .await.unwrap();
+                    .await
+                    .unwrap();
                 if queued.len() == 2 {
                     break queued;
                 }
@@ -5294,7 +5615,8 @@ mod tests {
                 let starts = dispatch
                     .control
                     .status_events(&spawned.thread.thread_id)
-                    .await.unwrap()
+                    .await
+                    .unwrap()
                     .into_iter()
                     .filter(|event| {
                         matches!(event.event, subagents::RunnerEvent::TurnStarted { .. })
@@ -5312,7 +5634,8 @@ mod tests {
             while !dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .is_empty()
             {
                 tokio::task::yield_now().await;
@@ -5322,7 +5645,8 @@ mod tests {
         .expect("second generation must consume the admitted mailbox batch");
         assert!(sessions
             .get_messages(&spawned.thread.session_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .iter()
             .any(|message| message.content.as_deref() == Some(expected_combined_input.as_str())));
         dispatch.runtime_manager.set_before_cleanup_hook(None);
@@ -5332,9 +5656,13 @@ mod tests {
     async fn idle_followup_reports_runtime_start_failure_instead_of_triggered_success() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         drop(sessions);
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
@@ -5406,7 +5734,8 @@ mod tests {
             dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             2,
             "failed start must leave durable follow-up retryable"
@@ -5417,9 +5746,13 @@ mod tests {
     async fn concurrent_cold_followups_recover_once_and_share_one_starting_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
@@ -5501,7 +5834,8 @@ mod tests {
         let starts = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
             .count();
@@ -5510,7 +5844,8 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
     }
 
@@ -5518,9 +5853,13 @@ mod tests {
     async fn post_claim_setup_failure_is_shared_cleaned_and_retryable() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
@@ -5578,7 +5917,8 @@ mod tests {
             dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             2
         );
@@ -5602,7 +5942,8 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
     }
 
@@ -5610,9 +5951,13 @@ mod tests {
     async fn canceling_idle_followup_caller_does_not_cancel_manager_owned_start() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
@@ -5655,7 +6000,8 @@ mod tests {
                 let starts = dispatch
                     .control
                     .status_events(&spawned.thread.thread_id)
-                    .await.unwrap()
+                    .await
+                    .unwrap()
                     .into_iter()
                     .filter(|event| {
                         matches!(event.event, subagents::RunnerEvent::TurnStarted { .. })
@@ -5676,7 +6022,8 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
         dispatch
             .runtime_manager
@@ -5687,9 +6034,13 @@ mod tests {
     async fn terminal_handoff_keeps_starting_slot_visible_to_third_followup() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
@@ -5738,7 +6089,8 @@ mod tests {
             while dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len()
                 != 1
             {
@@ -5776,7 +6128,8 @@ mod tests {
             while dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len()
                 != 2
             {
@@ -5796,7 +6149,8 @@ mod tests {
         let starts = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
             .count();
@@ -5819,9 +6173,13 @@ mod tests {
     async fn shutdown_rejects_pending_followup_without_starting_a_new_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let dispatch = Arc::new(dispatch);
@@ -5846,7 +6204,8 @@ mod tests {
             while dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .is_empty()
             {
                 tokio::task::yield_now().await;
@@ -5865,7 +6224,8 @@ mod tests {
         let starts = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .await.unwrap()
+            .await
+            .unwrap()
             .into_iter()
             .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
             .count();
@@ -5877,7 +6237,8 @@ mod tests {
             dispatch
                 .control
                 .drain_mailbox(&spawned.thread.canonical_path)
-                .await.unwrap()
+                .await
+                .unwrap()
                 .len(),
             1
         );
@@ -5887,9 +6248,13 @@ mod tests {
     async fn followup_rechecks_shutdown_atomically_before_enqueue_and_admission() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("data")).await.unwrap();
-        sessions.ensure_session("root-session", "test").await.unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session("root-session", "test")
+            .await
+            .unwrap();
         let mut dispatch = dispatch(&dir).await;
         dispatch.chat_override = Some(pending_chat());
         let checked = Arc::new(tokio::sync::Notify::new());
@@ -5927,12 +6292,14 @@ mod tests {
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
-            .await.unwrap()
+            .await
+            .unwrap()
             .is_empty());
         let events = dispatch
             .control
             .status_events(&spawned.thread.thread_id)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(
             events
                 .iter()
@@ -5947,7 +6314,8 @@ mod tests {
             dispatch
                 .control
                 .resolve_target(&AgentPath::root(), spawned.thread.canonical_path.as_ref())
-                .await.unwrap()
+                .await
+                .unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
@@ -5966,7 +6334,8 @@ mod tests {
         let reservation = dispatch
             .control
             .reserve_spawn(&parent.canonical_path, "child")
-            .await.unwrap();
+            .await
+            .unwrap();
         reservation.commit().await.unwrap();
 
         let all =
@@ -6042,7 +6411,8 @@ mod tests {
                 dispatch
                     .control
                     .persist_main_steer(&AgentPath::root(), "new root input".into())
-                    .await.unwrap();
+                    .await
+                    .unwrap();
                 dispatch.control.notify_main_steer();
             }
         );

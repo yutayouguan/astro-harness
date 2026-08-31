@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   isLiveActivityStatus,
+  isSettledActivityStatus,
   resolveToolActivityStatus,
 } from "./toolActivityStatus.ts";
 
@@ -26,4 +27,9 @@ test("only waiting, running, and retrying states remain live", () => {
   assert.equal(isLiveActivityStatus("retrying"), true);
   assert.equal(isLiveActivityStatus("partial"), false);
   assert.equal(isLiveActivityStatus("error"), false);
+  assert.equal(isSettledActivityStatus("done"), true);
+  assert.equal(isSettledActivityStatus("partial"), true);
+  assert.equal(isSettledActivityStatus("error"), true);
+  assert.equal(isSettledActivityStatus("interrupted"), true);
+  assert.equal(isSettledActivityStatus("running"), false);
 });

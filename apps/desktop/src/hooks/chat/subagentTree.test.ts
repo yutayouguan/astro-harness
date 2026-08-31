@@ -12,6 +12,7 @@ import {
   isAgentTreeGenerationCurrent,
   isAgentTreeRequestCurrent,
   reduceAgentThreadEvent,
+  summarizeAgentActivity,
   type AgentThread,
   type AgentThreadChanged,
   type AgentTreeSnapshot,
@@ -88,6 +89,34 @@ test("builds a stable nested tree sorted by canonical path", () => {
     state.roots[0]?.children[1]?.children[0]?.thread.canonicalPath,
     "/root/research/citations",
   );
+});
+
+test("summarizes every visible subagent lifecycle state", () => {
+  const state = fromSnapshot(
+    snapshot([
+      thread("/root/pending", { kind: "pending_init" }),
+      thread("/root/running", { kind: "running" }),
+      thread("/root/done", {
+        kind: "completed",
+        payload: { lastMessage: "done" },
+      }),
+      thread("/root/error", {
+        kind: "errored",
+        payload: { message: "failed" },
+      }),
+      thread("/root/interrupted", { kind: "interrupted" }),
+    ]),
+  );
+
+  assert.deepEqual(summarizeAgentActivity(state.roots), {
+    total: 5,
+    pending: 1,
+    running: 1,
+    completed: 1,
+    errored: 1,
+    interrupted: 1,
+    shutdown: 0,
+  });
 });
 
 test("ignores duplicate and out-of-order activity sequences", () => {

@@ -100,10 +100,7 @@ fn deferred_activation_survives_registry_reregistration() {
     registry.register(deferred());
 
     assert_eq!(
-        registry
-            .get("mcp__calendar__list_events")
-            .unwrap()
-            .exposure,
+        registry.get("mcp__calendar__list_events").unwrap().exposure,
         types::ToolExposure::Direct
     );
 }

@@ -89,7 +89,9 @@ async fn reconcile_skips_ds_store() {
 #[tokio::test]
 async fn register_and_list_by_category() {
     let dir = tempdir().unwrap();
-    let db = ArtifactDb::new(dir.path().join("artifacts.db")).await.unwrap();
+    let db = ArtifactDb::new(dir.path().join("artifacts.db"))
+        .await
+        .unwrap();
     let path = dir.path().join("workspace").join("note.md");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, b"hi").unwrap();
@@ -171,10 +173,7 @@ async fn reconcile_registers_uploaded_memory_template() {
     let report = db.reconcile(&memory_root).await.unwrap();
     assert_eq!(report.added, 1);
 
-    let row = db
-        .get_by_path(memory_md.to_str().unwrap())
-        .await
-        .unwrap();
+    let row = db.get_by_path(memory_md.to_str().unwrap()).await.unwrap();
     let row = row.expect("uploads/sess-a/MEMORY.md should be registered");
     assert_eq!(row.name, "MEMORY.md");
     assert_eq!(row.source, "reconcile");
@@ -184,7 +183,9 @@ async fn reconcile_registers_uploaded_memory_template() {
 #[tokio::test]
 async fn list_filters_by_agent_id() {
     let dir = tempfile::tempdir().unwrap();
-    let db = ArtifactDb::new(dir.path().join("artifacts.db")).await.unwrap();
+    let db = ArtifactDb::new(dir.path().join("artifacts.db"))
+        .await
+        .unwrap();
     let p1 = dir.path().join("a.md");
     let p2 = dir.path().join("b.md");
     std::fs::write(&p1, b"1").unwrap();
@@ -220,7 +221,9 @@ async fn list_filters_by_agent_id() {
 #[tokio::test]
 async fn re_register_without_agent_preserves_coder_ownership() {
     let dir = tempfile::tempdir().unwrap();
-    let db = ArtifactDb::new(dir.path().join("artifacts.db")).await.unwrap();
+    let db = ArtifactDb::new(dir.path().join("artifacts.db"))
+        .await
+        .unwrap();
     let path = dir.path().join("tool.rs");
     std::fs::write(&path, b"fn main() {}").unwrap();
     let path_str = path.to_str().unwrap();
@@ -234,15 +237,9 @@ async fn re_register_without_agent_preserves_coder_ownership() {
     )
     .await
     .unwrap();
-    db.register(
-        path_str,
-        ArtifactSource::AgentWrite,
-        None,
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    db.register(path_str, ArtifactSource::AgentWrite, None, None, None)
+        .await
+        .unwrap();
 
     let rows = db
         .list(None, None, false, 50, false, Some("coder"))
@@ -255,7 +252,9 @@ async fn re_register_without_agent_preserves_coder_ownership() {
 #[tokio::test]
 async fn remove_by_paths_deletes_rows() {
     let dir = tempdir().unwrap();
-    let db = ArtifactDb::new(dir.path().join("artifacts.db")).await.unwrap();
+    let db = ArtifactDb::new(dir.path().join("artifacts.db"))
+        .await
+        .unwrap();
     let p1 = dir.path().join("a.md");
     let p2 = dir.path().join("b.md");
     std::fs::write(&p1, b"1").unwrap();

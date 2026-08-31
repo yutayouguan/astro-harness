@@ -22,7 +22,11 @@ import {
 import { resolveComposerTurn } from "../../lib/chat/composerResolve";
 import { parseHitlRunFinished } from "../../lib/chat/hitlRunFinished";
 import { resolveTaskCompletion } from "../../lib/chat/taskCompletion";
-import { resolveToolActivityStatus } from "../../lib/chat/toolActivityStatus";
+import {
+  isLiveActivityStatus,
+  isSettledActivityStatus,
+  resolveToolActivityStatus,
+} from "../../lib/chat/toolActivityStatus";
 import {
   loadPickerGlobals,
   loadModelPrefs,
@@ -346,6 +350,7 @@ export function useSend(deps: UseSendDeps) {
           role: "assistant",
           content: "",
           activities: [],
+          turnStatus: "running",
           createdAt: Date.now(),
           generationStartedAt: Date.now(),
         });
@@ -569,6 +574,13 @@ export function useSend(deps: UseSendDeps) {
             const runId = payload.run_id ?? null;
             currentRunIdRef.current = runId;
             setCurrentTurnId(runId);
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantId
+                  ? { ...message, turnStatus: "running" }
+                  : message,
+              ),
+            );
           } else if (
             payload.type === "user_input_committed" &&
             payload.client_message_id
@@ -608,11 +620,37 @@ export function useSend(deps: UseSendDeps) {
                 payload.interrupts_json,
                 assistantId,
               );
+              const waitingToolIds = new Set(
+                interrupts
+                  .map((interrupt) => interrupt.toolCallId)
+                  .filter((id): id is string => Boolean(id)),
+              );
               setSessionPendingInterrupts(interrupts);
               setMessages((prev) =>
                 prev.map((m) => {
                   if (m.id !== assistantId) return m;
-                  let next = m;
+                  let next: ChatMessage = {
+                    ...m,
+                    turnStatus:
+                      payload.outcome_type === "interrupt"
+                        ? ("interrupted" as const)
+                        : ("waiting" as const),
+                    activities: m.activities?.map((activity) => {
+                      if (
+                        payload.outcome_type === "hitl_waiting" &&
+                        waitingToolIds.has(activity.id)
+                      ) {
+                        return { ...activity, status: "waiting" as const };
+                      }
+                      if (
+                        payload.outcome_type === "interrupt" &&
+                        isLiveActivityStatus(activity.status)
+                      ) {
+                        return { ...activity, status: "interrupted" as const };
+                      }
+                      return activity;
+                    }),
+                  };
                   if (surface) {
                     next = applySurfaceUpsert(next, surface);
                   } else {
@@ -785,7 +823,7 @@ export function useSend(deps: UseSendDeps) {
                 // 增量只补已经开卡的工具调用；先于 tool_call started 到达时丢弃，
                 // 完成事件仍会带上完整输出。
                 const existing = (m.activities ?? []).find((a) => a.id === id);
-                if (!existing || existing.status === "done") return m;
+                if (!existing || isSettledActivityStatus(existing.status)) return m;
                 const output = `${existing.output ?? ""}${delta}`;
                 return applyActivityUpsert(m, {
                   ...existing,
@@ -874,6 +912,11 @@ export function useSend(deps: UseSendDeps) {
                 const withUsage = sealOpenReasoning(
                   {
                     ...m,
+                    turnStatus: completion.failed
+                      ? ("error" as const)
+                      : terminalOutcome === "interrupt"
+                        ? ("interrupted" as const)
+                        : ("done" as const),
                     usage: usage ?? m.usage,
                     tokensPerSec: tokensPerSec ?? m.tokensPerSec,
                     generationDurationSec:
@@ -945,6 +988,7 @@ export function useSend(deps: UseSendDeps) {
                 return sealOpenReasoning(
                   {
                     ...m,
+                    turnStatus: "error" as const,
                     content: base ? `${base}\n\n⚠️ ${errMsg}` : errMsg,
                     error: true,
                     generationDurationSec:
@@ -1050,7 +1094,14 @@ export function useSend(deps: UseSendDeps) {
         clearStreamBuffers();
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, content: String(err), error: true } : m,
+            m.id === assistantId
+              ? {
+                  ...m,
+                  content: String(err),
+                  error: true,
+                  turnStatus: "error",
+                }
+              : m,
           ),
         );
         setStreaming(false);

@@ -26,6 +26,7 @@ test("RunFinished metadata creates a clickable surface linked to pending interru
   assert.equal(result.interrupts.length, 1);
   assert.equal(result.interrupts[0]?.id, "request-1");
   assert.equal(result.interrupts[0]?.assistantMessageId, "assistant-1");
+  assert.equal(result.interrupts[0]?.toolCallId, "tool-1");
   assert.equal(result.surface?.messageId, "a2ui-surface-tool-1");
   assert.deepEqual(result.surface?.operations, [
     { op: "surfaceUpdate", path: "/approved" },

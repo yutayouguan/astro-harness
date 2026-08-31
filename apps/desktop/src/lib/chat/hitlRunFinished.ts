@@ -45,6 +45,9 @@ export function parseHitlRunFinished(
         assistantMessageId,
       };
       if (typeof record.message === "string") interrupt.message = record.message;
+      if (typeof record.tool_call_id === "string" && record.tool_call_id.trim()) {
+        interrupt.toolCallId = record.tool_call_id.trim();
+      }
       if (schema) interrupt.responseSchema = schema;
       return [interrupt];
     });

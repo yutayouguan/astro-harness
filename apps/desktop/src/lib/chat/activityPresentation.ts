@@ -1,4 +1,5 @@
 import type { ChatActivity } from "../../types";
+import type { MessageKey } from "../../i18n/messages";
 
 export type ActivityVisualKind =
   | "read"
@@ -13,6 +14,19 @@ export type ActivityVisualKind =
   | "memory"
   | "status"
   | "tool";
+
+type SemanticTitleKind =
+  | "read"
+  | "search"
+  | "run"
+  | "edit"
+  | "browse"
+  | "media";
+
+export type ActivityTitlePresentation = {
+  key: MessageKey;
+  target: string;
+};
 
 const SEARCH_NAMES = /(^|[_-])(search|grep|rg|find|glob|query)([_-]|$)/;
 const READ_NAMES = /(^|[_-])(read|open|list|view|inspect|stat)([_-]|$)/;
@@ -68,6 +82,33 @@ export function activityDisplayTarget(activity: ChatActivity): string {
       ? pathParts[pathParts.length - 1]!
       : firstLine;
   return compact.length > 72 ? `${compact.slice(0, 69)}…` : compact;
+}
+
+export function activityTitlePresentation(
+  activity: ChatActivity,
+): ActivityTitlePresentation | null {
+  const kind = activityVisualKind(activity);
+  if (!isSemanticTitleKind(kind)) return null;
+  const target = activityDisplayTarget(activity);
+  const namespace = target ? "item" : "action";
+  const state = activity.status ? `.${activity.status}` : "";
+  return {
+    key: `chat.activity.${namespace}${state}.${kind}` as MessageKey,
+    target,
+  };
+}
+
+function isSemanticTitleKind(
+  kind: ActivityVisualKind,
+): kind is SemanticTitleKind {
+  return (
+    kind === "read" ||
+    kind === "search" ||
+    kind === "run" ||
+    kind === "edit" ||
+    kind === "browse" ||
+    kind === "media"
+  );
 }
 
 /** Extract the first edited file from apply_patch's freeform Lark payload. */
@@ -133,6 +174,47 @@ export type ActivityGroupSummary =
   | "execute"
   | "coordinate"
   | "tools";
+
+export type ActivityGroupProgress = {
+  total: number;
+  waiting: number;
+  running: number;
+  retrying: number;
+  done: number;
+  partial: number;
+  error: number;
+  interrupted: number;
+  resolved: number;
+  hasPartialOutcome: boolean;
+};
+
+export function activityGroupProgress(
+  activities: ChatActivity[],
+): ActivityGroupProgress {
+  const count = (status: ChatActivity["status"]) =>
+    activities.filter((activity) => activity.status === status).length;
+  const waiting = count("waiting");
+  const running = count("running");
+  const retrying = count("retrying");
+  const done = count("done");
+  const partial = count("partial");
+  const error = count("error");
+  const interrupted = count("interrupted");
+  const resolved = done + partial + error + interrupted;
+  return {
+    total: activities.length,
+    waiting,
+    running,
+    retrying,
+    done,
+    partial,
+    error,
+    interrupted,
+    resolved,
+    hasPartialOutcome:
+      partial > 0 || (done > 0 && (error > 0 || interrupted > 0)),
+  };
+}
 
 /** Produce a stable semantic heading without adding another model request. */
 export function activityGroupSummary(

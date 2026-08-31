@@ -46,10 +46,14 @@ fn rich_rollout() -> Vec<RolloutItem> {
 #[tokio::test]
 async fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db"))
+        .await
+        .unwrap();
     let items = rich_rollout();
 
-    session::store::rebuild_messages_from_rollout(&store, "thread-1", &items).await.unwrap();
+    session::store::rebuild_messages_from_rollout(&store, "thread-1", &items)
+        .await
+        .unwrap();
     let first_timestamps = store
         .get_messages("thread-1")
         .await
@@ -58,7 +62,9 @@ async fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
         .map(|message| message.timestamp)
         .collect::<Vec<_>>();
     std::thread::sleep(std::time::Duration::from_millis(2));
-    session::store::rebuild_messages_from_rollout(&store, "thread-1", &items).await.unwrap();
+    session::store::rebuild_messages_from_rollout(&store, "thread-1", &items)
+        .await
+        .unwrap();
 
     let messages = store.get_messages("thread-1").await.unwrap();
     assert_eq!(messages.len(), 3);
@@ -119,7 +125,9 @@ async fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
 #[tokio::test]
 async fn rebuild_only_replaces_the_target_session_projection() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db"))
+        .await
+        .unwrap();
     store.ensure_session("thread-1", "existing").await.unwrap();
     store
         .set_session_title("thread-1", "Keep this title")
@@ -166,7 +174,9 @@ async fn rebuild_only_replaces_the_target_session_projection() {
 #[tokio::test]
 async fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db"))
+        .await
+        .unwrap();
     store.ensure_session("thread-1", "test").await.unwrap();
     store
         .append_message(NewMessage {
@@ -175,11 +185,10 @@ async fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
         })
         .await
         .unwrap();
-    let raw = agent_db::SqlitePool::connect(
-        &format!("sqlite:{}?mode=rwc", store.db_path().display()),
-    )
-    .await
-    .unwrap();
+    let raw =
+        agent_db::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", store.db_path().display()))
+            .await
+            .unwrap();
     agent_db::sqlx::raw_sql(
         "CREATE TRIGGER reject_projection_insert
          BEFORE INSERT ON messages
@@ -224,7 +233,9 @@ async fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
 #[tokio::test]
 async fn duplicate_tool_call_ids_bind_results_in_rollout_order() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db"))
+        .await
+        .unwrap();
     let call = |name: &str| ToolCall {
         id: "duplicate-id".into(),
         name: name.into(),
@@ -242,7 +253,9 @@ async fn duplicate_tool_call_ids_bind_results_in_rollout_order() {
         RolloutItem::ResponseItem(Message::tool_with_id("missing-id", "unmatched")),
     ];
 
-    session::store::rebuild_messages_from_rollout(&store, "thread-tools", &items).await.unwrap();
+    session::store::rebuild_messages_from_rollout(&store, "thread-tools", &items)
+        .await
+        .unwrap();
 
     let messages = store.get_messages("thread-tools").await.unwrap();
     assert_eq!(messages[1].tool_name.as_deref(), Some("tool-a"));
@@ -253,7 +266,9 @@ async fn duplicate_tool_call_ids_bind_results_in_rollout_order() {
 #[tokio::test]
 async fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplicated() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db"))
+        .await
+        .unwrap();
     let parts_only = Message {
         role: Role::User,
         content: MessageContent::Parts(vec![
@@ -339,14 +354,23 @@ async fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplica
     )
     .await
     .is_err());
-    assert!(store.get_session("thread-invalid-media").await.unwrap().is_none());
+    assert!(store
+        .get_session("thread-invalid-media")
+        .await
+        .unwrap()
+        .is_none());
 }
 
 #[tokio::test]
 async fn invalid_adjacent_roles_are_rejected_before_projection_mutation() {
     let dir = tempfile::tempdir().unwrap();
-    let store = SessionStore::open(&dir.path().join("state.db")).await.unwrap();
-    store.ensure_session("thread-existing", "test").await.unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db"))
+        .await
+        .unwrap();
+    store
+        .ensure_session("thread-existing", "test")
+        .await
+        .unwrap();
     store
         .append_message(NewMessage {
             content: Some("original"),
@@ -389,5 +413,9 @@ async fn invalid_adjacent_roles_are_rejected_before_projection_mutation() {
     )
     .await;
     assert!(new_result.is_err());
-    assert!(store.get_session("thread-new-invalid").await.unwrap().is_none());
+    assert!(store
+        .get_session("thread-new-invalid")
+        .await
+        .unwrap()
+        .is_none());
 }

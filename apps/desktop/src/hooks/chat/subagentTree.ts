@@ -512,3 +512,51 @@ export function markThreadRead(
 export function flattenAgentTree(nodes: readonly AgentTreeNode[]): AgentTreeNode[] {
   return nodes.flatMap((node) => [node, ...flattenAgentTree(node.children)]);
 }
+
+export type AgentActivitySummary = {
+  total: number;
+  pending: number;
+  running: number;
+  completed: number;
+  errored: number;
+  interrupted: number;
+  shutdown: number;
+};
+
+export function summarizeAgentActivity(
+  nodes: readonly AgentTreeNode[],
+): AgentActivitySummary {
+  const summary: AgentActivitySummary = {
+    total: 0,
+    pending: 0,
+    running: 0,
+    completed: 0,
+    errored: 0,
+    interrupted: 0,
+    shutdown: 0,
+  };
+  for (const node of flattenAgentTree(nodes)) {
+    summary.total += 1;
+    switch (node.thread.status.kind) {
+      case "pending_init":
+        summary.pending += 1;
+        break;
+      case "running":
+        summary.running += 1;
+        break;
+      case "completed":
+        summary.completed += 1;
+        break;
+      case "errored":
+        summary.errored += 1;
+        break;
+      case "interrupted":
+        summary.interrupted += 1;
+        break;
+      case "shutdown":
+        summary.shutdown += 1;
+        break;
+    }
+  }
+  return summary;
+}

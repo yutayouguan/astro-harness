@@ -450,7 +450,10 @@ pub(super) async fn record_tool_outcomes(
     // 工具循环后回写 timeline/surfaces，避免历史恢复丢 A2UI 卡片。
     {
         let agent = session.as_ref();
-        if let Err(e) = agent.patch_last_assistant_timeline(timeline.reasoning_details_snapshot()).await {
+        if let Err(e) = agent
+            .patch_last_assistant_timeline(timeline.reasoning_details_snapshot())
+            .await
+        {
             tracing::warn!(error = %e, "patch assistant timeline after tools failed");
         }
     }

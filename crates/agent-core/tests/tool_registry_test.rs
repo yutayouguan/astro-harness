@@ -163,13 +163,10 @@ fn reload_uses_agent_specific_tools_enabled() {
     });
     reg.reload_enabled_from_disk(Some("custom-bot"));
     assert!(!reg.is_tool_allowed("memory"));
-    assert!(reg
-        .schemas_for_api()
-        .iter()
-        .all(|s| {
-            s.get("name")
-                .or_else(|| s.pointer("/function/name"))
-                .and_then(|n| n.as_str())
-                != Some("memory")
-        }));
+    assert!(reg.schemas_for_api().iter().all(|s| {
+        s.get("name")
+            .or_else(|| s.pointer("/function/name"))
+            .and_then(|n| n.as_str())
+            != Some("memory")
+    }));
 }

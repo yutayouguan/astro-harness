@@ -369,10 +369,7 @@ impl Session {
                         types::message::Role::Assistant => "assistant",
                         types::message::Role::Tool => "tool",
                     };
-                    (
-                        role.to_string(),
-                        message.provider_view_text().into_owned(),
-                    )
+                    (role.to_string(), message.provider_view_text().into_owned())
                 })
                 .collect::<std::collections::HashSet<_>>();
             let mut recalled = build_conversation_context(
@@ -847,10 +844,8 @@ impl Session {
                 registry.schemas_for_api_with_mode(requested_tool_mode),
             );
             // Deferred 工具不进模型 schema，但发现后仍可调用；两者都要按交互模式过滤。
-            let callable_specs = tools::filter_schemas(
-                interaction_mode,
-                registry.all_callable_tool_schemas(),
-            );
+            let callable_specs =
+                tools::filter_schemas(interaction_mode, registry.all_callable_tool_schemas());
             Arc::new(crate::runtime::ToolRouter::from_registry(
                 &registry,
                 &callable_specs,
@@ -933,7 +928,9 @@ mod tests {
     async fn initial_inputs_are_persisted_as_one_logical_user_message() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "coalesced-initial".into()).await.unwrap();
+        let session = Session::with_session_id(config, "coalesced-initial".into())
+            .await
+            .unwrap();
 
         session
             .prepare_turn(&[input("first"), input("second")])
@@ -949,7 +946,9 @@ mod tests {
     async fn initial_input_ack_is_emitted_only_after_db_and_memory_recording() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "initial-input-ack".into()).await.unwrap();
+        let session = Session::with_session_id(config, "initial-input-ack".into())
+            .await
+            .unwrap();
         session.set_current_turn_id("turn-initial-ack").await;
         let events = session.subscribe_turn_events("turn-initial-ack").await;
         let memory_recorded = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -984,7 +983,9 @@ mod tests {
     async fn initial_input_write_failure_does_not_emit_ack() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "initial-input-no-ack".into()).await.unwrap();
+        let session = Session::with_session_id(config, "initial-input-no-ack".into())
+            .await
+            .unwrap();
         session.set_current_turn_id("turn-initial-no-ack").await;
         let events = session.subscribe_turn_events("turn-initial-no-ack").await;
         session.set_turn_input_after_db_write_hook(Some(Arc::new(|| {
@@ -1008,7 +1009,9 @@ mod tests {
     async fn later_prompt_block_discards_staged_context_and_all_input() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "atomic-admission".into()).await.unwrap();
+        let session = Session::with_session_id(config, "atomic-admission".into())
+            .await
+            .unwrap();
         session
             .hook_bus()
             .register(::hooks::USER_PROMPT_SUBMIT, |input| {
@@ -1033,7 +1036,9 @@ mod tests {
     async fn session_start_block_retries_same_source() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "retry-session-start".into()).await.unwrap();
+        let session = Session::with_session_id(config, "retry-session-start".into())
+            .await
+            .unwrap();
         let hits = Arc::new(AtomicUsize::new(0));
         let sources = Arc::new(std::sync::Mutex::new(Vec::new()));
         let hook_hits = Arc::clone(&hits);
@@ -1066,8 +1071,9 @@ mod tests {
     async fn subagent_start_is_context_injection_only() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session =
-            Session::with_session_id(config, "subagent-start-context-only".into()).await.unwrap();
+        let session = Session::with_session_id(config, "subagent-start-context-only".into())
+            .await
+            .unwrap();
         session.set_subagent_hook_context(
             "thread-child".into(),
             "researcher".into(),
@@ -1091,8 +1097,11 @@ mod tests {
     async fn concurrent_session_start_admission_fires_once() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session =
-            Arc::new(Session::with_session_id(config, "concurrent-session-start".into()).await.unwrap());
+        let session = Arc::new(
+            Session::with_session_id(config, "concurrent-session-start".into())
+                .await
+                .unwrap(),
+        );
         let hits = Arc::new(AtomicUsize::new(0));
         let first_entered = Arc::new(tokio::sync::Notify::new());
         let second_entered = Arc::new(tokio::sync::Notify::new());
@@ -1155,7 +1164,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
         config.context_budget_chars = 64;
-        let session = Session::with_session_id(config, "budgeted-admission".into()).await.unwrap();
+        let session = Session::with_session_id(config, "budgeted-admission".into())
+            .await
+            .unwrap();
         session
             .hook_bus()
             .register(::hooks::USER_PROMPT_SUBMIT, |_| {
@@ -1174,7 +1185,9 @@ mod tests {
     async fn capture_step_context_reuses_the_turn_snapshot() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "step-context-test".into()).await.unwrap();
+        let session = Session::with_session_id(config, "step-context-test".into())
+            .await
+            .unwrap();
         session
             .set_interaction_mode(types::InteractionMode::Plan)
             .await;
@@ -1203,8 +1216,11 @@ mod tests {
     async fn tool_router_freezes_dynamic_handler_for_step() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session =
-            Arc::new(Session::with_session_id(config, "tool-router-snapshot".into()).await.unwrap());
+        let session = Arc::new(
+            Session::with_session_id(config, "tool-router-snapshot".into())
+                .await
+                .unwrap(),
+        );
         let entry = || types::ToolEntry {
             name: "router_snapshot_probe".into(),
             toolset: "core".into(),

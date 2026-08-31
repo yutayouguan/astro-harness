@@ -51,10 +51,16 @@ pub trait ConversationStore: Send + Sync {
     // ── 上下文召回 ──
 
     /// 获取最近 `limit` 条消息（按 id 升序返回）。
-    async fn recent_messages(&self, session_id: &str, limit: usize) -> Result<Vec<ScrolledMessage>>;
+    async fn recent_messages(&self, session_id: &str, limit: usize)
+        -> Result<Vec<ScrolledMessage>>;
 
     /// FTS 召回：返回与 `query` 相关的消息 id（最多 `limit` 个）。
-    async fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>>;
+    async fn recall_message_ids(
+        &self,
+        session_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<i64>>;
 
     /// 获取指定消息周围的上下文窗口（±`window_size` 行）。
     async fn scroll_context_window(

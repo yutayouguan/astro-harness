@@ -41,7 +41,8 @@
   min-height: 42px;
   box-sizing: border-box;
   padding: 4px 16px;
-  border: 0.75px solid var(--glass-edge);
+  border: 0;
+  border-bottom: 0.5px solid var(--glass-edge);
   border-radius: 0;
   background:
     var(--chat-header-surface-sheen),

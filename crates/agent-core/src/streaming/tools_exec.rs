@@ -2576,7 +2576,8 @@ mod tests {
             AgentLoop::new(crate::runtime::Config::with_defaults(
                 allow_dir.path().to_path_buf(),
             ))
-            .await.unwrap(),
+            .await
+            .unwrap(),
         );
         allow_session
             .hook_bus()
@@ -2610,7 +2611,8 @@ mod tests {
             AgentLoop::new(crate::runtime::Config::with_defaults(
                 deny_dir.path().to_path_buf(),
             ))
-            .await.unwrap(),
+            .await
+            .unwrap(),
         );
         deny_session
             .hook_bus()
