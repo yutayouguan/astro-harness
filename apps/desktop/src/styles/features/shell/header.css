@@ -267,13 +267,28 @@
 }
 
 .header-icon-btn.is-active {
-  color: var(--tone, var(--tone-blue, #2563eb));
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.3)),
-    color-mix(in srgb, var(--tone, var(--tone-blue, #2563eb)) 14%, white);
+  color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue, #2563eb)) 86%,
+    var(--ink) 14%
+  );
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue, #2563eb)) 24%,
+    rgba(255, 255, 255, 0.78)
+  );
   box-shadow:
-    0 1px 3px rgba(var(--shadow-ink), 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+    inset 0 0 0 1px color-mix(
+      in srgb,
+      var(--tone, var(--tone-blue, #2563eb)) 42%,
+      transparent
+    ),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 2px 7px color-mix(
+      in srgb,
+      var(--tone, var(--tone-blue, #2563eb)) 18%,
+      transparent
+    );
 }
 
 .header-icon-btn:active {
@@ -328,10 +343,24 @@
 }
 
 html[data-theme="dark"] .header-icon-btn.is-active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
-    color-mix(in srgb, var(--tone, var(--tone-blue, #3b82f6)) 20%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue, #3b82f6)) 82%,
+    white 18%
+  );
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue, #3b82f6)) 28%,
+    rgba(255, 255, 255, 0.08)
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(
+      in srgb,
+      var(--tone, var(--tone-blue, #3b82f6)) 48%,
+      transparent
+    ),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 2px 8px rgba(0, 0, 0, 0.22);
 }
 
 @media (max-width: 920px) {

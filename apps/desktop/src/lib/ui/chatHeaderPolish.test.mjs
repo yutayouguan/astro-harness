@@ -59,6 +59,24 @@ test("compact header controls share the 32px height contract", async () => {
   assert.match(css, /\.header-icon-btn\s*\{[\s\S]*?width:\s*28px;[\s\S]*?height:\s*28px;/);
 });
 
+test("active header tools remain distinct from hover in light and dark themes", async () => {
+  const css = await readFile(cssUrl, "utf8");
+  const active = css.match(
+    /\.header-icon-btn\.is-active\s*\{(?<body>[\s\S]*?)\n\}/,
+  )?.groups?.body;
+  const darkActive = css.match(
+    /html\[data-theme="dark"\] \.header-icon-btn\.is-active\s*\{(?<body>[\s\S]*?)\n\}/,
+  )?.groups?.body;
+
+  assert.ok(active, "missing active header tool styles");
+  assert.match(active, /24%/);
+  assert.match(active, /inset 0 0 0 1px[\s\S]*?42%/);
+  assert.match(active, /0 2px 7px[\s\S]*?18%/);
+  assert.ok(darkActive, "missing dark active header tool styles");
+  assert.match(darkActive, /28%/);
+  assert.match(darkActive, /inset 0 0 0 1px[\s\S]*?48%/);
+});
+
 test("unified color modes keep the conversation title neutral", async () => {
   const css = await readFile(unifiedColorUrl, "utf8");
 
