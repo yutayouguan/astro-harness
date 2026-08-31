@@ -993,13 +993,20 @@ impl McpHub {
     }
 
     /// 调用已连接 MCP 工具（按服务器与工具名）。
-    pub async fn call_tool(
+    pub fn call_tool(
         &self,
         qualified_name: &str,
         args: &Value,
-    ) -> anyhow::Result<types::ToolOutput> {
-        let (peer, native, timeout_secs) = self.resolve_tool_peer(qualified_name)?;
-        call_tool_with_peer(&peer, qualified_name, &native, args, timeout_secs).await
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<types::ToolOutput>> + Send + 'static>,
+    > {
+        let resolved = self.resolve_tool_peer(qualified_name);
+        let qualified_name = qualified_name.to_string();
+        let args = args.clone();
+        Box::pin(async move {
+            let (peer, native, timeout_secs) = resolved?;
+            call_tool_with_peer(&peer, &qualified_name, &native, &args, timeout_secs).await
+        })
     }
 
     /// 短连刷新某 server 的 discovered（供 UI refresh_mcp_tools）

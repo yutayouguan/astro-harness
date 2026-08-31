@@ -76,6 +76,12 @@ impl HookEvent {
             Self::CommandNewChat => "CommandNewChat",
         }
     }
+
+    pub fn from_command_name(name: &str) -> Option<Self> {
+        Self::COMMAND_HOOK_EVENTS
+            .into_iter()
+            .find(|event| event.as_str() == name)
+    }
 }
 
 #[cfg(test)]

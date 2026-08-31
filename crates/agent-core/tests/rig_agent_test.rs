@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use types::message::Message;
 
 #[tokio::test]
-async fn session_fire_hook_uses_shared_runtime_and_common_payload() {
+async fn session_fire_hook_preserves_shared_transports_and_common_payload() {
     let dir = TempDir::new().unwrap();
     let (agent, _) = AgentBuilder::new(dir.path()).build().await.unwrap();
     let runtime = Arc::new(hooks::HookRuntime::new());
@@ -44,7 +44,8 @@ async fn session_fire_hook_uses_shared_runtime_and_common_payload() {
     assert_eq!(payload.permission_mode.as_deref(), Some("workspace-write"));
     assert_eq!(payload.hook_event_name, hooks::USER_PROMPT_SUBMIT);
     assert_eq!(payload.prompt.as_deref(), Some("hello"));
-    assert!(Arc::ptr_eq(&agent.hook_runtime(), &runtime));
+    assert!(Arc::ptr_eq(&agent.hook_runtime().plugin, &runtime.plugin));
+    assert!(Arc::ptr_eq(&agent.hook_runtime().gateway, &runtime.gateway));
 }
 
 #[tokio::test]

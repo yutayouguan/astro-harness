@@ -5,6 +5,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -18,7 +19,11 @@ use tokio::process::Command;
 use tokio::task::JoinSet;
 use tracing::warn;
 
-use crate::run::{HookRunRecord, HookRunStatus, HookRunStore};
+use crate::mcp::{expand_argument_template, unavailable_executor, HookMcpCall, HookMcpExecutor};
+use crate::run::{
+    unix_timestamp, HookExecutionMode, HookHandlerType, HookOutputEntry, HookOutputEntryKind,
+    HookRunRecord, HookRunStatus, HookRunStore, HookScope,
+};
 use crate::{HookEvent, HookPayload};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
@@ -26,6 +31,7 @@ const SESSION_END_TIMEOUT: Duration = Duration::from_secs(1);
 const MAX_SESSION_END_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 const MAX_ENV_VALUE_BYTES: usize = 8 * 1024;
+const DEFAULT_ADDITIONAL_CONTEXT_TOKEN_LIMIT: usize = 2_500;
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -35,6 +41,28 @@ pub struct HooksFile {
     pub description: Option<String>,
     #[serde(default)]
     pub hooks: HashMap<String, Vec<MatcherGroup>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct HooksToml {
+    #[serde(default)]
+    state: HashMap<String, HookStateToml>,
+    #[serde(default, flatten)]
+    events: HashMap<String, Vec<MatcherGroup>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct HookStateToml {
+    #[serde(default, rename = "enabled")]
+    _enabled: Option<bool>,
+    #[serde(default, rename = "trusted_hash")]
+    _trusted_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct ConfigToml {
+    #[serde(default)]
+    hooks: Option<HooksToml>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -59,6 +87,8 @@ pub enum HookHandlerConfig {
         r#async: bool,
         #[serde(default, rename = "statusMessage")]
         status_message: Option<String>,
+        #[serde(default, rename = "additionalContextLimit")]
+        additional_context_limit: Option<usize>,
     },
     #[serde(rename = "prompt")]
     Prompt {},
@@ -91,17 +121,76 @@ pub struct CommandHookDecision {
     pub additional_context: Option<String>,
     pub feedback: Option<String>,
     pub keep_going: Option<String>,
+    pub stop_reason: Option<String>,
+    pub warnings: Vec<String>,
+    pub(crate) completion_order: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
-struct ConfiguredCommand {
+struct ConfiguredHandler {
     id: String,
     source: String,
     matcher: Option<Regex>,
-    command: String,
     timeout: Duration,
     asynchronous: bool,
     status_message: Option<String>,
+    additional_context_limit: Option<usize>,
+    kind: ConfiguredHandlerKind,
+}
+
+#[derive(Debug, Clone)]
+enum ConfiguredHandlerKind {
+    Command {
+        command: String,
+    },
+    McpTool {
+        server: String,
+        tool: String,
+        input: serde_json::Map<String, Value>,
+    },
+}
+
+impl ConfiguredHandlerKind {
+    fn identity(&self) -> String {
+        match self {
+            Self::Command { command } => command.clone(),
+            Self::McpTool {
+                server,
+                tool,
+                input,
+            } => {
+                format!("{server}:{tool}:{}", Value::Object(input.clone()))
+            }
+        }
+    }
+
+    const fn handler_type(&self) -> HookHandlerType {
+        match self {
+            Self::Command { .. } => HookHandlerType::Command,
+            Self::McpTool { .. } => HookHandlerType::McpTool,
+        }
+    }
+
+    fn command(&self) -> Option<&str> {
+        match self {
+            Self::Command { command } => Some(command),
+            Self::McpTool { .. } => None,
+        }
+    }
+
+    fn server(&self) -> Option<&str> {
+        match self {
+            Self::McpTool { server, .. } => Some(server),
+            Self::Command { .. } => None,
+        }
+    }
+
+    fn tool(&self) -> Option<&str> {
+        match self {
+            Self::McpTool { tool, .. } => Some(tool),
+            Self::Command { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -128,11 +217,34 @@ pub struct CommandHookSourceSummary {
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone)]
 pub struct CommandHookRunner {
-    handlers: HashMap<String, Vec<ConfiguredCommand>>,
+    handlers: HashMap<HookEvent, Vec<ConfiguredHandler>>,
     runs: HookRunStore,
     sources: Vec<CommandHookSourceSummary>,
+    mcp_executor: Arc<dyn HookMcpExecutor>,
+}
+
+impl std::fmt::Debug for CommandHookRunner {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("CommandHookRunner")
+            .field("handlers", &self.handlers)
+            .field("runs", &self.runs)
+            .field("sources", &self.sources)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Default for CommandHookRunner {
+    fn default() -> Self {
+        Self {
+            handlers: HashMap::new(),
+            runs: HookRunStore::default(),
+            sources: Vec::new(),
+            mcp_executor: unavailable_executor(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -140,18 +252,19 @@ pub struct CommandHookSummary {
     pub id: String,
     pub event_name: String,
     pub matcher: Option<String>,
-    pub command: String,
+    pub handler_type: HookHandlerType,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
     pub source: String,
     pub asynchronous: bool,
+    pub additional_context_limit: Option<usize>,
 }
 
 impl CommandHookRunner {
     pub fn load(root: &Path) -> anyhow::Result<Self> {
-        let path = root.join("hooks.json");
         let mut runner = Self::default();
-        if path.is_file() {
-            runner.load_file(&path, CommandHookScope::User, CommandHookTrust::Trusted)?;
-        }
+        runner.load_scope(root, CommandHookScope::User, CommandHookTrust::Trusted)?;
         Ok(runner)
     }
 
@@ -161,30 +274,49 @@ impl CommandHookRunner {
         let loaded = load_local_config(&LocalConfigOptions::new(astro_home, &cwd))?;
         let trust = CommandHookTrust::from(loaded.project_trust);
         for directory in project_hook_dirs(&loaded.project_root, &cwd) {
-            let path = directory.join("hooks.json");
-            if !path.is_file() {
+            let source_paths = [directory.join("hooks.json"), directory.join("config.toml")];
+            if !source_paths.iter().any(|path| path.is_file()) {
                 continue;
             }
             if trust != CommandHookTrust::Trusted {
-                runner.sources.push(CommandHookSourceSummary {
-                    path: path.to_string_lossy().into_owned(),
-                    scope: CommandHookScope::Project,
-                    trust,
-                    enabled: false,
-                    reason: Some(
-                        match trust {
-                            CommandHookTrust::Untrusted => "project is untrusted",
-                            CommandHookTrust::Unknown => "project trust has not been granted",
-                            CommandHookTrust::Trusted => unreachable!(),
-                        }
-                        .into(),
-                    ),
-                });
+                for path in source_paths.into_iter().filter(|path| path.is_file()) {
+                    runner.sources.push(CommandHookSourceSummary {
+                        path: path.to_string_lossy().into_owned(),
+                        scope: CommandHookScope::Project,
+                        trust,
+                        enabled: false,
+                        reason: Some(
+                            match trust {
+                                CommandHookTrust::Untrusted => "project is untrusted",
+                                CommandHookTrust::Unknown => "project trust has not been granted",
+                                CommandHookTrust::Trusted => unreachable!(),
+                            }
+                            .into(),
+                        ),
+                    });
+                }
                 continue;
             }
-            runner.load_file(&path, CommandHookScope::Project, trust)?;
+            runner.load_scope(&directory, CommandHookScope::Project, trust)?;
         }
         Ok(runner)
+    }
+
+    fn load_scope(
+        &mut self,
+        directory: &Path,
+        scope: CommandHookScope,
+        trust: CommandHookTrust,
+    ) -> anyhow::Result<()> {
+        let json_path = directory.join("hooks.json");
+        if json_path.is_file() {
+            self.load_file(&json_path, scope, trust)?;
+        }
+        let toml_path = directory.join("config.toml");
+        if toml_path.is_file() {
+            self.load_toml_file(&toml_path, scope, trust)?;
+        }
+        Ok(())
     }
 
     pub fn from_file(file: HooksFile, source: &Path) -> anyhow::Result<Self> {
@@ -219,15 +351,46 @@ impl CommandHookRunner {
         Ok(())
     }
 
+    fn load_toml_file(
+        &mut self,
+        source: &Path,
+        scope: CommandHookScope,
+        trust: CommandHookTrust,
+    ) -> anyhow::Result<()> {
+        let raw = std::fs::read_to_string(source)?;
+        let config: ConfigToml = toml::from_str(&raw)?;
+        let Some(hooks) = config.hooks else {
+            return Ok(());
+        };
+        // Keep state out of the flattened event map. State enforcement needs
+        // stable cross-source hook keys and is intentionally separate from decoding.
+        let _state = hooks.state;
+        if hooks.events.is_empty() {
+            return Ok(());
+        }
+        self.sources.push(CommandHookSourceSummary {
+            path: source.to_string_lossy().into_owned(),
+            scope,
+            trust,
+            enabled: true,
+            reason: None,
+        });
+        self.extend_from_file(
+            HooksFile {
+                description: None,
+                hooks: hooks.events,
+            },
+            source,
+        );
+        Ok(())
+    }
+
     fn extend_from_file(&mut self, file: HooksFile, source: &Path) {
         for (event, groups) in file.hooks {
-            if !HookEvent::COMMAND_HOOK_EVENTS
-                .iter()
-                .any(|candidate| candidate.as_str() == event)
-            {
+            let Some(event_name) = HookEvent::from_command_name(&event) else {
                 warn!(%event, source = %source.display(), "ignoring unsupported command hook event");
                 continue;
-            }
+            };
             for (group_index, group) in groups.into_iter().enumerate() {
                 let matcher_source = group.matcher.clone();
                 let matcher = match compile_matcher(group.matcher.as_deref()) {
@@ -238,48 +401,107 @@ impl CommandHookRunner {
                     }
                 };
                 for (handler_index, handler) in group.hooks.into_iter().enumerate() {
-                    let HookHandlerConfig::Command {
-                        command,
-                        command_windows,
-                        timeout_sec,
-                        r#async,
-                        status_message,
-                    } = handler
-                    else {
-                        warn!(%event, source = %source.display(), "hook handler type is parsed but not executable");
-                        continue;
-                    };
-                    #[cfg(windows)]
-                    let command = command_windows.unwrap_or(command);
-                    #[cfg(not(windows))]
-                    let _ = command_windows;
-                    let requested = timeout_sec.map(Duration::from_secs);
-                    let timeout = if event == crate::SESSION_END {
-                        requested
-                            .unwrap_or(SESSION_END_TIMEOUT)
-                            .min(MAX_SESSION_END_TIMEOUT)
+                    let (kind, requested, asynchronous, status_message, additional_context_limit) =
+                        match handler {
+                            HookHandlerConfig::Command {
+                                command,
+                                command_windows,
+                                timeout_sec,
+                                r#async,
+                                status_message,
+                                additional_context_limit,
+                            } => {
+                                #[cfg(windows)]
+                                let command = command_windows.unwrap_or(command);
+                                #[cfg(not(windows))]
+                                let _ = command_windows;
+                                if command.trim().is_empty() {
+                                    warn!(%event, source = %source.display(), "empty hook command disabled");
+                                    continue;
+                                }
+                                (
+                                    ConfiguredHandlerKind::Command { command },
+                                    timeout_sec.map(Duration::from_secs),
+                                    r#async,
+                                    status_message,
+                                    additional_context_limit,
+                                )
+                            }
+                            HookHandlerConfig::McpTool {
+                                server,
+                                tool,
+                                input,
+                                timeout_sec,
+                                status_message,
+                            } => {
+                                if event_name == HookEvent::SessionEnd {
+                                    warn!(%event, source = %source.display(), "SessionEnd MCP hook is not supported");
+                                    continue;
+                                }
+                                if server.trim().is_empty() || tool.trim().is_empty() {
+                                    warn!(%event, source = %source.display(), "MCP hook server and tool must not be empty");
+                                    continue;
+                                }
+                                (
+                                    ConfiguredHandlerKind::McpTool {
+                                        server,
+                                        tool,
+                                        input,
+                                    },
+                                    timeout_sec.map(Duration::from_secs),
+                                    false,
+                                    status_message,
+                                    None,
+                                )
+                            }
+                            HookHandlerConfig::Prompt {} | HookHandlerConfig::Agent {} => {
+                                warn!(%event, source = %source.display(), "hook handler type is not supported yet");
+                                continue;
+                            }
+                        };
+                    let additional_context_limit = if matches!(
+                        event_name,
+                        HookEvent::PreToolUse
+                            | HookEvent::PostToolUse
+                            | HookEvent::SessionStart
+                            | HookEvent::UserPromptSubmit
+                            | HookEvent::SubagentStart
+                    ) {
+                        additional_context_limit
                     } else {
-                        requested.unwrap_or(DEFAULT_TIMEOUT)
+                        if additional_context_limit.is_some() {
+                            warn!(%event, source = %source.display(), "additionalContextLimit ignored for event without additional context");
+                        }
+                        None
                     };
+                    let timeout =
+                        if matches!(event_name, HookEvent::SessionEnd | HookEvent::Interrupt) {
+                            requested
+                                .unwrap_or(SESSION_END_TIMEOUT)
+                                .min(MAX_SESSION_END_TIMEOUT)
+                        } else {
+                            requested.unwrap_or(DEFAULT_TIMEOUT)
+                        };
                     let id = handler_id(
                         source,
                         &event,
                         group_index,
                         handler_index,
                         matcher_source.as_deref(),
-                        &command,
+                        &kind.identity(),
                     );
                     self.handlers
-                        .entry(event.clone())
+                        .entry(event_name)
                         .or_default()
-                        .push(ConfiguredCommand {
+                        .push(ConfiguredHandler {
                             id,
                             source: source.to_string_lossy().into_owned(),
                             matcher: matcher.clone(),
-                            command,
                             timeout,
-                            asynchronous: r#async && event != crate::SESSION_END,
+                            asynchronous: asynchronous && event_name != HookEvent::SessionEnd,
                             status_message,
+                            additional_context_limit,
+                            kind,
                         });
                 }
             }
@@ -301,14 +523,18 @@ impl CommandHookRunner {
             .flat_map(|(event_name, handlers)| {
                 handlers.iter().map(|handler| CommandHookSummary {
                     id: handler.id.clone(),
-                    event_name: event_name.clone(),
+                    event_name: event_name.as_str().to_string(),
                     matcher: handler
                         .matcher
                         .as_ref()
                         .map(|matcher| matcher.as_str().to_string()),
-                    command: handler.command.clone(),
+                    handler_type: handler.kind.handler_type(),
+                    command: handler.kind.command().map(ToOwned::to_owned),
+                    server: handler.kind.server().map(ToOwned::to_owned),
+                    tool: handler.kind.tool().map(ToOwned::to_owned),
                     source: handler.source.clone(),
                     asynchronous: handler.asynchronous,
+                    additional_context_limit: handler.additional_context_limit,
                 })
             })
             .collect::<Vec<_>>();
@@ -333,11 +559,19 @@ impl CommandHookRunner {
         self.runs.clone()
     }
 
+    pub fn with_mcp_executor(mut self, executor: Arc<dyn HookMcpExecutor>) -> Self {
+        self.mcp_executor = executor;
+        self
+    }
+
     pub async fn run(&self, event: &str, payload: &HookPayload) -> Vec<CommandHookDecision> {
-        let Some(handlers) = self.handlers.get(event) else {
+        let Some(event_name) = HookEvent::from_command_name(event) else {
             return Vec::new();
         };
-        let matcher_values = matcher_values(event, payload);
+        let Some(handlers) = self.handlers.get(&event_name) else {
+            return Vec::new();
+        };
+        let matcher_values = matcher_values(event_name, payload);
         let input = match serde_json::to_vec(&payload.for_event(event)) {
             Ok(input) => input,
             Err(error) => {
@@ -348,8 +582,8 @@ impl CommandHookRunner {
         let cwd = PathBuf::from(&payload.cwd);
         let environment = hook_environment(event, payload);
         let ignore_matcher = matches!(
-            event,
-            crate::USER_PROMPT_SUBMIT | crate::STOP | crate::INTERRUPT
+            event_name,
+            HookEvent::UserPromptSubmit | HookEvent::Stop | HookEvent::Interrupt
         );
         let mut synchronous = JoinSet::new();
         for (configured_order, handler) in handlers
@@ -365,17 +599,29 @@ impl CommandHookRunner {
                 id: run_id.clone(),
                 event_name: event.to_string(),
                 handler_id: handler.id.clone(),
+                handler_type: handler.kind.handler_type(),
+                execution_mode: if handler.asynchronous {
+                    HookExecutionMode::Async
+                } else {
+                    HookExecutionMode::Sync
+                },
+                scope: hook_scope(event),
                 source: handler.source.clone(),
+                display_order: configured_order,
                 status: HookRunStatus::Running,
-                summary: handler
-                    .status_message
-                    .clone()
-                    .unwrap_or_else(|| "running command hook".into()),
+                status_message: handler.status_message.clone(),
+                summary: handler.status_message.clone().unwrap_or_else(|| {
+                    format!("running {} hook", handler.kind.handler_type().label())
+                }),
+                started_at: unix_timestamp(),
+                completed_at: None,
                 duration_ms: None,
+                entries: Vec::new(),
             });
             let input = input.clone();
             let cwd = cwd.clone();
             let environment = environment.clone();
+            let mcp_executor = Arc::clone(&self.mcp_executor);
             if handler.asynchronous {
                 let runs = self.runs.clone();
                 let run_event = event.to_string();
@@ -385,9 +631,13 @@ impl CommandHookRunner {
                         .enable_all()
                         .build();
                     let result = match runtime {
-                        Ok(runtime) => {
-                            runtime.block_on(run_command(&handler, &input, &cwd, &environment))
-                        }
+                        Ok(runtime) => runtime.block_on(run_handler(
+                            &handler,
+                            &input,
+                            &cwd,
+                            &environment,
+                            mcp_executor.as_ref(),
+                        )),
                         Err(error) => Err(error.into()),
                     };
                     if let Err(error) = &result {
@@ -399,8 +649,18 @@ impl CommandHookRunner {
                 let run_event = event.to_string();
                 synchronous.spawn(async move {
                     let started = Instant::now();
-                    let result = run_command(&handler, &input, &cwd, &environment).await;
-                    (configured_order, run_id, run_event, started, result)
+                    let additional_context_limit = handler.additional_context_limit;
+                    let result =
+                        run_handler(&handler, &input, &cwd, &environment, mcp_executor.as_ref())
+                            .await;
+                    (
+                        configured_order,
+                        run_id,
+                        run_event,
+                        started,
+                        additional_context_limit,
+                        result,
+                    )
                 });
             }
         }
@@ -408,8 +668,20 @@ impl CommandHookRunner {
         let mut completed = Vec::new();
         while let Some(result) = synchronous.join_next().await {
             match result {
-                Ok((configured_order, run_id, run_event, started, Ok(output))) => {
-                    let decision = parse_output(event, &output);
+                Ok((configured_order, run_id, run_event, started, limit, Ok(output))) => {
+                    let mut decision = parse_output(event, &output);
+                    if let Some(context) = decision.additional_context.take() {
+                        decision.additional_context = Some(
+                            maybe_spill_additional_context(
+                                &payload.session_id,
+                                &run_id,
+                                context,
+                                limit,
+                            )
+                            .await,
+                        );
+                    }
+                    decision.completion_order = Some(completed.len());
                     finish_run(
                         &self.runs,
                         &run_id,
@@ -420,7 +692,7 @@ impl CommandHookRunner {
                     );
                     completed.push((configured_order, decision));
                 }
-                Ok((_, run_id, run_event, started, Err(error))) => {
+                Ok((_, run_id, run_event, started, _, Err(error))) => {
                     finish_run(&self.runs, &run_id, &run_event, started, Err(&error), None);
                     warn!(%event, %error, "command hook failed open");
                 }
@@ -441,7 +713,7 @@ fn handler_id(
     group_index: usize,
     handler_index: usize,
     matcher: Option<&str>,
-    command: &str,
+    identity: &str,
 ) -> String {
     let mut digest = Sha256::new();
     digest.update(source.to_string_lossy().as_bytes());
@@ -451,12 +723,12 @@ fn handler_id(
         &group_index.to_string(),
         &handler_index.to_string(),
         matcher.unwrap_or(""),
-        command,
+        identity,
     ] {
         digest.update(part.as_bytes());
         digest.update([0]);
     }
-    format!("command-{:x}", digest.finalize())
+    format!("hook-{:x}", digest.finalize())
 }
 
 fn project_hook_dirs(project_root: &Path, cwd: &Path) -> Vec<PathBuf> {
@@ -484,13 +756,19 @@ fn finish_run(
     run_id: &str,
     event: &str,
     started: Instant,
-    result: Result<&CommandOutput, &anyhow::Error>,
+    result: Result<&HandlerOutput, &anyhow::Error>,
     decision: Option<&CommandHookDecision>,
 ) {
     let duration_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
     let (status, summary) = match result {
+        Ok(_output) if decision.is_some_and(|decision| decision.stop_reason.is_some()) => (
+            HookRunStatus::Stopped,
+            decision
+                .and_then(|decision| decision.stop_reason.clone())
+                .unwrap_or_else(|| format!("{event} hook stopped processing")),
+        ),
         Ok(output)
-            if output.status.code() == Some(2)
+            if output.exit_code == Some(2)
                 || decision.is_some_and(|decision| decision.block_reason.is_some()) =>
         {
             (
@@ -498,21 +776,86 @@ fn finish_run(
                 decision
                     .and_then(|decision| decision.block_reason.clone())
                     .or_else(|| stderr_reason(output))
-                    .unwrap_or_else(|| format!("{event} command blocked")),
+                    .unwrap_or_else(|| format!("{event} hook blocked")),
             )
         }
-        Ok(output) if output.status.success() => (
-            HookRunStatus::Completed,
-            format!("{event} command completed"),
-        ),
+        Ok(output) if output.exit_code == Some(0) => {
+            (HookRunStatus::Completed, format!("{event} hook completed"))
+        }
         Ok(output) => (
             HookRunStatus::Failed,
-            stderr_reason(output)
-                .unwrap_or_else(|| format!("{event} command exited with status {}", output.status)),
+            stderr_reason(output).unwrap_or_else(|| {
+                output.exit_code.map_or_else(
+                    || format!("{event} hook exited without a status code"),
+                    |code| format!("{event} hook exited with status {code}"),
+                )
+            }),
         ),
         Err(error) => (HookRunStatus::Failed, error.to_string()),
     };
-    runs.finish(run_id, status, summary, duration_ms);
+    let entries = decision.map_or_else(
+        || {
+            (status == HookRunStatus::Failed)
+                .then(|| HookOutputEntry {
+                    kind: HookOutputEntryKind::Error,
+                    text: summary.clone(),
+                })
+                .into_iter()
+                .collect()
+        },
+        decision_entries,
+    );
+    runs.finish(run_id, status, summary, duration_ms, entries);
+}
+
+fn decision_entries(decision: &CommandHookDecision) -> Vec<HookOutputEntry> {
+    let mut entries = Vec::new();
+    entries.extend(
+        decision
+            .warnings
+            .iter()
+            .cloned()
+            .map(|text| HookOutputEntry {
+                kind: HookOutputEntryKind::Warning,
+                text,
+            }),
+    );
+    if let Some(text) = &decision.stop_reason {
+        entries.push(HookOutputEntry {
+            kind: HookOutputEntryKind::Stop,
+            text: text.clone(),
+        });
+    }
+    if let Some(text) = &decision.block_reason {
+        entries.push(HookOutputEntry {
+            kind: HookOutputEntryKind::Feedback,
+            text: text.clone(),
+        });
+    }
+    if let Some(text) = &decision.additional_context {
+        entries.push(HookOutputEntry {
+            kind: HookOutputEntryKind::Context,
+            text: text.clone(),
+        });
+    }
+    if let Some(text) = &decision.feedback {
+        entries.push(HookOutputEntry {
+            kind: HookOutputEntryKind::Feedback,
+            text: text.clone(),
+        });
+    }
+    entries
+}
+
+fn hook_scope(event: &str) -> HookScope {
+    if matches!(
+        event,
+        crate::SESSION_START | crate::SESSION_END | crate::SUBAGENT_START
+    ) {
+        HookScope::Thread
+    } else {
+        HookScope::Turn
+    }
 }
 
 fn compile_matcher(matcher: Option<&str>) -> anyhow::Result<Option<Regex>> {
@@ -522,21 +865,21 @@ fn compile_matcher(matcher: Option<&str>) -> anyhow::Result<Option<Regex>> {
     }
 }
 
-fn matcher_values(event: &str, payload: &HookPayload) -> Vec<String> {
+fn matcher_values(event: HookEvent, payload: &HookPayload) -> Vec<String> {
     let value = match event {
-        crate::SESSION_START => payload.source.clone(),
-        crate::SESSION_END => payload.reason.clone(),
-        crate::PRE_TOOL_USE | crate::PERMISSION_REQUEST | crate::POST_TOOL_USE => {
+        HookEvent::SessionStart => payload.source.clone(),
+        HookEvent::SessionEnd => payload.reason.clone(),
+        HookEvent::PreToolUse | HookEvent::PermissionRequest | HookEvent::PostToolUse => {
             payload.tool_name.clone()
         }
-        crate::PRE_COMPACT | crate::POST_COMPACT => payload.trigger.clone(),
-        crate::SUBAGENT_START | crate::SUBAGENT_STOP => payload.agent_type.clone(),
+        HookEvent::PreCompact | HookEvent::PostCompact => payload.trigger.clone(),
+        HookEvent::SubagentStart | HookEvent::SubagentStop => payload.agent_type.clone(),
         _ => None,
     };
     let mut values = value.into_iter().collect::<Vec<_>>();
     if matches!(
         event,
-        crate::PRE_TOOL_USE | crate::PERMISSION_REQUEST | crate::POST_TOOL_USE
+        HookEvent::PreToolUse | HookEvent::PermissionRequest | HookEvent::PostToolUse
     ) {
         if values.iter().any(|value| value == "terminal") {
             values.push("Bash".into());
@@ -572,24 +915,137 @@ fn truncate_env_value(value: &str) -> String {
     value[..boundary].to_string()
 }
 
+async fn maybe_spill_additional_context(
+    session_id: &str,
+    run_id: &str,
+    text: String,
+    configured_limit: Option<usize>,
+) -> String {
+    let token_limit = configured_limit.unwrap_or(DEFAULT_ADDITIONAL_CONTEXT_TOKEN_LIMIT);
+    if token_limit == 0 || approximate_tokens(&text) <= token_limit {
+        return text;
+    }
+
+    let safe_session = sanitize_path_component(session_id, "unknown-session");
+    let safe_run = sanitize_path_component(run_id, "hook-run");
+    let output_dir = std::env::temp_dir().join("hook_outputs").join(safe_session);
+    let path = output_dir.join(format!("{safe_run}.txt"));
+    let footer = format!("\n\nFull hook output saved to: {}", path.display());
+    let preview_limit = token_limit.saturating_sub(approximate_tokens(&footer));
+    let preview = truncate_to_token_budget(&text, preview_limit);
+    if tokio::fs::create_dir_all(&output_dir).await.is_ok()
+        && tokio::fs::write(&path, text.as_bytes()).await.is_ok()
+    {
+        format!("{preview}{footer}")
+    } else {
+        warn!(path = %path.display(), "failed to spill oversized hook additional context");
+        preview
+    }
+}
+
+fn approximate_tokens(text: &str) -> usize {
+    text.chars().count().div_ceil(4)
+}
+
+fn truncate_to_token_budget(text: &str, token_limit: usize) -> String {
+    let char_limit = token_limit.saturating_mul(4);
+    let chars = text.chars().collect::<Vec<_>>();
+    if chars.len() <= char_limit {
+        return text.to_string();
+    }
+    let marker = "\n... hook output truncated ...\n";
+    let content_limit = char_limit.saturating_sub(marker.chars().count());
+    let head = content_limit / 2;
+    let tail = content_limit.saturating_sub(head);
+    format!(
+        "{}{}{}",
+        chars[..head].iter().collect::<String>(),
+        marker,
+        chars[chars.len().saturating_sub(tail)..]
+            .iter()
+            .collect::<String>()
+    )
+}
+
+fn sanitize_path_component(value: &str, fallback: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if sanitized.is_empty() {
+        fallback.to_string()
+    } else {
+        sanitized
+    }
+}
+
 #[derive(Debug)]
-struct CommandOutput {
-    status: std::process::ExitStatus,
+struct HandlerOutput {
+    exit_code: Option<i32>,
     stdout: String,
     stderr: String,
 }
 
+async fn run_handler(
+    handler: &ConfiguredHandler,
+    hook_input: &[u8],
+    cwd: &Path,
+    hook_environment: &[(String, String)],
+    mcp_executor: &dyn HookMcpExecutor,
+) -> anyhow::Result<HandlerOutput> {
+    match &handler.kind {
+        ConfiguredHandlerKind::Command { command } => {
+            run_command(handler, command, hook_input, cwd, hook_environment).await
+        }
+        ConfiguredHandlerKind::McpTool {
+            server,
+            tool,
+            input,
+        } => {
+            let hook_input: Value = serde_json::from_slice(hook_input)?;
+            let input = expand_argument_template(input, &hook_input)?;
+            let call = HookMcpCall {
+                server: server.clone(),
+                tool: tool.clone(),
+                input,
+                timeout: handler.timeout,
+            };
+            let stdout = tokio::time::timeout(handler.timeout, mcp_executor.execute(call))
+                .await
+                .map_err(|_| {
+                    anyhow::anyhow!("MCP hook timed out after {}s", handler.timeout.as_secs())
+                })??;
+            anyhow::ensure!(
+                stdout.len() <= MAX_OUTPUT_BYTES,
+                "hook output exceeds 1 MiB"
+            );
+            Ok(HandlerOutput {
+                exit_code: Some(0),
+                stdout,
+                stderr: String::new(),
+            })
+        }
+    }
+}
+
 async fn run_command(
-    handler: &ConfiguredCommand,
+    handler: &ConfiguredHandler,
+    command_text: &str,
     input: &[u8],
     cwd: &Path,
     hook_environment: &[(String, String)],
-) -> anyhow::Result<CommandOutput> {
+) -> anyhow::Result<HandlerOutput> {
     let mut command = Command::new(if cfg!(windows) { "cmd" } else { "sh" });
     if cfg!(windows) {
-        command.args(["/C", &handler.command]);
+        command.args(["/C", command_text]);
     } else {
-        command.args(["-c", &handler.command]);
+        command.args(["-c", command_text]);
     }
     command
         .env_clear()
@@ -632,8 +1088,8 @@ async fn run_command(
             async { (&mut stdout_task).await.map_err(anyhow::Error::from)? },
             async { (&mut stderr_task).await.map_err(anyhow::Error::from)? },
         )?;
-        Ok::<_, anyhow::Error>(CommandOutput {
-            status,
+        Ok::<_, anyhow::Error>(HandlerOutput {
+            exit_code: status.code(),
             stdout: String::from_utf8_lossy(&stdout).into_owned(),
             stderr: String::from_utf8_lossy(&stderr).into_owned(),
         })
@@ -694,6 +1150,10 @@ struct WireOutput {
     #[serde(default)]
     stop_reason: Option<String>,
     #[serde(default)]
+    system_message: Option<String>,
+    #[serde(default)]
+    suppress_output: bool,
+    #[serde(default)]
     decision: Option<String>,
     #[serde(default)]
     reason: Option<String>,
@@ -730,14 +1190,14 @@ const fn default_true() -> bool {
     true
 }
 
-fn stderr_reason(output: &CommandOutput) -> Option<String> {
+fn stderr_reason(output: &HandlerOutput) -> Option<String> {
     let reason = output.stderr.trim();
     (!reason.is_empty()).then(|| reason.to_string())
 }
 
-fn parse_output(event: &str, output: &CommandOutput) -> CommandHookDecision {
+fn parse_output(event: &str, output: &HandlerOutput) -> CommandHookDecision {
     let stderr = output.stderr.trim();
-    if output.status.code() == Some(2) {
+    if output.exit_code == Some(2) {
         return CommandHookDecision {
             block_reason: Some(if stderr.is_empty() {
                 "hook exited with status 2".into()
@@ -747,8 +1207,8 @@ fn parse_output(event: &str, output: &CommandOutput) -> CommandHookDecision {
             ..Default::default()
         };
     }
-    if !output.status.success() {
-        warn!(%event, status = %output.status, stderr, "command hook exited unsuccessfully");
+    if output.exit_code != Some(0) {
+        warn!(%event, exit_code = ?output.exit_code, stderr, "hook exited unsuccessfully");
         return CommandHookDecision::default();
     }
     let stdout = output.stdout.trim();
@@ -782,19 +1242,23 @@ fn parse_output(event: &str, output: &CommandOutput) -> CommandHookDecision {
         warn!(%event, "command hook output names a different event; ignored");
         return CommandHookDecision::default();
     }
+    let warnings = wire.system_message.into_iter().collect::<Vec<_>>();
+    let _ = wire.suppress_output;
     let stop_reason = wire
         .stop_reason
         .filter(|reason| !reason.trim().is_empty())
         .unwrap_or_else(|| "hook requested stop".into());
     if !wire.continue_processing {
         return CommandHookDecision {
-            block_reason: Some(stop_reason),
+            stop_reason: Some(stop_reason),
+            warnings,
             ..Default::default()
         };
     }
     let mut decision = CommandHookDecision {
         additional_context: specific.additional_context,
         updated_input: specific.updated_input,
+        warnings,
         ..Default::default()
     };
     match event {
@@ -834,6 +1298,25 @@ fn parse_output(event: &str, output: &CommandOutput) -> CommandHookDecision {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct RecordingMcpExecutor {
+        calls: Mutex<Vec<HookMcpCall>>,
+        output: String,
+    }
+
+    impl HookMcpExecutor for RecordingMcpExecutor {
+        fn execute(
+            &self,
+            call: HookMcpCall,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<String>> + Send + '_>>
+        {
+            self.calls.lock().unwrap().push(call);
+            let output = self.output.clone();
+            Box::pin(async move { Ok(output) })
+        }
+    }
 
     fn project_fixture(trust: &str, hooks: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
         let root = tempfile::tempdir().unwrap();
@@ -869,6 +1352,7 @@ mod tests {
                         timeout_sec: Some(2),
                         r#async: asynchronous,
                         status_message: None,
+                        additional_context_limit: None,
                     }],
                 }],
             )]),
@@ -891,6 +1375,116 @@ mod tests {
         assert!(invalid.is_empty());
     }
 
+    #[tokio::test]
+    async fn mcp_hook_expands_input_and_uses_normal_output_semantics() {
+        let executor = Arc::new(RecordingMcpExecutor {
+            output: r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"safe":true}}}"#.into(),
+            ..Default::default()
+        });
+        let runner = CommandHookRunner::from_file(
+            HooksFile {
+                hooks: HashMap::from([(
+                    crate::PRE_TOOL_USE.into(),
+                    vec![MatcherGroup {
+                        matcher: Some("terminal".into()),
+                        hooks: vec![HookHandlerConfig::McpTool {
+                            server: "policy".into(),
+                            tool: "authorize".into(),
+                            input: serde_json::from_value(serde_json::json!({
+                                "tool": "${tool_name}",
+                                "arguments": "${tool_input}"
+                            }))
+                            .unwrap(),
+                            timeout_sec: Some(2),
+                            status_message: None,
+                        }],
+                    }],
+                )]),
+                ..Default::default()
+            },
+            Path::new("hooks.json"),
+        )
+        .unwrap()
+        .with_mcp_executor(executor.clone());
+
+        let decisions = runner
+            .run(
+                crate::PRE_TOOL_USE,
+                &HookPayload {
+                    session_id: "session-1".into(),
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    tool_name: Some("terminal".into()),
+                    tool_input: Some(serde_json::json!({"command":"pwd"})),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert_eq!(decisions.len(), 1);
+        assert_eq!(
+            decisions[0].updated_input,
+            Some(serde_json::json!({"safe":true}))
+        );
+        let calls = executor.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].server, "policy");
+        assert_eq!(calls[0].tool, "authorize");
+        assert_eq!(calls[0].input["tool"], "terminal");
+        assert_eq!(
+            calls[0].input["arguments"],
+            serde_json::json!({"command":"pwd"})
+        );
+        assert_eq!(runner.list()[0].handler_type, HookHandlerType::McpTool);
+    }
+
+    #[tokio::test]
+    async fn oversized_additional_context_is_spilled_with_recovery_path() {
+        let context = "x".repeat(512);
+        let command = format!(
+            "printf '%s' '{}'",
+            serde_json::json!({"hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": context
+            }})
+        );
+        let mut file = file(command, None, false);
+        let HookHandlerConfig::Command {
+            additional_context_limit,
+            ..
+        } = &mut file.hooks.get_mut(crate::PRE_TOOL_USE).unwrap()[0].hooks[0]
+        else {
+            unreachable!()
+        };
+        *additional_context_limit = Some(8);
+        let groups = file.hooks.remove(crate::PRE_TOOL_USE).unwrap();
+        file.hooks.insert(crate::USER_PROMPT_SUBMIT.into(), groups);
+        let runner = CommandHookRunner::from_file(file, Path::new("hooks.json")).unwrap();
+
+        let decisions = runner
+            .run(
+                crate::USER_PROMPT_SUBMIT,
+                &HookPayload {
+                    session_id: "spill-test".into(),
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    prompt: Some("hello".into()),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        let preview = decisions[0].additional_context.as_deref().unwrap();
+        assert!(preview.contains("Full hook output saved to:"));
+        let path = preview.rsplit_once(": ").unwrap().1;
+        assert_eq!(std::fs::read_to_string(path).unwrap(), context);
+        let _ = std::fs::remove_file(path);
+    }
+
     #[test]
     fn trusted_project_hooks_are_discovered_and_enabled() {
         let (_root, astro_home, cwd) = project_fixture(
@@ -905,6 +1499,37 @@ mod tests {
         assert_eq!(runner.sources()[0].scope, CommandHookScope::Project);
         assert_eq!(runner.sources()[0].trust, CommandHookTrust::Trusted);
         assert!(runner.sources()[0].enabled);
+    }
+
+    #[test]
+    fn hooks_are_discovered_from_config_toml() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("config.toml"),
+            r#"
+                [hooks]
+                [hooks.state."legacy-hook-key"]
+                enabled = false
+                trusted_hash = "sha256:abc123"
+
+                [[hooks.PreToolUse]]
+                matcher = "terminal"
+
+                [[hooks.PreToolUse.hooks]]
+                type = "command"
+                command = "true"
+                additionalContextLimit = 4096
+            "#,
+        )
+        .unwrap();
+
+        let runner = CommandHookRunner::load(root.path()).unwrap();
+
+        assert_eq!(runner.handler_count(), 1);
+        let hooks = runner.list();
+        assert_eq!(hooks[0].handler_type, HookHandlerType::Command);
+        assert_eq!(hooks[0].additional_context_limit, Some(4096));
+        assert!(hooks[0].source.ends_with("config.toml"));
     }
 
     #[test]
@@ -1013,7 +1638,11 @@ mod tests {
         let runs = runner.recent_runs();
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].handler_id, listed[0].id);
+        assert_eq!(runs[0].handler_type, HookHandlerType::Command);
+        assert_eq!(runs[0].execution_mode, HookExecutionMode::Sync);
+        assert_eq!(runs[0].scope, HookScope::Turn);
         assert_eq!(runs[0].status, HookRunStatus::Completed);
+        assert!(runs[0].completed_at.is_some());
         assert!(runs[0].duration_ms.is_some());
     }
 
@@ -1069,6 +1698,7 @@ mod tests {
                             timeout_sec: Some(1),
                             r#async: false,
                             status_message: None,
+                            additional_context_limit: None,
                         }],
                     }],
                 )]),
@@ -1210,6 +1840,7 @@ mod tests {
                                 timeout_sec: Some(2),
                                 r#async: false,
                                 status_message: None,
+                                additional_context_limit: None,
                             },
                             HookHandlerConfig::Command {
                                 command: output("second"),
@@ -1217,6 +1848,7 @@ mod tests {
                                 timeout_sec: Some(2),
                                 r#async: false,
                                 status_message: None,
+                                additional_context_limit: None,
                             },
                         ],
                     }],
@@ -1242,7 +1874,11 @@ mod tests {
             .await;
 
         assert_eq!(decisions.len(), 2);
-        assert_eq!(decisions[0].block_reason.as_deref(), Some("first"));
-        assert_eq!(decisions[1].block_reason.as_deref(), Some("second"));
+        assert_eq!(decisions[0].stop_reason.as_deref(), Some("first"));
+        assert_eq!(decisions[1].stop_reason.as_deref(), Some("second"));
+        assert!(runner
+            .recent_runs()
+            .iter()
+            .all(|run| run.status == HookRunStatus::Stopped));
     }
 }

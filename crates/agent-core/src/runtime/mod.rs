@@ -197,6 +197,36 @@ pub(crate) struct SubagentHookContext {
     pub(crate) canonical_path: String,
 }
 
+struct SessionHookMcpExecutor {
+    hub: Arc<TokioMutex<McpHub>>,
+}
+
+impl ::hooks::HookMcpExecutor for SessionHookMcpExecutor {
+    fn execute(
+        &self,
+        call: ::hooks::HookMcpCall,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<String>> + Send + '_>>
+    {
+        Box::pin(async move {
+            let qualified_name = mcp::qualify_tool_name(&call.server, &call.tool);
+            let arguments = serde_json::Value::Object(call.input);
+            let pending = {
+                let hub = self.hub.lock().await;
+                hub.call_tool(&qualified_name, &arguments)
+            };
+            let output = tokio::time::timeout(call.timeout, pending)
+                .await
+                .map_err(|_| {
+                    anyhow::anyhow!(
+                        "MCP hook timed out after {}s: {qualified_name}",
+                        call.timeout.as_secs()
+                    )
+                })??;
+            Ok(output.into_text())
+        })
+    }
+}
+
 /// 兼容性别名，在下游 crate 迁移到 [`Config`] 期间保留。
 pub type AgentConfig = Config;
 
@@ -718,10 +748,13 @@ impl Session {
     }
 
     pub fn set_hook_runtime(&self, runtime: Arc<::hooks::HookRuntime>) {
+        let runtime = runtime.with_mcp_executor(Arc::new(SessionHookMcpExecutor {
+            hub: Arc::clone(&self.mcp_hub),
+        }));
         *self
             .hook_runtime
             .lock()
-            .expect("hook runtime mutex poisoned") = runtime;
+            .expect("hook runtime mutex poisoned") = Arc::new(runtime);
     }
 
     pub fn hook_runtime(&self) -> Arc<::hooks::HookRuntime> {

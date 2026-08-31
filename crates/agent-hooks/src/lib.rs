@@ -1,4 +1,5 @@
-//! Astro 三套 Hook 体系：Plugin（Agent 生命周期）、Gateway（外壳事件）、Shell（配置命令）。
+//! Astro Hook runtime: in-process plugins plus configured command/MCP handlers.
+//! Gateway manifests and legacy shell commands remain observational transports.
 //!
 //! 注册风格对齐：`ctx.register_hook("PostToolUse", callback)`。
 
@@ -7,6 +8,7 @@ pub mod config;
 pub mod context;
 pub mod event;
 pub mod gateway;
+pub mod mcp;
 pub mod names;
 pub mod outcome;
 pub mod plugin;
@@ -23,12 +25,16 @@ pub use config::{default_astro_root, load_config, load_config_or_default, AstroC
 pub use context::PluginContext;
 pub use event::HookEvent;
 pub use gateway::{DiscoveredHook, GatewayHookRegistry, HookManifest};
+pub use mcp::{HookMcpCall, HookMcpExecutor};
 pub use names::*;
 pub use outcome::{
     HookInput, HookOutcome, HookPayload, PermissionRequestDecision, PostToolUseDecision,
 };
 pub use plugin::PluginHookBus;
-pub use run::{HookRunRecord, HookRunStatus, HookRunStore};
+pub use run::{
+    HookExecutionMode, HookHandlerType, HookOutputEntry, HookOutputEntryKind, HookRunRecord,
+    HookRunStatus, HookRunStore, HookScope,
+};
 pub use shell::{load_shell_runner, ShellHookRunner};
 pub use ui::{
     install_recording, install_ui_timeline, UiHookEvent, UiTimelineGeneration, UiTimelineSlot,
@@ -70,7 +76,18 @@ impl HookRuntime {
         }
     }
 
-    /// 从数据根加载 config + 发现 gateway 清单。
+    /// Bind the session-scoped MCP transport used by `mcp_tool` hook handlers.
+    pub fn with_mcp_executor(&self, executor: Arc<dyn HookMcpExecutor>) -> Self {
+        Self {
+            plugin: Arc::clone(&self.plugin),
+            gateway: Arc::clone(&self.gateway),
+            shell: Arc::clone(&self.shell),
+            command: Arc::new(self.command.as_ref().clone().with_mcp_executor(executor)),
+            ui_slot: self.ui_slot.clone(),
+        }
+    }
+
+    /// Load configured command/MCP hooks and discover gateway manifests.
     pub fn bootstrap_from_root(root: &std::path::Path) -> anyhow::Result<Self> {
         let cfg = load_config(root)?;
         let rt = Self::new();
@@ -138,10 +155,14 @@ impl HookRuntime {
             shell.fire_async(PERMISSION_REQUEST, &payload);
         }
         for command in run_command_hooks(&self.command, PERMISSION_REQUEST, &payload) {
-            if command.permission == Some(PermissionVote::Deny) || command.block_reason.is_some() {
+            if command.permission == Some(PermissionVote::Deny)
+                || command.block_reason.is_some()
+                || command.stop_reason.is_some()
+            {
                 return PermissionRequestDecision::Deny(
                     command
                         .block_reason
+                        .or(command.stop_reason)
                         .unwrap_or_else(|| "denied by command hook".into()),
                 );
             }
@@ -161,7 +182,7 @@ impl HookRuntime {
         }
         for command in run_command_hooks(&self.command, POST_TOOL_USE, &payload) {
             if decision.block_reason.is_none() {
-                decision.block_reason = command.block_reason;
+                decision.block_reason = command.block_reason.or(command.stop_reason);
             }
             if let Some(context) = command.additional_context {
                 decision.additional_contexts.push(context);
@@ -250,7 +271,7 @@ fn run_command_hooks(
 fn aggregate_outcomes(plugin: HookOutcome, commands: Vec<CommandHookDecision>) -> HookOutcome {
     let mut block = None;
     let mut update = None;
-    let mut update_conflict = false;
+    let mut update_completion_order = None;
     let mut contexts = Vec::new();
     let mut continuations = Vec::new();
     match plugin {
@@ -265,13 +286,13 @@ fn aggregate_outcomes(plugin: HookOutcome, commands: Vec<CommandHookDecision>) -
     }
     for command in commands {
         if block.is_none() {
-            block = command.block_reason;
+            block = command.block_reason.or(command.stop_reason);
         }
         if let Some(candidate) = command.updated_input {
-            match &update {
-                Some(current) if current != &candidate => update_conflict = true,
-                None => update = Some(candidate),
-                _ => {}
+            let completion_order = command.completion_order.unwrap_or_default();
+            if update_completion_order.is_none_or(|current| completion_order >= current) {
+                update = Some(candidate);
+                update_completion_order = Some(completion_order);
             }
         }
         contexts.extend(command.additional_context);
@@ -280,9 +301,7 @@ fn aggregate_outcomes(plugin: HookOutcome, commands: Vec<CommandHookDecision>) -
     if let Some(reason) = block {
         return HookOutcome::Block(reason);
     }
-    if update_conflict {
-        tracing::warn!("conflicting command hook input rewrites were ignored");
-    } else if let Some(update) = update {
+    if let Some(update) = update {
         return HookOutcome::Modify(update);
     }
     if !continuations.is_empty() {
@@ -314,6 +333,7 @@ mod tests {
                                 timeout_sec: Some(2),
                                 r#async: false,
                                 status_message: None,
+                                additional_context_limit: None,
                             }],
                         }],
                     )]),
@@ -367,6 +387,30 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(decision, PermissionRequestDecision::Deny("policy".into()));
+    }
+
+    #[test]
+    fn latest_completed_command_rewrite_wins() {
+        let outcome = aggregate_outcomes(
+            HookOutcome::Modify(serde_json::json!({"source":"plugin"})),
+            vec![
+                CommandHookDecision {
+                    updated_input: Some(serde_json::json!({"source":"late"})),
+                    completion_order: Some(1),
+                    ..Default::default()
+                },
+                CommandHookDecision {
+                    updated_input: Some(serde_json::json!({"source":"early"})),
+                    completion_order: Some(0),
+                    ..Default::default()
+                },
+            ],
+        );
+
+        assert!(matches!(
+            outcome,
+            HookOutcome::Modify(value) if value == serde_json::json!({"source":"late"})
+        ));
     }
 
     #[tokio::test]

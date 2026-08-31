@@ -14,6 +14,7 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 serde_yaml = "0.9"
+toml = "0.8"
 dirs = "5"
 regex = "1"
 sha2 = "0.10"
