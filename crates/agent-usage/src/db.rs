@@ -793,7 +793,7 @@ mod tests {
         db.insert(zero_event(
             "2026-07-13T02:00:01Z",
             "skill",
-            "create-agent",
+            "demo-skill",
             "workspace",
             0,
         ))

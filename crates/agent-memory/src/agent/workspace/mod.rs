@@ -2,6 +2,4 @@
 
 mod lifecycle;
 
-pub use lifecycle::{
-    ensure_default_workspace, ensure_workspace, seed_create_agent_skill, EnsureWorkspaceReport,
-};
+pub use lifecycle::{ensure_default_workspace, ensure_workspace, EnsureWorkspaceReport};

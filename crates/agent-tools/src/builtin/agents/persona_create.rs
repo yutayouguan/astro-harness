@@ -56,8 +56,7 @@ pub fn register(registry: &mut ToolRegistry) {
         toolset: "persona".to_string(),
         description:
             "Create a durable Agent persona with persistent workspace (MEMORY/IDENTITY/SOUL). \
-FORBIDDEN for in-turn task splitting—use spawn_agent to create an Agent Thread. \
-Prefer after loading the create-agent skill."
+FORBIDDEN for in-turn task splitting—use spawn_agent to create an Agent Thread."
                 .to_string(),
         schema: schema_for_args::<PersonaCreateArgs>(),
         check_fn: None,

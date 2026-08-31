@@ -12,21 +12,40 @@ pub struct SeedReport {
     pub failed: Vec<String>,
     /// 已存在而跳过的名称。
     pub skipped: Vec<String>,
+    /// 已从用户技能目录移除的退役内置 Skill。
+    pub removed: Vec<String>,
 }
 
 /// 仓库内置 Skill（编译期嵌入 `skills/bundled/`）。
 const BUNDLED_STORYBOARD_VIDEO_MD: &str = include_str!("../bundled/storyboard-video/SKILL.md");
-const BUNDLED_CREATE_AGENT_MD: &str = include_str!("../bundled/create-agent/SKILL.md");
 const BUNDLED_AIHOT_MD: &str = include_str!("../bundled/aihot/SKILL.md");
 const BUNDLED_CREATIVE_MEDIA_MD: &str = include_str!("../bundled/creative-media/SKILL.md");
 
 /// 内置 Skill 清单：`(目录名, SKILL.md 正文)`。
 pub const BUNDLED_SKILLS: &[(&str, &str)] = &[
     ("aihot", BUNDLED_AIHOT_MD),
-    ("create-agent", BUNDLED_CREATE_AGENT_MD),
     ("creative-media", BUNDLED_CREATIVE_MEDIA_MD),
     ("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD),
 ];
+
+/// 由 SkillHub 承接后续更新的内置 Skill 基线。
+#[derive(Debug, Clone, Copy)]
+pub struct BundledSkillHubSource {
+    pub folder: &'static str,
+    pub install_ref: &'static str,
+    pub version: &'static str,
+    pub updated_at: i64,
+}
+
+pub const BUNDLED_SKILLHUB_SOURCES: &[BundledSkillHubSource] = &[BundledSkillHubSource {
+    folder: "aihot",
+    install_ref: "skillhub:kkkkhazix/aihot",
+    version: "0.1.1",
+    updated_at: 1_788_148_472_699,
+}];
+
+/// 已从产品中退役、需清理旧播种副本的内置 Skill。
+const RETIRED_BUNDLED_SKILLS: &[&str] = &["create-agent"];
 
 /// 从 SKILL.md frontmatter 解析 `astro_bundled_rev`（缺省 0）。
 fn bundled_rev_in(body: &str) -> u32 {
@@ -41,19 +60,48 @@ fn bundled_rev_in(body: &str) -> u32 {
     0
 }
 
+fn is_skillhub_managed(name: &str) -> bool {
+    BUNDLED_SKILLHUB_SOURCES
+        .iter()
+        .any(|source| source.folder == name)
+}
+
+fn remove_retired_bundled_skills(base: &Path, report: &mut SeedReport) {
+    for name in RETIRED_BUNDLED_SKILLS {
+        let dest = base.join("skills").join(name);
+        let skill_md = dest.join("SKILL.md");
+        let is_seeded_copy = fs::read_to_string(&skill_md)
+            .map(|body| bundled_rev_in(&body) > 0)
+            .unwrap_or(false);
+        if !is_seeded_copy {
+            continue;
+        }
+        match fs::remove_dir_all(&dest) {
+            Ok(()) => report.removed.push((*name).to_string()),
+            Err(_) => report.failed.push((*name).to_string()),
+        }
+    }
+}
+
 /// 将内置 Skill 写入 `base/skills/<name>/`。
 ///
-/// - 不存在 → 安装  
-/// - 已存在且 `astro_bundled_rev` ≥ 内置版本 → 跳过  
-/// - 已存在但版本落后或无 rev → 覆盖更新 SKILL.md（便于补装新版分镜 Skill）
+/// - 不存在 → 安装
+/// - 由 SkillHub 管理且已存在 → 跳过，避免覆盖远程更新
+/// - 其他内置 Skill 已是最新 bundled rev → 跳过
+/// - 其他内置 Skill 版本落后或无 rev → 覆盖更新 SKILL.md
 pub fn seed_bundled_into(base: &Path) -> SeedReport {
     let _ = fs::create_dir_all(base.join("skills"));
     let mut report = SeedReport::default();
+    remove_retired_bundled_skills(base, &mut report);
     for &(name, body) in BUNDLED_SKILLS {
         let dest = base.join("skills").join(name);
         let skill_md = dest.join("SKILL.md");
         let want = bundled_rev_in(body);
         if skill_md.is_file() {
+            if is_skillhub_managed(name) {
+                report.skipped.push(name.to_string());
+                continue;
+            }
             let have = fs::read_to_string(&skill_md)
                 .map(|s| bundled_rev_in(&s))
                 .unwrap_or(0);
@@ -96,25 +144,18 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn seed_bundled_installs_create_agent_and_storyboard() {
+    fn seed_bundled_installs_supported_skills() {
         let dir = tempdir().unwrap();
         let r1 = seed_bundled_into(dir.path());
         assert!(r1.installed.contains(&"aihot".to_string()));
-        assert!(r1.installed.contains(&"create-agent".to_string()));
         assert!(r1.installed.contains(&"creative-media".to_string()));
         assert!(r1.installed.contains(&"storyboard-video".to_string()));
         assert!(dir.path().join("skills/aihot/SKILL.md").is_file());
-        assert!(dir.path().join("skills/create-agent/SKILL.md").is_file());
         assert!(dir.path().join("skills/creative-media/SKILL.md").is_file());
         assert!(dir
             .path()
             .join("skills/storyboard-video/SKILL.md")
             .is_file());
-        let body = fs::read_to_string(dir.path().join("skills/create-agent/SKILL.md")).unwrap();
-        assert!(body.contains("create-agent"));
-        assert!(body.contains("astro_bundled_rev:"));
-        assert!(body.contains("spawn_agent"));
-        assert!(body.contains("persona_create"));
         let aihot = fs::read_to_string(dir.path().join("skills/aihot/SKILL.md")).unwrap();
         assert!(aihot.contains("aihot.virxact.com"));
         let creative =
@@ -124,27 +165,57 @@ mod tests {
         let r2 = seed_bundled_into(dir.path());
         assert!(r2.installed.is_empty());
         assert!(r2.skipped.contains(&"aihot".to_string()));
-        assert!(r2.skipped.contains(&"create-agent".to_string()));
         assert!(r2.skipped.contains(&"creative-media".to_string()));
         assert!(r2.skipped.contains(&"storyboard-video".to_string()));
     }
 
     #[test]
-    fn seed_bundled_upgrades_stale_create_agent_without_rev() {
+    fn seed_bundled_removes_retired_create_agent_snapshot() {
         let dir = tempdir().unwrap();
         let dest = dir.path().join("skills/create-agent");
         fs::create_dir_all(&dest).unwrap();
         fs::write(
             dest.join("SKILL.md"),
-            "---\nname: create-agent\n---\nold create-agent body\n",
+            "---\nname: create-agent\nastro_bundled_rev: 5\n---\nold bundled body\n",
         )
         .unwrap();
         let r = seed_bundled_into(dir.path());
-        assert!(r.installed.contains(&"create-agent".to_string()));
-        let body = fs::read_to_string(dest.join("SKILL.md")).unwrap();
-        assert!(bundled_rev_in(&body) >= 1);
-        assert!(body.contains("spawn_agent"));
-        assert!(body.contains("persona_create"));
+        assert!(r.removed.contains(&"create-agent".to_string()));
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn seed_bundled_preserves_user_owned_create_agent() {
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("skills/create-agent");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(
+            dest.join("SKILL.md"),
+            "---\nname: create-agent\n---\ncustom\n",
+        )
+        .unwrap();
+
+        let r = seed_bundled_into(dir.path());
+
+        assert!(!r.removed.contains(&"create-agent".to_string()));
+        assert!(dest.join("SKILL.md").is_file());
+    }
+
+    #[test]
+    fn seed_bundled_preserves_skillhub_managed_aihot() {
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("skills/aihot");
+        fs::create_dir_all(&dest).unwrap();
+        let remote_body = "---\nname: aihot\nversion: 9.9.9\n---\nremote update\n";
+        fs::write(dest.join("SKILL.md"), remote_body).unwrap();
+
+        let report = seed_bundled_into(dir.path());
+
+        assert!(report.skipped.contains(&"aihot".to_string()));
+        assert_eq!(
+            fs::read_to_string(dest.join("SKILL.md")).unwrap(),
+            remote_body
+        );
     }
 
     #[test]
@@ -176,7 +247,6 @@ mod tests {
         .unwrap();
         let r = seed_bundled_into(dir.path());
         assert!(r.installed.contains(&"storyboard-video".to_string()));
-        assert!(r.installed.contains(&"create-agent".to_string()));
         let body = fs::read_to_string(dest.join("SKILL.md")).unwrap();
         assert!(bundled_rev_in(&body) >= 2);
         assert!(body.contains("先出图再出视频"));

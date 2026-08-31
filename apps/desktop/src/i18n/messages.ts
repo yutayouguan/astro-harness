@@ -1250,7 +1250,7 @@ export const zh = {
   "chat.agentGuideEyebrow": "新建 Agent",
   "chat.agentGuideTitle": "开始创建 Agent",
   "chat.agentGuideBody":
-    "在下方输入框里点击高亮处填写（「名称」「做什么」必填，其余选填），Tab 切换下一格。发送后将自动加载 create-agent 技能，并写入 IDENTITY / SOUL / MEMORY。",
+    "在下方输入框里点击高亮处填写（「名称」「做什么」必填，其余选填），Tab 切换下一格。发送后将创建 Agent，并写入 IDENTITY / SOUL / MEMORY。",
   "chat.agentGuideStepsLabel": "创建步骤",
   "chat.agentGuideStep1": "填空模板",
   "chat.agentGuideStep2": "可选外观",
@@ -1260,7 +1260,7 @@ export const zh = {
   "chat.agentGuideComposerAria": "创建 Agent 模板，点击高亮处填空，Tab 切换",
   "chat.agentCreateNeedRequired": "请先填写「名称」和「做什么」；其余选填，未填不会发给模型。",
   "chat.agentCreateHint":
-    "请先用 skills 工具加载 create-agent 技能，再按技能步骤调用 persona_create 工具创建助手，并填充各 md 文件。",
+    "请调用 persona_create 工具创建持久 Agent，并根据用户填写的背景、风格、职责与偏好完成配置。",
   "chat.agentIconsTitle": "外观（可选）",
   "chat.agentIconsSub": "头像用于对话主视觉；Emoji 是小号 Lucide。点右侧入口在抽屉中选择。",
   "chat.agentCoversTitle": "头像",
@@ -3758,7 +3758,7 @@ export const en: Record<MessageKey, string> = {
   "chat.agentGuideEyebrow": "New Agent",
   "chat.agentGuideTitle": "Create an Agent",
   "chat.agentGuideBody":
-    "Click the highlighted slots below (「name」 and 「help with」 required; others optional), then Tab for the next. Astro loads create-agent and writes IDENTITY / SOUL / MEMORY.",
+    "Click the highlighted slots below (「name」 and 「help with」 required; others optional), then Tab for the next. Astro creates the Agent and writes IDENTITY / SOUL / MEMORY.",
   "chat.agentGuideStepsLabel": "Creation steps",
   "chat.agentGuideStep1": "Fill template",
   "chat.agentGuideStep2": "Optional look",
@@ -3769,7 +3769,7 @@ export const en: Record<MessageKey, string> = {
   "chat.agentCreateNeedRequired":
     "Fill in 「name」 and 「help with」 first; other slots are optional and omitted if empty.",
   "chat.agentCreateHint":
-    "First load the create-agent skill with the skills tool, then call persona_create and fill the markdown files as the skill describes.",
+    "Call persona_create to create the durable Agent and configure it from the supplied background, style, responsibilities, and preferences.",
   "chat.agentIconsTitle": "Look (optional)",
   "chat.agentIconsSub":
     "Avatar for chat face; Emoji is a small Lucide mark. Open the side drawer to pick.",

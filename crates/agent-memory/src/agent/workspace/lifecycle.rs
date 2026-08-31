@@ -37,12 +37,6 @@ pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     Ok(report)
 }
 
-/// 播种内置 `create-agent`（及同批 bundled skills）。
-pub fn seed_create_agent_skill(base: &Path) -> anyhow::Result<bool> {
-    let report = skills::seed_bundled_into(base);
-    Ok(report.installed.iter().any(|n| n == "create-agent"))
-}
-
 /// 对默认目录执行 [`ensure_workspace`]。
 pub fn ensure_default_workspace() -> anyhow::Result<EnsureWorkspaceReport> {
     ensure_workspace(&home::default_memory_dir())
@@ -62,12 +56,8 @@ mod tests {
         assert!(report
             .created_files
             .iter()
-            .any(|f| f == "skills/create-agent/SKILL.md"));
-        assert!(report
-            .created_files
-            .iter()
             .any(|f| f == "skills/storyboard-video/SKILL.md"));
-        assert!(dir.path().join("skills/create-agent/SKILL.md").is_file());
+        assert!(!dir.path().join("skills/create-agent/SKILL.md").exists());
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -6,8 +6,10 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 
 use crate::agent_id::normalize as normalize_agent_id;
+use crate::digest::skill_content_digest;
 use crate::install::{is_safe_skill_folder, is_skillhub_http_ref};
 use crate::models::{SkillOriginRecord, SkillOriginsFile, StoreSkill, StoreSkillDetail};
+use crate::seed::BUNDLED_SKILLHUB_SOURCES;
 use crate::store::fetch_detail_strict;
 
 const ORIGINS_FILE: &str = "skill-origins.json";
@@ -87,6 +89,52 @@ pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
     }
     let json = serde_json::to_string_pretty(file)?;
     fs::write(&path, json).with_context(|| format!("write {}", path.display()))?;
+    Ok(())
+}
+
+/// 为可由 SkillHub 更新的内置 Skill 建立一次性基线。
+///
+/// 用户已安装或更新过的来源记录优先，不会被内置基线覆盖。
+pub fn ensure_bundled_skillhub_origins(agent_id: Option<&str>) -> Result<()> {
+    let agent_id = normalize_agent_id(agent_id);
+    let skills_dir = memory_dir().join("skills");
+    let mut file = load_origins()?;
+    let mut changed = false;
+
+    for source in BUNDLED_SKILLHUB_SOURCES {
+        let skill_dir = skills_dir.join(source.folder);
+        if !skill_dir.join("SKILL.md").is_file() {
+            continue;
+        }
+        let key = origin_key(Some(&agent_id), "global", source.folder);
+        if file.records.iter().any(|record| {
+            valid_scope(record.scope.as_deref())
+                .map(|scope| origin_key(record.agent_id.as_deref(), scope, &record.folder))
+                .as_ref()
+                == Some(&key)
+        }) {
+            continue;
+        }
+        file.records.push(SkillOriginRecord {
+            folder: source.folder.to_string(),
+            skill_id: Some(source.install_ref.to_string()),
+            name: source.folder.to_string(),
+            store: "skillhub".to_string(),
+            install_ref: source.install_ref.to_string(),
+            agent_id: Some(agent_id.clone()),
+            scope: Some("global".to_string()),
+            installed_at: chrono::Utc::now().timestamp(),
+            last_updated_at: None,
+            remote_version: Some(source.version.to_string()),
+            remote_updated_at: Some(source.updated_at),
+            content_digest: skill_content_digest(&skill_dir).ok(),
+        });
+        changed = true;
+    }
+
+    if changed {
+        save_origins(&file)?;
+    }
     Ok(())
 }
 
@@ -223,8 +271,65 @@ pub async fn fill_origin_remote_baseline(
 mod tests {
     use super::*;
     use crate::models::SkillOriginRecord;
+    use crate::seed::seed_bundled_into;
     use crate::ENV_TEST_LOCK;
     use tempfile::tempdir;
+
+    #[test]
+    fn ensure_bundled_skillhub_origins_adds_aihot_once() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        seed_bundled_into(dir.path());
+
+        ensure_bundled_skillhub_origins(Some("workspace")).unwrap();
+        ensure_bundled_skillhub_origins(Some("workspace")).unwrap();
+
+        let file = load_origins().unwrap();
+        assert_eq!(file.records.len(), 1);
+        let origin = &file.records[0];
+        assert_eq!(origin.folder, "aihot");
+        assert_eq!(origin.skill_id.as_deref(), Some("skillhub:kkkkhazix/aihot"));
+        assert_eq!(origin.install_ref, "skillhub:kkkkhazix/aihot");
+        assert_eq!(origin.agent_id.as_deref(), Some("default"));
+        assert_eq!(origin.scope.as_deref(), Some("global"));
+        assert_eq!(origin.remote_version.as_deref(), Some("0.1.1"));
+        assert_eq!(origin.remote_updated_at, Some(1_788_148_472_699));
+        assert!(origin.content_digest.is_some());
+    }
+
+    #[test]
+    fn ensure_bundled_skillhub_origins_preserves_existing_origin() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        seed_bundled_into(dir.path());
+        upsert_origin(SkillOriginRecord {
+            folder: "aihot".into(),
+            skill_id: Some("skillhub:custom/aihot".into()),
+            name: "Custom aihot".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:custom/aihot".into(),
+            agent_id: Some("workspace".into()),
+            scope: Some("global".into()),
+            installed_at: 7,
+            last_updated_at: Some(8),
+            remote_version: Some("9.9.9".into()),
+            remote_updated_at: Some(10),
+            content_digest: Some("custom-digest".into()),
+        })
+        .unwrap();
+
+        ensure_bundled_skillhub_origins(Some("workspace")).unwrap();
+
+        let origin = find_origin(Some("workspace"), "global", "aihot")
+            .unwrap()
+            .unwrap();
+        assert_eq!(origin.install_ref, "skillhub:custom/aihot");
+        assert_eq!(origin.remote_version.as_deref(), Some("9.9.9"));
+        assert_eq!(origin.content_digest.as_deref(), Some("custom-digest"));
+        assert_eq!(load_origins().unwrap().records.len(), 1);
+    }
 
     #[test]
     fn upsert_same_folder_updates_not_duplicates() {

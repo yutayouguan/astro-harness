@@ -29,6 +29,9 @@ pub fn spawn_on_startup(app: &AppHandle) {
         for name in &report.failed {
             tracing::warn!("default skill seed failed: {name}");
         }
+        for name in &report.removed {
+            tracing::info!("retired bundled skill removed: {name}");
+        }
         if report.installed.is_empty() {
             return;
         }

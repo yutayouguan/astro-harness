@@ -8,8 +8,8 @@ use crate::install::scoped_skills_path;
 use crate::models::{
     SkillOriginRecord, SkillUpdateCheckResult, SkillUpdateStatus, StoreSkillDetail,
 };
-use crate::origins::load_origins;
 pub use crate::origins::origin_to_store_skill;
+use crate::origins::{ensure_bundled_skillhub_origins, load_origins};
 use crate::store::fetch_detail_strict;
 
 /// 用本地 origin 快照与远端快照判定更新状态。
@@ -83,6 +83,9 @@ pub async fn check_updates_for_agent(
     project_root: Option<&Path>,
 ) -> Result<Vec<SkillUpdateCheckResult>> {
     let target = normalize_agent_id(agent_id);
+    if scope == "global" {
+        ensure_bundled_skillhub_origins(Some(&target))?;
+    }
     let file = load_origins()?;
     let origins: Vec<SkillOriginRecord> = file
         .records

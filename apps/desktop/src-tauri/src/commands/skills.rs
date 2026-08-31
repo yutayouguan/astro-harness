@@ -6,15 +6,16 @@ use std::path::PathBuf;
 use skills::models::SkillOriginRecord;
 use skills::origins::load_origins;
 use skills::{
-    check_updates_for_agent, fetch_detail, install_from_ref_scoped, link_skill_to_agent,
-    list_installed_scoped_for_agent, list_skill_backups as skills_list_skill_backups,
-    list_skill_files_ex, load_skill_by_name, open_skill_file_externally as open_skill_file_fs,
-    open_skill_folder as open_skill_folder_fs, preview_skill_update as skills_preview_skill_update,
-    read_skill_file_ex, reveal_skill_backup as skills_reveal_skill_backup,
-    reveal_skill_file as reveal_skill_file_fs, search_with_filters, set_enabled_for_agent,
-    update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
-    InstalledSkill, SkillBackupEntry, SkillBundle, SkillSnapshot, SkillUpdateCheckResult,
-    SkillUpdateItemResult, SkillUpdatePreview, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
+    check_updates_for_agent, ensure_bundled_skillhub_origins, fetch_detail,
+    install_from_ref_scoped, link_skill_to_agent, list_installed_scoped_for_agent,
+    list_skill_backups as skills_list_skill_backups, list_skill_files_ex, load_skill_by_name,
+    open_skill_file_externally as open_skill_file_fs, open_skill_folder as open_skill_folder_fs,
+    preview_skill_update as skills_preview_skill_update, read_skill_file_ex,
+    reveal_skill_backup as skills_reveal_skill_backup, reveal_skill_file as reveal_skill_file_fs,
+    search_with_filters, set_enabled_for_agent, update_all_with_origin, update_installed_skill_ex,
+    update_outdated_skills, InstallOriginHint, InstalledSkill, SkillBackupEntry, SkillBundle,
+    SkillSnapshot, SkillUpdateCheckResult, SkillUpdateItemResult, SkillUpdatePreview, StoreSkill,
+    StoreSkillDetail, UpdateSkillOpts,
 };
 
 #[derive(Serialize)]
@@ -86,6 +87,7 @@ fn resolve_skill_scope(
 pub async fn list_skill_origins(
     agent_id: Option<String>,
 ) -> Result<Vec<SkillOriginRecord>, String> {
+    ensure_bundled_skillhub_origins(agent_id.as_deref()).map_err(|e| e.to_string())?;
     let file = load_origins().map_err(|e| e.to_string())?;
     let filter_agent = normalize_agent_id(agent_id);
     let records = match filter_agent.as_deref() {
