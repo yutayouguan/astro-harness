@@ -70,6 +70,13 @@ import {
   type ChatWorkMode,
   type ModeSwitchRequest,
 } from "../../lib/chat/chatMode";
+import {
+  findPromptTemplateSlotAt,
+  listPromptTemplateSegments,
+  nextEmptyPromptTemplateSlot,
+  preparePromptTemplateSend,
+  prevEmptyPromptTemplateSlot,
+} from "../../lib/chat/promptTemplate";
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
 import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
 import { countRunningParallel, countSettledByStatus, isParallelTaskActive } from "../../lib/chat/parallelTasks";
@@ -904,6 +911,13 @@ export default function ChatView({
   const [selectedCronTraceLoading, setSelectedCronTraceLoading] = useState(false);
   /** 创建 Agent：发送校验失败时高亮的必填槽 index */
   const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
+  /** 欢迎页示例：当前模板的未填占位文案。 */
+  const [welcomeTemplateHints, setWelcomeTemplateHints] = useState<
+    string[] | null
+  >(null);
+  const [welcomeTemplateMissing, setWelcomeTemplateMissing] = useState<
+    number[]
+  >([]);
   const { servers: mcpServers } = useMcpTools(agentId);
   const mcpHasEnabled = mcpServers.some((s) => s.enabled);
 
@@ -1636,13 +1650,19 @@ export default function ChatView({
       }
     }
 
-    if (e.key === "Tab" && emptyMode === "agent") {
+    const welcomeTemplateActive =
+      emptyMode === "chat" && Boolean(welcomeTemplateHints?.length);
+    if (e.key === "Tab" && (emptyMode === "agent" || welcomeTemplateActive)) {
       const el = textareaRef.current;
       if (!el) return;
       const caret = el.selectionStart ?? 0;
-      const slot = e.shiftKey
-        ? prevEmptySlot(input, caret)
-        : nextEmptySlot(input, caret);
+      const slot = welcomeTemplateActive
+        ? e.shiftKey
+          ? prevEmptyPromptTemplateSlot(input, caret, welcomeTemplateHints ?? [])
+          : nextEmptyPromptTemplateSlot(input, caret, welcomeTemplateHints ?? [])
+        : e.shiftKey
+          ? prevEmptySlot(input, caret)
+          : nextEmptySlot(input, caret);
       if (slot) {
         e.preventDefault();
         requestAnimationFrame(() => {
@@ -2128,13 +2148,28 @@ export default function ChatView({
   );
 
   const slotMirrorRef = useRef<HTMLDivElement>(null);
-  const agentTemplateSegments = useMemo(
-    () => (emptyMode === "agent" ? listTemplateSegments(input) : []),
-    [emptyMode, input],
+  const welcomeTemplateActive =
+    emptyMode === "chat" && Boolean(welcomeTemplateHints?.length);
+  const slotTemplateActive = emptyMode === "agent" || welcomeTemplateActive;
+  const templateSegments = useMemo(
+    () =>
+      emptyMode === "agent"
+        ? listTemplateSegments(input)
+        : welcomeTemplateActive
+          ? listPromptTemplateSegments(
+              input,
+              welcomeTemplateHints ?? [],
+              (welcomeTemplateHints ?? []).map((_, index) => index),
+            )
+          : [],
+    [emptyMode, input, welcomeTemplateActive, welcomeTemplateHints],
   );
-  const agentCreateMissingSet = useMemo(
-    () => new Set(agentCreateMissing),
-    [agentCreateMissing],
+  const templateMissingSet = useMemo(
+    () =>
+      new Set(
+        emptyMode === "agent" ? agentCreateMissing : welcomeTemplateMissing,
+      ),
+    [agentCreateMissing, emptyMode, welcomeTemplateMissing],
   );
 
   useEffect(() => {
@@ -2153,6 +2188,37 @@ export default function ChatView({
     });
   }, [emptyMode, input]);
 
+  useEffect(() => {
+    setWelcomeTemplateMissing((previous) => {
+      if (!welcomeTemplateActive || previous.length === 0) {
+        return previous.length === 0 ? previous : [];
+      }
+      const still = preparePromptTemplateSend(
+        input,
+        welcomeTemplateHints ?? [],
+      ).missing.map((slot) => slot.index);
+      if (
+        still.length === previous.length &&
+        still.every((index, position) => index === previous[position])
+      ) {
+        return previous;
+      }
+      return still;
+    });
+  }, [input, welcomeTemplateActive, welcomeTemplateHints]);
+
+  useEffect(() => {
+    setWelcomeTemplateHints(null);
+    setWelcomeTemplateMissing([]);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (welcomeTemplateActive && input.length === 0) {
+      setWelcomeTemplateHints(null);
+      setWelcomeTemplateMissing([]);
+    }
+  }, [input, welcomeTemplateActive]);
+
   const trySubmitComposer = () => {
     if (!canSend) return;
     if (emptyMode === "agent") {
@@ -2170,6 +2236,28 @@ export default function ChatView({
         return;
       }
       setAgentCreateMissing([]);
+      onSend({ text: serializeComposerContext(composerContexts, prep.sanitized) });
+      onInputChange("");
+      setComposerContexts([]);
+      setPreviewTarget(null);
+      return;
+    }
+    if (welcomeTemplateActive) {
+      const prep = preparePromptTemplateSend(input, welcomeTemplateHints ?? []);
+      if (!prep.ok) {
+        setWelcomeTemplateMissing(prep.missing.map((slot) => slot.index));
+        const first = prep.missing[0];
+        const el = textareaRef.current;
+        if (first && el) {
+          requestAnimationFrame(() => {
+            el.focus();
+            el.setSelectionRange(first.innerStart, first.innerEnd);
+          });
+        }
+        return;
+      }
+      setWelcomeTemplateHints(null);
+      setWelcomeTemplateMissing([]);
       onSend({ text: serializeComposerContext(composerContexts, prep.sanitized) });
       onInputChange("");
       setComposerContexts([]);
@@ -2199,6 +2287,30 @@ export default function ChatView({
     // 仅在进入创建模式时定位首个空槽
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emptyMode]);
+
+  useEffect(() => {
+    if (!welcomeTemplateActive) return;
+    const el = textareaRef.current;
+    const slot = nextEmptyPromptTemplateSlot(
+      input,
+      -1,
+      welcomeTemplateHints ?? [],
+    );
+    if (!el || !slot) return;
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(slot.innerStart, slot.innerEnd);
+    });
+  }, [welcomeTemplateActive, welcomeTemplateHints]);
+
+  const pickWelcomePrompt = useCallback(
+    (prompt: string, slotHints: string[]) => {
+      setWelcomeTemplateHints(slotHints);
+      setWelcomeTemplateMissing([]);
+      onPickWelcomePrompt(prompt);
+    },
+    [onPickWelcomePrompt],
+  );
 
   const syncSlotMirrorScroll = () => {
     const ta = textareaRef.current;
@@ -2448,7 +2560,7 @@ export default function ChatView({
         workspaceContent
       ) : emptyMode === "chat" || emptyMode === "agent" ? (
         <ChatWelcome
-          onPickCard={onPickWelcomePrompt}
+          onPickCard={pickWelcomePrompt}
           onActivate={() => textareaRef.current?.focus()}
         />
       ) : (
@@ -3435,6 +3547,12 @@ export default function ChatView({
             <p className="composer-agent-validate-hint" role="alert">
               {t("chat.agentCreateNeedRequired")}
             </p>
+          ) : !composerClarify &&
+            welcomeTemplateActive &&
+            welcomeTemplateMissing.length > 0 ? (
+            <p className="composer-agent-validate-hint" role="alert">
+              {t("chat.welcomeTemplateNeedRequired")}
+            </p>
           ) : null}
           {composerClarify ? (
             <ComposerClarifySurface
@@ -3445,7 +3563,9 @@ export default function ChatView({
               }
             />
           ) : (
-          <div className={`composer-input-wrap ${emptyMode === "agent" ? "is-agent-template" : ""}`.trim()}>
+          <div
+            className={`composer-input-wrap ${slotTemplateActive ? "is-slot-template" : ""}`.trim()}
+          >
             <div
               className="composer-typed-hint"
               hidden={!typingPlaceholderEnabled}
@@ -3454,9 +3574,9 @@ export default function ChatView({
               <span ref={typedHintRef} className="composer-typed-text" />
               <span className="composer-typed-caret" />
             </div>
-            {emptyMode === "agent" ? (
+            {slotTemplateActive ? (
               <div ref={slotMirrorRef} className="composer-slot-mirror" aria-hidden>
-                {agentTemplateSegments.map((seg, i) =>
+                {templateSegments.map((seg, i) =>
                   seg.type === "text" ? (
                     <span key={`t-${i}`}>{seg.value}</span>
                   ) : (
@@ -3465,7 +3585,7 @@ export default function ChatView({
                       className={[
                         "composer-slot-chip",
                         seg.empty ? "is-empty" : "is-filled",
-                        agentCreateMissingSet.has(seg.index) ? "is-invalid" : "",
+                        templateMissingSet.has(seg.index) ? "is-invalid" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -3480,7 +3600,7 @@ export default function ChatView({
             ) : null}
             <textarea
               ref={textareaRef}
-              className={`composer-input ${emptyMode === "agent" ? "is-slot-highlight" : ""}`.trim()}
+              className={`composer-input ${slotTemplateActive ? "is-slot-highlight" : ""}`.trim()}
               value={input}
               rows={2}
               onChange={(e) => {
@@ -3497,9 +3617,15 @@ export default function ChatView({
               onClick={() => {
                 const el = textareaRef.current;
                 if (!el) return;
-                if (emptyMode === "agent") {
+                if (slotTemplateActive) {
                   const caret = el.selectionStart ?? 0;
-                  const slot = findSlotAt(input, caret);
+                  const slot = welcomeTemplateActive
+                    ? findPromptTemplateSlotAt(
+                        input,
+                        caret,
+                        welcomeTemplateHints ?? [],
+                      )
+                    : findSlotAt(input, caret);
                   if (slot) {
                     el.setSelectionRange(slot.innerStart, slot.innerEnd);
                     return;
@@ -3512,6 +3638,8 @@ export default function ChatView({
               aria-label={
                 emptyMode === "agent"
                   ? t("chat.agentGuideComposerAria")
+                  : welcomeTemplateActive
+                    ? t("chat.welcomeTemplateComposerAria")
                   : emptyMode === "chat"
                     ? t("chat.welcomePlaceholder")
                     : composerPlaceholder || t("chat.placeholder")

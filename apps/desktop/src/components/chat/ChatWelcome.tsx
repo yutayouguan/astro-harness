@@ -31,6 +31,7 @@ import {
 import { Pause as PauseData, Play as PlayData } from "lucide";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import { WelcomeLedCanvas } from "./WelcomeLedCanvas";
+import { promptTemplateHints } from "../../lib/chat/promptTemplate";
 
 const PAUSE_ICON = PauseData;
 const PLAY_ICON = PlayData;
@@ -41,7 +42,7 @@ export type WelcomeCardId =
   | "code" | "writing" | "search" | "translate";
 
 type Props = {
-  onPickCard: (prompt: string) => void;
+  onPickCard: (prompt: string, slotHints: string[]) => void;
   onActivate?: () => void;
 };
 
@@ -107,7 +108,7 @@ function clampedMomentum(velocity: number): number {
 
 function MarqueeCard({ card, onPick, duplicate = false }: {
   card: typeof ALL_CARDS[0];
-  onPick: (p: string) => void;
+  onPick: (prompt: string, slotHints: string[]) => void;
   duplicate?: boolean;
 }) {
   const { t } = useI18n();
@@ -118,7 +119,10 @@ function MarqueeCard({ card, onPick, duplicate = false }: {
       type="button"
       className="chat-welcome-card"
       data-tone={meta.tone}
-      onClick={() => onPick(t(meta.prompt))}
+      onClick={() => {
+        const prompt = t(meta.prompt);
+        onPick(prompt, promptTemplateHints(prompt));
+      }}
       tabIndex={duplicate ? -1 : undefined}
     >
       <span className={`chat-welcome-card-icon ${meta.lucide ? "is-lucide" : ""}`} aria-hidden>
@@ -139,7 +143,7 @@ function MarqueeCard({ card, onPick, duplicate = false }: {
 function MarqueeRow({ cards, direction, onPick }: {
   cards: typeof ALL_CARDS;
   direction: "left" | "right";
-  onPick: (p: string) => void;
+  onPick: (prompt: string, slotHints: string[]) => void;
 }) {
   return (
     <div className={`chat-welcome-marquee chat-welcome-marquee--${direction}`}>

@@ -684,10 +684,13 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
 
 .composer-slot-chip {
   display: inline;
-  padding: 0.05em 0.28em;
-  margin: 0 0.04em;
+  padding: 0.05em 0.22em;
+  margin: 0 -0.22em;
   border-radius: 0.45em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
   font-weight: 650;
+  white-space: nowrap;
   transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -739,7 +742,7 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   color: color-mix(in srgb, #fff 22%, var(--danger, #f87171));
 }
 
-.composer-input-wrap.is-agent-template .composer-input.is-slot-highlight {
+.composer-input-wrap.is-slot-template .composer-input.is-slot-highlight {
   position: relative;
   z-index: 1;
   color: transparent;
@@ -747,7 +750,7 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   background: transparent;
 }
 
-.composer-input-wrap.is-agent-template .composer-input.is-slot-highlight::selection {
+.composer-input-wrap.is-slot-template .composer-input.is-slot-highlight::selection {
   background: color-mix(in srgb, var(--tone, var(--accent)) 28%, transparent);
   color: transparent;
 }
