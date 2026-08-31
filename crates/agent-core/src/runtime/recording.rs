@@ -340,7 +340,7 @@ impl AgentLoop {
             }
         }
 
-        let output = serde_json::Value::String(content.to_string());
+        let output = agent_protocol::FunctionCallOutputPayload::from_text(content.to_string());
         let metadata = (!media.is_empty() || spill_view.is_some()).then(|| {
             let mut metadata = serde_json::Map::new();
             if let Some(view) = spill_view {
@@ -424,7 +424,7 @@ fn response_items_for_assistant(
     for call in calls {
         let item = match call.name.as_str() {
             "tool_search" => ResponseItem::ToolSearchCall {
-                id: Some(call.id.clone()),
+                id: Some(call.id.clone().into()),
                 call_id: Some(call.id.clone()),
                 status: Some("completed".into()),
                 execution: "client".into(),
@@ -432,7 +432,7 @@ fn response_items_for_assistant(
                 internal_chat_message_metadata_passthrough: None,
             },
             "apply_patch" | "exec" => ResponseItem::CustomToolCall {
-                id: Some(call.id.clone()),
+                id: Some(call.id.clone().into()),
                 status: Some("completed".into()),
                 call_id: call.id.clone(),
                 name: call.name.clone(),
@@ -445,7 +445,7 @@ fn response_items_for_assistant(
                 internal_chat_message_metadata_passthrough: None,
             },
             _ => ResponseItem::FunctionCall {
-                id: Some(call.id.clone()),
+                id: Some(call.id.clone().into()),
                 name: call.name.clone(),
                 namespace: None,
                 arguments: match &call.arguments {

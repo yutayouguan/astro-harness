@@ -229,7 +229,7 @@ mod input_tests {
             call_id: Some("call_1".into()),
             name: Some("lookup".into()),
             namespace: None,
-            output: json!("raw output"),
+            output: agent_protocol::FunctionCallOutputPayload::from_text("raw output".into()),
             internal_chat_message_metadata_passthrough: Some(json!({
                 "astro_compressed_output": "short view"
             })),
@@ -239,7 +239,7 @@ mod input_tests {
         assert!(matches!(
             raw,
             agent_protocol::ResponseItem::FunctionCallOutput { output, .. }
-                if output == "raw output"
+                if output.text_content() == Some("raw output")
         ));
     }
 }

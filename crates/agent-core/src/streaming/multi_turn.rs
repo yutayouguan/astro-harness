@@ -70,7 +70,7 @@ fn response_item_calls(items: &[ResponseItem]) -> Vec<types::ParsedToolCall> {
                 call_id,
                 ..
             } => Some(types::ParsedToolCall {
-                item_id: id.clone(),
+                item_id: id.as_ref().map(ToString::to_string),
                 id: call_id.clone(),
                 name: name.clone(),
                 namespace: namespace.clone(),
@@ -88,7 +88,7 @@ fn response_item_calls(items: &[ResponseItem]) -> Vec<types::ParsedToolCall> {
                 input,
                 ..
             } => Some(types::ParsedToolCall {
-                item_id: id.clone(),
+                item_id: id.as_ref().map(ToString::to_string),
                 id: call_id.clone(),
                 name: name.clone(),
                 namespace: namespace.clone(),
@@ -103,7 +103,7 @@ fn response_item_calls(items: &[ResponseItem]) -> Vec<types::ParsedToolCall> {
                 arguments,
                 ..
             } => Some(types::ParsedToolCall {
-                item_id: id.clone(),
+                item_id: id.as_ref().map(ToString::to_string),
                 id: call_id.clone(),
                 name: "tool_search".into(),
                 namespace: None,

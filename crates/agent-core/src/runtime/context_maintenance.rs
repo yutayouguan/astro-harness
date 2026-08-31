@@ -267,7 +267,7 @@ impl AgentLoop {
                 agent_protocol::ResponseItem::FunctionCallOutput { call_id, output, .. }
                     if match (call_id, &stored_msg.tool_call_id) {
                         (Some(a), Some(b)) => a == b,
-                        (None, None) => output.as_str() == Some(content),
+                        (None, None) => output.text_content() == Some(content),
                         _ => false,
                     }
             )

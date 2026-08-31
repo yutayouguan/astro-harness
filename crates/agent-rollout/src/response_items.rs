@@ -270,7 +270,7 @@ fn tool_output_items(message: &Message, tool_name: Option<&str>) -> Result<Vec<R
         call_id,
         name: tool_name.map(str::to_string),
         namespace: None,
-        output: serde_json::Value::String(message.content_text()),
+        output: agent_protocol::FunctionCallOutputPayload::from_text(message.content_text()),
         internal_chat_message_metadata_passthrough: metadata,
     }])
 }
@@ -458,11 +458,10 @@ fn reasoning_text(summary: &[serde_json::Value], content: Option<&[serde_json::V
         .join("\n")
 }
 
-fn output_text(output: &serde_json::Value) -> String {
-    match output {
-        serde_json::Value::String(text) => text.clone(),
-        other => serde_json::to_string(other).unwrap_or_default(),
-    }
+fn output_text(output: &agent_protocol::FunctionCallOutputPayload) -> String {
+    output
+        .to_text()
+        .unwrap_or_else(|| serde_json::to_string(output).unwrap_or_default())
 }
 
 fn tool_message(
