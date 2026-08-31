@@ -24,7 +24,7 @@ pub fn response_items_from_message(
             role: role_name(&message.role).to_string(),
             content: content_items(message),
             phase: None,
-            internal_chat_message_metadata_passthrough: None,
+            internal_chat_message_metadata_passthrough: message_metadata(message),
         }]),
     }
 }
@@ -60,20 +60,39 @@ pub fn reconstruct_response_items(
 
     for item in items {
         match &item {
-            ResponseItem::Message { role, content, .. } if role == "assistant" => {
-                let incoming = message_from_content(Role::Assistant, content);
+            ResponseItem::Message {
+                role,
+                content,
+                internal_chat_message_metadata_passthrough,
+                ..
+            } if role == "assistant" => {
+                let mut incoming = message_from_content(Role::Assistant, content);
+                apply_message_metadata(
+                    &mut incoming,
+                    internal_chat_message_metadata_passthrough.as_ref(),
+                );
                 let pending = pending_assistant.get_or_insert_with(|| Message::assistant(""));
                 append_message_content(pending, &incoming);
             }
-            ResponseItem::Message { role, content, .. } => {
+            ResponseItem::Message {
+                role,
+                content,
+                internal_chat_message_metadata_passthrough,
+                ..
+            } => {
                 flush_assistant(&mut messages, &mut pending_assistant);
                 let role = match role.as_str() {
                     "user" => Role::User,
                     "system" | "developer" => Role::System,
                     _ => continue,
                 };
+                let mut message = message_from_content(role, content);
+                apply_message_metadata(
+                    &mut message,
+                    internal_chat_message_metadata_passthrough.as_ref(),
+                );
                 messages.push(ReconstructedMessage {
-                    message: message_from_content(role, content),
+                    message,
                     tool_name: None,
                 });
             }
@@ -141,27 +160,28 @@ pub fn reconstruct_response_items(
                 call_id,
                 name,
                 output,
+                internal_chat_message_metadata_passthrough,
                 ..
             } => {
                 flush_assistant(&mut messages, &mut pending_assistant);
-                messages.push(tool_message(
-                    call_id.as_deref(),
-                    output_text(output),
-                    name.clone(),
-                ));
+                let mut projected =
+                    tool_message(call_id.as_deref(), output_text(output), name.clone());
+                projected.message.media =
+                    metadata_media(internal_chat_message_metadata_passthrough.as_ref());
+                messages.push(projected);
             }
             ResponseItem::CustomToolCallOutput {
                 call_id,
                 name,
                 output,
+                internal_chat_message_metadata_passthrough,
                 ..
             } => {
                 flush_assistant(&mut messages, &mut pending_assistant);
-                messages.push(tool_message(
-                    Some(call_id),
-                    output_text(output),
-                    name.clone(),
-                ));
+                let mut projected = tool_message(Some(call_id), output_text(output), name.clone());
+                projected.message.media =
+                    metadata_media(internal_chat_message_metadata_passthrough.as_ref());
+                messages.push(projected);
             }
             ResponseItem::ToolSearchOutput { call_id, tools, .. } => {
                 flush_assistant(&mut messages, &mut pending_assistant);
@@ -232,6 +252,7 @@ fn assistant_items(message: &Message) -> Result<Vec<ResponseItem>> {
 
 fn tool_output_items(message: &Message, tool_name: Option<&str>) -> Result<Vec<ResponseItem>> {
     let call_id = message.tool_call_id.clone();
+    let metadata = message_metadata(message);
     if tool_name == Some("tool_search") {
         let tools = serde_json::from_str::<Vec<serde_json::Value>>(&message.content_text())
             .unwrap_or_default();
@@ -241,7 +262,7 @@ fn tool_output_items(message: &Message, tool_name: Option<&str>) -> Result<Vec<R
             status: "completed".into(),
             execution: "client".into(),
             tools,
-            internal_chat_message_metadata_passthrough: None,
+            internal_chat_message_metadata_passthrough: metadata,
         }]);
     }
     Ok(vec![ResponseItem::FunctionCallOutput {
@@ -250,8 +271,27 @@ fn tool_output_items(message: &Message, tool_name: Option<&str>) -> Result<Vec<R
         name: tool_name.map(str::to_string),
         namespace: None,
         output: serde_json::Value::String(message.content_text()),
-        internal_chat_message_metadata_passthrough: None,
+        internal_chat_message_metadata_passthrough: metadata,
     }])
+}
+
+fn message_metadata(message: &Message) -> Option<serde_json::Value> {
+    let mut metadata = serde_json::Map::new();
+    if let Some(value) = message.compressed_content.as_ref() {
+        let key = if message.role == Role::Tool {
+            "astro_compressed_output"
+        } else {
+            "astro_memory_marker"
+        };
+        metadata.insert(key.into(), serde_json::Value::String(value.clone()));
+    }
+    if !message.media.is_empty() {
+        metadata.insert(
+            "astro_media".into(),
+            serde_json::to_value(&message.media).unwrap_or_default(),
+        );
+    }
+    (!metadata.is_empty()).then_some(serde_json::Value::Object(metadata))
 }
 
 fn role_name(role: &Role) -> &'static str {
@@ -328,6 +368,7 @@ fn text_item(text: String, output: bool) -> ContentItem {
 
 fn message_from_content(role: Role, content: &[ContentItem]) -> Message {
     let mut parts = Vec::new();
+    let mut media = Vec::new();
     for item in content {
         match item {
             ContentItem::InputText { text } | ContentItem::OutputText { text } => {
@@ -335,9 +376,11 @@ fn message_from_content(role: Role, content: &[ContentItem]) -> Message {
             }
             ContentItem::InputImage { image_url, .. } => {
                 parts.push(ContentPart::image_url(image_url.clone()));
+                media.push(media_from_url(MediaKind::Image, image_url, "image/*"));
             }
             ContentItem::InputAudio { audio_url } => {
                 parts.push(ContentPart::audio_url(audio_url.clone(), "audio/*"));
+                media.push(media_from_url(MediaKind::Audio, audio_url, "audio/*"));
             }
         }
     }
@@ -352,10 +395,45 @@ fn message_from_content(role: Role, content: &[ContentItem]) -> Message {
         compressed_content: None,
         tool_calls: None,
         tool_call_id: None,
-        media: Vec::new(),
+        media,
         reasoning: None,
         thought_signature: None,
     }
+}
+
+fn media_from_url(kind: MediaKind, url: &str, fallback_mime: &str) -> types::MediaAsset {
+    let mime = url
+        .strip_prefix("data:")
+        .and_then(|rest| rest.split(';').next())
+        .unwrap_or(fallback_mime)
+        .to_string();
+    let reference = if url.starts_with("data:") {
+        MediaRef::DataUrl(url.to_string())
+    } else {
+        MediaRef::RemoteUri(url.to_string())
+    };
+    types::MediaAsset {
+        kind,
+        mime_type: mime,
+        reference,
+        label: None,
+        id: None,
+    }
+}
+
+fn metadata_media(metadata: Option<&serde_json::Value>) -> Vec<types::MediaAsset> {
+    metadata
+        .and_then(|value| value.get("astro_media"))
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default()
+}
+
+fn apply_message_metadata(message: &mut Message, metadata: Option<&serde_json::Value>) {
+    message.compressed_content = metadata
+        .and_then(|value| value.get("astro_memory_marker"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
 }
 
 fn append_message_content(target: &mut Message, incoming: &Message) {

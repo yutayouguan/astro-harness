@@ -4,7 +4,6 @@
 //! 辅模型：`AuxiliaryTask::Compaction`；失败或无目标时回退 head/tail。
 
 use futures::StreamExt;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use tracing::warn;
@@ -75,14 +74,13 @@ async fn complete_compaction_chat(
         additional_params: serde_json::Value::Null,
         ..ProviderConfig::default()
     };
-    let messages = vec![
-        ProviderMessage::system(
-            "You compress tool outputs for coding agents. Preserve critical facts.",
-        ),
-        ProviderMessage::user_text(prompt),
-    ];
-    let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
+    let mut stream = providers::dispatch::agent_responses_prompt(
+        &target.backend_id,
+        "You compress tool outputs for coding agents. Preserve critical facts.",
+        prompt,
+        &config,
+    )
+    .await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;

@@ -101,6 +101,30 @@ impl AgentLoop {
         reasoning: Option<&str>,
         reasoning_details: Option<serde_json::Value>,
     ) -> anyhow::Result<()> {
+        let response_items = response_items_for_assistant(
+            content,
+            tool_calls.as_deref().unwrap_or_default(),
+            reasoning.filter(|value| !value.is_empty()),
+            reasoning_details.clone(),
+        )?;
+        self.record_assistant_response_items(
+            content,
+            tool_calls,
+            reasoning,
+            reasoning_details,
+            response_items,
+        )
+        .await
+    }
+
+    pub(crate) async fn record_assistant_response_items(
+        &self,
+        content: &str,
+        tool_calls: Option<Vec<types::message::ToolCall>>,
+        reasoning: Option<&str>,
+        reasoning_details: Option<serde_json::Value>,
+        response_items: Vec<ResponseItem>,
+    ) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
         let tool_calls_json = match &tool_calls {
             Some(calls) if !calls.is_empty() => Some(serde_json::to_value(calls)?),
@@ -121,12 +145,6 @@ impl AgentLoop {
                 ..NewMessage::empty(&self.session_id, "assistant")
             })
             .await?;
-        let response_items = response_items_for_assistant(
-            content,
-            tool_calls.as_deref().unwrap_or_default(),
-            reasoning,
-            reasoning_details,
-        )?;
         self.persist_response_items(&response_items).await?;
         self.record_response_items_unlocked(response_items);
         Ok(())
@@ -259,8 +277,24 @@ impl AgentLoop {
         tool_name: Option<&str>,
         content: &str,
     ) -> anyhow::Result<()> {
+        self.record_tool_result_with_id_and_media(tool_call_id, tool_name, content, &[])
+            .await
+    }
+
+    pub(crate) async fn record_tool_result_with_id_and_media(
+        &self,
+        tool_call_id: Option<&str>,
+        tool_name: Option<&str>,
+        content: &str,
+        additional_media: &[types::MediaAsset],
+    ) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
-        let (_, media) = types::extract_tool_media(content);
+        let (_, mut media) = types::extract_tool_media(content);
+        for asset in additional_media {
+            if !media.contains(asset) {
+                media.push(asset.clone());
+            }
+        }
         let media_owned = if media.is_empty() {
             None
         } else {
@@ -307,11 +341,21 @@ impl AgentLoop {
         }
 
         let output = serde_json::Value::String(content.to_string());
-        let metadata = spill_view.map(|view| {
-            serde_json::json!({
-                "astro_compressed_output": view,
-                "astro_media": media,
-            })
+        let metadata = (!media.is_empty() || spill_view.is_some()).then(|| {
+            let mut metadata = serde_json::Map::new();
+            if let Some(view) = spill_view {
+                metadata.insert(
+                    "astro_compressed_output".into(),
+                    serde_json::Value::String(view),
+                );
+            }
+            if !media.is_empty() {
+                metadata.insert(
+                    "astro_media".into(),
+                    serde_json::to_value(&media).unwrap_or_default(),
+                );
+            }
+            serde_json::Value::Object(metadata)
         });
         let item = match tool_name {
             Some("tool_search") => ResponseItem::ToolSearchOutput {

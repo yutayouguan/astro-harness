@@ -75,7 +75,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
             .expect("recording summary prompt response item should succeed");
         (
             agent.prompt_context_history(),
-            agent.provider_history().await,
+            agent.provider_response_history().await,
         )
     };
 
@@ -97,6 +97,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
 
     let mut full_response = String::new();
     let mut full_reasoning = String::new();
+    let mut completed_response_items = Vec::new();
     let mut round_usage: Option<Usage> = None;
     let now_ms = || chrono::Utc::now().timestamp_millis();
 
@@ -125,6 +126,9 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
 
         match next {
             None => break,
+            Some(Ok(StreamedAssistantContent::ResponseItemDone(item))) => {
+                completed_response_items.push(item);
+            }
             Some(Ok(StreamedAssistantContent::Text(text))) => {
                 full_response.push_str(&text);
                 timeline.push_text_delta(&text, now_ms());
@@ -158,15 +162,15 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
                 if !full_response.is_empty() {
                     let agent = session.as_ref();
                     let details = Some(timeline.reasoning_details_snapshot());
-                    if agent
-                        .record_assistant_message_with_tools(
-                            &full_response,
-                            None,
-                            (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                            details,
-                        )
-                        .await
-                        .is_ok()
+                    if record_summary_output(
+                        agent,
+                        &full_response,
+                        (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                        details,
+                        &completed_response_items,
+                    )
+                    .await
+                    .is_ok()
                     {
                         emit_response_items_completed(
                             session,
@@ -205,14 +209,14 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     {
         let agent = session.as_ref();
         let details = Some(timeline.reasoning_details_snapshot());
-        if let Err(err) = agent
-            .record_assistant_message_with_tools(
-                &full_response,
-                None,
-                (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                details,
-            )
-            .await
+        if let Err(err) = record_summary_output(
+            agent,
+            &full_response,
+            (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+            details,
+            &completed_response_items,
+        )
+        .await
         {
             return SummaryOutcome::Failed(err.to_string());
         }
@@ -230,4 +234,39 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     .await;
 
     SummaryOutcome::Finished
+}
+
+async fn record_summary_output(
+    agent: &AgentLoop,
+    content: &str,
+    reasoning: Option<&str>,
+    reasoning_details: Option<serde_json::Value>,
+    native_items: &[agent_protocol::ResponseItem],
+) -> anyhow::Result<()> {
+    if native_items.is_empty() {
+        return agent
+            .record_assistant_message_with_tools(content, None, reasoning, reasoning_details)
+            .await;
+    }
+    let mut items = native_items.to_vec();
+    let has_message = items.iter().any(|item| {
+        matches!(
+            item,
+            agent_protocol::ResponseItem::Message { role, .. } if role == "assistant"
+        )
+    });
+    if !has_message {
+        items.push(agent_protocol::ResponseItem::Message {
+            id: None,
+            role: "assistant".into(),
+            content: vec![agent_protocol::ContentItem::OutputText {
+                text: content.to_string(),
+            }],
+            phase: Some(agent_protocol::MessagePhase::FinalAnswer),
+            internal_chat_message_metadata_passthrough: None,
+        });
+    }
+    agent
+        .record_assistant_response_items(content, None, reasoning, reasoning_details, items)
+        .await
 }

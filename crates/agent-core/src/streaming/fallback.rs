@@ -1,7 +1,6 @@
 //! 聊天主模型故障切换：错误分类与首包前 fallback 流包装。
 
 use futures::{stream, StreamExt};
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};
 use providers::ProviderConfig;
 use types::ChatTarget;
@@ -81,6 +80,7 @@ fn chunk_has_meaningful_content(chunk: &StreamChunk) -> bool {
     match chunk {
         StreamChunk::Text(t) if !t.is_empty() => true,
         StreamChunk::Thinking(t) if !t.is_empty() => true,
+        StreamChunk::ResponseItemDone(_) => true,
         StreamChunk::ToolCallStart { .. } | StreamChunk::ToolCallDelta { .. } => true,
         _ => false,
     }
@@ -112,9 +112,10 @@ pub async fn probe_or_wrap_pre_content(
 }
 
 /// 按 `targets` 链尝试 `chat_stream`；仅首包前可切；耗尽返回聚合错误。
-pub async fn try_stream_completion_with_fallback(
+pub async fn try_stream_responses_with_fallback(
     targets: &[ChatTarget],
-    messages: Vec<ProviderMessage>,
+    instructions: String,
+    input: Vec<agent_protocol::ResponseItem>,
     tools: Vec<serde_json::Value>,
     base_config: &ProviderConfig,
     mut on_failover: impl FnMut(&ChatTarget, &ChatTarget, &anyhow::Error),
@@ -125,7 +126,13 @@ pub async fn try_stream_completion_with_fallback(
 
     let mut errors = Vec::new();
     for (i, target) in targets.iter().enumerate() {
-        let is_google = target.backend_id == "google" || target.provider_id == "google";
+        if !providers::dispatch::supports_agent_responses(&target.backend_id) {
+            errors.push(format!(
+                "{}: provider does not support the Responses API",
+                target.backend_id
+            ));
+            continue;
+        }
         let config = ProviderConfig {
             api_key: target.api_key.clone(),
             base_url: Some(target.base_url.clone()).filter(|s| !s.is_empty()),
@@ -135,19 +142,15 @@ pub async fn try_stream_completion_with_fallback(
             thinking_enabled: base_config.thinking_enabled,
             reasoning_effort: base_config.reasoning_effort.clone(),
             additional_params: base_config.additional_params.clone(),
-            // 仅 Google Interactions 续写；其它后端忽略该字段
-            previous_interaction_id: if is_google {
-                base_config.previous_interaction_id.clone()
-            } else {
-                None
-            },
-            api_mode: target.api_mode.clone(),
+            previous_interaction_id: None,
+            api_mode: "responses".into(),
         };
 
         let attempt = async {
-            let stream = providers::dispatch::chat_stream(
+            let stream = providers::dispatch::agent_responses_stream(
                 &target.backend_id,
-                messages.clone(),
+                instructions.clone(),
+                input.clone(),
                 tools.clone(),
                 &config,
             )
@@ -171,7 +174,7 @@ pub async fn try_stream_completion_with_fallback(
         }
     }
 
-    anyhow::bail!("全部模型尝试失败：{}", errors.join("；"))
+    anyhow::bail!("全部 Responses 模型尝试失败：{}", errors.join("；"))
 }
 
 #[cfg(test)]
@@ -265,8 +268,9 @@ mod tests {
 
     #[tokio::test]
     async fn try_stream_rejects_empty_targets() {
-        let err = match try_stream_completion_with_fallback(
+        let err = match try_stream_responses_with_fallback(
             &[],
+            String::new(),
             vec![],
             vec![],
             &ProviderConfig::default(),

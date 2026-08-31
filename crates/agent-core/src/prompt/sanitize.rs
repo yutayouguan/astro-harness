@@ -6,6 +6,104 @@
 use std::collections::HashSet;
 use types::message::{Message, Role};
 
+/// Normalize native Responses tool items without changing or flattening any
+/// surviving item. Missing outputs are synthesized with deterministic ids so
+/// retries and cold restores produce the same request.
+pub fn sanitized_response_items(
+    items: &[agent_protocol::ResponseItem],
+) -> Vec<agent_protocol::ResponseItem> {
+    use agent_protocol::ResponseItem;
+
+    let declared = items
+        .iter()
+        .filter_map(response_call_id)
+        .map(str::to_string)
+        .collect::<HashSet<_>>();
+    let outputs = items
+        .iter()
+        .filter_map(response_output_call_id)
+        .map(str::to_string)
+        .collect::<HashSet<_>>();
+    let mut normalized = Vec::with_capacity(items.len());
+    for item in items {
+        if let Some(call_id) = response_output_call_id(item) {
+            if declared.contains(call_id) {
+                normalized.push(item.clone());
+            }
+            continue;
+        }
+        normalized.push(item.clone());
+        let Some(call_id) = response_call_id(item) else {
+            continue;
+        };
+        if outputs.contains(call_id) {
+            continue;
+        }
+        let id = Some(format!("auto_output_{call_id}"));
+        let output = serde_json::Value::String("aborted".into());
+        normalized.push(match item {
+            ResponseItem::CustomToolCall { name, .. } => ResponseItem::CustomToolCallOutput {
+                id,
+                call_id: call_id.to_string(),
+                name: Some(name.clone()),
+                output,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::ToolSearchCall { execution, .. } => ResponseItem::ToolSearchOutput {
+                id,
+                call_id: Some(call_id.to_string()),
+                status: "completed".into(),
+                execution: execution.clone(),
+                tools: Vec::new(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCall {
+                name, namespace, ..
+            } => ResponseItem::FunctionCallOutput {
+                id,
+                call_id: Some(call_id.to_string()),
+                name: Some(name.clone()),
+                namespace: namespace.clone(),
+                output,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            _ => unreachable!("response_call_id only returns tool call variants"),
+        });
+    }
+    normalized
+}
+
+fn response_call_id(item: &agent_protocol::ResponseItem) -> Option<&str> {
+    match item {
+        agent_protocol::ResponseItem::FunctionCall { call_id, .. }
+        | agent_protocol::ResponseItem::CustomToolCall { call_id, .. } => {
+            (!call_id.trim().is_empty()).then_some(call_id.as_str())
+        }
+        agent_protocol::ResponseItem::ToolSearchCall {
+            call_id: Some(call_id),
+            ..
+        } => (!call_id.trim().is_empty()).then_some(call_id.as_str()),
+        _ => None,
+    }
+}
+
+fn response_output_call_id(item: &agent_protocol::ResponseItem) -> Option<&str> {
+    match item {
+        agent_protocol::ResponseItem::FunctionCallOutput {
+            call_id: Some(call_id),
+            ..
+        }
+        | agent_protocol::ResponseItem::ToolSearchOutput {
+            call_id: Some(call_id),
+            ..
+        } => (!call_id.trim().is_empty()).then_some(call_id.as_str()),
+        agent_protocol::ResponseItem::CustomToolCallOutput { call_id, .. } => {
+            (!call_id.trim().is_empty()).then_some(call_id.as_str())
+        }
+        _ => None,
+    }
+}
+
 /// 归一化 tool_calls / tool result 对（就地修改）。
 ///
 /// 与 Codex 的 prompt-history 边界一致：
@@ -165,5 +263,46 @@ mod tests {
         let tools: Vec<_> = msgs.iter().filter(|m| m.role == Role::Tool).collect();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].tool_call_id.as_deref(), Some("c1"));
+    }
+
+    #[test]
+    fn native_items_get_stable_missing_output_without_flattening() {
+        let call = agent_protocol::ResponseItem::FunctionCall {
+            id: Some("item_1".into()),
+            name: "lookup".into(),
+            namespace: Some("mcp".into()),
+            arguments: "{}".into(),
+            encrypted_function_args: Some(vec!["opaque".into()]),
+            call_id: "call_1".into(),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        let normalized = sanitized_response_items(std::slice::from_ref(&call));
+        assert_eq!(normalized[0], call);
+        assert!(matches!(
+            &normalized[1],
+            agent_protocol::ResponseItem::FunctionCallOutput {
+                id: Some(id),
+                call_id: Some(call_id),
+                namespace: Some(namespace),
+                output,
+                ..
+            } if id == "auto_output_call_1"
+                && call_id == "call_1"
+                && namespace == "mcp"
+                && output == "aborted"
+        ));
+    }
+
+    #[test]
+    fn native_items_drop_orphan_outputs() {
+        let orphan = agent_protocol::ResponseItem::FunctionCallOutput {
+            id: Some("out_1".into()),
+            call_id: Some("unknown".into()),
+            name: Some("lookup".into()),
+            namespace: None,
+            output: serde_json::Value::String("ok".into()),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        assert!(sanitized_response_items(&[orphan]).is_empty());
     }
 }

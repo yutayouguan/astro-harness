@@ -329,7 +329,12 @@ pub(super) async fn record_tool_outcomes(
         let recorded = {
             let agent = session.as_ref();
             agent
-                .record_tool_result_with_id(Some(&call.id), Some(&call.name), &result_for_history)
+                .record_tool_result_with_id_and_media(
+                    Some(&call.id),
+                    Some(&call.name),
+                    &result_for_history,
+                    &tool_media,
+                )
                 .await
         };
         if let Err(error) = recorded {
@@ -520,7 +525,7 @@ pub(super) async fn run_sampling_request(
     streamer: &ProviderStreamer,
     prompt: &crate::prompt::PromptContract,
     prompt_context: &[crate::prompt::context_state::PromptContextEvent],
-    history: &[types::message::Message],
+    history: &[agent_protocol::ResponseItem],
     tool_specs: Vec<serde_json::Value>,
     attempt: usize,
 ) -> Result<SamplingRequest, String> {

@@ -45,6 +45,82 @@ pub async fn chat_stream(
     chat_stream_with_tool_policy(provider, messages, tools, config, None, None).await
 }
 
+/// Agent-only Responses API entry point.
+///
+/// Unlike [`chat_stream`], this accepts the canonical Responses item history
+/// and refuses providers that do not advertise Responses support. Legacy chat,
+/// Anthropic, Gemini, and Interactions protocols remain available only to
+/// tool-owned callers through their dedicated APIs.
+pub async fn agent_responses_stream(
+    provider: &str,
+    instructions: String,
+    input: Vec<agent_protocol::ResponseItem>,
+    tools: Vec<Value>,
+    config: &ProviderConfig,
+) -> ProviderResult<CompletionStream> {
+    let provider = normalize_provider_id(provider);
+    if !supports_agent_responses(provider) {
+        return Err(ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: "Agent Responses API".to_string(),
+        });
+    }
+    let mut config = config.clone();
+    config.api_mode = "responses".to_string();
+    let request = CompletionRequest {
+        model: config.model.clone(),
+        instructions,
+        input: Vec::new(),
+        response_input: Some(input),
+        tools: tools.iter().filter_map(parse_tool_definition).collect(),
+        tool_choice: None,
+        parallel_tool_calls: None,
+        temperature: Some(config.temperature),
+        max_tokens: Some(config.max_tokens),
+        thinking: Some(ThinkingConfig {
+            enabled: config.thinking_enabled,
+            budget_tokens: None,
+            effort: config.reasoning_effort.clone(),
+        }),
+        additional_params: config.additional_params.clone(),
+        previous_interaction_id: None,
+    };
+    chat_stream_direct(provider, request, &config).await
+}
+
+/// Convenience entry point for Agent-owned one-shot tasks such as title,
+/// compaction, memory review, and smart approval.
+pub async fn agent_responses_prompt(
+    provider: &str,
+    instructions: impl Into<String>,
+    prompt: impl Into<String>,
+    config: &ProviderConfig,
+) -> ProviderResult<CompletionStream> {
+    agent_responses_stream(
+        provider,
+        instructions.into(),
+        vec![agent_protocol::ResponseItem::Message {
+            id: None,
+            role: "user".into(),
+            content: vec![agent_protocol::ContentItem::InputText {
+                text: prompt.into(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        Vec::new(),
+        config,
+    )
+    .await
+}
+
+/// Whether a provider may participate in the Agent target/fallback chain.
+pub fn supports_agent_responses(provider: &str) -> bool {
+    let provider = normalize_provider_id(provider);
+    crate::profile::resolve(provider).is_some_and(|profile| profile.supports_responses)
+        || lookup_custom_provider(provider).is_some()
+}
+
 pub(crate) async fn chat_stream_with_tool_policy(
     provider: &str,
     messages: Vec<Message>,
@@ -67,6 +143,7 @@ pub(crate) async fn chat_stream_with_tool_policy(
         model: config.model.clone(),
         instructions,
         input,
+        response_input: None,
         tools: tool_defs,
         tool_choice,
         parallel_tool_calls,

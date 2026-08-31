@@ -5,15 +5,12 @@ use std::sync::{Arc, Mutex as StdMutex};
 use async_trait::async_trait;
 use futures::StreamExt;
 use providers::types::message::Message as ProviderMessage;
-use providers::types::stream::{CompletionStream, StreamChunk};
+use providers::types::stream::CompletionStream;
 use providers::ProviderConfig;
-use types::message::Message;
 use types::ChatTarget;
 
-use crate::prompt::messages::to_provider_messages;
-
-use super::fallback::{try_stream_completion_with_fallback, ActiveTargetMeta};
-use super::traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
+use super::fallback::{try_stream_responses_with_fallback, ActiveTargetMeta};
+use super::traits::StreamingResponses;
 use super::types::{map_new_provider_stream, AssistantContentStream};
 
 /// 测试用 chat 函数覆盖：跳过 dispatch，直接返回脚本化的 CompletionStream。
@@ -38,8 +35,6 @@ pub struct ProviderStreamer {
     last_hit: StdMutex<Option<ActiveTargetMeta>>,
     /// 最近一次已尝试的目标，包括最终失败的 fallback 目标。
     last_attempt: StdMutex<Option<ActiveTargetMeta>>,
-    /// Google Interactions：上一轮 `interaction.id`，供工具多轮 `previous_interaction_id`。
-    previous_interaction_id: Arc<StdMutex<Option<String>>>,
     /// 测试覆盖：非空时跳过 dispatch，直接使用此函数获取 CompletionStream。
     chat_override: Option<ChatOverride>,
 }
@@ -51,7 +46,6 @@ impl ProviderStreamer {
             base_config,
             last_hit: StdMutex::new(None),
             last_attempt: StdMutex::new(None),
-            previous_interaction_id: Arc::new(StdMutex::new(None)),
             chat_override: None,
         }
     }
@@ -67,7 +61,6 @@ impl ProviderStreamer {
             base_config,
             last_hit: StdMutex::new(None),
             last_attempt: StdMutex::new(None),
-            previous_interaction_id: Arc::new(StdMutex::new(None)),
             chat_override: Some(chat_override),
         }
     }
@@ -107,42 +100,40 @@ impl ProviderStreamer {
         &self,
         prompt: &crate::prompt::PromptContract,
         prompt_context: &[crate::prompt::context_state::PromptContextEvent],
-        history: &[Message],
+        history: &[agent_protocol::ResponseItem],
         tools: Vec<serde_json::Value>,
     ) -> anyhow::Result<AssistantContentStream> {
-        let messages = crate::prompt::messages::to_provider_messages_with_context_history(
-            prompt,
+        let input = crate::prompt::messages::to_response_items_with_context_history(
             prompt_context,
             history,
         );
-        self.stream_completion(messages, tools).await
+        self.stream_response(prompt.base_instructions.clone(), input, tools)
+            .await
     }
 }
 
 #[async_trait]
-impl StreamingCompletion for ProviderStreamer {
-    /// 经 [`try_stream_completion_with_fallback`] 再 [`map_new_provider_stream`] 归一化。
-    ///
-    /// Google Interactions：自动注入/更新 `previous_interaction_id`，使工具多轮
-    /// 保留服务端 thought/signature。
-    async fn stream_completion(
+impl StreamingResponses for ProviderStreamer {
+    async fn stream_response(
         &self,
-        messages: Vec<ProviderMessage>,
+        instructions: String,
+        input: Vec<agent_protocol::ResponseItem>,
         tools: Vec<serde_json::Value>,
     ) -> anyhow::Result<AssistantContentStream> {
-        let mut config = self.base_config.clone();
-        config.previous_interaction_id = self
-            .previous_interaction_id
-            .lock()
-            .ok()
-            .and_then(|g| g.clone());
+        let config = self.base_config.clone();
 
         if let Ok(mut guard) = self.last_attempt.lock() {
             *guard = self.targets.first().map(ActiveTargetMeta::from_target);
         }
 
         let (stream, meta) = if let Some(ref chat_fn) = self.chat_override {
-            // 测试覆盖路径：直接调用自定义函数
+            // Compatibility test seam. Production requests never take this
+            // projection path.
+            let projected = agent_rollout::reconstruct_response_items(input.clone())?
+                .into_iter()
+                .map(|entry| entry.message)
+                .collect::<Vec<_>>();
+            let messages = crate::prompt::messages::to_provider_messages(&instructions, &projected);
             let stream = chat_fn(messages, tools, config.clone()).await?;
             let meta = ActiveTargetMeta {
                 provider_id: self
@@ -168,9 +159,10 @@ impl StreamingCompletion for ProviderStreamer {
             };
             (stream, meta)
         } else {
-            try_stream_completion_with_fallback(
+            try_stream_responses_with_fallback(
                 &self.targets,
-                messages,
+                instructions,
+                input,
                 tools,
                 &config,
                 |from, to, err| {
@@ -183,75 +175,24 @@ impl StreamingCompletion for ProviderStreamer {
                         to_backend = %to.backend_id,
                         to_model = %to.model,
                         error = %err,
-                        "chat failover: switching target before first content"
+                        "Responses failover: switching target before first content"
                     );
                 },
             )
             .await?
         };
 
-        let is_google = meta.backend_id == "google" || meta.provider_id == "google";
-        if !is_google {
-            if let Ok(mut guard) = self.previous_interaction_id.lock() {
-                *guard = None;
-            }
-        }
-
-        let prev_slot = if is_google {
-            Some(Arc::clone(&self.previous_interaction_id))
-        } else {
-            None
-        };
-        let tracked: CompletionStream = Box::pin(futures::stream::unfold(
-            (stream, prev_slot),
-            |(mut stream, prev_slot)| async move {
+        let tracked: CompletionStream =
+            Box::pin(futures::stream::unfold(stream, |mut stream| async move {
                 match stream.next().await {
-                    Some(item) => {
-                        if let (Some(ref slot), Ok(StreamChunk::InteractionId(ref id))) =
-                            (&prev_slot, &item)
-                        {
-                            if let Ok(mut g) = slot.lock() {
-                                *g = Some(id.clone());
-                            }
-                        }
-                        Some((item, (stream, prev_slot)))
-                    }
+                    Some(item) => Some((item, stream)),
                     None => None,
                 }
-            },
-        ));
+            }));
 
         if let Ok(mut guard) = self.last_hit.lock() {
             *guard = Some(meta);
         }
         Ok(map_new_provider_stream(tracked))
-    }
-}
-
-#[async_trait]
-impl StreamingChat for ProviderStreamer {
-    /// 通过 [`to_provider_messages`] 转换历史后调用 `stream_completion`。
-    async fn stream_chat(
-        &self,
-        system_prompt: &str,
-        history: &[Message],
-        tools: Vec<serde_json::Value>,
-    ) -> anyhow::Result<AssistantContentStream> {
-        let messages = to_provider_messages(system_prompt, history);
-        self.stream_completion(messages, tools).await
-    }
-}
-
-#[async_trait]
-impl StreamingPrompt for ProviderStreamer {
-    /// 构造单条 user 历史后委托 `stream_chat`。
-    async fn stream_prompt(
-        &self,
-        system_prompt: &str,
-        prompt: &str,
-        tools: Vec<serde_json::Value>,
-    ) -> anyhow::Result<AssistantContentStream> {
-        let history = vec![Message::user(prompt)];
-        self.stream_chat(system_prompt, &history, tools).await
     }
 }

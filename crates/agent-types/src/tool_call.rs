@@ -10,9 +10,12 @@ use serde_json::Value;
 /// 解析完成的单次工具调用。
 #[derive(Debug, Clone)]
 pub struct ParsedToolCall {
+    pub item_id: Option<String>,
     pub id: String,
     pub name: String,
+    pub namespace: Option<String>,
     pub arguments: Value,
+    pub encrypted_arguments: Option<Vec<String>>,
     pub args_parse_error: bool,
     pub signature: Option<String>,
 }
@@ -20,9 +23,12 @@ pub struct ParsedToolCall {
 impl ParsedToolCall {
     pub fn new(name: impl Into<String>, arguments: Value) -> Self {
         Self {
+            item_id: None,
             id: uuid::Uuid::new_v4().to_string(),
             name: name.into(),
+            namespace: None,
             arguments,
+            encrypted_arguments: None,
             args_parse_error: false,
             signature: None,
         }
@@ -30,9 +36,12 @@ impl ParsedToolCall {
 
     pub fn with_id(id: impl Into<String>, name: impl Into<String>, arguments: Value) -> Self {
         Self {
+            item_id: None,
             id: id.into(),
             name: name.into(),
+            namespace: None,
             arguments,
+            encrypted_arguments: None,
             args_parse_error: false,
             signature: None,
         }
@@ -127,12 +136,15 @@ impl ToolCallAccumulator {
                             format!("工具参数 JSON 无效（请检查引号与转义）: {err}")
                         };
                         ParsedToolCall {
+                            item_id: None,
                             id,
                             name: s.name,
+                            namespace: None,
                             arguments: serde_json::json!({
                                 "_parse_error": detail,
                                 "_raw": trimmed,
                             }),
+                            encrypted_arguments: None,
                             args_parse_error: true,
                             signature: s.signature,
                         }

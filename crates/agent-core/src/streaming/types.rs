@@ -13,6 +13,8 @@ use types::ToolCallDelta;
 /// 单次模型流式片段，对齐 Rig `StreamedAssistantContent` 并扩展 Reasoning 通道。
 #[derive(Debug, Clone)]
 pub enum StreamedAssistantContent {
+    /// Canonical completed Responses item. This is persisted verbatim.
+    ResponseItemDone(agent_protocol::ResponseItem),
     /// 可见 assistant 文本 token。
     Text(String),
     /// 推理/思考过程 token（部分 Provider 专用）。
@@ -33,6 +35,7 @@ impl StreamedAssistantContent {
     /// 从新 `StreamChunk` 转换。
     pub fn from_stream_chunk(chunk: StreamChunk) -> Option<Self> {
         match chunk {
+            StreamChunk::ResponseItemDone(item) => Some(Self::ResponseItemDone(item)),
             StreamChunk::Text(t) => Some(Self::Text(t)),
             StreamChunk::Thinking(t) => Some(Self::Reasoning(t)),
             StreamChunk::ThoughtSignature(s) => Some(Self::ThoughtSignature(s)),

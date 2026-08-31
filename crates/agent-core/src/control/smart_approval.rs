@@ -6,7 +6,6 @@
 use std::time::Duration;
 
 use futures::StreamExt;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use serde::Serialize;
@@ -188,11 +187,14 @@ async fn ask_model(target: &ApprovalTarget, prompt: &str) -> Result<String, Stri
         },
         ..ProviderConfig::default()
     };
-    let messages = vec![ProviderMessage::user_text(prompt)];
-    let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
-            .await
-            .map_err(|e| e.to_string())?;
+    let mut stream = providers::dispatch::agent_responses_prompt(
+        &target.backend_id,
+        "You decide whether a requested tool action is safe to approve.",
+        prompt,
+        &config,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     let mut full = String::new();
     while let Some(chunk) = stream.next().await {

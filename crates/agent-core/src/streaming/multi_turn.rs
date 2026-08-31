@@ -12,8 +12,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use agent_protocol::{
-    ControlRequestEvent, Event, EventMsg, ItemEvent, ToolExecutionMode, ToolStatus, TurnInput,
-    UserInputCommittedEvent,
+    ContentItem, ControlRequestEvent, Event, EventMsg, ItemEvent, ResponseItem, ToolExecutionMode,
+    ToolStatus, TurnInput, UserInputCommittedEvent,
 };
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
@@ -55,6 +55,121 @@ const MAX_THINKING_ONLY_RETRIES: usize = 1;
 struct PendingToolArgumentEvents {
     item_id: Option<String>,
     deltas: Vec<types::ToolCallDelta>,
+}
+
+fn response_item_calls(items: &[ResponseItem]) -> Vec<types::ParsedToolCall> {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            ResponseItem::FunctionCall {
+                id,
+                name,
+                namespace,
+                arguments,
+                encrypted_function_args,
+                call_id,
+                ..
+            } => Some(types::ParsedToolCall {
+                item_id: id.clone(),
+                id: call_id.clone(),
+                name: name.clone(),
+                namespace: namespace.clone(),
+                arguments: serde_json::from_str(arguments)
+                    .unwrap_or_else(|_| serde_json::Value::String(arguments.clone())),
+                encrypted_arguments: encrypted_function_args.clone(),
+                args_parse_error: false,
+                signature: None,
+            }),
+            ResponseItem::CustomToolCall {
+                id,
+                call_id,
+                name,
+                namespace,
+                input,
+                ..
+            } => Some(types::ParsedToolCall {
+                item_id: id.clone(),
+                id: call_id.clone(),
+                name: name.clone(),
+                namespace: namespace.clone(),
+                arguments: serde_json::Value::String(input.clone()),
+                encrypted_arguments: None,
+                args_parse_error: false,
+                signature: None,
+            }),
+            ResponseItem::ToolSearchCall {
+                id,
+                call_id: Some(call_id),
+                arguments,
+                ..
+            } => Some(types::ParsedToolCall {
+                item_id: id.clone(),
+                id: call_id.clone(),
+                name: "tool_search".into(),
+                namespace: None,
+                arguments: arguments.clone(),
+                encrypted_arguments: None,
+                args_parse_error: false,
+                signature: None,
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+async fn record_assistant_output(
+    agent: &Session,
+    content: &str,
+    calls: &[types::ParsedToolCall],
+    reasoning: Option<&str>,
+    reasoning_details: Option<serde_json::Value>,
+    native_items: &[ResponseItem],
+) -> anyhow::Result<()> {
+    if native_items.is_empty() {
+        return agent
+            .record_assistant_with_calls(content, calls, reasoning, reasoning_details)
+            .await;
+    }
+    let tool_calls = (!calls.is_empty()).then(|| {
+        calls
+            .iter()
+            .map(|call| types::message::ToolCall {
+                id: call.id.clone(),
+                name: call.name.clone(),
+                arguments: call.arguments.clone(),
+                signature: call.signature.clone(),
+            })
+            .collect()
+    });
+    let mut items = native_items.to_vec();
+    let native_text = items
+        .iter()
+        .filter_map(|item| match item {
+            ResponseItem::Message { role, content, .. } if role == "assistant" => Some(content),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|item| match item {
+            ContentItem::OutputText { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<String>();
+    if native_text != content {
+        if let Some(ResponseItem::Message {
+            content: item_content,
+            ..
+        }) = items
+            .iter_mut()
+            .find(|item| matches!(item, ResponseItem::Message { role, .. } if role == "assistant"))
+        {
+            *item_content = vec![ContentItem::OutputText {
+                text: content.to_string(),
+            }];
+        }
+    }
+    agent
+        .record_assistant_response_items(content, tool_calls, reasoning, reasoning_details, items)
+        .await
 }
 
 async fn emit_tool_argument_events(
@@ -568,6 +683,27 @@ pub(crate) async fn run_turn(
             "step context captured"
         );
         let history = step_context.history.clone();
+        let history_projection = agent_rollout::reconstruct_response_items(history.clone())
+            .map_err(anyhow::Error::from)
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| item.message)
+                    .collect::<Vec<_>>()
+            });
+        let history_projection = match history_projection {
+            Ok(history) => history,
+            Err(error) => {
+                return finish_task_error(
+                    &session,
+                    &turn_context,
+                    &streamer,
+                    error.to_string(),
+                    saw_usage.then_some(total_usage),
+                )
+                .await;
+            }
+        };
         let prompt_context = step_context.prompt_context.clone();
         let tool_specs = step_context.tool_router.model_visible_specs().to_vec();
 
@@ -576,7 +712,7 @@ pub(crate) async fn run_turn(
             &turn_context,
             &prompt,
             &prompt_context,
-            &history,
+            &history_projection,
             &tool_specs,
         )
         .await;
@@ -619,6 +755,7 @@ pub(crate) async fn run_turn(
 
         let mut full_response = String::new();
         let mut full_reasoning = String::new();
+        let mut completed_response_items = Vec::new();
         let mut thought_signature: Option<String> = None;
         let mut tool_acc = types::ToolCallAccumulator::new();
         let mut tool_argument_events: HashMap<u32, PendingToolArgumentEvents> = HashMap::new();
@@ -709,6 +846,9 @@ pub(crate) async fn run_turn(
 
             match next {
                 None => break,
+                Some(Ok(StreamedAssistantContent::ResponseItemDone(item))) => {
+                    completed_response_items.push(item);
+                }
                 Some(Ok(StreamedAssistantContent::Text(text))) => {
                     if !text.is_empty() {
                         timeline.push_text_delta(&text, now_ms());
@@ -879,16 +1019,21 @@ pub(crate) async fn run_turn(
             emit_tool_argument_events(&session, &turn_context, &item_id, buffered).await;
         }
 
-        let mut native_calls = tool_acc.finish();
-        for (call, index) in native_calls.iter_mut().zip(tool_call_indices) {
+        let response_calls = response_item_calls(&completed_response_items);
+        let mut accumulated_calls = tool_acc.finish();
+        for (call, index) in accumulated_calls.iter_mut().zip(tool_call_indices) {
             if let Some(item_id) = tool_argument_events
                 .get(&index)
                 .and_then(|pending| pending.item_id.as_ref())
             {
-                call.id.clone_from(item_id);
+                call.item_id = Some(item_id.clone());
             }
         }
-        let calls = native_calls;
+        let calls = if response_calls.is_empty() {
+            accumulated_calls
+        } else {
+            response_calls
+        };
 
         if full_response.is_empty() && calls.is_empty() {
             if !full_reasoning.is_empty() && thinking_only_retries < MAX_THINKING_ONLY_RETRIES {
@@ -903,14 +1048,15 @@ pub(crate) async fn run_turn(
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
                 );
-                if let Err(err) = agent
-                    .record_assistant_with_calls(
-                        &full_response,
-                        &[],
-                        Some(full_reasoning.as_str()),
-                        details,
-                    )
-                    .await
+                if let Err(err) = record_assistant_output(
+                    agent,
+                    &full_response,
+                    &[],
+                    Some(full_reasoning.as_str()),
+                    details,
+                    &completed_response_items,
+                )
+                .await
                 {
                     return finish_task_error(
                         &session,
@@ -1004,14 +1150,15 @@ pub(crate) async fn run_turn(
                         Some(timeline.reasoning_details_snapshot()),
                         thought_signature.as_deref(),
                     );
-                    if let Err(err) = agent
-                        .record_assistant_with_calls(
-                            &full_response,
-                            &[],
-                            (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                            details,
-                        )
-                        .await
+                    if let Err(err) = record_assistant_output(
+                        agent,
+                        &full_response,
+                        &[],
+                        (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                        details,
+                        &completed_response_items,
+                    )
+                    .await
                     {
                         return finish_task_error(
                             &session,
@@ -1130,14 +1277,15 @@ pub(crate) async fn run_turn(
                 Some(timeline.reasoning_details_snapshot()),
                 thought_signature.as_deref(),
             );
-            if let Err(err) = agent
-                .record_assistant_with_calls(
-                    &full_response,
-                    &calls,
-                    (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                    details,
-                )
-                .await
+            if let Err(err) = record_assistant_output(
+                agent,
+                &full_response,
+                &calls,
+                (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                details,
+                &completed_response_items,
+            )
+            .await
             {
                 return finish_task_error(
                     &session,
@@ -1359,6 +1507,27 @@ mod tests {
             },
             inject_context: None,
         }
+    }
+
+    #[test]
+    fn native_response_call_keeps_item_and_call_identity() {
+        let calls = response_item_calls(&[ResponseItem::FunctionCall {
+            id: Some("item_7".into()),
+            name: "lookup".into(),
+            namespace: Some("mcp".into()),
+            arguments: "{\"q\":1}".into(),
+            encrypted_function_args: Some(vec!["ciphertext".into()]),
+            call_id: "call_7".into(),
+            internal_chat_message_metadata_passthrough: None,
+        }]);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].item_id.as_deref(), Some("item_7"));
+        assert_eq!(calls[0].id, "call_7");
+        assert_eq!(calls[0].namespace.as_deref(), Some("mcp"));
+        assert_eq!(
+            calls[0].encrypted_arguments.as_deref(),
+            Some(&["ciphertext".into()][..])
+        );
     }
 
     #[tokio::test]

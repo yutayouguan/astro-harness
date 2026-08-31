@@ -12,7 +12,6 @@
 use std::sync::Arc;
 
 use providers::{PauseControl, ProviderConfig, Usage};
-use types::message::{MessageContent, Role};
 use types::ChatTarget;
 
 use crate::runtime::Session;
@@ -97,7 +96,7 @@ async fn run_background_multi_turn_controlled_with_chat_and_system(
 ) -> anyhow::Result<(String, Usage)> {
     let (base_config, message_start) = {
         let agent = session.as_ref();
-        let history = agent.clone_history().await;
+        let history = agent.clone_response_history().await;
         (
             ProviderConfig {
                 temperature: agent.temperature(),
@@ -263,18 +262,24 @@ async fn collect_background_events(
 }
 
 async fn latest_assistant_text(session: &Arc<Session>, message_start: usize) -> Option<String> {
-    let history = session.clone_history().await;
+    let history = session.clone_response_history().await;
     history[message_start..]
         .iter()
         .rev()
-        .find(|message| message.role == Role::Assistant)
-        .map(|message| match &message.content {
-            MessageContent::Text(text) => text.clone(),
-            MessageContent::Parts(parts) => parts
-                .iter()
-                .filter_map(|part| part.text.as_deref())
-                .collect::<Vec<_>>()
-                .join("\n"),
+        .find_map(|item| match item {
+            agent_protocol::ResponseItem::Message { role, content, .. } if role == "assistant" => {
+                Some(
+                    content
+                        .iter()
+                        .filter_map(|content| match content {
+                            agent_protocol::ContentItem::OutputText { text } => Some(text.as_str()),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+            }
+            _ => None,
         })
 }
 

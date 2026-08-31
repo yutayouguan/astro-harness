@@ -8,6 +8,37 @@ use crate::compat::parse_openai_usage;
 use crate::types::message::{AssistantContent, Message, ToolCall, UserContent};
 use crate::types::stream::StreamChunk;
 
+/// Serialize the Agent's canonical Responses history without passing through
+/// a chat-completions message model. Local-only metadata is removed at the
+/// wire boundary; a compressed tool view may replace `output` without
+/// destroying the persisted raw value.
+pub fn to_native_responses_input(
+    items: &[agent_protocol::ResponseItem],
+) -> serde_json::Result<Vec<Value>> {
+    items
+        .iter()
+        .map(|item| {
+            let mut value = serde_json::to_value(item)?;
+            if let Some(object) = value.as_object_mut() {
+                let metadata = object.remove("internal_chat_message_metadata_passthrough");
+                if matches!(
+                    object.get("type").and_then(Value::as_str),
+                    Some("function_call_output" | "custom_tool_call_output")
+                ) {
+                    if let Some(compressed) = metadata
+                        .as_ref()
+                        .and_then(|value| value.get("astro_compressed_output"))
+                        .cloned()
+                    {
+                        object.insert("output".into(), compressed);
+                    }
+                }
+            }
+            Ok(value)
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // 消息转换
 // ---------------------------------------------------------------------------
@@ -168,6 +199,49 @@ mod input_tests {
         assert_eq!(input[0]["content"], "dynamic policy");
         assert_eq!(input[1]["role"], "user");
     }
+
+    #[test]
+    fn native_input_preserves_distinct_item_and_call_ids() {
+        let input = to_native_responses_input(&[agent_protocol::ResponseItem::FunctionCall {
+            id: Some("item_1".into()),
+            name: "lookup".into(),
+            namespace: Some("mcp".into()),
+            arguments: "{}".into(),
+            encrypted_function_args: Some(vec!["opaque".into()]),
+            call_id: "call_1".into(),
+            internal_chat_message_metadata_passthrough: Some(json!({"local": true})),
+        }])
+        .unwrap();
+
+        assert_eq!(input[0]["id"], "item_1");
+        assert_eq!(input[0]["call_id"], "call_1");
+        assert_eq!(input[0]["namespace"], "mcp");
+        assert_eq!(input[0]["encrypted_function_args"][0], "opaque");
+        assert!(input[0]
+            .get("internal_chat_message_metadata_passthrough")
+            .is_none());
+    }
+
+    #[test]
+    fn native_input_uses_compressed_tool_view_only_on_wire() {
+        let raw = agent_protocol::ResponseItem::FunctionCallOutput {
+            id: Some("out_1".into()),
+            call_id: Some("call_1".into()),
+            name: Some("lookup".into()),
+            namespace: None,
+            output: json!("raw output"),
+            internal_chat_message_metadata_passthrough: Some(json!({
+                "astro_compressed_output": "short view"
+            })),
+        };
+        let input = to_native_responses_input(std::slice::from_ref(&raw)).unwrap();
+        assert_eq!(input[0]["output"], "short view");
+        assert!(matches!(
+            raw,
+            agent_protocol::ResponseItem::FunctionCallOutput { output, .. }
+                if output == "raw output"
+        ));
+    }
 }
 
 fn build_content_from_user(parts: &[UserContent]) -> Value {
@@ -298,6 +372,10 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
 
         "response.output_item.done" => {
             if let Some(item) = v.get("item") {
+                let native_item =
+                    serde_json::from_value::<agent_protocol::ResponseItem>(item.clone())
+                        .ok()
+                        .map(StreamChunk::ResponseItemDone);
                 let item_type = item.get("type").and_then(|t| t.as_str());
                 if matches!(
                     item_type,
@@ -318,8 +396,15 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
                             .map(str::to_string),
                     };
                     if let Some(arguments) = arguments {
-                        one!(StreamChunk::ToolCallDelta { index, arguments });
+                        let mut chunks = vec![StreamChunk::ToolCallDelta { index, arguments }];
+                        if let Some(native_item) = native_item {
+                            chunks.push(native_item);
+                        }
+                        return chunks;
                     }
+                }
+                if let Some(native_item) = native_item {
+                    one!(native_item);
                 }
             }
         }
@@ -399,6 +484,26 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
 mod tests {
     use super::*;
     use crate::types::message::{AssistantContent, Message, ToolCall, UserContent};
+
+    #[test]
+    fn output_item_done_emits_native_response_item() {
+        let chunks = extract_responses_chunks(
+            r#"{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"item_1","call_id":"call_1","name":"lookup","namespace":"mcp","arguments":"{}","encrypted_function_args":["opaque"],"status":"completed"}}"#,
+        );
+        assert!(chunks.iter().any(|chunk| matches!(
+            chunk,
+            StreamChunk::ResponseItemDone(agent_protocol::ResponseItem::FunctionCall {
+                id: Some(id),
+                call_id,
+                namespace: Some(namespace),
+                encrypted_function_args: Some(encrypted),
+                ..
+            }) if id == "item_1"
+                && call_id == "call_1"
+                && namespace == "mcp"
+                && encrypted == &["opaque"]
+        )));
+    }
 
     // ── 消息转换 ──
 

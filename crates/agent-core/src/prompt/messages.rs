@@ -7,6 +7,72 @@ use providers::types::message::{
 };
 use types::message::{Message, MessageContent, Role};
 
+/// Merge role-bearing prompt context with canonical Responses history.
+/// Conversation items are cloned verbatim; only Astro-authored context is
+/// constructed here.
+pub(crate) fn to_response_items_with_context_history(
+    prompt_context: &[crate::prompt::context_state::PromptContextEvent],
+    session: &[agent_protocol::ResponseItem],
+) -> Vec<agent_protocol::ResponseItem> {
+    let session = super::sanitize::sanitized_response_items(session);
+    let mut context_events = prompt_context.iter().peekable();
+    let context_count = prompt_context
+        .iter()
+        .map(|event| event.messages.len())
+        .sum::<usize>();
+    let mut input = Vec::with_capacity(session.len() + context_count);
+    let mut user_ordinal = 0usize;
+    for item in &session {
+        if matches!(
+            item,
+            agent_protocol::ResponseItem::Message { role, .. } if role == "user"
+        ) {
+            while context_events
+                .peek()
+                .is_some_and(|event| event.before_user <= user_ordinal)
+            {
+                input.extend(
+                    context_events
+                        .next()
+                        .expect("peeked context event")
+                        .messages
+                        .iter()
+                        .filter_map(provider_context_to_response_item),
+                );
+            }
+            user_ordinal += 1;
+        }
+        input.push(item.clone());
+    }
+    for event in context_events {
+        input.extend(
+            event
+                .messages
+                .iter()
+                .filter_map(provider_context_to_response_item),
+        );
+    }
+    input
+}
+
+fn provider_context_to_response_item(
+    message: &ProviderMessage,
+) -> Option<agent_protocol::ResponseItem> {
+    let (role, text) = match message {
+        ProviderMessage::Developer { content } => ("developer", content.clone()),
+        ProviderMessage::User { .. } => ("user", message.text_content().to_string()),
+        ProviderMessage::System { content } => ("developer", content.clone()),
+        _ => return None,
+    };
+    Some(agent_protocol::ResponseItem::Message {
+        id: None,
+        role: role.into(),
+        content: vec![agent_protocol::ContentItem::InputText { text }],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    })
+}
+
 /// 将会话历史与 system prompt 转为 Provider 可消费的聊天消息列表。
 ///
 /// 首条固定为 `system` 角色；tool 消息会从历史中反向查找对应 `tool_call_id` 以填充 `name`。

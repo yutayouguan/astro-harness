@@ -4,7 +4,6 @@
 //! （[`session::SessionStore::set_session_title_if_empty`]），迟到任务不会覆盖手动标题。
 
 use futures::StreamExt;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use tracing::{info, warn};
@@ -187,9 +186,13 @@ async fn complete_title_chat(target: &types::ChatTarget, prompt: &str) -> anyhow
         additional_params: serde_json::Value::Null,
         ..ProviderConfig::default()
     };
-    let messages = vec![ProviderMessage::user_text(prompt)];
-    let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
+    let mut stream = providers::dispatch::agent_responses_prompt(
+        &target.backend_id,
+        "Generate a concise title for this agent task.",
+        prompt,
+        &config,
+    )
+    .await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;

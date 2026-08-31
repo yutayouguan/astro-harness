@@ -2,15 +2,13 @@
 
 use std::sync::Arc;
 
-use types::message::Message;
-
 use super::{ToolRouter, TurnContext};
 
 /// 单次采样请求的快照：turn 上下文、历史消息、可用工具。
 #[derive(Debug)]
 pub(crate) struct StepContext {
     pub(crate) turn: Arc<TurnContext>,
-    pub(crate) history: Vec<Message>,
+    pub(crate) history: Vec<agent_protocol::ResponseItem>,
     pub(crate) prompt_context: Vec<crate::prompt::context_state::PromptContextEvent>,
     pub(crate) tool_router: Arc<ToolRouter>,
 }
@@ -18,7 +16,7 @@ pub(crate) struct StepContext {
 impl StepContext {
     pub(crate) fn new(
         turn: Arc<TurnContext>,
-        history: Vec<Message>,
+        history: Vec<agent_protocol::ResponseItem>,
         prompt_context: Vec<crate::prompt::context_state::PromptContextEvent>,
         tool_router: Arc<ToolRouter>,
     ) -> Self {

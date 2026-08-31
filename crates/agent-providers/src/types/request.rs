@@ -79,6 +79,10 @@ pub struct CompletionRequest {
     pub instructions: String,
     /// 动态上下文与对话条目（带显式角色）。
     pub input: Vec<Message>,
+    /// Native Responses input for the Agent path. When present, Responses
+    /// providers serialize these items directly and never lower them through
+    /// chat-completions messages.
+    pub response_input: Option<Vec<agent_protocol::ResponseItem>>,
     /// 原生工具 schema；不编码到指令或消息文本中。
     pub tools: Vec<ToolDefinition>,
     /// 显式工具选择策略。`None` 保持 provider 默认。
@@ -99,6 +103,7 @@ impl Default for CompletionRequest {
             model: String::new(),
             instructions: String::new(),
             input: Vec::new(),
+            response_input: None,
             tools: Vec::new(),
             tool_choice: None,
             parallel_tool_calls: None,

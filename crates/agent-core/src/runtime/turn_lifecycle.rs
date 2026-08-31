@@ -1,7 +1,6 @@
 //! Session turn 生命周期：输入持久化、记忆召回、prompt 组装与 hooks。
 
 use session::{build_conversation_context, format_recalled_context, ConversationStore, NewMessage};
-use types::message::Message;
 
 use std::sync::Arc;
 
@@ -842,10 +841,18 @@ impl Session {
     /// 与 Agent Thread 路径共享同一捕获入口。
     pub(crate) async fn capture_step_context(&self) -> anyhow::Result<Arc<StepContext>> {
         self.reload_tools_and_mcp().await?;
-        let mut history = self.provider_history().await;
+        let mut history = self.provider_response_history().await;
         let prompt_context = self.prompt_context_history();
         if let Some(ctx) = self.take_inject_context().await {
-            history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
+            history.push(agent_protocol::ResponseItem::Message {
+                id: None,
+                role: "user".into(),
+                content: vec![agent_protocol::ContentItem::InputText {
+                    text: format!("[astro:hook-context]\n{ctx}"),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            });
         }
         let (interaction_mode, requested_tool_mode) = {
             let state = self.lock_state();

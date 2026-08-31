@@ -8,6 +8,45 @@ use crate::compression::{prune_tool_view, ContextMaintenanceResult, ToolCompress
 use super::AgentLoop;
 
 impl AgentLoop {
+    /// Canonical provider history. Mid-run handoff truncates only the local
+    /// view and preserves every retained ResponseItem verbatim.
+    pub async fn provider_response_history(&self) -> Vec<agent_protocol::ResponseItem> {
+        let (handoff, history) = {
+            let state = self.lock_state();
+            (
+                state.compression.mid_run_handoff.clone(),
+                state.clone_response_history(),
+            )
+        };
+        let Some(handoff) = handoff else {
+            return history;
+        };
+        let first = self.config_protect_first_n().min(history.len());
+        let last = self
+            .config_protect_last_n()
+            .min(history.len().saturating_sub(first));
+        if history.len() <= first + last {
+            return history;
+        }
+        let mut out = Vec::with_capacity(first + 1 + last);
+        out.extend_from_slice(&history[..first]);
+        out.push(agent_protocol::ResponseItem::Message {
+            id: None,
+            role: "user".into(),
+            content: vec![agent_protocol::ContentItem::InputText {
+                text: format!(
+                    "{}\n{}",
+                    crate::exec::mid_run_summary::MID_RUN_SUMMARY_MARK,
+                    handoff.trim()
+                ),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        });
+        out.extend_from_slice(&history[history.len() - last..]);
+        out
+    }
+
     /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
     pub async fn provider_history(&self) -> Vec<Message> {
         let (handoff, history) = {

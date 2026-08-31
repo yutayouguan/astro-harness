@@ -43,5 +43,5 @@ pub use multi_turn::{
 };
 pub use provider::{ChatOverride, ProviderStreamer};
 pub use run_state::{RunPhase, RunRequirements, RunState};
-pub use traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
+pub use traits::StreamingResponses;
 pub use types::{AssistantContentStream, StreamedAssistantContent};

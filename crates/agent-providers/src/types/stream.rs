@@ -122,6 +122,9 @@ impl Usage {
 /// 流式分片（所有厂商统一输出）。
 #[derive(Debug, Clone)]
 pub enum StreamChunk {
+    /// Completed native item emitted by the Responses API. Agent callers use
+    /// this as the durable item; text/tool deltas remain presentation events.
+    ResponseItemDone(agent_protocol::ResponseItem),
     /// 正文 token。
     Text(String),
     /// 推理/思考内容。

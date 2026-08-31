@@ -71,7 +71,10 @@ where
             &request.model
         };
 
-        let input = crate::openai::responses::to_responses_input(&request.input);
+        let input = match request.response_input.as_deref() {
+            Some(items) => crate::openai::responses::to_native_responses_input(items)?,
+            None => crate::openai::responses::to_responses_input(&request.input),
+        };
 
         let mut body = json!({
             "model": model,
@@ -163,9 +166,10 @@ where
             .await
             .with_context(|| format!("连接 {} Responses API 失败: {url}", Ext::NAME))?;
 
-        crate::shared::sse::sse_stream(
+        crate::shared::sse::sse_stream_with_terminal(
             response,
             Arc::new(crate::openai::responses::extract_responses_chunks),
+            true,
         )
         .await
     }
