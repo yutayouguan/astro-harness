@@ -66,16 +66,88 @@ test("decode daily with weekday range", () => {
   assert.deepEqual(d?.weekdays, [1, 2, 3, 4, 5]);
 });
 
-test("weekly and custom modes round-trip through five-field cron", () => {
+test("weekly shortcut and custom weekly schedules round-trip", () => {
   const weekly = decodeSchedule(
     encodeSchedule({ mode: "weekly", time: "16:00", weekdays: [5] }),
   );
   assert.deepEqual(weekly, { mode: "weekly", time: "16:00", weekdays: [5] });
 
   const custom = decodeSchedule(
-    encodeSchedule({ mode: "custom", time: "08:30", weekdays: [1, 3, 6] }),
+    encodeSchedule({
+      mode: "custom",
+      customFrequency: "weekly",
+      customInterval: 1,
+      time: "08:30",
+      weekdays: [1, 3, 6],
+    }),
   );
-  assert.deepEqual(custom, { mode: "custom", time: "08:30", weekdays: [1, 3, 6] });
+  assert.deepEqual(custom, {
+    mode: "custom",
+    customFrequency: "weekly",
+    customInterval: 1,
+    time: "08:30",
+    weekdays: [1, 3, 6],
+  });
+});
+
+test("custom calendar frequencies round-trip with their adaptive fields", () => {
+  const drafts = [
+    {
+      mode: "custom",
+      customFrequency: "hourly",
+      customInterval: 2,
+      minute: 15,
+      weekdays: [],
+    },
+    {
+      mode: "custom",
+      customFrequency: "daily",
+      customInterval: 3,
+      time: "08:20",
+      weekdays: [],
+    },
+    {
+      mode: "custom",
+      customFrequency: "monthly",
+      customInterval: 2,
+      monthDay: 18,
+      time: "10:30",
+      weekdays: [],
+    },
+    {
+      mode: "custom",
+      customFrequency: "yearly",
+      customInterval: 1,
+      month: 1,
+      monthDay: 1,
+      time: "08:00",
+      weekdays: [],
+    },
+  ];
+
+  for (const draft of drafts) {
+    assert.deepEqual(decodeSchedule(encodeSchedule(draft)), draft);
+  }
+});
+
+test("standard monthly and yearly cron expressions open in custom mode", () => {
+  assert.deepEqual(decodeSchedule("0 8 15 * *"), {
+    mode: "custom",
+    customFrequency: "monthly",
+    customInterval: 1,
+    monthDay: 15,
+    time: "08:00",
+    weekdays: [],
+  });
+  assert.deepEqual(decodeSchedule("0 8 1 1 *"), {
+    mode: "custom",
+    customFrequency: "yearly",
+    customInterval: 1,
+    month: 1,
+    monthDay: 1,
+    time: "08:00",
+    weekdays: [],
+  });
 });
 
 test("daily ignores stale weekday selections", () => {

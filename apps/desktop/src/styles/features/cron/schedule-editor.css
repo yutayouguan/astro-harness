@@ -9,7 +9,11 @@
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--chip-border));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.32),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 28%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.49),
@@ -18,7 +22,11 @@
 
 html[data-theme="dark"] .cron-sched {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone) 10%, rgba(8, 6, 18, 0.35));
   border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.1));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -45,17 +53,27 @@ html[data-theme="dark"] .cron-sched {
   padding: 4px;
   border-radius: 10px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--glass-fill) 60%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--chip-border));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.1));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.1));
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
 }
 
 html[data-theme="dark"] .cron-sched-modes {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.02)
+    ),
     rgba(8, 6, 18, 0.4);
   border-color: rgba(255, 255, 255, 0.09);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -75,7 +93,11 @@ html[data-theme="dark"] .cron-sched-modes {
   cursor: pointer;
   color: var(--ink-mute);
   background: transparent;
-  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
 }
 
 .cron-sched-mode > svg {
@@ -91,7 +113,11 @@ html[data-theme="dark"] .cron-sched-modes {
 .cron-sched-mode.active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.12)
+    ),
     var(--tone-soft);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent),
@@ -151,23 +177,37 @@ html[data-theme="dark"] .cron-sched-mode.active {
   box-sizing: border-box;
   padding: 0 10px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.33),
+      rgba(255, 255, 255, 0.1)
+    ),
     rgba(255, 255, 255, 0.17);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.47),
     0 4px 12px color-mix(in srgb, var(--tone) 8%, transparent);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
   color: var(--tone);
-  transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    background 0.14s ease;
 }
 
 html[data-theme="dark"] .cron-sched-field-shell,
 html[data-theme="dark"] .cron-sched-stepper {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.03)
+    ),
     rgba(255, 255, 255, 0.04);
   border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.12));
   box-shadow:
@@ -205,9 +245,13 @@ html[data-theme="dark"] .cron-sched-stepper {
   font-size: 13px;
   font-family: inherit;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.1));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.1));
-  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
 }
 
 .cron-sched-input--bare {
@@ -236,7 +280,8 @@ html[data-theme="dark"] .cron-sched-stepper {
   filter: none;
 }
 
-html[data-theme="dark"] .cron-sched-input--bare::-webkit-calendar-picker-indicator {
+html[data-theme="dark"]
+  .cron-sched-input--bare::-webkit-calendar-picker-indicator {
   filter: invert(0.85);
   opacity: 0.75;
 }
@@ -252,7 +297,11 @@ html[data-theme="dark"] .cron-sched-input--bare::-webkit-calendar-picker-indicat
 html[data-theme="dark"] .cron-sched-input {
   border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.1));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 22%, rgba(8, 6, 18, 0.5));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
@@ -273,7 +322,9 @@ html[data-theme="dark"] .cron-sched-input {
   background: transparent;
   color: var(--tone);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .cron-sched-stepper-btn:hover {
@@ -307,6 +358,84 @@ html[data-theme="dark"] .cron-sched-input {
   min-height: 40px;
 }
 
+.cron-custom-fields {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--chip-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--glass-fill) 38%, transparent);
+}
+
+.cron-custom-row,
+.cron-custom-weekday-field {
+  display: grid;
+  grid-template-columns: minmax(104px, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 10px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--tone) 8%, var(--chip-border));
+}
+
+.cron-custom-row:last-child,
+.cron-custom-weekday-field:last-child {
+  border-bottom: none;
+}
+
+.cron-custom-row-label {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 620;
+}
+
+.cron-custom-row-control {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.cron-custom-select {
+  --select-tone: var(--tone);
+  --select-tone-soft: var(--tone-soft);
+  width: min(190px, 100%);
+}
+
+.cron-custom-select--compact {
+  width: min(112px, 100%);
+}
+
+.cron-custom-select .select-menu-trigger {
+  min-height: 38px;
+}
+
+.cron-custom-interval-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cron-custom-unit {
+  min-width: 34px;
+  color: var(--ink-mute);
+  font-size: 12.5px;
+}
+
+.cron-custom-weekday-field {
+  align-items: start;
+  padding-block: 10px;
+}
+
+.cron-custom-weekday-field .cron-custom-row-label {
+  padding-top: 7px;
+}
+
+.cron-custom-weekday-field .cron-sched-weekdays {
+  justify-content: flex-end;
+}
+
 .cron-sched-weekdays {
   display: flex;
   flex-wrap: wrap;
@@ -321,6 +450,12 @@ html[data-theme="dark"] .cron-sched-input {
   .cron-sched-interval {
     flex-wrap: wrap;
   }
+
+  .cron-custom-row,
+  .cron-custom-weekday-field {
+    grid-template-columns: minmax(82px, auto) minmax(0, 1fr);
+    gap: 8px;
+  }
 }
 
 .cron-sched-wd {
@@ -332,7 +467,11 @@ html[data-theme="dark"] .cron-sched-input {
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--glass-fill) 70%, transparent);
   color: var(--ink-mute);
   font-size: 12px;
@@ -340,12 +479,20 @@ html[data-theme="dark"] .cron-sched-input {
   cursor: pointer;
   backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)));
   -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)));
-  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 html[data-theme="dark"] .cron-sched-wd {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 20%, rgba(8, 6, 18, 0.45));
   border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.1));
 }
@@ -353,7 +500,11 @@ html[data-theme="dark"] .cron-sched-wd {
 .cron-sched-wd.active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.12)
+    ),
     var(--tone-soft);
   border-color: color-mix(in srgb, var(--tone) 35%, transparent);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);

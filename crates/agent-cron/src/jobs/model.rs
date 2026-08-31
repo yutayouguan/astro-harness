@@ -11,7 +11,7 @@ use super::schedule::compute_next_run;
 pub struct CronJob {
     /// 唯一 id（UUID 字符串）
     pub id: String,
-    /// 调度表达式：`every:5m` / `every:1h` / 五段 cron（分 时 日 月 周）
+    /// 调度表达式：`every:5m` / `custom:yearly;...` / 五段 cron（分 时 日 月 周）
     pub schedule: String,
     /// 到期时交给 Agent 执行的完整指令
     pub task: String,
@@ -65,7 +65,7 @@ pub struct NewCronJob {
 /// 自然语言 → 定时任务的结构化抽取目标（Extractor `submit`）。
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct CronJobExtract {
-    /// `every:5m` / `every:1h` / 五段 cron
+    /// `every:5m` / `custom:monthly;...` / 五段 cron
     pub schedule: String,
     /// 到期时交给 Agent 执行的指令
     pub task: String,
@@ -80,6 +80,11 @@ pub fn cron_extract_preamble() -> &'static str {
 规则：
 1. schedule 必须是下列之一：
    - every:Nm / every:Nh / every:Nd（N 为正整数；可选 ;wd=1,2,3 限定周几，0=周日）
+   - custom:hourly;every=N;minute=M
+   - custom:daily;every=N;time=HH:MM
+   - custom:weekly;every=N;wd=1,2,3;time=HH:MM
+   - custom:monthly;every=N;day=D;time=HH:MM
+   - custom:yearly;every=N;month=M;day=D;time=HH:MM
    - 五段 cron：分 时 日 月 周（例如每天 09:00 → 0 9 * * *）
 2. task 是到期时要执行的完整指令，保留用户意图，不要空。
 3. title 可选，简短中文标题；不确定时可省略。

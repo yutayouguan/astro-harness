@@ -5,7 +5,7 @@
 ## 核心职责
 
 1. **任务定义与持久化** -- 在 `~/.astro/cron/jobs.json` 以 JSON 格式管理定时任务列表，支持 CRUD 操作（add / update / remove / enable / disable），原子写入（临时文件 + rename）防半写损坏。
-2. **调度表达式解析** -- 支持两种调度语法：`every:Nunit`（间隔调度，可选 `;wd=` 工作日过滤）、五段 cron（分 时 日 月 周，支持 `*` / 数字 / 逗号列表 / 区间）。
+2. **调度表达式解析** -- 支持三种调度语法：`every:Nunit`（间隔调度，可选 `;wd=` 工作日过滤）、`custom:` 日历重复（每小时 / 天 / 周 / 月 / 年及自适应字段）、五段 cron（分 时 日 月 周，支持 `*` / 数字 / 逗号列表 / 区间）。
 3. **到期扫描与触发** -- `tick()` / `claim_due()` 扫描已到期任务并推进 `next_run_at`。
 4. **执行记录持久化** -- `CronRunDb`（`~/.astro/cron/cron.db`，WAL 模式）记录每次触发的运行状态（running / success / failure），支持按 job / agent / 日期过滤查询，`summary` 截断 2KB、`output` 截断 512KB。
 5. **工具分发入口** -- `dispatch_cron_tool` 将 Agent 工具调用按 `action` 分支路由到 CronStore 的对应操作。
@@ -19,7 +19,7 @@
 | `src/jobs/mod.rs` | jobs 子模块入口；re-export 并包含模块级集成测试 |
 | `src/jobs/model.rs` | 数据模型 -- `CronJob`（持久化定义）、`NewCronJob`（创建输入）、`CronJobExtract`（自然语言抽取目标）、`normalize_cron_extract`（校验与规范化）、`normalize_cron_agent_id`（legacy `"default"` 映射） |
 | `src/jobs/store.rs` | `CronStore` -- 文件级持久化；`open` / `add` / `add_job` / `update_job` / `remove` / `set_enabled` / `claim_due` / `tick` / `touch_last_run`；内含 `JobsFile` 结构和心跳文件写入 |
-| `src/jobs/schedule.rs` | `compute_next_run` -- 调度表达式解析引擎；`every:` 主表达式 + `;wd=` 过滤、五段 cron（`CronField` 枚举 + 分钟级扫描） |
+| `src/jobs/schedule.rs` | `compute_next_run` -- 调度表达式解析引擎；`every:` 间隔、`custom:` 日历重复、五段 cron（`CronField` 枚举 + 分钟级扫描） |
 | `src/jobs/dispatch.rs` | `dispatch_cron_tool` -- Agent 工具入口；按 `action` 参数分发 add / list / remove / enable / disable |
 | `src/jobs/tick.rs` | `tick_default` -- 对默认 cron 目录执行一次 tick 的便捷入口 |
 

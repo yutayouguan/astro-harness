@@ -1,5 +1,8 @@
 /** 定时表达式解析与人类可读描述。 */
-export type ScheduleMode = "interval" | "daily" | "weekly" | "weekdays" | "custom";
+export type ScheduleMode =
+  "interval" | "daily" | "weekly" | "weekdays" | "custom";
+export type CustomFrequency =
+  "hourly" | "daily" | "weekly" | "monthly" | "yearly";
 
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun 与 cron 一致
 
@@ -10,6 +13,11 @@ export type ScheduleDraft = {
   weekdays: Weekday[]; // 空 = 每天
   intervalValue?: number;
   intervalUnit?: "m" | "h" | "d";
+  customFrequency?: CustomFrequency;
+  customInterval?: number;
+  minute?: number;
+  month?: number;
+  monthDay?: number;
 };
 
 /** 周一=1 … 周日=0 的 UI 顺序映射到 Weekday */
@@ -36,6 +44,27 @@ export function encodeSchedule(d: ScheduleDraft): string {
       ? `every:${n}${unit};wd=${weekdays.join(",")}`
       : `every:${n}${unit}`;
   }
+  if (d.mode === "custom") {
+    const frequency = d.customFrequency ?? "weekly";
+    const every = Math.max(1, Math.floor(d.customInterval ?? 1));
+    if (frequency === "hourly") {
+      const minute = Math.min(59, Math.max(0, Math.floor(d.minute ?? 0)));
+      return `custom:hourly;every=${every};minute=${minute}`;
+    }
+    const time = d.time ?? "09:00";
+    if (frequency === "daily")
+      return `custom:daily;every=${every};time=${time}`;
+    if (frequency === "weekly") {
+      const weekdays = d.weekdays.length > 0 ? d.weekdays : ([1] as Weekday[]);
+      return `custom:weekly;every=${every};wd=${[...weekdays].sort((a, b) => a - b).join(",")};time=${time}`;
+    }
+    const day = Math.min(31, Math.max(1, Math.floor(d.monthDay ?? 1)));
+    if (frequency === "monthly") {
+      return `custom:monthly;every=${every};day=${day};time=${time}`;
+    }
+    const month = Math.min(12, Math.max(1, Math.floor(d.month ?? 1)));
+    return `custom:yearly;every=${every};month=${month};day=${day};time=${time}`;
+  }
   const [hh, mm] = (d.time ?? "09:00").split(":").map(Number);
   const weekdays =
     d.mode === "weekdays"
@@ -49,8 +78,51 @@ export function encodeSchedule(d: ScheduleDraft): string {
   return `${mm} ${hh} * * ${wd}`;
 }
 
-export function formatScheduleLabel(schedule: string, locale: "zh" | "en"): string {
+export function formatScheduleLabel(
+  schedule: string,
+  locale: "zh" | "en",
+): string {
   const zh = locale === "zh";
+  if (schedule.startsWith("custom:")) {
+    const custom = decodeCustomSchedule(schedule);
+    if (custom) {
+      const every = custom.customInterval ?? 1;
+      const unit = custom.customFrequency ?? "weekly";
+      const names = zh
+        ? {
+            hourly: "小时",
+            daily: "天",
+            weekly: "周",
+            monthly: "月",
+            yearly: "年",
+          }
+        : {
+            hourly: "hour",
+            daily: "day",
+            weekly: "week",
+            monthly: "month",
+            yearly: "year",
+          };
+      const prefix = zh
+        ? every === 1
+          ? `每${names[unit]}`
+          : `每 ${every} ${names[unit]}`
+        : `Every ${every} ${names[unit]}${every === 1 ? "" : "s"}`;
+      if (unit === "hourly") {
+        return `${prefix} · ${zh ? "第" : "at minute"} ${String(custom.minute ?? 0).padStart(2, "0")} ${zh ? "分" : ""}`.trim();
+      }
+      if (unit === "yearly") {
+        const date = zh
+          ? `${custom.month ?? 1}月${custom.monthDay ?? 1}日`
+          : `${custom.month ?? 1}/${custom.monthDay ?? 1}`;
+        return `${prefix} · ${date} ${custom.time ?? "09:00"}`;
+      }
+      if (unit === "monthly") {
+        return `${prefix} · ${zh ? `${custom.monthDay ?? 1}日` : `day ${custom.monthDay ?? 1}`} ${custom.time ?? "09:00"}`;
+      }
+      return `${prefix} · ${custom.time ?? "09:00"}`;
+    }
+  }
   if (schedule.startsWith("every:")) {
     const body = schedule.slice(6);
     const [main, ...rest] = body.split(";");
@@ -88,13 +160,18 @@ export function formatScheduleLabel(schedule: string, locale: "zh" | "en"): stri
       return zh ? `每天 ${hh}:${mm}` : `Daily ${hh}:${mm}`;
     }
     const days = wd.split(",");
-    if (days.length === 5 && ["1", "2", "3", "4", "5"].every((d) => days.includes(d))) {
+    if (
+      days.length === 5 &&
+      ["1", "2", "3", "4", "5"].every((d) => days.includes(d))
+    ) {
       return zh ? `工作日 ${hh}:${mm}` : `Weekdays ${hh}:${mm}`;
     }
     if (days.length === 6 && !days.includes("0")) {
       return zh ? `周一至周六 ${hh}:${mm}` : `Mon–Sat ${hh}:${mm}`;
     }
-    return zh ? `${hh}:${mm} · 每周 ${days.length} 天` : `${hh}:${mm} · ${days.length} days/week`;
+    return zh
+      ? `${hh}:${mm} · 每周 ${days.length} 天`
+      : `${hh}:${mm} · ${days.length} days/week`;
   }
   return schedule;
 }
@@ -102,6 +179,8 @@ export function formatScheduleLabel(schedule: string, locale: "zh" | "en"): stri
 /** 把持久化 schedule 还原成编辑器草稿（尽量解析，失败则回退每天 09:00） */
 export function decodeSchedule(schedule: string): ScheduleDraft {
   const raw = schedule.trim();
+  const custom = decodeCustomSchedule(raw);
+  if (custom) return custom;
   if (raw.startsWith("every:")) {
     const body = raw.slice(6);
     const [main, ...rest] = body.split(";");
@@ -139,8 +218,12 @@ export function decodeSchedule(schedule: string): ScheduleDraft {
 
   const parts = raw.split(/\s+/);
   if (parts.length >= 5) {
-    const mm = Number(parts[0]);
-    const hh = Number(parts[1]);
+    const minuteRaw = parts[0];
+    const hourRaw = parts[1];
+    const dayRaw = parts[2];
+    const monthRaw = parts[3];
+    const mm = Number(minuteRaw);
+    const hh = Number(hourRaw);
     const wdRaw = parts[4];
     const weekdays: Weekday[] = [];
     if (wdRaw !== "*") {
@@ -159,6 +242,37 @@ export function decodeSchedule(schedule: string): ScheduleDraft {
       }
     }
     const pad = (n: number) => String(n).padStart(2, "0");
+    const time = `${pad(Number.isFinite(hh) ? hh : 9)}:${pad(Number.isFinite(mm) ? mm : 0)}`;
+    if (dayRaw !== "*" && monthRaw !== "*") {
+      return {
+        mode: "custom",
+        customFrequency: "yearly",
+        customInterval: 1,
+        month: Math.min(12, Math.max(1, Number(monthRaw) || 1)),
+        monthDay: Math.min(31, Math.max(1, Number(dayRaw) || 1)),
+        time,
+        weekdays: [],
+      };
+    }
+    if (dayRaw !== "*") {
+      return {
+        mode: "custom",
+        customFrequency: "monthly",
+        customInterval: 1,
+        monthDay: Math.min(31, Math.max(1, Number(dayRaw) || 1)),
+        time,
+        weekdays: [],
+      };
+    }
+    if (hourRaw === "*" && Number.isFinite(mm)) {
+      return {
+        mode: "custom",
+        customFrequency: "hourly",
+        customInterval: 1,
+        minute: Math.min(59, Math.max(0, mm)),
+        weekdays: [],
+      };
+    }
     const allWeekdays =
       weekdays.length === 5 &&
       ([1, 2, 3, 4, 5] as Weekday[]).every((day) => weekdays.includes(day));
@@ -172,10 +286,55 @@ export function decodeSchedule(schedule: string): ScheduleDraft {
             : "custom";
     return {
       mode,
-      time: `${pad(Number.isFinite(hh) ? hh : 9)}:${pad(Number.isFinite(mm) ? mm : 0)}`,
+      time,
       weekdays,
+      ...(mode === "custom"
+        ? { customFrequency: "weekly" as const, customInterval: 1 }
+        : {}),
     };
   }
 
   return { mode: "daily", time: "09:00", weekdays: [] };
+}
+
+function decodeCustomSchedule(raw: string): ScheduleDraft | null {
+  if (!raw.startsWith("custom:")) return null;
+  const [head, ...segments] = raw.split(";");
+  const frequency = head.slice(7) as CustomFrequency;
+  if (!["hourly", "daily", "weekly", "monthly", "yearly"].includes(frequency)) {
+    return null;
+  }
+  const fields = new Map<string, string>();
+  for (const segment of segments) {
+    const [key, value] = segment.split("=", 2);
+    if (key && value) fields.set(key, value);
+  }
+  const every = Math.max(1, Number(fields.get("every")) || 1);
+  const draft: ScheduleDraft = {
+    mode: "custom",
+    customFrequency: frequency,
+    customInterval: every,
+    weekdays: [],
+  };
+  if (frequency === "hourly") {
+    draft.minute = Math.min(59, Math.max(0, Number(fields.get("minute")) || 0));
+    return draft;
+  }
+  draft.time = /^\d{1,2}:\d{2}$/.test(fields.get("time") ?? "")
+    ? fields.get("time")
+    : "09:00";
+  if (frequency === "weekly") {
+    draft.weekdays = (fields.get("wd") ?? "1")
+      .split(",")
+      .map(Number)
+      .filter((day): day is Weekday => day >= 0 && day <= 6);
+    if (draft.weekdays.length === 0) draft.weekdays = [1];
+  }
+  if (frequency === "monthly" || frequency === "yearly") {
+    draft.monthDay = Math.min(31, Math.max(1, Number(fields.get("day")) || 1));
+  }
+  if (frequency === "yearly") {
+    draft.month = Math.min(12, Math.max(1, Number(fields.get("month")) || 1));
+  }
+  return draft;
 }

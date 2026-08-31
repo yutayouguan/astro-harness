@@ -2,7 +2,7 @@
 //!
 //! 职责：
 //! - 将任务定义持久化到 `~/.astro/cron/jobs.json`
-//! - 解析 `every:` / 五段 cron 调度表达式并计算下次运行时间
+//! - 解析 `every:` / `custom:` / 五段 cron 调度表达式并计算下次运行时间
 //! - `claim_due` / `tick` 扫描到期任务并推进 `next_run_at`
 //! - 为 Agent 工具与 Extractor 提供自然语言 → 结构化任务的入口
 //!
@@ -104,6 +104,41 @@ mod tests {
         let next = compute_next_run("30 10 * * *", after).unwrap();
         assert_eq!(next.hour(), 10);
         assert_eq!(next.minute(), 30);
+    }
+
+    #[test]
+    fn custom_calendar_schedules_cover_all_supported_frequencies() {
+        use chrono::TimeZone;
+        let after = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+
+        let hourly = compute_next_run("custom:hourly;every=1;minute=30", after).unwrap();
+        assert_eq!((hourly.hour(), hourly.minute()), (10, 30));
+
+        let daily = compute_next_run("custom:daily;every=1;time=08:20", after).unwrap();
+        assert_eq!((daily.day(), daily.hour(), daily.minute()), (12, 8, 20));
+
+        let weekly = compute_next_run("custom:weekly;every=1;wd=1,3;time=08:00", after).unwrap();
+        assert_eq!(weekly.weekday().num_days_from_sunday(), 1);
+        assert_eq!((weekly.hour(), weekly.minute()), (8, 0));
+
+        let monthly = compute_next_run("custom:monthly;every=1;day=15;time=09:30", after).unwrap();
+        assert_eq!((monthly.month(), monthly.day()), (7, 15));
+        assert_eq!((monthly.hour(), monthly.minute()), (9, 30));
+
+        let yearly =
+            compute_next_run("custom:yearly;every=1;month=1;day=1;time=08:00", after).unwrap();
+        assert_eq!((yearly.year(), yearly.month(), yearly.day()), (2027, 1, 1));
+        assert_eq!((yearly.hour(), yearly.minute()), (8, 0));
+    }
+
+    #[test]
+    fn custom_calendar_schedule_rejects_invalid_fields() {
+        use chrono::TimeZone;
+        let after = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+        assert!(
+            compute_next_run("custom:yearly;every=1;month=13;day=1;time=08:00", after).is_err()
+        );
+        assert!(compute_next_run("custom:weekly;every=0;wd=1;time=08:00", after).is_err());
     }
 
     #[test]

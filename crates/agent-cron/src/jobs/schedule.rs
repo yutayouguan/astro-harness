@@ -1,13 +1,212 @@
 //! 调度表达式解析与下次运行时间计算。
 
-use chrono::{DateTime, Datelike, Duration, Local, Timelike};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Timelike};
 
 pub fn compute_next_run(schedule: &str, after: DateTime<Local>) -> anyhow::Result<DateTime<Local>> {
     let schedule = schedule.trim();
+    if let Some(rest) = schedule.strip_prefix("custom:") {
+        return parse_custom(rest, after);
+    }
     if let Some(rest) = schedule.strip_prefix("every:") {
         return parse_every(rest, after);
     }
     parse_five_field_cron(schedule, after)
+}
+
+/// 解析日历型自定义重复：`custom:<frequency>;every=N;...`。
+fn parse_custom(spec: &str, after: DateTime<Local>) -> anyhow::Result<DateTime<Local>> {
+    let mut parts = spec.split(';');
+    let frequency = parts
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("自定义重复类型不能为空"))?
+        .trim();
+    let mut every = 1_u32;
+    let mut minute = 0_u32;
+    let mut time = (9_u32, 0_u32);
+    let mut weekdays = vec![1_u32];
+    let mut day = 1_u32;
+    let mut month = 1_u32;
+
+    for field in parts {
+        let (key, value) = field
+            .split_once('=')
+            .ok_or_else(|| anyhow::anyhow!("无效的自定义重复字段: {field}"))?;
+        match key.trim() {
+            "every" => {
+                every = value
+                    .trim()
+                    .parse()
+                    .map_err(|_| anyhow::anyhow!("无效的重复间隔: {value}"))?;
+                if every == 0 || every > 999 {
+                    anyhow::bail!("重复间隔必须在 1-999 之间");
+                }
+            }
+            "minute" => {
+                minute = parse_bounded(value, 0, 59, "分钟")?;
+            }
+            "time" => time = parse_clock_time(value)?,
+            "wd" => weekdays = parse_weekday_filter(value)?,
+            "day" => day = parse_bounded(value, 1, 31, "日期")?,
+            "month" => month = parse_bounded(value, 1, 12, "月份")?,
+            other => anyhow::bail!("不支持的自定义重复字段: {other}"),
+        }
+    }
+
+    match frequency {
+        "hourly" => next_custom_hourly(after, every, minute),
+        "daily" => next_custom_daily(after, every, time),
+        "weekly" => next_custom_weekly(after, every, &weekdays, time),
+        "monthly" => next_custom_monthly(after, every, day, time),
+        "yearly" => next_custom_yearly(after, every, month, day, time),
+        _ => anyhow::bail!("不支持的自定义重复类型: {frequency}"),
+    }
+}
+
+fn parse_bounded(raw: &str, min: u32, max: u32, label: &str) -> anyhow::Result<u32> {
+    let value: u32 = raw
+        .trim()
+        .parse()
+        .map_err(|_| anyhow::anyhow!("无效的{label}: {raw}"))?;
+    if value < min || value > max {
+        anyhow::bail!("{label}越界: {value}（范围 {min}-{max}）");
+    }
+    Ok(value)
+}
+
+fn parse_clock_time(raw: &str) -> anyhow::Result<(u32, u32)> {
+    let (hour, minute) = raw
+        .trim()
+        .split_once(':')
+        .ok_or_else(|| anyhow::anyhow!("无效时间: {raw}"))?;
+    Ok((
+        parse_bounded(hour, 0, 23, "小时")?,
+        parse_bounded(minute, 0, 59, "分钟")?,
+    ))
+}
+
+fn local_candidate(date: NaiveDate, hour: u32, minute: u32) -> Option<DateTime<Local>> {
+    let naive = date.and_hms_opt(hour, minute, 0)?;
+    Local.from_local_datetime(&naive).earliest()
+}
+
+fn next_custom_hourly(
+    after: DateTime<Local>,
+    every: u32,
+    minute: u32,
+) -> anyhow::Result<DateTime<Local>> {
+    let mut cursor = (after + Duration::minutes(1))
+        .with_second(0)
+        .and_then(|value| value.with_nanosecond(0))
+        .unwrap_or(after + Duration::minutes(1));
+    let limit = usize::try_from(every).unwrap_or(999) * 60 + 48 * 60;
+    for _ in 0..=limit {
+        let absolute_hour = cursor.timestamp().div_euclid(3600);
+        if cursor.minute() == minute && absolute_hour.rem_euclid(i64::from(every)) == 0 {
+            return Ok(cursor);
+        }
+        cursor += Duration::minutes(1);
+    }
+    anyhow::bail!("无法计算下一个每 {every} 小时计划")
+}
+
+fn next_custom_daily(
+    after: DateTime<Local>,
+    every: u32,
+    time: (u32, u32),
+) -> anyhow::Result<DateTime<Local>> {
+    let anchor = NaiveDate::from_ymd_opt(1970, 1, 1).expect("valid epoch date");
+    for offset in 0..=i64::from(every) + 1 {
+        let date = after.date_naive() + Duration::days(offset);
+        let day_index = date.signed_duration_since(anchor).num_days();
+        if day_index.rem_euclid(i64::from(every)) != 0 {
+            continue;
+        }
+        if let Some(candidate) = local_candidate(date, time.0, time.1) {
+            if candidate > after {
+                return Ok(candidate);
+            }
+        }
+    }
+    anyhow::bail!("无法计算下一个每 {every} 天计划")
+}
+
+fn next_custom_weekly(
+    after: DateTime<Local>,
+    every: u32,
+    weekdays: &[u32],
+    time: (u32, u32),
+) -> anyhow::Result<DateTime<Local>> {
+    let anchor = NaiveDate::from_ymd_opt(1970, 1, 5).expect("valid Monday anchor");
+    let limit = i64::from(every) * 7 + 7;
+    for offset in 0..=limit {
+        let date = after.date_naive() + Duration::days(offset);
+        if !weekdays.contains(&date.weekday().num_days_from_sunday()) {
+            continue;
+        }
+        let week_index = date.signed_duration_since(anchor).num_days().div_euclid(7);
+        if week_index.rem_euclid(i64::from(every)) != 0 {
+            continue;
+        }
+        if let Some(candidate) = local_candidate(date, time.0, time.1) {
+            if candidate > after {
+                return Ok(candidate);
+            }
+        }
+    }
+    anyhow::bail!("无法计算下一个每 {every} 周计划")
+}
+
+fn next_custom_monthly(
+    after: DateTime<Local>,
+    every: u32,
+    day: u32,
+    time: (u32, u32),
+) -> anyhow::Result<DateTime<Local>> {
+    let start_index = after.year() * 12 + i32::try_from(after.month0()).unwrap_or(0);
+    let anchor_index = 1970 * 12;
+    let limit = i64::from(every) * 12 + 12;
+    for offset in 0..=limit {
+        let index = start_index + i32::try_from(offset).unwrap_or(i32::MAX);
+        if (index - anchor_index).rem_euclid(i32::try_from(every).unwrap_or(1)) != 0 {
+            continue;
+        }
+        let year = index.div_euclid(12);
+        let month = u32::try_from(index.rem_euclid(12) + 1).unwrap_or(1);
+        let Some(date) = NaiveDate::from_ymd_opt(year, month, day) else {
+            continue;
+        };
+        if let Some(candidate) = local_candidate(date, time.0, time.1) {
+            if candidate > after {
+                return Ok(candidate);
+            }
+        }
+    }
+    anyhow::bail!("无法计算下一个每 {every} 月计划")
+}
+
+fn next_custom_yearly(
+    after: DateTime<Local>,
+    every: u32,
+    month: u32,
+    day: u32,
+    time: (u32, u32),
+) -> anyhow::Result<DateTime<Local>> {
+    let limit = i32::try_from(every).unwrap_or(999) * 8 + 8;
+    for offset in 0..=limit {
+        let year = after.year() + offset;
+        if (year - 1970).rem_euclid(i32::try_from(every).unwrap_or(1)) != 0 {
+            continue;
+        }
+        let Some(date) = NaiveDate::from_ymd_opt(year, month, day) else {
+            continue;
+        };
+        if let Some(candidate) = local_candidate(date, time.0, time.1) {
+            if candidate > after {
+                return Ok(candidate);
+            }
+        }
+    }
+    anyhow::bail!("无法计算下一个每 {every} 年计划")
 }
 
 /// 解析 `every:Nunit` 主表达式与 `;wd=` 工作日过滤器
@@ -115,7 +314,7 @@ fn parse_five_field_cron(expr: &str, after: DateTime<Local>) -> anyhow::Result<D
     let parts: Vec<&str> = expr.split_whitespace().collect();
     if parts.len() != 5 {
         anyhow::bail!(
-            "无效调度表达式: {expr}。请使用 every:5m / every:1h，或五段 cron（分 时 日 月 周）"
+            "无效调度表达式: {expr}。请使用 every:5m / every:1h、custom:...，或五段 cron（分 时 日 月 周）"
         );
     }
 
