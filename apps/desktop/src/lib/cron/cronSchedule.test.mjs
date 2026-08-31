@@ -46,13 +46,6 @@ test("decode every with weekday filter", () => {
   assert.deepEqual(d?.weekdays, [1, 2, 3, 4, 5]);
 });
 
-test("legacy once schedule remains round-trippable without being a creation mode", () => {
-  const d = decodeSchedule("once:2026-07-12T15:30:00+08:00");
-  assert.equal(d?.mode, "once");
-  assert.equal(d?.onceAt, "2026-07-12T15:30");
-  assert.match(encodeSchedule(d), /^once:2026-07-12T15:30:00\+08:00$/);
-});
-
 test("round-trip weekdays encode/decode", () => {
   const draft = {
     mode: "weekdays",

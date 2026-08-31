@@ -1,5 +1,5 @@
 /** 定时表达式解析与人类可读描述。 */
-export type ScheduleMode = "interval" | "daily" | "weekly" | "weekdays" | "custom" | "once";
+export type ScheduleMode = "interval" | "daily" | "weekly" | "weekdays" | "custom";
 
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun 与 cron 一致
 
@@ -10,8 +10,6 @@ export type ScheduleDraft = {
   weekdays: Weekday[]; // 空 = 每天
   intervalValue?: number;
   intervalUnit?: "m" | "h" | "d";
-  /** 仅用于兼容已存在的单次任务；新建 UI 不再提供该模式。 */
-  onceAt?: string;
 };
 
 /** 周一=1 … 周日=0 的 UI 顺序映射到 Weekday */
@@ -38,16 +36,6 @@ export function encodeSchedule(d: ScheduleDraft): string {
       ? `every:${n}${unit};wd=${weekdays.join(",")}`
       : `every:${n}${unit}`;
   }
-  if (d.mode === "once") {
-    if (
-      d.onceAt &&
-      /^\d{4}-\d{2}-\d{2}T/.test(d.onceAt) &&
-      /[+-]\d{2}:\d{2}$|Z$/.test(d.onceAt)
-    ) {
-      return `once:${d.onceAt}`;
-    }
-    return `once:${toRfc3339Local(d.onceAt)}`;
-  }
   const [hh, mm] = (d.time ?? "09:00").split(":").map(Number);
   const weekdays =
     d.mode === "weekdays"
@@ -61,37 +49,8 @@ export function encodeSchedule(d: ScheduleDraft): string {
   return `${mm} ${hh} * * ${wd}`;
 }
 
-function toRfc3339Local(onceAt?: string): string {
-  const date = onceAt ? new Date(onceAt) : new Date();
-  if (Number.isNaN(date.getTime())) {
-    return new Date().toISOString().replace(/\.\d{3}Z$/, "+00:00");
-  }
-  const pad = (value: number) => String(value).padStart(2, "0");
-  const offsetMinutes = -date.getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? "+" : "-";
-  return [
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
-    `${sign}${pad(Math.floor(Math.abs(offsetMinutes) / 60))}:${pad(Math.abs(offsetMinutes) % 60)}`,
-  ].join("");
-}
-
 export function formatScheduleLabel(schedule: string, locale: "zh" | "en"): string {
   const zh = locale === "zh";
-  if (schedule.startsWith("once:")) {
-    const raw = schedule.slice(5);
-    const d = new Date(raw);
-    if (!Number.isNaN(d.getTime())) {
-      const text = d.toLocaleString(zh ? "zh-CN" : "en-US", {
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      return zh ? `单次 · ${text}` : `Once · ${text}`;
-    }
-    return zh ? `单次 ${raw}` : `Once ${raw}`;
-  }
   if (schedule.startsWith("every:")) {
     const body = schedule.slice(6);
     const [main, ...rest] = body.split(";");
@@ -143,17 +102,6 @@ export function formatScheduleLabel(schedule: string, locale: "zh" | "en"): stri
 /** 把持久化 schedule 还原成编辑器草稿（尽量解析，失败则回退每天 09:00） */
 export function decodeSchedule(schedule: string): ScheduleDraft {
   const raw = schedule.trim();
-  if (raw.startsWith("once:")) {
-    const iso = raw.slice(5);
-    const d = new Date(iso);
-    if (!Number.isNaN(d.getTime())) {
-      const pad = (n: number) => String(n).padStart(2, "0");
-      const onceAt = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      return { mode: "once", weekdays: [], onceAt };
-    }
-    return { mode: "once", weekdays: [], onceAt: iso.slice(0, 16) };
-  }
-
   if (raw.startsWith("every:")) {
     const body = raw.slice(6);
     const [main, ...rest] = body.split(";");

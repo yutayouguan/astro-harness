@@ -24,9 +24,8 @@ type Props = {
 };
 
 type ModeIcon = ComponentType<LucideProps>;
-type RecurringScheduleMode = Exclude<ScheduleMode, "once">;
 
-const MODES: { mode: RecurringScheduleMode; labelKey: MessageKey; Icon: ModeIcon }[] = [
+const MODES: { mode: ScheduleMode; labelKey: MessageKey; Icon: ModeIcon }[] = [
   { mode: "interval", labelKey: "cron.mode.interval", Icon: Timer },
   { mode: "daily", labelKey: "cron.mode.daily", Icon: CalendarDays },
   { mode: "weekly", labelKey: "cron.mode.weekly", Icon: CalendarRange },
@@ -36,7 +35,7 @@ const MODES: { mode: RecurringScheduleMode; labelKey: MessageKey; Icon: ModeIcon
 
 const WORKDAYS: Weekday[] = [1, 2, 3, 4, 5];
 
-function normalizedDraft(value: ScheduleDraft, mode: RecurringScheduleMode): ScheduleDraft {
+function normalizedDraft(value: ScheduleDraft, mode: ScheduleMode): ScheduleDraft {
   if (mode === "daily") return { ...value, mode, weekdays: [] };
   if (mode === "weekdays") return { ...value, mode, weekdays: WORKDAYS };
   if (mode === "weekly") {
@@ -62,7 +61,7 @@ export function ScheduleEditor({ value, onChange }: Props) {
   const { t } = useI18n();
   const intervalValue = value.intervalValue ?? 1;
 
-  const setMode = (mode: RecurringScheduleMode) => {
+  const setMode = (mode: ScheduleMode) => {
     if (mode !== value.mode) onChange(normalizedDraft(value, mode));
   };
 
@@ -81,7 +80,7 @@ export function ScheduleEditor({ value, onChange }: Props) {
     onChange({ ...value, weekdays: [day] });
   };
 
-  const showTime = value.mode !== "interval" && value.mode !== "once";
+  const showTime = value.mode !== "interval";
 
   return (
     <div className="cron-sched">
@@ -160,10 +159,6 @@ export function ScheduleEditor({ value, onChange }: Props) {
             />
           </div>
         </div>
-      )}
-
-      {value.mode === "once" && (
-        <p className="cron-sched-summary">{t("cron.legacyOnceHint")}</p>
       )}
 
       {showTime && (
