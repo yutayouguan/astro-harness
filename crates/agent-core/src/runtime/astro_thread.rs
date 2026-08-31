@@ -877,9 +877,9 @@ mod tests {
         let history = session.clone_response_history().await;
         assert!(matches!(
             history.last(),
-            Some(agent_protocol::ResponseItem::Message { role, content, .. })
-                if role == "developer"
-                    && matches!(content.first(), Some(agent_protocol::ContentItem::InputText { text }) if text.contains("check the rollback boundary"))
+            Some(agent_protocol::ResponseItem::AgentMessage { author, content, .. })
+                if author == "/root/reviewer"
+                    && matches!(content.first(), Some(agent_protocol::AgentMessageInputContent::InputText { text }) if text.contains("check the rollback boundary"))
         ));
         thread.flush_rollout().await.unwrap();
         assert!(read_rollout(&path).await.unwrap().iter().any(|item| {

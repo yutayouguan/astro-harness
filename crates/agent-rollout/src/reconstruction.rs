@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io;
 use std::path::Path;
 
@@ -51,9 +52,21 @@ pub async fn read_rollout_with_diagnostics(path: &Path) -> io::Result<RolloutRea
 /// Rebuild the effective model history after applying append-only compaction and rollback markers.
 pub fn effective_response_history(items: &[RolloutItem]) -> Vec<ResponseItem> {
     let mut history = Vec::new();
+    let mut pending_triggered_communications = Vec::new();
+    let mut seen_triggered_communication_ids = HashSet::new();
     for item in items {
         match item {
-            RolloutItem::ResponseItem(item) => history.push(item.clone()),
+            RolloutItem::ResponseItem(item) => {
+                if let ResponseItem::AgentMessage { id: Some(id), .. } = item {
+                    if let Some(index) = pending_triggered_communications
+                        .iter()
+                        .position(|(pending_id, _)| pending_id == id.as_str())
+                    {
+                        pending_triggered_communications.remove(index);
+                    }
+                }
+                history.push(item.clone());
+            }
             RolloutItem::Compacted(payload) => {
                 if let Some(replacement) = payload.get("replacement_history") {
                     if let Ok(replacement) =
@@ -64,14 +77,49 @@ pub fn effective_response_history(items: &[RolloutItem]) -> Vec<ResponseItem> {
                 }
             }
             RolloutItem::EventMsg(agent_protocol::EventMsg::ThreadRolledBack(event)) => {
+                history.extend(
+                    pending_triggered_communications
+                        .drain(..)
+                        .map(|(_, item)| item),
+                );
                 drop_last_n_user_turns(&mut history, event.num_turns);
+            }
+            RolloutItem::EventMsg(agent_protocol::EventMsg::UserInputCommitted(event)) => {
+                if let Some(index) = pending_triggered_communications
+                    .iter()
+                    .position(|(pending_id, _)| pending_id == &event.client_message_id)
+                {
+                    pending_triggered_communications.remove(index);
+                }
+            }
+            RolloutItem::InterAgentCommunication(payload) => {
+                if let Ok(communication) = serde_json::from_value::<
+                    agent_protocol::InterAgentCommunication,
+                >(payload.clone())
+                {
+                    if communication.trigger_turn {
+                        if let Some(id) = communication.id.as_ref() {
+                            let id = id.to_string();
+                            if seen_triggered_communication_ids.insert(id.clone()) {
+                                pending_triggered_communications
+                                    .push((id, communication.to_model_input_item()));
+                            }
+                        }
+                    }
+                }
             }
             _ => {}
         }
     }
+    history.extend(
+        pending_triggered_communications
+            .into_iter()
+            .map(|(_, item)| item),
+    );
     history
 }
 
+/// Drop instruction boundaries: ordinary user messages and structured agent messages.
 pub fn drop_last_n_user_turns(history: &mut Vec<ResponseItem>, num_turns: u32) {
     if num_turns == 0 {
         return;
@@ -80,7 +128,9 @@ pub fn drop_last_n_user_turns(history: &mut Vec<ResponseItem>, num_turns: u32) {
         .iter()
         .enumerate()
         .filter_map(|(index, item)| {
-            matches!(item, ResponseItem::Message { role, .. } if role == "user").then_some(index)
+            matches!(item, ResponseItem::Message { role, .. } if role == "user")
+                .then_some(index)
+                .or_else(|| matches!(item, ResponseItem::AgentMessage { .. }).then_some(index))
         })
         .collect::<Vec<_>>();
     let remove_from = positions
@@ -101,6 +151,16 @@ mod tests {
         drop_last_n_user_turns, effective_response_history, read_rollout_with_diagnostics,
     };
     use crate::RolloutItem;
+
+    fn message(role: &str, text: &str) -> agent_protocol::ResponseItem {
+        agent_protocol::ResponseItem::Message {
+            id: None,
+            role: role.into(),
+            content: vec![agent_protocol::ContentItem::InputText { text: text.into() }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }
+    }
 
     #[tokio::test]
     async fn retains_valid_items_across_a_malformed_middle_line() {
@@ -156,13 +216,6 @@ mod tests {
 
     #[test]
     fn effective_history_applies_compaction_and_cumulative_rollbacks() {
-        let message = |role: &str, text: &str| agent_protocol::ResponseItem::Message {
-            id: None,
-            role: role.into(),
-            content: vec![agent_protocol::ContentItem::InputText { text: text.into() }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        };
         let compacted = vec![message("developer", "summary")];
         let items = vec![
             RolloutItem::ResponseItem(message("user", "old")),
@@ -190,5 +243,49 @@ mod tests {
         let mut history = vec![message("developer", "summary"), message("user", "one")];
         drop_last_n_user_turns(&mut history, 99);
         assert_eq!(history, vec![message("developer", "summary")]);
+    }
+
+    #[test]
+    fn effective_history_recovers_only_uncommitted_triggered_agent_messages() {
+        let communication = agent_protocol::InterAgentCommunication {
+            id: Some(agent_protocol::ResponseItemId::with_suffix("mail", "1")),
+            author: "/root/worker".into(),
+            recipient: "/root".into(),
+            other_recipients: Vec::new(),
+            content: "continue".into(),
+            encrypted_content: None,
+            internal_chat_message_metadata_passthrough: None,
+            trigger_turn: true,
+        };
+        let marker =
+            RolloutItem::InterAgentCommunication(serde_json::to_value(&communication).unwrap());
+        assert_eq!(
+            effective_response_history(std::slice::from_ref(&marker)),
+            vec![communication.to_model_input_item()]
+        );
+
+        let consumed = vec![
+            marker.clone(),
+            RolloutItem::ResponseItem(message("user", "continue")),
+            RolloutItem::EventMsg(agent_protocol::EventMsg::UserInputCommitted(
+                agent_protocol::UserInputCommittedEvent {
+                    turn_id: "turn-1".into(),
+                    client_message_id: "mail_1".into(),
+                },
+            )),
+            marker,
+        ];
+        assert_eq!(
+            effective_response_history(&consumed),
+            vec![message("user", "continue")]
+        );
+
+        let rolled_back = vec![
+            RolloutItem::InterAgentCommunication(serde_json::to_value(&communication).unwrap()),
+            RolloutItem::EventMsg(agent_protocol::EventMsg::ThreadRolledBack(
+                agent_protocol::ThreadRolledBackEvent { num_turns: 1 },
+            )),
+        ];
+        assert!(effective_response_history(&rolled_back).is_empty());
     }
 }

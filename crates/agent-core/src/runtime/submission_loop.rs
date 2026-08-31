@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use agent_protocol::{
-    ContentItem, ErrorEvent, EventMsg, InterAgentCommunication, ItemEvent, Op, ResponseItem,
-    ReviewDecision, Submission, TurnInput, TurnInputMode, TurnInputRequest, TurnItem,
+    ErrorEvent, EventMsg, InterAgentCommunication, ItemEvent, Op, ReviewDecision, Submission,
+    TurnInput, TurnInputMode, TurnInputRequest, TurnItem,
 };
 use async_channel::Receiver;
 use futures::FutureExt;
@@ -307,7 +307,7 @@ impl Session {
     async fn handle_inter_agent_communication(
         self: &Arc<Self>,
         submission_id: String,
-        communication: InterAgentCommunication,
+        mut communication: InterAgentCommunication,
         chat_override: Option<ChatOverride>,
     ) {
         let Some(bindings) = self.runtime_io.get() else {
@@ -319,6 +319,9 @@ impl Session {
             .await;
             return;
         };
+        if communication.id.is_none() {
+            communication.id = Some(agent_protocol::ResponseItemId::new("agent_message"));
+        }
         let payload = serde_json::to_value(&communication)
             .expect("inter-agent communication is serializable");
         if let Err(error) = bindings
@@ -333,49 +336,48 @@ impl Session {
             return;
         }
 
-        let visible_text = format!(
-            "<inter_agent_message from=\"{}\" to=\"{}\">\n{}\n</inter_agent_message>",
-            communication.author, communication.recipient, communication.content
-        );
-        if communication.trigger_turn && !communication.content.trim().is_empty() {
-            let result = self
-                .submit_turn_input(
-                    submission_id.clone(),
-                    TurnInputRequest {
-                        input: vec![TurnInput {
-                            content: visible_text.clone(),
-                            image_data_urls: Vec::new(),
-                            client_message_id: communication.id.as_ref().map(ToString::to_string),
-                        }],
-                    },
-                    TurnInputMode::StartOrSteer,
-                    chat_override,
-                )
-                .await;
-            if matches!(
-                result,
-                Ok(agent_protocol::TurnInputSubmission::Started { .. }
-                    | agent_protocol::TurnInputSubmission::Steered { .. })
-            ) {
-                return;
-            }
-            if let Err(error) = result {
-                self.emit_control_error(submission_id.clone(), "inter_agent_communication", error)
+        let visible_text = communication.model_input_text();
+        if communication.trigger_turn {
+            if let Some(visible_text) = visible_text.as_ref() {
+                let result = self
+                    .submit_turn_input(
+                        submission_id.clone(),
+                        TurnInputRequest {
+                            input: vec![TurnInput {
+                                content: visible_text.clone(),
+                                image_data_urls: Vec::new(),
+                                client_message_id: communication
+                                    .id
+                                    .as_ref()
+                                    .map(ToString::to_string),
+                            }],
+                        },
+                        TurnInputMode::StartOrSteer,
+                        chat_override,
+                    )
                     .await;
+                if matches!(
+                    result,
+                    Ok(agent_protocol::TurnInputSubmission::Started { .. }
+                        | agent_protocol::TurnInputSubmission::Steered { .. })
+                ) {
+                    return;
+                }
+                if let Err(error) = result {
+                    self.emit_control_error(
+                        submission_id.clone(),
+                        "inter_agent_communication",
+                        error,
+                    )
+                    .await;
+                }
             }
         }
 
-        if communication.content.trim().is_empty() {
+        if visible_text.is_none() && communication.encrypted_content.is_none() {
             return;
         }
-        let item = ResponseItem::Message {
-            id: communication.id,
-            role: "developer".into(),
-            content: vec![ContentItem::InputText { text: visible_text }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: communication
-                .internal_chat_message_metadata_passthrough,
-        };
+        let item = communication.to_model_input_item();
         if let Err(error) = self.record_response_items(vec![item]).await {
             self.emit_control_error(submission_id, "inter_agent_communication", error)
                 .await;

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::ResponseItemId;
+use crate::{AgentMessageInputContent, ResponseItem, ResponseItemId};
 
 /// User decision for an execution or patch approval request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +117,52 @@ pub struct InterAgentCommunication {
     pub trigger_turn: bool,
 }
 
+impl InterAgentCommunication {
+    pub fn model_input_text(&self) -> Option<String> {
+        (!self.content.trim().is_empty()).then(|| {
+            format!(
+                "<inter_agent_message from=\"{}\" to=\"{}\">\n{}\n</inter_agent_message>",
+                self.author, self.recipient, self.content
+            )
+        })
+    }
+
+    pub fn to_model_input_item(&self) -> ResponseItem {
+        let content = match &self.encrypted_content {
+            Some(encrypted_content) => {
+                let message_type = if self.trigger_turn {
+                    "NEW_TASK"
+                } else {
+                    "MESSAGE"
+                };
+                vec![
+                    AgentMessageInputContent::InputText {
+                        text: format!(
+                            "Message Type: {message_type}\nTask name: {}\nSender: {}\nPayload:\n",
+                            self.recipient, self.author
+                        ),
+                    },
+                    AgentMessageInputContent::EncryptedContent {
+                        encrypted_content: encrypted_content.clone(),
+                    },
+                ]
+            }
+            None => vec![AgentMessageInputContent::InputText {
+                text: self.content.clone(),
+            }],
+        };
+        ResponseItem::AgentMessage {
+            id: self.id.clone(),
+            author: self.author.clone(),
+            recipient: self.recipient.clone(),
+            content,
+            internal_chat_message_metadata_passthrough: self
+                .internal_chat_message_metadata_passthrough
+                .clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,5 +190,32 @@ mod tests {
                 "imageUrl": "data:image/png;base64,AA=="
             })
         );
+    }
+
+    #[test]
+    fn inter_agent_communication_keeps_structured_and_encrypted_input() {
+        let communication = InterAgentCommunication {
+            id: Some(ResponseItemId::with_suffix("mail", "7")),
+            author: "/root/worker".into(),
+            recipient: "/root".into(),
+            other_recipients: Vec::new(),
+            content: String::new(),
+            encrypted_content: Some("ciphertext".into()),
+            internal_chat_message_metadata_passthrough: None,
+            trigger_turn: true,
+        };
+
+        assert!(communication.model_input_text().is_none());
+        assert!(matches!(
+            communication.to_model_input_item(),
+            ResponseItem::AgentMessage { id: Some(id), author, recipient, content, .. }
+                if id == "mail_7"
+                    && author == "/root/worker"
+                    && recipient == "/root"
+                    && matches!(content.as_slice(), [
+                        AgentMessageInputContent::InputText { text },
+                        AgentMessageInputContent::EncryptedContent { encrypted_content }
+                    ] if text.contains("Message Type: NEW_TASK") && encrypted_content == "ciphertext")
+        ));
     }
 }
