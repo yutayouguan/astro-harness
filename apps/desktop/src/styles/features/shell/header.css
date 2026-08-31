@@ -535,11 +535,11 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   width: min(320px, 78vw);
   max-width: min(360px, 78vw);
   border-radius: 16px;
-  border: 1px solid var(--menu-glass-border);
-  background: var(--menu-glass-bg);
-  box-shadow: var(--menu-glass-shadow);
-  backdrop-filter: var(--menu-glass-blur);
-  -webkit-backdrop-filter: var(--menu-glass-blur);
+  border: 1px solid var(--menu-overlay-border);
+  background: var(--menu-overlay-bg);
+  box-shadow: var(--menu-overlay-shadow);
+  backdrop-filter: var(--menu-overlay-blur);
+  -webkit-backdrop-filter: var(--menu-overlay-blur);
   overflow: hidden;
   isolation: isolate;
 }
@@ -1094,9 +1094,7 @@ html[data-theme="dark"] .model-picker-group + .model-picker-group {
 }
 
 html[data-theme="dark"] .model-picker-panel {
-  border-color: var(--menu-glass-border);
-  background: var(--menu-glass-bg);
-  box-shadow: var(--menu-glass-shadow);
+  border-color: var(--menu-overlay-border);
 }
 
 html[data-theme="dark"] .model-picker-globals,

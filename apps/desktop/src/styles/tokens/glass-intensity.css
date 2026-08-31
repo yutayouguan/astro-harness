@@ -72,6 +72,8 @@ html[data-glass="minimal"] {
   --glass-saturate: 1;
   --backdrop-glass: none;
   --menu-glass-blur: none;
+  --menu-overlay-blur: none;
+  --menu-overlay-bg: var(--menu-glass-bg);
   --header-chip-shadow: none;
   --lens-shadow: none;
   --badge-shadow: none;

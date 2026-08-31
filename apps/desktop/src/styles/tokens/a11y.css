@@ -18,6 +18,8 @@
     --composer-bg: rgba(12, 10, 24, 0.92);
     --backdrop-glass: none;
     --menu-glass-blur: none;
+    --menu-overlay-bg: var(--menu-glass-bg);
+    --menu-overlay-blur: none;
   }
 
   html[data-theme="light"] {
@@ -32,10 +34,14 @@
     --composer-bg: rgba(245, 245, 252, 0.9);
     --backdrop-glass: none;
     --menu-glass-blur: none;
+    --menu-overlay-bg: var(--menu-glass-bg);
+    --menu-overlay-blur: none;
   }
 
   .sidebar,
+  .sidebar-session-actions,
   .chat-header-tools,
+  .model-picker-panel,
   .select-menu-list,
   .select-menu-trigger,
   .agent-picker-menu,

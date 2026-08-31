@@ -198,8 +198,12 @@
   gap: 1px;
   flex-shrink: 0;
   padding: 2px;
+  border: 1px solid var(--menu-overlay-border);
   border-radius: 7px;
-  background: color-mix(in srgb, var(--sidebar-bg, var(--glass)) 88%, transparent);
+  background: var(--menu-overlay-bg);
+  box-shadow: var(--menu-overlay-shadow);
+  backdrop-filter: var(--menu-overlay-blur);
+  -webkit-backdrop-filter: var(--menu-overlay-blur);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);

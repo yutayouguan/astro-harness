@@ -74,10 +74,17 @@ test("full-process controls reach reasoning and tool groups", async () => {
 });
 
 test("menu glass stays responsive and respects motion and transparency preferences", async () => {
-  const css = await source("styles/features/chat/message-context-menu.css");
+  const [css, tokens] = await Promise.all([
+    source("styles/features/chat/message-context-menu.css"),
+    source("styles/tokens/component/menu.css"),
+  ]);
 
   assert.match(css, /width: min\(238px, calc\(100vw - 16px\)\)/);
-  assert.match(css, /backdrop-filter: blur/);
+  assert.match(css, /background:\s*var\(--menu-overlay-bg\)/);
+  assert.match(css, /backdrop-filter:\s*var\(--menu-overlay-blur\)/);
+  assert.match(tokens, /--menu-overlay-bg:/);
+  assert.match(tokens, /var\(--bg1\) 92%/);
+  assert.match(tokens, /--menu-overlay-blur:\s*blur\(calc\(28px/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   assert.match(css, /prefers-reduced-transparency: reduce/);
 });

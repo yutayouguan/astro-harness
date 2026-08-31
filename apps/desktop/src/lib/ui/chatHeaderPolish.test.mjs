@@ -59,6 +59,19 @@ test("compact header controls share the 32px height contract", async () => {
   assert.match(css, /\.header-icon-btn\s*\{[\s\S]*?width:\s*28px;[\s\S]*?height:\s*28px;/);
 });
 
+test("model picker panel shares the AI answer context-menu surface", async () => {
+  const css = await readFile(cssUrl, "utf8");
+  const panel = css.match(
+    /\.model-picker-panel\s*\{(?<body>[\s\S]*?)\n\}/,
+  )?.groups?.body;
+
+  assert.ok(panel, "missing model picker panel styles");
+  assert.match(panel, /background:\s*var\(--menu-overlay-bg\);/);
+  assert.match(panel, /border:\s*1px solid var\(--menu-overlay-border\);/);
+  assert.match(panel, /box-shadow:\s*var\(--menu-overlay-shadow\);/);
+  assert.match(panel, /backdrop-filter:\s*var\(--menu-overlay-blur\);/);
+});
+
 test("active header tools remain distinct from hover in light and dark themes", async () => {
   const css = await readFile(cssUrl, "utf8");
   const active = css.match(
