@@ -12,6 +12,50 @@ use crate::tasks::{RegularTask, TaskKind, TurnInput};
 use super::turn_context::QueuedTurnInput;
 use super::{looks_like_user_correction, Session, StepContext, TurnContext, TurnResult};
 
+fn successfully_loaded_skill_ids(history: &[Message]) -> Vec<String> {
+    let mut calls = std::collections::HashMap::<String, String>::new();
+    for message in history {
+        for call in message.tool_calls.iter().flatten() {
+            if call.name != "skills"
+                || call
+                    .arguments
+                    .get("action")
+                    .and_then(serde_json::Value::as_str)
+                    != Some("load")
+            {
+                continue;
+            }
+            if let Some(skill_id) = call
+                .arguments
+                .get("skill_id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|skill_id| !skill_id.is_empty())
+            {
+                calls.insert(call.id.clone(), skill_id.to_string());
+            }
+        }
+    }
+
+    let mut loaded = std::collections::BTreeSet::new();
+    for message in history {
+        let Some(call_id) = message.tool_call_id.as_deref() else {
+            continue;
+        };
+        let Some(skill_id) = calls.get(call_id) else {
+            continue;
+        };
+        if message
+            .content_str()
+            .trim_start()
+            .starts_with(&format!("# Skill: {skill_id}"))
+        {
+            loaded.insert(skill_id.clone());
+        }
+    }
+    loaded.into_iter().collect()
+}
+
 fn coalesce_turn_inputs<I>(inputs: I) -> Option<TurnInput>
 where
     I: IntoIterator<Item = TurnInput>,
@@ -822,6 +866,27 @@ impl Session {
     pub(crate) async fn capture_step_context(&self) -> anyhow::Result<Arc<StepContext>> {
         self.reload_tools_and_mcp().await?;
         let mut history = self.provider_history().await;
+        // Registry 是 Session 内存状态；进程重启后从真实会话历史恢复已成功
+        // 加载 Skill 的 additive toolsets，使恢复后的 schema 与 Skill 指令仍保持一致。
+        for skill_id in successfully_loaded_skill_ids(&history) {
+            let already_activated = self
+                .services
+                .tool_registry
+                .read()
+                .expect("tool registry lock poisoned")
+                .is_skill_activated(&skill_id);
+            if already_activated {
+                continue;
+            }
+            let Ok(loaded) = skills::load_skill_by_name(&skill_id) else {
+                continue;
+            };
+            self.services
+                .tool_registry
+                .write()
+                .expect("tool registry lock poisoned")
+                .activate_skill(&skill_id, &loaded.metadata.astro_tools);
+        }
         let prompt_context = self.prompt_context_history();
         if let Some(ctx) = self.take_inject_context().await {
             history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
@@ -895,6 +960,43 @@ mod tests {
             image_data_urls: Vec::new(),
             client_message_id: None,
         }
+    }
+
+    #[test]
+    fn finds_only_successfully_loaded_skills_in_history() {
+        let history = vec![
+            Message::assistant_with_tools(
+                "",
+                vec![types::message::ToolCall {
+                    id: "load-ok".into(),
+                    name: "skills".into(),
+                    arguments: serde_json::json!({
+                        "action": "load",
+                        "skill_id": "creative-media"
+                    }),
+                    signature: None,
+                }],
+            ),
+            Message::tool_with_id("load-ok", "# Skill: creative-media\n\nbody"),
+            Message::assistant_with_tools(
+                "",
+                vec![types::message::ToolCall {
+                    id: "load-failed".into(),
+                    name: "skills".into(),
+                    arguments: serde_json::json!({
+                        "action": "load",
+                        "skill_id": "missing-skill"
+                    }),
+                    signature: None,
+                }],
+            ),
+            Message::tool_with_id("load-failed", "未找到技能: missing-skill"),
+        ];
+
+        assert_eq!(
+            successfully_loaded_skill_ids(&history),
+            vec!["creative-media".to_string()]
+        );
     }
 
     #[test]

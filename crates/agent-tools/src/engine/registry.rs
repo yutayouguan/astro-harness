@@ -65,7 +65,9 @@ pub struct ToolRegistry {
     enabled: HashMap<String, bool>,
     /// Skill 加载后 additive 放宽的 toolset（即使 enabled 映射为 false 也允许）。
     skill_override_enabled: std::collections::HashSet<String>,
-    /// 当前 Session 内已由 `tool_search` 加载的 deferred 工具。
+    /// 当前 Session 内已成功加载并应用过工具声明的 Skill。
+    activated_skills: std::collections::HashSet<String>,
+    /// 当前 Session 内已由 `tool_search` 或 Skill 加载的 deferred 工具。
     ///
     /// MCP 每轮会卸载并重新注册，因此加载状态必须与具体 `ToolEntry`
     /// 分离，否则搜索结果无法在下一次 sampling step 保持可见。
@@ -157,6 +159,7 @@ impl ToolRegistry {
             dynamic_handlers: HashMap::new(),
             enabled: HashMap::new(),
             skill_override_enabled: std::collections::HashSet::new(),
+            activated_skills: std::collections::HashSet::new(),
             activated_deferred: std::collections::HashSet::new(),
         }
     }
@@ -203,14 +206,45 @@ impl ToolRegistry {
         self.enabled.get(toolset).copied().unwrap_or(true)
     }
 
-    /// 将 skill 声明的 toolset 并入 additive 放宽集合。
+    /// 将 skill 声明的 toolset 并入 additive 放宽集合，并向下一步模型
+    /// schema 暴露该 toolset 中的 deferred 工具。
+    ///
+    /// Skill 正文会指导模型调用这些工具，因此仅放宽 enabled gate 却不将
+    /// schema 放入 StepContext 会产生“模型知道工具、Harness 却拒绝”的不一致。
     pub fn activate_skill_toolsets(&mut self, toolsets: &[String]) {
+        let requested: std::collections::HashSet<&str> = toolsets
+            .iter()
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|toolset| !toolset.is_empty())
+            .collect();
+        let deferred_names: Vec<String> = self
+            .tools
+            .values()
+            .filter(|entry| requested.contains(entry.toolset.as_str()))
+            .filter(|entry| entry.exposure.is_deferred())
+            .map(|entry| entry.name.clone())
+            .collect();
         for ts in toolsets {
             let t = ts.trim();
             if !t.is_empty() {
                 self.skill_override_enabled.insert(t.to_string());
             }
         }
+        for name in deferred_names {
+            self.activate_deferred(&name);
+        }
+    }
+
+    /// 记录 Skill 的 Session 级激活状态，并应用其 additive toolset。
+    pub fn activate_skill(&mut self, skill_id: &str, toolsets: &[String]) {
+        self.activate_skill_toolsets(toolsets);
+        self.activated_skills.insert(skill_id.to_string());
+    }
+
+    /// Skill 是否已在当前 Session 恢复/激活。
+    pub fn is_skill_activated(&self, skill_id: &str) -> bool {
+        self.activated_skills.contains(skill_id)
     }
 
     /// 当前 skill 放宽的 toolset 列表（测试 / 观测）。
@@ -591,6 +625,30 @@ mod tests {
         reg.activate_skill_toolsets(&["memory".into()]);
         assert!(reg.is_tool_allowed("memory"));
         assert_eq!(reg.skill_override_toolsets(), vec!["memory".to_string()]);
+    }
+
+    #[test]
+    fn skill_activation_exposes_deferred_tools_in_its_toolsets() {
+        let mut reg = ToolRegistry::new();
+        reg.register(ToolEntry {
+            name: "image_gen".into(),
+            toolset: "image_gen".into(),
+            description: "generate an image".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "palette",
+            ..ToolEntry::lifecycle_defaults().deferred()
+        });
+        let mut enabled = HashMap::new();
+        enabled.insert("image_gen".into(), false);
+        reg.set_enabled_map(enabled);
+
+        assert!(!schema_names(&reg).iter().any(|name| name == "image_gen"));
+        reg.activate_skill("creative-media", &["image_gen".into()]);
+
+        assert!(reg.is_skill_activated("creative-media"));
+        assert!(reg.is_tool_allowed("image_gen"));
+        assert!(schema_names(&reg).iter().any(|name| name == "image_gen"));
     }
 
     #[test]

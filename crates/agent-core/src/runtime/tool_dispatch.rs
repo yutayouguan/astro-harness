@@ -496,7 +496,7 @@ impl AgentLoop {
                 .tool_registry
                 .write()
                 .expect("tool registry lock poisoned")
-                .activate_skill_toolsets(&astro_tools);
+                .activate_skill(skill_id, &astro_tools);
         }
     }
 

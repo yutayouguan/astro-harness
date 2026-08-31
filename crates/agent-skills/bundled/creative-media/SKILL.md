@@ -1,7 +1,8 @@
 ---
 name: creative-media
 description: 音乐/图片/语音（及单镜头视频）创作工作流：何时 ask_user、如何写详细 prompt、歌词与文件 title、工具调用顺序。用户要写歌、作词作曲、出图、配音、生成一首歌或一张概念图时使用。多镜分镜短片改用 storyboard-video。
-astro_bundled_rev: 2
+astro_tools: [music_gen, image_gen, speech_gen, video_gen]
+astro_bundled_rev: 3
 ---
 
 # 创作媒体（creative-media）
