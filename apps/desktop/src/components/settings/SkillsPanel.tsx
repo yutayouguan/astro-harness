@@ -90,6 +90,7 @@ import {
   mergeUpdateRows,
   originMatchesSkill,
   resolveUpdateVersionPresentation,
+  setFoldersUpdating,
   summarizeUpdateRows,
 } from "../../lib/skills/skillUpdateRows";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
@@ -577,7 +578,9 @@ export default function SkillsPanel({
   >([]);
   const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
-  const [updatingFolder, setUpdatingFolder] = useState<string | null>(null);
+  const [updatingFolders, setUpdatingFolders] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [updatingAll, setUpdatingAll] = useState(false);
   const [updateConfirm, setUpdateConfirm] = useState<SkillUpdateConfirmState | null>(
     null,
@@ -608,7 +611,9 @@ export default function SkillsPanel({
   const updateCheckMetaRef = useRef<{ agentId: string; checkedAt: number } | null>(
     null,
   );
-  const updateCheckInFlightRef = useRef(false);
+  const updateCheckGenerationRef = useRef(0);
+  const pendingUpdateChecksRef = useRef(0);
+  const updatingFoldersRef = useRef<Set<string>>(new Set());
   const skillCallsMetaRef = useRef<{
     agentId: string;
     fetchedAt: number;
@@ -650,6 +655,7 @@ export default function SkillsPanel({
     setLastCheckResults([]);
     setLastCheckedAt(null);
     updateCheckMetaRef.current = null;
+    updateCheckGenerationRef.current += 1;
     setSkillBackups([]);
   }, [agentId]);
 
@@ -807,8 +813,8 @@ export default function SkillsPanel({
       const force = opts?.force ?? false;
       const meta = updateCheckMetaRef.current;
       if (!force && meta?.agentId === agentId) return;
-      if (updateCheckInFlightRef.current) return;
-      updateCheckInFlightRef.current = true;
+      const generation = ++updateCheckGenerationRef.current;
+      pendingUpdateChecksRef.current += 1;
       setCheckingUpdates(true);
       setError(null);
       try {
@@ -816,6 +822,7 @@ export default function SkillsPanel({
           agentId,
           scope: "global",
         });
+        if (generation !== updateCheckGenerationRef.current) return;
         setLastCheckResults(checks);
         const checkedAt = Date.now();
         setLastCheckedAt(checkedAt);
@@ -836,12 +843,16 @@ export default function SkillsPanel({
         }
         void loadSkillBackups();
       } catch (err) {
+        if (generation !== updateCheckGenerationRef.current) return;
         const msg = String(err);
         setError(msg);
         showToast(msg, { error: true });
       } finally {
-        updateCheckInFlightRef.current = false;
-        setCheckingUpdates(false);
+        pendingUpdateChecksRef.current = Math.max(
+          0,
+          pendingUpdateChecksRef.current - 1,
+        );
+        if (pendingUpdateChecksRef.current === 0) setCheckingUpdates(false);
       }
     },
     [agentId, loadSkillBackups, showToast, t],
@@ -1330,6 +1341,16 @@ export default function SkillsPanel({
     await loadSkillBackups();
   };
 
+  const markSkillsUpdating = (folders: string[], updating: boolean) => {
+    const next = setFoldersUpdating(
+      updatingFoldersRef.current,
+      folders,
+      updating,
+    );
+    updatingFoldersRef.current = next;
+    setUpdatingFolders(next);
+  };
+
   const updateSkillRow = async (row: SkillUpdateRow) => {
     if (!isTauri() || !row.origin) return;
     const folder = updateFolderForRow(row);
@@ -1370,7 +1391,8 @@ export default function SkillsPanel({
     folder: string,
     opts: { force: boolean; backupIfDirty: boolean },
   ) => {
-    setUpdatingFolder(folder);
+    if (updatingFoldersRef.current.has(folder)) return;
+    markSkillsUpdating([folder], true);
     setError(null);
     try {
       await invokeUpdateInstalled(
@@ -1388,7 +1410,7 @@ export default function SkillsPanel({
       setError(msg);
       showToast(msg, { error: true });
     } finally {
-      setUpdatingFolder(null);
+      markSkillsUpdating([folder], false);
     }
   };
 
@@ -1406,28 +1428,35 @@ export default function SkillsPanel({
   };
 
   const runBatchUpdate = async (targets: SkillUpdateRow[]) => {
-    if (targets.length === 0) return;
+    const pendingTargets = targets.filter(
+      (row) => !updatingFoldersRef.current.has(updateFolderForRow(row)),
+    );
+    if (pendingTargets.length === 0) return;
     setUpdatingAll(true);
     setError(null);
-    const results: SkillUpdateItemResult[] = [];
+    const folders = pendingTargets.map(updateFolderForRow);
+    markSkillsUpdating(folders, true);
     try {
-      for (const row of targets) {
-        const folder = updateFolderForRow(row);
-        setUpdatingFolder(folder);
-        try {
-          const message = await invokeUpdateInstalled(
-            folder,
-            row.origin?.scope ?? row.skill.scope ?? "global",
-            {
-              force: true,
-              backupIfDirty: true,
-            },
-          );
-          results.push({ folder, ok: true, message });
-        } catch (err) {
-          results.push({ folder, ok: false, message: String(err) });
-        }
-      }
+      const results = await Promise.all(
+        pendingTargets.map(async (row): Promise<SkillUpdateItemResult> => {
+          const folder = updateFolderForRow(row);
+          try {
+            const message = await invokeUpdateInstalled(
+              folder,
+              row.origin?.scope ?? row.skill.scope ?? "global",
+              {
+                force: true,
+                backupIfDirty: true,
+              },
+            );
+            return { folder, ok: true, message };
+          } catch (err) {
+            return { folder, ok: false, message: String(err) };
+          } finally {
+            markSkillsUpdating([folder], false);
+          }
+        }),
+      );
       await refreshUpdatesData();
       await checkSkillUpdates({ force: true, notify: false });
       const ok = results.filter((r) => r.ok).length;
@@ -1443,7 +1472,7 @@ export default function SkillsPanel({
       setError(msg);
       showToast(msg, { error: true });
     } finally {
-      setUpdatingFolder(null);
+      markSkillsUpdating(folders, false);
       setUpdatingAll(false);
     }
   };
@@ -1457,7 +1486,7 @@ export default function SkillsPanel({
   };
 
   const updateAllSkills = async () => {
-    if (!isTauri()) return;
+    if (!isTauri() || updatingFoldersRef.current.size > 0) return;
     setError(null);
     const targets = updateRows.filter(
       (row) =>
@@ -1827,7 +1856,7 @@ export default function SkillsPanel({
     if (!canUpdateSkillFromOrigin(skill, origin)) return null;
     const row: SkillUpdateRow = { skill, origin, status: "with_origin" };
     const folder = updateFolderForRow(row);
-    const isUpdating = updatingFolder === folder || updatingAll;
+    const isUpdating = updatingFolders.has(folder);
     return (
       <button
         type="button"
@@ -2210,7 +2239,7 @@ export default function SkillsPanel({
     const folder = updateFolderForRow(row);
     const check = origin ? updateChecksByFolder.get(origin.folder) : undefined;
     const canUpdate = canUpdateSkillFromOrigin(skill, origin);
-    const isUpdating = updatingFolder === folder;
+    const isUpdating = updatingFolders.has(folder);
     const { installedVersion, latestVersion, showVersionFlow } =
       resolveUpdateVersionPresentation(row, check);
     const remoteUpdatedLabel = check?.remote_updated_at
@@ -2333,7 +2362,7 @@ export default function SkillsPanel({
           <button
             type="button"
             className="skills-action-btn primary skill-card-primary"
-            disabled={!canUpdate || isUpdating || updatingAll || checkingUpdates}
+            disabled={!canUpdate || isUpdating || updatingAll}
             aria-busy={isUpdating}
             onClick={() => void updateSkillRow(row)}
             title={
@@ -3342,7 +3371,9 @@ export default function SkillsPanel({
                 type="button"
                 className="skills-action-btn"
                 onClick={() => void checkSkillUpdates({ force: true })}
-                disabled={checkingUpdates || updatingAll}
+                disabled={
+                  checkingUpdates || updatingAll || updatingFolders.size > 0
+                }
                 aria-busy={checkingUpdates}
               >
                 <RefreshCw
@@ -3357,7 +3388,12 @@ export default function SkillsPanel({
                 type="button"
                 className="skills-action-btn primary"
                 onClick={() => void updateAllSkills()}
-                disabled={outdatedCount === 0 || updatingAll || checkingUpdates}
+                disabled={
+                  outdatedCount === 0 ||
+                  updatingAll ||
+                  checkingUpdates ||
+                  updatingFolders.size > 0
+                }
                 aria-busy={updatingAll}
               >
                 <CloudDownload size={14} />

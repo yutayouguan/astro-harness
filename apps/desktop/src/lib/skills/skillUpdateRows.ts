@@ -22,6 +22,20 @@ export type SkillUpdateVersionPresentation = {
   showVersionFlow: boolean;
 };
 
+/** 不可变地更新正在处理的 Skill 目录集合。 */
+export function setFoldersUpdating(
+  current: ReadonlySet<string>,
+  folders: Iterable<string>,
+  updating: boolean,
+): Set<string> {
+  const next = new Set(current);
+  for (const folder of folders) {
+    if (updating) next.add(folder);
+    else next.delete(folder);
+  }
+  return next;
+}
+
 /** 从路径 id 取文件夹名（与 `skillInstalledMatch` 一致） */
 function folderFromId(id: string): string | undefined {
   const parts = id.split(/[/\\]/).filter(Boolean);
@@ -144,14 +158,19 @@ export function applyCheckResults(
     if (!row.origin) return row;
     const check = byFolder.get(row.origin.folder);
     if (!check) return row;
-    return { ...row, status: check.status };
+    const installedVersion = norm(row.origin.remote_version);
+    const latestVersion = norm(check.remote_version);
+    const status =
+      check.status === "outdated" &&
+      installedVersion !== undefined &&
+      installedVersion === latestVersion
+        ? "current"
+        : check.status;
+    return { ...row, status };
   });
 }
 
-/**
- * 可更新条目始终展示“已安装 → 最新”。
- * SkillHub 可能只更新内容/时间戳而不提升版本号，因此不能用版本号是否不同决定是否显示箭头。
- */
+/** 只在已安装版本与最新版本不同时展示版本流转箭头。 */
 export function resolveUpdateVersionPresentation(
   row: SkillUpdateRow,
   check: SkillUpdateCheckResult | undefined,
@@ -162,7 +181,8 @@ export function resolveUpdateVersionPresentation(
     installedVersion,
     latestVersion,
     showVersionFlow:
-      row.status === "outdated" && Boolean(installedVersion || latestVersion),
+      row.status === "outdated" &&
+      Boolean(installedVersion && latestVersion && installedVersion !== latestVersion),
   };
 }
 

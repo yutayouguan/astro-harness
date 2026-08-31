@@ -2,8 +2,9 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 
 use crate::agent_id::normalize as normalize_agent_id;
 use crate::digest::skill_content_digest;
@@ -14,6 +15,13 @@ use crate::store::fetch_detail_strict;
 
 const ORIGINS_FILE: &str = "skill-origins.json";
 const ORIGINS_VERSION: u32 = 3;
+static ORIGINS_FILE_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_origins_file() -> Result<MutexGuard<'static, ()>> {
+    ORIGINS_FILE_LOCK
+        .lock()
+        .map_err(|_| anyhow!("skill origins lock poisoned"))
+}
 
 /// 解析本机 Astro 数据根目录。
 fn memory_dir() -> PathBuf {
@@ -48,8 +56,7 @@ pub fn origins_path() -> PathBuf {
     memory_dir().join(ORIGINS_FILE)
 }
 
-/// 读取来源清单；缺失或空文件时返回默认空清单。
-pub fn load_origins() -> Result<SkillOriginsFile> {
+fn load_origins_unlocked() -> Result<SkillOriginsFile> {
     let path = origins_path();
     if !path.exists() {
         return Ok(SkillOriginsFile {
@@ -76,13 +83,12 @@ pub fn load_origins() -> Result<SkillOriginsFile> {
     let needs_migration = file.version != ORIGINS_VERSION || file.records.len() != original_len;
     file.version = ORIGINS_VERSION;
     if needs_migration {
-        save_origins(&file)?;
+        save_origins_unlocked(&file)?;
     }
     Ok(file)
 }
 
-/// 写入来源清单。
-pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
+fn save_origins_unlocked(file: &SkillOriginsFile) -> Result<()> {
     let path = origins_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
@@ -90,6 +96,18 @@ pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
     let json = serde_json::to_string_pretty(file)?;
     fs::write(&path, json).with_context(|| format!("write {}", path.display()))?;
     Ok(())
+}
+
+/// 读取来源清单；缺失或空文件时返回默认空清单。
+pub fn load_origins() -> Result<SkillOriginsFile> {
+    let _guard = lock_origins_file()?;
+    load_origins_unlocked()
+}
+
+/// 写入来源清单。
+pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
+    let _guard = lock_origins_file()?;
+    save_origins_unlocked(file)
 }
 
 fn locked_upstream_matches(base: &std::path::Path, folder: &str, expected: Option<&str>) -> bool {
@@ -115,10 +133,11 @@ fn locked_upstream_matches(base: &std::path::Path, folder: &str, expected: Optio
 /// 外部安装的 Skill 必须同时匹配 `skills-lock.json` 中的上游，避免仅凭同名误认领。
 /// 用户已安装或更新过的来源记录优先，不会被基线覆盖。
 pub fn ensure_known_skillhub_origins(agent_id: Option<&str>) -> Result<()> {
+    let _guard = lock_origins_file()?;
     let agent_id = normalize_agent_id(agent_id);
     let base = memory_dir();
     let skills_dir = base.join("skills");
-    let mut file = load_origins()?;
+    let mut file = load_origins_unlocked()?;
     let mut changed = false;
 
     for source in KNOWN_SKILLHUB_SOURCES {
@@ -155,7 +174,7 @@ pub fn ensure_known_skillhub_origins(agent_id: Option<&str>) -> Result<()> {
     }
 
     if changed {
-        save_origins(&file)?;
+        save_origins_unlocked(&file)?;
     }
     Ok(())
 }
@@ -175,7 +194,8 @@ pub fn upsert_origin(mut record: SkillOriginRecord) -> Result<()> {
     record.agent_id = Some(normalize_agent_id(record.agent_id.as_deref()));
     record.scope = Some(scope.clone());
     let key = origin_key(record.agent_id.as_deref(), &scope, &record.folder);
-    let mut file = load_origins()?;
+    let _guard = lock_origins_file()?;
+    let mut file = load_origins_unlocked()?;
     if let Some(existing) = file.records.iter_mut().find(|r| {
         valid_scope(r.scope.as_deref())
             .map(|record_scope| origin_key(r.agent_id.as_deref(), record_scope, &r.folder))
@@ -186,7 +206,7 @@ pub fn upsert_origin(mut record: SkillOriginRecord) -> Result<()> {
     } else {
         file.records.push(record);
     }
-    save_origins(&file)
+    save_origins_unlocked(&file)
 }
 
 /// 按 Agent、作用域与文件夹名查找来源记录。
@@ -475,6 +495,43 @@ mod tests {
         let file = load_origins().unwrap();
         assert_eq!(file.records.len(), 1);
         assert_eq!(file.records[0].last_updated_at, Some(2));
+    }
+
+    #[test]
+    fn concurrent_upserts_preserve_every_origin() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let threads = (0..8)
+            .map(|index| {
+                std::thread::spawn(move || {
+                    let folder = format!("skill-{index}");
+                    upsert_origin(SkillOriginRecord {
+                        folder: folder.clone(),
+                        skill_id: None,
+                        name: folder.clone(),
+                        store: "skillhub".into(),
+                        install_ref: format!("skillhub:owner/{folder}"),
+                        agent_id: Some("workspace".into()),
+                        scope: Some("global".into()),
+                        installed_at: 1,
+                        last_updated_at: None,
+                        remote_version: Some("1.0.0".into()),
+                        remote_updated_at: None,
+                        content_digest: None,
+                    })
+                    .unwrap();
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for thread in threads {
+            thread.join().unwrap();
+        }
+
+        let file = load_origins().unwrap();
+        assert_eq!(file.records.len(), 8);
     }
 
     #[test]

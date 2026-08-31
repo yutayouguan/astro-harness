@@ -5,6 +5,7 @@ import {
   filterUpdateRows,
   mergeUpdateRows,
   resolveUpdateVersionPresentation,
+  setFoldersUpdating,
   summarizeUpdateRows,
 } from "./skillUpdateRows.ts";
 
@@ -237,6 +238,36 @@ test("applyCheckResults maps current status by origin folder", () => {
   assert.equal(applied[0].status, "current");
 });
 
+test("applyCheckResults normalizes same-version outdated result to current", () => {
+  const origin = { ...pptOrigin, remote_version: "1.0.4" };
+  const staleCheck = {
+    folder: "ppt-generator-skill",
+    status: "outdated",
+    remote_version: "1.0.4",
+    remote_updated_at: 99,
+    message: "",
+  };
+  const applied = applyCheckResults(
+    mergeUpdateRows([pptInstalled], [], [origin], "workspace"),
+    [staleCheck],
+  );
+  assert.equal(applied[0].status, "current");
+  assert.deepEqual(resolveUpdateVersionPresentation(applied[0], staleCheck), {
+    installedVersion: "1.0.4",
+    latestVersion: "1.0.4",
+    showVersionFlow: false,
+  });
+});
+
+test("updating folders keep independent progress until each finishes", () => {
+  let folders = setFoldersUpdating(new Set(), ["aihot"], true);
+  folders = setFoldersUpdating(folders, ["ontology"], true);
+  assert.deepEqual([...folders].sort(), ["aihot", "ontology"]);
+
+  folders = setFoldersUpdating(folders, ["ontology"], false);
+  assert.deepEqual([...folders], ["aihot"]);
+});
+
 test("outdated row shows installed to latest flow when versions differ", () => {
   const origin = { ...pptOrigin, remote_version: "1.0.0" };
   const check = {
@@ -258,7 +289,7 @@ test("outdated row shows installed to latest flow when versions differ", () => {
   });
 });
 
-test("timestamp-only update still shows installed to latest flow", () => {
+test("same-version timestamp-only result does not offer an update", () => {
   const origin = { ...pptOrigin, remote_version: "1.0.0" };
   const check = {
     folder: "ppt-generator-skill",
@@ -275,8 +306,9 @@ test("timestamp-only update still shows installed to latest flow", () => {
   assert.deepEqual(resolveUpdateVersionPresentation(row, check), {
     installedVersion: "1.0.0",
     latestVersion: "1.0.0",
-    showVersionFlow: true,
+    showVersionFlow: false,
   });
+  assert.equal(row.status, "current");
 });
 
 test("applyCheckResults leaves no_origin rows unchanged", () => {
