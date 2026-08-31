@@ -1,5 +1,5 @@
 /** 定时表达式解析与人类可读描述。 */
-export type ScheduleMode = "daily" | "interval" | "once";
+export type ScheduleMode = "interval" | "daily" | "weekly" | "weekdays" | "custom" | "once";
 
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun 与 cron 一致
 
@@ -9,8 +9,8 @@ export type ScheduleDraft = {
   time?: string;
   weekdays: Weekday[]; // 空 = 每天
   intervalValue?: number;
-  intervalUnit?: "m" | "h";
-  /** datetime-local 值或 ISO，按单次 */
+  intervalUnit?: "m" | "h" | "d";
+  /** 仅用于兼容已存在的单次任务；新建 UI 不再提供该模式。 */
   onceAt?: string;
 };
 
@@ -28,48 +28,52 @@ export const UI_WEEKDAYS: { labelKey: string; value: Weekday }[] = [
 export function encodeSchedule(d: ScheduleDraft): string {
   if (d.mode === "daily") {
     const [hh, mm] = (d.time ?? "09:00").split(":").map(Number);
-    const wd =
-      d.weekdays.length === 0 || d.weekdays.length === 7
-        ? "*"
-        : [...d.weekdays].sort((a, b) => a - b).join(",");
-    return `${mm} ${hh} * * ${wd}`;
+    return `${mm} ${hh} * * *`;
   }
   if (d.mode === "interval") {
     const n = Math.max(1, d.intervalValue ?? 1);
     const unit = d.intervalUnit ?? "m";
-    let s = `every:${n}${unit}`;
-    if (d.weekdays.length > 0 && d.weekdays.length < 7) {
-      const sorted = [...d.weekdays].sort((a, b) => a - b);
-      s += `;wd=${sorted.join(",")}`;
+    const weekdays = [...d.weekdays].sort((a, b) => a - b);
+    return weekdays.length > 0 && weekdays.length < 7
+      ? `every:${n}${unit};wd=${weekdays.join(",")}`
+      : `every:${n}${unit}`;
+  }
+  if (d.mode === "once") {
+    if (
+      d.onceAt &&
+      /^\d{4}-\d{2}-\d{2}T/.test(d.onceAt) &&
+      /[+-]\d{2}:\d{2}$|Z$/.test(d.onceAt)
+    ) {
+      return `once:${d.onceAt}`;
     }
-    return s;
+    return `once:${toRfc3339Local(d.onceAt)}`;
   }
-  // once
-  if (d.onceAt && /^\d{4}-\d{2}-\d{2}T/.test(d.onceAt) && /[+-]\d{2}:\d{2}$|Z$/.test(d.onceAt)) {
-    return `once:${d.onceAt}`;
-  }
-  return `once:${toRfc3339Local(d.onceAt)}`;
+  const [hh, mm] = (d.time ?? "09:00").split(":").map(Number);
+  const weekdays =
+    d.mode === "weekdays"
+      ? ([1, 2, 3, 4, 5] as Weekday[])
+      : d.mode === "weekly"
+        ? [d.weekdays[0] ?? 1]
+        : d.weekdays.length > 0
+          ? d.weekdays
+          : ([1, 2, 3, 4, 5] as Weekday[]);
+  const wd = [...weekdays].sort((a, b) => a - b).join(",");
+  return `${mm} ${hh} * * ${wd}`;
 }
 
-export function toRfc3339Local(onceAt?: string): string {
-  // If datetime-local (YYYY-MM-DDTHH:mm), interpret as local and append offset
-  // If empty, use now
-  const d = onceAt ? new Date(onceAt) : new Date();
-  if (Number.isNaN(d.getTime())) {
+function toRfc3339Local(onceAt?: string): string {
+  const date = onceAt ? new Date(onceAt) : new Date();
+  if (Number.isNaN(date.getTime())) {
     return new Date().toISOString().replace(/\.\d{3}Z$/, "+00:00");
   }
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const y = d.getFullYear();
-  const mo = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const h = pad(d.getHours());
-  const mi = pad(d.getMinutes());
-  const s = pad(d.getSeconds());
-  const offsetMin = -d.getTimezoneOffset();
-  const sign = offsetMin >= 0 ? "+" : "-";
-  const oh = pad(Math.floor(Math.abs(offsetMin) / 60));
-  const om = pad(Math.abs(offsetMin) % 60);
-  return `${y}-${mo}-${day}T${h}:${mi}:${s}${sign}${oh}:${om}`;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  return [
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
+    `${sign}${pad(Math.floor(Math.abs(offsetMinutes) / 60))}:${pad(Math.abs(offsetMinutes) % 60)}`,
+  ].join("");
 }
 
 export function formatScheduleLabel(schedule: string, locale: "zh" | "en"): string {
@@ -91,13 +95,22 @@ export function formatScheduleLabel(schedule: string, locale: "zh" | "en"): stri
   if (schedule.startsWith("every:")) {
     const body = schedule.slice(6);
     const [main, ...rest] = body.split(";");
-    const m = main.match(/^(\d+)([mh])$/i);
+    const m = main.match(/^(\d+)([mhd])$/i);
     let base = zh ? `间隔 ${body}` : `Every ${body}`;
     if (m) {
       const n = m[1];
-      const unit = m[2].toLowerCase() === "h"
-        ? zh ? "小时" : "h"
-        : zh ? "分钟" : "m";
+      const unit =
+        m[2].toLowerCase() === "d"
+          ? zh
+            ? "天"
+            : "d"
+          : m[2].toLowerCase() === "h"
+            ? zh
+              ? "小时"
+              : "h"
+            : zh
+              ? "分钟"
+              : "m";
       base = zh ? `每 ${n} ${unit}` : `Every ${n}${unit}`;
     }
     const wd = rest.find((p) => p.startsWith("wd="));
@@ -144,7 +157,7 @@ export function decodeSchedule(schedule: string): ScheduleDraft {
   if (raw.startsWith("every:")) {
     const body = raw.slice(6);
     const [main, ...rest] = body.split(";");
-    const m = main.match(/^(\d+)([mh])$/i);
+    const m = main.match(/^(\d+)([mhd])$/i);
     const weekdays: Weekday[] = [];
     for (const part of rest) {
       if (part.startsWith("wd=")) {
@@ -167,7 +180,12 @@ export function decodeSchedule(schedule: string): ScheduleDraft {
       mode: "interval",
       weekdays,
       intervalValue: m ? Math.max(1, Number(m[1])) : 1,
-      intervalUnit: m && m[2].toLowerCase() === "h" ? "h" : "m",
+      intervalUnit:
+        m && m[2].toLowerCase() === "d"
+          ? "d"
+          : m && m[2].toLowerCase() === "h"
+            ? "h"
+            : "m",
     };
   }
 
@@ -193,8 +211,19 @@ export function decodeSchedule(schedule: string): ScheduleDraft {
       }
     }
     const pad = (n: number) => String(n).padStart(2, "0");
+    const allWeekdays =
+      weekdays.length === 5 &&
+      ([1, 2, 3, 4, 5] as Weekday[]).every((day) => weekdays.includes(day));
+    const mode: ScheduleMode =
+      wdRaw === "*"
+        ? "daily"
+        : allWeekdays
+          ? "weekdays"
+          : weekdays.length === 1
+            ? "weekly"
+            : "custom";
     return {
-      mode: "daily",
+      mode,
       time: `${pad(Number.isFinite(hh) ? hh : 9)}:${pad(Number.isFinite(mm) ? mm : 0)}`,
       weekdays,
     };

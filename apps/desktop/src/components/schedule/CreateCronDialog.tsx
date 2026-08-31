@@ -1,8 +1,10 @@
 /** 新建/编辑定时任务：右侧抽屉。 */
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import {
+  Activity,
   CalendarPlus,
   Check,
+  ClipboardList,
   Cpu,
   MessageSquareText,
   MessagesSquare,
@@ -10,8 +12,10 @@ import {
   Save,
   Server,
   SlidersHorizontal,
+  SunMedium,
   Type,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import {
   ChevronDown as ChevronDownData,
@@ -28,6 +32,7 @@ import {
   type ScheduleDraft,
 } from "../../lib/cron/cronSchedule";
 import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
 import type { CronJobDto } from "./CronRunDetailDrawer";
 
 /** 创建任务对话框可选的供应商简项 */
@@ -68,6 +73,38 @@ const DEFAULT_DRAFT: ScheduleDraft = {
   weekdays: [],
 };
 
+type QuickTemplate = {
+  id: string;
+  icon: LucideIcon;
+  titleKey: MessageKey;
+  taskKey: MessageKey;
+  schedule: string;
+};
+
+const QUICK_TEMPLATES: QuickTemplate[] = [
+  {
+    id: "follow-up",
+    icon: Activity,
+    titleKey: "cron.quick.followup.title",
+    taskKey: "cron.quick.followup.task",
+    schedule: "every:1h",
+  },
+  {
+    id: "weekly-review",
+    icon: ClipboardList,
+    titleKey: "cron.quick.weekly.title",
+    taskKey: "cron.quick.weekly.task",
+    schedule: "0 16 * * 5",
+  },
+  {
+    id: "daily-brief",
+    icon: SunMedium,
+    titleKey: "cron.quick.brief.title",
+    taskKey: "cron.quick.brief.task",
+    schedule: "0 8 * * 1-5",
+  },
+];
+
 /** 优先用当前激活供应商，否则取列表首项 */
 function defaultProviderId(
   providers: ProviderOpt[],
@@ -107,6 +144,13 @@ export function CreateCronDialog({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const applyQuickTemplate = (template: QuickTemplate) => {
+    setTitle(t(template.titleKey));
+    setTask(t(template.taskKey));
+    setDraft(decodeSchedule(template.schedule));
+    setError("");
+  };
+
   const resetForm = useCallback(() => {
     setTitle("");
     setTask("");
@@ -141,9 +185,15 @@ export function CreateCronDialog({
       setTitle(prefill.title);
       setTask(prefill.task);
       setDraft(decodeSchedule(prefill.schedule));
+    } else {
+      setTitle("");
+      setTask("");
+      setDraft({ ...DEFAULT_DRAFT, weekdays: [] });
     }
     setSelectedProviderId(defaultProviderId(providers, activeProviderId));
+    setSelectedModel("");
     setShowInChat(false);
+    setAdvancedOpen(false);
     setError("");
   }, [open, providers, activeProviderId, editingJob, prefill]);
 
@@ -204,11 +254,6 @@ export function CreateCronDialog({
       setError(t("cron.dialog.error"));
       return;
     }
-    if (draft.mode === "once" && !draft.onceAt?.trim()) {
-      setError(t("cron.dialog.onceRequired"));
-      return;
-    }
-
     setSaving(true);
     try {
       const payload = {
@@ -267,6 +312,36 @@ export function CreateCronDialog({
         </header>
 
         <div className="cron-create-drawer-scroll">
+          {!isEdit && (
+            <section className="cron-quick-templates" aria-labelledby="cron-quick-templates-title">
+              <div className="cron-quick-templates-heading">
+                <span id="cron-quick-templates-title">{t("cron.quick.title")}</span>
+                <small>{t("cron.quick.hint")}</small>
+              </div>
+              <div className="cron-quick-templates-list">
+                {QUICK_TEMPLATES.map((template) => {
+                  const Icon = template.icon;
+                  const active = title === t(template.titleKey) && task === t(template.taskKey);
+                  return (
+                    <button
+                      key={template.id}
+                      type="button"
+                      className={`cron-quick-template${active ? " is-active" : ""}`}
+                      onClick={() => applyQuickTemplate(template)}
+                      aria-pressed={active}
+                    >
+                      <span className="cron-quick-template-icon" aria-hidden>
+                        <Icon size={16} strokeWidth={2.1} />
+                      </span>
+                      <span>{t(template.titleKey)}</span>
+                      <CalendarPlus size={14} strokeWidth={2} aria-hidden />
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           <div className="cron-dialog-row">
             <label className="cron-dialog-field">
               <span className="cron-dialog-label">
