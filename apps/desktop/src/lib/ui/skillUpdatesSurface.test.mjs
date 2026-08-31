@@ -14,6 +14,10 @@ test("Skill updates surface exposes status, progress, and counted filters", () =
   assert.match(panel, /skills-update-filter-count/);
   assert.match(panel, /aria-busy=\{checkingUpdates\}/);
   assert.match(panel, /updateChecksByFolder/);
+  assert.match(panel, /className="skill-update-version-flow"/);
+  assert.match(panel, /className="skill-update-version-arrow" aria-hidden>→/);
+  assert.match(panel, /installedVersion \?\? "—"/);
+  assert.match(styles, /\.skill-update-version-flow\s*\{/);
 });
 
 test("Skill updates surface adapts for narrow and accessibility contexts", () => {

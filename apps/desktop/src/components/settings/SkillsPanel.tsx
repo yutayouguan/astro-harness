@@ -2209,6 +2209,11 @@ export default function SkillsPanel({
     const check = origin ? updateChecksByFolder.get(origin.folder) : undefined;
     const canUpdate = canUpdateSkillFromOrigin(skill, origin);
     const isUpdating = updatingFolder === folder;
+    const installedVersion = origin?.remote_version?.trim() || null;
+    const latestVersion = check?.remote_version?.trim() || null;
+    const hasVersionUpgrade =
+      row.status === "outdated" &&
+      Boolean(latestVersion && latestVersion !== installedVersion);
     const remoteUpdatedLabel = check?.remote_updated_at
       ? formatStoreUpdatedAt(check.remote_updated_at, t)
       : null;
@@ -2272,23 +2277,42 @@ export default function SkillsPanel({
         <div className="skill-card-desc">
           <p>{skill.description || skill.path}</p>
           <div className="skill-update-meta">
-            {origin?.remote_version && (
-              <span>
-                {t("skills.installedVersion").replace(
-                  "{version}",
-                  origin.remote_version,
-                )}
-              </span>
-            )}
-            {check?.remote_version &&
-              check.remote_version !== origin?.remote_version && (
+            {hasVersionUpgrade ? (
+              <span className="skill-update-version-flow">
+                <span className="is-current-version">
+                  {t("skills.installedVersion").replace(
+                    "{version}",
+                    installedVersion ?? "—",
+                  )}
+                </span>
+                <span className="skill-update-version-arrow" aria-hidden>→</span>
                 <span className="is-remote">
                   {t("skills.remoteVersion").replace(
                     "{version}",
-                    check.remote_version,
+                    latestVersion ?? "—",
                   )}
                 </span>
-              )}
+              </span>
+            ) : (
+              <>
+                {installedVersion && (
+                  <span>
+                    {t("skills.installedVersion").replace(
+                      "{version}",
+                      installedVersion,
+                    )}
+                  </span>
+                )}
+                {latestVersion && latestVersion !== installedVersion && (
+                  <span className="is-remote">
+                    {t("skills.remoteVersion").replace(
+                      "{version}",
+                      latestVersion,
+                    )}
+                  </span>
+                )}
+              </>
+            )}
             {remoteUpdatedLabel && <span>{remoteUpdatedLabel}</span>}
             <span title={skill.source_dir}>{formatTildePath(skill.source_dir)}</span>
           </div>
