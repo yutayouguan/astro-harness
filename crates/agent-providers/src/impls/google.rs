@@ -1214,6 +1214,45 @@ mod tests {
     }
 
     #[test]
+    fn mixed_text_tool_call_and_result_keep_interactions_pairing() {
+        use crate::types::message::{AssistantContent, ToolCall};
+        let msgs = vec![
+            crate::types::Message::user_text("查看当前目录"),
+            crate::types::Message::assistant(vec![
+                AssistantContent::Text {
+                    text: "Checking the directory.".into(),
+                },
+                AssistantContent::ToolCall(ToolCall {
+                    id: "call-1".into(),
+                    name: "exec_command".into(),
+                    arguments: json!({"command": "pwd"}),
+                    signature: Some("sig-1".into()),
+                }),
+            ]),
+            crate::types::Message::tool_result("call-1", "/tmp", false),
+        ];
+
+        let converted = to_interactions_input(&msgs, false);
+        let kinds: Vec<&str> = converted
+            .steps
+            .iter()
+            .map(|step| step["type"].as_str().unwrap_or_default())
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                "user_input",
+                "model_output",
+                "function_call",
+                "function_result"
+            ]
+        );
+        assert_eq!(converted.steps[2]["id"], "call-1");
+        assert_eq!(converted.steps[3]["call_id"], "call-1");
+        assert_eq!(converted.steps[3]["name"], "exec_command");
+    }
+
+    #[test]
     fn full_replay_drops_unsigned_foreign_tool_pairs() {
         use crate::types::message::{AssistantContent, ToolCall};
         let msgs = vec![

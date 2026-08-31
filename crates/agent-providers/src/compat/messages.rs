@@ -189,4 +189,29 @@ mod tests {
         assert!(msgs[0]["content"].is_null());
         assert_eq!(msgs[0]["tool_calls"][0]["function"]["name"], "read");
     }
+
+    #[test]
+    fn mixed_text_tool_call_and_result_keep_chat_pairing() {
+        let msgs = to_openai_messages(&[
+            Message::assistant(vec![
+                AssistantContent::Text {
+                    text: "Reading now.".into(),
+                },
+                AssistantContent::ToolCall(crate::types::ToolCall {
+                    id: "call_1".into(),
+                    name: "read".into(),
+                    arguments: json!({"path": "f.rs"}),
+                    signature: None,
+                }),
+            ]),
+            Message::tool_result("call_1", "done", false),
+        ]);
+
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0]["role"], "assistant");
+        assert_eq!(msgs[0]["content"], "Reading now.");
+        assert_eq!(msgs[0]["tool_calls"][0]["id"], "call_1");
+        assert_eq!(msgs[1]["role"], "tool");
+        assert_eq!(msgs[1]["tool_call_id"], "call_1");
+    }
 }

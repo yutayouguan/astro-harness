@@ -536,6 +536,36 @@ mod tests {
     }
 
     #[test]
+    fn mixed_text_tool_call_and_result_keep_anthropic_pairing() {
+        use crate::types::message::{AssistantContent, ToolCall};
+
+        let msgs = vec![
+            crate::types::Message::assistant(vec![
+                AssistantContent::Text {
+                    text: "Searching now.".into(),
+                },
+                AssistantContent::ToolCall(ToolCall {
+                    id: "call_1".into(),
+                    name: "search".into(),
+                    arguments: json!({"q": "rust"}),
+                    signature: None,
+                }),
+            ]),
+            crate::types::Message::tool_result("call_1", "done", false),
+        ];
+
+        let (_, api) = to_anthropic_messages(&msgs);
+        assert_eq!(api.len(), 2);
+        assert_eq!(api[0]["role"], "assistant");
+        assert_eq!(api[0]["content"][0]["type"], "text");
+        assert_eq!(api[0]["content"][1]["type"], "tool_use");
+        assert_eq!(api[0]["content"][1]["id"], "call_1");
+        assert_eq!(api[1]["role"], "user");
+        assert_eq!(api[1]["content"][0]["type"], "tool_result");
+        assert_eq!(api[1]["content"][0]["tool_use_id"], "call_1");
+    }
+
+    #[test]
     fn sse_text_delta() {
         let data = r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}"#;
         match extract_anthropic_delta(data) {

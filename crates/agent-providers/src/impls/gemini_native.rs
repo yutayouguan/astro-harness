@@ -187,6 +187,18 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
     let mut instruction_parts = Vec::new();
     let mut contents = Vec::new();
 
+    // Message::Tool 只保留 call id，Gemini functionResponse 还要求原始函数名。
+    let mut call_names = std::collections::HashMap::new();
+    for message in messages {
+        if let Message::Assistant { content } = message {
+            for part in content {
+                if let AssistantContent::ToolCall(call) = part {
+                    call_names.insert(call.id.as_str(), call.name.as_str());
+                }
+            }
+        }
+    }
+
     for m in messages {
         match m {
             // Gemini 只有一个 system_instruction 字段；developer 角色降级到此字段。
@@ -218,13 +230,22 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
                 content,
                 ..
             } => {
-                let response_value: Value =
-                    serde_json::from_str(content).unwrap_or_else(|_| json!({"result": content}));
+                // REST 契约规定 response 必须是 JSON object。
+                let response_value = match serde_json::from_str::<Value>(content) {
+                    Ok(Value::Object(fields)) => Value::Object(fields),
+                    Ok(value) => json!({"result": value}),
+                    Err(_) => json!({"result": content}),
+                };
+                let name = call_names
+                    .get(tool_call_id.as_str())
+                    .copied()
+                    .unwrap_or("tool");
                 contents.push(json!({
-                    "role": "model",
+                    "role": "user",
                     "parts": [{
                         "functionResponse": {
-                            "name": tool_call_id,
+                            "id": tool_call_id,
+                            "name": name,
                             "response": response_value,
                         }
                     }]
@@ -248,6 +269,7 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
                             };
                             parts.push(json!({
                                 "functionCall": {
+                                    "id": tc.id,
                                     "name": tc.name,
                                     "args": args,
                                 }
@@ -557,6 +579,44 @@ mod tests {
         assert_eq!(contents.len(), 1);
         assert_eq!(contents[0]["role"], "model");
         assert!(contents[0]["parts"][0].get("functionCall").is_some());
+        assert_eq!(contents[0]["parts"][0]["functionCall"]["id"], "call_1");
         assert_eq!(contents[0]["parts"][0]["functionCall"]["name"], "search");
+    }
+
+    #[test]
+    fn mixed_text_tool_call_and_result_keep_native_pairing() {
+        use crate::types::message::{AssistantContent, ToolCall};
+
+        let msgs = vec![
+            crate::types::Message::assistant(vec![
+                AssistantContent::Text {
+                    text: "Searching now.".into(),
+                },
+                AssistantContent::ToolCall(ToolCall {
+                    id: "call_1".into(),
+                    name: "search".into(),
+                    arguments: json!({"q": "rust"}),
+                    signature: None,
+                }),
+            ]),
+            crate::types::Message::tool_result("call_1", "[1, 2]", false),
+        ];
+
+        let (_, contents) = to_native_contents(&msgs);
+        assert_eq!(contents.len(), 2);
+        assert_eq!(contents[0]["role"], "model");
+        assert_eq!(contents[0]["parts"][0]["text"], "Searching now.");
+        assert_eq!(contents[0]["parts"][1]["functionCall"]["id"], "call_1");
+        assert_eq!(contents[0]["parts"][1]["functionCall"]["name"], "search");
+        assert_eq!(contents[1]["role"], "user");
+        assert_eq!(contents[1]["parts"][0]["functionResponse"]["id"], "call_1");
+        assert_eq!(
+            contents[1]["parts"][0]["functionResponse"]["name"],
+            "search"
+        );
+        assert_eq!(
+            contents[1]["parts"][0]["functionResponse"]["response"],
+            json!({"result": [1, 2]})
+        );
     }
 }
