@@ -59,11 +59,18 @@ fn load_providers_file() -> Option<ProvidersFile> {
     serde_json::from_str(&raw).ok()
 }
 
+fn entry_supports_agent_responses(entry: &ProviderEntry) -> bool {
+    providers::dispatch::supports_agent_responses(kind_to_backend(&entry.kind))
+}
+
 fn entry_to_target(entry: &ProviderEntry) -> Option<ChatTarget> {
     if !entry.enabled {
         return None;
     }
     let backend_id = kind_to_backend(&entry.kind).to_string();
+    if !entry_supports_agent_responses(entry) {
+        return None;
+    }
     let api_key = providers::read_env_api_key(&backend_id).unwrap_or_default();
     let allow_empty_key = backend_id == "ollama";
     if api_key.trim().is_empty() && !allow_empty_key {
@@ -86,13 +93,13 @@ fn entry_to_target(entry: &ProviderEntry) -> Option<ChatTarget> {
 fn find_primary_entry<'a>(file: &'a ProvidersFile, job: &CronJob) -> Option<&'a ProviderEntry> {
     if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
         if let Some(p) = file.providers.iter().find(|p| p.id == id) {
-            return Some(p);
+            return entry_supports_agent_responses(p).then_some(p);
         }
-        if let Some(p) = file
-            .providers
-            .iter()
-            .find(|p| p.enabled && (kind_to_backend(&p.kind) == id || p.kind == id))
-        {
+        if let Some(p) = file.providers.iter().find(|p| {
+            p.enabled
+                && entry_supports_agent_responses(p)
+                && (kind_to_backend(&p.kind) == id || p.kind == id)
+        }) {
             return Some(p);
         }
         return None;
@@ -101,11 +108,17 @@ fn find_primary_entry<'a>(file: &'a ProvidersFile, job: &CronJob) -> Option<&'a 
         .active_provider_id
         .as_deref()
         .filter(|s| !s.is_empty())
-        .and_then(|id| file.providers.iter().find(|p| p.id == id))
+        .and_then(|id| {
+            file.providers
+                .iter()
+                .find(|p| p.id == id && entry_supports_agent_responses(p))
+        })
     {
         return Some(active);
     }
-    file.providers.iter().find(|p| p.enabled)
+    file.providers
+        .iter()
+        .find(|p| p.enabled && entry_supports_agent_responses(p))
 }
 
 /// 从任务字段、`providers.json` 与环境变量解析执行凭据（含 fallback 链）。
@@ -150,8 +163,13 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
         .provider_id
         .clone()
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "ollama".into());
-    let backend = kind_to_backend(&provider).to_string();
+        .unwrap_or_else(|| "openai".into());
+    let requested_backend = kind_to_backend(&provider);
+    let backend = if providers::dispatch::supports_agent_responses(requested_backend) {
+        requested_backend.to_string()
+    } else {
+        "openai".to_string()
+    };
     let model = job.model.clone().unwrap_or_default();
     let api_key = providers::read_env_api_key(&backend).unwrap_or_default();
     let base_url =
@@ -277,14 +295,14 @@ mod tests {
         };
         let refs = vec![FallbackRef {
             provider_id: "p1".into(),
-            model: Some("opus".into()),
+            model: Some("deepseek-chat".into()),
         }];
         let chain = expand_chat_targets(&primary, &refs, |id| {
             if id == "p1" {
                 Some(ChatTarget {
                     provider_id: "p1".into(),
-                    backend_id: "claude".into(),
-                    model: "claude".into(),
+                    backend_id: "deepseek".into(),
+                    model: "deepseek-v3".into(),
                     api_key: "k1".into(),
                     base_url: "https://api.anthropic.com".into(),
                 })
@@ -293,6 +311,6 @@ mod tests {
             }
         });
         assert_eq!(chain.len(), 2);
-        assert_eq!(chain[1].model, "opus");
+        assert_eq!(chain[1].model, "deepseek-chat");
     }
 }

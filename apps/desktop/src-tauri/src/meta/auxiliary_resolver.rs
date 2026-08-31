@@ -296,7 +296,7 @@ pub async fn primary_chat_target_for_session(
         let candidates: Vec<&providers::ProviderConfigDto> = state
             .providers
             .iter()
-            .filter(|p| p.enabled && p.backend_id == *bp)
+            .filter(|p| p.enabled && p.supports_responses_api && p.backend_id == *bp)
             .collect();
         if let Some(url) = billing_base_url.as_ref() {
             if let Some(p) = candidates
@@ -310,15 +310,23 @@ pub async fn primary_chat_target_for_session(
     });
 
     let provider_id = matched_id
-        .or_else(|| state.active_provider_id.clone())
+        .or_else(|| {
+            state.active_provider_id.as_ref().and_then(|id| {
+                state
+                    .providers
+                    .iter()
+                    .any(|p| p.id == *id && p.enabled && p.supports_responses_api)
+                    .then(|| id.clone())
+            })
+        })
         .or_else(|| {
             state
                 .providers
                 .iter()
-                .find(|p| p.enabled)
+                .find(|p| p.enabled && p.supports_responses_api)
                 .map(|p| p.id.clone())
         })
-        .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
+        .ok_or_else(|| "请先配置并启用支持 Responses API 的提供商".to_string())?;
 
     let ui = providers::find_provider(&provider_id)?;
     let model = session_model.unwrap_or_else(|| ui.model.clone());

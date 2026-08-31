@@ -117,8 +117,20 @@ fn active_ui_provider() -> Result<UiProvider, String> {
     let state = providers_commands::get_providers_state()?;
     let id = state
         .active_provider_id
-        .or_else(|| state.providers.first().map(|p| p.id.clone()))
-        .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
+        .filter(|id| {
+            state
+                .providers
+                .iter()
+                .any(|p| p.id == *id && p.enabled && p.supports_responses_api)
+        })
+        .or_else(|| {
+            state
+                .providers
+                .iter()
+                .find(|p| p.enabled && p.supports_responses_api)
+                .map(|p| p.id.clone())
+        })
+        .ok_or_else(|| "请先配置并启用支持 Responses API 的提供商".to_string())?;
     providers_commands::find_provider(&id)
 }
 
