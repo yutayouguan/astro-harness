@@ -929,13 +929,11 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   min-width: 168px;
   padding: 0.35rem;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    rgba(22, 20, 34, 0.94);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+  border: 1px solid var(--titlebar-menu-border);
+  background: var(--titlebar-menu-bg);
+  box-shadow: var(--titlebar-menu-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
   overflow: auto;
 }
 
@@ -1001,12 +999,6 @@ html[data-theme="dark"] .composer-agent-validate-hint {
 .composer-approval-health[data-status="unavailable"] .composer-approval-health-dot,
 .composer-approval-health[data-status="unknown"] .composer-approval-health-dot {
   background: currentColor;
-}
-
-html[data-theme="light"] .composer-mode-menu {
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.48)),
-    rgba(248, 250, 252, 0.95);
 }
 
 .composer-mode-item {
@@ -1101,14 +1093,11 @@ html[data-theme="light"] .composer-mode-menu {
   display: flex;
   flex-direction: column;
   border-radius: 14px;
-  border: 1px solid var(--menu-glass-border);
-  border-top: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 45%, transparent);
-  background: var(--menu-glass-bg);
-  box-shadow:
-    var(--menu-glass-shadow),
-    0 0 24px color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
-  backdrop-filter: var(--menu-glass-blur);
-  -webkit-backdrop-filter: var(--menu-glass-blur);
+  border: 1px solid var(--titlebar-menu-border);
+  background: var(--titlebar-menu-bg);
+  box-shadow: var(--titlebar-menu-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
   overflow: auto;
   color: var(--ink);
 }
@@ -2240,15 +2229,11 @@ html[data-theme="dark"] .composer-palette-item:hover {
 
 .composer-plus-menu {
   width: min(336px, calc(100vw - 24px));
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12), transparent 46%),
-    color-mix(in srgb, var(--bg2) 94%, transparent);
-  border-color: color-mix(in srgb, var(--glass-edge) 92%, transparent);
-  box-shadow:
-    0 10px 30px rgba(15, 23, 42, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(1.16);
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(1.16);
+  border: 1px solid var(--titlebar-menu-border);
+  background: var(--titlebar-menu-bg);
+  box-shadow: var(--titlebar-menu-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
   will-change: transform, opacity;
 }
 

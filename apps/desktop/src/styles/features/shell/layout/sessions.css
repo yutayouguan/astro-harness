@@ -198,12 +198,12 @@
   gap: 1px;
   flex-shrink: 0;
   padding: 2px;
-  border: 1px solid var(--menu-overlay-border);
+  border: 1px solid var(--titlebar-menu-border);
   border-radius: 7px;
-  background: var(--menu-overlay-bg);
-  box-shadow: var(--menu-overlay-shadow);
-  backdrop-filter: var(--menu-overlay-blur);
-  -webkit-backdrop-filter: var(--menu-overlay-blur);
+  background: var(--titlebar-menu-bg);
+  box-shadow: var(--titlebar-menu-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);

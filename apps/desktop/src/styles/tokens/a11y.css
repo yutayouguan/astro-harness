@@ -20,6 +20,8 @@
     --menu-glass-blur: none;
     --menu-overlay-bg: var(--menu-glass-bg);
     --menu-overlay-blur: none;
+    --titlebar-menu-bg: var(--menu-glass-bg);
+    --titlebar-menu-blur: none;
   }
 
   html[data-theme="light"] {
@@ -36,6 +38,8 @@
     --menu-glass-blur: none;
     --menu-overlay-bg: var(--menu-glass-bg);
     --menu-overlay-blur: none;
+    --titlebar-menu-bg: var(--menu-glass-bg);
+    --titlebar-menu-blur: none;
   }
 
   .sidebar,

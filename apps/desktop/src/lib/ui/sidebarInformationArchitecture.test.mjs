@@ -231,10 +231,10 @@ test("session activity uses trailing status and hover-revealed tools", () => {
   assert.match(statusIcon, /className="session-status-icon-spin"/);
   assert.match(statusIcon, /className="session-status-unread-dot"/);
   assert.ok(actions, "missing session action styles");
-  assert.match(actions, /background:\s*var\(--menu-overlay-bg\);/);
-  assert.match(actions, /border:\s*1px solid var\(--menu-overlay-border\);/);
-  assert.match(actions, /box-shadow:\s*var\(--menu-overlay-shadow\);/);
-  assert.match(actions, /backdrop-filter:\s*var\(--menu-overlay-blur\);/);
+  assert.match(actions, /background:\s*var\(--titlebar-menu-bg\);/);
+  assert.match(actions, /border:\s*1px solid var\(--titlebar-menu-border\);/);
+  assert.match(actions, /box-shadow:\s*var\(--titlebar-menu-shadow\);/);
+  assert.match(actions, /backdrop-filter:\s*var\(--titlebar-menu-blur\);/);
   assert.match(actions, /opacity:\s*0;/);
   assert.match(actions, /pointer-events:\s*none;/);
   assert.match(
