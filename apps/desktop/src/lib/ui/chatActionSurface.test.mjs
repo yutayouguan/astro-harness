@@ -123,7 +123,7 @@ test("composer approval selector keeps the three supported permission choices", 
   assert.doesNotMatch(presets, /read_only/);
   assert.match(
     source,
-    /invoke<PermissionSettings>\(\s*"get_permission_settings"\s*\)/,
+    /invoke<PermissionSettings>\(\s*"get_permission_settings"\s*,?\s*\)/,
   );
   assert.match(source, /"set_permission_preset"/);
   assert.match(source, /data-approval-mode=\{mode\}/);

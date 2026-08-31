@@ -101,7 +101,7 @@ test("chat header shares composer glass while messages scroll underneath", () =>
   assert.match(header, /box-shadow:[\s\S]*var\(--glass-rim\)/);
   assert.match(
     header,
-    /backdrop-filter:\s*blur\(calc\(\s*var\(--blur-glass, 20px\)/,
+    /backdrop-filter:\s*blur\(\s*calc\(\s*var\(--blur-glass, 20px\)/,
   );
   assert.match(header, /pointer-events:\s*none;/);
   assert.match(
@@ -332,7 +332,7 @@ test("floating composer shares the sidebar glass material", () => {
   );
   assert.match(
     composer,
-    /backdrop-filter:\s*blur\(calc\(\s*var\(--blur-glass, 20px\)/,
+    /backdrop-filter:\s*blur\(\s*calc\(\s*var\(--blur-glass, 20px\)/,
   );
   assert.match(
     composer,
