@@ -1,6 +1,6 @@
-/* Final sidebar contract: quiet navigation chrome with one stable hierarchy.
-   The outer surface shares the same continuous glass recipe as the chat header
-   and right dock; controls inside remain flat so translucent layers do not stack. */
+/* Final sidebar contract: quiet, flush navigation chrome with one stable hierarchy.
+   The outer surface keeps a continuous glass fill without a floating drop shadow;
+   controls inside remain flat so translucent layers do not stack. */
 
 .sidebar {
   --sidebar-chrome-sheen: linear-gradient(
@@ -18,9 +18,7 @@
     color-mix(in srgb, var(--glass-edge) 62%, transparent);
   border-radius: 0;
   background: var(--sidebar-chrome-background);
-  box-shadow:
-    var(--glass-rim),
-    1px 0 2px rgba(var(--shadow-ink), 0.018);
+  box-shadow: none;
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
   font-optical-sizing: auto;
@@ -28,9 +26,7 @@
 
 .sidebar.is-pinned {
   background: var(--sidebar-chrome-background);
-  box-shadow:
-    var(--glass-rim),
-    1px 0 2px rgba(var(--shadow-ink), 0.018);
+  box-shadow: none;
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }
@@ -47,9 +43,7 @@ html[data-theme="dark"] .sidebar.is-pinned {
 /* Settings keeps the same continuous material while retaining its own navigation layout. */
 .sidebar.is-settings {
   background: var(--sidebar-chrome-background);
-  box-shadow:
-    var(--glass-rim),
-    1px 0 2px rgba(var(--shadow-ink), 0.018);
+  box-shadow: none;
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }

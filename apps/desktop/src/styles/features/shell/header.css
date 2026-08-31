@@ -11,7 +11,7 @@
   app-region: no-drag;
 }
 
-/* 对话页标题栏与底部输入框使用同一类悬浮玻璃材质。
+/* 对话页标题栏使用贴底的轻薄玻璃材质，避免与聊天背景产生明显色差。
    标题栏不参与 content-pane 的 flex 高度分配，消息滚动视口因此可以延伸到窗顶；
    空白区域透传滚轮和窗口拖动，只有标题与操作控件恢复命中。 */
 .content-pane--chat {
@@ -23,12 +23,8 @@
 }
 
 .content-header--chat {
-  --chat-header-surface-base: var(--sidebar-bg);
-  --chat-header-surface-sheen: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
-    transparent 72%
-  );
+  --chat-header-surface-base: color-mix(in srgb, var(--bg1) 92%, transparent);
+  --chat-header-surface-sheen: none;
   position: absolute;
   z-index: 42;
   top: 0;
@@ -39,12 +35,10 @@
   box-sizing: border-box;
   padding: 4px 16px;
   border: 0;
-  border-bottom: 0.5px solid var(--glass-edge);
+  border-bottom: 0.5px solid color-mix(in srgb, var(--ink) 6%, transparent);
   border-radius: 0;
   background: var(--chat-header-surface-sheen), var(--chat-header-surface-base);
-  box-shadow:
-    var(--glass-rim),
-    0 1px 4px rgba(var(--shadow-ink), 0.035);
+  box-shadow: none;
   backdrop-filter: blur(
       calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
     )

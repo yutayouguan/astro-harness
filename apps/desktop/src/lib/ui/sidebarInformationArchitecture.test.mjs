@@ -163,7 +163,7 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
     pinnedSidebar,
     /background:\s*var\(--sidebar-chrome-background\);/,
   );
-  assert.match(pinnedSidebar, /box-shadow:[\s\S]*var\(--glass-rim\)/);
+  assert.match(pinnedSidebar, /box-shadow:\s*none;/);
   assert.match(
     pinnedSidebar,
     /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/,
@@ -245,7 +245,7 @@ test("left sidebar shares the flush glass chrome contract", () => {
   assert.match(sidebar, /border-radius:\s*0;/);
   assert.match(sidebar, /border-right:\s*0\.5px\s+solid\s+color-mix\(/);
   assert.match(sidebar, /background:\s*var\(--sidebar-chrome-background\);/);
-  assert.match(sidebar, /1px 0 2px rgba\(var\(--shadow-ink\), 0\.018\);/);
+  assert.match(sidebar, /box-shadow:\s*none;/);
   assert.match(sidebar, /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/);
   assert.ok(unifiedSidebar, "missing unified sidebar sheen override");
   assert.match(unifiedSidebar, /--sidebar-chrome-sheen:\s*linear-gradient\(/);

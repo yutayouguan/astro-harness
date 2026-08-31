@@ -77,7 +77,7 @@ test("chat header chrome stays anchored while project files animate", () => {
   assert.equal(projectFileActions, undefined);
 });
 
-test("chat header shares composer glass while messages scroll underneath", () => {
+test("chat header stays flush with the chat background while messages scroll underneath", () => {
   const header = rule(headerStyles, ".content-header--chat");
   const chatPane = rule(headerStyles, ".content-pane--chat");
 
@@ -88,17 +88,24 @@ test("chat header shares composer glass while messages scroll underneath", () =>
     headerStyles,
     /> \.chat-layout-with-right\s*\{\s*--chat-header-overlay-height:\s*50px;/,
   );
-  assert.match(header, /--chat-header-surface-base:\s*var\(--sidebar-bg\);/);
+  assert.match(
+    header,
+    /--chat-header-surface-base:\s*color-mix\(in srgb, var\(--bg1\) 92%, transparent\);/,
+  );
+  assert.match(header, /--chat-header-surface-sheen:\s*none;/);
   assert.match(
     header,
     /background:[\s\S]*var\(--chat-header-surface-sheen\)[\s\S]*var\(--chat-header-surface-base\);/,
   );
   assert.match(header, /border:\s*0;/);
-  assert.match(header, /border-bottom:\s*0\.5px solid var\(--glass-edge\);/);
+  assert.match(
+    header,
+    /border-bottom:\s*0\.5px solid color-mix\(in srgb, var\(--ink\) 6%, transparent\);/,
+  );
   assert.doesNotMatch(header, /border-top:/);
   assert.doesNotMatch(header, /border-left:/);
   assert.doesNotMatch(header, /border-right:/);
-  assert.match(header, /box-shadow:[\s\S]*var\(--glass-rim\)/);
+  assert.match(header, /box-shadow:\s*none;/);
   assert.match(
     header,
     /backdrop-filter:\s*blur\(\s*calc\(\s*var\(--blur-glass, 20px\)/,
