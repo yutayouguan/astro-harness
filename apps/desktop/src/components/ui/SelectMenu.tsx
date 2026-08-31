@@ -14,6 +14,7 @@ import {
   ChevronUp as ChevronUpData,
 } from "lucide";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
+import { useDynamicOverlayLayer } from "../../hooks/ui/useDynamicOverlayLayer";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 
 /** 下拉选项 */
@@ -91,6 +92,7 @@ export function SelectMenu({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const listId = useId();
+  const { layer, bringToFront } = useDynamicOverlayLayer(open);
   const selected = options.find((o) => o.value === value);
   const label = selected?.label ?? placeholder;
 
@@ -195,7 +197,8 @@ export function SelectMenu({
 
   useEffect(() => {
     if (!open || highlightedIndex < 0 || !listRef.current) return;
-    const items = listRef.current.querySelectorAll<HTMLElement>('[role="option"]');
+    const items =
+      listRef.current.querySelectorAll<HTMLElement>('[role="option"]');
     items[highlightedIndex]?.scrollIntoView({ block: "nearest" });
   }, [open, highlightedIndex]);
 
@@ -242,8 +245,10 @@ export function SelectMenu({
               minWidth: Math.max(pos.width, 140),
               maxWidth: pos.widthCap,
               maxHeight: pos.maxHeight,
+              zIndex: layer,
               ...menuToneStyle,
             }}
+            onPointerDownCapture={bringToFront}
           >
             {options.map((opt, i) => {
               const active = opt.value === value;
@@ -270,9 +275,15 @@ export function SelectMenu({
                         {opt.icon}
                       </span>
                     ) : null}
-                    <span className="select-menu-option-label">{opt.label}</span>
+                    <span className="select-menu-option-label">
+                      {opt.label}
+                    </span>
                     {active ? (
-                      selectionIndicator === "radio" ? <RadioIcon /> : <CheckIcon />
+                      selectionIndicator === "radio" ? (
+                        <RadioIcon />
+                      ) : (
+                        <CheckIcon />
+                      )
                     ) : selectionIndicator === "radio" ? (
                       <span className="select-menu-radio" aria-hidden />
                     ) : null}

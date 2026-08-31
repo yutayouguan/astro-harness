@@ -12,11 +12,16 @@ import {
   Timer,
   type LucideProps,
 } from "lucide-react";
-import type { ScheduleDraft, ScheduleMode, Weekday } from "../../lib/cron/cronSchedule";
+import type {
+  ScheduleDraft,
+  ScheduleMode,
+  Weekday,
+} from "../../lib/cron/cronSchedule";
 import { UI_WEEKDAYS } from "../../lib/cron/cronSchedule";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { SelectMenu } from "../ui/SelectMenu";
+import { GlassTimePicker } from "./GlassTimePicker";
 
 type Props = {
   value: ScheduleDraft;
@@ -35,7 +40,10 @@ const MODES: { mode: ScheduleMode; labelKey: MessageKey; Icon: ModeIcon }[] = [
 
 const WORKDAYS: Weekday[] = [1, 2, 3, 4, 5];
 
-function normalizedDraft(value: ScheduleDraft, mode: ScheduleMode): ScheduleDraft {
+function normalizedDraft(
+  value: ScheduleDraft,
+  mode: ScheduleMode,
+): ScheduleDraft {
   if (mode === "daily") return { ...value, mode, weekdays: [] };
   if (mode === "weekdays") return { ...value, mode, weekdays: WORKDAYS };
   if (mode === "weekly") {
@@ -89,7 +97,11 @@ export function ScheduleEditor({ value, onChange }: Props) {
         <span>{t("cron.field.schedule")}</span>
       </div>
 
-      <div className="cron-sched-modes" role="tablist" aria-label={t("cron.field.schedule")}>
+      <div
+        className="cron-sched-modes"
+        role="tablist"
+        aria-label={t("cron.field.schedule")}
+      >
         {MODES.map(({ mode, labelKey, Icon }) => (
           <button
             key={mode}
@@ -108,13 +120,24 @@ export function ScheduleEditor({ value, onChange }: Props) {
       {value.mode === "interval" && (
         <div className="cron-sched-body">
           <div className="cron-sched-row cron-sched-interval">
-            <span className="cron-sched-interval-label">{t("cron.interval.every")}</span>
-            <div className="cron-sched-stepper" role="group" aria-label={t("cron.interval.every")}>
+            <span className="cron-sched-interval-label">
+              {t("cron.interval.every")}
+            </span>
+            <div
+              className="cron-sched-stepper"
+              role="group"
+              aria-label={t("cron.interval.every")}
+            >
               <button
                 type="button"
                 className="cron-sched-stepper-btn"
                 aria-label={t("cron.interval.decrease")}
-                onClick={() => onChange({ ...value, intervalValue: Math.max(1, intervalValue - 1) })}
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    intervalValue: Math.max(1, intervalValue - 1),
+                  })
+                }
               >
                 <Minus size={14} strokeWidth={2.4} aria-hidden />
               </button>
@@ -127,7 +150,8 @@ export function ScheduleEditor({ value, onChange }: Props) {
                   const next = Number(event.target.value);
                   onChange({
                     ...value,
-                    intervalValue: Number.isFinite(next) && next >= 1 ? Math.floor(next) : 1,
+                    intervalValue:
+                      Number.isFinite(next) && next >= 1 ? Math.floor(next) : 1,
                   });
                 }}
               />
@@ -135,7 +159,9 @@ export function ScheduleEditor({ value, onChange }: Props) {
                 type="button"
                 className="cron-sched-stepper-btn"
                 aria-label={t("cron.interval.increase")}
-                onClick={() => onChange({ ...value, intervalValue: intervalValue + 1 })}
+                onClick={() =>
+                  onChange({ ...value, intervalValue: intervalValue + 1 })
+                }
               >
                 <Plus size={14} strokeWidth={2.4} aria-hidden />
               </button>
@@ -152,9 +178,21 @@ export function ScheduleEditor({ value, onChange }: Props) {
               }
               aria-label={t("cron.interval.unit")}
               options={[
-                { value: "m", label: t("cron.interval.m"), icon: <Timer size={13} aria-hidden /> },
-                { value: "h", label: t("cron.interval.h"), icon: <Clock size={13} aria-hidden /> },
-                { value: "d", label: t("cron.interval.d"), icon: <CalendarDays size={13} aria-hidden /> },
+                {
+                  value: "m",
+                  label: t("cron.interval.m"),
+                  icon: <Timer size={13} aria-hidden />,
+                },
+                {
+                  value: "h",
+                  label: t("cron.interval.h"),
+                  icon: <Clock size={13} aria-hidden />,
+                },
+                {
+                  value: "d",
+                  label: t("cron.interval.d"),
+                  icon: <CalendarDays size={13} aria-hidden />,
+                },
               ]}
             />
           </div>
@@ -167,24 +205,29 @@ export function ScheduleEditor({ value, onChange }: Props) {
             <p className="cron-sched-summary">{t("cron.weekdays.summary")}</p>
           )}
           {value.mode === "weekly" && (
-            <WeekdayChips selected={value.weekdays} onToggle={chooseWeeklyDay} t={t} />
+            <WeekdayChips
+              selected={value.weekdays}
+              onToggle={chooseWeeklyDay}
+              t={t}
+            />
           )}
           {value.mode === "custom" && (
             <>
-              <p className="cron-sched-summary">{t("cron.custom.chooseDays")}</p>
-              <WeekdayChips selected={value.weekdays} onToggle={toggleCustomWeekday} t={t} />
+              <p className="cron-sched-summary">
+                {t("cron.custom.chooseDays")}
+              </p>
+              <WeekdayChips
+                selected={value.weekdays}
+                onToggle={toggleCustomWeekday}
+                t={t}
+              />
             </>
           )}
-          <label className="cron-sched-field-shell cron-sched-field-shell--time">
-            <Clock size={14} strokeWidth={2.2} aria-hidden />
-            <span className="sr-only">{t("cron.time")}</span>
-            <input
-              type="time"
-              className="cron-sched-input cron-sched-input--bare"
-              value={value.time ?? "09:00"}
-              onChange={(event) => onChange({ ...value, time: event.target.value })}
-            />
-          </label>
+          <GlassTimePicker
+            value={value.time ?? "09:00"}
+            onChange={(time) => onChange({ ...value, time })}
+            aria-label={t("cron.time")}
+          />
         </div>
       )}
     </div>
@@ -201,7 +244,10 @@ function WeekdayChips({
   t: (key: MessageKey) => string;
 }) {
   return (
-    <div className="cron-sched-weekdays" aria-label={t("cron.custom.chooseDays")}>
+    <div
+      className="cron-sched-weekdays"
+      aria-label={t("cron.custom.chooseDays")}
+    >
       {UI_WEEKDAYS.map(({ labelKey, value }) => {
         const active = selected.includes(value);
         return (

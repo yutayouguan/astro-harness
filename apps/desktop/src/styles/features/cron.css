@@ -4,6 +4,7 @@
 @import "./cron/cards.css";
 @import "./cron/history-dialog.css";
 @import "./cron/schedule-editor.css";
+@import "./cron/pickers.css";
 @import "./cron/create-drawer.css";
 @import "./cron/views.css";
 @import "./cron/history.css";

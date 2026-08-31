@@ -1,21 +1,7 @@
-.cron-create-drawer-backdrop {
-  background:
-    radial-gradient(
-      ellipse 55% 70% at 88% 30%,
-      color-mix(in srgb, var(--tone) 18%, transparent),
-      transparent 65%
-    ),
-    color-mix(in srgb, var(--bg-base, #0f172a) 32%, transparent);
-}
-
-html[data-theme="light"] .cron-create-drawer-backdrop {
-  background:
-    radial-gradient(
-      ellipse 55% 70% at 88% 30%,
-      color-mix(in srgb, var(--tone) 22%, transparent),
-      transparent 65%
-    ),
-    color-mix(in srgb, #64748b 18%, transparent);
+.ui-overlay.cron-create-drawer-backdrop {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .cron-create-drawer {
@@ -37,15 +23,31 @@ html[data-theme="light"] .cron-create-drawer-backdrop {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--tone) 20%, transparent), transparent 48%),
-    radial-gradient(ellipse at 90% 100%, color-mix(in srgb, var(--tone) 12%, transparent), transparent 42%);
+    radial-gradient(
+      circle at 12% 8%,
+      color-mix(in srgb, var(--tone) 20%, transparent),
+      transparent 48%
+    ),
+    radial-gradient(
+      ellipse at 90% 100%,
+      color-mix(in srgb, var(--tone) 12%, transparent),
+      transparent 42%
+    );
   opacity: 0.9;
 }
 
 html[data-theme="dark"] .cron-create-drawer::before {
   background:
-    radial-gradient(circle at 14% 6%, color-mix(in srgb, var(--tone) 26%, transparent), transparent 50%),
-    radial-gradient(ellipse at 88% 96%, color-mix(in srgb, var(--tone) 14%, transparent), transparent 44%);
+    radial-gradient(
+      circle at 14% 6%,
+      color-mix(in srgb, var(--tone) 26%, transparent),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 88% 96%,
+      color-mix(in srgb, var(--tone) 14%, transparent),
+      transparent 44%
+    );
   opacity: 0.85;
 }
 
@@ -60,7 +62,8 @@ html[data-theme="dark"] .cron-create-drawer::before {
   justify-content: space-between;
   gap: 12px;
   padding: 18px 18px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--tone) 10%, var(--chip-border));
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--tone) 10%, var(--chip-border));
   flex-shrink: 0;
 }
 
@@ -87,7 +90,11 @@ html[data-theme="dark"] .cron-create-drawer-head {
   border-radius: 10px;
   color: var(--tone);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.39),
@@ -96,7 +103,11 @@ html[data-theme="dark"] .cron-create-drawer-head {
 
 html[data-theme="dark"] .cron-create-drawer-title-icon {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     color-mix(in srgb, var(--tone) 18%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
@@ -112,7 +123,9 @@ html[data-theme="dark"] .cron-create-drawer-title-icon {
   cursor: pointer;
   color: var(--tone, var(--ink-mute));
   background: transparent;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .cron-dialog-close:hover {
@@ -173,12 +186,20 @@ html[data-theme="dark"] .cron-create-drawer-title-icon {
   border-radius: 14px;
   color: var(--ink-soft);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.31), rgba(255, 255, 255, 0.08)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.31),
+      rgba(255, 255, 255, 0.08)
+    ),
     color-mix(in srgb, var(--glass-fill) 68%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
   cursor: pointer;
   text-align: left;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.12s ease;
 }
 
 .cron-quick-template:hover,
@@ -186,7 +207,11 @@ html[data-theme="dark"] .cron-create-drawer-title-icon {
   color: var(--tone);
   border-color: color-mix(in srgb, var(--tone) 34%, var(--chip-border));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.38),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 62%, transparent);
 }
 
@@ -220,7 +245,11 @@ html[data-theme="dark"] .cron-create-drawer-title-icon {
 html[data-theme="dark"] .cron-quick-template {
   border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.1));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.07),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 22%, rgba(8, 6, 18, 0.45));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
@@ -239,22 +268,20 @@ html[data-theme="dark"] .cron-quick-template.is-active {
   flex-shrink: 0;
   padding: 12px 18px 18px;
   border-top: 1px solid color-mix(in srgb, var(--tone) 8%, transparent);
-  background:
-    linear-gradient(
-      0deg,
-      color-mix(in srgb, var(--tone-soft) 35%, rgba(255, 255, 255, 0.35)),
-      color-mix(in srgb, var(--tone-soft) 6%, transparent)
-    );
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--tone-soft) 35%, rgba(255, 255, 255, 0.35)),
+    color-mix(in srgb, var(--tone-soft) 6%, transparent)
+  );
 }
 
 html[data-theme="dark"] .cron-create-drawer-foot {
   border-top-color: color-mix(in srgb, var(--tone) 12%, transparent);
-  background:
-    linear-gradient(
-      0deg,
-      color-mix(in srgb, var(--tone) 12%, rgba(8, 6, 18, 0.5)),
-      transparent
-    );
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--tone) 12%, rgba(8, 6, 18, 0.5)),
+    transparent
+  );
 }
 
 .cron-dialog-row {
@@ -342,18 +369,27 @@ html[data-theme="dark"] .cron-create-drawer-foot {
   padding: 10px 12px;
   min-height: 40px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.33),
+      rgba(255, 255, 255, 0.1)
+    ),
     rgba(255, 255, 255, 0.17);
   color: var(--ink);
   font-size: 13px;
   font-weight: 400;
   font-family: inherit;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.47);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
 }
 
 .cron-dialog-input.has-leading-icon,
@@ -382,7 +418,11 @@ html[data-theme="dark"] .cron-create-drawer-foot {
 html[data-theme="dark"] .cron-dialog-input,
 html[data-theme="dark"] .cron-dialog-textarea {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.03)
+    ),
     rgba(255, 255, 255, 0.04);
   border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.12));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -398,7 +438,11 @@ html[data-theme="dark"] .cron-dialog-textarea {
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.07)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.26),
+      rgba(255, 255, 255, 0.07)
+    ),
     color-mix(in srgb, var(--glass-fill) 65%, transparent);
   padding: 0 12px;
   overflow: visible;
@@ -476,27 +520,43 @@ html[data-theme="dark"] .cron-dialog-textarea {
 
 .cron-btn-primary {
   padding: 9px 20px;
-  border: 1px solid color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.35));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.35));
   border-radius: 12px;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
   color: var(--tone);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.12) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.12) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--tone) 12%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.49);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  transition: opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  transition:
+    opacity 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .cron-btn-primary:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.43) 0%, rgba(255, 255, 255, 0.16) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.43) 0%,
+      rgba(255, 255, 255, 0.16) 100%
+    ),
     var(--tone-soft);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone) 16%, transparent),
@@ -515,7 +575,11 @@ html[data-theme="dark"] .cron-dialog-textarea {
 html[data-theme="dark"] .cron-btn-primary {
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0.02) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.5));
   box-shadow:
     0 8px 20px rgba(0, 0, 0, 0.35),
@@ -526,7 +590,11 @@ html[data-theme="dark"] .cron-btn-primary {
 html[data-theme="dark"] .cron-btn-primary:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.14));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 70%, rgba(8, 6, 18, 0.45));
 }
 
@@ -539,7 +607,9 @@ html[data-theme="dark"] .cron-btn-primary:hover:not(:disabled) {
   cursor: pointer;
   color: var(--ink-mute);
   background: transparent;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .cron-btn-ghost:hover {

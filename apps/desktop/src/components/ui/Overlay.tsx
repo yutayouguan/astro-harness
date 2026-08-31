@@ -17,18 +17,19 @@ type OverlayAccessibleName =
 type OverlayCommonProps = Omit<
   HTMLAttributes<HTMLDivElement>,
   "children" | "aria-label" | "aria-labelledby"
-> & OverlayAccessibleName & {
-  open: boolean;
-  onClose: () => void;
-  children: ReactNode;
-  initialFocusRef?: RefObject<HTMLElement>;
-  backdropClassName?: string;
-  backdropStyle?: CSSProperties;
-  closeOnBackdrop?: boolean;
-  closeOnEscape?: boolean;
-  trapFocus?: boolean;
-  modal?: boolean;
-};
+> &
+  OverlayAccessibleName & {
+    open: boolean;
+    onClose: () => void;
+    children: ReactNode;
+    initialFocusRef?: RefObject<HTMLElement>;
+    backdropClassName?: string;
+    backdropStyle?: CSSProperties;
+    closeOnBackdrop?: boolean;
+    closeOnEscape?: boolean;
+    trapFocus?: boolean;
+    modal?: boolean;
+  };
 
 type OverlayFrameProps = OverlayCommonProps & {
   kind: "modal" | "drawer" | "popover";
@@ -72,11 +73,7 @@ function OverlayFrame({
 
   return createPortal(
     <div
-      className={[
-        "ui-overlay",
-        `ui-overlay--${kind}`,
-        backdropClassName,
-      ]
+      className={["ui-overlay", `ui-overlay--${kind}`, backdropClassName]
         .filter(Boolean)
         .join(" ")}
       role="presentation"
@@ -140,13 +137,14 @@ export function Drawer({
   side = "end",
   size = "md",
   className = "",
+  backdropClassName = "",
   ...props
 }: DrawerProps) {
   return (
     <OverlayFrame
       {...props}
       kind="drawer"
-      backdropClassName={`ui-overlay--drawer-${side}`}
+      backdropClassName={`ui-overlay--drawer-${side} ${backdropClassName}`.trim()}
       className={`ui-drawer ui-drawer--${size} ${className}`.trim()}
     />
   );
