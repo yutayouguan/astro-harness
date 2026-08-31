@@ -468,7 +468,7 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 44px 8px 12px;
+  padding: 44px 8px 8px;
   border-radius: 0;
   background: var(--sidebar-bg);
   border: none;
@@ -495,7 +495,7 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
 
 .sidebar.is-labels {
   width: var(--sidebar-w-wide);
-  padding: 44px 10px 12px;
+  padding: 44px 10px 8px;
 }
 
 /* 侧栏透出壳层渐变；叠加一层极淡主题色，与 tab 同步即时变色 */
