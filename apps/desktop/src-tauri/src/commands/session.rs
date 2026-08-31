@@ -658,9 +658,6 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
 // Project commands
 // ---------------------------------------------------------------------------
 
-const DEFAULT_PROJECT_NAME: &str = "主空间";
-const DEFAULT_PROJECT_ICON: &str = "astro-space";
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectDto {
@@ -692,12 +689,16 @@ fn default_project_root() -> Result<String, String> {
     Ok(root.to_string_lossy().into_owned())
 }
 
-async fn ensure_default_project_in_store(
+pub(super) async fn ensure_default_project_in_store(
     store: &session::SessionStore,
 ) -> Result<ProjectDto, String> {
     let root = default_project_root()?;
     let project = store
-        .ensure_default_project(DEFAULT_PROJECT_NAME, DEFAULT_PROJECT_ICON, &root)
+        .ensure_default_project(
+            session::DEFAULT_PROJECT_NAME,
+            session::DEFAULT_PROJECT_ICON,
+            &root,
+        )
         .await
         .map_err(|e| e.to_string())?;
     Ok(project_to_dto(project))
@@ -828,11 +829,11 @@ pub async fn assign_session_to_project_if_unassigned(
     project_id: String,
 ) -> Result<(), String> {
     let store = open_sessions().await?;
-    // Best-effort: silently ignore if already assigned.
-    let _ = store
-        .assign_session_to_project(&session_id, &project_id)
-        .await;
-    Ok(())
+    store
+        .assign_session_to_project_if_unassigned(&session_id, &project_id)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// 清理上次进程遗留的临时 Side 会话。

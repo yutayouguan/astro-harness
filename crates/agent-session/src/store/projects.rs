@@ -7,6 +7,10 @@ use super::SessionStore;
 
 /// 内置主空间项目的稳定 ID。
 pub const DEFAULT_PROJECT_ID: &str = "default";
+/// 内置主空间的默认名称。
+pub const DEFAULT_PROJECT_NAME: &str = "主空间";
+/// 内置主空间的品牌图标。
+pub const DEFAULT_PROJECT_ICON: &str = "astro-space";
 
 /// 从库中读出的 Project 实体。
 #[derive(Debug, Clone)]
@@ -31,12 +35,6 @@ impl SessionStore {
         icon: &str,
         root: &str,
     ) -> Result<Project> {
-        if let Some(project) = self.get_project(DEFAULT_PROJECT_ID).await? {
-            if project.roots.len() == 1 && project.roots[0] == root {
-                return Ok(project);
-            }
-        }
-
         let mut tx = self.pool.begin().await?;
         // 先执行一次写入来取得 SQLite writer lock。`INSERT OR IGNORE` 既让并发调用
         // 串行化，也避免两个连接都在只读快照中判断项目不存在后再竞争插入。
@@ -115,6 +113,22 @@ impl SessionStore {
                 .execute(&mut *tx)
                 .await?;
         }
+
+        // 旧版未给普通顶层聊天写 project_id。主空间就是这类会话的
+        // 默认容器；保留已归属项目、分支会话和 Cron 会话的现有语义。
+        sqlx::query(
+            "UPDATE sessions
+             SET project_id = ?1
+             WHERE project_id IS NULL
+               AND source = 'tauri'
+               AND parent_session_id IS NULL
+               AND branch_kind IS NULL
+               AND (project_root IS NULL OR trim(project_root) = '' OR project_root = ?2)",
+        )
+        .bind(DEFAULT_PROJECT_ID)
+        .bind(root)
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         self.get_project(DEFAULT_PROJECT_ID)
@@ -353,6 +367,30 @@ impl SessionStore {
         Ok(())
     }
 
+    /// 仅在会话尚未归属项目时设置其项目，已有归属保持不变。
+    pub async fn assign_session_to_project_if_unassigned(
+        &self,
+        session_id: &str,
+        project_id: &str,
+    ) -> Result<bool> {
+        let result =
+            sqlx::query("UPDATE sessions SET project_id = ?1 WHERE id = ?2 AND project_id IS NULL")
+                .bind(project_id)
+                .bind(session_id)
+                .execute(&self.pool)
+                .await?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    /// 读取会话当前的项目归属。
+    pub async fn session_project_id(&self, session_id: &str) -> Result<Option<String>> {
+        let row = sqlx::query("SELECT project_id FROM sessions WHERE id = ?1")
+            .bind(session_id)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row.and_then(|row| row.get(0)))
+    }
+
     /// 解除会话的项目关联。
     pub async fn unassign_session_from_project(&self, session_id: &str) -> Result<()> {
         sqlx::query("UPDATE sessions SET project_id = NULL WHERE id = ?1")
@@ -379,7 +417,7 @@ impl SessionStore {
 mod tests {
     use agent_db::sqlx::{self, Row};
 
-    use super::DEFAULT_PROJECT_ID;
+    use super::{DEFAULT_PROJECT_ICON, DEFAULT_PROJECT_ID, DEFAULT_PROJECT_NAME};
     use crate::store::SessionStore;
 
     async fn test_store() -> (tempfile::TempDir, SessionStore) {
@@ -489,6 +527,54 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(row.get::<String, _>(0), DEFAULT_PROJECT_ID);
+    }
+
+    #[tokio::test]
+    async fn ensure_default_project_adopts_unassigned_top_level_chats_only() {
+        let (_dir, store) = test_store().await;
+        store.ensure_session("chat", "tauri").await.unwrap();
+        store.ensure_session("cron", "cron").await.unwrap();
+        store
+            .create_session("side", "tauri", None, None, Some("chat"))
+            .await
+            .unwrap();
+
+        store
+            .ensure_default_project(
+                DEFAULT_PROJECT_NAME,
+                DEFAULT_PROJECT_ICON,
+                "/home/user/.astro/workspace",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            store.session_project_id("chat").await.unwrap().as_deref(),
+            Some(DEFAULT_PROJECT_ID)
+        );
+        assert_eq!(store.session_project_id("cron").await.unwrap(), None);
+        assert_eq!(store.session_project_id("side").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn assign_if_unassigned_preserves_existing_project() {
+        let (_dir, store) = test_store().await;
+        let first = store.create_project("First", &["/first"]).await.unwrap();
+        let second = store.create_project("Second", &["/second"]).await.unwrap();
+        store.ensure_session("s1", "tauri").await.unwrap();
+
+        assert!(store
+            .assign_session_to_project_if_unassigned("s1", &first.id)
+            .await
+            .unwrap());
+        assert!(!store
+            .assign_session_to_project_if_unassigned("s1", &second.id)
+            .await
+            .unwrap());
+        assert_eq!(
+            store.session_project_id("s1").await.unwrap().as_deref(),
+            Some(first.id.as_str())
+        );
     }
 
     #[tokio::test]

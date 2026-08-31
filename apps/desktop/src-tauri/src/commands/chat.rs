@@ -14,6 +14,7 @@ use super::providers::{
     cached_model_context_window, cached_model_info, cached_model_max_output_tokens,
     resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
 };
+use super::session::ensure_default_project_in_store;
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use crate::infra::thread_events::{
     accepted_turn_id, emit_chat_events, managed_bridge, submission_failure_events,
@@ -399,6 +400,7 @@ pub struct StartChatRequest {
     pub resume_json: Option<String>,
     pub keep_chat_bubbles: Option<i32>,
     pub interaction_mode: Option<String>,
+    pub project_id: Option<String>,
     pub project_root: Option<String>,
 }
 
@@ -432,12 +434,13 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         resume_json,
         keep_chat_bubbles,
         interaction_mode,
+        project_id,
         project_root,
     } = request;
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let use_memory = use_memory.unwrap_or(true);
     let attachments = attachments.unwrap_or_default();
-    let workspace_roots = folder_workspace_roots(&attachments);
+    let mut workspace_roots = folder_workspace_roots(&attachments);
     let BuiltChatPayload {
         content: merged,
         images,
@@ -463,13 +466,25 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         "plan" => interaction_mode,
         other => return Err(format!("unsupported interaction_mode: {other}")),
     };
-    let project_root = project_root.unwrap_or_default().trim().to_string();
+    let requested_project_id = project_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .unwrap_or(session::DEFAULT_PROJECT_ID)
+        .to_string();
+    let explicit_project_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty())
+        .map(str::to_string);
 
     // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
-    {
+    let (project_id, project_root, project_roots) = {
         bootstrap_workspace()?;
         let store = open_sessions().await?;
-        if let Ok(Some(meta)) = store.get_session(&sid).await {
+        ensure_default_project_in_store(&store).await?;
+        let existing = store.get_session(&sid).await.map_err(|e| e.to_string())?;
+        if let Some(meta) = existing.as_ref() {
             if meta.ended_at.is_some() {
                 let reason = meta.end_reason.as_deref().unwrap_or("ended");
                 return Err(if reason == "compacted" {
@@ -478,6 +493,35 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
                     format!("会话已结束（{reason}），无法继续写入")
                 });
             }
+        }
+
+        let effective_project_id = store
+            .session_project_id(&sid)
+            .await
+            .map_err(|e| e.to_string())?
+            .unwrap_or(requested_project_id);
+        let project = store
+            .get_project(&effective_project_id)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("project not found: {effective_project_id}"))?;
+        store
+            .ensure_session(&sid, "tauri")
+            .await
+            .map_err(|e| e.to_string())?;
+        store
+            .assign_session_to_project_if_unassigned(&sid, &effective_project_id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let effective_root = explicit_project_root
+            .or_else(|| project.roots.first().cloned())
+            .unwrap_or_default();
+        (effective_project_id, effective_root, project.roots)
+    };
+    for root in project_roots {
+        if !root.trim().is_empty() && !workspace_roots.contains(&root) {
+            workspace_roots.push(root);
         }
     }
 
@@ -658,7 +702,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         // Initial submissions are not queued steer messages and therefore do
         // not participate in client-side optimistic delivery reconciliation.
         client_message_id: String::new(),
-        project_id: String::new(),
+        project_id,
         workspace_roots,
         api_mode: primary.api_mode.clone(),
     };
@@ -1048,10 +1092,23 @@ pub async fn count_tokens(model: String) -> Result<u32, String> {
 mod tests {
     use super::{
         build_chat_payload, chat_control_with_lifecycle, folder_workspace_roots,
-        parse_chat_control_action, ChatAttachmentDto,
+        parse_chat_control_action, ChatAttachmentDto, StartChatRequest,
     };
     use crate::infra::thread_events::ThreadEventsBridge;
     use proto::ChatControlAction;
+
+    #[test]
+    fn start_chat_request_accepts_project_id_from_the_desktop() {
+        let request: StartChatRequest = serde_json::from_value(serde_json::json!({
+            "content": "hello",
+            "provider": "openai",
+            "model": "gpt-test",
+            "projectId": "default"
+        }))
+        .unwrap();
+
+        assert_eq!(request.project_id.as_deref(), Some("default"));
+    }
 
     #[test]
     fn folder_attachment_adds_an_explicit_workspace_root_without_eager_reading() {

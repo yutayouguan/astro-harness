@@ -322,7 +322,7 @@ async fn execute_job_with_roots_local(
         anyhow::bail!("job already running");
     }
 
-    let session_id = Some(Uuid::new_v4().to_string());
+    let session_id = Some(cron_session_id(&job.id));
 
     // 与 run_agent_job / Session 共用同一 memory_dir 下的 SessionStore。
     // show_in_chat 仅影响侧栏展示；执行记录 / Tracing 始终需要 session。
@@ -332,10 +332,8 @@ async fn execute_job_with_roots_local(
         .ok();
 
     if let Some(ref sid) = session_id {
-        let summary = format!("定时任务 · {}", job.title);
         if let Some(ref store) = sessions {
-            let _ = store.ensure_session(sid, "cron").await;
-            let _ = store.set_session_title(sid, &summary).await;
+            prepare_cron_session(store, job, sid).await;
         }
     }
 
@@ -543,16 +541,14 @@ async fn begin_job_local(
         anyhow::bail!("job already running");
     }
 
-    let session_id = Some(Uuid::new_v4().to_string());
+    let session_id = Some(cron_session_id(&job.id));
     let memory_dir = default_memory_dir();
     let sessions = SessionStore::open_sessions_dir(&home::data_dir(&memory_dir))
         .await
         .ok();
     if let Some(ref sid) = session_id {
-        let summary = format!("定时任务 · {}", job.title);
         if let Some(ref store) = sessions {
-            let _ = store.ensure_session(sid, "cron").await;
-            let _ = store.set_session_title(sid, &summary).await;
+            prepare_cron_session(store, job, sid).await;
         }
     }
 
@@ -766,6 +762,36 @@ fn now_rfc3339() -> String {
     Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
+/// 一个定时任务始终对应同一个聊天会话；任务 ID 在 CronStore 中唯一。
+fn cron_session_id(job_id: &str) -> String {
+    format!("cron-{}", job_id.trim())
+}
+
+/// 创建或复用 Cron 会话，并把默认 Agent 的会话收纳到主空间。
+async fn prepare_cron_session(store: &SessionStore, job: &CronJob, session_id: &str) {
+    let summary = format!("定时任务 · {}", job.title);
+    let _ = store.ensure_session(session_id, "cron").await;
+    let _ = store.set_session_title(session_id, &summary).await;
+
+    if cron::normalize_cron_agent_id(&job.agent_id) == home::DEFAULT_AGENT_ID {
+        let memory_dir = default_memory_dir();
+        let root = home::agent_workspace_dir(&memory_dir, home::DEFAULT_AGENT_ID);
+        let root = root.to_string_lossy().into_owned();
+        if let Ok(project) = store
+            .ensure_default_project(
+                session::DEFAULT_PROJECT_NAME,
+                session::DEFAULT_PROJECT_ICON,
+                &root,
+            )
+            .await
+        {
+            let _ = store
+                .assign_session_to_project_if_unassigned(session_id, &project.id)
+                .await;
+        }
+    }
+}
+
 /// 从模型完整输出中提取一行摘要，供运行记录列表展示。
 ///
 /// 取首个非空行并截断至 200 个 Unicode 标量；若无非空行则对全文截断。
@@ -810,6 +836,45 @@ mod tests {
             message_items: None,
             media_json: None,
         }
+    }
+
+    fn cron_job(id: &str) -> CronJob {
+        CronJob {
+            id: id.into(),
+            schedule: "every:1d".into(),
+            task: "check status".into(),
+            title: "status".into(),
+            agent_id: home::DEFAULT_AGENT_ID.into(),
+            provider_id: None,
+            model: None,
+            enabled: true,
+            created_at: "2026-08-31T00:00:00Z".into(),
+            last_run_at: None,
+            next_run_at: None,
+            show_in_chat: true,
+        }
+    }
+
+    #[tokio::test]
+    async fn cron_jobs_reuse_distinct_sessions_in_the_default_project() {
+        let dir = TempDir::new().unwrap();
+        let store = SessionStore::open_sessions_dir(dir.path()).await.unwrap();
+        let first = cron_job("job-a");
+        let second = cron_job("job-b");
+        let first_session = cron_session_id(&first.id);
+
+        assert_eq!(first_session, cron_session_id(&first.id));
+        assert_ne!(first_session, cron_session_id(&second.id));
+
+        prepare_cron_session(&store, &first, &first_session).await;
+        assert_eq!(
+            store
+                .session_project_id(&first_session)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some(session::DEFAULT_PROJECT_ID)
+        );
     }
 
     #[test]

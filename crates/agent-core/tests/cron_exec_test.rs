@@ -24,13 +24,26 @@ async fn execute_job_fails_without_api_key() {
         base_url: String::new(),
         targets: vec![],
     };
-    let row = agent::exec::cron::execute_job_with_roots(dir.path(), &job, creds, "manual")
+    let row = agent::exec::cron::execute_job_with_roots(dir.path(), &job, creds.clone(), "manual")
         .await
         .unwrap();
     assert_eq!(row.status, "failure");
     assert!(row.error.as_deref().unwrap_or("").contains("API"));
     // 旧 jobs 的 "default" 必须记为真实默认工作区 id，避免落到 workspace-default/
     assert_eq!(row.agent_id, home::DEFAULT_AGENT_ID);
+
+    let repeated =
+        agent::exec::cron::execute_job_with_roots(dir.path(), &job, creds.clone(), "manual")
+            .await
+            .unwrap();
+    assert_eq!(repeated.session_id, row.session_id);
+
+    let mut other_job = job.clone();
+    other_job.id = "job-test-2".into();
+    let other = agent::exec::cron::execute_job_with_roots(dir.path(), &other_job, creds, "manual")
+        .await
+        .unwrap();
+    assert_ne!(other.session_id, row.session_id);
 }
 
 #[test]
