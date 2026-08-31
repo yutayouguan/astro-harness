@@ -132,6 +132,58 @@ mod tests {
     }
 
     #[test]
+    fn custom_calendar_schedule_uses_persisted_start_as_interval_phase() {
+        use chrono::TimeZone;
+        let created = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+
+        let first = compute_next_run(
+            "custom:yearly;every=3;month=12;day=31;time=08:00;start=2026-07-11T10:10",
+            created,
+        )
+        .unwrap();
+        assert_eq!((first.year(), first.month(), first.day()), (2026, 12, 31));
+
+        let next = compute_next_run(
+            "custom:yearly;every=3;month=12;day=31;time=08:00;start=2026-07-11T10:10",
+            first,
+        )
+        .unwrap();
+        assert_eq!((next.year(), next.month(), next.day()), (2029, 12, 31));
+
+        let first_daily = compute_next_run(
+            "custom:daily;every=3;time=08:00;start=2026-07-11T10:10",
+            created,
+        )
+        .unwrap();
+        assert_eq!((first_daily.month(), first_daily.day()), (7, 12));
+        let next_daily = compute_next_run(
+            "custom:daily;every=3;time=08:00;start=2026-07-11T10:10",
+            first_daily,
+        )
+        .unwrap();
+        assert_eq!((next_daily.month(), next_daily.day()), (7, 15));
+    }
+
+    #[test]
+    fn custom_yearly_leap_day_anchors_to_first_valid_occurrence() {
+        use chrono::TimeZone;
+        let created = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+        let first = compute_next_run(
+            "custom:yearly;every=4;month=2;day=29;time=08:00;start=2026-07-11T10:10",
+            created,
+        )
+        .unwrap();
+        assert_eq!((first.year(), first.month(), first.day()), (2028, 2, 29));
+
+        let next = compute_next_run(
+            "custom:yearly;every=4;month=2;day=29;time=08:00;start=2026-07-11T10:10",
+            first,
+        )
+        .unwrap();
+        assert_eq!((next.year(), next.month(), next.day()), (2032, 2, 29));
+    }
+
+    #[test]
     fn custom_calendar_schedule_rejects_invalid_fields() {
         use chrono::TimeZone;
         let after = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
@@ -139,6 +191,60 @@ mod tests {
             compute_next_run("custom:yearly;every=1;month=13;day=1;time=08:00", after).is_err()
         );
         assert!(compute_next_run("custom:weekly;every=0;wd=1;time=08:00", after).is_err());
+        assert!(compute_next_run("custom:daily;every=1", after).is_err());
+        assert!(compute_next_run("custom:hourly;every=1;time=08:00", after).is_err());
+        assert!(compute_next_run("custom:daily;every=1;every=2;time=08:00", after).is_err());
+        assert!(compute_next_run(
+            "custom:daily;every=1;time=08:00;start=2026-99-99T10:10",
+            after,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn interval_schedule_rejects_overflow_without_panicking() {
+        use chrono::TimeZone;
+        let after = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+        assert!(compute_next_run("every:9223372036854775807d", after).is_err());
+    }
+
+    #[test]
+    fn store_persists_a_start_anchor_for_new_custom_schedules() {
+        let dir = TempDir::new().unwrap();
+        let store = CronStore::open(dir.path()).unwrap();
+        let job = store
+            .add("custom:daily;every=2;time=08:00", "锚点测试")
+            .unwrap();
+        assert!(job.schedule.contains(";start="));
+        assert!(compute_next_run(&job.schedule, Local::now()).is_ok());
+    }
+
+    #[test]
+    fn load_migrates_custom_schedule_without_start_from_created_at() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("jobs.json");
+        std::fs::write(
+            &path,
+            r#"{
+              "jobs": [{
+                "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "schedule": "custom:daily;every=2;time=08:00",
+                "task": "迁移锚点",
+                "title": "迁移锚点",
+                "agent_id": "default",
+                "enabled": true,
+                "created_at": "2026-07-11T10:10:00+08:00",
+                "show_in_chat": false
+              }]
+            }"#,
+        )
+        .unwrap();
+
+        let store = CronStore::open(dir.path()).unwrap();
+        let jobs = store.list().unwrap();
+        assert!(jobs[0].schedule.contains(";start="));
+        let persisted = std::fs::read_to_string(path).unwrap();
+        assert!(persisted.contains(";start="));
     }
 
     #[test]

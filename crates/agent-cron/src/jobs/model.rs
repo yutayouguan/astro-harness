@@ -4,7 +4,7 @@ use chrono::Local;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::schedule::compute_next_run;
+use super::schedule::{compute_next_run, ensure_custom_start};
 
 /// 定时任务定义，持久化在 `~/.astro/cron/jobs.json`
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,6 +85,7 @@ pub fn cron_extract_preamble() -> &'static str {
    - custom:weekly;every=N;wd=1,2,3;time=HH:MM
    - custom:monthly;every=N;day=D;time=HH:MM
    - custom:yearly;every=N;month=M;day=D;time=HH:MM
+     （保存时会自动追加 start=YYYY-MM-DDTHH:MM 作为周期相位）
    - 五段 cron：分 时 日 月 周（例如每天 09:00 → 0 9 * * *）
 2. task 是到期时要执行的完整指令，保留用户意图，不要空。
 3. title 可选，简短中文标题；不确定时可省略。
@@ -107,7 +108,9 @@ pub fn normalize_cron_extract(mut draft: CronJobExtract) -> anyhow::Result<CronJ
     if draft.schedule.is_empty() {
         anyhow::bail!("schedule 为空");
     }
-    let _ = compute_next_run(&draft.schedule, Local::now())?;
+    let now = Local::now();
+    draft.schedule = ensure_custom_start(&draft.schedule, now);
+    let _ = compute_next_run(&draft.schedule, now)?;
     if draft.title.is_none() {
         draft.title = Some(title_from_task(&draft.task));
     }

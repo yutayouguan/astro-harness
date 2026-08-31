@@ -70,6 +70,7 @@ function normalizedDraft(
       monthDay: value.monthDay ?? 1,
       minute: value.minute ?? 0,
       weekdays: value.weekdays.length > 0 ? value.weekdays : [1],
+      start: undefined,
     };
   }
   return {
@@ -255,6 +256,7 @@ function CustomScheduleFields({ value, onChange }: Props) {
       minute: value.minute ?? 0,
       weekdays: value.weekdays.length > 0 ? value.weekdays : [1],
       time: value.time ?? "09:00",
+      start: undefined,
     });
   };
 

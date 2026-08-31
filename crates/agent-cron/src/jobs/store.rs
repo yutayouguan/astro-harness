@@ -12,7 +12,7 @@ use home::{default_memory_dir, ensure_default_workspace_dirs};
 use super::model::{
     default_agent_id, normalize_cron_agent_id, title_from_task, CronJob, NewCronJob,
 };
-use super::schedule::compute_next_run;
+use super::schedule::{compute_next_run, ensure_custom_start};
 
 /// `jobs.json` 顶层结构
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -70,9 +70,9 @@ impl CronStore {
 
     /// 添加新任务：校验 schedule、计算 `next_run_at` 并持久化
     pub fn add_job(&self, input: NewCronJob) -> anyhow::Result<CronJob> {
-        let schedule = input.schedule.trim();
+        let raw_schedule = input.schedule.trim();
         let task = input.task.trim();
-        if schedule.is_empty() {
+        if raw_schedule.is_empty() {
             anyhow::bail!("schedule 不能为空");
         }
         if task.is_empty() {
@@ -84,14 +84,16 @@ impl CronStore {
             input.title.trim().to_string()
         };
         let agent_id = default_agent_id();
-        // 校验表达式
-        let next = compute_next_run(schedule, Local::now())?
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        // 自定义日历周期以创建时刻为相位锚点；随后校验表达式。
+        let now = Local::now();
+        let schedule = ensure_custom_start(raw_schedule, now);
+        let next =
+            compute_next_run(&schedule, now)?.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
         let mut file = self.load()?;
         let job = CronJob {
             id: Uuid::new_v4().to_string(),
-            schedule: schedule.to_string(),
+            schedule,
             task: task.to_string(),
             title,
             agent_id,
@@ -114,9 +116,9 @@ impl CronStore {
         id_or_prefix: &str,
         input: NewCronJob,
     ) -> anyhow::Result<Option<CronJob>> {
-        let schedule = input.schedule.trim();
+        let raw_schedule = input.schedule.trim();
         let task = input.task.trim();
-        if schedule.is_empty() {
+        if raw_schedule.is_empty() {
             anyhow::bail!("schedule 不能为空");
         }
         if task.is_empty() {
@@ -128,14 +130,16 @@ impl CronStore {
             input.title.trim().to_string()
         };
         let agent_id = default_agent_id();
-        let next = compute_next_run(schedule, Local::now())?
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let now = Local::now();
+        let schedule = ensure_custom_start(raw_schedule, now);
+        let next =
+            compute_next_run(&schedule, now)?.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
         let mut file = self.load()?;
         let mut updated = None;
         for job in &mut file.jobs {
             if job.id == id_or_prefix || job.id.starts_with(id_or_prefix) {
-                job.schedule = schedule.to_string();
+                job.schedule = schedule.clone();
                 job.task = task.to_string();
                 job.title = title;
                 job.agent_id = agent_id;
@@ -288,11 +292,25 @@ impl CronStore {
             return Ok(JobsFile::default());
         }
         let mut file: JobsFile = serde_json::from_str(&raw)?;
+        let mut migrated = false;
         for job in &mut file.jobs {
             if job.title.trim().is_empty() {
                 job.title = title_from_task(&job.task);
             }
             job.agent_id = normalize_cron_agent_id(&job.agent_id);
+            if let Ok(created_at) = DateTime::parse_from_rfc3339(&job.created_at) {
+                let created_at = created_at.with_timezone(&Local);
+                let anchored_schedule = ensure_custom_start(&job.schedule, created_at);
+                if anchored_schedule != job.schedule
+                    && compute_next_run(&anchored_schedule, created_at).is_ok()
+                {
+                    job.schedule = anchored_schedule;
+                    migrated = true;
+                }
+            }
+        }
+        if migrated {
+            self.save(&file)?;
         }
         Ok(file)
     }
