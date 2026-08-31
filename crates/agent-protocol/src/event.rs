@@ -70,6 +70,11 @@ pub struct TurnAbortedEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThreadRolledBackEvent {
+    pub num_turns: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenCountEvent {
     pub turn_id: Option<String>,
     /// 总输入 token，包含 cache read/write。
@@ -324,7 +329,7 @@ pub enum EventMsg {
     ContextUsage(ContextUsageEvent),
     TokenCount(TokenCountEvent),
     ThreadSettingsApplied(Value),
-    ThreadRolledBack(Value),
+    ThreadRolledBack(ThreadRolledBackEvent),
     Error(ErrorEvent),
     Warning(ErrorEvent),
     StreamError(ErrorEvent),

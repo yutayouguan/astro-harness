@@ -1,6 +1,8 @@
 //! 可恢复任务生命周期——Session 拥有的单活跃任务调度与中断。
 
+mod compact;
 mod regular;
+mod review;
 
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
@@ -19,7 +21,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext};
 
+pub(crate) use compact::CompactTask;
 pub(crate) use regular::RegularTask;
+pub(crate) use review::ReviewTask;
 
 pub(crate) type SessionTaskResult = anyhow::Result<Option<String>>;
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -39,7 +43,6 @@ pub(crate) struct TurnCancelled;
 
 /// 任务类型枚举：Regular / Review / Compact。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // ReviewTask 和 CompactTask 在下一批 Phase B 中落地。
 pub enum TaskKind {
     Regular,
     Review,

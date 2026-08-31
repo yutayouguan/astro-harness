@@ -73,7 +73,9 @@ pub(crate) async fn submission_loop(
                 true
             }
             op => {
-                session.dispatch_control_op(submission.id, op).await;
+                session
+                    .dispatch_control_op(submission.id, op, chat_override.clone())
+                    .await;
                 false
             }
         };
@@ -147,7 +149,12 @@ impl Session {
         .await;
     }
 
-    async fn dispatch_control_op(&self, submission_id: String, op: Op) {
+    async fn dispatch_control_op(
+        self: &Arc<Self>,
+        submission_id: String,
+        op: Op,
+        chat_override: Option<ChatOverride>,
+    ) {
         match op {
             Op::ThreadSettings { settings } => {
                 self.send_event(&submission_id, EventMsg::ThreadSettingsApplied(settings))
@@ -195,12 +202,50 @@ impl Session {
                 self.resolve_control_response(submission_id, id, "resolved", response)
                     .await;
             }
-            Op::Compact => self.emit_unsupported_op(submission_id, "compact").await,
-            Op::ThreadRollback { .. } => {
-                self.emit_unsupported_op(submission_id, "thread_rollback")
+            Op::Compact => {
+                let context = self.create_turn_context(submission_id.clone()).await;
+                if let Err(error) = self
+                    .spawn_task(context, Vec::new(), crate::tasks::CompactTask)
+                    .await
+                {
+                    self.send_event(
+                        &submission_id,
+                        EventMsg::Error(ErrorEvent {
+                            message: error.to_string(),
+                            error_type: "compact_failed".into(),
+                        }),
+                    )
                     .await;
+                }
             }
-            Op::Review { .. } => self.emit_unsupported_op(submission_id, "review").await,
+            Op::ThreadRollback { num_turns } => {
+                self.rollback_thread(submission_id, num_turns).await;
+            }
+            Op::Review { request } => {
+                let context = self.create_turn_context(submission_id.clone()).await;
+                let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
+                    Arc::clone(self),
+                    Arc::clone(&context),
+                    chat_override,
+                );
+                if let Err(error) = self
+                    .spawn_task(
+                        context,
+                        Vec::new(),
+                        crate::tasks::ReviewTask::new(args, request),
+                    )
+                    .await
+                {
+                    self.send_event(
+                        &submission_id,
+                        EventMsg::Error(ErrorEvent {
+                            message: error.to_string(),
+                            error_type: "review_failed".into(),
+                        }),
+                    )
+                    .await;
+                }
+            }
             Op::InterAgentCommunication { .. } => {
                 self.emit_unsupported_op(submission_id, "inter_agent_communication")
                     .await;

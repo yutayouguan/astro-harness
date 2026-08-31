@@ -41,6 +41,7 @@ pub(crate) mod code_mode;
 pub(crate) mod compression_state;
 mod context_maintenance;
 pub(crate) mod event_identity;
+mod history_control;
 pub(crate) mod model_ctx;
 mod recording;
 mod session;

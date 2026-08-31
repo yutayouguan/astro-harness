@@ -131,6 +131,40 @@ async fn complete_summary_chat(target: &types::ChatTarget, prompt: &str) -> anyh
     Ok(trimmed)
 }
 
+async fn complete_with_targets(
+    targets: &[types::ChatTarget],
+    prompt: &str,
+) -> anyhow::Result<String> {
+    let mut last_error = None;
+    for target in targets.iter().take(2) {
+        match complete_summary_chat(target, prompt).await {
+            Ok(text) => return Ok(text),
+            Err(error) => {
+                warn!(
+                    backend = %target.backend_id,
+                    model = %target.model,
+                    %error,
+                    "compaction summary target failed"
+                );
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("no compaction targets")))
+}
+
+/// Generate a durable full-session handoff used by the explicit `Compact` task.
+pub(crate) async fn generate_manual_summary(agent: &AgentLoop) -> anyhow::Result<String> {
+    let history = agent.clone_history().await;
+    let transcript = build_transcript(&history, 0, 0);
+    anyhow::ensure!(
+        !transcript.trim().is_empty(),
+        "conversation history is empty"
+    );
+    let targets = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
+    complete_with_targets(&targets, &summary_prompt(&transcript)).await
+}
+
 /// 尝试 mid-run 摘要；成功则写入 AgentLoop handoff，返回 true。
 pub async fn maybe_apply_mid_run_summary(agent: &AgentLoop) -> anyhow::Result<bool> {
     if !should_attempt(agent).await {
@@ -153,31 +187,12 @@ pub async fn maybe_apply_mid_run_summary(agent: &AgentLoop) -> anyhow::Result<bo
     }
 
     let prompt = summary_prompt(&transcript);
-    let mut last_err = None;
-    let mut summary = None;
-    for target in targets.iter().take(2) {
-        match complete_summary_chat(target, &prompt).await {
-            Ok(text) => {
-                summary = Some(text);
-                break;
-            }
-            Err(e) => {
-                warn!(
-                    backend = %target.backend_id,
-                    model = %target.model,
-                    error = %e,
-                    "mid-run summary target failed"
-                );
-                last_err = Some(e);
-            }
+    let text = match complete_with_targets(&targets, &prompt).await {
+        Ok(text) => text,
+        Err(error) => {
+            agent.mark_mid_run_summary_skipped().await;
+            return Err(error);
         }
-    }
-    let Some(text) = summary else {
-        agent.mark_mid_run_summary_skipped().await;
-        if let Some(e) = last_err {
-            return Err(e);
-        }
-        return Ok(false);
     };
 
     let before = estimate_messages_tokens(&history);

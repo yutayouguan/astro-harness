@@ -19,7 +19,7 @@ pub mod fallback;
 /// Astro HITL 桥：`astro_hitl` 解析与当前会话 park/resume。
 pub(crate) mod hitl_bridge;
 /// 多轮循环生命周期辅助：事件发送、usage 记录、终态收尾。
-mod lifecycle;
+pub(crate) mod lifecycle;
 /// 上下文维护：LLM 前后的压缩/摘要、工具结果记录、hook 集成。
 mod maintenance;
 /// 多轮工具循环编排。

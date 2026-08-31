@@ -739,4 +739,83 @@ mod tests {
             .await
             .unwrap();
     }
+
+    #[tokio::test]
+    async fn review_op_runs_as_a_review_task_with_mode_events() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "actor-review-loop".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        session.set_chat_targets(vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }]);
+        let chat: crate::streaming::ChatOverride = Arc::new(move |_messages, _tools, _config| {
+            Box::pin(async {
+                Ok(Box::pin(futures::stream::iter(
+                    vec![
+                        StreamChunk::Text("no findings".into()),
+                        StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        },
+                    ]
+                    .into_iter()
+                    .map(Ok),
+                )) as CompletionStream)
+            })
+        });
+        let thread = AstroThread::spawn_with_chat_override(
+            session,
+            recorder(&dir, "actor-review.jsonl").await,
+            chat,
+        )
+        .unwrap();
+        let turn_id = thread
+            .submit(Op::Review {
+                request: serde_json::json!({ "prompt": "review the current diff" }),
+            })
+            .await
+            .unwrap();
+        let mut entered = false;
+        let mut exited = false;
+        timeout(Duration::from_secs(2), async {
+            loop {
+                let event = thread.next_event().await.unwrap();
+                match event.msg {
+                    agent_protocol::EventMsg::ItemCompleted(ref event)
+                        if matches!(event.item, agent_protocol::TurnItem::EnteredReviewMode(_)) =>
+                    {
+                        entered = true;
+                    }
+                    agent_protocol::EventMsg::ItemCompleted(ref event)
+                        if matches!(event.item, agent_protocol::TurnItem::ExitedReviewMode(_)) =>
+                    {
+                        exited = true;
+                    }
+                    agent_protocol::EventMsg::TurnComplete(ref complete)
+                        if complete.turn_id == turn_id =>
+                    {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert!(entered && exited);
+
+        thread.submit(Op::Shutdown).await.unwrap();
+        timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .unwrap();
+    }
 }

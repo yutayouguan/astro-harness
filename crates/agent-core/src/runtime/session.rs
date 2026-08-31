@@ -15,13 +15,7 @@ pub async fn hydrate_response_history(
     let rollout_root = memory_dir.join("sessions").join("rollouts");
     if let Some(path) = agent_rollout::find_rollout(&rollout_root, session_id)? {
         let items = agent_rollout::read_rollout(&path).await?;
-        let response_items = items
-            .into_iter()
-            .filter_map(|item| match item {
-                agent_rollout::RolloutItem::ResponseItem(item) => Some(item),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
+        let response_items = agent_rollout::effective_response_history(&items);
         if !response_items.is_empty() {
             return Ok(response_items);
         }

@@ -78,6 +78,10 @@ impl SessionState {
         self.history.extend(items);
     }
 
+    pub(crate) fn replace_history(&mut self, history: Vec<ResponseItem>) {
+        self.history = history;
+    }
+
     pub(crate) fn clone_response_history(&self) -> Vec<ResponseItem> {
         self.history.clone()
     }
