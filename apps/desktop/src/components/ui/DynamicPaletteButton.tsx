@@ -25,7 +25,7 @@ export default function DynamicPaletteButton({ label, onReshuffle }: Props) {
           { transform: `rotate(${reduceMotion ? 360 : 720}deg)` },
         ],
         {
-          duration: reduceMotion ? 320 : 680,
+          duration: reduceMotion ? 1320 : 1680,
           easing: "cubic-bezier(0.77, 0, 0.175, 1)",
         },
       );
