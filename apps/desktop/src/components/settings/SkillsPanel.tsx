@@ -1258,8 +1258,10 @@ export default function SkillsPanel({
         projectRoot: null,
       });
       setInstallPromptSkill(null);
-      setScope(target);
-      setPersonalTab("installed");
+      await refreshOrigins({ mode: "silent" });
+      if (target === scope) {
+        await refreshInstalled({ mode: "silent" });
+      }
       if (skill.requires_api_key === true) {
         setCredentialPrompt({ skill, target });
       }

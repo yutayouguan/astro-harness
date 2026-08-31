@@ -129,6 +129,18 @@ test("personal Skill navigation uses the intended lifecycle order", () => {
   assert.doesNotMatch(panel, /className="skills-toolbar plugins-context-toolbar"/);
 });
 
+test("direct marketplace install refreshes inventory without leaving the current tab", () => {
+  const start = panel.indexOf("const installSkill = async");
+  const end = panel.indexOf("const installWithAgent =", start);
+  const installFlow = panel.slice(start, end);
+
+  assert.ok(start >= 0 && end > start, "missing direct Skill install flow");
+  assert.match(installFlow, /await refreshOrigins\(\{ mode: "silent" \}\)/);
+  assert.match(installFlow, /await refreshInstalled\(\{ mode: "silent" \}\)/);
+  assert.doesNotMatch(installFlow, /setPersonalTab\(/);
+  assert.doesNotMatch(installFlow, /setScope\(/);
+});
+
 test("Skill and MCP navigation expose different source taxonomies", () => {
   assert.match(panel, /\["global", "builtin", "project"\]/);
   assert.match(panel, /\["personal", "public"\]/);
