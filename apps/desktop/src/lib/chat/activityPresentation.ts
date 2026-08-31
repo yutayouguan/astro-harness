@@ -7,6 +7,10 @@ export type ActivityVisualKind =
   | "run"
   | "edit"
   | "browse"
+  | "image"
+  | "video"
+  | "music"
+  | "speech"
   | "media"
   | "skill"
   | "mcp"
@@ -21,6 +25,10 @@ type SemanticTitleKind =
   | "run"
   | "edit"
   | "browse"
+  | "image"
+  | "video"
+  | "music"
+  | "speech"
   | "media";
 
 export type ActivityTitlePresentation = {
@@ -34,6 +42,14 @@ const RUN_NAMES = /(^|[_-])(run|exec|execute|exec_command|shell|command|code_exe
 const EDIT_NAMES = /(^|[_-])(edit|write|patch|apply|create|delete|remove|move|copy|rename)([_-]|$)/;
 const BROWSE_NAMES = /(^|[_-])(browser|fetch|crawl|navigate|visit|http|url)([_-]|$)/;
 const MEDIA_NAMES = /(^|[_-])(image|video|audio|media|render|generate)([_-]|$)/;
+const IMAGE_GENERATION_NAMES =
+  /(^|[_:-])(image[_-]?(gen|generate|generation)|generate[_-]?image)([_:-]|$)/;
+const VIDEO_GENERATION_NAMES =
+  /(^|[_:-])(video[_-]?(gen|generate|generation)|generate[_-]?video)([_:-]|$)/;
+const MUSIC_GENERATION_NAMES =
+  /(^|[_:-])(music[_-]?(gen|generate|generation)|generate[_-]?music)([_:-]|$)/;
+const SPEECH_GENERATION_NAMES =
+  /(^|[_:-])(speech[_-]?(gen|generate|generation)|audio[_-]?gen|tts|text[_-]?to[_-]?speech|voice[_-]?clone)([_:-]|$)/;
 
 /** Map the native activity identity to a stable visual verb. */
 export function activityVisualKind(activity: ChatActivity): ActivityVisualKind {
@@ -41,10 +57,18 @@ export function activityVisualKind(activity: ChatActivity): ActivityVisualKind {
 
   const name = activity.title.trim().toLowerCase();
   const operation = activityOperation(activity.input);
+  const candidates = [operation, name].filter(Boolean);
+  // A generic operation such as `generate` must not hide the concrete tool
+  // family carried by the tool name (`image_gen`, `video_gen`, ...).
+  for (const candidate of candidates) {
+    if (IMAGE_GENERATION_NAMES.test(candidate)) return "image";
+    if (VIDEO_GENERATION_NAMES.test(candidate)) return "video";
+    if (MUSIC_GENERATION_NAMES.test(candidate)) return "music";
+    if (SPEECH_GENERATION_NAMES.test(candidate)) return "speech";
+  }
   // Multiplexed tools such as exec_command/file_ops describe the real action
   // in their structured input; prefer it over the broad tool family name.
-  for (const candidate of [operation, name]) {
-    if (!candidate) continue;
+  for (const candidate of candidates) {
     if (SEARCH_NAMES.test(candidate)) return "search";
     if (READ_NAMES.test(candidate)) return "read";
     if (RUN_NAMES.test(candidate)) return "run";
@@ -89,7 +113,9 @@ export function activityTitlePresentation(
 ): ActivityTitlePresentation | null {
   const kind = activityVisualKind(activity);
   if (!isSemanticTitleKind(kind)) return null;
-  const target = activityDisplayTarget(activity);
+  // Media prompts can be long and visually unstable. Keep the summary terse;
+  // the complete prompt remains available in the expanded input section.
+  const target = isGeneratedMediaKind(kind) ? "" : activityDisplayTarget(activity);
   const namespace = target ? "item" : "action";
   const state = activity.status ? `.${activity.status}` : "";
   return {
@@ -107,7 +133,22 @@ function isSemanticTitleKind(
     kind === "run" ||
     kind === "edit" ||
     kind === "browse" ||
+    kind === "image" ||
+    kind === "video" ||
+    kind === "music" ||
+    kind === "speech" ||
     kind === "media"
+  );
+}
+
+function isGeneratedMediaKind(
+  kind: ActivityVisualKind,
+): kind is "image" | "video" | "music" | "speech" {
+  return (
+    kind === "image" ||
+    kind === "video" ||
+    kind === "music" ||
+    kind === "speech"
   );
 }
 
@@ -223,7 +264,14 @@ export function activityGroupSummary(
   const kinds = new Set(distinctActivityVisualKinds(activities));
   if (kinds.has("edit") && kinds.has("run")) return "modify_and_verify";
   if (kinds.has("edit")) return "modify";
-  if (kinds.has("media")) return "media";
+  if (
+    kinds.has("media") ||
+    (["image", "video", "music", "speech"] as const).some((kind) =>
+      kinds.has(kind),
+    )
+  ) {
+    return "media";
+  }
   if (kinds.has("search") || kinds.has("browse")) return "research";
   if (kinds.has("run")) return "execute";
   if (kinds.has("read")) return "inspect";

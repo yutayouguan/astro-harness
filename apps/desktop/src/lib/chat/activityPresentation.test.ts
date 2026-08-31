@@ -20,7 +20,12 @@ test("classifies native tool names into visual verbs", () => {
   assert.equal(activityVisualKind(activity("code_exec")), "run");
   assert.equal(activityVisualKind(activity("apply_patch")), "edit");
   assert.equal(activityVisualKind(activity("browser_navigate")), "browse");
-  assert.equal(activityVisualKind(activity("image_generate")), "media");
+  assert.equal(activityVisualKind(activity("image_generate")), "image");
+  assert.equal(activityVisualKind(activity("default_api:image_gen")), "image");
+  assert.equal(activityVisualKind(activity("video_gen")), "video");
+  assert.equal(activityVisualKind(activity("music_gen")), "music");
+  assert.equal(activityVisualKind(activity("speech_gen")), "speech");
+  assert.equal(activityVisualKind(activity("render_media")), "media");
   assert.equal(activityVisualKind(activity("custom_tool")), "tool");
 });
 
@@ -172,4 +177,26 @@ test("selects semantic title keys for all seven activity states", () => {
     })),
   );
   assert.equal(activityTitlePresentation(activity("custom_tool")), null);
+});
+
+test("uses concise media generation titles while retaining prompt details", () => {
+  const mediaCases = [
+    ["image_gen", "image"],
+    ["video_gen", "video"],
+    ["music_gen", "music"],
+    ["speech_gen", "speech"],
+  ] as const;
+
+  for (const [title, kind] of mediaCases) {
+    const value = {
+      ...activity(title),
+      status: "running" as const,
+      input: '{"operation":"generate","prompt":"a deliberately long prompt"}',
+    };
+    assert.equal(activityVisualKind(value), kind);
+    assert.deepEqual(activityTitlePresentation(value), {
+      key: `chat.activity.action.running.${kind}`,
+      target: "",
+    });
+  }
 });

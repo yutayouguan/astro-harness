@@ -3,11 +3,14 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
   BookOpenText,
+  AudioLines,
   Globe2,
   Image as ImageIcon,
+  Music2,
   PencilLine,
   Search,
   SquareTerminal,
+  Video,
   Webhook,
   Wrench,
 } from "lucide-react";
@@ -65,6 +68,14 @@ export function ActivityIcon({
       return <PencilLine {...props} />;
     case "browse":
       return <Globe2 {...props} />;
+    case "image":
+      return <ImageIcon {...props} />;
+    case "video":
+      return <Video {...props} />;
+    case "music":
+      return <Music2 {...props} />;
+    case "speech":
+      return <AudioLines {...props} />;
     case "media":
       return <ImageIcon {...props} />;
     case "mcp":
