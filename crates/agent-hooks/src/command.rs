@@ -54,7 +54,7 @@ struct HooksToml {
 #[derive(Debug, Clone, Default, Deserialize)]
 struct HookStateToml {
     #[serde(default, rename = "enabled")]
-    _enabled: Option<bool>,
+    enabled: Option<bool>,
     #[serde(default, rename = "trusted_hash")]
     _trusted_hash: Option<String>,
 }
@@ -123,12 +123,15 @@ pub struct CommandHookDecision {
     pub keep_going: Option<String>,
     pub stop_reason: Option<String>,
     pub warnings: Vec<String>,
+    pub error: Option<String>,
     pub(crate) completion_order: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
 struct ConfiguredHandler {
     id: String,
+    key: String,
+    enabled: bool,
     source: String,
     matcher: Option<Regex>,
     timeout: Duration,
@@ -250,6 +253,8 @@ impl Default for CommandHookRunner {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CommandHookSummary {
     pub id: String,
+    pub key: String,
+    pub enabled: bool,
     pub event_name: String,
     pub matcher: Option<String>,
     pub handler_type: HookHandlerType,
@@ -308,13 +313,35 @@ impl CommandHookRunner {
         scope: CommandHookScope,
         trust: CommandHookTrust,
     ) -> anyhow::Result<()> {
+        let toml_path = directory.join("config.toml");
+        let toml_hooks = if toml_path.is_file() {
+            let raw = std::fs::read_to_string(&toml_path)?;
+            toml::from_str::<ConfigToml>(&raw)?
+                .hooks
+                .unwrap_or_default()
+        } else {
+            HooksToml::default()
+        };
         let json_path = directory.join("hooks.json");
         if json_path.is_file() {
-            self.load_file(&json_path, scope, trust)?;
+            self.load_file(&json_path, scope, trust, &toml_hooks.state)?;
         }
-        let toml_path = directory.join("config.toml");
-        if toml_path.is_file() {
-            self.load_toml_file(&toml_path, scope, trust)?;
+        if toml_path.is_file() && !toml_hooks.events.is_empty() {
+            self.sources.push(CommandHookSourceSummary {
+                path: toml_path.to_string_lossy().into_owned(),
+                scope,
+                trust,
+                enabled: true,
+                reason: None,
+            });
+            self.extend_from_file(
+                HooksFile {
+                    description: None,
+                    hooks: toml_hooks.events,
+                },
+                &toml_path,
+                &toml_hooks.state,
+            );
         }
         Ok(())
     }
@@ -328,7 +355,7 @@ impl CommandHookRunner {
             enabled: true,
             reason: None,
         });
-        runner.extend_from_file(file, source);
+        runner.extend_from_file(file, source, &HashMap::new());
         Ok(runner)
     }
 
@@ -337,6 +364,7 @@ impl CommandHookRunner {
         source: &Path,
         scope: CommandHookScope,
         trust: CommandHookTrust,
+        states: &HashMap<String, HookStateToml>,
     ) -> anyhow::Result<()> {
         let raw = std::fs::read_to_string(source)?;
         let file: HooksFile = serde_json::from_str(&raw)?;
@@ -347,45 +375,16 @@ impl CommandHookRunner {
             enabled: true,
             reason: None,
         });
-        self.extend_from_file(file, source);
+        self.extend_from_file(file, source, states);
         Ok(())
     }
 
-    fn load_toml_file(
+    fn extend_from_file(
         &mut self,
+        file: HooksFile,
         source: &Path,
-        scope: CommandHookScope,
-        trust: CommandHookTrust,
-    ) -> anyhow::Result<()> {
-        let raw = std::fs::read_to_string(source)?;
-        let config: ConfigToml = toml::from_str(&raw)?;
-        let Some(hooks) = config.hooks else {
-            return Ok(());
-        };
-        // Keep state out of the flattened event map. State enforcement needs
-        // stable cross-source hook keys and is intentionally separate from decoding.
-        let _state = hooks.state;
-        if hooks.events.is_empty() {
-            return Ok(());
-        }
-        self.sources.push(CommandHookSourceSummary {
-            path: source.to_string_lossy().into_owned(),
-            scope,
-            trust,
-            enabled: true,
-            reason: None,
-        });
-        self.extend_from_file(
-            HooksFile {
-                description: None,
-                hooks: hooks.events,
-            },
-            source,
-        );
-        Ok(())
-    }
-
-    fn extend_from_file(&mut self, file: HooksFile, source: &Path) {
+        states: &HashMap<String, HookStateToml>,
+    ) {
         for (event, groups) in file.hooks {
             let Some(event_name) = HookEvent::from_command_name(&event) else {
                 warn!(%event, source = %source.display(), "ignoring unsupported command hook event");
@@ -401,6 +400,8 @@ impl CommandHookRunner {
                     }
                 };
                 for (handler_index, handler) in group.hooks.into_iter().enumerate() {
+                    let key = hook_key(source, event_name, group_index, handler_index);
+                    let enabled = states.get(&key).and_then(|state| state.enabled) != Some(false);
                     let (kind, requested, asynchronous, status_message, additional_context_limit) =
                         match handler {
                             HookHandlerConfig::Command {
@@ -495,6 +496,8 @@ impl CommandHookRunner {
                         .or_default()
                         .push(ConfiguredHandler {
                             id,
+                            key,
+                            enabled,
                             source: source.to_string_lossy().into_owned(),
                             matcher: matcher.clone(),
                             timeout,
@@ -509,7 +512,9 @@ impl CommandHookRunner {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.handlers.is_empty()
+        self.handlers
+            .values()
+            .all(|handlers| handlers.iter().all(|handler| !handler.enabled))
     }
 
     pub fn handler_count(&self) -> usize {
@@ -523,6 +528,8 @@ impl CommandHookRunner {
             .flat_map(|(event_name, handlers)| {
                 handlers.iter().map(|handler| CommandHookSummary {
                     id: handler.id.clone(),
+                    key: handler.key.clone(),
+                    enabled: handler.enabled,
                     event_name: event_name.as_str().to_string(),
                     matcher: handler
                         .matcher
@@ -589,7 +596,9 @@ impl CommandHookRunner {
         for (configured_order, handler) in handlers
             .iter()
             .filter(|handler| {
-                ignore_matcher || matcher_matches(handler.matcher.as_ref(), &matcher_values)
+                handler.enabled
+                    && (ignore_matcher
+                        || matcher_matches(handler.matcher.as_ref(), &matcher_values))
             })
             .cloned()
             .enumerate()
@@ -643,7 +652,18 @@ impl CommandHookRunner {
                     if let Err(error) = &result {
                         warn!(%error, "asynchronous command hook failed");
                     }
-                    finish_run(&runs, &run_id, &run_event, started, result.as_ref(), None);
+                    let decision = result
+                        .as_ref()
+                        .ok()
+                        .map(|output| parse_output(&run_event, output, false));
+                    finish_run(
+                        &runs,
+                        &run_id,
+                        &run_event,
+                        started,
+                        result.as_ref(),
+                        decision.as_ref(),
+                    );
                 });
             } else {
                 let run_event = event.to_string();
@@ -669,7 +689,7 @@ impl CommandHookRunner {
         while let Some(result) = synchronous.join_next().await {
             match result {
                 Ok((configured_order, run_id, run_event, started, limit, Ok(output))) => {
-                    let mut decision = parse_output(event, &output);
+                    let mut decision = parse_output(event, &output, true);
                     if let Some(context) = decision.additional_context.take() {
                         decision.additional_context = Some(
                             maybe_spill_additional_context(
@@ -731,6 +751,14 @@ fn handler_id(
     format!("hook-{:x}", digest.finalize())
 }
 
+fn hook_key(source: &Path, event: HookEvent, group_index: usize, handler_index: usize) -> String {
+    format!(
+        "{}:{}:{group_index}:{handler_index}",
+        source.display(),
+        event.key_label()
+    )
+}
+
 fn project_hook_dirs(project_root: &Path, cwd: &Path) -> Vec<PathBuf> {
     let mut directories = cwd
         .ancestors()
@@ -761,6 +789,18 @@ fn finish_run(
 ) {
     let duration_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
     let (status, summary) = match result {
+        Ok(_output) if decision.is_some_and(|decision| decision.error.is_some()) => (
+            HookRunStatus::Failed,
+            decision
+                .and_then(|decision| decision.error.clone())
+                .unwrap_or_else(|| format!("{event} hook returned invalid output")),
+        ),
+        Ok(_output) if decision.is_some_and(|decision| decision.keep_going.is_some()) => (
+            HookRunStatus::Blocked,
+            decision
+                .and_then(|decision| decision.keep_going.clone())
+                .unwrap_or_else(|| format!("{event} hook requested continuation")),
+        ),
         Ok(_output) if decision.is_some_and(|decision| decision.stop_reason.is_some()) => (
             HookRunStatus::Stopped,
             decision
@@ -841,6 +881,12 @@ fn decision_entries(decision: &CommandHookDecision) -> Vec<HookOutputEntry> {
     if let Some(text) = &decision.feedback {
         entries.push(HookOutputEntry {
             kind: HookOutputEntryKind::Feedback,
+            text: text.clone(),
+        });
+    }
+    if let Some(text) = &decision.error {
+        entries.push(HookOutputEntry {
+            kind: HookOutputEntryKind::Error,
             text: text.clone(),
         });
     }
@@ -1144,6 +1190,7 @@ fn minimal_environment() -> impl Iterator<Item = (String, String)> {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 struct WireOutput {
     #[serde(default = "default_true", rename = "continue")]
     continue_processing: bool,
@@ -1163,6 +1210,7 @@ struct WireOutput {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 struct HookSpecificOutput {
     #[serde(default)]
     hook_event_name: Option<String>,
@@ -1176,14 +1224,23 @@ struct HookSpecificOutput {
     permission_decision_reason: Option<String>,
     #[serde(default)]
     decision: Option<PermissionDecision>,
+    #[serde(default, rename = "updatedMCPToolOutput")]
+    updated_mcp_tool_output: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 struct PermissionDecision {
     behavior: String,
     #[serde(default)]
+    updated_input: Option<Value>,
+    #[serde(default)]
+    updated_permissions: Option<Value>,
+    #[serde(default)]
     message: Option<String>,
+    #[serde(default)]
+    interrupt: bool,
 }
 
 const fn default_true() -> bool {
@@ -1195,24 +1252,38 @@ fn stderr_reason(output: &HandlerOutput) -> Option<String> {
     (!reason.is_empty()).then(|| reason.to_string())
 }
 
-fn parse_output(event: &str, output: &HandlerOutput) -> CommandHookDecision {
+fn parse_output(
+    event: &str,
+    output: &HandlerOutput,
+    can_apply_control_effects: bool,
+) -> CommandHookDecision {
     let stderr = output.stderr.trim();
     if output.exit_code == Some(2) {
+        if !can_apply_control_effects || !supports_exit_two_block(event) {
+            return invalid_output("hook exited with code 2");
+        }
+        if stderr.is_empty() {
+            return invalid_output(format!(
+                "{event} hook exited with code 2 but did not provide a reason"
+            ));
+        }
         return CommandHookDecision {
-            block_reason: Some(if stderr.is_empty() {
-                "hook exited with status 2".into()
-            } else {
-                stderr.into()
-            }),
+            block_reason: Some(stderr.into()),
             ..Default::default()
         };
     }
     if output.exit_code != Some(0) {
         warn!(%event, exit_code = ?output.exit_code, stderr, "hook exited unsuccessfully");
-        return CommandHookDecision::default();
+        return invalid_output(output.exit_code.map_or_else(
+            || "hook exited without a status code".to_string(),
+            |code| format!("hook exited with code {code}"),
+        ));
     }
     let stdout = output.stdout.trim();
     if stdout.is_empty() {
+        return CommandHookDecision::default();
+    }
+    if event == crate::SESSION_END {
         return CommandHookDecision::default();
     }
     let wire = match serde_json::from_str::<WireOutput>(stdout) {
@@ -1221,7 +1292,7 @@ fn parse_output(event: &str, output: &HandlerOutput) -> CommandHookDecision {
             if matches!(
                 event,
                 crate::SESSION_START | crate::SUBAGENT_START | crate::USER_PROMPT_SUBMIT
-            ) =>
+            ) && !looks_like_json(stdout) =>
         {
             return CommandHookDecision {
                 additional_context: Some(stdout.into()),
@@ -1229,70 +1300,278 @@ fn parse_output(event: &str, output: &HandlerOutput) -> CommandHookDecision {
             };
         }
         Err(error) => {
-            warn!(%event, %error, "invalid command hook JSON output; ignored");
-            return CommandHookDecision::default();
+            warn!(%event, %error, "invalid hook JSON output; ignored");
+            return invalid_output(format!("hook returned invalid {event} JSON output"));
         }
     };
+    let specific_present = wire.hook_specific_output.is_some();
     let specific = wire.hook_specific_output.unwrap_or_default();
-    if specific
-        .hook_event_name
-        .as_deref()
-        .is_some_and(|name| name != event)
-    {
-        warn!(%event, "command hook output names a different event; ignored");
-        return CommandHookDecision::default();
+    if specific_present && specific.hook_event_name.as_deref() != Some(event) {
+        warn!(%event, "hook output has a missing or mismatched hookEventName; ignored");
+        return invalid_output(format!(
+            "{event} hook returned hookSpecificOutput without the matching hookEventName"
+        ));
     }
     let warnings = wire.system_message.into_iter().collect::<Vec<_>>();
-    let _ = wire.suppress_output;
     let stop_reason = wire
         .stop_reason
+        .as_deref()
         .filter(|reason| !reason.trim().is_empty())
-        .unwrap_or_else(|| "hook requested stop".into());
-    if !wire.continue_processing {
+        .map_or_else(|| "hook requested stop".into(), ToOwned::to_owned);
+    if can_apply_control_effects && !wire.continue_processing && supports_continue_false(event) {
+        let feedback = (event == crate::POST_TOOL_USE).then(|| {
+            wire.reason
+                .as_deref()
+                .and_then(trimmed_reason)
+                .unwrap_or_else(|| stop_reason.clone())
+        });
         return CommandHookDecision {
             stop_reason: Some(stop_reason),
+            feedback,
             warnings,
             ..Default::default()
         };
     }
     let mut decision = CommandHookDecision {
         additional_context: specific.additional_context,
-        updated_input: specific.updated_input,
         warnings,
         ..Default::default()
     };
+    if !can_apply_control_effects {
+        return decision;
+    }
     match event {
-        crate::PRE_TOOL_USE => match specific.permission_decision.as_deref() {
-            Some("deny") => {
-                decision.block_reason = specific.permission_decision_reason.or(wire.reason)
+        crate::PRE_TOOL_USE => {
+            if !wire.continue_processing {
+                return invalid_output_with_warnings(
+                    "PreToolUse hook returned unsupported continue:false",
+                    decision.warnings,
+                );
             }
-            Some("allow") => {}
-            _ if wire.decision.as_deref() == Some("block") => decision.block_reason = wire.reason,
-            _ => {}
-        },
+            if wire.stop_reason.is_some() {
+                return invalid_output_with_warnings(
+                    "PreToolUse hook returned unsupported stopReason",
+                    decision.warnings,
+                );
+            }
+            if wire.suppress_output {
+                return invalid_output_with_warnings(
+                    "PreToolUse hook returned unsupported suppressOutput",
+                    decision.warnings,
+                );
+            }
+            match specific.permission_decision.as_deref() {
+                Some("allow") if specific.updated_input.is_none() => {
+                    decision.error = Some(
+                        "PreToolUse hook returned permissionDecision:allow without updatedInput"
+                            .into(),
+                    )
+                }
+                Some("allow") => decision.updated_input = specific.updated_input,
+                Some("deny") => {
+                    decision.block_reason = specific
+                        .permission_decision_reason
+                        .as_deref()
+                        .and_then(trimmed_reason);
+                    if decision.block_reason.is_none() {
+                        decision.error = Some("PreToolUse hook returned permissionDecision:deny without a non-empty permissionDecisionReason".into());
+                    }
+                }
+                Some("ask") => {
+                    decision.error =
+                        Some("PreToolUse hook returned unsupported permissionDecision:ask".into())
+                }
+                Some(other) => {
+                    decision.error = Some(format!(
+                        "PreToolUse hook returned unknown permissionDecision:{other}"
+                    ))
+                }
+                None if specific.updated_input.is_some() => {
+                    decision.error = Some(
+                        "PreToolUse hook returned updatedInput without permissionDecision:allow"
+                            .into(),
+                    )
+                }
+                None if specific.permission_decision_reason.is_some() => decision.error = Some(
+                    "PreToolUse hook returned permissionDecisionReason without permissionDecision"
+                        .into(),
+                ),
+                None if wire.decision.as_deref() == Some("approve") => {
+                    decision.error =
+                        Some("PreToolUse hook returned unsupported decision:approve".into())
+                }
+                None if wire.decision.as_deref() == Some("block") => {
+                    decision.block_reason = wire.reason.as_deref().and_then(trimmed_reason);
+                    if decision.block_reason.is_none() {
+                        decision.error = Some(
+                            "PreToolUse hook returned decision:block without a non-empty reason"
+                                .into(),
+                        );
+                    }
+                }
+                None if wire.reason.is_some() => {
+                    decision.error = Some("PreToolUse hook returned reason without decision".into())
+                }
+                None if wire.decision.is_some() => {
+                    decision.error = Some("PreToolUse hook returned an unknown decision".into())
+                }
+                None => {}
+            }
+        }
         crate::PERMISSION_REQUEST => {
+            if !wire.continue_processing {
+                return invalid_output_with_warnings(
+                    "PermissionRequest hook returned unsupported continue:false",
+                    decision.warnings,
+                );
+            }
+            if wire.stop_reason.is_some() {
+                return invalid_output_with_warnings(
+                    "PermissionRequest hook returned unsupported stopReason",
+                    decision.warnings,
+                );
+            }
+            if wire.suppress_output {
+                return invalid_output_with_warnings(
+                    "PermissionRequest hook returned unsupported suppressOutput",
+                    decision.warnings,
+                );
+            }
+            if wire.decision.is_some() || wire.reason.is_some() {
+                return invalid_output_with_warnings(
+                    "PermissionRequest hook returned unsupported top-level decision fields",
+                    decision.warnings,
+                );
+            }
             if let Some(permission) = specific.decision {
+                if permission.updated_input.is_some() {
+                    decision.error =
+                        Some("PermissionRequest hook returned unsupported updatedInput".into());
+                    return decision;
+                }
+                if permission.updated_permissions.is_some() {
+                    decision.error = Some(
+                        "PermissionRequest hook returned unsupported updatedPermissions".into(),
+                    );
+                    return decision;
+                }
+                if permission.interrupt {
+                    decision.error =
+                        Some("PermissionRequest hook returned unsupported interrupt:true".into());
+                    return decision;
+                }
                 decision.permission = match permission.behavior.as_str() {
                     "allow" => Some(PermissionVote::Allow),
                     "deny" => Some(PermissionVote::Deny),
-                    _ => None,
+                    other => {
+                        decision.error = Some(format!(
+                            "PermissionRequest hook returned unknown behavior:{other}"
+                        ));
+                        None
+                    }
                 };
                 if decision.permission == Some(PermissionVote::Deny) {
-                    decision.block_reason = permission.message;
+                    decision.block_reason = permission
+                        .message
+                        .as_deref()
+                        .and_then(trimmed_reason)
+                        .or_else(|| Some("PermissionRequest hook denied approval".into()));
                 }
             }
         }
         crate::STOP | crate::SUBAGENT_STOP if wire.decision.as_deref() == Some("block") => {
-            decision.keep_going = wire.reason;
+            decision.keep_going = wire.reason.as_deref().and_then(trimmed_reason);
+            if decision.keep_going.is_none() {
+                decision.error = Some(format!(
+                    "{event} hook returned decision:block without a non-empty reason"
+                ));
+            }
         }
         crate::POST_TOOL_USE | crate::USER_PROMPT_SUBMIT
             if wire.decision.as_deref() == Some("block") =>
         {
-            decision.block_reason = wire.reason;
+            decision.block_reason = wire.reason.as_deref().and_then(trimmed_reason);
+            if decision.block_reason.is_none() {
+                decision.error = Some(format!(
+                    "{event} hook returned decision:block without a non-empty reason"
+                ));
+            }
         }
         _ => {}
     }
+    if event == crate::POST_TOOL_USE {
+        if wire.suppress_output {
+            decision.error = Some("PostToolUse hook returned unsupported suppressOutput".into());
+        } else if specific.updated_mcp_tool_output.is_some() {
+            decision.error =
+                Some("PostToolUse hook returned unsupported updatedMCPToolOutput".into());
+        } else if wire.decision.is_none() && wire.reason.is_some() {
+            decision.error = Some("PostToolUse hook returned reason without decision".into());
+        }
+    }
+    if decision.error.is_some() {
+        decision.block_reason = None;
+        decision.permission = None;
+        decision.updated_input = None;
+        decision.additional_context = None;
+        decision.feedback = None;
+        decision.keep_going = None;
+        decision.stop_reason = None;
+    }
     decision
+}
+
+fn trimmed_reason(reason: &str) -> Option<String> {
+    let reason = reason.trim();
+    (!reason.is_empty()).then(|| reason.to_string())
+}
+
+fn looks_like_json(output: &str) -> bool {
+    let output = output.trim_start();
+    output.starts_with('{') || output.starts_with('[')
+}
+
+fn supports_continue_false(event: &str) -> bool {
+    matches!(
+        event,
+        crate::SESSION_START
+            | crate::PRE_COMPACT
+            | crate::POST_COMPACT
+            | crate::POST_TOOL_USE
+            | crate::USER_PROMPT_SUBMIT
+            | crate::STOP
+            | crate::SUBAGENT_STOP
+    )
+}
+
+fn supports_exit_two_block(event: &str) -> bool {
+    matches!(
+        event,
+        crate::PRE_TOOL_USE
+            | crate::PERMISSION_REQUEST
+            | crate::POST_TOOL_USE
+            | crate::USER_PROMPT_SUBMIT
+            | crate::STOP
+            | crate::SUBAGENT_STOP
+    )
+}
+
+fn invalid_output(reason: impl Into<String>) -> CommandHookDecision {
+    CommandHookDecision {
+        error: Some(reason.into()),
+        ..Default::default()
+    }
+}
+
+fn invalid_output_with_warnings(
+    reason: impl Into<String>,
+    warnings: Vec<String>,
+) -> CommandHookDecision {
+    CommandHookDecision {
+        error: Some(reason.into()),
+        warnings,
+        ..Default::default()
+    }
 }
 
 #[cfg(test)]
@@ -1378,7 +1657,7 @@ mod tests {
     #[tokio::test]
     async fn mcp_hook_expands_input_and_uses_normal_output_semantics() {
         let executor = Arc::new(RecordingMcpExecutor {
-            output: r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"safe":true}}}"#.into(),
+            output: r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"safe":true}}}"#.into(),
             ..Default::default()
         });
         let runner = CommandHookRunner::from_file(
@@ -1438,6 +1717,60 @@ mod tests {
             serde_json::json!({"command":"pwd"})
         );
         assert_eq!(runner.list()[0].handler_type, HookHandlerType::McpTool);
+    }
+
+    #[test]
+    fn pre_tool_use_rejects_updated_input_without_allow() {
+        let decision = parse_output(
+            crate::PRE_TOOL_USE,
+            &HandlerOutput {
+                exit_code: Some(0),
+                stdout: r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"safe":true}}}"#.into(),
+                stderr: String::new(),
+            },
+            true,
+        );
+
+        assert_eq!(decision.updated_input, None);
+        assert_eq!(
+            decision.error.as_deref(),
+            Some("PreToolUse hook returned updatedInput without permissionDecision:allow")
+        );
+    }
+
+    #[test]
+    fn permission_request_rejects_universal_stop_fields() {
+        let decision = parse_output(
+            crate::PERMISSION_REQUEST,
+            &HandlerOutput {
+                exit_code: Some(0),
+                stdout: r#"{"continue":false,"stopReason":"stop"}"#.into(),
+                stderr: String::new(),
+            },
+            true,
+        );
+
+        assert_eq!(decision.permission, None);
+        assert_eq!(
+            decision.error.as_deref(),
+            Some("PermissionRequest hook returned unsupported continue:false")
+        );
+    }
+
+    #[test]
+    fn json_like_invalid_user_prompt_output_fails_open() {
+        let decision = parse_output(
+            crate::USER_PROMPT_SUBMIT,
+            &HandlerOutput {
+                exit_code: Some(0),
+                stdout: r#"{"unexpected":true}"#.into(),
+                stderr: String::new(),
+            },
+            true,
+        );
+
+        assert!(decision.additional_context.is_none());
+        assert!(decision.error.is_some());
     }
 
     #[tokio::test]
@@ -1530,6 +1863,49 @@ mod tests {
         assert_eq!(hooks[0].handler_type, HookHandlerType::Command);
         assert_eq!(hooks[0].additional_context_limit, Some(4096));
         assert!(hooks[0].source.ends_with("config.toml"));
+    }
+
+    #[tokio::test]
+    async fn config_toml_state_can_disable_one_handler_by_stable_key() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("config.toml");
+        let key = hook_key(&source, HookEvent::PreToolUse, 0, 0);
+        let quoted_key = toml::Value::String(key.clone()).to_string();
+        std::fs::write(
+            &source,
+            format!(
+                r#"
+                    [hooks.state.{quoted_key}]
+                    enabled = false
+
+                    [[hooks.PreToolUse]]
+                    matcher = "terminal"
+
+                    [[hooks.PreToolUse.hooks]]
+                    type = "command"
+                    command = "true"
+                "#
+            ),
+        )
+        .unwrap();
+
+        let runner = CommandHookRunner::load(root.path()).unwrap();
+
+        assert_eq!(runner.handler_count(), 1);
+        assert_eq!(runner.list()[0].key, key);
+        assert!(!runner.list()[0].enabled);
+        let decisions = runner
+            .run(
+                crate::PRE_TOOL_USE,
+                &HookPayload {
+                    session_id: "disabled-hook".into(),
+                    cwd: root.path().to_string_lossy().into_owned(),
+                    tool_name: Some("terminal".into()),
+                    ..Default::default()
+                },
+            )
+            .await;
+        assert!(decisions.is_empty());
     }
 
     #[test]

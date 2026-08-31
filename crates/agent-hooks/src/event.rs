@@ -82,6 +82,25 @@ impl HookEvent {
             .into_iter()
             .find(|event| event.as_str() == name)
     }
+
+    /// Stable event label used inside persisted `hooks.state` keys.
+    pub const fn key_label(self) -> &'static str {
+        match self {
+            Self::PreToolUse => "pre_tool_use",
+            Self::PermissionRequest => "permission_request",
+            Self::PostToolUse => "post_tool_use",
+            Self::PreCompact => "pre_compact",
+            Self::PostCompact => "post_compact",
+            Self::SessionStart => "session_start",
+            Self::SessionEnd => "session_end",
+            Self::UserPromptSubmit => "user_prompt_submit",
+            Self::SubagentStart => "subagent_start",
+            Self::SubagentStop => "subagent_stop",
+            Self::Stop => "stop",
+            Self::Interrupt => "interrupt",
+            _ => self.as_str(),
+        }
+    }
 }
 
 #[cfg(test)]
