@@ -1,12 +1,20 @@
 import { useEffect, useRef } from "react";
 
 const LED_SHADER = /* wgsl */ `
-struct Params {
-  viewport: vec4f,
-  pointer: vec4f,
+struct Viewport {
+  resolution: vec2f,
+  dark_mode: f32,
+  padding: f32,
 }
 
-@group(0) @binding(0) var<uniform> params: Params;
+struct Motion {
+  pointer: vec2f,
+  time: f32,
+  pointer_active: f32,
+}
+
+@group(0) @binding(0) var<uniform> viewport: Viewport;
+@group(0) @binding(1) var<uniform> motion: Motion;
 
 fn segment_info(p: vec2f, a: vec2f, b: vec2f) -> vec2f {
   let ab = b - a;
@@ -33,11 +41,11 @@ fn led_pattern(t: f32, phase: f32) -> f32 {
 }
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  let resolution = max(params.viewport.xy, vec2f(1.0));
+  let resolution = max(viewport.resolution, vec2f(1.0));
   let aspect = resolution.x / resolution.y;
   let center = vec2f(0.5, 0.43);
   let p = (uv - center) * vec2f(aspect, 1.0);
-  let pointer = (params.pointer.xy - center) * vec2f(aspect, 1.0);
+  let pointer = (motion.pointer - center) * vec2f(aspect, 1.0);
 
   let radius = 0.255;
   let top = vec2f(0.0, -radius);
@@ -58,7 +66,7 @@ fn led_pattern(t: f32, phase: f32) -> f32 {
     vec3f(0.12, 0.82, 0.94) * w2
   ) / weight_sum;
 
-  let time = params.viewport.z;
+  let time = motion.time;
   let led = max(
     led_pattern(edge0.y, time * 0.035) * w0,
     max(
@@ -66,7 +74,7 @@ fn led_pattern(t: f32, phase: f32) -> f32 {
       led_pattern(edge2.y, time * 0.032 + 0.61) * w2,
     ),
   );
-  let pointer_reveal = params.pointer.z * exp(-distance(p, pointer) * 5.5);
+  let pointer_reveal = motion.pointer_active * exp(-distance(p, pointer) * 5.5);
   let travel = 0.5 + 0.5 * sin(time * 1.35 - edge * 34.0);
   let colour_mix = clamp(pointer_reveal * 1.45 + travel * 0.22, 0.0, 1.0);
   let light_colour = mix(vec3f(0.96, 0.98, 1.0), edge_colour, colour_mix);
@@ -80,7 +88,7 @@ fn led_pattern(t: f32, phase: f32) -> f32 {
   let intensity = (crisp + near_glow + far_glow + floor_radiance) * pulse;
 
   let inside = inside_triangle(p, top, left, right);
-  let dark_mode = params.viewport.w;
+  let dark_mode = viewport.dark_mode;
   let body_alpha = select(0.0, mix(0.12, 0.62, dark_mode), inside);
   let glow_alpha = clamp(intensity * 0.78, 0.0, 0.82);
   let alpha = max(body_alpha, glow_alpha);
@@ -131,18 +139,28 @@ export function WelcomeLedCanvas() {
       canvasSurface.clearColor = [0, 0, 0, 0];
 
       const pointer: PointerState = { x: 0.5, y: 0.43, active: 0 };
-      let viewport = [canvasSurface.size[0], canvasSurface.size[1]] as const;
       const ledEffect = effect(gpu, LED_SHADER, {
         set: {
-          params: {
-            viewport: [viewport[0], viewport[1], 0, isDarkTheme() ? 1 : 0],
-            pointer: [pointer.x, pointer.y, pointer.active, 0],
+          viewport: {
+            resolution: [canvasSurface.size[0], canvasSurface.size[1]],
+            dark_mode: isDarkTheme() ? 1 : 0,
+            padding: 0,
+          },
+          motion: {
+            pointer: [pointer.x, pointer.y],
+            time: 0,
+            pointer_active: pointer.active,
           },
         },
       });
 
+      disposeRenderer = () => {
+        canvasSurface.dispose();
+        gpu.dispose();
+      };
+
       const unsubscribeResize = canvasSurface.onResize(({ width, height }) => {
-        viewport = [width, height] as const;
+        ledEffect.set({ viewport: { resolution: [width, height] } });
       });
       await ledEffect.compile(canvasSurface);
       if (cancelled) {
@@ -169,6 +187,7 @@ export function WelcomeLedCanvas() {
       let dark = isDarkTheme();
       const themeObserver = new MutationObserver(() => {
         dark = isDarkTheme();
+        ledEffect.set({ viewport: { dark_mode: dark ? 1 : 0 } });
       });
       themeObserver.observe(document.documentElement, {
         attributes: true,
@@ -179,9 +198,10 @@ export function WelcomeLedCanvas() {
       const timer = clock(gpu);
       const draw = (currentFrame: Parameters<Parameters<typeof frameLoop>[1]>[0], time: number) => {
         ledEffect.set({
-          params: {
-            viewport: [viewport[0], viewport[1], time, dark ? 1 : 0],
-            pointer: [pointer.x, pointer.y, pointer.active, 0],
+          motion: {
+            pointer: [pointer.x, pointer.y],
+            time,
+            pointer_active: pointer.active,
           },
         });
         currentFrame.pass(canvasSurface, ledEffect);
@@ -191,7 +211,7 @@ export function WelcomeLedCanvas() {
       if (reducedMotion) {
         frame(gpu, (currentFrame) => draw(currentFrame, 0));
       } else {
-        loop = frameLoop(gpu, (currentFrame) => draw(currentFrame, timer.time));
+        loop = frameLoop(gpu, (currentFrame) => draw(currentFrame, timer.time % 4096));
       }
       canvas.dataset.ready = "true";
 
@@ -208,6 +228,8 @@ export function WelcomeLedCanvas() {
 
     void initialize().catch(() => {
       canvas.dataset.ready = "false";
+      disposeRenderer?.();
+      disposeRenderer = undefined;
     });
 
     return () => {
