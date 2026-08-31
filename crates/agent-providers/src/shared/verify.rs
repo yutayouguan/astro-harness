@@ -42,11 +42,7 @@ pub async fn probe(
     };
 
     let message = if let Some(p) = profile::resolve(provider_id) {
-        let effective_mode = if config.api_mode == "responses" && p.supports_responses {
-            ApiMode::Responses
-        } else {
-            p.api_mode
-        };
+        let effective_mode = profile::effective_api_mode(provider_id, &config.api_mode);
         match (effective_mode, p.azure_deployment_style) {
             (ApiMode::AnthropicMessages, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);

@@ -104,7 +104,7 @@ impl AuthKind {
 pub static PROFILES: &[ProviderProfile] = &[
     ProviderProfile {
         id: "openai",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://api.openai.com/v1",
         auth: AuthKind::Bearer,
         env_keys: &["OPENAI_API_KEY"],
@@ -146,7 +146,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "deepseek",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://api.deepseek.com/v1",
         auth: AuthKind::Bearer,
         env_keys: &["DEEPSEEK_API_KEY"],
@@ -209,7 +209,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "azure",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "",
         auth: AuthKind::AzureHeader,
         env_keys: &["AZURE_OPENAI_API_KEY", "AZURE_API_KEY"],
@@ -272,7 +272,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "bailian",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         auth: AuthKind::Bearer,
         env_keys: &["DASHSCOPE_API_KEY", "BAILIAN_API_KEY"],
@@ -356,7 +356,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "minimax",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://api.minimaxi.com/v1",
         auth: AuthKind::Bearer,
         env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
@@ -419,7 +419,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "mimo",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://api.xiaomimimo.com/v1",
         auth: AuthKind::Bearer,
         env_keys: &["MIMO_API_KEY"],
@@ -470,6 +470,15 @@ pub fn resolve(provider_id: &str) -> Option<&'static ProviderProfile> {
 /// 查找失败时回退到 OpenAI 兼容（custom 等）。
 pub fn resolve_or_openai_compat(provider_id: &str) -> &'static ProviderProfile {
     resolve(provider_id).unwrap_or(&OPENAI_COMPAT_FALLBACK)
+}
+
+/// 解析最终补全协议：显式配置优先，否则使用 provider profile 默认值。
+pub fn effective_api_mode(provider_id: &str, api_mode: &str) -> ApiMode {
+    match api_mode.trim() {
+        "chat" | "chat_completions" => ApiMode::ChatCompletions,
+        "responses" => ApiMode::Responses,
+        _ => resolve_or_openai_compat(provider_id).api_mode,
+    }
 }
 
 /// custom / 未知 id 的回退 profile（不在 PROFILES 中单独注册）。
@@ -714,9 +723,9 @@ mod tests {
     }
 
     #[test]
-    fn azure_is_chat_completions_with_quirk() {
+    fn azure_defaults_to_responses_with_deployment_quirk() {
         let p = resolve("azure").expect("azure");
-        assert_eq!(p.api_mode, ApiMode::ChatCompletions);
+        assert_eq!(p.api_mode, ApiMode::Responses);
         assert!(p.azure_deployment_style);
         assert_eq!(p.auth, AuthKind::AzureHeader);
     }
@@ -730,13 +739,30 @@ mod tests {
 
     #[test]
     fn supports_responses_flag() {
-        assert!(resolve("openai").unwrap().supports_responses);
-        assert!(resolve("deepseek").unwrap().supports_responses);
-        assert!(resolve("minimax").unwrap().supports_responses);
-        assert!(resolve("azure").unwrap().supports_responses);
-        assert!(resolve("bailian").unwrap().supports_responses);
+        for id in ["openai", "deepseek", "minimax", "azure", "bailian", "mimo"] {
+            let profile = resolve(id).unwrap();
+            assert!(profile.supports_responses, "{id} should support Responses");
+            assert_eq!(
+                profile.api_mode,
+                ApiMode::Responses,
+                "{id} should default to Responses"
+            );
+        }
         assert!(!resolve("claude").unwrap().supports_responses);
         assert!(!resolve("google").unwrap().supports_responses);
+    }
+
+    #[test]
+    fn effective_mode_uses_profile_default_and_honors_compatibility_override() {
+        assert_eq!(effective_api_mode("deepseek", ""), ApiMode::Responses);
+        assert_eq!(
+            effective_api_mode("deepseek", "chat_completions"),
+            ApiMode::ChatCompletions
+        );
+        assert_eq!(
+            effective_api_mode("ollama", "responses"),
+            ApiMode::Responses
+        );
     }
 
     #[test]

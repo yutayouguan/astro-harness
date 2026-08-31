@@ -1831,12 +1831,12 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                       value={draft.api_mode === "responses" ? "responses" : "chat_completions"}
                       onChange={(v) =>
                         setDraft((d) =>
-                          d ? { ...d, api_mode: v === "responses" ? "responses" : "" } : d,
+                          d ? { ...d, api_mode: v } : d,
                         )
                       }
                       options={[
-                        { value: "chat_completions", label: "Chat Completions" },
                         { value: "responses", label: "Responses API" },
+                        { value: "chat_completions", label: "Chat Completions (兼容)" },
                       ]}
                     />
                   </label>

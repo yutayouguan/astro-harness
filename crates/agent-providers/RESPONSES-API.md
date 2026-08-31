@@ -10,7 +10,9 @@
 2. `upgrade_to_responses()` 替换 completion model 为 `OpenAIResponsesModel<Ext>`
 3. `OpenAICompatible::responses_base_url()` 处理 base_url 变换（仅 Azure 需要覆盖）
 
-新增 Responses provider 只需：`profile.rs` 设 `supports_responses: true`，`dispatch.rs` 的 upgrade match 加一行。
+新增并默认使用 Responses 的 provider 需要：`profile.rs` 设
+`api_mode: ApiMode::Responses` 和 `supports_responses: true`，再在 `dispatch.rs` 的 upgrade match 加一行。
+`ChatCompletions` 仅作为用户显式选择的兼容模式。
 
 ## Provider 参考表
 

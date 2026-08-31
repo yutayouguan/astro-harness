@@ -799,17 +799,12 @@ fn supports_responses_toggle(kind: ProviderKind) -> bool {
 
 /// 当前生效的 api_mode 名称（用于前端展示）。
 fn effective_api_mode(kind: ProviderKind, api_mode: &str) -> &'static str {
-    if api_mode == "responses" && supports_responses_toggle(kind) {
-        "responses"
-    } else {
-        let profile = providers::profile::resolve_or_openai_compat(kind.backend_id());
-        match profile.api_mode {
-            providers::ApiMode::ChatCompletions => "chat_completions",
-            providers::ApiMode::AnthropicMessages => "anthropic_messages",
-            providers::ApiMode::Responses => "responses",
-            providers::ApiMode::Interactions => "interactions",
-            providers::ApiMode::GeminiNative => "gemini_native",
-        }
+    match providers::profile::effective_api_mode(kind.backend_id(), api_mode) {
+        providers::ApiMode::ChatCompletions => "chat_completions",
+        providers::ApiMode::AnthropicMessages => "anthropic_messages",
+        providers::ApiMode::Responses => "responses",
+        providers::ApiMode::Interactions => "interactions",
+        providers::ApiMode::GeminiNative => "gemini_native",
     }
 }
 
@@ -1977,6 +1972,19 @@ mod tests {
         assert!(!p.enabled);
         assert_eq!(p.kind, ProviderKind::Openrouter);
         assert_eq!(p.endpoint, "https://openrouter.ai/api/v1");
+    }
+
+    #[test]
+    fn responses_capable_provider_defaults_to_responses_but_honors_chat_override() {
+        assert_eq!(effective_api_mode(ProviderKind::Deepseek, ""), "responses");
+        assert_eq!(
+            effective_api_mode(ProviderKind::Deepseek, "chat_completions"),
+            "chat_completions"
+        );
+        assert_eq!(
+            effective_api_mode(ProviderKind::Deepseek, "responses"),
+            "responses"
+        );
     }
 
     #[test]

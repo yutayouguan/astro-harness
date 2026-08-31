@@ -467,16 +467,13 @@ fn normalize_provider_id(id: &str) -> &str {
 
 /// 是否应使用 Responses API 协议。
 ///
-/// 优先级：`config.api_mode` 显式指定 > profile `supports_responses` 默认。
+/// 优先级：`config.api_mode` 显式指定 > profile `api_mode` 默认。
 /// - `api_mode == "chat" | "chat_completions"` → 强制 Chat Completions
 /// - `api_mode == "responses"` → 强制 Responses
-/// - `api_mode` 为空 → profile.supports_responses 决定
+/// - `api_mode` 为空 → profile.api_mode 决定
 fn use_responses(provider: &str, config: &ProviderConfig) -> bool {
-    match config.api_mode.as_str() {
-        "chat" | "chat_completions" => false,
-        "responses" => true,
-        _ => crate::profile::resolve(provider).is_some_and(|p| p.supports_responses),
-    }
+    crate::profile::effective_api_mode(provider, &config.api_mode)
+        == crate::profile::ApiMode::Responses
 }
 
 /// 根据 provider id 注册到注册表。
@@ -522,7 +519,7 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
     }
 
     // 2) Responses 模式：替换 completion model（保留已注册的全部媒体能力）
-    //    默认由 profile.supports_responses 决定；用户可通过 api_mode="responses" 强制开启。
+    //    默认由 profile.api_mode 决定；用户可显式覆盖为 Responses 或 Chat Completions。
     if responses {
         match provider {
             "openai" => {
