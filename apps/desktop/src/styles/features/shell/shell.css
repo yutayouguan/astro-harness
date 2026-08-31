@@ -82,32 +82,23 @@
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--tone, #2563eb) 24%, var(--glass-edge));
+  appearance: none;
+  border: 0;
   border-radius: 50%;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.34), transparent 48%),
-    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.16)) 54%, var(--glass-panel));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 6px 18px color-mix(in srgb, var(--tone, #2563eb) 13%, transparent);
+  background: transparent;
+  box-shadow: none;
   color: var(--tone, #2563eb);
   cursor: pointer;
   -webkit-app-region: no-drag;
   app-region: no-drag;
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(1.18);
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(1.18);
-  transition:
-    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1), opacity 160ms ease;
 }
 
 .shell-dynamic-palette-icon {
   display: grid;
   place-items: center;
   width: 26px;
-  height: 35px;
+  height: 100%;
 }
 
 .shell-dynamic-palette-icon svg {
@@ -143,10 +134,7 @@
 @media (hover: hover) and (pointer: fine) {
   .shell-dynamic-palette-button:hover {
     transform: translateY(-1px);
-    border-color: color-mix(in srgb, var(--tone, #2563eb) 42%, var(--glass-edge));
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.58),
-      0 8px 22px color-mix(in srgb, var(--tone, #2563eb) 19%, transparent);
+    opacity: 0.88;
   }
 }
 
@@ -157,15 +145,6 @@
 .shell-dynamic-palette-button:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--tone, #2563eb) 68%, transparent);
   outline-offset: 3px;
-}
-
-html[data-theme="dark"] .shell-dynamic-palette-button {
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 48%),
-    color-mix(in srgb, var(--tone-soft, rgba(96, 165, 250, 0.16)) 58%, rgba(8, 10, 22, 0.72));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 8px 22px rgba(0, 0, 0, 0.18);
 }
 
 @media (max-width: 640px) {
@@ -179,7 +158,7 @@ html[data-theme="dark"] .shell-dynamic-palette-button {
 
 @media (prefers-reduced-motion: reduce) {
   .shell-dynamic-palette-button {
-    transition: border-color 160ms ease, background-color 160ms ease;
+    transition: opacity 160ms ease;
   }
 
   .shell-dynamic-palette-rotor[data-spinning="true"] {
@@ -190,14 +169,6 @@ html[data-theme="dark"] .shell-dynamic-palette-button {
     50% {
       opacity: 0.55;
     }
-  }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .shell-dynamic-palette-button {
-    background: color-mix(in srgb, var(--tone, #2563eb) 12%, var(--bg));
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
 }
 

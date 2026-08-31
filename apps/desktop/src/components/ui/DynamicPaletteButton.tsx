@@ -132,7 +132,7 @@ export default function DynamicPaletteButton({ label, onReshuffle }: Props) {
               <stop offset="1" stopColor="#454546" />
             </linearGradient>
           </defs>
-          <path className="shell-dynamic-palette-stem" d="M24 25v37" />
+          <path className="shell-dynamic-palette-stem" d="M24 25v39.5" />
           <g
             key={spinRevision}
             className="shell-dynamic-palette-rotor"

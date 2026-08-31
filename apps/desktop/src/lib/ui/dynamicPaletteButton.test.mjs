@@ -39,6 +39,7 @@ test("each activation restarts the pinwheel feedback", () => {
   assert.match(component, /data-spinning=\{spinRevision > 0 \|\| undefined\}/);
   assert.match(component, /onReshuffle\(\)/);
   assert.match(component, /shell-dynamic-palette-stem/);
+  assert.match(component, /d="M24 25v39\.5"/);
   assert.equal((component.match(/data-blade=/g) ?? []).length, 4);
   assert.match(component, /data-blade="blue"/);
   assert.match(component, /data-blade="green"/);
@@ -49,6 +50,8 @@ test("each activation restarts the pinwheel feedback", () => {
     /shell-dynamic-palette-spin 520ms cubic-bezier\(0\.77, 0, 0\.175, 1\)/,
   );
   assert.match(styles, /\.shell-dynamic-palette-rotor\[data-spinning="true"\]/);
+  assert.match(styles, /\.shell-dynamic-palette-button\s*\{[\s\S]*border:\s*0;/);
+  assert.match(styles, /\.shell-dynamic-palette-button\s*\{[\s\S]*background:\s*transparent;/);
   assert.match(styles, /transform:\s*rotate\(720deg\)/);
 });
 
