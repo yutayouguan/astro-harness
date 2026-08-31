@@ -125,10 +125,7 @@ pub struct AgentThreadMessageV2 {
     pub token_count: Option<i64>,
     pub finish_reason: Option<String>,
     pub reasoning: Option<String>,
-    pub reasoning_content: Option<String>,
     pub reasoning_details: Option<serde_json::Value>,
-    pub reasoning_items: Option<serde_json::Value>,
-    pub message_items: Option<serde_json::Value>,
     pub media_json: Option<String>,
 }
 

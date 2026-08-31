@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 20;
+pub const SCHEMA_VERSION: i32 = 21;
 
 const SCHEMA_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -87,10 +87,7 @@ CREATE TABLE IF NOT EXISTS messages (
     token_count INTEGER,
     finish_reason TEXT,
     reasoning TEXT,
-    reasoning_content TEXT,
-    reasoning_details TEXT,
-    reasoning_items TEXT,
-    message_items TEXT
+    reasoning_details TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
@@ -142,6 +139,10 @@ impl SessionStore {
         if current == SCHEMA_VERSION {
             return self.validate_current_schema().await;
         }
+        if current == 20 {
+            self.migrate_v20_to_v21().await?;
+            return self.validate_current_schema().await;
+        }
         if current != 0 || self.has_user_tables().await? {
             bail!(
                 "unsupported session database schema version {current}; expected {SCHEMA_VERSION}"
@@ -182,8 +183,7 @@ impl SessionStore {
         .await
         .context("session database schema marker is current but sessions table is incomplete")?;
         sqlx::query(
-            "SELECT id, compressed_content, media_json, reasoning_details,
-                    reasoning_items, message_items
+            "SELECT id, compressed_content, media_json, reasoning_details
              FROM messages LIMIT 0",
         )
         .execute(&self.pool)
@@ -197,6 +197,28 @@ impl SessionStore {
             .execute(&self.pool)
             .await
             .context("session database schema marker is current but FTS tables are incomplete")?;
+        Ok(())
+    }
+
+    async fn migrate_v20_to_v21(&self) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("ALTER TABLE messages DROP COLUMN reasoning_content")
+            .execute(&mut *tx)
+            .await
+            .context("drop obsolete messages.reasoning_content")?;
+        sqlx::query("ALTER TABLE messages DROP COLUMN reasoning_items")
+            .execute(&mut *tx)
+            .await
+            .context("drop obsolete messages.reasoning_items")?;
+        sqlx::query("ALTER TABLE messages DROP COLUMN message_items")
+            .execute(&mut *tx)
+            .await
+            .context("drop obsolete messages.message_items")?;
+        sqlx::query("UPDATE schema_version SET version = ?1")
+            .bind(SCHEMA_VERSION)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
         Ok(())
     }
 

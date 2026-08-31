@@ -755,6 +755,72 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn first_load_migrates_legacy_sqlite_history_into_native_rollout_items() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let thread_id = "legacy-sqlite-history";
+        let store = session::SessionStore::open_sessions_dir(&home::data_dir(dir.path()))
+            .await
+            .expect("session store");
+        store
+            .ensure_session(thread_id, "legacy")
+            .await
+            .expect("session");
+        store
+            .append_message(session::NewMessage {
+                content: Some("legacy user message"),
+                ..session::NewMessage::empty(thread_id, "user")
+            })
+            .await
+            .expect("message");
+        drop(store);
+
+        let rollout_root = dir.path().join("sessions").join("rollouts");
+        let empty_rollout_path =
+            agent_rollout::new_rollout_path(&rollout_root, thread_id, chrono::Utc::now());
+        let empty_rollout = agent_rollout::RolloutRecorder::open(empty_rollout_path)
+            .await
+            .expect("empty rollout");
+        empty_rollout.flush().await.expect("flush empty rollout");
+        empty_rollout.shutdown().await.expect("close empty rollout");
+
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread(thread_id)
+            .await
+            .expect("thread");
+        assert_eq!(
+            managed
+                .runtime
+                .session()
+                .clone_response_history()
+                .await
+                .len(),
+            1
+        );
+
+        let rollout_path = agent_rollout::find_rollout(&rollout_root, thread_id)
+            .expect("find rollout")
+            .expect("migrated rollout");
+        let items = agent_rollout::read_rollout(&rollout_path)
+            .await
+            .expect("read rollout");
+        assert!(items.iter().any(|item| matches!(
+            item,
+            agent_rollout::RolloutItem::ResponseItem(
+                agent_protocol::ResponseItem::Message { role, .. }
+            ) if role == "user"
+        )));
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
     async fn configure_thread_rejects_removed_ask_mode_without_mutating_session() {
         let dir = TempDir::new().expect("tempdir");
         memory::ensure_workspace(dir.path()).expect("workspace");

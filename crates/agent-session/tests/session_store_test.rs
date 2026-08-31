@@ -71,6 +71,63 @@ async fn rejects_noncurrent_schema() {
 }
 
 #[tokio::test]
+async fn migrates_v20_by_dropping_obsolete_message_payload_columns() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    {
+        let store = SessionStore::open(&path).await.unwrap();
+        store
+            .create_session("s1", "test", None, None, None)
+            .await
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                content: Some("kept"),
+                ..NewMessage::empty("s1", "assistant")
+            })
+            .await
+            .unwrap();
+    }
+
+    let pool = agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}?mode=rwc", path.display()))
+        .await
+        .unwrap();
+    for statement in [
+        "ALTER TABLE messages ADD COLUMN reasoning_content TEXT",
+        "ALTER TABLE messages ADD COLUMN reasoning_items TEXT",
+        "ALTER TABLE messages ADD COLUMN message_items TEXT",
+    ] {
+        agent_db::sqlx::query(statement)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    agent_db::sqlx::query("UPDATE schema_version SET version = 20")
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.close().await;
+
+    let store = SessionStore::open(&path).await.unwrap();
+    assert_eq!(store.schema_version().await.unwrap(), SCHEMA_VERSION);
+    let columns = agent_db::sqlx::query_scalar::<_, String>(
+        "SELECT name FROM pragma_table_info('messages') ORDER BY cid",
+    )
+    .fetch_all(types::SqliteStore::pool(&store))
+    .await
+    .unwrap();
+    assert!(!columns.iter().any(|name| name == "reasoning_content"));
+    assert!(!columns.iter().any(|name| name == "reasoning_items"));
+    assert!(!columns.iter().any(|name| name == "message_items"));
+    assert_eq!(
+        store.get_messages("s1").await.unwrap()[0]
+            .content
+            .as_deref(),
+        Some("kept")
+    );
+}
+
+#[tokio::test]
 async fn rejects_unversioned_database_with_unrelated_tables() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
@@ -153,10 +210,7 @@ async fn append_and_reload_tool_calls_and_reasoning() {
             token_count: Some(12),
             finish_reason: Some("tool_calls"),
             reasoning: Some("think"),
-            reasoning_content: None,
             reasoning_details: None,
-            reasoning_items: None,
-            message_items: None,
             media_json: None,
         })
         .await
@@ -173,10 +227,7 @@ async fn append_and_reload_tool_calls_and_reasoning() {
             token_count: None,
             finish_reason: None,
             reasoning: None,
-            reasoning_content: None,
             reasoning_details: None,
-            reasoning_items: None,
-            message_items: None,
             media_json: None,
         })
         .await
@@ -950,10 +1001,7 @@ async fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries()
             token_count: Some(17),
             finish_reason: Some("tool_calls"),
             reasoning: Some("visible reasoning"),
-            reasoning_content: Some("provider reasoning"),
             reasoning_details: Some(serde_json::json!({"detail": true})),
-            reasoning_items: Some(serde_json::json!([{"type": "reasoning"}])),
-            message_items: Some(serde_json::json!([{"type": "message"}])),
             ..NewMessage::empty("source", "assistant")
         })
         .await
@@ -1038,10 +1086,7 @@ async fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries()
         assert_eq!(actual.token_count, expected.token_count);
         assert_eq!(actual.finish_reason, expected.finish_reason);
         assert_eq!(actual.reasoning, expected.reasoning);
-        assert_eq!(actual.reasoning_content, expected.reasoning_content);
         assert_eq!(actual.reasoning_details, expected.reasoning_details);
-        assert_eq!(actual.reasoning_items, expected.reasoning_items);
-        assert_eq!(actual.message_items, expected.message_items);
         assert_eq!(actual.media_json, expected.media_json);
     }
     assert!(store.get_messages("none").await.unwrap().is_empty());

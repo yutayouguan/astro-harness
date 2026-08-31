@@ -38,10 +38,7 @@ export type AgentThreadMessage = {
   tokenCount: number | null;
   finishReason: string | null;
   reasoning: string | null;
-  reasoningContent: string | null;
   reasoningDetails: unknown | null;
-  reasoningItems: unknown | null;
-  messageItems: unknown | null;
   mediaJson: string | null;
 };
 
@@ -246,14 +243,7 @@ export function normalizeAgentThreadMessage(value: unknown): AgentThreadMessage 
       "finish reason",
     ),
     reasoning: nullableString(message.reasoning, "reasoning"),
-    reasoningContent: nullableString(
-      message.reasoningContent ?? message.reasoning_content,
-      "reasoning content",
-    ),
     reasoningDetails: message.reasoningDetails ?? message.reasoning_details ?? null,
-    reasoningItems:
-      message.reasoningItems ?? message.reasoning_items ?? null,
-    messageItems: message.messageItems ?? message.message_items ?? null,
     mediaJson: nullableString(message.mediaJson ?? message.media_json, "media json"),
   };
 }

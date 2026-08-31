@@ -31,7 +31,7 @@ use types::ToolEntry;
 
 use crate::prompt::context::StaticContext;
 use crate::prompt::hooks::CancelSignal;
-use crate::runtime::session::{hydrate_history, resolve_session_project_root};
+use crate::runtime::session::{hydrate_response_history, resolve_session_project_root};
 use crate::tasks::ActiveTurn;
 use session_services::SessionServices;
 
@@ -319,7 +319,7 @@ impl Session {
         let agent_id = memory.agent_id.clone();
         let sessions: Box<dyn ConversationStore> =
             Box::new(SessionStore::open_sessions_dir(&home::data_dir(&config.memory_dir)).await?);
-        let history = hydrate_history(&*sessions, &session_id).await?;
+        let history = hydrate_response_history(&config.memory_dir, &*sessions, &session_id).await?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -1567,24 +1567,6 @@ impl Session {
         self.lock_state().clone_response_history()
     }
 
-    /// 用拥有式快照替换当前对话历史。
-    pub async fn replace_history(&self, history: Vec<Message>) {
-        let _write_guard = self.conversation_write_lock.lock().await;
-        let response_items = history
-            .iter()
-            .flat_map(|message| {
-                agent_rollout::response_items_from_message(message, None)
-                    .expect("serializing runtime message as response item cannot fail")
-            })
-            .collect();
-        self.lock_state().replace_response_history(response_items);
-    }
-
-    pub async fn replace_response_history(&self, history: Vec<agent_protocol::ResponseItem>) {
-        let _write_guard = self.conversation_write_lock.lock().await;
-        self.lock_state().replace_response_history(history);
-    }
-
     pub fn context_window(&self) -> u32 {
         self.lock_state().model_ctx.context_window()
     }
@@ -1729,6 +1711,37 @@ mod tests {
             api_key: format!("k-{id}"),
             base_url: format!("https://{id}.example"),
         }
+    }
+
+    #[tokio::test]
+    async fn cold_start_restores_native_response_items_without_message_projection() {
+        let dir = TempDir::new().unwrap();
+        let thread_id = "native-response-history";
+        let rollout_root = dir.path().join("sessions").join("rollouts");
+        let rollout_path =
+            agent_rollout::new_rollout_path(&rollout_root, thread_id, chrono::Utc::now());
+        let recorder = RolloutRecorder::open(rollout_path).await.unwrap();
+        let native = agent_protocol::ResponseItem::FunctionCall {
+            id: Some("item-1".into()),
+            name: "lookup".into(),
+            namespace: Some("mcp".into()),
+            arguments: "{\"query\":\"rust\"}".into(),
+            encrypted_function_args: Some(vec!["opaque".into()]),
+            call_id: "call-1".into(),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        recorder
+            .record(vec![RolloutItem::ResponseItem(native.clone())])
+            .await
+            .unwrap();
+        recorder.flush().await.unwrap();
+
+        let session = Session::with_session_id(test_config(&dir), thread_id.into())
+            .await
+            .unwrap();
+
+        assert_eq!(session.clone_response_history().await, vec![native]);
+        recorder.shutdown().await.unwrap();
     }
 
     #[tokio::test]
@@ -2101,21 +2114,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(session.clone_response_history().await, vec![call]);
-    }
-
-    #[tokio::test]
-    async fn replace_history_replaces_the_session_state_snapshot() {
-        let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).await.unwrap();
-        session.record_items(vec![Message::user("discarded")]).await;
-
-        session
-            .replace_history(vec![Message::assistant("replacement")])
-            .await;
-
-        let history = session.clone_history().await;
-        assert_eq!(history.len(), 1);
-        assert_eq!(history[0].content_str(), "replacement");
     }
 
     #[tokio::test]

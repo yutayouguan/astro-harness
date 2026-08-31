@@ -72,10 +72,7 @@ pub struct NewMessage<'a> {
     pub token_count: Option<i64>,
     pub finish_reason: Option<&'a str>,
     pub reasoning: Option<&'a str>,
-    pub reasoning_content: Option<&'a str>,
     pub reasoning_details: Option<Value>,
-    pub reasoning_items: Option<Value>,
-    pub message_items: Option<Value>,
     /// 结构化媒体 JSON 数组（`MediaAsset[]`）；空则不写列。
     pub media_json: Option<&'a str>,
 }
@@ -94,10 +91,7 @@ impl<'a> NewMessage<'a> {
             token_count: None,
             finish_reason: None,
             reasoning: None,
-            reasoning_content: None,
             reasoning_details: None,
-            reasoning_items: None,
-            message_items: None,
             media_json: None,
         }
     }
@@ -118,10 +112,7 @@ pub struct StoredMessage {
     pub token_count: Option<i64>,
     pub finish_reason: Option<String>,
     pub reasoning: Option<String>,
-    pub reasoning_content: Option<String>,
     pub reasoning_details: Option<Value>,
-    pub reasoning_items: Option<Value>,
-    pub message_items: Option<Value>,
     /// 结构化媒体 JSON 数组字符串。
     pub media_json: Option<String>,
 }

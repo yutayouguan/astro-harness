@@ -1055,32 +1055,42 @@ impl AstroServiceImpl {
             .unwrap_or_else(|| {
                 agent_rollout::new_rollout_path(&rollout_root, thread_id, chrono::Utc::now())
             });
-        let existing_items = if rollout_path.exists() {
+        let has_existing_rollout = rollout_path.exists();
+        let existing_items = if has_existing_rollout {
             agent_rollout::read_rollout(&rollout_path)
                 .await
                 .map_err(|error| Status::internal(error.to_string()))?
         } else {
             Vec::new()
         };
-        let projection = open_sessions(&self.memory_dir)
-            .await
-            .map_err(Status::internal)?;
-        session::store::rebuild_messages_from_rollout(&projection, thread_id, &existing_items)
-            .await
-            .map_err(|error| Status::internal(error.to_string()))?;
-        let session = self.get_session(thread_id).await?;
-        let history = existing_items
+        let has_native_history = existing_items
             .iter()
-            .filter_map(|item| match item {
-                agent_rollout::RolloutItem::ResponseItem(item) => Some(item.clone()),
-                _ => None,
-            })
-            .collect();
-        session.replace_response_history(history).await;
+            .any(|item| matches!(item, agent_rollout::RolloutItem::ResponseItem(_)));
+        if has_native_history {
+            let projection = open_sessions(&self.memory_dir)
+                .await
+                .map_err(Status::internal)?;
+            session::store::rebuild_messages_from_rollout(&projection, thread_id, &existing_items)
+                .await
+                .map_err(|error| Status::internal(error.to_string()))?;
+        }
+        let session = self.get_session(thread_id).await?;
         session.restore_prompt_context_from_rollout(&existing_items);
         let rollout = agent_rollout::RolloutRecorder::open(rollout_path)
             .await
             .map_err(|error| Status::internal(error.to_string()))?;
+        if !has_native_history {
+            let legacy_history = session
+                .clone_response_history()
+                .await
+                .into_iter()
+                .map(agent_rollout::RolloutItem::ResponseItem)
+                .collect();
+            rollout
+                .record(legacy_history)
+                .await
+                .map_err(|error| Status::internal(error.to_string()))?;
+        }
         let runtime = agent::AstroThread::spawn(Arc::clone(&session), rollout)
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
 

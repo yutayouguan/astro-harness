@@ -38,7 +38,6 @@ function flattenWithDepth(nodes: readonly AgentTreeNode[], depth = 0): FlatNode[
 function messageText(message: AgentThreadMessage): string {
   return message.content
     ?? message.compressedContent
-    ?? message.reasoningContent
     ?? message.reasoning
     ?? "";
 }

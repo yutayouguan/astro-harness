@@ -257,11 +257,7 @@ async fn spans_from_chat_history(
                 let parent = format!("llm-{}", msg.id);
                 let output = msg.content.as_deref().and_then(nonempty_truncated);
                 let has_tool_calls = matches!(msg.tool_calls.as_ref(), Some(serde_json::Value::Array(a)) if !a.is_empty());
-                let reasoning = msg
-                    .reasoning
-                    .as_deref()
-                    .or(msg.reasoning_content.as_deref())
-                    .and_then(nonempty_truncated);
+                let reasoning = msg.reasoning.as_deref().and_then(nonempty_truncated);
 
                 if has_tool_calls || output.is_some() || reasoning.is_some() {
                     events.push(TraceEvent {

@@ -41,21 +41,7 @@ pub(crate) struct SessionState {
 }
 
 impl SessionState {
-    pub(crate) fn new(history: Vec<Message>, project_root: Option<PathBuf>) -> Self {
-        let history = history
-            .iter()
-            .flat_map(|message| {
-                agent_rollout::response_items_from_message(message, None)
-                    .expect("serializing runtime message as response item cannot fail")
-            })
-            .collect();
-        Self::from_response_items(history, project_root)
-    }
-
-    pub(crate) fn from_response_items(
-        history: Vec<ResponseItem>,
-        project_root: Option<PathBuf>,
-    ) -> Self {
+    pub(crate) fn new(history: Vec<ResponseItem>, project_root: Option<PathBuf>) -> Self {
         let session_start_source = if history.is_empty() {
             "startup"
         } else {
@@ -94,10 +80,6 @@ impl SessionState {
 
     pub(crate) fn clone_response_history(&self) -> Vec<ResponseItem> {
         self.history.clone()
-    }
-
-    pub(crate) fn replace_response_history(&mut self, history: Vec<ResponseItem>) {
-        self.history = history;
     }
 
     pub(crate) fn clone_message_projection(&self) -> Vec<Message> {

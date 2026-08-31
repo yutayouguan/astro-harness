@@ -829,10 +829,7 @@ mod tests {
             token_count: None,
             finish_reason: None,
             reasoning: None,
-            reasoning_content: None,
             reasoning_details: None,
-            reasoning_items: None,
-            message_items: None,
             media_json: None,
         }
     }

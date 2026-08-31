@@ -591,12 +591,10 @@ async fn copy_prefix_through_turn(
             sqlx::query(
                 "INSERT INTO messages (
                     session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                    timestamp, token_count, finish_reason, reasoning, reasoning_content, reasoning_details,
-                    reasoning_items, message_items, media_json
+                    timestamp, token_count, finish_reason, reasoning, reasoning_details, media_json
                  )
                  SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                        timestamp, token_count, finish_reason, reasoning, reasoning_content,
-                        reasoning_details, reasoning_items, message_items, media_json
+                        timestamp, token_count, finish_reason, reasoning, reasoning_details, media_json
                  FROM messages WHERE session_id = ?2
                  AND (timestamp < ?3 OR (timestamp = ?3 AND id < ?4))
                  ORDER BY timestamp ASC, id ASC",
@@ -613,12 +611,10 @@ async fn copy_prefix_through_turn(
             sqlx::query(
                 "INSERT INTO messages (
                     session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                    timestamp, token_count, finish_reason, reasoning, reasoning_content, reasoning_details,
-                    reasoning_items, message_items, media_json
+                    timestamp, token_count, finish_reason, reasoning, reasoning_details, media_json
                  )
                  SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                        timestamp, token_count, finish_reason, reasoning, reasoning_content,
-                        reasoning_details, reasoning_items, message_items, media_json
+                        timestamp, token_count, finish_reason, reasoning, reasoning_details, media_json
                  FROM messages WHERE session_id = ?2
                  ORDER BY timestamp ASC, id ASC",
             )

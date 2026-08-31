@@ -127,7 +127,7 @@ impl SessionStore {
                         id: m.id.to_string(),
                         role: "assistant".into(),
                         content: m.content.unwrap_or_default(),
-                        reasoning: m.reasoning.or(m.reasoning_content),
+                        reasoning: m.reasoning,
                         activities,
                         segments,
                         ui_surfaces,

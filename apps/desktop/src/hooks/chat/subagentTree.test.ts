@@ -320,10 +320,7 @@ test("normalizes the real SessionStore timeline including tool metadata", () => 
       token_count: 8,
       finish_reason: null,
       reasoning: null,
-      reasoning_content: null,
       reasoning_details: null,
-      reasoning_items: null,
-      message_items: null,
       media_json: null,
     }],
   });

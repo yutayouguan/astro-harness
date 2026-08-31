@@ -76,10 +76,7 @@ pub async fn rebuild_messages_from_rollout(
             token_count: None,
             finish_reason: None,
             reasoning: message.reasoning.as_deref(),
-            reasoning_content: None,
             reasoning_details: message.reasoning_details,
-            reasoning_items: None,
-            message_items: None,
             media_json: message.media_json.as_deref(),
         };
         insert_message_row(&mut *tx, row, timestamp).await?;

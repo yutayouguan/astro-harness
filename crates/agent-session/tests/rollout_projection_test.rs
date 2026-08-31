@@ -93,7 +93,10 @@ async fn repeated_rebuild_is_idempotent_for_native_response_items() {
     );
     assert_eq!(messages[0].role, "user");
     assert_eq!(messages[0].content.as_deref(), Some("hello"));
-    assert_eq!(messages[0].compressed_content, None);
+    assert_eq!(
+        messages[0].compressed_content.as_deref(),
+        Some("hello compressed")
+    );
     let user_media: Vec<MediaAsset> =
         serde_json::from_str(messages[0].media_json.as_deref().unwrap()).unwrap();
     assert_eq!(user_media.len(), 1);
@@ -112,7 +115,9 @@ async fn repeated_rebuild_is_idempotent_for_native_response_items() {
     assert_eq!(messages[2].tool_name.as_deref(), Some("exec_command"));
     assert_eq!(messages[2].content.as_deref(), Some("tool output"));
     assert_eq!(messages[2].compressed_content, None);
-    assert!(messages[2].media_json.is_none());
+    let tool_media: Vec<MediaAsset> =
+        serde_json::from_str(messages[2].media_json.as_deref().unwrap()).unwrap();
+    assert_eq!(tool_media.len(), 1);
 
     let session = store.get_session("thread-1").await.unwrap().unwrap();
     assert_eq!(session.source, "rollout");

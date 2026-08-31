@@ -16,21 +16,17 @@ pub(crate) async fn insert_message_row(
 ) -> Result<i64> {
     let tool_calls = json_to_db(&msg.tool_calls)?;
     let reasoning_details = json_to_db(&msg.reasoning_details)?;
-    let reasoning_items = json_to_db(&msg.reasoning_items)?;
-    let message_items = json_to_db(&msg.message_items)?;
     let result = sqlx::query(
         "INSERT INTO messages (
             session_id, role, content, compressed_content,
             tool_call_id, tool_calls, tool_name,
             timestamp, token_count, finish_reason,
-            reasoning, reasoning_content, reasoning_details,
-            reasoning_items, message_items, media_json
+            reasoning, reasoning_details, media_json
          ) VALUES (
             ?1, ?2, ?3, ?4,
             ?5, ?6, ?7,
             ?8, ?9, ?10,
-            ?11, ?12, ?13,
-            ?14, ?15, ?16
+            ?11, ?12, ?13
          )",
     )
     .bind(msg.session_id)
@@ -44,10 +40,7 @@ pub(crate) async fn insert_message_row(
     .bind(msg.token_count)
     .bind(msg.finish_reason)
     .bind(msg.reasoning)
-    .bind(msg.reasoning_content)
     .bind(reasoning_details)
-    .bind(reasoning_items)
-    .bind(message_items)
     .bind(msg.media_json)
     .execute(executor)
     .await?;
@@ -112,8 +105,7 @@ impl SessionStore {
         let rows = sqlx::query(
             "SELECT id, session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
-                    reasoning, reasoning_content, reasoning_details,
-                    reasoning_items, message_items, media_json
+                    reasoning, reasoning_details, media_json
              FROM messages
              WHERE session_id = ?1
              ORDER BY timestamp ASC, id ASC",
@@ -125,9 +117,7 @@ impl SessionStore {
         let mut out = Vec::new();
         for row in rows {
             let tool_calls_raw: Option<String> = row.get::<Option<String>, _>(6);
-            let reasoning_details_raw: Option<String> = row.get::<Option<String>, _>(13);
-            let reasoning_items_raw: Option<String> = row.get::<Option<String>, _>(14);
-            let message_items_raw: Option<String> = row.get::<Option<String>, _>(15);
+            let reasoning_details_raw: Option<String> = row.get::<Option<String>, _>(12);
             out.push(StoredMessage {
                 id: row.get::<i64, _>(0),
                 session_id: row.get::<String, _>(1),
@@ -141,11 +131,8 @@ impl SessionStore {
                 token_count: row.get::<Option<i64>, _>(9),
                 finish_reason: row.get::<Option<String>, _>(10),
                 reasoning: row.get::<Option<String>, _>(11),
-                reasoning_content: row.get::<Option<String>, _>(12),
                 reasoning_details: json_from_db(reasoning_details_raw)?,
-                reasoning_items: json_from_db(reasoning_items_raw)?,
-                message_items: json_from_db(message_items_raw)?,
-                media_json: row.get::<Option<String>, _>(16),
+                media_json: row.get::<Option<String>, _>(13),
             });
         }
         Ok(out)
@@ -247,19 +234,15 @@ impl SessionStore {
         for m in &messages[..=end] {
             let tool_calls = json_to_db(&m.tool_calls)?;
             let reasoning_details = json_to_db(&m.reasoning_details)?;
-            let reasoning_items = json_to_db(&m.reasoning_items)?;
-            let message_items = json_to_db(&m.message_items)?;
             sqlx::query(
                 "INSERT INTO messages (
                     session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
-                    reasoning, reasoning_content, reasoning_details,
-                    reasoning_items, message_items, media_json
+                    reasoning, reasoning_details, media_json
                  ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7,
                     ?8, ?9, ?10,
-                    ?11, ?12, ?13,
-                    ?14, ?15, ?16
+                    ?11, ?12, ?13
                  )",
             )
             .bind(new_id)
@@ -273,10 +256,7 @@ impl SessionStore {
             .bind(m.token_count)
             .bind(&m.finish_reason)
             .bind(&m.reasoning)
-            .bind(&m.reasoning_content)
             .bind(&reasoning_details)
-            .bind(&reasoning_items)
-            .bind(&message_items)
             .bind(&m.media_json)
             .execute(&mut *tx)
             .await?;
@@ -373,13 +353,11 @@ impl SessionStore {
                     "INSERT INTO messages (
                         session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                         timestamp, token_count, finish_reason,
-                        reasoning, reasoning_content, reasoning_details,
-                        reasoning_items, message_items, media_json
+                        reasoning, reasoning_details, media_json
                      )
                      SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                             timestamp, token_count, finish_reason,
-                            reasoning, reasoning_content, reasoning_details,
-                            reasoning_items, message_items, media_json
+                            reasoning, reasoning_details, media_json
                      FROM messages
                      WHERE session_id = ?2
                      ORDER BY timestamp ASC, id ASC",
@@ -409,13 +387,11 @@ impl SessionStore {
                         "INSERT INTO messages (
                             session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                             timestamp, token_count, finish_reason,
-                            reasoning, reasoning_content, reasoning_details,
-                            reasoning_items, message_items, media_json
+                            reasoning, reasoning_details, media_json
                          )
                          SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                                 timestamp, token_count, finish_reason,
-                                reasoning, reasoning_content, reasoning_details,
-                                reasoning_items, message_items, media_json
+                                reasoning, reasoning_details, media_json
                          FROM messages
                          WHERE session_id = ?2
                          AND (timestamp > ?3 OR (timestamp = ?3 AND id >= ?4))
@@ -432,13 +408,11 @@ impl SessionStore {
                         "INSERT INTO messages (
                             session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                             timestamp, token_count, finish_reason,
-                            reasoning, reasoning_content, reasoning_details,
-                            reasoning_items, message_items, media_json
+                            reasoning, reasoning_details, media_json
                          )
                          SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                                 timestamp, token_count, finish_reason,
-                                reasoning, reasoning_content, reasoning_details,
-                                reasoning_items, message_items, media_json
+                                reasoning, reasoning_details, media_json
                          FROM messages
                          WHERE session_id = ?2
                          ORDER BY timestamp ASC, id ASC",
@@ -737,20 +711,16 @@ impl SessionStore {
                 for (i, m) in messages[start..].iter().enumerate() {
                     let tool_calls = json_to_db(&m.tool_calls)?;
                     let reasoning_details = json_to_db(&m.reasoning_details)?;
-                    let reasoning_items = json_to_db(&m.reasoning_items)?;
-                    let message_items = json_to_db(&m.message_items)?;
                     let timestamp = now + (i + 1) as f64 * 0.001;
                     sqlx::query(
                         "INSERT INTO messages (
                             session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                             timestamp, token_count, finish_reason,
-                            reasoning, reasoning_content, reasoning_details,
-                            reasoning_items, message_items, media_json
+                            reasoning, reasoning_details, media_json
                          ) VALUES (
                             ?1, ?2, ?3, ?4, ?5, ?6, ?7,
                             ?8, ?9, ?10,
-                            ?11, ?12, ?13,
-                            ?14, ?15, ?16
+                            ?11, ?12, ?13
                          )",
                     )
                     .bind(new_id)
@@ -764,10 +734,7 @@ impl SessionStore {
                     .bind(m.token_count)
                     .bind(&m.finish_reason)
                     .bind(&m.reasoning)
-                    .bind(&m.reasoning_content)
                     .bind(&reasoning_details)
-                    .bind(&reasoning_items)
-                    .bind(&message_items)
                     .bind(&m.media_json)
                     .execute(&mut *tx)
                     .await?;
@@ -821,17 +788,8 @@ impl SessionStore {
             if let Some(r) = m.reasoning {
                 obj.insert("reasoning".into(), Value::String(r));
             }
-            if let Some(r) = m.reasoning_content {
-                obj.insert("reasoning_content".into(), Value::String(r));
-            }
             if let Some(r) = m.reasoning_details {
                 obj.insert("reasoning_details".into(), r);
-            }
-            if let Some(r) = m.reasoning_items {
-                obj.insert("reasoning_items".into(), r);
-            }
-            if let Some(r) = m.message_items {
-                obj.insert("message_items".into(), r);
             }
             out.push(Value::Object(obj));
         }

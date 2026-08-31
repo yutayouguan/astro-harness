@@ -1,22 +1,44 @@
 use std::path::PathBuf;
 
 use ::session::ConversationStore;
+use agent_protocol::ResponseItem;
 use types::message::Message;
 
-/// 从会话存储冷启动重建 `SessionState.history`（权威以 DB 为准）。
-pub async fn hydrate_history(
+/// 从 canonical rollout 直接恢复 Agent 历史。
+///
+/// 无 rollout 的老会话才从 SQLite Message 投影做一次性兼容转换。
+pub async fn hydrate_response_history(
+    memory_dir: &std::path::Path,
     sessions: &dyn ConversationStore,
     session_id: &str,
-) -> anyhow::Result<Vec<Message>> {
-    let stored = sessions.get_messages(session_id).await?;
-    let mut out = Vec::with_capacity(stored.len());
-    for m in stored {
-        if let Some(msg) = stored_message_to_runtime(m)? {
-            out.push(msg);
+) -> anyhow::Result<Vec<ResponseItem>> {
+    let rollout_root = memory_dir.join("sessions").join("rollouts");
+    if let Some(path) = agent_rollout::find_rollout(&rollout_root, session_id)? {
+        let items = agent_rollout::read_rollout(&path).await?;
+        let response_items = items
+            .into_iter()
+            .filter_map(|item| match item {
+                agent_rollout::RolloutItem::ResponseItem(item) => Some(item),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if !response_items.is_empty() {
+            return Ok(response_items);
         }
     }
-    // 保留持久化历史原样；tool call/output 归一化只在 provider prompt 快照上进行。
-    Ok(out)
+
+    let stored = sessions.get_messages(session_id).await?;
+    let mut messages = Vec::with_capacity(stored.len());
+    for m in stored {
+        if let Some(msg) = stored_message_to_runtime(m)? {
+            messages.push(msg);
+        }
+    }
+    let mut response_items = Vec::new();
+    for message in &messages {
+        response_items.extend(agent_rollout::response_items_from_message(message, None)?);
+    }
+    Ok(response_items)
 }
 
 fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Option<Message>> {
