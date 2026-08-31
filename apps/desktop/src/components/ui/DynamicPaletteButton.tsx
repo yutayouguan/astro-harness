@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef } from "react";
 
 type Props = {
   label: string;
@@ -7,12 +7,29 @@ type Props = {
 
 /** 灵动色彩模式在主聊天页的轻量重配色入口。 */
 export default function DynamicPaletteButton({ label, onReshuffle }: Props) {
-  const [spinRevision, setSpinRevision] = useState(0);
+  const rotorRef = useRef<SVGGElement | null>(null);
   const gradientPrefix = `dynamic-pinwheel-${useId().replace(/:/g, "")}`;
   const gradientId = (name: string) => `${gradientPrefix}-${name}`;
 
   const reshuffle = () => {
-    setSpinRevision((revision) => revision + 1);
+    const rotor = rotorRef.current;
+    if (rotor) {
+      const reduceMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      rotor.getAnimations().forEach((animation) => animation.cancel());
+      rotor.animate(
+        [
+          { transform: "rotate(0deg)" },
+          { transform: `rotate(${reduceMotion ? 360 : 720}deg)` },
+        ],
+        {
+          duration: reduceMotion ? 320 : 680,
+          easing: "cubic-bezier(0.77, 0, 0.175, 1)",
+        },
+      );
+    }
     onReshuffle();
   };
 
@@ -133,11 +150,7 @@ export default function DynamicPaletteButton({ label, onReshuffle }: Props) {
             </linearGradient>
           </defs>
           <path className="shell-dynamic-palette-stem" d="M24 25v39.5" />
-          <g
-            key={spinRevision}
-            className="shell-dynamic-palette-rotor"
-            data-spinning={spinRevision > 0 || undefined}
-          >
+          <g ref={rotorRef} className="shell-dynamic-palette-rotor">
             <path
               data-blade="blue"
               fill={`url(#${gradientId("blue")})`}

@@ -34,9 +34,12 @@ test("dynamic seed changes crossfade from the current shell palette", () => {
 });
 
 test("each activation restarts the pinwheel feedback", () => {
-  assert.match(component, /setSpinRevision\(\(revision\) => revision \+ 1\)/);
-  assert.match(component, /key=\{spinRevision\}/);
-  assert.match(component, /data-spinning=\{spinRevision > 0 \|\| undefined\}/);
+  assert.match(component, /const rotorRef = useRef<SVGGElement \| null>\(null\)/);
+  assert.match(component, /rotor\.getAnimations\(\)\.forEach/);
+  assert.match(component, /animation\.cancel\(\)/);
+  assert.match(component, /rotor\.animate\(/);
+  assert.match(component, /reduceMotion \? 360 : 720/);
+  assert.match(component, /ref=\{rotorRef\}/);
   assert.match(component, /onReshuffle\(\)/);
   assert.match(component, /shell-dynamic-palette-stem/);
   assert.match(component, /d="M24 25v39\.5"/);
@@ -45,14 +48,9 @@ test("each activation restarts the pinwheel feedback", () => {
   assert.match(component, /data-blade="green"/);
   assert.match(component, /data-blade="cyan"/);
   assert.match(component, /data-blade="red"/);
-  assert.match(
-    styles,
-    /shell-dynamic-palette-spin 520ms cubic-bezier\(0\.77, 0, 0\.175, 1\)/,
-  );
-  assert.match(styles, /\.shell-dynamic-palette-rotor\[data-spinning="true"\]/);
   assert.match(styles, /\.shell-dynamic-palette-button\s*\{[\s\S]*border:\s*0;/);
   assert.match(styles, /\.shell-dynamic-palette-button\s*\{[\s\S]*background:\s*transparent;/);
-  assert.match(styles, /transform:\s*rotate\(720deg\)/);
+  assert.match(styles, /\.shell-dynamic-palette-rotor\s*\{[\s\S]*will-change:\s*transform;/);
 });
 
 test("dynamic palette control has accessible motion and input states", () => {
@@ -61,5 +59,6 @@ test("dynamic palette control has accessible motion and input states", () => {
   assert.match(styles, /\.shell-dynamic-palette-button:active/);
   assert.match(styles, /@media \(hover: hover\) and \(pointer: fine\)/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*bottom:\s*92px;/);
+  assert.match(styles, /\.shell-dynamic-palette-button\s*\{[\s\S]*bottom:\s*0;/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*bottom:\s*0;/);
 });
