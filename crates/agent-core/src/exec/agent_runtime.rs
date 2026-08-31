@@ -1991,7 +1991,6 @@ mod tests {
                     model: "test".into(),
                     api_key: "test".into(),
                     base_url: "http://127.0.0.1.invalid".into(),
-                    api_mode: String::new(),
                 }],
                 project_root: None,
                 workspace_roots: Vec::new(),

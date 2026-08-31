@@ -9,9 +9,6 @@ pub struct ChatTarget {
     pub model: String,
     pub api_key: String,
     pub base_url: String,
-    /// API 协议模式覆盖（空 = profile 默认；`"responses"` = Responses API）。
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub api_mode: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,7 +65,6 @@ mod tests {
             model: model.into(),
             api_key: format!("k-{id}"),
             base_url: format!("https://{id}.example"),
-            api_mode: String::new(),
         }
     }
 

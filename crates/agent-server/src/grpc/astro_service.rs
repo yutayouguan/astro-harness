@@ -108,6 +108,9 @@ fn parse_auxiliary_targets(
         let Some(task) = types::AuxiliaryTask::parse(item.task.trim()) else {
             continue;
         };
+        if !providers::dispatch::supports_agent_responses(&item.backend_id) {
+            continue;
+        }
         grouped.entry(task).or_default().push((
             item.order,
             types::ChatTarget {
@@ -116,7 +119,6 @@ fn parse_auxiliary_targets(
                 model: item.model,
                 api_key: item.api_key,
                 base_url: item.base_url,
-                api_mode: String::new(),
             },
         ));
     }
@@ -1209,10 +1211,15 @@ impl AstroServiceImpl {
         };
 
         let provider = if req.provider.trim().is_empty() {
-            "ollama"
+            "openai"
         } else {
             req.provider.trim()
         };
+        if !providers::dispatch::supports_agent_responses(provider) {
+            return Err(Status::invalid_argument(format!(
+                "provider `{provider}` does not support the Responses API"
+            )));
+        }
         let model = if req.model.trim().is_empty() {
             providers::dispatch::default_model(provider).to_string()
         } else {
@@ -1230,15 +1237,17 @@ impl AstroServiceImpl {
             model: model.clone(),
             api_key: api_key.clone(),
             base_url: base_url.clone(),
-            api_mode: req.api_mode.trim().to_string(),
         }];
-        targets.extend(req.chat_fallbacks.iter().map(|fallback| types::ChatTarget {
-            provider_id: fallback.provider_id.clone(),
-            backend_id: fallback.provider.clone(),
-            model: fallback.model.clone(),
-            api_key: fallback.api_key.clone(),
-            base_url: fallback.base_url.clone(),
-            api_mode: fallback.api_mode.trim().to_string(),
+        targets.extend(req.chat_fallbacks.iter().filter_map(|fallback| {
+            providers::dispatch::supports_agent_responses(&fallback.provider).then(|| {
+                types::ChatTarget {
+                    provider_id: fallback.provider_id.clone(),
+                    backend_id: fallback.provider.clone(),
+                    model: fallback.model.clone(),
+                    api_key: fallback.api_key.clone(),
+                    base_url: fallback.base_url.clone(),
+                }
+            })
         }));
         let session = thread.session();
         session.set_hook_runtime(hook_runtime);

@@ -522,7 +522,6 @@ pub async fn regenerate_session_title(
 
     async fn complete_one(target: &ResolvedTarget, prompt: &str) -> Result<String, String> {
         use futures::StreamExt;
-        use providers::types::message::Message as ProviderMessage;
         use providers::types::stream::StreamChunk;
         use providers::ProviderConfig;
 
@@ -542,11 +541,14 @@ pub async fn regenerate_session_title(
             previous_interaction_id: None,
             api_mode: String::new(),
         };
-        let messages = vec![ProviderMessage::user_text(prompt)];
-        let mut stream =
-            providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
-                .await
-                .map_err(|e| e.to_string())?;
+        let mut stream = providers::dispatch::agent_responses_prompt(
+            &target.backend_id,
+            "Generate a concise title for the supplied conversation.",
+            prompt,
+            &config,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         let mut out = String::new();
         while let Some(item) = stream.next().await {
             let chunk = item.map_err(|e| e.to_string())?;

@@ -553,7 +553,6 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
             api_key: t.api_key.clone(),
             base_url: t.base_url.clone(),
             provider_id: t.provider_id.clone(),
-            api_mode: t.api_mode.clone(),
         })
         .collect();
     let image_targets = resolve_image_gen_targets().unwrap_or_default();
@@ -704,7 +703,6 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         client_message_id: String::new(),
         project_id,
         workspace_roots,
-        api_mode: primary.api_mode.clone(),
     };
 
     let bridge = managed_bridge(&app).inner().clone();

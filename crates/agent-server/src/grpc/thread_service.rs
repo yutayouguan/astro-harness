@@ -673,7 +673,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configure_thread_preserves_primary_and_fallback_api_modes() {
+    async fn configure_thread_keeps_only_responses_capable_targets() {
         let dir = TempDir::new().expect("tempdir");
         memory::ensure_workspace(dir.path()).expect("workspace");
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
@@ -689,13 +689,18 @@ mod tests {
                     session_id: "api-mode-thread".into(),
                     provider: "deepseek".into(),
                     model: "deepseek-v4-flash".into(),
-                    api_mode: "chat_completions".into(),
-                    chat_fallbacks: vec![proto::ChatFallbackTarget {
-                        provider: "openai".into(),
-                        model: "gpt-5.6".into(),
-                        api_mode: "responses".into(),
-                        ..Default::default()
-                    }],
+                    chat_fallbacks: vec![
+                        proto::ChatFallbackTarget {
+                            provider: "openai".into(),
+                            model: "gpt-5.6".into(),
+                            ..Default::default()
+                        },
+                        proto::ChatFallbackTarget {
+                            provider: "ollama".into(),
+                            model: "qwen3".into(),
+                            ..Default::default()
+                        },
+                    ],
                     ..Default::default()
                 },
             )
@@ -703,8 +708,43 @@ mod tests {
             .expect("configure thread");
 
         let targets = managed.runtime.session().chat_targets();
-        assert_eq!(targets[0].api_mode, "chat_completions");
-        assert_eq!(targets[1].api_mode, "responses");
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].backend_id, "deepseek");
+        assert_eq!(targets[1].backend_id, "openai");
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn configure_thread_rejects_non_responses_primary() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("unsupported-agent-provider")
+            .await
+            .expect("thread");
+
+        let error = service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "unsupported-agent-provider".into(),
+                    provider: "ollama".into(),
+                    model: "qwen3".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("Agent must reject providers without Responses support");
+
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert!(error.message().contains("Responses API"));
 
         managed
             .runtime

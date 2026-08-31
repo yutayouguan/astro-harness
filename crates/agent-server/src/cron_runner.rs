@@ -80,7 +80,6 @@ fn entry_to_target(entry: &ProviderEntry) -> Option<ChatTarget> {
         model: entry.model.clone(),
         api_key,
         base_url,
-        api_mode: String::new(),
     })
 }
 
@@ -275,7 +274,6 @@ mod tests {
             model: "gpt".into(),
             api_key: "k0".into(),
             base_url: "https://api.openai.com/v1".into(),
-            api_mode: String::new(),
         };
         let refs = vec![FallbackRef {
             provider_id: "p1".into(),
@@ -289,7 +287,6 @@ mod tests {
                     model: "claude".into(),
                     api_key: "k1".into(),
                     base_url: "https://api.anthropic.com".into(),
-                    api_mode: String::new(),
                 })
             } else {
                 None

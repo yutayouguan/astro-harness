@@ -277,9 +277,7 @@ export type ProviderDto = {
   supports_asr?: boolean;
   supports_embedding?: boolean;
   embedding_model?: string;
-  /** 当前 API 协议模式（chat_completions / responses / anthropic_messages 等） */
-  api_mode?: string;
-  /** 是否支持 Responses API 模式切换 */
+  /** 是否可用于 Agent Responses API */
   supports_responses_api?: boolean;
   /** 配置来源：builtin / toml / user */
   config_source?: string;

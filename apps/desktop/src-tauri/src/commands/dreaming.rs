@@ -11,7 +11,6 @@ use memory::dreaming::{
     DreamAgentReport, DreamJob, DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
 use memory::{list_pending, load_memory_config};
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 
@@ -86,11 +85,7 @@ async fn complete_chat(
         previous_interaction_id: None,
         api_mode: String::new(),
     };
-    let messages = vec![
-        ProviderMessage::system(system),
-        ProviderMessage::user_text(user),
-    ];
-    let mut stream = providers::dispatch::chat_stream(backend_id, messages, vec![], &config)
+    let mut stream = providers::dispatch::agent_responses_prompt(backend_id, system, user, &config)
         .await
         .map_err(|e| format!("入梦调用模型失败: {e}"))?;
     let mut out = String::new();
@@ -259,7 +254,6 @@ fn active_chat_target() -> Result<types::ChatTarget, String> {
         model: ui.model,
         api_key: key.unwrap_or_default(),
         base_url: ui.endpoint,
-        api_mode: ui.api_mode,
     })
 }
 

@@ -187,7 +187,6 @@ type Draft = {
   tts_model: string;
   music_model: string;
   vision_model: string;
-  api_mode: string;
 };
 
 type DetailTab = "chat" | "models" | "media" | "voice" | "embedding";
@@ -245,7 +244,6 @@ function draftFromProvider(p: ProviderDto): Draft {
     tts_model: p.tts_model?.trim() ?? "",
     music_model: p.music_model?.trim() ?? "",
     vision_model: p.vision_model?.trim() ?? "",
-    api_mode: p.api_mode ?? "",
   };
 }
 
@@ -267,7 +265,6 @@ function providerSaveInput(
     tts_model: draft.tts_model.trim(),
     music_model: draft.music_model.trim(),
     vision_model: draft.vision_model.trim(),
-    api_mode: draft.api_mode,
   };
 }
 
@@ -1301,6 +1298,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     state?.providers.filter(
       (p) =>
         p.enabled &&
+        p.supports_responses_api === true &&
         p.id !== selected?.id &&
         !fallbackEntries.some((f) => f.provider_id === p.id),
     ) ?? [];
@@ -1618,7 +1616,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                 >
                   <IconSave />
                 </IconButton>
-                {!isActive && draft.enabled && (
+                {!isActive && draft.enabled && selected.supports_responses_api && (
                   <IconButton
                     variant="secondary"
                     className="providers-pane-action"
@@ -1817,29 +1815,12 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                 </label>
                 {draft.endpoint.trim() && (
                   <p className="providers-field-hint">
-                    → {resolveEndpointPreview(selected.kind, draft.endpoint, draft.api_mode)}
+                    → {resolveEndpointPreview(
+                      selected.kind,
+                      draft.endpoint,
+                      selected.supports_responses_api ? "responses" : undefined,
+                    )}
                   </p>
-                )}
-
-                {selected.supports_responses_api && (
-                  <label className="providers-field providers-field-span">
-                    <span className="providers-field-label">
-                      <Zap size={14} />
-                      API 模式
-                    </span>
-                    <SelectMenu
-                      value={draft.api_mode === "responses" ? "responses" : "chat_completions"}
-                      onChange={(v) =>
-                        setDraft((d) =>
-                          d ? { ...d, api_mode: v } : d,
-                        )
-                      }
-                      options={[
-                        { value: "responses", label: "Responses API" },
-                        { value: "chat_completions", label: "Chat Completions (兼容)" },
-                      ]}
-                    />
-                  </label>
                 )}
               </div>
 

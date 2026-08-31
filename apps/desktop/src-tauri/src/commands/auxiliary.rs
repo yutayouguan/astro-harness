@@ -190,8 +190,7 @@ mod tests {
             supports_music: false,
             supports_asr: false,
             supports_embedding: false,
-            api_mode: "chat_completions".into(),
-            supports_responses_api: false,
+            supports_responses_api: true,
             config_source: "builtin".into(),
         }
     }

@@ -265,7 +265,10 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
   );
 
   const enabledProviders = useMemo(
-    () => (providersState?.providers ?? []).filter((p) => p.enabled),
+    () =>
+      (providersState?.providers ?? []).filter(
+        (p) => p.enabled && p.supports_responses_api === true,
+      ),
     [providersState],
   );
 

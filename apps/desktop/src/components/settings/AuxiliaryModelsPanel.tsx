@@ -121,7 +121,10 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
   const [loadingModelsFor, setLoadingModelsFor] = useState<string | null>(null);
 
   const enabledProviders = useMemo(
-    () => (providersState?.providers ?? []).filter((p) => p.enabled),
+    () =>
+      (providersState?.providers ?? []).filter(
+        (p) => p.enabled && p.supports_responses_api === true,
+      ),
     [providersState],
   );
 

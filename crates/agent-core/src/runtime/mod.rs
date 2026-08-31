@@ -1728,7 +1728,6 @@ mod tests {
             model: model.into(),
             api_key: format!("k-{id}"),
             base_url: format!("https://{id}.example"),
-            api_mode: String::new(),
         }
     }
 

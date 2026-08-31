@@ -69,7 +69,6 @@ async fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaul
         model: "model-only".into(),
         api_key: String::new(),
         base_url: String::new(),
-        api_mode: String::new(),
     }]);
 
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
@@ -79,7 +78,6 @@ async fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaul
         model: String::new(),
         api_key: String::new(),
         base_url: String::new(),
-        api_mode: String::new(),
     }]);
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
     agent.set_chat_targets(vec![types::ChatTarget {
@@ -88,7 +86,6 @@ async fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaul
         model: String::new(),
         api_key: String::new(),
         base_url: String::new(),
-        api_mode: String::new(),
     }]);
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
     agent.fire_hook(

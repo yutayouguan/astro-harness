@@ -4,7 +4,6 @@ use futures::StreamExt;
 use serde::Serialize;
 use uuid::Uuid;
 
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use session::StoredMessage;
@@ -137,12 +136,8 @@ async fn summarize_with_target(
 Cover: goals, constraints, done, in-progress, key paths/decisions, next steps. \
 Reply in the same language as the transcript. No preamble.";
     let user = format!("Transcript:\n\n{transcript}");
-    let messages = vec![
-        ProviderMessage::system(system),
-        ProviderMessage::user_text(user),
-    ];
     let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
+        providers::dispatch::agent_responses_prompt(&target.backend_id, system, user, &config)
             .await
             .map_err(|e| format!("压实调用模型失败: {e}"))?;
     let mut out = String::new();
@@ -296,7 +291,6 @@ mod tests {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
-            api_mode: String::new(),
         }
     }
 

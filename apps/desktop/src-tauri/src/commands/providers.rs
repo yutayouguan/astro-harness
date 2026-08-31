@@ -260,9 +260,6 @@ pub struct ProviderConfig {
     /// 音乐生成模型（空=内置默认；主要 Google）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub music_model: String,
-    /// API 协议模式覆盖。空 = 使用 profile 默认；`"responses"` = Responses API。
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub api_mode: String,
 }
 
 impl ProviderConfig {
@@ -281,7 +278,6 @@ impl ProviderConfig {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
-            api_mode: String::new(),
         }
     }
 
@@ -467,9 +463,7 @@ pub struct ProviderConfigDto {
     pub supports_music: bool,
     pub supports_asr: bool,
     pub supports_embedding: bool,
-    /// 当前 API 协议模式（`"chat_completions"` / `"responses"` 等）。
-    pub api_mode: String,
-    /// 是否支持 Responses API 模式切换。
+    /// 是否可用于 Agent Responses API。
     pub supports_responses_api: bool,
     /// 配置来源：`"builtin"` / `"toml"` / `"user"`。
     pub config_source: String,
@@ -501,8 +495,6 @@ pub struct ProviderConfigInput {
     pub vision_model: String,
     #[serde(default)]
     pub music_model: String,
-    #[serde(default)]
-    pub api_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -760,7 +752,6 @@ fn merge_toml_custom_providers(state: &mut ProvidersState) {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
-            api_mode: "responses".to_string(),
         });
     }
 }
@@ -795,17 +786,6 @@ pub(crate) fn resolve_api_key(
 /// 支持 Responses API 切换的厂商（表驱动）。
 fn supports_responses_toggle(kind: ProviderKind) -> bool {
     providers::profile::resolve(kind.backend_id()).is_some_and(|p| p.supports_responses)
-}
-
-/// 当前生效的 api_mode 名称（用于前端展示）。
-fn effective_api_mode(kind: ProviderKind, api_mode: &str) -> &'static str {
-    match providers::profile::effective_api_mode(kind.backend_id(), api_mode) {
-        providers::ApiMode::ChatCompletions => "chat_completions",
-        providers::ApiMode::AnthropicMessages => "anthropic_messages",
-        providers::ApiMode::Responses => "responses",
-        providers::ApiMode::Interactions => "interactions",
-        providers::ApiMode::GeminiNative => "gemini_native",
-    }
 }
 
 /// TOML 自定义 provider 用 TOML key 作为 backend_id（dispatch 需要此 ID 命中 custom provider）。
@@ -868,7 +848,6 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         supports_music: profile.supports_music(),
         supports_asr: profile.supports_asr(),
         supports_embedding: profile.supports_embedding,
-        api_mode: effective_api_mode(p.kind, &p.api_mode).to_string(),
         supports_responses_api: supports_responses_toggle(p.kind) || p.id.starts_with("toml:"),
         config_source: if p.id.starts_with("toml:") {
             "toml".to_string()
@@ -992,7 +971,6 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             tts_model: provider.tts_model.trim().to_string(),
             vision_model: provider.vision_model.trim().to_string(),
             music_model: provider.music_model.trim().to_string(),
-            api_mode: provider.api_mode.trim().to_string(),
         };
         Ok(to_state_dto(s))
     })
@@ -1062,8 +1040,13 @@ pub fn delete_provider(id: String) -> Result<ProvidersStateDto, String> {
 #[tauri::command]
 pub fn set_active_provider(id: String) -> Result<ProvidersStateDto, String> {
     with_state_mut(|s| {
-        if !s.providers.iter().any(|p| p.id == id && p.enabled) {
-            return Err("提供商不存在或未启用".to_string());
+        let provider = s
+            .providers
+            .iter()
+            .find(|p| p.id == id && p.enabled)
+            .ok_or_else(|| "提供商不存在或未启用".to_string())?;
+        if !providers::dispatch::supports_agent_responses(&toml_backend_id(provider)) {
+            return Err("该提供商不支持 Agent Responses API".to_string());
         }
         s.active_provider_id = Some(id);
         Ok(to_state_dto(s))
@@ -1162,6 +1145,10 @@ pub fn resolve_chat_targets(
     } else {
         find_provider_by_backend(backend_hint)?
     };
+    let primary_backend = toml_backend_id(&cfg);
+    if !providers::dispatch::supports_agent_responses(&primary_backend) {
+        return Err(format!("{} 不支持 Agent Responses API", cfg.display_name));
+    }
 
     let (has, _source, _env, key) = resolve_api_key(&cfg);
     if cfg.kind.requires_api_key() && !has {
@@ -1182,11 +1169,10 @@ pub fn resolve_chat_targets(
 
     let primary = types::ChatTarget {
         provider_id: cfg.id.clone(),
-        backend_id: toml_backend_id(&cfg),
+        backend_id: primary_backend,
         model,
         api_key: key.unwrap_or_default(),
         base_url: cfg.endpoint.clone(),
-        api_mode: cfg.api_mode.clone(),
     };
 
     let refs: Vec<types::FallbackRef> = cfg
@@ -1208,6 +1194,9 @@ pub fn resolve_chat_targets(
         let (_has, _source, _env, key) = resolve_api_key(&p);
         let api_key = key.unwrap_or_default();
         let bid = toml_backend_id(&p);
+        if !providers::dispatch::supports_agent_responses(&bid) {
+            return None;
+        }
         let allow_empty_key = bid == "ollama";
         if api_key.trim().is_empty() && !allow_empty_key {
             return None;
@@ -1218,7 +1207,6 @@ pub fn resolve_chat_targets(
             model: p.model.clone(),
             api_key,
             base_url: p.endpoint.clone(),
-            api_mode: p.api_mode.clone(),
         })
     });
 
@@ -1864,7 +1852,11 @@ async fn probe_one_model(
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
-        api_mode: provider.api_mode.clone(),
+        api_mode: if providers::dispatch::supports_agent_responses(probe_id) {
+            "responses".to_string()
+        } else {
+            "chat_completions".to_string()
+        },
     };
     let result = providers::dispatch::verify(probe_id, &model, &config).await;
     ProviderTestResult {
@@ -1975,16 +1967,10 @@ mod tests {
     }
 
     #[test]
-    fn responses_capable_provider_defaults_to_responses_but_honors_chat_override() {
-        assert_eq!(effective_api_mode(ProviderKind::Deepseek, ""), "responses");
-        assert_eq!(
-            effective_api_mode(ProviderKind::Deepseek, "chat_completions"),
-            "chat_completions"
-        );
-        assert_eq!(
-            effective_api_mode(ProviderKind::Deepseek, "responses"),
-            "responses"
-        );
+    fn agent_provider_capability_is_responses_only() {
+        assert!(providers::dispatch::supports_agent_responses("deepseek"));
+        assert!(providers::dispatch::supports_agent_responses("openai"));
+        assert!(!providers::dispatch::supports_agent_responses("ollama"));
     }
 
     #[test]
@@ -2162,7 +2148,6 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
-                    api_mode: String::new(),
                 },
                 ProviderConfig {
                     id: "v1".into(),
@@ -2177,7 +2162,6 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
-                    api_mode: String::new(),
                 },
                 ProviderConfig {
                     id: "x1".into(),
@@ -2192,7 +2176,6 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
-                    api_mode: String::new(),
                 },
                 ProviderConfig {
                     id: "g1".into(),
@@ -2207,7 +2190,6 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
-                    api_mode: String::new(),
                 },
             ],
         };

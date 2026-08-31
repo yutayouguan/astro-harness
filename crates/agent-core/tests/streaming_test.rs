@@ -266,7 +266,6 @@ async fn run_projected_stream_with_chat_fn(
             model: config.model.clone(),
             api_key: config.api_key.clone(),
             base_url: config.base_url.clone().unwrap_or_default(),
-            api_mode: String::new(),
         }],
         base_config: config,
         input: Vec::new(),
@@ -1192,7 +1191,6 @@ async fn regular_task_owns_initial_input_persistence() {
             model: "test".into(),
             api_key: String::new(),
             base_url: String::new(),
-            api_mode: String::new(),
         }],
         base_config: ProviderConfig {
             model: "test".into(),
@@ -1237,7 +1235,6 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
             model: "test".into(),
             api_key: String::new(),
             base_url: String::new(),
-            api_mode: String::new(),
         }],
         base_config: ProviderConfig::default(),
         input: vec![TurnInput {
@@ -1291,7 +1288,6 @@ async fn regular_task_prepare_error_emits_error_then_done() {
             model: "test".into(),
             api_key: String::new(),
             base_url: String::new(),
-            api_mode: String::new(),
         }],
         base_config: ProviderConfig::default(),
         input: Vec::new(),

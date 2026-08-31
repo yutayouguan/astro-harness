@@ -31,7 +31,6 @@ use evolution::{
 };
 use home::default_memory_dir;
 use memory::DecisionKind;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -135,7 +134,6 @@ fn active_primary_target() -> Result<types::ChatTarget, String> {
         model: ui.model,
         api_key: key.unwrap_or_default(),
         base_url: ui.endpoint,
-        api_mode: ui.api_mode,
     })
 }
 
@@ -161,12 +159,8 @@ async fn complete_chat(
         previous_interaction_id: None,
         api_mode: String::new(),
     };
-    let messages = vec![
-        ProviderMessage::system(system),
-        ProviderMessage::user_text(user),
-    ];
     let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
+        providers::dispatch::agent_responses_prompt(&target.backend_id, system, user, &config)
             .await
             .map_err(|e| format!("进化调用模型失败: {e}"))?;
     let mut out = String::new();
