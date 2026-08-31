@@ -3,6 +3,7 @@ use std::sync::Arc;
 use agent_protocol::{ErrorEvent, EventMsg, ItemEvent, Op, Submission, TurnItem};
 use async_channel::Receiver;
 use futures::FutureExt;
+use serde_json::{Map, Value};
 
 use super::Session;
 use crate::streaming::ChatOverride;
@@ -156,24 +157,22 @@ impl Session {
                     .await;
                 }
             }
-            Op::ExecApproval { .. } => {
-                self.emit_unsupported_op(submission_id, "exec_approval")
+            Op::ExecApproval { id, decision } => {
+                self.resolve_approval(submission_id, id, decision).await;
+            }
+            Op::PatchApproval { id, decision } => {
+                self.resolve_approval(submission_id, id, decision).await;
+            }
+            Op::UserInputAnswer { id, response } => {
+                self.resolve_control_response(submission_id, id, "resolved", response)
                     .await;
             }
-            Op::PatchApproval { .. } => {
-                self.emit_unsupported_op(submission_id, "patch_approval")
+            Op::RequestPermissionsResponse { id, response } => {
+                self.resolve_control_response(submission_id, id, "resolved", response)
                     .await;
             }
-            Op::UserInputAnswer { .. } => {
-                self.emit_unsupported_op(submission_id, "user_input_answer")
-                    .await;
-            }
-            Op::RequestPermissionsResponse { .. } => {
-                self.emit_unsupported_op(submission_id, "request_permissions_response")
-                    .await;
-            }
-            Op::DynamicToolResponse { .. } => {
-                self.emit_unsupported_op(submission_id, "dynamic_tool_response")
+            Op::DynamicToolResponse { id, response } => {
+                self.resolve_control_response(submission_id, id, "resolved", response)
                     .await;
             }
             Op::Compact => self.emit_unsupported_op(submission_id, "compact").await,
@@ -189,6 +188,39 @@ impl Session {
             Op::TurnInput { .. } | Op::Interrupt | Op::EmitExtension { .. } | Op::Shutdown => {
                 unreachable!("submission loop routes primary control operations directly")
             }
+        }
+    }
+
+    async fn resolve_approval(&self, submission_id: String, id: String, decision: Value) {
+        let (status, payload) = approval_resolution(decision);
+        self.resolve_control_response(submission_id, id, status, payload)
+            .await;
+    }
+
+    async fn resolve_control_response(
+        &self,
+        submission_id: String,
+        request_id: String,
+        status: &str,
+        payload: Value,
+    ) {
+        let (_, gate, _) = self.ensure_thread_controls();
+        let result = gate
+            .resolve(&[crate::ResumeItem {
+                interrupt_id: request_id,
+                status: status.to_string(),
+                payload_json: payload.to_string(),
+            }])
+            .await;
+        if let Err(error) = result {
+            self.send_event(
+                &submission_id,
+                EventMsg::Error(ErrorEvent {
+                    message: error,
+                    error_type: "control_response".into(),
+                }),
+            )
+            .await;
         }
     }
 
@@ -254,12 +286,62 @@ impl Session {
     }
 }
 
+fn approval_resolution(decision: Value) -> (&'static str, Value) {
+    match decision {
+        Value::String(decision) => approval_resolution_from_name(&decision, Map::new()),
+        Value::Object(mut decision) => {
+            if decision.get("approved").and_then(Value::as_bool).is_some() {
+                return ("resolved", Value::Object(decision));
+            }
+            let name = decision
+                .remove("decision")
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .or_else(|| {
+                    (decision.len() == 1)
+                        .then(|| decision.keys().next().cloned())
+                        .flatten()
+                })
+                .unwrap_or_else(|| "denied".into());
+            approval_resolution_from_name(&name, decision)
+        }
+        _ => ("resolved", serde_json::json!({ "approved": false })),
+    }
+}
+
+fn approval_resolution_from_name(
+    decision: &str,
+    mut metadata: Map<String, Value>,
+) -> (&'static str, Value) {
+    let normalized = decision.trim().to_ascii_lowercase();
+    let (status, approved, always, abort) = match normalized.as_str() {
+        "approved" | "approve" | "allow" | "allow_once" => ("resolved", true, false, false),
+        "approved_for_session"
+        | "approvedforsession"
+        | "allow_always"
+        | "approved_execpolicy_amendment"
+        | "approved_mcp_policy_amendment"
+        | "network_policy_amendment" => ("resolved", true, true, false),
+        "timed_out" | "timeout" => ("timeout", false, false, false),
+        "abort" | "cancelled" | "canceled" => ("cancelled", false, false, true),
+        _ => ("resolved", false, false, false),
+    };
+    metadata.insert("approved".into(), Value::Bool(approved));
+    if always {
+        metadata.insert("always".into(), Value::Bool(true));
+    }
+    if abort {
+        metadata.insert("abort".into(), Value::Bool(true));
+    }
+    (status, Value::Object(metadata))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;
 
     use agent_protocol::{Op, Submission, TurnInput};
+    use serde_json::json;
     use tokio::sync::Notify;
     use tokio_util::sync::CancellationToken;
 
@@ -337,5 +419,90 @@ mod tests {
         .unwrap();
         drop(tx);
         loop_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn ordered_control_ops_resolve_the_session_hitl_gate() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "submission-control-test".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        let (_, gate, _) = session.ensure_thread_controls();
+        let approval = gate
+            .begin_wait(crate::Interrupt {
+                id: "approval-1".into(),
+                response_schema_json: json!({
+                    "type": "object",
+                    "required": ["approved"],
+                    "properties": { "approved": { "type": "boolean" } }
+                })
+                .to_string(),
+                ..Default::default()
+            })
+            .await;
+        let answer = gate
+            .begin_wait(crate::Interrupt {
+                id: "question-1".into(),
+                ..Default::default()
+            })
+            .await;
+
+        let (tx, rx) = async_channel::bounded(4);
+        let loop_task = tokio::spawn(submission_loop(Arc::clone(&session), rx, None));
+        tx.send(Submission {
+            id: "approval-submission".into(),
+            op: Op::ExecApproval {
+                id: "approval-1".into(),
+                decision: Value::String("approved_for_session".into()),
+            },
+        })
+        .await
+        .unwrap();
+        let approval = approval.await.unwrap();
+        assert_eq!(approval.status, "resolved");
+        let payload: Value = serde_json::from_str(&approval.payload_json).unwrap();
+        assert_eq!(payload["approved"], true);
+        assert_eq!(payload["always"], true);
+
+        tx.send(Submission {
+            id: "answer-submission".into(),
+            op: Op::UserInputAnswer {
+                id: "question-1".into(),
+                response: json!({ "answers": { "choice": ["yes"] } }),
+            },
+        })
+        .await
+        .unwrap();
+        let answer = answer.await.unwrap();
+        assert_eq!(answer.status, "resolved");
+        assert_eq!(
+            serde_json::from_str::<Value>(&answer.payload_json).unwrap(),
+            json!({ "answers": { "choice": ["yes"] } })
+        );
+
+        drop(tx);
+        loop_task.await.unwrap();
+    }
+
+    #[test]
+    fn approval_resolution_accepts_codex_decision_names() {
+        let (status, approved) = approval_resolution(Value::String("approved".into()));
+        assert_eq!(status, "resolved");
+        assert_eq!(approved, json!({ "approved": true }));
+
+        let (status, denied) = approval_resolution(json!({
+            "denied": { "rejection": "unsafe" }
+        }));
+        assert_eq!(status, "resolved");
+        assert_eq!(denied["approved"], false);
+
+        let (status, timeout) = approval_resolution(Value::String("timed_out".into()));
+        assert_eq!(status, "timeout");
+        assert_eq!(timeout["approved"], false);
     }
 }

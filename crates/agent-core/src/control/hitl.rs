@@ -195,7 +195,7 @@ impl HitlGate {
         // 先全部校验再发送，避免部分完成
         let mut prepared = Vec::with_capacity(items.len());
         for item in items {
-            if item.status != "resolved" && item.status != "cancelled" {
+            if item.status != "resolved" && item.status != "cancelled" && item.status != "timeout" {
                 return Err(format!("invalid resume status: {}", item.status));
             }
             let Some(waiting) = map.get(&item.interrupt_id) else {
