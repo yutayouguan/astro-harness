@@ -15,7 +15,7 @@ pub async fn hydrate_history(
             out.push(msg);
         }
     }
-    crate::prompt::sanitize::sanitize_tool_pairs(&mut out);
+    // 保留持久化历史原样；tool call/output 归一化只在 provider prompt 快照上进行。
     Ok(out)
 }
 

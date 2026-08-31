@@ -10,8 +10,8 @@ use types::message::{Message, MessageContent, Role};
 /// 将会话历史与 system prompt 转为 Provider 可消费的聊天消息列表。
 ///
 /// 首条固定为 `system` 角色；tool 消息会从历史中反向查找对应 `tool_call_id` 以填充 `name`。
-/// 发送前会 [`sanitize_tool_pairs`](super::sanitize::sanitize_tool_pairs)：去掉悬挂
-/// `tool_calls` 与孤儿 tool 消息，避免上游 400。
+/// 发送前会 [`sanitize_tool_pairs`](super::sanitize::sanitize_tool_pairs)：为悬挂
+/// `tool_calls` 补齐 aborted 结果并去掉孤儿 tool 消息，避免上游 400。
 pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<ProviderMessage> {
     to_provider_messages_with_context(
         &crate::prompt::PromptContract::from_base_instructions(system_prompt),
@@ -415,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn dangling_assistant_tool_calls_are_stripped() {
+    fn dangling_assistant_tool_calls_get_aborted_outputs() {
         let session = vec![
             Message::assistant_with_tools(
                 "partial",
@@ -449,9 +449,57 @@ mod tests {
                     _ => None,
                 })
                 .collect();
-            assert_eq!(calls.len(), 1);
+            assert_eq!(calls.len(), 2);
             assert_eq!(calls[0].id, "c1");
+            assert_eq!(calls[1].id, "c2");
         }
+        let tools: Vec<_> = msgs
+            .iter()
+            .filter(|message| message.role() == providers::types::message::Role::Tool)
+            .collect();
+        assert_eq!(tools.len(), 2);
+        if let ProviderMessage::Tool {
+            tool_call_id,
+            content,
+            ..
+        } = &tools[0]
+        {
+            assert_eq!(tool_call_id, "c2");
+            assert_eq!(content, "aborted");
+        }
+    }
+
+    #[test]
+    fn responses_projection_keeps_text_call_output_order() {
+        let session = vec![Message::assistant_with_tools(
+            "I will inspect it.",
+            vec![ToolCall {
+                id: "c1".into(),
+                name: "read".into(),
+                arguments: json!({"path": "f.rs"}),
+                signature: None,
+            }],
+        )];
+
+        let provider_messages = to_provider_messages("sys", &session);
+        let input = providers::openai::responses::to_responses_input(&provider_messages);
+        let kinds = input
+            .iter()
+            .map(|item| {
+                item.get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| item.get("role").and_then(serde_json::Value::as_str))
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            kinds,
+            ["assistant", "function_call", "function_call_output"]
+        );
+        assert_eq!(input[1]["call_id"], "c1");
+        assert_eq!(input[2]["call_id"], "c1");
+        assert_eq!(input[2]["output"], "aborted");
     }
 
     #[test]

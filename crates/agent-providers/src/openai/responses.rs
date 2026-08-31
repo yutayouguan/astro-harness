@@ -14,17 +14,10 @@ use crate::types::stream::StreamChunk;
 
 /// 将 [`Message`] 转为 Responses API `input` 数组。
 pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
-    let mut result_ids = HashSet::new();
     let mut call_names = HashMap::new();
     for m in messages {
-        if let Message::Tool { tool_call_id, .. } = m {
-            let id = tool_call_id.trim();
-            if !id.is_empty() {
-                result_ids.insert(id.to_string());
-            }
-        }
         if let Message::Assistant { content } = m {
             for part in content {
                 if let AssistantContent::ToolCall(call) = part {
@@ -71,73 +64,66 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
             }
 
             Message::Assistant { content } => {
-                let had_any_tool_call = content
-                    .iter()
-                    .any(|c| matches!(c, AssistantContent::ToolCall(_)));
-                let text = m.text_content();
-                // Responses 兼容端要求 tool call 后紧跟配对的 output。
-                // 先放 assistant 文本，避免它被插到 call/output 之间。
-                if !text.is_empty() {
-                    input.push(json!({
-                        "role": "assistant",
-                        "content": json!(text),
-                    }));
-                }
+                let mut emitted = false;
                 for part in content {
-                    if let AssistantContent::ToolCall(ToolCall {
-                        id,
-                        name,
-                        arguments,
-                        ..
-                    }) = part
-                    {
-                        if !result_ids.contains(id.trim()) {
-                            continue;
+                    match part {
+                        AssistantContent::Text { text } if !text.is_empty() => {
+                            input.push(json!({
+                                "role": "assistant",
+                                "content": text,
+                            }));
+                            emitted = true;
                         }
-                        match name.as_str() {
-                            "tool_search" => input.push(json!({
-                                "type": "tool_search_call",
-                                "call_id": id,
-                                "execution": "client",
-                                "arguments": arguments,
-                            })),
-                            "apply_patch" | "exec" => {
-                                let input_text = arguments
-                                    .as_str()
-                                    .or_else(|| arguments.get("input").and_then(Value::as_str))
-                                    .map(str::to_string)
-                                    .unwrap_or_else(|| arguments.to_string());
-                                input.push(json!({
-                                    "type": "custom_tool_call",
-                                    "id": id,
+                        AssistantContent::ToolCall(ToolCall {
+                            id,
+                            name,
+                            arguments,
+                            ..
+                        }) => {
+                            match name.as_str() {
+                                "tool_search" => input.push(json!({
+                                    "type": "tool_search_call",
                                     "call_id": id,
-                                    "name": name,
-                                    "input": input_text,
-                                }));
+                                    "execution": "client",
+                                    "arguments": arguments,
+                                })),
+                                "apply_patch" | "exec" => {
+                                    let input_text = arguments
+                                        .as_str()
+                                        .or_else(|| arguments.get("input").and_then(Value::as_str))
+                                        .map(str::to_string)
+                                        .unwrap_or_else(|| arguments.to_string());
+                                    input.push(json!({
+                                        "type": "custom_tool_call",
+                                        "id": id,
+                                        "call_id": id,
+                                        "name": name,
+                                        "input": input_text,
+                                    }));
+                                }
+                                _ => {
+                                    let args = match arguments {
+                                        Value::String(s) => s.clone(),
+                                        other => other.to_string(),
+                                    };
+                                    input.push(json!({
+                                        "type": "function_call",
+                                        "id": id,
+                                        "call_id": id,
+                                        "name": name,
+                                        "arguments": args,
+                                    }));
+                                }
                             }
-                            _ => {
-                                let args = match arguments {
-                                    Value::String(s) => s.clone(),
-                                    other => other.to_string(),
-                                };
-                                input.push(json!({
-                                    "type": "function_call",
-                                    "id": id,
-                                    "call_id": id,
-                                    "name": name,
-                                    "arguments": args,
-                                }));
-                            }
+                            emitted = true;
                         }
+                        AssistantContent::Thinking { .. } | AssistantContent::Text { .. } => {}
                     }
                 }
-                if had_any_tool_call && text.is_empty() {
-                    continue;
-                }
-                if text.is_empty() {
+                if !emitted {
                     input.push(json!({
                         "role": "assistant",
-                        "content": json!(text),
+                        "content": "",
                     }));
                 }
             }
@@ -458,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    fn assistant_text_precedes_tool_call_and_its_output() {
+    fn assistant_parts_preserve_native_response_item_order() {
         let msgs = vec![
             Message::assistant(vec![
                 AssistantContent::Text {
@@ -481,6 +467,24 @@ mod tests {
         assert_eq!(input[1]["call_id"], "call_image");
         assert_eq!(input[2]["type"], "function_call_output");
         assert_eq!(input[2]["call_id"], "call_image");
+
+        let reversed = to_responses_input(&[
+            Message::assistant(vec![
+                AssistantContent::ToolCall(ToolCall {
+                    id: "call_image".into(),
+                    name: "image_gen".into(),
+                    arguments: json!({"prompt": "diagram"}),
+                    signature: None,
+                }),
+                AssistantContent::Text {
+                    text: "I will generate the image.".into(),
+                },
+            ]),
+            Message::tool_result("call_image", "generated/image.png", false),
+        ]);
+        assert_eq!(reversed[0]["type"], "function_call");
+        assert_eq!(reversed[1]["role"], "assistant");
+        assert_eq!(reversed[2]["type"], "function_call_output");
     }
 
     #[test]
@@ -548,7 +552,7 @@ mod tests {
     }
 
     #[test]
-    fn to_responses_input_drops_orphan_tool_calls() {
+    fn to_responses_input_preserves_native_orphan_tool_calls() {
         let msgs = vec![Message::assistant(vec![AssistantContent::ToolCall(
             ToolCall {
                 id: "call_orphan".into(),
@@ -558,11 +562,13 @@ mod tests {
             },
         )])];
         let input = to_responses_input(&msgs);
-        assert!(input.is_empty(), "orphan tool_call should be dropped");
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], "function_call");
+        assert_eq!(input[0]["call_id"], "call_orphan");
     }
 
     #[test]
-    fn orphan_tool_calls_preserve_text() {
+    fn orphan_tool_calls_and_text_preserve_source_order() {
         let msgs = vec![Message::assistant(vec![
             AssistantContent::Text {
                 text: "analysis done".into(),
@@ -575,9 +581,11 @@ mod tests {
             }),
         ])];
         let input = to_responses_input(&msgs);
-        assert_eq!(input.len(), 1);
+        assert_eq!(input.len(), 2);
         assert_eq!(input[0]["role"], "assistant");
         assert_eq!(input[0]["content"], "analysis done");
+        assert_eq!(input[1]["type"], "function_call");
+        assert_eq!(input[1]["call_id"], "call_orphan");
     }
 
     // ── 内容构建 ──
