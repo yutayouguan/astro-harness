@@ -4,6 +4,7 @@
 //! 而活跃任务注册表则直接保留在 [`super::Session`] 上。[`super::Session`]
 //! 通过短生命周期互斥锁持有本容器，确保调用方不会暴露与状态守卫绑定的引用。
 
+use agent_protocol::ResponseItem;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,7 +14,9 @@ use super::{compression_state, model_ctx, turn_budget, StepContext, TurnContext}
 
 /// 此前直接存储在 [`super::Session`] 上的持久化可变状态。
 pub(crate) struct SessionState {
-    pub(crate) history: Vec<Message>,
+    /// Canonical model history. Chat-shaped [`Message`] values are only
+    /// compatibility projections for storage/search/UI consumers.
+    pub(crate) history: Vec<ResponseItem>,
     pub(crate) pending_session_start_source: Option<String>,
     pub(crate) model_ctx: model_ctx::ModelContext,
     pub(crate) compression: compression_state::CompressionState,
@@ -39,6 +42,20 @@ pub(crate) struct SessionState {
 
 impl SessionState {
     pub(crate) fn new(history: Vec<Message>, project_root: Option<PathBuf>) -> Self {
+        let history = history
+            .iter()
+            .flat_map(|message| {
+                agent_rollout::response_items_from_message(message, None)
+                    .expect("serializing runtime message as response item cannot fail")
+            })
+            .collect();
+        Self::from_response_items(history, project_root)
+    }
+
+    pub(crate) fn from_response_items(
+        history: Vec<ResponseItem>,
+        project_root: Option<PathBuf>,
+    ) -> Self {
         let session_start_source = if history.is_empty() {
             "startup"
         } else {
@@ -70,17 +87,25 @@ impl SessionState {
 
     pub(crate) fn record_items<I>(&mut self, items: I)
     where
-        I: IntoIterator<Item = Message>,
+        I: IntoIterator<Item = ResponseItem>,
     {
         self.history.extend(items);
     }
 
-    pub(crate) fn clone_history(&self) -> Vec<Message> {
+    pub(crate) fn clone_response_history(&self) -> Vec<ResponseItem> {
         self.history.clone()
     }
 
-    pub(crate) fn replace_history(&mut self, history: Vec<Message>) {
+    pub(crate) fn replace_response_history(&mut self, history: Vec<ResponseItem>) {
         self.history = history;
+    }
+
+    pub(crate) fn clone_message_projection(&self) -> Vec<Message> {
+        agent_rollout::reconstruct_response_items(self.history.clone())
+            .expect("projecting response items as messages cannot fail")
+            .into_iter()
+            .map(|item| item.message)
+            .collect()
     }
 }
 

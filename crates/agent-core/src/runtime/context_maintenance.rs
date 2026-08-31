@@ -1,7 +1,7 @@
 //! AgentLoop 上下文维护：tool 结果压缩、provider 历史折叠与上下文占用估算。
 
 use session::ConversationStore;
-use types::message::{Message, Role};
+use types::message::Message;
 
 use crate::compression::{prune_tool_view, ContextMaintenanceResult, ToolCompressionManager};
 
@@ -14,7 +14,7 @@ impl AgentLoop {
             let state = self.lock_state();
             (
                 state.compression.mid_run_handoff.clone(),
-                state.clone_history(),
+                state.clone_message_projection(),
             )
         };
         match handoff {
@@ -50,7 +50,7 @@ impl AgentLoop {
                 result.thrashing_disabled = true;
                 return Ok(result);
             }
-            state.clone_history()
+            state.clone_message_projection()
         };
 
         let stored = self
@@ -219,15 +219,28 @@ impl AgentLoop {
             .update_message_compressed_content(stored_msg.id, Some(view))
             .await?;
         let mut state = self.lock_state();
-        if let Some(runtime_msg) = state.history.iter_mut().find(|m| {
-            m.role == Role::Tool
-                && match (&m.tool_call_id, &stored_msg.tool_call_id) {
-                    (Some(a), Some(b)) => a == b,
-                    (None, None) => m.content_str() == content,
-                    _ => false,
-                }
+        if let Some(agent_protocol::ResponseItem::FunctionCallOutput {
+            internal_chat_message_metadata_passthrough,
+            ..
+        }) = state.history.iter_mut().find(|item| {
+            matches!(
+                item,
+                agent_protocol::ResponseItem::FunctionCallOutput { call_id, output, .. }
+                    if match (call_id, &stored_msg.tool_call_id) {
+                        (Some(a), Some(b)) => a == b,
+                        (None, None) => output.as_str() == Some(content),
+                        _ => false,
+                    }
+            )
         }) {
-            runtime_msg.compressed_content = Some(view.to_string());
+            let metadata = internal_chat_message_metadata_passthrough
+                .get_or_insert_with(|| serde_json::json!({}));
+            if let Some(object) = metadata.as_object_mut() {
+                object.insert(
+                    "astro_compressed_output".to_string(),
+                    serde_json::Value::String(view.to_string()),
+                );
+            }
         }
         Ok(())
     }

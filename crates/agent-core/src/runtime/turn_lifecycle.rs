@@ -729,15 +729,30 @@ impl Session {
             image_data_urls,
             client_message_id: _,
         } = input;
-        let mut message = Message::user_with_images(content, image_data_urls);
-        message.compressed_content = marker.map(str::to_string);
+        let mut response_content = vec![agent_protocol::ContentItem::InputText {
+            text: content.clone(),
+        }];
+        response_content.extend(image_data_urls.iter().map(|image_url| {
+            agent_protocol::ContentItem::InputImage {
+                image_url: image_url.clone(),
+                detail: None,
+            }
+        }));
+        let item = agent_protocol::ResponseItem::Message {
+            id: None,
+            role: "user".into(),
+            content: response_content,
+            phase: None,
+            internal_chat_message_metadata_passthrough: marker
+                .map(|value| serde_json::json!({ "astro_memory_marker": value })),
+        };
         if let Err(error) = self
-            .persist_response_messages(std::slice::from_ref(&message), None)
+            .persist_response_items(std::slice::from_ref(&item))
             .await
         {
             tracing::warn!(%error, "failed to persist turn input response item");
         }
-        self.record_items_unlocked(vec![message]);
+        self.record_response_items_unlocked(vec![item]);
         #[cfg(test)]
         if let Some(hook) = self
             .services

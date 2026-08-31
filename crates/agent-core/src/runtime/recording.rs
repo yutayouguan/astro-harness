@@ -1,28 +1,28 @@
 //! AgentLoop 消息记录方法：assistant / user / tool 角色消息的持久化与会话镜像维护。
 
+use agent_protocol::{ContentItem, ResponseItem};
 use session::{ConversationStore, NewMessage};
-use types::message::Message;
 
 use super::AgentLoop;
 
 impl AgentLoop {
-    pub(crate) async fn persist_response_messages(
+    pub(crate) async fn persist_response_items(
         &self,
-        messages: &[Message],
-        tool_name: Option<&str>,
+        items: &[agent_protocol::ResponseItem],
     ) -> anyhow::Result<()> {
         let Some(bindings) = self.runtime_io.get() else {
             return Ok(());
         };
-        let mut items = Vec::new();
-        for message in messages {
-            items.extend(
-                agent_rollout::response_items_from_message(message, tool_name)?
-                    .into_iter()
-                    .map(agent_rollout::RolloutItem::ResponseItem),
-            );
-        }
-        bindings.rollout.record(items).await?;
+        bindings
+            .rollout
+            .record(
+                items
+                    .iter()
+                    .cloned()
+                    .map(agent_rollout::RolloutItem::ResponseItem)
+                    .collect(),
+            )
+            .await?;
         Ok(())
     }
 
@@ -70,7 +70,9 @@ impl AgentLoop {
             .last()
             .is_some_and(|message| message.role == types::message::Role::User)
         {
-            self.record_items(vec![Message::assistant(content)]).await;
+            let items = response_items_for_assistant(content, &[], None, None)?;
+            self.persist_response_items(&items).await?;
+            self.record_response_items_unlocked(items);
         }
         Ok(())
     }
@@ -91,8 +93,7 @@ impl AgentLoop {
 
     /// 将 assistant 回复（可含 tool_calls / reasoning / reasoning_details）写入记忆与会话镜像。
     ///
-    /// 非空 `tool_calls` 时使用 `Message::assistant_with_tools` 保留结构化调用信息；
-    /// 落盘通过 `SessionStore::append_message` 写入富字段。
+    /// SQLite 仅保留 UI/检索投影；rollout 与运行时直接保存原生 ResponseItem。
     pub async fn record_assistant_message_with_tools(
         &self,
         content: &str,
@@ -106,8 +107,6 @@ impl AgentLoop {
             _ => None,
         };
         let reasoning = reasoning.filter(|r| !r.is_empty());
-        let thought_signature =
-            types::message::google_thought_signature_from_details(&reasoning_details);
         self.services
             .sessions
             .ensure_session(&self.session_id, "tauri")
@@ -122,16 +121,14 @@ impl AgentLoop {
                 ..NewMessage::empty(&self.session_id, "assistant")
             })
             .await?;
-        let msg = match tool_calls {
-            Some(calls) if !calls.is_empty() => Message::assistant_with_tools(content, calls),
-            _ => Message::assistant(content),
-        };
-        let mut msg = msg;
-        msg.reasoning = reasoning.map(str::to_string);
-        msg.thought_signature = thought_signature;
-        self.persist_response_messages(std::slice::from_ref(&msg), None)
-            .await?;
-        self.record_items_unlocked(vec![msg]);
+        let response_items = response_items_for_assistant(
+            content,
+            tool_calls.as_deref().unwrap_or_default(),
+            reasoning,
+            reasoning_details,
+        )?;
+        self.persist_response_items(&response_items).await?;
+        self.record_response_items_unlocked(response_items);
         Ok(())
     }
 
@@ -193,10 +190,18 @@ impl AgentLoop {
                 ..NewMessage::empty(&self.session_id, "user")
             })
             .await?;
-        let message = Message::user(content);
-        self.persist_response_messages(std::slice::from_ref(&message), None)
+        let item = ResponseItem::Message {
+            id: None,
+            role: "user".into(),
+            content: vec![ContentItem::InputText {
+                text: content.to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        };
+        self.persist_response_items(std::slice::from_ref(&item))
             .await?;
-        self.record_items_unlocked(vec![message]);
+        self.record_response_items_unlocked(vec![item]);
         Ok(())
     }
 
@@ -301,17 +306,114 @@ impl AgentLoop {
             }
         }
 
-        let mut msg = match tool_call_id {
-            Some(id) if !id.is_empty() => Message::tool_with_id(id, content),
-            _ => Message::tool(content),
+        let output = serde_json::Value::String(content.to_string());
+        let metadata = spill_view.map(|view| {
+            serde_json::json!({
+                "astro_compressed_output": view,
+                "astro_media": media,
+            })
+        });
+        let item = match tool_name {
+            Some("tool_search") => ResponseItem::ToolSearchOutput {
+                id: None,
+                call_id: tool_call_id.map(str::to_string),
+                status: "completed".into(),
+                execution: "client".into(),
+                tools: serde_json::from_str(content).unwrap_or_default(),
+                internal_chat_message_metadata_passthrough: metadata,
+            },
+            Some("apply_patch" | "exec") if tool_call_id.is_some_and(|id| !id.is_empty()) => {
+                ResponseItem::CustomToolCallOutput {
+                    id: None,
+                    call_id: tool_call_id.expect("guarded above").to_string(),
+                    name: tool_name.map(str::to_string),
+                    output,
+                    internal_chat_message_metadata_passthrough: metadata,
+                }
+            }
+            _ => ResponseItem::FunctionCallOutput {
+                id: None,
+                call_id: tool_call_id.map(str::to_string),
+                name: tool_name.map(str::to_string),
+                namespace: None,
+                output,
+                internal_chat_message_metadata_passthrough: metadata,
+            },
         };
-        msg.media = media;
-        if let Some(view) = spill_view {
-            msg.compressed_content = Some(view);
-        }
-        self.persist_response_messages(std::slice::from_ref(&msg), tool_name)
+        self.persist_response_items(std::slice::from_ref(&item))
             .await?;
-        self.record_items_unlocked(vec![msg]);
+        self.record_response_items_unlocked(vec![item]);
         Ok(())
     }
+}
+
+fn response_items_for_assistant(
+    content: &str,
+    calls: &[types::message::ToolCall],
+    reasoning: Option<&str>,
+    metadata: Option<serde_json::Value>,
+) -> anyhow::Result<Vec<ResponseItem>> {
+    let mut items = Vec::new();
+    if let Some(reasoning) = reasoning.filter(|value| !value.is_empty()) {
+        items.push(ResponseItem::Reasoning {
+            id: None,
+            summary: Vec::new(),
+            content: Some(vec![serde_json::json!({
+                "type": "reasoning_text",
+                "text": reasoning,
+            })]),
+            encrypted_content: None,
+            internal_chat_message_metadata_passthrough: metadata.clone(),
+        });
+    }
+    if !content.is_empty() || calls.is_empty() {
+        items.push(ResponseItem::Message {
+            id: None,
+            role: "assistant".into(),
+            content: vec![ContentItem::OutputText {
+                text: content.to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: metadata,
+        });
+    }
+    for call in calls {
+        let item = match call.name.as_str() {
+            "tool_search" => ResponseItem::ToolSearchCall {
+                id: Some(call.id.clone()),
+                call_id: Some(call.id.clone()),
+                status: Some("completed".into()),
+                execution: "client".into(),
+                arguments: call.arguments.clone(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            "apply_patch" | "exec" => ResponseItem::CustomToolCall {
+                id: Some(call.id.clone()),
+                status: Some("completed".into()),
+                call_id: call.id.clone(),
+                name: call.name.clone(),
+                namespace: None,
+                input: call
+                    .arguments
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| call.arguments.to_string()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            _ => ResponseItem::FunctionCall {
+                id: Some(call.id.clone()),
+                name: call.name.clone(),
+                namespace: None,
+                arguments: match &call.arguments {
+                    serde_json::Value::String(value) => value.clone(),
+                    value => serde_json::to_string(value)?,
+                },
+                encrypted_function_args: None,
+                call_id: call.id.clone(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+        };
+        items.push(item);
+    }
+    Ok(items)
 }

@@ -328,18 +328,9 @@ pub(super) async fn record_tool_outcomes(
 
         let recorded = {
             let agent = session.as_ref();
-            let recorded = agent
+            agent
                 .record_tool_result_with_id(Some(&call.id), Some(&call.name), &result_for_history)
-                .await;
-            if !tool_media.is_empty() {
-                let mut state = agent.state.lock().expect("session state mutex poisoned");
-                if let Some(last) = state.history.last_mut() {
-                    if last.role == types::message::Role::Tool && last.media.is_empty() {
-                        last.media = tool_media.clone();
-                    }
-                }
-            }
-            recorded
+                .await
         };
         if let Err(error) = recorded {
             tracing::warn!(%error, tool_call_id = %call.id, "failed to record tool result");

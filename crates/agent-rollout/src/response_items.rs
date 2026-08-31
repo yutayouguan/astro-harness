@@ -30,6 +30,21 @@ pub fn response_items_from_message(
 }
 
 pub fn reconstruct_messages(items: &[RolloutItem]) -> Result<Vec<ReconstructedMessage>> {
+    let response_items = items.iter().filter_map(|item| match item {
+        RolloutItem::ResponseItem(item) => Some(item.clone()),
+        _ => None,
+    });
+    reconstruct_response_items(response_items)
+}
+
+/// Build the legacy/UI message projection from native Responses items.
+///
+/// Agent execution must retain and consume the original [`ResponseItem`] list;
+/// this projection exists only for compatibility consumers such as the
+/// conversation index and current desktop timeline.
+pub fn reconstruct_response_items(
+    items: impl IntoIterator<Item = ResponseItem>,
+) -> Result<Vec<ReconstructedMessage>> {
     let mut messages = Vec::new();
     let mut pending_assistant: Option<Message> = None;
 
@@ -44,10 +59,7 @@ pub fn reconstruct_messages(items: &[RolloutItem]) -> Result<Vec<ReconstructedMe
     };
 
     for item in items {
-        let RolloutItem::ResponseItem(item) = item else {
-            continue;
-        };
-        match item {
+        match &item {
             ResponseItem::Message { role, content, .. } if role == "assistant" => {
                 let incoming = message_from_content(Role::Assistant, content);
                 let pending = pending_assistant.get_or_insert_with(|| Message::assistant(""));

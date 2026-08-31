@@ -1063,16 +1063,18 @@ impl AstroServiceImpl {
         let projection = open_sessions(&self.memory_dir)
             .await
             .map_err(Status::internal)?;
-        session::rebuild_messages_from_rollout(&projection, thread_id, &existing_items)
+        session::store::rebuild_messages_from_rollout(&projection, thread_id, &existing_items)
             .await
             .map_err(|error| Status::internal(error.to_string()))?;
         let session = self.get_session(thread_id).await?;
-        let history = agent_rollout::reconstruct_messages(&existing_items)
-            .map_err(|error| Status::internal(error.to_string()))?
-            .into_iter()
-            .map(|entry| entry.message)
+        let history = existing_items
+            .iter()
+            .filter_map(|item| match item {
+                agent_rollout::RolloutItem::ResponseItem(item) => Some(item.clone()),
+                _ => None,
+            })
             .collect();
-        session.replace_history(history).await;
+        session.replace_response_history(history).await;
         session.restore_prompt_context_from_rollout(&existing_items);
         let rollout = agent_rollout::RolloutRecorder::open(rollout_path)
             .await

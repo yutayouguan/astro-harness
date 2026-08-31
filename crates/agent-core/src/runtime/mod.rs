@@ -1530,25 +1530,59 @@ impl Session {
     /// 将对话条目追加到会话拥有的历史记录中。
     pub async fn record_items(&self, items: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
-        if let Err(error) = self.persist_response_messages(&items, None).await {
+        let response_items = items
+            .iter()
+            .flat_map(|message| {
+                agent_rollout::response_items_from_message(message, None)
+                    .expect("serializing runtime message as response item cannot fail")
+            })
+            .collect::<Vec<_>>();
+        if let Err(error) = self.persist_response_items(&response_items).await {
             tracing::warn!(%error, "failed to persist response items");
         }
-        self.record_items_unlocked(items);
+        self.record_response_items_unlocked(response_items);
     }
 
-    fn record_items_unlocked(&self, items: Vec<Message>) {
+    pub(crate) async fn record_response_items(
+        &self,
+        items: Vec<agent_protocol::ResponseItem>,
+    ) -> anyhow::Result<()> {
+        let _write_guard = self.conversation_write_lock.lock().await;
+        self.persist_response_items(&items).await?;
+        self.record_response_items_unlocked(items);
+        Ok(())
+    }
+
+    fn record_response_items_unlocked(&self, items: Vec<agent_protocol::ResponseItem>) {
         self.lock_state().record_items(items);
     }
 
     /// 返回当前对话历史的拥有式快照。
     pub async fn clone_history(&self) -> Vec<Message> {
-        self.lock_state().clone_history()
+        self.lock_state().clone_message_projection()
+    }
+
+    /// Canonical Responses history used for model sampling and rollout replay.
+    pub async fn clone_response_history(&self) -> Vec<agent_protocol::ResponseItem> {
+        self.lock_state().clone_response_history()
     }
 
     /// 用拥有式快照替换当前对话历史。
     pub async fn replace_history(&self, history: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.lock_state().replace_history(history);
+        let response_items = history
+            .iter()
+            .flat_map(|message| {
+                agent_rollout::response_items_from_message(message, None)
+                    .expect("serializing runtime message as response item cannot fail")
+            })
+            .collect();
+        self.lock_state().replace_response_history(response_items);
+    }
+
+    pub async fn replace_response_history(&self, history: Vec<agent_protocol::ResponseItem>) {
+        let _write_guard = self.conversation_write_lock.lock().await;
+        self.lock_state().replace_response_history(history);
     }
 
     pub fn context_window(&self) -> u32 {
@@ -1583,7 +1617,12 @@ impl Session {
             let before_user = state
                 .history
                 .iter()
-                .filter(|m| m.role == types::message::Role::User)
+                .filter(|item| {
+                    matches!(
+                        item,
+                        agent_protocol::ResponseItem::Message { role, .. } if role == "user"
+                    )
+                })
                 .count();
             let previous = state.prompt_context_snapshot.as_ref();
             let rollout_item =
@@ -1657,7 +1696,7 @@ impl Session {
     /// 返回对话历史中最后 `n` 条消息。
     pub fn tail_history(&self, n: usize) -> Vec<types::message::Message> {
         let state = self.lock_state();
-        let history = &state.history;
+        let history = state.clone_message_projection();
         let start = history.len().saturating_sub(n);
         history[start..].to_vec()
     }
@@ -2041,6 +2080,28 @@ mod tests {
         let current = session.clone_history().await;
         assert_eq!(current.len(), 1);
         assert_eq!(current[0].content_str(), "original");
+    }
+
+    #[tokio::test]
+    async fn canonical_history_keeps_native_response_items() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
+        let call = agent_protocol::ResponseItem::FunctionCall {
+            id: Some("item_1".into()),
+            name: "lookup".into(),
+            namespace: Some("mcp".into()),
+            arguments: "{\"query\":\"rust\"}".into(),
+            encrypted_function_args: Some(vec!["opaque".into()]),
+            call_id: "call_1".into(),
+            internal_chat_message_metadata_passthrough: None,
+        };
+
+        session
+            .record_response_items(vec![call.clone()])
+            .await
+            .unwrap();
+
+        assert_eq!(session.clone_response_history().await, vec![call]);
     }
 
     #[tokio::test]

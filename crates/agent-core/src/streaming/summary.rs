@@ -5,7 +5,6 @@ use std::sync::Arc;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::{PauseControl, Usage};
-use types::message::Message;
 
 use crate::runtime::{AgentLoop, TurnContext};
 
@@ -63,8 +62,17 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     let (prompt_context, history) = {
         let agent = session.as_ref();
         agent
-            .record_items(vec![Message::user(MAX_ITERATIONS_SUMMARY_PROMPT)])
-            .await;
+            .record_response_items(vec![agent_protocol::ResponseItem::Message {
+                id: None,
+                role: "user".into(),
+                content: vec![agent_protocol::ContentItem::InputText {
+                    text: MAX_ITERATIONS_SUMMARY_PROMPT.into(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            }])
+            .await
+            .expect("recording summary prompt response item should succeed");
         (
             agent.prompt_context_history(),
             agent.provider_history().await,
