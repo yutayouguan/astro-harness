@@ -161,13 +161,11 @@ html[data-glass-flush] .content-pane {
 }
 
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar {
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--unified-tone-soft, transparent) 55%, transparent),
-      color-mix(in srgb, var(--unified-tone-soft, transparent) 22%, transparent)
-    ),
-    var(--sidebar-bg);
+  --sidebar-chrome-sheen: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--unified-tone-soft, transparent) 26%, transparent),
+    transparent 72%
+  );
 }
 
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-card,

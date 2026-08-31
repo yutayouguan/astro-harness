@@ -19,6 +19,14 @@ const sidebarPolishStyles = await readFile(
   new URL("../../styles/features/shell/layout/sidebar-polish.css", import.meta.url),
   "utf8",
 );
+const unifiedColorStyles = await readFile(
+  new URL("../../styles/tokens/unified-color.css", import.meta.url),
+  "utf8",
+);
+const a11yStyles = await readFile(
+  new URL("../../styles/tokens/a11y.css", import.meta.url),
+  "utf8",
+);
 const sessionList = await readFile(
   new URL("../../components/chat/SidebarSessionList.tsx", import.meta.url),
   "utf8",
@@ -124,8 +132,9 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   const footerDivider = rule(sidebarPolishStyles, ".sidebar-footer::before");
 
   assert.ok(pinnedSidebar, "missing stable pinned sidebar surface");
-  assert.match(pinnedSidebar, /box-shadow:\s*none;/);
-  assert.match(pinnedSidebar, /backdrop-filter:\s*none;/);
+  assert.match(pinnedSidebar, /background:\s*var\(--sidebar-chrome-background\);/);
+  assert.match(pinnedSidebar, /box-shadow:[\s\S]*var\(--glass-rim\)/);
+  assert.match(pinnedSidebar, /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/);
   assert.ok(labelledSidebar, "missing labelled sidebar spacing");
   assert.match(labelledSidebar, /padding-inline:\s*16px;/);
   assert.ok(primaryActions, "missing primary action row styles");
@@ -159,6 +168,26 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.match(footer, /min-height:\s*54px;/);
   assert.ok(footerDivider, "sidebar footer should be visually separated");
   assert.match(footerDivider, /height:\s*1px;/);
+});
+
+test("left sidebar shares the flush glass chrome contract", () => {
+  const sidebar = rule(sidebarPolishStyles, ".sidebar");
+  const unifiedSidebar = rule(
+    unifiedColorStyles,
+    'html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar',
+  );
+
+  assert.ok(sidebar, "missing sidebar surface rule");
+  assert.match(sidebar, /--sidebar-chrome-background:/);
+  assert.match(sidebar, /border-radius:\s*0;/);
+  assert.match(sidebar, /border-right:\s*1px solid color-mix\(/);
+  assert.match(sidebar, /background:\s*var\(--sidebar-chrome-background\);/);
+  assert.match(sidebar, /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/);
+  assert.ok(unifiedSidebar, "missing unified sidebar sheen override");
+  assert.match(unifiedSidebar, /--sidebar-chrome-sheen:\s*linear-gradient\(/);
+  assert.doesNotMatch(unifiedSidebar, /\n\s*background:/);
+  assert.match(a11yStyles, /--sidebar-chrome-filter:\s*none;/);
+  assert.match(a11yStyles, /--sidebar-chrome-background:\s*var\(--sidebar-bg\);/);
 });
 
 test("session activity uses trailing status and hover-revealed tools", () => {

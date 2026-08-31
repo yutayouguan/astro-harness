@@ -1,35 +1,56 @@
 /* Final sidebar contract: quiet navigation chrome with one stable hierarchy.
-   Decorative glass belongs to floating panels; the pinned sidebar is a calm base. */
+   The outer surface shares the same continuous glass recipe as the chat header
+   and right dock; controls inside remain flat so translucent layers do not stack. */
 
 .sidebar {
+  --sidebar-chrome-sheen: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
+    transparent 72%
+  );
+  --sidebar-chrome-background:
+    var(--sidebar-chrome-sheen),
+    var(--sidebar-bg);
+  --sidebar-chrome-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  border-radius: 0;
+  background: var(--sidebar-chrome-background);
+  box-shadow:
+    var(--glass-rim),
+    1px 0 8px rgba(var(--shadow-ink), 0.045);
+  backdrop-filter: var(--sidebar-chrome-filter);
+  -webkit-backdrop-filter: var(--sidebar-chrome-filter);
   font-optical-sizing: auto;
 }
 
 .sidebar.is-pinned {
-  border-right: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
-  background: color-mix(in srgb, var(--sidebar-pinned-bg) 95%, var(--bg-base) 5%);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: var(--sidebar-chrome-background);
+  box-shadow:
+    var(--glass-rim),
+    1px 0 8px rgba(var(--shadow-ink), 0.045);
+  backdrop-filter: var(--sidebar-chrome-filter);
+  -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }
 
 html[data-theme="dark"] .sidebar.is-pinned {
-  border-right-color: color-mix(in srgb, #fff 8%, transparent);
-  background: color-mix(in srgb, var(--sidebar-pinned-bg) 96%, var(--bg-base) 4%);
-  box-shadow: none;
+  background: var(--sidebar-chrome-background);
 }
 
+.sidebar::before,
 .sidebar.is-pinned::before {
   opacity: 0;
 }
 
-/* Settings keeps the same stable material, while retaining its own navigation layout. */
+/* Settings keeps the same continuous material while retaining its own navigation layout. */
 .sidebar.is-settings {
-  border-right-color: color-mix(in srgb, var(--ink) 9%, transparent);
-  background: color-mix(in srgb, var(--sidebar-pinned-bg) 94%, var(--bg-base) 6%);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: var(--sidebar-chrome-background);
+  box-shadow:
+    var(--glass-rim),
+    1px 0 8px rgba(var(--shadow-ink), 0.045);
+  backdrop-filter: var(--sidebar-chrome-filter);
+  -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }
 
 .sidebar.is-settings::before {
@@ -37,9 +58,7 @@ html[data-theme="dark"] .sidebar.is-pinned {
 }
 
 html[data-theme="dark"] .sidebar.is-settings {
-  border-right-color: color-mix(in srgb, #fff 8%, transparent);
-  background: color-mix(in srgb, var(--sidebar-pinned-bg) 96%, var(--bg-base) 4%);
-  box-shadow: none;
+  background: var(--sidebar-chrome-background);
 }
 
 .sidebar.is-labels {

@@ -55,6 +55,12 @@
     background: var(--glass-panel);
   }
 
+  .sidebar {
+    --sidebar-chrome-sheen: none;
+    --sidebar-chrome-background: var(--sidebar-bg);
+    --sidebar-chrome-filter: none;
+  }
+
   html:root {
     --seg-shell-blur: none;
     --seg-item-blur-active: none;
@@ -115,5 +121,14 @@
     --seg-item-ring-amt: 100%;
     --seg-item-glow-amt: 0%;
     --seg-item-rim: transparent;
+  }
+
+  .sidebar {
+    --sidebar-chrome-background: color-mix(
+      in srgb,
+      var(--surface-panel-background) 94%,
+      transparent
+    );
+    border-right-color: color-mix(in srgb, var(--ink) 28%, transparent);
   }
 }
