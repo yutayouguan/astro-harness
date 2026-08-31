@@ -850,6 +850,7 @@ export type SkillUpdateRow = {
 /** 侧栏近期会话 */
 export type RecentSessionDto = {
   sessionId: string;
+  source: string;
   projectId?: string | null;
   summary: string;
   createdAt: string | null;

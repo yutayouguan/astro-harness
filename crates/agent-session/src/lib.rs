@@ -14,8 +14,8 @@ pub use message_db::{build_conversation_context, ScrolledMessage};
 pub use store::{
     projects::{Project, DEFAULT_PROJECT_ICON, DEFAULT_PROJECT_ID, DEFAULT_PROJECT_NAME},
     BillingDelta, ChatActivityStored, ChatHistoryMessage, NewMessage, RecentSession, SearchHit,
-    SessionBillingRow, SessionListFilter, SessionStore, StoredMessage, StoredSession,
-    SCHEMA_VERSION,
+    SessionBillingRow, SessionListFilter, SessionPlacementFilter, SessionStore, StoredMessage,
+    StoredSession, SCHEMA_VERSION,
 };
 pub use tools::{dispatch_session_tool, record_message};
 pub use traits::ConversationStore;

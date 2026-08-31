@@ -199,6 +199,7 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [pinnedCount, setPinnedCount] = useState(0);
+  const [automationSessionCount, setAutomationSessionCount] = useState(0);
   const toggleSection = useCallback((section: string) => {
     setCollapsedSections((prev) => {
       const next = new Set(prev);
@@ -1112,7 +1113,7 @@ export default function App() {
                         projectId={null}
                         query=""
                         listKind={sessionListKind}
-                        pinnedFilter="pinned"
+                        placement="pinned"
                         onCountChange={setPinnedCount}
                         onOpenSession={(sid) => void openSessionFromFilespace(sid)}
                         onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
@@ -1220,6 +1221,7 @@ export default function App() {
                             projectId={proj.id}
                             query=""
                             listKind={sessionListKind}
+                            placement="project"
                             onOpenSession={(sid) => {
                               if (!switchActiveProject(proj.id)) return;
                               void openSessionFromFilespace(sid);
@@ -1230,6 +1232,49 @@ export default function App() {
                         )}
                       </div>
                     ))}
+
+                    {/* ── 自动化运行（Cron 会话保留项目上下文，但在展示上独立分组） ── */}
+                    {automationSessionCount > 0 && (
+                      <div className="sidebar-collapsible-section">
+                        <button
+                          type="button"
+                          className="sidebar-section-toggle"
+                          onClick={() => toggleSection("automation")}
+                          aria-expanded={!collapsedSections.has("automation")}
+                        >
+                          <span className="sidebar-section-title">
+                            {t("sidebar.automationRuns")}
+                          </span>
+                          <ChevronRight
+                            size={12}
+                            strokeWidth={2}
+                            className={`sidebar-section-chevron ${!collapsedSections.has("automation") ? "is-expanded" : ""}`}
+                            aria-hidden
+                          />
+                        </button>
+                      </div>
+                    )}
+                    <div
+                      style={
+                        automationSessionCount > 0 &&
+                        !collapsedSections.has("automation")
+                          ? undefined
+                          : { display: "none" }
+                      }
+                    >
+                      <SidebarSessionList
+                        activeSessionId={chat.sessionId}
+                        sessionStatuses={sessionStatuses}
+                        projectId={null}
+                        query=""
+                        listKind={sessionListKind}
+                        placement="automation"
+                        onCountChange={setAutomationSessionCount}
+                        onOpenSession={(sid) => void openSessionFromFilespace(sid)}
+                        onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
+                        onClearDeletedCurrentSession={clearDeletedCurrentSession}
+                      />
+                    </div>
 
                     {/* ── 最近 ── */}
                     <div className="sidebar-collapsible-section">
@@ -1271,7 +1316,7 @@ export default function App() {
                         projectId={null}
                         query=""
                         listKind={sessionListKind}
-                        pinnedFilter="unpinned"
+                        placement="recent"
                         onOpenSession={(sid) => void openSessionFromFilespace(sid)}
                         onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
                         onClearDeletedCurrentSession={clearDeletedCurrentSession}

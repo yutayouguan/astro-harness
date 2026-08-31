@@ -1,4 +1,7 @@
-use session::store::{BillingDelta, NewMessage, SessionListFilter, SessionStore, SCHEMA_VERSION};
+use session::store::{
+    BillingDelta, NewMessage, SessionListFilter, SessionPlacementFilter, SessionStore,
+    SCHEMA_VERSION,
+};
 use tempfile::TempDir;
 
 async fn test_store() -> (TempDir, SessionStore) {
@@ -1588,6 +1591,109 @@ async fn pin_session_sorts_before_unpinned() {
         .unwrap();
     assert_eq!(after[0].id, "newer");
     assert!(after.iter().all(|s| s.pinned_at.is_none()));
+}
+
+#[tokio::test]
+async fn session_lists_preserve_source_for_sidebar_placement() {
+    let (_dir, store) = test_store().await;
+    store
+        .create_session("manual", "tauri", None, None, None)
+        .await
+        .unwrap();
+    store
+        .create_session("scheduled", "cron", None, None, None)
+        .await
+        .unwrap();
+
+    let sessions = store
+        .list_sessions(SessionListFilter::Active, 10)
+        .await
+        .unwrap();
+    let source = |id: &str| {
+        sessions
+            .iter()
+            .find(|session| session.id == id)
+            .map(|session| session.source.as_str())
+    };
+
+    assert_eq!(source("manual"), Some("tauri"));
+    assert_eq!(source("scheduled"), Some("cron"));
+}
+
+#[tokio::test]
+async fn sidebar_placement_filters_before_applying_the_limit() {
+    let (_dir, store) = test_store().await;
+    let project = store
+        .create_project("Project", &["/project"])
+        .await
+        .unwrap();
+
+    for (id, source) in [
+        ("pinned", "tauri"),
+        ("project", "tauri"),
+        ("automation", "cron"),
+        ("recent", "tauri"),
+    ] {
+        store
+            .create_session(id, source, None, None, None)
+            .await
+            .unwrap();
+    }
+    store
+        .assign_session_to_project("pinned", &project.id)
+        .await
+        .unwrap();
+    store
+        .assign_session_to_project("project", &project.id)
+        .await
+        .unwrap();
+    store
+        .assign_session_to_project("automation", &project.id)
+        .await
+        .unwrap();
+    store.pin_session("pinned").await.unwrap();
+
+    let pinned = store
+        .list_sessions_filtered_by_placement(
+            SessionListFilter::Active,
+            SessionPlacementFilter::Pinned,
+            1,
+            None,
+        )
+        .await
+        .unwrap();
+    let project_sessions = store
+        .list_sessions_by_project_placement(
+            SessionListFilter::Active,
+            SessionPlacementFilter::Project,
+            1,
+            &project.id,
+        )
+        .await
+        .unwrap();
+    let automation = store
+        .list_sessions_filtered_by_placement(
+            SessionListFilter::Active,
+            SessionPlacementFilter::Automation,
+            1,
+            None,
+        )
+        .await
+        .unwrap();
+    let recent = store
+        .list_sessions_filtered_by_placement(
+            SessionListFilter::Active,
+            SessionPlacementFilter::Recent,
+            1,
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(pinned[0].id, "pinned");
+    assert_eq!(project_sessions[0].id, "project");
+    assert_eq!(automation[0].id, "automation");
+    assert_eq!(recent[0].id, "recent");
 }
 
 #[tokio::test]

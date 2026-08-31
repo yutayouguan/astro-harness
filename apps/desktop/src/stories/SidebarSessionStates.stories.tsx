@@ -27,6 +27,7 @@ import type { RecentSessionDto } from "../types";
 
 const menuSessions = Array.from({ length: 5 }, (_, index) => ({
   sessionId: `menu-session-${index + 1}`,
+  source: "tauri",
   summary: `生成一张党政风格的 PPT 封面背景 ${index + 1}`,
   createdAt: new Date(Date.now() - index * 3_600_000).toISOString(),
   endReason: null,

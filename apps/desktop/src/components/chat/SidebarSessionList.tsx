@@ -36,6 +36,10 @@ import type { MessageKey } from "../../i18n/messages";
 import type { RecentSessionDto } from "../../types";
 import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import { visibleSessionTitle } from "../../lib/chat/sessionTitle";
+import {
+  matchesSidebarSessionPlacement,
+  type SidebarSessionPlacement,
+} from "../../lib/chat/sidebarSessionPlacement";
 import SessionActionsMenu from "./SessionActionsMenu";
 import SessionStatusIcon, {
   resolveSessionStatus,
@@ -62,8 +66,8 @@ type Props = {
   /** 侧栏全局搜索词；非空时展示全部匹配结果 */
   query: string;
   listKind: SessionListKind;
-  /** 按置顶状态过滤：pinned 只显示已置顶，unpinned 只显示未置顶，all 不过滤 */
-  pinnedFilter?: "all" | "pinned" | "unpinned";
+  /** 互斥的侧栏展示位置；不会修改会话项目归属。 */
+  placement?: SidebarSessionPlacement;
   /** 过滤后条目数变化时回调，用于外部按需隐藏整个分区 */
   onCountChange?: (count: number) => void;
   onOpenSession: (sessionId: string) => void;
@@ -90,7 +94,7 @@ export default function SidebarSessionList({
   projectId,
   query,
   listKind,
-  pinnedFilter = "all",
+  placement = "all",
   onCountChange,
   onOpenSession,
   onPrepareDeleteCurrentSession,
@@ -109,6 +113,7 @@ export default function SidebarSessionList({
         filter: listKind,
         limit: projectId ? 50 : 200,
         projectId,
+        placement,
       });
       setItems(
         (list ?? []).map((item) => ({
@@ -119,7 +124,7 @@ export default function SidebarSessionList({
     } catch {
       setItems([]);
     }
-  }, [listKind, projectId]);
+  }, [listKind, placement, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -186,9 +191,9 @@ export default function SidebarSessionList({
   );
 
   const filtered = useMemo(() => {
-    let result = items;
-    if (pinnedFilter === "pinned") result = result.filter((s) => s.pinnedAt);
-    else if (pinnedFilter === "unpinned") result = result.filter((s) => !s.pinnedAt);
+    let result = items.filter((session) =>
+      matchesSidebarSessionPlacement(session, placement),
+    );
     const q = query.trim().toLowerCase();
     if (!q) return result;
     return result.filter(
@@ -196,7 +201,7 @@ export default function SidebarSessionList({
         (s.summary ?? "").toLowerCase().includes(q) ||
         s.sessionId.toLowerCase().includes(q),
     );
-  }, [items, query, pinnedFilter]);
+  }, [items, placement, query]);
 
   useEffect(() => { onCountChange?.(filtered.length); }, [filtered.length, onCountChange]);
 

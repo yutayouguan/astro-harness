@@ -180,6 +180,7 @@ pub struct ChatHistoryMessage {
 #[derive(Debug, Clone)]
 pub struct RecentSession {
     pub id: String,
+    pub source: String,
     pub project_id: Option<String>,
     pub title: Option<String>,
     pub started_at: f64,
@@ -196,6 +197,16 @@ pub struct RecentSession {
 pub enum SessionListFilter {
     Active,
     Archived,
+}
+
+/// 侧栏会话的互斥展示分组。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionPlacementFilter {
+    All,
+    Pinned,
+    Project,
+    Automation,
+    Recent,
 }
 
 /// 助手气泡上的工具/活动条（由 `tool_calls` + 后续 `tool` 行折叠）。

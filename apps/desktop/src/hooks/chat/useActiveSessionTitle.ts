@@ -64,7 +64,7 @@ export function useActiveSessionMetadata(
         setSession((current) =>
           current
             ? { ...current, summary: next }
-            : { sessionId, summary: next, createdAt: null },
+            : { sessionId, source: "unknown", summary: next, createdAt: null },
         );
       }
     })

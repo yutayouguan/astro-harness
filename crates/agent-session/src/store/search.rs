@@ -20,6 +20,30 @@ struct FtsCollect<'a> {
     seen: &'a mut HashSet<i64>,
 }
 
+fn add_placement_conditions(
+    conditions: &mut Vec<&'static str>,
+    placement: super::SessionPlacementFilter,
+) {
+    match placement {
+        super::SessionPlacementFilter::All => {}
+        super::SessionPlacementFilter::Pinned => conditions.push("s.pinned_at IS NOT NULL"),
+        super::SessionPlacementFilter::Project => {
+            conditions.push("s.pinned_at IS NULL");
+            conditions.push("s.source != 'cron'");
+            conditions.push("s.project_id IS NOT NULL");
+        }
+        super::SessionPlacementFilter::Automation => {
+            conditions.push("s.pinned_at IS NULL");
+            conditions.push("s.source = 'cron'");
+        }
+        super::SessionPlacementFilter::Recent => {
+            conditions.push("s.pinned_at IS NULL");
+            conditions.push("s.source != 'cron'");
+            conditions.push("s.project_id IS NULL");
+        }
+    }
+}
+
 impl SessionStore {
     /// 跨会话消息 FTS：优先 `messages_fts`，再合并 `messages_fts_trigram`（CJK / 子串）。
     pub async fn search_messages(
@@ -264,7 +288,13 @@ impl SessionStore {
         filter: super::SessionListFilter,
         limit: usize,
     ) -> Result<Vec<RecentSession>> {
-        self.list_sessions_filtered(filter, limit, None).await
+        self.list_sessions_filtered_by_placement(
+            filter,
+            super::SessionPlacementFilter::All,
+            limit,
+            None,
+        )
+        .await
     }
 
     pub async fn list_sessions_filtered(
@@ -273,18 +303,53 @@ impl SessionStore {
         limit: usize,
         project_root: Option<&str>,
     ) -> Result<Vec<RecentSession>> {
+        self.list_sessions_filtered_by_placement(
+            filter,
+            super::SessionPlacementFilter::All,
+            limit,
+            project_root,
+        )
+        .await
+    }
+
+    pub async fn list_sessions_filtered_by_placement(
+        &self,
+        filter: super::SessionListFilter,
+        placement: super::SessionPlacementFilter,
+        limit: usize,
+        project_root: Option<&str>,
+    ) -> Result<Vec<RecentSession>> {
         if let Some(root) = project_root.filter(|r| !r.is_empty() && *r != "default") {
             if let Some(proj) = self.find_project_by_root(root).await? {
-                return self.list_sessions_by_project(filter, limit, &proj.id).await;
+                return self
+                    .list_sessions_by_project_placement(filter, placement, limit, &proj.id)
+                    .await;
             }
         }
-        self.list_sessions_inner(filter, limit, project_root).await
+        self.list_sessions_inner(filter, placement, limit, project_root)
+            .await
     }
 
     /// 按 `project_id` 过滤会话列表。
     pub async fn list_sessions_by_project(
         &self,
         filter: super::SessionListFilter,
+        limit: usize,
+        project_id: &str,
+    ) -> Result<Vec<RecentSession>> {
+        self.list_sessions_by_project_placement(
+            filter,
+            super::SessionPlacementFilter::All,
+            limit,
+            project_id,
+        )
+        .await
+    }
+
+    pub async fn list_sessions_by_project_placement(
+        &self,
+        filter: super::SessionListFilter,
+        placement: super::SessionPlacementFilter,
         limit: usize,
         project_id: &str,
     ) -> Result<Vec<RecentSession>> {
@@ -298,6 +363,7 @@ impl SessionStore {
         }
         // Side 会话是进程内临时旁路，不进入普通会话列表。
         conditions.push("COALESCE(s.branch_kind, '') != 'side'");
+        add_placement_conditions(&mut conditions, placement);
         conditions.push("s.project_id = ?2");
         let where_clause = format!("WHERE {}", conditions.join(" AND "));
         let sql = format!(
@@ -309,7 +375,8 @@ impl SessionStore {
                        AND TRIM(m.content) != ''
                      ORDER BY m.timestamp ASC, m.id ASC
                      LIMIT 1) AS preview,
-                    s.ended_at, s.end_reason, s.archived_at, s.pinned_at, s.project_id
+                    s.ended_at, s.end_reason, s.archived_at, s.pinned_at, s.project_id,
+                    s.source
              FROM sessions s
              {where_clause}
              ORDER BY (s.pinned_at IS NULL) ASC, s.pinned_at DESC, s.started_at DESC
@@ -333,6 +400,7 @@ impl SessionStore {
                     row.get::<Option<f64>, _>(6),
                     row.get::<Option<f64>, _>(7),
                     row.get::<Option<String>, _>(8),
+                    row.get::<String, _>(9),
                 )
             })
             .collect();
@@ -342,6 +410,7 @@ impl SessionStore {
     async fn list_sessions_inner(
         &self,
         filter: super::SessionListFilter,
+        placement: super::SessionPlacementFilter,
         limit: usize,
         project_root: Option<&str>,
     ) -> Result<Vec<RecentSession>> {
@@ -354,6 +423,7 @@ impl SessionStore {
             super::SessionListFilter::Archived => conditions.push("s.archived_at IS NOT NULL"),
         }
         conditions.push("COALESCE(s.branch_kind, '') != 'side'");
+        add_placement_conditions(&mut conditions, placement);
         if let Some(root) = project_root {
             if root.is_empty() || root == "default" {
                 conditions.push(
@@ -377,7 +447,8 @@ impl SessionStore {
                        AND TRIM(m.content) != ''
                      ORDER BY m.timestamp ASC, m.id ASC
                      LIMIT 1) AS preview,
-                    s.ended_at, s.end_reason, s.archived_at, s.pinned_at, s.project_id
+                    s.ended_at, s.end_reason, s.archived_at, s.pinned_at, s.project_id,
+                    s.source
              FROM sessions s
              {where_clause}
              ORDER BY (s.pinned_at IS NULL) ASC, s.pinned_at DESC, s.started_at DESC
@@ -408,6 +479,7 @@ impl SessionStore {
                     row.get::<Option<f64>, _>(6),
                     row.get::<Option<f64>, _>(7),
                     row.get::<Option<String>, _>(8),
+                    row.get::<String, _>(9),
                 )
             })
             .collect();
@@ -425,6 +497,7 @@ impl SessionStore {
             Option<f64>,
             Option<f64>,
             Option<String>,
+            String,
         )>,
     ) -> Vec<RecentSession> {
         rows.into_iter()
@@ -439,9 +512,11 @@ impl SessionStore {
                     archived_at,
                     pinned_at,
                     project_id,
+                    source,
                 )| {
                     RecentSession {
                         id,
+                        source,
                         project_id,
                         title,
                         started_at,

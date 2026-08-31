@@ -70,16 +70,23 @@ test("cron, loop, and plugin pages share the same top inset", () => {
   );
 });
 
-test("project and recent actions stay with the section they affect", () => {
+test("project, automation, and recent sections keep distinct responsibilities", () => {
   const projects = app.indexOf('t("sidebar.projects")');
   const addProject = app.indexOf('className="sidebar-add-btn"', projects);
+  const automation = app.indexOf('t("sidebar.automationRuns")');
   const recent = app.indexOf('t("sidebar.recent")');
   const archive = app.indexOf('className={`sidebar-session-filter-btn', recent);
 
   assert.ok(projects >= 0 && addProject > projects, "new project action must follow the Projects heading");
+  assert.ok(automation > projects && recent > automation, "automation runs should sit between projects and recent sessions");
   assert.ok(recent >= 0 && archive > recent, "archive action must follow the Recent heading");
   assert.match(app, /aria-expanded=\{!collapsedSections\.has\("projects"\)\}/);
+  assert.match(app, /aria-expanded=\{!collapsedSections\.has\("automation"\)\}/);
   assert.match(app, /aria-expanded=\{!collapsedSections\.has\("recent"\)\}/);
+  assert.match(app, /placement="pinned"/);
+  assert.match(app, /placement="project"/);
+  assert.match(app, /placement="automation"/);
+  assert.match(app, /placement="recent"/);
   assert.match(
     app,
     /<span className="sidebar-section-title">[\s\S]*?<\/span>[\s\S]*?<ChevronRight/,

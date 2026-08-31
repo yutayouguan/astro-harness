@@ -14,6 +14,7 @@ use super::common::open_sessions;
 #[serde(rename_all = "camelCase")]
 pub struct RecentSessionDto {
     pub session_id: String,
+    pub source: String,
     pub project_id: Option<String>,
     pub summary: String,
     pub created_at: Option<String>,
@@ -146,6 +147,19 @@ fn parse_session_filter(filter: &str) -> Result<session::SessionListFilter, Stri
     }
 }
 
+fn parse_session_placement(
+    placement: Option<&str>,
+) -> Result<session::SessionPlacementFilter, String> {
+    match placement.unwrap_or("all") {
+        "all" => Ok(session::SessionPlacementFilter::All),
+        "pinned" => Ok(session::SessionPlacementFilter::Pinned),
+        "project" => Ok(session::SessionPlacementFilter::Project),
+        "automation" => Ok(session::SessionPlacementFilter::Automation),
+        "recent" => Ok(session::SessionPlacementFilter::Recent),
+        _ => Err("invalid session placement".into()),
+    }
+}
+
 fn validate_session_title(title: &str) -> Result<String, String> {
     let title = title.trim();
     if title.is_empty() {
@@ -172,6 +186,7 @@ fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
         .map(|dt| dt.to_rfc3339());
     RecentSessionDto {
         session_id: s.id,
+        source: s.source,
         project_id: s.project_id,
         summary,
         created_at,
@@ -402,18 +417,20 @@ pub async fn list_sessions(
     limit: Option<i32>,
     project_root: Option<String>,
     project_id: Option<String>,
+    placement: Option<String>,
 ) -> Result<Vec<RecentSessionDto>, String> {
     let filter = parse_session_filter(&filter)?;
+    let placement = parse_session_placement(placement.as_deref())?;
     let store = open_sessions().await?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
     let sessions = if let Some(pid) = project_id.filter(|s| !s.is_empty()) {
         store
-            .list_sessions_by_project(filter, limit, &pid)
+            .list_sessions_by_project_placement(filter, placement, limit, &pid)
             .await
             .map_err(|e| e.to_string())?
     } else {
         store
-            .list_sessions_filtered(filter, limit, project_root.as_deref())
+            .list_sessions_filtered_by_placement(filter, placement, limit, project_root.as_deref())
             .await
             .map_err(|e| e.to_string())?
     };
@@ -423,7 +440,7 @@ pub async fn list_sessions(
 /// 兼容旧调用：仅列出未归档会话。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
-    list_sessions("active".into(), limit, None, None).await
+    list_sessions("active".into(), limit, None, None, None).await
 }
 
 /// 设置会话的项目根目录（兼容旧调用，内部转 project_id）。
@@ -852,10 +869,10 @@ pub async fn cleanup_stale_side_sessions() -> Result<usize, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        exclude_inherited_turns, parse_session_filter, validate_session_title,
-        ChatHistoryMessageDto,
+        exclude_inherited_turns, parse_session_filter, parse_session_placement,
+        validate_session_title, ChatHistoryMessageDto,
     };
-    use session::SessionListFilter;
+    use session::{SessionListFilter, SessionPlacementFilter};
 
     fn history_message(id: &str, role: &str) -> ChatHistoryMessageDto {
         ChatHistoryMessageDto {
@@ -907,6 +924,19 @@ mod tests {
             parse_session_filter("archived").unwrap(),
             SessionListFilter::Archived
         );
+    }
+
+    #[test]
+    fn parses_supported_session_placements() {
+        assert_eq!(
+            parse_session_placement(None).unwrap(),
+            SessionPlacementFilter::All
+        );
+        assert_eq!(
+            parse_session_placement(Some("automation")).unwrap(),
+            SessionPlacementFilter::Automation
+        );
+        assert!(parse_session_placement(Some("unknown")).is_err());
     }
 
     #[test]
