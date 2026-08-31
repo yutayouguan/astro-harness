@@ -33,7 +33,7 @@ pub use outcome::{
 pub use plugin::PluginHookBus;
 pub use run::{
     HookExecutionMode, HookHandlerType, HookOutputEntry, HookOutputEntryKind, HookRunRecord,
-    HookRunStatus, HookRunStore, HookScope,
+    HookRunStatus, HookRunStore, HookScope, HookTrustStatus,
 };
 pub use shell::{load_shell_runner, ShellHookRunner};
 pub use ui::{

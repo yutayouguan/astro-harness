@@ -22,7 +22,7 @@ use tracing::warn;
 use crate::mcp::{expand_argument_template, unavailable_executor, HookMcpCall, HookMcpExecutor};
 use crate::run::{
     unix_timestamp, HookExecutionMode, HookHandlerType, HookOutputEntry, HookOutputEntryKind,
-    HookRunRecord, HookRunStatus, HookRunStore, HookScope,
+    HookRunRecord, HookRunStatus, HookRunStore, HookScope, HookTrustStatus,
 };
 use crate::{HookEvent, HookPayload};
 
@@ -56,7 +56,7 @@ struct HookStateToml {
     #[serde(default, rename = "enabled")]
     enabled: Option<bool>,
     #[serde(default, rename = "trusted_hash")]
-    _trusted_hash: Option<String>,
+    trusted_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -132,6 +132,8 @@ struct ConfiguredHandler {
     id: String,
     key: String,
     enabled: bool,
+    current_hash: String,
+    trust_status: HookTrustStatus,
     source: String,
     matcher: Option<Regex>,
     timeout: Duration,
@@ -255,6 +257,8 @@ pub struct CommandHookSummary {
     pub id: String,
     pub key: String,
     pub enabled: bool,
+    pub current_hash: String,
+    pub trust_status: HookTrustStatus,
     pub event_name: String,
     pub matcher: Option<String>,
     pub handler_type: HookHandlerType,
@@ -341,6 +345,7 @@ impl CommandHookRunner {
                 },
                 &toml_path,
                 &toml_hooks.state,
+                trust,
             );
         }
         Ok(())
@@ -355,7 +360,7 @@ impl CommandHookRunner {
             enabled: true,
             reason: None,
         });
-        runner.extend_from_file(file, source, &HashMap::new());
+        runner.extend_from_file(file, source, &HashMap::new(), CommandHookTrust::Trusted);
         Ok(runner)
     }
 
@@ -375,7 +380,7 @@ impl CommandHookRunner {
             enabled: true,
             reason: None,
         });
-        self.extend_from_file(file, source, states);
+        self.extend_from_file(file, source, states, trust);
         Ok(())
     }
 
@@ -384,6 +389,7 @@ impl CommandHookRunner {
         file: HooksFile,
         source: &Path,
         states: &HashMap<String, HookStateToml>,
+        source_trust: CommandHookTrust,
     ) {
         for (event, groups) in file.hooks {
             let Some(event_name) = HookEvent::from_command_name(&event) else {
@@ -391,6 +397,7 @@ impl CommandHookRunner {
                 continue;
             };
             for (group_index, group) in groups.into_iter().enumerate() {
+                let group_for_hash = group.clone();
                 let matcher_source = group.matcher.clone();
                 let matcher = match compile_matcher(group.matcher.as_deref()) {
                     Ok(matcher) => matcher,
@@ -401,7 +408,7 @@ impl CommandHookRunner {
                 };
                 for (handler_index, handler) in group.hooks.into_iter().enumerate() {
                     let key = hook_key(source, event_name, group_index, handler_index);
-                    let enabled = states.get(&key).and_then(|state| state.enabled) != Some(false);
+                    let state = states.get(&key);
                     let (kind, requested, asynchronous, status_message, additional_context_limit) =
                         match handler {
                             HookHandlerConfig::Command {
@@ -475,14 +482,32 @@ impl CommandHookRunner {
                         }
                         None
                     };
-                    let timeout =
-                        if matches!(event_name, HookEvent::SessionEnd | HookEvent::Interrupt) {
-                            requested
-                                .unwrap_or(SESSION_END_TIMEOUT)
-                                .min(MAX_SESSION_END_TIMEOUT)
-                        } else {
-                            requested.unwrap_or(DEFAULT_TIMEOUT)
-                        };
+                    let timeout = normalize_timeout(event_name, requested);
+                    let normalized_handler = normalized_handler_config(
+                        &kind,
+                        timeout,
+                        asynchronous,
+                        status_message.clone(),
+                        additional_context_limit,
+                    );
+                    let current_hash = hook_hash(
+                        event_name,
+                        matcher_source.as_deref(),
+                        &group_for_hash,
+                        normalized_handler,
+                    );
+                    let trust_status = match state.and_then(|state| state.trusted_hash.as_deref()) {
+                        Some(trusted_hash) if trusted_hash == current_hash => {
+                            HookTrustStatus::Trusted
+                        }
+                        Some(_) => HookTrustStatus::Modified,
+                        None if source_trust == CommandHookTrust::Trusted => {
+                            HookTrustStatus::Trusted
+                        }
+                        None => HookTrustStatus::Untrusted,
+                    };
+                    let enabled = state.and_then(|state| state.enabled) != Some(false)
+                        && trust_status != HookTrustStatus::Modified;
                     let id = handler_id(
                         source,
                         &event,
@@ -498,6 +523,8 @@ impl CommandHookRunner {
                             id,
                             key,
                             enabled,
+                            current_hash,
+                            trust_status,
                             source: source.to_string_lossy().into_owned(),
                             matcher: matcher.clone(),
                             timeout,
@@ -530,6 +557,8 @@ impl CommandHookRunner {
                     id: handler.id.clone(),
                     key: handler.key.clone(),
                     enabled: handler.enabled,
+                    current_hash: handler.current_hash.clone(),
+                    trust_status: handler.trust_status,
                     event_name: event_name.as_str().to_string(),
                     matcher: handler
                         .matcher
@@ -749,6 +778,96 @@ fn handler_id(
         digest.update([0]);
     }
     format!("hook-{:x}", digest.finalize())
+}
+
+fn normalize_timeout(event: HookEvent, requested: Option<Duration>) -> Duration {
+    if matches!(event, HookEvent::SessionEnd | HookEvent::Interrupt) {
+        let seconds = requested
+            .unwrap_or(SESSION_END_TIMEOUT)
+            .as_secs()
+            .clamp(1, MAX_SESSION_END_TIMEOUT.as_secs());
+        Duration::from_secs(seconds)
+    } else {
+        Duration::from_secs(requested.unwrap_or(DEFAULT_TIMEOUT).as_secs().max(1))
+    }
+}
+
+fn normalized_handler_config(
+    kind: &ConfiguredHandlerKind,
+    timeout: Duration,
+    asynchronous: bool,
+    status_message: Option<String>,
+    additional_context_limit: Option<usize>,
+) -> HookHandlerConfig {
+    match kind {
+        ConfiguredHandlerKind::Command { command } => HookHandlerConfig::Command {
+            command: command.clone(),
+            command_windows: None,
+            timeout_sec: Some(timeout.as_secs()),
+            r#async: asynchronous,
+            status_message,
+            additional_context_limit: additional_context_limit
+                .filter(|limit| *limit != DEFAULT_ADDITIONAL_CONTEXT_TOKEN_LIMIT),
+        },
+        ConfiguredHandlerKind::McpTool {
+            server,
+            tool,
+            input,
+        } => HookHandlerConfig::McpTool {
+            server: server.clone(),
+            tool: tool.clone(),
+            input: input.clone(),
+            timeout_sec: Some(timeout.as_secs()),
+            status_message,
+        },
+    }
+}
+
+#[derive(Serialize)]
+struct NormalizedHookIdentity {
+    event_name: &'static str,
+    #[serde(flatten)]
+    group: MatcherGroup,
+}
+
+fn hook_hash(
+    event: HookEvent,
+    matcher: Option<&str>,
+    group: &MatcherGroup,
+    handler: HookHandlerConfig,
+) -> String {
+    let mut group = group.clone();
+    group.matcher = matcher.map(ToOwned::to_owned);
+    group.hooks = vec![handler];
+    let identity = NormalizedHookIdentity {
+        event_name: event.key_label(),
+        group,
+    };
+    let value = toml::Value::try_from(identity).expect("normalized hook identity serializes");
+    let json = serde_json::to_value(value).unwrap_or(Value::Null);
+    let serialized = serde_json::to_vec(&canonical_json(&json)).unwrap_or_default();
+    let mut digest = Sha256::new();
+    digest.update(serialized);
+    format!("sha256:{:x}", digest.finalize())
+}
+
+fn canonical_json(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut keys = map.keys().collect::<Vec<_>>();
+            keys.sort_unstable();
+            Value::Object(
+                keys.into_iter()
+                    .filter_map(|key| {
+                        map.get(key)
+                            .map(|value| (key.clone(), canonical_json(value)))
+                    })
+                    .collect(),
+            )
+        }
+        Value::Array(values) => Value::Array(values.iter().map(canonical_json).collect()),
+        _ => value.clone(),
+    }
 }
 
 fn hook_key(source: &Path, event: HookEvent, group_index: usize, handler_index: usize) -> String {
@@ -1906,6 +2025,53 @@ mod tests {
             )
             .await;
         assert!(decisions.is_empty());
+    }
+
+    #[test]
+    fn trusted_hash_detects_modified_hook_content() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("config.toml");
+        let hook_body = |command: &str, state: &str| {
+            format!(
+                r#"
+                    [hooks]
+                    {state}
+                    [[hooks.PreToolUse]]
+                    matcher = "terminal"
+
+                    [[hooks.PreToolUse.hooks]]
+                    type = "command"
+                    command = {command:?}
+                "#
+            )
+        };
+        std::fs::write(&source, hook_body("true", "")).unwrap();
+        let initial = CommandHookRunner::load(root.path())
+            .unwrap()
+            .list()
+            .remove(0);
+        assert!(initial.current_hash.starts_with("sha256:"));
+
+        let state = format!(
+            "[hooks.state.{:?}]\ntrusted_hash = {:?}\n",
+            initial.key, initial.current_hash
+        );
+        std::fs::write(&source, hook_body("true", &state)).unwrap();
+        let trusted = CommandHookRunner::load(root.path())
+            .unwrap()
+            .list()
+            .remove(0);
+        assert_eq!(trusted.trust_status, HookTrustStatus::Trusted);
+        assert!(trusted.enabled);
+
+        std::fs::write(&source, hook_body("false", &state)).unwrap();
+        let modified = CommandHookRunner::load(root.path())
+            .unwrap()
+            .list()
+            .remove(0);
+        assert_ne!(modified.current_hash, initial.current_hash);
+        assert_eq!(modified.trust_status, HookTrustStatus::Modified);
+        assert!(!modified.enabled);
     }
 
     #[test]

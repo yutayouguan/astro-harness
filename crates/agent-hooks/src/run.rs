@@ -53,6 +53,15 @@ pub enum HookScope {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+pub enum HookTrustStatus {
+    Managed,
+    Untrusted,
+    Trusted,
+    Modified,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum HookOutputEntryKind {
     Warning,
     Stop,
