@@ -10,7 +10,6 @@ import {
 } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import { AstroLogoMark } from "../icons/AstroLogoMark";
 import ParticleField from "./ParticleField";
 import {
   SolidBolt,
@@ -30,7 +29,7 @@ import {
 } from "lucide-react";
 import { Pause as PauseData, Play as PlayData } from "lucide";
 import { MorphToggleIcon } from "../icons/MorphIcon";
-import { WelcomeLedCanvas } from "./WelcomeLedCanvas";
+import { WelcomeLogoEffect } from "./WelcomeLogoEffect";
 import { promptTemplateHints } from "../../lib/chat/promptTemplate";
 
 const PAUSE_ICON = PauseData;
@@ -202,8 +201,8 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
     const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    event.currentTarget.style.setProperty("--welcome-tilt-x", `${(-y * 5).toFixed(2)}deg`);
-    event.currentTarget.style.setProperty("--welcome-tilt-y", `${(x * 6).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty("--welcome-tilt-x", `${(-y * 10).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty("--welcome-tilt-y", `${(x * 12).toFixed(2)}deg`);
     event.currentTarget.style.setProperty("--welcome-glare-x", `${Math.round((x + 0.5) * 100)}%`);
     event.currentTarget.style.setProperty("--welcome-glare-y", `${Math.round((y + 0.5) * 100)}%`);
   };
@@ -297,7 +296,6 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
   return (
     <div className="chat-empty chat-welcome" role="region" aria-label={brandLabel}>
       <div className="chat-welcome-hero" aria-hidden>
-        <WelcomeLedCanvas />
         <span className="chat-welcome-orb" />
         <span className="chat-welcome-orb chat-welcome-orb--soft" />
         <span className="chat-welcome-orb chat-welcome-orb--spark" />
@@ -324,7 +322,7 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
             <span ref={dragLayerRef} className="chat-welcome-drag-layer">
               <span className="chat-welcome-mark-glow" />
               <span className="chat-welcome-illust">
-                <AstroLogoMark className="chat-welcome-logo" width={72} height={72} />
+                <WelcomeLogoEffect />
               </span>
               {pulseId > 0 ? (
                 <span key={pulseId} className="chat-welcome-mark-pulse" aria-hidden />

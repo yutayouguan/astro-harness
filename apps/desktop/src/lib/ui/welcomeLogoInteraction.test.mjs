@@ -29,6 +29,9 @@ test("welcome logo supports direct drag, spring return, and reduced motion", () 
   assert.match(welcome, /dragReturnRef\.current = layer\.animate/);
   assert.match(welcome, /suppressLogoClickRef/);
   assert.match(styles, /\.chat-welcome-mark:active \.chat-welcome-illust/);
+  assert.match(styles, /\.chat-welcome-logo-stack[\s\S]*transform-style: preserve-3d/);
+  assert.match(styles, /\.chat-welcome-logo--depth-far/);
+  assert.match(styles, /\.chat-welcome-logo--front/);
   assert.match(styles, /@keyframes welcome-logo-confetti/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(styles, /\.chat-welcome-mark-pulse,[\s\S]*\.chat-welcome-burst[\s\S]*display: none/);

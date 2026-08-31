@@ -3267,102 +3267,6 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
   );
 }
 
-.chat-welcome-led-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 700ms ease;
-  filter: saturate(1.08);
-}
-
-.chat-welcome-led-canvas[data-ready="true"] {
-  opacity: 0.92;
-}
-
-.chat-welcome-led-fallback {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-  opacity: 0.94;
-  filter: saturate(1.08);
-  transition: opacity 420ms ease;
-}
-
-.chat-welcome-led-floor {
-  fill: url("#welcome-led-floor");
-  transform-origin: 50px 67px;
-  animation: welcome-led-floor-breathe 5.2s ease-in-out infinite;
-}
-
-.chat-welcome-led-halo,
-.chat-welcome-led-edge,
-.chat-welcome-led-dots {
-  fill: none;
-  stroke: url("#welcome-led-edge");
-  stroke-linejoin: round;
-}
-
-.chat-welcome-led-halo {
-  stroke-width: 4.2;
-  opacity: 0.62;
-  filter: url("#welcome-led-blur");
-}
-
-.chat-welcome-led-edge {
-  stroke-width: 0.72;
-  opacity: 0.96;
-}
-
-.chat-welcome-led-dots {
-  stroke-width: 1.25;
-  stroke-linecap: round;
-  stroke-dasharray: 0.008 0.022;
-  animation: welcome-led-dots-travel 7s linear infinite;
-}
-
-.chat-welcome-led-body {
-  fill: color-mix(in srgb, var(--shell-bg) 88%, #030712);
-  opacity: 0.82;
-}
-
-.chat-welcome-led-canvas[data-ready="true"] + .chat-welcome-led-fallback {
-  opacity: 0;
-}
-
-@keyframes welcome-led-dots-travel {
-  to { stroke-dashoffset: -1; }
-}
-
-@keyframes welcome-led-floor-breathe {
-  50% {
-    opacity: 0.72;
-    transform: scale(1.08);
-  }
-}
-
-.chat-welcome-hero:has(.chat-welcome-led-canvas[data-ready="true"]) .chat-welcome-orb {
-  opacity: 0.18;
-}
-
-.chat-welcome-hero:has(.chat-welcome-led-canvas[data-ready="true"]) .chat-welcome-particles {
-  opacity: 0.24;
-}
-
-html[data-theme="dark"] .chat-welcome-led-canvas[data-ready="true"] {
-  opacity: 1;
-}
-
-html[data-theme="dark"] .chat-welcome-led-body {
-  fill: #02040a;
-  opacity: 0.96;
-}
-
 .chat-welcome-particles {
   position: absolute;
   inset: -40px -20%;
@@ -3553,7 +3457,7 @@ html[data-theme="dark"] .chat-welcome-illust {
   opacity: 0.92;
 }
 
-html[data-theme="dark"] .chat-welcome-logo {
+html[data-theme="dark"] .chat-welcome-logo--front {
   filter: drop-shadow(0 4px 14px color-mix(in srgb, var(--tone-blue) 18%, transparent));
 }
 
@@ -3641,7 +3545,8 @@ html[data-theme="dark"] .chat-welcome-logo {
   justify-content: center;
   align-items: center;
   line-height: 0;
-  transform: perspective(320px) rotateX(var(--welcome-tilt-x)) rotateY(var(--welcome-tilt-y)) scale(1);
+  perspective: 360px;
+  transform: rotateX(var(--welcome-tilt-x)) rotateY(var(--welcome-tilt-y)) scale(1);
   transform-style: preserve-3d;
   transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
@@ -3650,16 +3555,17 @@ html[data-theme="dark"] .chat-welcome-logo {
 .chat-welcome-illust::after {
   content: "";
   position: absolute;
-  inset: 8px;
-  border-radius: 22px;
-  background: radial-gradient(
-    circle at var(--welcome-glare-x) var(--welcome-glare-y),
-    rgba(255, 255, 255, 0.42),
-    transparent 44%
-  );
-  opacity: 0;
+  left: 9px;
+  right: 9px;
+  bottom: -8px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--tone-blue) 42%, transparent), transparent 68%);
+  filter: blur(7px);
+  opacity: 0.48;
   pointer-events: none;
-  transition: opacity 180ms ease;
+  transform: translateZ(-18px) rotateX(72deg);
+  transition: opacity 180ms ease, transform 240ms ease;
 }
 
 .chat-welcome-mark:hover .chat-welcome-mark-glow,
@@ -3670,7 +3576,8 @@ html[data-theme="dark"] .chat-welcome-logo {
 
 .chat-welcome-mark:hover .chat-welcome-illust::after,
 .chat-welcome-mark:focus-visible .chat-welcome-illust::after {
-  opacity: 0.72;
+  opacity: 0.82;
+  transform: translateZ(-20px) rotateX(72deg) scale(1.08);
 }
 
 .chat-welcome-mark:active .chat-welcome-illust {
@@ -3785,11 +3692,108 @@ html[data-theme="dark"] .chat-welcome-logo {
   background: var(--tone-blue);
 }
 
+.chat-welcome-logo-stack {
+  --welcome-logo-mask: none;
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  transform-style: preserve-3d;
+}
+
 .chat-welcome-logo {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 72px;
   height: 72px;
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+}
+
+.chat-welcome-logo--depth-far {
+  --astro-mark-c0: #071b48;
+  --astro-mark-c1: #15104d;
+  --astro-mark-c2: #2c0b62;
+  opacity: 0.78;
+  transform: translate3d(0, 7px, -18px) scale(0.985);
+  filter: drop-shadow(0 12px 13px color-mix(in srgb, var(--tone-purple) 30%, transparent));
+}
+
+.chat-welcome-logo--depth-near {
+  --astro-mark-c0: #0a4fb8;
+  --astro-mark-c1: #3120a6;
+  --astro-mark-c2: #4b1cc0;
+  opacity: 0.9;
+  transform: translate3d(0, 3.5px, -8px) scale(0.994);
+}
+
+.chat-welcome-logo--front {
+  position: relative;
+  transform: translateZ(10px);
   filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--tone-blue, #2563eb) 22%, transparent));
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), filter 240ms ease;
+}
+
+.chat-welcome-logo-lighting,
+.chat-welcome-logo-lighting-fallback {
+  position: absolute;
+  inset: 0;
+  width: 72px;
+  height: 72px;
+  pointer-events: none;
+  -webkit-mask-image: var(--welcome-logo-mask);
+  mask-image: var(--welcome-logo-mask);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  transform: translateZ(16px);
+}
+
+.chat-welcome-logo-lighting {
+  opacity: 0;
+  mix-blend-mode: screen;
+  transition: opacity 420ms ease;
+}
+
+.chat-welcome-logo-lighting[data-ready="true"] {
+  opacity: 0.82;
+}
+
+.chat-welcome-logo-lighting-fallback {
+  background:
+    radial-gradient(
+      circle at var(--welcome-glare-x) var(--welcome-glare-y),
+      rgba(255, 255, 255, 0.92) 0,
+      rgba(102, 196, 255, 0.34) 18%,
+      transparent 42%
+    ),
+    linear-gradient(112deg, transparent 26%, rgba(255, 255, 255, 0.72) 43%, rgba(52, 211, 235, 0.36) 51%, transparent 66%);
+  background-size: 100% 100%, 240% 100%;
+  opacity: 0.78;
+  mix-blend-mode: screen;
+  animation: welcome-logo-material-sweep 4.8s ease-in-out infinite;
+  transition: opacity 320ms ease;
+}
+
+.chat-welcome-logo-lighting[data-ready="true"] + .chat-welcome-logo-lighting-fallback {
+  opacity: 0;
+}
+
+.chat-welcome-mark:hover .chat-welcome-logo--front,
+.chat-welcome-mark:focus-visible .chat-welcome-logo--front {
+  transform: translateZ(16px);
+  filter: drop-shadow(0 12px 22px color-mix(in srgb, var(--tone-cyan, #06b6d4) 36%, transparent));
+}
+
+@keyframes welcome-logo-material-sweep {
+  0%,
+  100% { background-position: 50% 50%, 115% 50%; }
+  50% { background-position: 50% 50%, -35% 50%; }
 }
 
 .chat-welcome-wordmark {
@@ -4412,13 +4416,8 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
     display: none;
   }
 
-  .chat-welcome-led-canvas {
-    transition: none;
-  }
-
-  .chat-welcome-led-fallback,
-  .chat-welcome-led-floor,
-  .chat-welcome-led-dots {
+  .chat-welcome-logo-lighting,
+  .chat-welcome-logo-lighting-fallback {
     animation: none;
     transition: none;
   }
