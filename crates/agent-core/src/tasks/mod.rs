@@ -638,6 +638,13 @@ impl Session {
 
         drop(running.task);
         Self::await_auxiliary_handles(&mut running.auxiliary_handles).await;
+        if reason == TurnAbortReason::Interrupted {
+            if let Err(error) = self.record_interrupted_turn_marker().await {
+                tracing::warn!(%error, %turn_id, "failed to persist interrupted-turn history marker");
+            } else if let Err(error) = self.flush_rollout().await {
+                tracing::warn!(%error, %turn_id, "failed to flush interrupted-turn marker before TurnAborted");
+            }
+        }
         if emit_interrupt_hook && self.subagent_hook_context().is_none() {
             if let Err(error) = self.flush_rollout().await {
                 tracing::warn!(%error, %turn_id, "failed to flush rollout before interrupt hook");
@@ -1059,7 +1066,41 @@ mod tests {
                 .count(),
             1
         );
+        let history = session.clone_response_history().await;
+        assert!(matches!(
+            history.last(),
+            Some(agent_protocol::ResponseItem::Message { role, content, .. })
+                if role == "developer"
+                    && matches!(content.first(), Some(agent_protocol::ContentItem::InputText { text }) if text.contains("<turn_aborted>"))
+        ));
         assert_eq!(thread.status(), AgentStatus::Idle);
+    }
+
+    #[tokio::test]
+    async fn cleaning_background_terminals_does_not_interrupt_the_active_turn() {
+        let (_dir, session, thread) = task_test_thread("task-clean-background-test").await;
+        let started = Arc::new(Notify::new());
+        let context = session
+            .create_turn_context("turn-clean-background".into())
+            .await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                PendingTask {
+                    started: Arc::clone(&started),
+                },
+            )
+            .await
+            .unwrap();
+        started.notified().await;
+
+        thread.submit(Op::CleanBackgroundTerminals).await.unwrap();
+        tokio::task::yield_now().await;
+        assert!(session.active_turn.lock().await.is_some());
+
+        thread.submit(Op::Interrupt).await.unwrap();
+        let _ = collect_terminal(&thread, "turn-clean-background").await;
     }
 
     #[tokio::test]

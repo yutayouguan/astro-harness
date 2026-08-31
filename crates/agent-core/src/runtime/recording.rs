@@ -38,6 +38,30 @@ impl AgentLoop {
         self.ensure_assistant_boundary(CONTENT, "interrupted").await
     }
 
+    /// Persist a model-visible boundary before publishing `TurnAborted`.
+    ///
+    /// This is deliberately a developer item rather than a synthetic assistant answer: a
+    /// partially streamed assistant response may already exist, while the next model request
+    /// still needs an unambiguous signal that the previous turn did not complete normally.
+    pub(crate) async fn record_interrupted_turn_marker(&self) -> anyhow::Result<()> {
+        // Preserve Astro's alternating user/assistant projection invariant before adding the
+        // richer developer marker to the canonical provider history.
+        self.ensure_assistant_interrupted_boundary().await?;
+        let item = ResponseItem::Message {
+            id: None,
+            role: "developer".into(),
+            content: vec![ContentItem::InputText {
+                text: "<turn_aborted>\nThe user intentionally interrupted the previous turn. Any in-flight tool work was stopped. If the user continues, do not assume the interrupted work completed.\n</turn_aborted>".into(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        };
+        self.persist_response_items(std::slice::from_ref(&item))
+            .await?;
+        self.record_response_items_unlocked(vec![item]);
+        Ok(())
+    }
+
     async fn ensure_assistant_boundary(
         &self,
         content: &str,

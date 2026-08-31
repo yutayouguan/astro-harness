@@ -64,6 +64,16 @@ pub(crate) async fn submission_loop(
                 }
                 false
             }
+            Op::CleanBackgroundTerminals => {
+                let stopped_jobs =
+                    tools::shutdown_background_jobs_for_session(session.session_id());
+                tracing::debug!(
+                    stopped_jobs,
+                    session_id = %session.session_id(),
+                    "background terminals cleaned on request"
+                );
+                false
+            }
             Op::EmitExtension { item, turn_id } => {
                 session.record_extension(submission.id, item, turn_id).await;
                 false
@@ -254,6 +264,7 @@ impl Session {
             | Op::RecoverTurn { .. }
             | Op::SuspendTurnAndShutdown { .. }
             | Op::Interrupt
+            | Op::CleanBackgroundTerminals
             | Op::EmitExtension { .. }
             | Op::Shutdown => {
                 unreachable!("submission loop routes primary control operations directly")

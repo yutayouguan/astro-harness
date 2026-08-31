@@ -78,6 +78,8 @@ pub enum Op {
         reply: tokio::sync::oneshot::Sender<Result<SuspendTurnOutcome, TurnInputError>>,
     },
     Interrupt,
+    /// Terminate this thread's background terminal jobs without interrupting the active turn.
+    CleanBackgroundTerminals,
     ThreadSettings {
         settings: Value,
     },
