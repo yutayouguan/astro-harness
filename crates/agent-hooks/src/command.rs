@@ -22,7 +22,7 @@ use tracing::warn;
 use crate::mcp::{expand_argument_template, unavailable_executor, HookMcpCall, HookMcpExecutor};
 use crate::run::{
     unix_timestamp, HookExecutionMode, HookHandlerType, HookOutputEntry, HookOutputEntryKind,
-    HookRunRecord, HookRunStatus, HookRunStore, HookScope, HookTrustStatus,
+    HookRunRecord, HookRunStatus, HookRunStore, HookScope, HookSource, HookTrustStatus,
 };
 use crate::{HookEvent, HookPayload};
 
@@ -135,6 +135,7 @@ struct ConfiguredHandler {
     current_hash: String,
     trust_status: HookTrustStatus,
     source: String,
+    source_kind: HookSource,
     matcher: Option<Regex>,
     timeout: Duration,
     asynchronous: bool,
@@ -345,6 +346,7 @@ impl CommandHookRunner {
                 },
                 &toml_path,
                 &toml_hooks.state,
+                scope,
                 trust,
             );
         }
@@ -360,7 +362,13 @@ impl CommandHookRunner {
             enabled: true,
             reason: None,
         });
-        runner.extend_from_file(file, source, &HashMap::new(), CommandHookTrust::Trusted);
+        runner.extend_from_file(
+            file,
+            source,
+            &HashMap::new(),
+            CommandHookScope::User,
+            CommandHookTrust::Trusted,
+        );
         Ok(runner)
     }
 
@@ -380,7 +388,7 @@ impl CommandHookRunner {
             enabled: true,
             reason: None,
         });
-        self.extend_from_file(file, source, states, trust);
+        self.extend_from_file(file, source, states, scope, trust);
         Ok(())
     }
 
@@ -389,6 +397,7 @@ impl CommandHookRunner {
         file: HooksFile,
         source: &Path,
         states: &HashMap<String, HookStateToml>,
+        source_scope: CommandHookScope,
         source_trust: CommandHookTrust,
     ) {
         for (event, groups) in file.hooks {
@@ -526,6 +535,10 @@ impl CommandHookRunner {
                             current_hash,
                             trust_status,
                             source: source.to_string_lossy().into_owned(),
+                            source_kind: match source_scope {
+                                CommandHookScope::User => HookSource::User,
+                                CommandHookScope::Project => HookSource::Project,
+                            },
                             matcher: matcher.clone(),
                             timeout,
                             asynchronous: asynchronous && event_name != HookEvent::SessionEnd,
@@ -633,29 +646,34 @@ impl CommandHookRunner {
             .enumerate()
         {
             let run_id = format!("hook-run-{}", NEXT_RUN_ID.fetch_add(1, Ordering::Relaxed));
-            self.runs.start(HookRunRecord {
-                id: run_id.clone(),
-                event_name: event.to_string(),
-                handler_id: handler.id.clone(),
-                handler_type: handler.kind.handler_type(),
-                execution_mode: if handler.asynchronous {
-                    HookExecutionMode::Async
-                } else {
-                    HookExecutionMode::Sync
+            self.runs.start(
+                payload.session_id.clone(),
+                payload.turn_id.clone(),
+                HookRunRecord {
+                    id: run_id.clone(),
+                    event_name: event.to_string(),
+                    handler_id: handler.id.clone(),
+                    handler_type: handler.kind.handler_type(),
+                    execution_mode: if handler.asynchronous {
+                        HookExecutionMode::Async
+                    } else {
+                        HookExecutionMode::Sync
+                    },
+                    scope: hook_scope(event),
+                    source_path: handler.source.clone(),
+                    source: handler.source_kind,
+                    display_order: configured_order,
+                    status: HookRunStatus::Running,
+                    status_message: handler.status_message.clone(),
+                    summary: handler.status_message.clone().unwrap_or_else(|| {
+                        format!("running {} hook", handler.kind.handler_type().label())
+                    }),
+                    started_at: unix_timestamp(),
+                    completed_at: None,
+                    duration_ms: None,
+                    entries: Vec::new(),
                 },
-                scope: hook_scope(event),
-                source: handler.source.clone(),
-                display_order: configured_order,
-                status: HookRunStatus::Running,
-                status_message: handler.status_message.clone(),
-                summary: handler.status_message.clone().unwrap_or_else(|| {
-                    format!("running {} hook", handler.kind.handler_type().label())
-                }),
-                started_at: unix_timestamp(),
-                completed_at: None,
-                duration_ms: None,
-                entries: Vec::new(),
-            });
+            );
             let input = input.clone();
             let cwd = cwd.clone();
             let environment = environment.clone();

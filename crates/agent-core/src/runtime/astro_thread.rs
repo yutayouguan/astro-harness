@@ -30,6 +30,7 @@ impl AstroThread {
     ) -> Result<Arc<Self>, RuntimeIoBindError> {
         let (io, rx_sub, event_tx, status_tx, termination_tx) = SessionIo::new();
         session.bind_runtime_io(event_tx, status_tx, rollout)?;
+        session.bind_hook_run_events();
 
         let thread = Arc::new(Self {
             session: Arc::clone(&session),

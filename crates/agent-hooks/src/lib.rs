@@ -32,8 +32,9 @@ pub use outcome::{
 };
 pub use plugin::PluginHookBus;
 pub use run::{
-    HookExecutionMode, HookHandlerType, HookOutputEntry, HookOutputEntryKind, HookRunRecord,
-    HookRunStatus, HookRunStore, HookScope, HookTrustStatus,
+    HookExecutionMode, HookHandlerType, HookOutputEntry, HookOutputEntryKind,
+    HookRunLifecycleEvent, HookRunObserver, HookRunRecord, HookRunStatus, HookRunStore, HookScope,
+    HookSource, HookTrustStatus,
 };
 pub use shell::{load_shell_runner, ShellHookRunner};
 pub use ui::{
@@ -116,6 +117,14 @@ impl HookRuntime {
 
     pub fn recent_command_hook_runs(&self) -> Vec<HookRunRecord> {
         self.command.recent_runs()
+    }
+
+    pub fn set_run_observer(&self, session_id: impl Into<String>, observer: HookRunObserver) {
+        self.command.run_store().set_observer(session_id, observer);
+    }
+
+    pub fn remove_run_observer(&self, session_id: &str) {
+        self.command.run_store().remove_observer(session_id);
     }
 
     pub fn command_hook_sources(&self) -> Vec<CommandHookSourceSummary> {

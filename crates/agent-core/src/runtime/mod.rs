@@ -161,6 +161,8 @@ pub struct Session {
     // ── 注入的依赖 ─────────────────────────────────────────
     /// 共享的 Plugin/Gateway/Shell hook 运行时。
     hook_runtime: StdMutex<Arc<::hooks::HookRuntime>>,
+    /// 把配置型 handler 生命周期串行投影到统一事件流。
+    hook_run_observer: StdMutex<Option<::hooks::HookRunObserver>>,
     /// 子线程身份标识，用于路由 Codex subagent 生命周期 hooks。
     subagent_hook_context: StdMutex<Option<SubagentHookContext>>,
     subagent_stop_turns: StdMutex<HashSet<String>>,
@@ -199,6 +201,117 @@ pub(crate) struct SubagentHookContext {
 
 struct SessionHookMcpExecutor {
     hub: Arc<TokioMutex<McpHub>>,
+}
+
+fn hook_run_protocol_event(
+    session_id: &str,
+    event: ::hooks::HookRunLifecycleEvent,
+) -> Option<(String, EventMsg)> {
+    let (turn_id, run, started) = match event {
+        ::hooks::HookRunLifecycleEvent::Started { turn_id, run } => (turn_id, run, true),
+        ::hooks::HookRunLifecycleEvent::Completed { turn_id, run } => (turn_id, run, false),
+    };
+    let route_id = turn_id.clone().unwrap_or_else(|| session_id.to_string());
+    let run = hook_run_summary(run)?;
+    let event = if started {
+        EventMsg::HookStarted(agent_protocol::HookStartedEvent { turn_id, run })
+    } else {
+        EventMsg::HookCompleted(agent_protocol::HookCompletedEvent { turn_id, run })
+    };
+    Some((route_id, event))
+}
+
+fn hook_run_summary(run: ::hooks::HookRunRecord) -> Option<agent_protocol::HookRunSummary> {
+    use agent_protocol::{
+        HookEventName, HookExecutionMode, HookHandlerType, HookOutputEntry, HookOutputEntryKind,
+        HookRunStatus, HookScope, HookSource,
+    };
+
+    let event_name = match run.event_name.as_str() {
+        ::hooks::PRE_TOOL_USE => HookEventName::PreToolUse,
+        ::hooks::PERMISSION_REQUEST => HookEventName::PermissionRequest,
+        ::hooks::POST_TOOL_USE => HookEventName::PostToolUse,
+        ::hooks::PRE_COMPACT => HookEventName::PreCompact,
+        ::hooks::POST_COMPACT => HookEventName::PostCompact,
+        ::hooks::SESSION_START => HookEventName::SessionStart,
+        ::hooks::SESSION_END => HookEventName::SessionEnd,
+        ::hooks::USER_PROMPT_SUBMIT => HookEventName::UserPromptSubmit,
+        ::hooks::SUBAGENT_START => HookEventName::SubagentStart,
+        ::hooks::SUBAGENT_STOP => HookEventName::SubagentStop,
+        ::hooks::STOP => HookEventName::Stop,
+        ::hooks::INTERRUPT => HookEventName::Interrupt,
+        event_name => {
+            tracing::warn!(%event_name, "dropping unsupported configured hook lifecycle event");
+            return None;
+        }
+    };
+    let handler_type = match run.handler_type {
+        ::hooks::HookHandlerType::Command => HookHandlerType::Command,
+        ::hooks::HookHandlerType::McpTool => HookHandlerType::McpTool,
+        ::hooks::HookHandlerType::Prompt => HookHandlerType::Prompt,
+        ::hooks::HookHandlerType::Agent => HookHandlerType::Agent,
+    };
+    let execution_mode = match run.execution_mode {
+        ::hooks::HookExecutionMode::Sync => HookExecutionMode::Sync,
+        ::hooks::HookExecutionMode::Async => HookExecutionMode::Async,
+    };
+    let scope = match run.scope {
+        ::hooks::HookScope::Thread => HookScope::Thread,
+        ::hooks::HookScope::Turn => HookScope::Turn,
+    };
+    let source = match run.source {
+        ::hooks::HookSource::System => HookSource::System,
+        ::hooks::HookSource::User => HookSource::User,
+        ::hooks::HookSource::Project => HookSource::Project,
+        ::hooks::HookSource::Mdm => HookSource::Mdm,
+        ::hooks::HookSource::SessionFlags => HookSource::SessionFlags,
+        ::hooks::HookSource::Plugin => HookSource::Plugin,
+        ::hooks::HookSource::CloudRequirements => HookSource::CloudRequirements,
+        ::hooks::HookSource::CloudManagedConfig => HookSource::CloudManagedConfig,
+        ::hooks::HookSource::LegacyManagedConfigFile => HookSource::LegacyManagedConfigFile,
+        ::hooks::HookSource::LegacyManagedConfigMdm => HookSource::LegacyManagedConfigMdm,
+        ::hooks::HookSource::Unknown => HookSource::Unknown,
+    };
+    let status = match run.status {
+        ::hooks::HookRunStatus::Running => HookRunStatus::Running,
+        ::hooks::HookRunStatus::Completed => HookRunStatus::Completed,
+        ::hooks::HookRunStatus::Failed => HookRunStatus::Failed,
+        ::hooks::HookRunStatus::Blocked => HookRunStatus::Blocked,
+        ::hooks::HookRunStatus::Stopped => HookRunStatus::Stopped,
+    };
+    let entries = run
+        .entries
+        .into_iter()
+        .map(|entry| HookOutputEntry {
+            kind: match entry.kind {
+                ::hooks::HookOutputEntryKind::Warning => HookOutputEntryKind::Warning,
+                ::hooks::HookOutputEntryKind::Stop => HookOutputEntryKind::Stop,
+                ::hooks::HookOutputEntryKind::Feedback => HookOutputEntryKind::Feedback,
+                ::hooks::HookOutputEntryKind::Context => HookOutputEntryKind::Context,
+                ::hooks::HookOutputEntryKind::Error => HookOutputEntryKind::Error,
+            },
+            text: entry.text,
+        })
+        .collect();
+
+    Some(agent_protocol::HookRunSummary {
+        id: run.id,
+        event_name,
+        handler_type,
+        execution_mode,
+        scope,
+        source_path: run.source_path,
+        source,
+        display_order: run.display_order.min(i64::MAX as usize) as i64,
+        status,
+        status_message: run.status_message,
+        started_at: run.started_at,
+        completed_at: run.completed_at,
+        duration_ms: run
+            .duration_ms
+            .map(|duration| duration.min(i64::MAX as u64) as i64),
+        entries,
+    })
 }
 
 impl ::hooks::HookMcpExecutor for SessionHookMcpExecutor {
@@ -394,6 +507,7 @@ impl Session {
             ),
             mcp_hub,
             hook_runtime: StdMutex::new(Arc::new(::hooks::HookRuntime::new())),
+            hook_run_observer: StdMutex::new(None),
             subagent_hook_context: StdMutex::new(None),
             subagent_stop_turns: StdMutex::new(HashSet::new()),
             execution,
@@ -467,6 +581,8 @@ impl Session {
     }
 
     pub(crate) fn close_event_stream(&self) {
+        self.hook_runtime()
+            .remove_run_observer(self.session_id.as_str());
         if let Some(bindings) = self.runtime_io.get() {
             bindings.event_tx.close();
         }
@@ -751,10 +867,47 @@ impl Session {
         let runtime = runtime.with_mcp_executor(Arc::new(SessionHookMcpExecutor {
             hub: Arc::clone(&self.mcp_hub),
         }));
-        *self
+        let observer = self
+            .hook_run_observer
+            .lock()
+            .expect("hook run observer mutex poisoned")
+            .clone();
+        let mut current = self
             .hook_runtime
             .lock()
-            .expect("hook runtime mutex poisoned") = Arc::new(runtime);
+            .expect("hook runtime mutex poisoned");
+        current.remove_run_observer(self.session_id.as_str());
+        if let Some(observer) = observer {
+            runtime.set_run_observer(self.session_id.clone(), observer);
+        }
+        *current = Arc::new(runtime);
+    }
+
+    pub(crate) fn bind_hook_run_events(self: &Arc<Self>) {
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        let observer: ::hooks::HookRunObserver = Arc::new(move |event| {
+            let _ = sender.send(event);
+        });
+        *self
+            .hook_run_observer
+            .lock()
+            .expect("hook run observer mutex poisoned") = Some(Arc::clone(&observer));
+        self.hook_runtime()
+            .set_run_observer(self.session_id.clone(), observer);
+
+        let session = Arc::downgrade(self);
+        tokio::spawn(async move {
+            while let Some(event) = receiver.recv().await {
+                let Some(session) = session.upgrade() else {
+                    break;
+                };
+                if let Some((route_id, event)) =
+                    hook_run_protocol_event(session.session_id(), event)
+                {
+                    session.send_event(&route_id, event).await;
+                }
+            }
+        });
     }
 
     pub fn hook_runtime(&self) -> Arc<::hooks::HookRuntime> {

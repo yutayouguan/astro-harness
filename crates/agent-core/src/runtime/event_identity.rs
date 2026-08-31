@@ -95,11 +95,15 @@ pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> Stri
             normalize_turn_item(&mut event.item);
         }
         EventMsg::HookStarted(event) => {
-            event.turn_id = Some(turn_id.clone());
+            if let Some(event_turn_id) = &mut event.turn_id {
+                event_turn_id.clone_from(&turn_id);
+            }
             event.run.id = event_item_id(&event.run.id);
         }
         EventMsg::HookCompleted(event) => {
-            event.turn_id = Some(turn_id.clone());
+            if let Some(event_turn_id) = &mut event.turn_id {
+                event_turn_id.clone_from(&turn_id);
+            }
             event.run.id = event_item_id(&event.run.id);
         }
         EventMsg::AgentMessageContentDelta(event)
