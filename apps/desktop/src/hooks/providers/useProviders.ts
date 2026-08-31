@@ -34,7 +34,8 @@ export function useProviders() {
               (provider) => provider.supports_responses_api === true,
             );
             setProviders(responsesProviders);
-            if (responsesProviders[0]) setActiveProviderId(responsesProviders[0].id);
+            if (responsesProviders[0])
+              setActiveProviderId(responsesProviders[0].id);
           })
           .catch(() => {}),
       );

@@ -27,7 +27,10 @@ function ComposerPlusSearch() {
         </div>
         <label className="composer-mcp-menu-search composer-plus-search">
           <Search size={14} strokeWidth={2} aria-hidden />
-          <input placeholder="搜索 Skills 或 MCP…" aria-label="搜索 Skills 或 MCP…" />
+          <input
+            placeholder="搜索 Skills 或 MCP…"
+            aria-label="搜索 Skills 或 MCP…"
+          />
         </label>
         <div className="composer-mcp-menu-body">
           <div className="composer-mcp-menu-group">插件</div>

@@ -51,7 +51,10 @@ test("hover actions exclude deletion and only the latest user question can be ed
   assert.match(source, /event\.key === "Escape"/);
   assert.match(source, /event\.metaKey \|\| event\.ctrlKey/);
   assert.match(session, /findLastUserMessageIndex\(messages\)/);
-  assert.match(session, /await sendImmediate\(\{[\s\S]*?truncateTo: idx,[\s\S]*?reuseUserId: userMsg\.id/);
+  assert.match(
+    session,
+    /await sendImmediate\(\{[\s\S]*?truncateTo: idx,[\s\S]*?reuseUserId: userMsg\.id/,
+  );
   assert.match(messages, /"chat\.editSubmit": "保存并重新生成"/);
   assert.match(styles, /\.bubble\.user\.is-editing/);
   assert.match(styles, /\.msg-row\.user:hover \.msg-actions/);
@@ -118,7 +121,10 @@ test("composer approval selector keeps the three supported permission choices", 
     assert.match(presets, new RegExp(`"${preset}"`));
   }
   assert.doesNotMatch(presets, /read_only/);
-  assert.match(source, /invoke<PermissionSettings>\("get_permission_settings"\)/);
+  assert.match(
+    source,
+    /invoke<PermissionSettings>\(\s*"get_permission_settings"\s*\)/,
+  );
   assert.match(source, /"set_permission_preset"/);
   assert.match(source, /data-approval-mode=\{mode\}/);
   assert.match(source, /chat\.approval\.fullAccessConfirmTitle/);

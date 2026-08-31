@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  STORE_CATEGORY_IDS,
-  filterStoreSkills,
-} from "./storeSkillFilters.ts";
+import { STORE_CATEGORY_IDS, filterStoreSkills } from "./storeSkillFilters.ts";
 
 const skills = [
   {

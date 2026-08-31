@@ -9,12 +9,7 @@ export type SurfaceProps = HTMLAttributes<HTMLDivElement> & {
 
 export const Surface = forwardRef<HTMLDivElement, SurfaceProps>(
   function Surface(
-    {
-      variant = "panel",
-      interactive = false,
-      className = "",
-      ...props
-    },
+    { variant = "panel", interactive = false, className = "", ...props },
     ref,
   ) {
     return (

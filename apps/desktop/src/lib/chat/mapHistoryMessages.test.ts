@@ -45,11 +45,10 @@ test("mapHistoryMessages restores interleaved text timeline segments", () => {
     },
   ]);
 
-  assert.deepEqual(message?.segments?.map((segment) => segment.type), [
-    "text",
-    "activity",
-    "text",
-  ]);
+  assert.deepEqual(
+    message?.segments?.map((segment) => segment.type),
+    ["text", "activity", "text"],
+  );
 });
 
 test("mapHistoryMessages drops invalid media entries", () => {
@@ -85,7 +84,9 @@ test("coalesceConsecutiveAssistants merges same-turn assistant bubbles", () => {
       id: "a1",
       role: "assistant",
       content: "先生成",
-      activities: [{ id: "c1", kind: "tool", title: "music_gen", status: "done" }],
+      activities: [
+        { id: "c1", kind: "tool", title: "music_gen", status: "done" },
+      ],
       segments: [
         { type: "reasoning", id: "r1", text: "t1", at: 1000 },
         { type: "activity", id: "c1", at: 2000 },
@@ -95,7 +96,9 @@ test("coalesceConsecutiveAssistants merges same-turn assistant bubbles", () => {
       id: "a2",
       role: "assistant",
       content: "生成成功",
-      activities: [{ id: "c2", kind: "tool", title: "present", status: "done" }],
+      activities: [
+        { id: "c2", kind: "tool", title: "present", status: "done" },
+      ],
       segments: [
         { type: "reasoning", id: "r1", text: "t1", at: 1000 },
         { type: "activity", id: "c1", at: 2000 },

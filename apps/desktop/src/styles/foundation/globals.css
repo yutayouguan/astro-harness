@@ -40,8 +40,6 @@ html[data-theme="dark"] select:-webkit-autofill {
   transition: background-color 99999s ease-out;
 }
 
-
-
 /* 窗口缩放动画期间：关过渡；暂停（不取消）CSS 动画 */
 html.zooming,
 html.zooming * {
@@ -73,9 +71,17 @@ html.zooming #root {
 
 /* macOS 原生透明：body 背景半透明，让 NSVisualEffectView 穿透 */
 html[data-platform="macos"] body {
-  background: color-mix(in srgb, var(--window-underlay, var(--bg1)) 72%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--window-underlay, var(--bg1)) 72%,
+    transparent
+  ) !important;
 }
 
 html[data-platform="macos"][data-theme="dark"] body {
-  background: color-mix(in srgb, var(--window-underlay, var(--bg1)) 55%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--window-underlay, var(--bg1)) 55%,
+    transparent
+  ) !important;
 }

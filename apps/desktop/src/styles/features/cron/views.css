@@ -10,8 +10,10 @@
   background: var(--plugins-shell-bg);
   border: 1px solid var(--plugins-shell-border);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
 }
 
 .cron-view-btn {
@@ -24,7 +26,10 @@
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .cron-view-btn:hover {
@@ -57,12 +62,25 @@
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.13)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 75%, transparent);
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.42),
+      rgba(255, 255, 255, 0.13)
+    ),
+    color-mix(
+      in srgb,
+      var(--glass-panel, rgba(255, 255, 255, 0.5)) 75%,
+      transparent
+    );
   box-shadow: var(--glass-rim);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  transition: border-color 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease;
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  transition:
+    border-color 0.14s ease,
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
 }
 
 .cron-job-list-row:hover {
@@ -75,7 +93,11 @@
 
 html[data-theme="dark"] .cron-job-list-row {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.01) 100%
+    ),
     rgba(8, 6, 18, 0.52);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
@@ -153,25 +175,40 @@ html[data-theme="dark"] .cron-job-list-row {
   border: 1px solid var(--chip-border);
   border-radius: 14px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.12)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.25),
+      rgba(255, 255, 255, 0.12)
+    ),
     color-mix(in srgb, var(--glass-fill) 55%, transparent);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
 .cron-job-detail-item:hover {
   border-color: color-mix(in srgb, var(--tone) 28%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.32),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 35%, transparent);
 }
 
 .cron-job-detail-item.is-selected {
   border-color: color-mix(in srgb, var(--tone) 32%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.3),
+      rgba(255, 255, 255, 0.08)
+    ),
     color-mix(in srgb, var(--tone-soft) 65%, transparent);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 14%, transparent),
@@ -180,7 +217,11 @@ html[data-theme="dark"] .cron-job-list-row {
 
 html[data-theme="dark"] .cron-job-detail-item {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.015)
+    ),
     rgba(8, 6, 18, 0.4);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -188,14 +229,22 @@ html[data-theme="dark"] .cron-job-detail-item {
 
 html[data-theme="dark"] .cron-job-detail-item:hover {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 35%, rgba(8, 6, 18, 0.45));
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
 }
 
 html[data-theme="dark"] .cron-job-detail-item.is-selected {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 50%, rgba(8, 6, 18, 0.5));
   border-color: color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.1));
   box-shadow:
@@ -278,13 +327,20 @@ html[data-theme="dark"] .cron-job-detail-item.is-selected {
   margin: 0;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.32));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.32));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.12)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.25),
+      rgba(255, 255, 255, 0.12)
+    ),
     color-mix(in srgb, var(--tone-soft) 28%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
   font-size: 13px;
   line-height: 1.55;
   color: var(--ink-soft);
@@ -294,7 +350,11 @@ html[data-theme="dark"] .cron-job-detail-item.is-selected {
 html[data-theme="dark"] .cron-job-detail-task {
   border-color: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.1));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.07),
+      rgba(255, 255, 255, 0.015)
+    ),
     color-mix(in srgb, var(--tone-soft) 30%, rgba(8, 6, 18, 0.45));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
@@ -313,7 +373,11 @@ html[data-theme="dark"] .cron-job-detail-task {
   border-radius: 12px;
   border: 1px solid var(--chip-border);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.22),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--glass-fill) 50%, transparent);
   font-size: 13px;
   color: var(--ink);
@@ -323,7 +387,11 @@ html[data-theme="dark"] .cron-job-detail-task {
 html[data-theme="dark"] .cron-job-detail-meta-item,
 html[data-theme="dark"] .cron-job-detail-task {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.045),
+      rgba(255, 255, 255, 0.01)
+    ),
     rgba(8, 6, 18, 0.38);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -335,4 +403,3 @@ html[data-theme="dark"] .cron-job-detail-task {
   gap: 6px;
   padding: 7px 14px;
 }
-

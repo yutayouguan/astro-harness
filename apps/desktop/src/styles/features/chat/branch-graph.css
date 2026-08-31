@@ -70,16 +70,30 @@
   border: 1px solid var(--border-subtle);
   border-radius: 7px;
   color: var(--text-secondary);
-  background: var(--control-bg, color-mix(in srgb, var(--bg-primary) 88%, var(--text-primary)));
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  background: var(
+    --control-bg,
+    color-mix(in srgb, var(--bg-primary) 88%, var(--text-primary))
+  );
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .branch-graph-actions button:hover,
 .branch-graph-actions button.is-active,
 .branch-graph-inspector button:hover {
-  border-color: color-mix(in srgb, var(--branch-current) 48%, var(--border-subtle));
+  border-color: color-mix(
+    in srgb,
+    var(--branch-current) 48%,
+    var(--border-subtle)
+  );
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--branch-current) 10%, var(--control-bg, var(--bg-primary)));
+  background: color-mix(
+    in srgb,
+    var(--branch-current) 10%,
+    var(--control-bg, var(--bg-primary))
+  );
 }
 
 .branch-graph-actions button:focus-visible,
@@ -113,15 +127,29 @@
   background: var(--branch-rail);
 }
 
-.branch-graph-legend i.is-current { background: var(--branch-current); }
+.branch-graph-legend i.is-current {
+  background: var(--branch-current);
+}
 .branch-graph-legend i.is-fork {
-  background: repeating-linear-gradient(90deg, var(--branch-current) 0 4px, transparent 4px 7px);
+  background: repeating-linear-gradient(
+    90deg,
+    var(--branch-current) 0 4px,
+    transparent 4px 7px
+  );
 }
 .branch-graph-legend i.is-agent {
-  background: repeating-linear-gradient(90deg, var(--branch-agent) 0 2px, transparent 2px 5px);
+  background: repeating-linear-gradient(
+    90deg,
+    var(--branch-agent) 0 2px,
+    transparent 2px 5px
+  );
 }
 .branch-graph-legend i.is-side {
-  background: repeating-linear-gradient(90deg, var(--branch-side) 0 5px, transparent 5px 8px);
+  background: repeating-linear-gradient(
+    90deg,
+    var(--branch-side) 0 5px,
+    transparent 5px 8px
+  );
 }
 
 .branch-graph-canvas {
@@ -178,8 +206,13 @@
 }
 
 .branch-graph-node.is-current {
-  border-color: color-mix(in srgb, var(--branch-current) 58%, var(--border-primary));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--branch-current) 16%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--branch-current) 58%,
+    var(--border-primary)
+  );
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--branch-current) 16%, transparent);
 }
 
 .branch-graph-node.is-selected {
@@ -188,11 +221,19 @@
 }
 
 .branch-graph-node.is-agent {
-  border-color: color-mix(in srgb, var(--branch-agent) 40%, var(--border-primary));
+  border-color: color-mix(
+    in srgb,
+    var(--branch-agent) 40%,
+    var(--border-primary)
+  );
 }
 
 .branch-graph-node.is-ephemeral {
-  border-color: color-mix(in srgb, var(--branch-side) 52%, var(--border-primary));
+  border-color: color-mix(
+    in srgb,
+    var(--branch-side) 52%,
+    var(--border-primary)
+  );
   border-style: dashed;
 }
 
@@ -273,7 +314,10 @@
   text-overflow: ellipsis;
 }
 
-.branch-node-meta time { margin-left: auto; white-space: nowrap; }
+.branch-node-meta time {
+  margin-left: auto;
+  white-space: nowrap;
+}
 .branch-node-status::before {
   display: inline-block;
   width: 5px;
@@ -285,12 +329,20 @@
 }
 
 .branch-node-status.is-completed,
-.branch-node-status.is-current { color: var(--branch-current); }
+.branch-node-status.is-current {
+  color: var(--branch-current);
+}
 .branch-node-status.is-running,
-.branch-node-status.is-pending_init { color: var(--status-warning, #d97706); }
-.branch-node-status.is-ephemeral { color: var(--branch-side); }
+.branch-node-status.is-pending_init {
+  color: var(--status-warning, #d97706);
+}
+.branch-node-status.is-ephemeral {
+  color: var(--branch-side);
+}
 .branch-node-status.is-errored,
-.branch-node-status.is-failed { color: var(--status-error, #dc2626); }
+.branch-node-status.is-failed {
+  color: var(--status-error, #dc2626);
+}
 
 .branch-graph-panel .react-flow__handle {
   width: 7px;
@@ -356,15 +408,31 @@
   text-overflow: ellipsis;
 }
 
-.branch-graph-inspector strong { font-size: 11px; }
-.branch-graph-inspector span { color: var(--text-tertiary); font-size: 9.5px; }
-.branch-graph-inspector button { font-size: 10px; white-space: nowrap; }
+.branch-graph-inspector strong {
+  font-size: 11px;
+}
+.branch-graph-inspector span {
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+}
+.branch-graph-inspector button {
+  font-size: 10px;
+  white-space: nowrap;
+}
 .branch-graph-inspector button.is-primary {
-  border-color: color-mix(in srgb, var(--branch-current) 44%, var(--border-subtle));
+  border-color: color-mix(
+    in srgb,
+    var(--branch-current) 44%,
+    var(--border-subtle)
+  );
   color: var(--branch-current);
 }
 .branch-graph-inspector button.is-side {
-  border-color: color-mix(in srgb, var(--branch-side) 42%, var(--border-subtle));
+  border-color: color-mix(
+    in srgb,
+    var(--branch-side) 42%,
+    var(--border-subtle)
+  );
   color: var(--branch-side);
 }
 .branch-graph-inspector button:disabled {
@@ -372,20 +440,36 @@
   opacity: 0.45;
 }
 
-.is-spinning { animation: branch-spin 0.8s linear infinite; }
+.is-spinning {
+  animation: branch-spin 0.8s linear infinite;
+}
 
 @keyframes branch-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 620px) {
-  .branch-graph-panel.is-fullscreen { inset: 0; border-radius: 0; }
-  .branch-graph-inspector { align-items: stretch; flex-direction: column; }
-  .branch-graph-inspector > div:last-child { justify-content: flex-end; }
+  .branch-graph-panel.is-fullscreen {
+    inset: 0;
+    border-radius: 0;
+  }
+  .branch-graph-inspector {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .branch-graph-inspector > div:last-child {
+    justify-content: flex-end;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .branch-graph-actions button,
-  .branch-graph-inspector button { transition: none; }
-  .branch-graph-panel .react-flow__edge.animated path { animation: none; }
+  .branch-graph-inspector button {
+    transition: none;
+  }
+  .branch-graph-panel .react-flow__edge.animated path {
+    animation: none;
+  }
 }

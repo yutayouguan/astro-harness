@@ -239,14 +239,21 @@ export function CreateCronDialog({
       if (cancelled) return;
       setModelOptions(options);
       setSelectedModel((prev) =>
-        prev && options.includes(prev) ? prev : options[0] ?? "",
+        prev && options.includes(prev) ? prev : (options[0] ?? ""),
       );
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [open, modelsProp, selectedProviderId, providers, activeProviderId, editingJob]);
+  }, [
+    open,
+    modelsProp,
+    selectedProviderId,
+    providers,
+    activeProviderId,
+    editingJob,
+  ]);
 
   async function handleSave() {
     setError("");
@@ -294,199 +301,206 @@ export function CreateCronDialog({
       className="cron-create-drawer"
       aria-labelledby="cron-create-drawer-title"
     >
-        <header className="cron-create-drawer-head">
-          <h2 id="cron-create-drawer-title" className="cron-create-drawer-title">
-            <span className="cron-create-drawer-title-icon" aria-hidden>
-              <TitleIcon size={16} strokeWidth={2.3} />
-            </span>
-            {isEdit ? t("cron.dialog.editTitle") : t("cron.dialog.title")}
-          </h2>
-          <button
-            type="button"
-            className="cron-dialog-close"
-            onClick={onClose}
-            aria-label={t("cron.cancel")}
+      <header className="cron-create-drawer-head">
+        <h2 id="cron-create-drawer-title" className="cron-create-drawer-title">
+          <span className="cron-create-drawer-title-icon" aria-hidden>
+            <TitleIcon size={16} strokeWidth={2.3} />
+          </span>
+          {isEdit ? t("cron.dialog.editTitle") : t("cron.dialog.title")}
+        </h2>
+        <button
+          type="button"
+          className="cron-dialog-close"
+          onClick={onClose}
+          aria-label={t("cron.cancel")}
+        >
+          <X size={16} strokeWidth={2.5} aria-hidden />
+        </button>
+      </header>
+
+      <div className="cron-create-drawer-scroll">
+        {!isEdit && (
+          <section
+            className="cron-quick-templates"
+            aria-labelledby="cron-quick-templates-title"
           >
-            <X size={16} strokeWidth={2.5} aria-hidden />
-          </button>
-        </header>
-
-        <div className="cron-create-drawer-scroll">
-          {!isEdit && (
-            <section className="cron-quick-templates" aria-labelledby="cron-quick-templates-title">
-              <div className="cron-quick-templates-heading">
-                <span id="cron-quick-templates-title">{t("cron.quick.title")}</span>
-                <small>{t("cron.quick.hint")}</small>
-              </div>
-              <div className="cron-quick-templates-list">
-                {QUICK_TEMPLATES.map((template) => {
-                  const Icon = template.icon;
-                  const active = title === t(template.titleKey) && task === t(template.taskKey);
-                  return (
-                    <button
-                      key={template.id}
-                      type="button"
-                      className={`cron-quick-template${active ? " is-active" : ""}`}
-                      onClick={() => applyQuickTemplate(template)}
-                      aria-pressed={active}
-                    >
-                      <span className="cron-quick-template-icon" aria-hidden>
-                        <Icon size={16} strokeWidth={2.1} />
-                      </span>
-                      <span>{t(template.titleKey)}</span>
-                      <CalendarPlus size={14} strokeWidth={2} aria-hidden />
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          <div className="cron-dialog-row">
-            <label className="cron-dialog-field">
-              <span className="cron-dialog-label">
-                <Type size={13} strokeWidth={2.2} aria-hidden />
-                {t("cron.field.name")}
-                <span className="cron-dialog-req" aria-hidden>
-                  *
-                </span>
+            <div className="cron-quick-templates-heading">
+              <span id="cron-quick-templates-title">
+                {t("cron.quick.title")}
               </span>
-              <input
-                type="text"
-                className="cron-dialog-input"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={t("cron.field.namePlaceholder")}
-                autoFocus
-              />
-            </label>
-          </div>
+              <small>{t("cron.quick.hint")}</small>
+            </div>
+            <div className="cron-quick-templates-list">
+              {QUICK_TEMPLATES.map((template) => {
+                const Icon = template.icon;
+                const active =
+                  title === t(template.titleKey) &&
+                  task === t(template.taskKey);
+                return (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className={`cron-quick-template${active ? " is-active" : ""}`}
+                    onClick={() => applyQuickTemplate(template)}
+                    aria-pressed={active}
+                  >
+                    <span className="cron-quick-template-icon" aria-hidden>
+                      <Icon size={16} strokeWidth={2.1} />
+                    </span>
+                    <span>{t(template.titleKey)}</span>
+                    <CalendarPlus size={14} strokeWidth={2} aria-hidden />
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
+        <div className="cron-dialog-row">
           <label className="cron-dialog-field">
             <span className="cron-dialog-label">
-              <MessageSquareText size={13} strokeWidth={2.2} aria-hidden />
-              {t("cron.field.task")}
+              <Type size={13} strokeWidth={2.2} aria-hidden />
+              {t("cron.field.name")}
               <span className="cron-dialog-req" aria-hidden>
                 *
               </span>
             </span>
-            <textarea
-              className="cron-dialog-textarea"
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
-              placeholder={t("cron.field.taskPlaceholder")}
-              rows={4}
+            <input
+              type="text"
+              className="cron-dialog-input"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={t("cron.field.namePlaceholder")}
+              autoFocus
             />
           </label>
+        </div>
 
-          <ScheduleEditor value={draft} onChange={setDraft} />
+        <label className="cron-dialog-field">
+          <span className="cron-dialog-label">
+            <MessageSquareText size={13} strokeWidth={2.2} aria-hidden />
+            {t("cron.field.task")}
+            <span className="cron-dialog-req" aria-hidden>
+              *
+            </span>
+          </span>
+          <textarea
+            className="cron-dialog-textarea"
+            value={task}
+            onChange={(e) => setTask(e.target.value)}
+            placeholder={t("cron.field.taskPlaceholder")}
+            rows={4}
+          />
+        </label>
 
-          <details
-            className="cron-dialog-advanced"
-            onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
-          >
-            <summary>
-              <span className="cron-dialog-advanced-label">
-                <SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden />
-                {t("cron.advanced")}
-              </span>
-              <MorphToggleIcon
-                active={advancedOpen}
-                activeIcon={ChevronUpData}
-                inactiveIcon={ChevronDownData}
-                className="cron-dialog-advanced-morph"
-                size={14}
-                strokeWidth={2.2}
-                aria-hidden
-              />
-            </summary>
-            <div className="cron-dialog-advanced-body">
-              {providers.length > 1 && (
-                <label className="cron-dialog-field">
-                  <span className="cron-dialog-label">
-                    <Server size={13} strokeWidth={2.2} aria-hidden />
-                    {t("cron.field.provider")}
-                  </span>
-                  <SelectMenu
-                    className="cron-dialog-select cron-dialog-select--brand"
-                    value={selectedProviderId}
-                    onChange={setSelectedProviderId}
-                    aria-label={t("cron.field.provider")}
-                      options={providers.map((p) => ({
-                        value: p.id,
-                        label: p.name,
-                        icon: (
-                          <span className="select-menu-brand-icon" aria-hidden>
-                            <ProviderBrandIcon kind={p.kind ?? p.id} size={13} />
-                          </span>
-                        ),
-                      }))}
-                  />
-                </label>
-              )}
+        <ScheduleEditor value={draft} onChange={setDraft} />
+
+        <details
+          className="cron-dialog-advanced"
+          onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
+        >
+          <summary>
+            <span className="cron-dialog-advanced-label">
+              <SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden />
+              {t("cron.advanced")}
+            </span>
+            <MorphToggleIcon
+              active={advancedOpen}
+              activeIcon={ChevronUpData}
+              inactiveIcon={ChevronDownData}
+              className="cron-dialog-advanced-morph"
+              size={14}
+              strokeWidth={2.2}
+              aria-hidden
+            />
+          </summary>
+          <div className="cron-dialog-advanced-body">
+            {providers.length > 1 && (
               <label className="cron-dialog-field">
                 <span className="cron-dialog-label">
-                  <Cpu size={13} strokeWidth={2.2} aria-hidden />
-                  {t("cron.field.model")}
+                  <Server size={13} strokeWidth={2.2} aria-hidden />
+                  {t("cron.field.provider")}
                 </span>
                 <SelectMenu
                   className="cron-dialog-select cron-dialog-select--brand"
-                  value={selectedModel}
-                  onChange={setSelectedModel}
-                  aria-label={t("cron.field.model")}
-                  disabled={modelOptions.length === 0}
-                  options={
-                    modelOptions.length === 0
-                      ? [{ value: "", label: "—" }]
-                      : modelOptions.map((m) => ({
-                          value: m,
-                          label: m,
-                          icon: <ModelBrandIcon modelId={m} size={13} />,
-                        }))
-                  }
+                  value={selectedProviderId}
+                  onChange={setSelectedProviderId}
+                  aria-label={t("cron.field.provider")}
+                  options={providers.map((p) => ({
+                    value: p.id,
+                    label: p.name,
+                    icon: (
+                      <span className="select-menu-brand-icon" aria-hidden>
+                        <ProviderBrandIcon kind={p.kind ?? p.id} size={13} />
+                      </span>
+                    ),
+                  }))}
                 />
               </label>
-              <label
-                className={`cron-dialog-check${showInChat ? " is-checked" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  className="cron-dialog-check-input"
-                  checked={showInChat}
-                  onChange={(e) => setShowInChat(e.target.checked)}
-                />
-                <span className="cron-dialog-check-box" aria-hidden>
-                  {showInChat ? <Check size={12} strokeWidth={2.8} /> : null}
-                </span>
-                <span className="cron-dialog-check-copy">
-                  <strong>
-                    <MessagesSquare size={13} strokeWidth={2.2} aria-hidden />
-                    {t("cron.field.showInChat")}
-                  </strong>
-                  <small>{t("cron.field.showInChatHint")}</small>
-                </span>
-              </label>
-            </div>
-          </details>
+            )}
+            <label className="cron-dialog-field">
+              <span className="cron-dialog-label">
+                <Cpu size={13} strokeWidth={2.2} aria-hidden />
+                {t("cron.field.model")}
+              </span>
+              <SelectMenu
+                className="cron-dialog-select cron-dialog-select--brand"
+                value={selectedModel}
+                onChange={setSelectedModel}
+                aria-label={t("cron.field.model")}
+                disabled={modelOptions.length === 0}
+                options={
+                  modelOptions.length === 0
+                    ? [{ value: "", label: "—" }]
+                    : modelOptions.map((m) => ({
+                        value: m,
+                        label: m,
+                        icon: <ModelBrandIcon modelId={m} size={13} />,
+                      }))
+                }
+              />
+            </label>
+            <label
+              className={`cron-dialog-check${showInChat ? " is-checked" : ""}`}
+            >
+              <input
+                type="checkbox"
+                className="cron-dialog-check-input"
+                checked={showInChat}
+                onChange={(e) => setShowInChat(e.target.checked)}
+              />
+              <span className="cron-dialog-check-box" aria-hidden>
+                {showInChat ? <Check size={12} strokeWidth={2.8} /> : null}
+              </span>
+              <span className="cron-dialog-check-copy">
+                <strong>
+                  <MessagesSquare size={13} strokeWidth={2.2} aria-hidden />
+                  {t("cron.field.showInChat")}
+                </strong>
+                <small>{t("cron.field.showInChatHint")}</small>
+              </span>
+            </label>
+          </div>
+        </details>
 
-          {error && <p className="cron-dialog-error">{error}</p>}
-        </div>
+        {error && <p className="cron-dialog-error">{error}</p>}
+      </div>
 
-        <footer className="cron-create-drawer-foot">
-          <button type="button" className="cron-btn-ghost" onClick={onClose}>
-            <X size={14} strokeWidth={2.3} aria-hidden />
-            {t("cron.cancel")}
-          </button>
-          <button
-            type="button"
-            className="cron-btn-primary"
-            onClick={() => void handleSave()}
-            disabled={saving}
-          >
-            <Save size={14} strokeWidth={2.3} aria-hidden />
-            {t("cron.save")}
-          </button>
-        </footer>
+      <footer className="cron-create-drawer-foot">
+        <button type="button" className="cron-btn-ghost" onClick={onClose}>
+          <X size={14} strokeWidth={2.3} aria-hidden />
+          {t("cron.cancel")}
+        </button>
+        <button
+          type="button"
+          className="cron-btn-primary"
+          onClick={() => void handleSave()}
+          disabled={saving}
+        >
+          <Save size={14} strokeWidth={2.3} aria-hidden />
+          {t("cron.save")}
+        </button>
+      </footer>
     </Drawer>
   );
 }

@@ -24,7 +24,8 @@ export function loadContextUsageForSession(
       ...snap,
       estimatedTotalTokens: snap.estimatedTotalTokens ?? snap.totalTokens,
       source:
-        snap.source === "provider_reported" || snap.source === "provider_recomputed"
+        snap.source === "provider_reported" ||
+        snap.source === "provider_recomputed"
           ? snap.source
           : "local_estimate",
     };
@@ -93,7 +94,10 @@ function stripHeavyFields(messages: ChatMessage[]): ChatMessage[] {
 
 /** 是否仅为欢迎占位（不应落盘） */
 export function isWelcomeOnly(messages: ChatMessage[]): boolean {
-  return messages.length === 0 || (messages.length === 1 && messages[0].id === "welcome");
+  return (
+    messages.length === 0 ||
+    (messages.length === 1 && messages[0].id === "welcome")
+  );
 }
 
 /** 用户是否主动清空过聊天（避免欢迎页写回） */
@@ -173,7 +177,7 @@ export function saveChatSession(
     const usage =
       contextUsage === undefined
         ? prev?.contextUsage
-        : contextUsage ?? undefined;
+        : (contextUsage ?? undefined);
     const payload: StoredChatSession = {
       sessionId,
       messages: stripHeavyFields(messages),
@@ -181,7 +185,8 @@ export function saveChatSession(
         pendingInterrupts.length > 0 ? pendingInterrupts : undefined,
       contextUsage: usage,
       ephemeral: prev?.sessionId === sessionId ? prev.ephemeral : undefined,
-      parentSessionId: prev?.sessionId === sessionId ? prev.parentSessionId : undefined,
+      parentSessionId:
+        prev?.sessionId === sessionId ? prev.parentSessionId : undefined,
       excludedTurnCount:
         prev?.sessionId === sessionId ? prev.excludedTurnCount : undefined,
       updatedAt: Date.now(),

@@ -16,8 +16,16 @@
   height: 160px;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.45), transparent 45%),
-    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone) 32%, transparent), transparent 68%);
+    radial-gradient(
+      circle at 40% 35%,
+      rgba(255, 255, 255, 0.45),
+      transparent 45%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--tone) 32%, transparent),
+      transparent 68%
+    );
   filter: blur(12px);
   opacity: 0.75;
   z-index: 0;
@@ -48,8 +56,7 @@
   display: grid;
   place-items: center;
   color: var(--tone);
-  filter:
-    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35))
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35))
     drop-shadow(0 2px 3px color-mix(in srgb, var(--tone) 28%, transparent));
 }
 
@@ -73,4 +80,3 @@
   max-width: 300px;
   line-height: 1.5;
 }
-

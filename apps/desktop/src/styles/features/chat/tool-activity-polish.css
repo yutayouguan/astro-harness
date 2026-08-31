@@ -125,10 +125,7 @@
   filter: none;
 }
 
-html[data-theme="dark"]
-  .bubble.assistant
-  .msg-timeline-body
-  > .msg-activity {
+html[data-theme="dark"] .bubble.assistant .msg-timeline-body > .msg-activity {
   border-color: color-mix(
     in srgb,
     var(--tl-tone, var(--tone, #a78bfa)) 14%,
@@ -181,10 +178,7 @@ html[data-theme="dark"]
 
 @media (prefers-reduced-motion: reduce) {
   .bubble.assistant .msg-timeline-body > .msg-activity,
-  .bubble.assistant
-    .msg-timeline-body
-    > .msg-activity
-    .msg-activity-toggle {
+  .bubble.assistant .msg-timeline-body > .msg-activity .msg-activity-toggle {
     transition: none;
   }
 }

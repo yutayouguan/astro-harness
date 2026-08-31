@@ -1,5 +1,10 @@
 import { useCallback, useRef } from "react";
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
+import type {
+  Dispatch,
+  MutableRefObject,
+  RefObject,
+  SetStateAction,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
@@ -158,7 +163,10 @@ export interface UseSendDeps {
   persistContextUsage?: boolean;
 }
 
-function calcTokensPerSec(completionTokens: number, durationMs: number): number | undefined {
+function calcTokensPerSec(
+  completionTokens: number,
+  durationMs: number,
+): number | undefined {
   if (completionTokens <= 0 || durationMs <= 0) return undefined;
   const sec = Math.max(0.1, durationMs / 1000);
   return Math.round((completionTokens / sec) * 10) / 10;
@@ -289,7 +297,10 @@ export function useSend(deps: UseSendDeps) {
             skills: (skillList ?? [])
               .filter((s) => s.enabled !== false)
               .map((s) => ({ id: s.id, name: s.name })),
-            mcpServers: (mcpList ?? []).map((s) => ({ id: s.id, name: s.name })),
+            mcpServers: (mcpList ?? []).map((s) => ({
+              id: s.id,
+              name: s.name,
+            })),
           });
 
           if (resolved === null) {
@@ -302,7 +313,12 @@ export function useSend(deps: UseSendDeps) {
           if (resolved.enableMcpIds.length > 0) {
             try {
               const servers = await invoke<
-                { id: string; name: string; enabled: boolean; [k: string]: unknown }[]
+                {
+                  id: string;
+                  name: string;
+                  enabled: boolean;
+                  [k: string]: unknown;
+                }[]
               >("get_mcp_servers");
               const want = new Set(resolved.enableMcpIds);
               const next = (servers ?? []).map((s) =>
@@ -310,7 +326,9 @@ export function useSend(deps: UseSendDeps) {
               );
               await invoke("set_mcp_servers", { servers: next });
               showTransientToast(
-                t("chat.mentionMcpEnabled", { names: resolved.enableMcpNames.join(", ") }),
+                t("chat.mentionMcpEnabled", {
+                  names: resolved.enableMcpNames.join(", "),
+                }),
               );
             } catch (e) {
               console.warn("enable mcp failed", e);
@@ -319,7 +337,9 @@ export function useSend(deps: UseSendDeps) {
 
           if (resolved.loadedSkills.length > 0) {
             showTransientToast(
-              t("chat.skillLoaded", { names: resolved.loadedSkills.join(", ") }),
+              t("chat.skillLoaded", {
+                names: resolved.loadedSkills.join(", "),
+              }),
             );
           }
         } catch (e) {
@@ -334,7 +354,8 @@ export function useSend(deps: UseSendDeps) {
       setSessionId(sid);
 
       setMessages((prev) => {
-        const base = opts?.truncateTo != null ? prev.slice(0, opts.truncateTo) : prev;
+        const base =
+          opts?.truncateTo != null ? prev.slice(0, opts.truncateTo) : prev;
         const next = [...base];
         if (!opts?.skipUserAppend) {
           next.push({
@@ -448,7 +469,11 @@ export function useSend(deps: UseSendDeps) {
             cache_write_reported?: boolean;
             reasoning_reported?: boolean;
           } | null;
-          segments?: Array<{ id: string; tokens: number; count?: number | null }>;
+          segments?: Array<{
+            id: string;
+            tokens: number;
+            count?: number | null;
+          }>;
           updated_at?: number;
           thread_id?: string;
           run_id?: string;
@@ -478,7 +503,12 @@ export function useSend(deps: UseSendDeps) {
             payload.content
           ) {
             setMessages((prev) =>
-              upsertAsyncAssistantMessage(prev, assistantId, payload.id!, payload.content!),
+              upsertAsyncAssistantMessage(
+                prev,
+                assistantId,
+                payload.id!,
+                payload.content!,
+              ),
             );
             touchActivity();
           } else if (payload.type === "text_reconcile") {
@@ -529,7 +559,9 @@ export function useSend(deps: UseSendDeps) {
             setStatusPhase("generating");
           } else if (payload.type === "citations" && payload.citations) {
             try {
-              const parsed = JSON.parse(payload.citations) as Array<Record<string, unknown>>;
+              const parsed = JSON.parse(payload.citations) as Array<
+                Record<string, unknown>
+              >;
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
@@ -541,7 +573,8 @@ export function useSend(deps: UseSendDeps) {
           } else if (payload.type === "usage") {
             const usage: MessageTokenUsage = {
               promptTokens: payload.prompt_tokens ?? 0,
-              uncachedInputTokens: payload.uncached_input_tokens ?? payload.prompt_tokens ?? 0,
+              uncachedInputTokens:
+                payload.uncached_input_tokens ?? payload.prompt_tokens ?? 0,
               completionTokens: payload.completion_tokens ?? 0,
               totalTokens: payload.total_tokens ?? 0,
               providerTotalTokens: payload.provider_total_tokens,
@@ -561,13 +594,16 @@ export function useSend(deps: UseSendDeps) {
           } else if (payload.type === "context_usage") {
             const snap = normalizeContextUsageEvent(payload);
             setContextUsage(snap);
-            if (sid && persistContextUsage) saveContextUsageForSession(sid, snap);
+            if (sid && persistContextUsage)
+              saveContextUsageForSession(sid, snap);
             if (snap.recommendCompact) {
               const now = Date.now();
               // 流式中只提示，不自动拆 session；60s 冷却避免刷屏
               if (now - lastRecommendCompactToastAtRef.current >= 60_000) {
                 lastRecommendCompactToastAtRef.current = now;
-                showTransientToast(t("chat.recommendCompact"), { tone: "warning" });
+                showTransientToast(t("chat.recommendCompact"), {
+                  tone: "warning",
+                });
               }
             }
           } else if (payload.type === "run_started") {
@@ -729,10 +765,12 @@ export function useSend(deps: UseSendDeps) {
                   : "tool";
             const id = payload.id || `act-${Date.now()}`;
             const structuredMedia = Array.isArray(payload.media)
-              ? payload.media
+              ? (payload.media
                   .map((m) => {
                     const path = m.ref_value;
-                    let kind: NonNullable<ChatActivity["media"]>[number]["kind"] | null =
+                    let kind:
+                      | NonNullable<ChatActivity["media"]>[number]["kind"]
+                      | null =
                       m.kind === "image" ||
                       m.kind === "video" ||
                       m.kind === "audio" ||
@@ -742,9 +780,12 @@ export function useSend(deps: UseSendDeps) {
                     // 后端把写工具产物标为 kind="file"；按扩展名归类（对齐历史加载逻辑）
                     if (!kind && m.kind === "file" && path) {
                       if (/\.html?$/i.test(path)) kind = "html";
-                      else if (/\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i.test(path))
+                      else if (
+                        /\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i.test(path)
+                      )
                         kind = "image";
-                      else if (/\.(mp4|webm|mov|mkv|m4v)$/i.test(path)) kind = "video";
+                      else if (/\.(mp4|webm|mov|mkv|m4v)$/i.test(path))
+                        kind = "video";
                       else if (/\.(wav|mp3|m4a|aac|ogg|flac|opus)$/i.test(path))
                         kind = "audio";
                       else if (isCodePath(path)) kind = "code";
@@ -752,7 +793,7 @@ export function useSend(deps: UseSendDeps) {
                     if (!kind || !path) return null;
                     return { kind, path };
                   })
-                  .filter(Boolean) as ChatActivity["media"]
+                  .filter(Boolean) as ChatActivity["media"])
               : undefined;
             generatingPreviewApi.onToolCall({
               id: payload.id,
@@ -823,7 +864,8 @@ export function useSend(deps: UseSendDeps) {
                 // 增量只补已经开卡的工具调用；先于 tool_call started 到达时丢弃，
                 // 完成事件仍会带上完整输出。
                 const existing = (m.activities ?? []).find((a) => a.id === id);
-                if (!existing || isSettledActivityStatus(existing.status)) return m;
+                if (!existing || isSettledActivityStatus(existing.status))
+                  return m;
                 const output = `${existing.output ?? ""}${delta}`;
                 return applyActivityUpsert(m, {
                   ...existing,
@@ -907,7 +949,8 @@ export function useSend(deps: UseSendDeps) {
                   : undefined;
               const next = prev.map((m) => {
                 if (m.id !== assistantId) return m;
-                const pendingText = streamPendingRef.current.get(assistantId) ?? "";
+                const pendingText =
+                  streamPendingRef.current.get(assistantId) ?? "";
                 const content = (m.content + pendingText).trim();
                 const withUsage = sealOpenReasoning(
                   {
@@ -944,7 +987,7 @@ export function useSend(deps: UseSendDeps) {
                     content:
                       !completion.failed && terminalOutcome === "interrupt"
                         ? t("chat.task.cancelled")
-                        : completion.error ?? t("status.emptyResponse"),
+                        : (completion.error ?? t("status.emptyResponse")),
                     error: completion.failed,
                   };
                 }
@@ -1014,12 +1057,15 @@ export function useSend(deps: UseSendDeps) {
             .filter((a) => !!a.dataBase64)
             .map(async (a) => {
               try {
-                const saved = await invoke<{ path: string }>("save_chat_upload", {
-                  sessionId: sid,
-                  fileName: a.name,
-                  dataBase64: a.dataBase64,
-                  messageId: userId,
-                });
+                const saved = await invoke<{ path: string }>(
+                  "save_chat_upload",
+                  {
+                    sessionId: sid,
+                    fileName: a.name,
+                    dataBase64: a.dataBase64,
+                    messageId: userId,
+                  },
+                );
                 uploadedPaths.set(a.id, saved.path);
               } catch (e) {
                 console.warn("save_chat_upload failed", e);
@@ -1075,7 +1121,8 @@ export function useSend(deps: UseSendDeps) {
             thinkingEnabled: modelApi.thinkingEnabled,
             reasoningEffort: modelApi.reasoningEffort,
             resumeJson: resumeJson || undefined,
-            keepChatBubbles: keepChatBubbles != null ? keepChatBubbles : undefined,
+            keepChatBubbles:
+              keepChatBubbles != null ? keepChatBubbles : undefined,
             interactionMode: effectiveMode,
             projectId,
             attachments: pending.map((a) => ({

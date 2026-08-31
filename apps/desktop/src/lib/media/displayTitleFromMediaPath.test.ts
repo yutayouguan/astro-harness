@@ -13,11 +13,15 @@ test("strips timestamp-uuid suffix for chinese titles", () => {
 
 test("maps legacy prefixes to chinese kind labels", () => {
   assert.equal(
-    displayTitleFromMediaPath("generated/audio/music-20260717-194651-d81f0b2b.mp3"),
+    displayTitleFromMediaPath(
+      "generated/audio/music-20260717-194651-d81f0b2b.mp3",
+    ),
     "音乐",
   );
   assert.equal(
-    displayTitleFromMediaPath("generated/images/img-20260717-110609-5fb9089c.jpg"),
+    displayTitleFromMediaPath(
+      "generated/images/img-20260717-110609-5fb9089c.jpg",
+    ),
     "图片",
   );
 });

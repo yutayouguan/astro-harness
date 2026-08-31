@@ -103,8 +103,16 @@ const BUDGET_META: {
     Icon: Feather,
     fields: [
       { key: "softMaxChars", labelKey: "prefs.context.maxChars", Icon: Hash },
-      { key: "softHeadChars", labelKey: "prefs.context.headChars", Icon: ArrowUpToLine },
-      { key: "softTailChars", labelKey: "prefs.context.tailChars", Icon: ArrowDownToLine },
+      {
+        key: "softHeadChars",
+        labelKey: "prefs.context.headChars",
+        Icon: ArrowUpToLine,
+      },
+      {
+        key: "softTailChars",
+        labelKey: "prefs.context.tailChars",
+        Icon: ArrowDownToLine,
+      },
     ],
   },
   {
@@ -113,8 +121,16 @@ const BUDGET_META: {
     Icon: Scale,
     fields: [
       { key: "mediumMaxChars", labelKey: "prefs.context.maxChars", Icon: Hash },
-      { key: "mediumHeadChars", labelKey: "prefs.context.headChars", Icon: ArrowUpToLine },
-      { key: "mediumTailChars", labelKey: "prefs.context.tailChars", Icon: ArrowDownToLine },
+      {
+        key: "mediumHeadChars",
+        labelKey: "prefs.context.headChars",
+        Icon: ArrowUpToLine,
+      },
+      {
+        key: "mediumTailChars",
+        labelKey: "prefs.context.tailChars",
+        Icon: ArrowDownToLine,
+      },
     ],
   },
   {
@@ -123,8 +139,16 @@ const BUDGET_META: {
     Icon: Flame,
     fields: [
       { key: "hardMaxChars", labelKey: "prefs.context.maxChars", Icon: Hash },
-      { key: "hardHeadChars", labelKey: "prefs.context.headChars", Icon: ArrowUpToLine },
-      { key: "hardTailChars", labelKey: "prefs.context.tailChars", Icon: ArrowDownToLine },
+      {
+        key: "hardHeadChars",
+        labelKey: "prefs.context.headChars",
+        Icon: ArrowUpToLine,
+      },
+      {
+        key: "hardTailChars",
+        labelKey: "prefs.context.tailChars",
+        Icon: ArrowDownToLine,
+      },
     ],
   },
 ];
@@ -217,7 +241,9 @@ export default function CompressionSettingsCard({
   const commit = useCallback(
     async (next: CompressionSettingsDto) => {
       setLocalError(null);
-      if (!(next.softRatio < next.mediumRatio && next.mediumRatio < next.hardRatio)) {
+      if (!(
+        next.softRatio < next.mediumRatio && next.mediumRatio < next.hardRatio
+      )) {
         setLocalError(t("prefs.context.invalidOrder"));
         if (settings) setDraft(settings);
         return;
@@ -298,8 +324,12 @@ export default function CompressionSettingsCard({
               <Sparkles size={15} strokeWidth={2.25} />
             </span>
             <span className="prefs-toggle-text">
-              <span className="prefs-toggle-label">{t("prefs.context.enabled")}</span>
-              <span className="prefs-toggle-desc">{t("prefs.context.enabledDesc")}</span>
+              <span className="prefs-toggle-label">
+                {t("prefs.context.enabled")}
+              </span>
+              <span className="prefs-toggle-desc">
+                {t("prefs.context.enabledDesc")}
+              </span>
             </span>
             <button
               type="button"
@@ -384,7 +414,9 @@ export default function CompressionSettingsCard({
                               aria-hidden
                             />
                           )}
-                          <span className="prefs-context-label">{t(labelKey)}</span>
+                          <span className="prefs-context-label">
+                            {t(labelKey)}
+                          </span>
                         </span>
                         <input
                           className="aux-number-input"
@@ -409,7 +441,10 @@ export default function CompressionSettingsCard({
           <SectionHead Icon={Shield}>{t("prefs.context.triggers")}</SectionHead>
           <div className="prefs-context-grid">
             {OTHER_FIELDS.map(({ key, labelKey, hintKey, percent, Icon }) => (
-              <label key={key} className="prefs-context-field prefs-context-field--card">
+              <label
+                key={key}
+                className="prefs-context-field prefs-context-field--card"
+              >
                 <span className="prefs-context-label-row">
                   {Icon && (
                     <span className="prefs-context-field-badge" aria-hidden>

@@ -1,5 +1,10 @@
 /** 文件空间右侧 Viewer 类型判定（纯函数，便于单测） */
-import { fileExt, isPdfFile, mediaKindOf, resolveFileType } from "./fileTypeIcon.ts";
+import {
+  fileExt,
+  isPdfFile,
+  mediaKindOf,
+  resolveFileType,
+} from "./fileTypeIcon.ts";
 
 export type FilespaceViewerKind =
   | "markdown"
@@ -22,7 +27,9 @@ export type FilespaceViewerInput = {
 };
 
 /** artifact → 右侧 Viewer 分支 */
-export function filespaceViewerKind(input: FilespaceViewerInput): FilespaceViewerKind {
+export function filespaceViewerKind(
+  input: FilespaceViewerInput,
+): FilespaceViewerKind {
   if (input.missing) return "missing";
 
   const media = mediaKindOf(input.name);

@@ -64,7 +64,9 @@ export function storeConfigureCommand(
     target === "project"
       ? `<当前项目>/.astro/skills/${folder}/SKILL.md`
       : `~/.astro/skills/${folder}/SKILL.md`;
-  const subject = options.contextual ? "这个 SkillHub 技能" : `SkillHub 技能「${skill.name}」`;
+  const subject = options.contextual
+    ? "这个 SkillHub 技能"
+    : `SkillHub 技能「${skill.name}」`;
   return (
     `${subject}已经安装。\n` +
     `请读取 ${skillPath}，确认它实际需要的凭据名称、申请地址和配置方式，并用简短步骤告诉我。\n` +

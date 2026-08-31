@@ -8,12 +8,18 @@ import {
 
 test("maps protocol tool phases onto stable activity states", () => {
   assert.equal(resolveToolActivityStatus("started", undefined), "running");
-  assert.equal(resolveToolActivityStatus("pending_approval", undefined), "waiting");
+  assert.equal(
+    resolveToolActivityStatus("pending_approval", undefined),
+    "waiting",
+  );
   assert.equal(resolveToolActivityStatus("retrying", undefined), "retrying");
   assert.equal(resolveToolActivityStatus("partial", undefined), "partial");
   assert.equal(resolveToolActivityStatus("completed", undefined), "done");
   assert.equal(resolveToolActivityStatus("failed", undefined), "error");
-  assert.equal(resolveToolActivityStatus("cancelled", undefined), "interrupted");
+  assert.equal(
+    resolveToolActivityStatus("cancelled", undefined),
+    "interrupted",
+  );
 });
 
 test("uses a returned result as completion fallback", () => {

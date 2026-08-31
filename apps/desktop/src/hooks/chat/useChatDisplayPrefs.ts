@@ -84,16 +84,30 @@ function readStored(): ChatDisplayPrefs {
     return {
       verbosity,
       answerLayout: parsed.answerLayout === "grouped" ? "grouped" : "timeline",
-      showTools: typeof parsed.showTools === "boolean" ? parsed.showTools : PRESETS[verbosity].showTools,
+      showTools:
+        typeof parsed.showTools === "boolean"
+          ? parsed.showTools
+          : PRESETS[verbosity].showTools,
       showSkills:
-        typeof parsed.showSkills === "boolean" ? parsed.showSkills : PRESETS[verbosity].showSkills,
-      showMcp: typeof parsed.showMcp === "boolean" ? parsed.showMcp : PRESETS[verbosity].showMcp,
+        typeof parsed.showSkills === "boolean"
+          ? parsed.showSkills
+          : PRESETS[verbosity].showSkills,
+      showMcp:
+        typeof parsed.showMcp === "boolean"
+          ? parsed.showMcp
+          : PRESETS[verbosity].showMcp,
       showHooks:
-        typeof parsed.showHooks === "boolean" ? parsed.showHooks : PRESETS[verbosity].showHooks,
+        typeof parsed.showHooks === "boolean"
+          ? parsed.showHooks
+          : PRESETS[verbosity].showHooks,
       showMemory:
-        typeof parsed.showMemory === "boolean" ? parsed.showMemory : PRESETS[verbosity].showMemory,
+        typeof parsed.showMemory === "boolean"
+          ? parsed.showMemory
+          : PRESETS[verbosity].showMemory,
       showStatus:
-        typeof parsed.showStatus === "boolean" ? parsed.showStatus : PRESETS[verbosity].showStatus,
+        typeof parsed.showStatus === "boolean"
+          ? parsed.showStatus
+          : PRESETS[verbosity].showStatus,
       showTimestamps:
         typeof parsed.showTimestamps === "boolean"
           ? parsed.showTimestamps
@@ -104,7 +118,8 @@ function readStored(): ChatDisplayPrefs {
   }
 }
 
-export type ChatActivityKind = "tool" | "skill" | "mcp" | "hook" | "memory" | "status";
+export type ChatActivityKind =
+  "tool" | "skill" | "mcp" | "hook" | "memory" | "status";
 
 export function isActivityVisible(
   kind: ChatActivityKind,
@@ -145,12 +160,9 @@ export function useChatDisplayPrefs() {
     setPrefs((prev) => ({ ...prev, verbosity, ...PRESETS[verbosity] }));
   }, []);
 
-  const setToggle = useCallback(
-    (key: ChatDisplayToggleKey, value: boolean) => {
-      setPrefs((prev) => ({ ...prev, [key]: value }));
-    },
-    [],
-  );
+  const setToggle = useCallback((key: ChatDisplayToggleKey, value: boolean) => {
+    setPrefs((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
   const setAnswerLayout = useCallback((answerLayout: ChatAnswerLayout) => {
     setPrefs((prev) => ({ ...prev, answerLayout }));

@@ -17,7 +17,8 @@ export const DEFAULT_MORPHICON_PREFS: MorphiconPrefs = {
 };
 
 export function normalizeMorphiconPrefs(value: unknown): MorphiconPrefs {
-  if (!value || typeof value !== "object") return { ...DEFAULT_MORPHICON_PREFS };
+  if (!value || typeof value !== "object")
+    return { ...DEFAULT_MORPHICON_PREFS };
   const candidate = value as Partial<MorphiconPrefs>;
   return {
     spring: MORPHICON_SPRINGS.includes(candidate.spring as MorphiconSpring)
@@ -34,7 +35,9 @@ export function normalizeMorphiconPrefs(value: unknown): MorphiconPrefs {
 export function readMorphiconPrefs(): MorphiconPrefs {
   try {
     const raw = localStorage.getItem(MORPHICON_PREFS_KEY);
-    return raw ? normalizeMorphiconPrefs(JSON.parse(raw)) : { ...DEFAULT_MORPHICON_PREFS };
+    return raw
+      ? normalizeMorphiconPrefs(JSON.parse(raw))
+      : { ...DEFAULT_MORPHICON_PREFS };
   } catch {
     return { ...DEFAULT_MORPHICON_PREFS };
   }
@@ -42,7 +45,10 @@ export function readMorphiconPrefs(): MorphiconPrefs {
 
 export function writeMorphiconPrefs(prefs: MorphiconPrefs): void {
   try {
-    localStorage.setItem(MORPHICON_PREFS_KEY, JSON.stringify(normalizeMorphiconPrefs(prefs)));
+    localStorage.setItem(
+      MORPHICON_PREFS_KEY,
+      JSON.stringify(normalizeMorphiconPrefs(prefs)),
+    );
   } catch {
     // localStorage may be unavailable in browser previews.
   }

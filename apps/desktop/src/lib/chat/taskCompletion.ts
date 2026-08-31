@@ -51,7 +51,12 @@ export function resolveParallelTaskCompletion(
     return { status: null, failed: false, error: null, celebrate: false };
   }
   if (options.outcome === "interrupt") {
-    return { status: "cancelled", failed: false, error: null, celebrate: false };
+    return {
+      status: "cancelled",
+      failed: false,
+      error: null,
+      celebrate: false,
+    };
   }
 
   const completion = resolveTaskCompletion(options);

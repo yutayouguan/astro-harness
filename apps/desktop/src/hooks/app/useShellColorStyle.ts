@@ -155,7 +155,9 @@ export function useShellColorStyle() {
 
   const commitGradientEdit = useCallback((gradient?: ShellGradient) => {
     setPrefsState((prev) => {
-      const base = gradient ? cloneGradient(gradient) : cloneGradient(prev.gradient);
+      const base = gradient
+        ? cloneGradient(gradient)
+        : cloneGradient(prev.gradient);
       const next = {
         ...prev,
         style: "unified" as const,

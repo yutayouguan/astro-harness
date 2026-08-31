@@ -50,7 +50,10 @@ export default function ModelCapabilityIcons({
   if (active.length === 0) return null;
 
   return (
-    <span className={`model-picker-cap-icons ${className}`.trim()} aria-hidden={false}>
+    <span
+      className={`model-picker-cap-icons ${className}`.trim()}
+      aria-hidden={false}
+    >
       {active.map((key) => {
         const { Icon, labelKey } = CAP_META[key];
         const label = t(labelKey);

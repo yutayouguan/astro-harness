@@ -36,21 +36,21 @@ export function parseHitlRunFinished(
   }
 
   const interrupts: PendingInterrupt[] = records.flatMap((record) => {
-      const id = String(record.id ?? "");
-      if (!id) return [];
-      const schema = parseObject(record.response_schema_json);
-      const interrupt: PendingInterrupt = {
-        id,
-        reason: String(record.reason ?? ""),
-        assistantMessageId,
-      };
-      if (typeof record.message === "string") interrupt.message = record.message;
-      if (typeof record.tool_call_id === "string" && record.tool_call_id.trim()) {
-        interrupt.toolCallId = record.tool_call_id.trim();
-      }
-      if (schema) interrupt.responseSchema = schema;
-      return [interrupt];
-    });
+    const id = String(record.id ?? "");
+    if (!id) return [];
+    const schema = parseObject(record.response_schema_json);
+    const interrupt: PendingInterrupt = {
+      id,
+      reason: String(record.reason ?? ""),
+      assistantMessageId,
+    };
+    if (typeof record.message === "string") interrupt.message = record.message;
+    if (typeof record.tool_call_id === "string" && record.tool_call_id.trim()) {
+      interrupt.toolCallId = record.tool_call_id.trim();
+    }
+    if (schema) interrupt.responseSchema = schema;
+    return [interrupt];
+  });
 
   const surfaceRecord = records.find((record) => {
     const metadata = parseObject(record.metadata_json);
@@ -58,9 +58,13 @@ export function parseHitlRunFinished(
   });
   if (!surfaceRecord) return { interrupts };
   const operations = parseActivityOperations(
-    typeof surfaceRecord.metadata_json === "string" ? surfaceRecord.metadata_json : undefined,
+    typeof surfaceRecord.metadata_json === "string"
+      ? surfaceRecord.metadata_json
+      : undefined,
   );
-  const stableId = String(surfaceRecord.tool_call_id ?? surfaceRecord.id ?? "hitl");
+  const stableId = String(
+    surfaceRecord.tool_call_id ?? surfaceRecord.id ?? "hitl",
+  );
   return {
     interrupts,
     surface: {

@@ -30,7 +30,11 @@ function PreviewNode({ data }: { data: PreviewNodeData }) {
       className="loop-preview-node"
       style={{ "--node-color": data.meta.color } as React.CSSProperties}
     >
-      <Handle type="target" position={Position.Left} className="loop-preview-handle" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="loop-preview-handle"
+      />
       <span className="loop-preview-node-icon">
         {IconComp && <IconComp size={11} />}
       </span>
@@ -38,12 +42,23 @@ function PreviewNode({ data }: { data: PreviewNodeData }) {
         <span className="loop-preview-node-label">{data.label}</span>
         <span className="loop-preview-node-type">{data.meta.labelEn}</span>
       </div>
-      {data.sourceHandleIds.length > 0
-        ? data.sourceHandleIds.map((hid) => (
-            <Handle key={hid} type="source" position={Position.Right} id={hid} className="loop-preview-handle" />
-          ))
-        : <Handle type="source" position={Position.Right} className="loop-preview-handle" />
-      }
+      {data.sourceHandleIds.length > 0 ? (
+        data.sourceHandleIds.map((hid) => (
+          <Handle
+            key={hid}
+            type="source"
+            position={Position.Right}
+            id={hid}
+            className="loop-preview-handle"
+          />
+        ))
+      ) : (
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="loop-preview-handle"
+        />
+      )}
     </div>
   );
 }
@@ -63,7 +78,9 @@ function LoopPreviewInner({ workflow }: Props) {
   const rfRef = useRef<ReactFlowInstance | null>(null);
 
   useEffect(() => {
-    requestAnimationFrame(() => fitView({ padding: 0.12, maxZoom: 1, duration: 300 }));
+    requestAnimationFrame(() =>
+      fitView({ padding: 0.12, maxZoom: 1, duration: 300 }),
+    );
   }, [workflow.id, fitView]);
 
   const onInit = useCallback((instance: ReactFlowInstance) => {
@@ -99,7 +116,9 @@ function LoopPreviewInner({ workflow }: Props) {
           position: pos,
           data: {
             label: n.label,
-            meta: NODE_REGISTRY.find((m) => m.type === n.node_type) ?? NODE_REGISTRY[0],
+            meta:
+              NODE_REGISTRY.find((m) => m.type === n.node_type) ??
+              NODE_REGISTRY[0],
             sourceHandleIds: sourceHandleMap[n.id] ?? [],
           },
         };
@@ -143,7 +162,12 @@ function LoopPreviewInner({ workflow }: Props) {
       preventScrolling={false}
       proOptions={{ hideAttribution: true }}
     >
-      <Background variant={BackgroundVariant.Dots} gap={16} size={0.8} color="var(--ink-faint, #d4d4d8)" />
+      <Background
+        variant={BackgroundVariant.Dots}
+        gap={16}
+        size={0.8}
+        color="var(--ink-faint, #d4d4d8)"
+      />
     </ReactFlow>
   );
 }

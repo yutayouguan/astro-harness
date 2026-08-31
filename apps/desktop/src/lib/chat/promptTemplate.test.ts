@@ -30,7 +30,10 @@ test("every welcome card prompt exposes localized fillable slots", () => {
       const prompt = messages[key];
       const hints = promptTemplateHints(prompt);
       assert.ok(hints.length >= 2, `${key} should expose at least two slots`);
-      assert.equal(preparePromptTemplateSend(prompt, hints).missing.length, hints.length);
+      assert.equal(
+        preparePromptTemplateSend(prompt, hints).missing.length,
+        hints.length,
+      );
     }
   }
 });
@@ -45,7 +48,10 @@ test("filled slots keep visual segments and serialize to plain prompt text", () 
   assert.equal(slots.length, 2);
   assert.equal(slots[0]?.empty, false);
   assert.equal(slots[1]?.empty, true);
-  assert.equal(nextEmptyPromptTemplateSlot(partiallyFilled, -1, hints)?.index, 1);
+  assert.equal(
+    nextEmptyPromptTemplateSlot(partiallyFilled, -1, hints)?.index,
+    1,
+  );
 
   const completed = partiallyFilled.replace("「功能」", "「命令行工具」");
   const prepared = preparePromptTemplateSend(completed, hints);

@@ -79,11 +79,31 @@ const messages: ChatMessage[] = [
 
 const storyFiles: FileChangeItem[] = [
   { path: "crates/agent-core/src/runtime/mod.rs", additions: 2, deletions: 1 },
-  { path: "crates/agent-core/src/streaming/tool_dispatch.rs", additions: 3, deletions: 1 },
-  { path: "crates/agent-core/src/streaming/tool_router.rs", additions: 4, deletions: 2 },
-  { path: "crates/agent-tools/src/tool_registry_test.rs", additions: 1, deletions: 1 },
-  { path: "crates/agent-providers/src/completion.rs", additions: 2, deletions: 2 },
-  { path: "crates/agent-providers/src/responses.rs", additions: 1, deletions: 1 },
+  {
+    path: "crates/agent-core/src/streaming/tool_dispatch.rs",
+    additions: 3,
+    deletions: 1,
+  },
+  {
+    path: "crates/agent-core/src/streaming/tool_router.rs",
+    additions: 4,
+    deletions: 2,
+  },
+  {
+    path: "crates/agent-tools/src/tool_registry_test.rs",
+    additions: 1,
+    deletions: 1,
+  },
+  {
+    path: "crates/agent-providers/src/completion.rs",
+    additions: 2,
+    deletions: 2,
+  },
+  {
+    path: "crates/agent-providers/src/responses.rs",
+    additions: 1,
+    deletions: 1,
+  },
 ];
 
 const loadStoryDiff: ReviewDiffLoader = async (_projectId, path) => {
@@ -113,13 +133,19 @@ index 0f223e1..4cc38f2 100644
   } satisfies ProjectGitDiff;
 };
 
-function TodoProgressPreview({ initialReview = false }: { initialReview?: boolean }) {
+function TodoProgressPreview({
+  initialReview = false,
+}: {
+  initialReview?: boolean;
+}) {
   const [review, setReview] = useState<{
     files: FileChangeItem[];
     selectedPath: string;
-  } | null>(() => initialReview
-    ? { files: storyFiles, selectedPath: storyFiles[0].path }
-    : null);
+  } | null>(() =>
+    initialReview
+      ? { files: storyFiles, selectedPath: storyFiles[0].path }
+      : null,
+  );
 
   return (
     <main className="app-shell" data-tone="blue" style={{ height: "100vh" }}>
@@ -127,23 +153,23 @@ function TodoProgressPreview({ initialReview = false }: { initialReview?: boolea
         <div className="chat-main">
           <section className="chat-pane">
             <div className="message-list" style={{ paddingTop: 120 }}>
-          <div className="msg-row user">
-            <div className="msg-stack">
-              <article className="bubble user">
-                按计划继续完成工具协议对齐。
-              </article>
-            </div>
-          </div>
-          <div className="msg-row assistant">
-            <div className="avatar" aria-hidden>
-              AI
-            </div>
-            <div className="msg-stack">
-              <article className="bubble assistant">
-                继续按分批闭环推进，完成当前实现后会运行针对性验证。
-              </article>
-            </div>
-          </div>
+              <div className="msg-row user">
+                <div className="msg-stack">
+                  <article className="bubble user">
+                    按计划继续完成工具协议对齐。
+                  </article>
+                </div>
+              </div>
+              <div className="msg-row assistant">
+                <div className="avatar" aria-hidden>
+                  AI
+                </div>
+                <div className="msg-stack">
+                  <article className="bubble assistant">
+                    继续按分批闭环推进，完成当前实现后会运行针对性验证。
+                  </article>
+                </div>
+              </div>
             </div>
             <form
               className="composer-shell"
@@ -156,33 +182,33 @@ function TodoProgressPreview({ initialReview = false }: { initialReview?: boolea
                 }
               />
               <div className="composer composer--stacked">
-            <div className="composer-input-wrap">
-              <textarea
-                className="composer-input"
-                placeholder="随心输入"
-                rows={2}
-              />
-            </div>
-            <div className="composer-bar">
-              <div className="composer-bar-left">
-                <button
-                  type="button"
-                  className="composer-icon-btn"
-                  aria-label="添加与插件"
-                >
-                  <Plus size={17} />
-                </button>
-              </div>
-              <div className="composer-bar-right">
-                <button
-                  type="button"
-                  className="composer-send"
-                  aria-label="停止生成"
-                >
-                  <Square size={13} fill="currentColor" />
-                </button>
-              </div>
-            </div>
+                <div className="composer-input-wrap">
+                  <textarea
+                    className="composer-input"
+                    placeholder="随心输入"
+                    rows={2}
+                  />
+                </div>
+                <div className="composer-bar">
+                  <div className="composer-bar-left">
+                    <button
+                      type="button"
+                      className="composer-icon-btn"
+                      aria-label="添加与插件"
+                    >
+                      <Plus size={17} />
+                    </button>
+                  </div>
+                  <div className="composer-bar-right">
+                    <button
+                      type="button"
+                      className="composer-send"
+                      aria-label="停止生成"
+                    >
+                      <Square size={13} fill="currentColor" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </form>
           </section>

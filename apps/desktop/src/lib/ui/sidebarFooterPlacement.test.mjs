@@ -7,7 +7,10 @@ const shellStyles = await readFile(
   "utf8",
 );
 const polishStyles = await readFile(
-  new URL("../../styles/features/shell/layout/sidebar-polish.css", import.meta.url),
+  new URL(
+    "../../styles/features/shell/layout/sidebar-polish.css",
+    import.meta.url,
+  ),
   "utf8",
 );
 

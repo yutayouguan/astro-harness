@@ -43,7 +43,7 @@ export default function EmailTriggerConfig({ config, onChange }: ConfigProps) {
         label="过滤条件"
         value={cfgStr(config, "filter")}
         onChange={(v) => onChange({ ...config, filter: v })}
-        placeholder='发件人、主题关键词等'
+        placeholder="发件人、主题关键词等"
         hint="留空接收所有新邮件"
       />
     </>

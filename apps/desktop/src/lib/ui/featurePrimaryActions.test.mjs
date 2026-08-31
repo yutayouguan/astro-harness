@@ -26,7 +26,10 @@ test("workflow creation actions form the left toolbar group without a visible ti
   );
   assert.doesNotMatch(loopPanel, /className="loop-toolbar-title"/);
   assert.match(loopStyles, /\.loop-toolbar-start\s*\{[\s\S]*?display:\s*flex;/);
-  assert.match(loopStyles, /\.loop-toolbar-end\s*\{[\s\S]*?margin-left:\s*auto;/);
+  assert.match(
+    loopStyles,
+    /\.loop-toolbar-end\s*\{[\s\S]*?margin-left:\s*auto;/,
+  );
 });
 
 test("workflow template mode replaces the saved workflow content", () => {
@@ -53,5 +56,8 @@ test("scheduled task creation actions form the left toolbar group without a visi
   assert.match(cronPanel, /aria-expanded=\{showTemplates\}/);
   assert.match(cronPanel, /className="cron-template-picker"/);
   assert.match(cronStyles, /\.cron-toolbar-start\s*\{[\s\S]*?display:\s*flex;/);
-  assert.match(cronStyles, /\.cron-toolbar-end\s*\{[\s\S]*?margin-left:\s*auto;/);
+  assert.match(
+    cronStyles,
+    /\.cron-toolbar-end\s*\{[\s\S]*?margin-left:\s*auto;/,
+  );
 });

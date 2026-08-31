@@ -25,7 +25,9 @@ import type { ProjectFileWorkbench } from "../../hooks/chat/useProjectFileWorkbe
 import { useAppDialog } from "../../hooks/ui/DialogContext";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useI18n } from "../../i18n/LocaleContext";
-import FileContextMenu, { type FileMenuAction } from "../filespace/FileContextMenu";
+import FileContextMenu, {
+  type FileMenuAction,
+} from "../filespace/FileContextMenu";
 import FileTypeIcon from "../filespace/FileTypeIcon";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 
@@ -37,7 +39,9 @@ const MAX_WIDTH = 440;
 function initialWidth(): number {
   try {
     const value = Number(localStorage.getItem(WIDTH_KEY));
-    return Number.isFinite(value) ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value)) : DEFAULT_WIDTH;
+    return Number.isFinite(value)
+      ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value))
+      : DEFAULT_WIDTH;
   } catch {
     return DEFAULT_WIDTH;
   }
@@ -51,7 +55,13 @@ type TreeRowProps = {
   onContextMenu: (entry: FileEntryDto, x: number, y: number) => void;
 };
 
-function TreeRow({ entry, level, workbench, query, onContextMenu }: TreeRowProps) {
+function TreeRow({
+  entry,
+  level,
+  workbench,
+  query,
+  onContextMenu,
+}: TreeRowProps) {
   const expanded = workbench.expandedDirectories.has(entry.path);
   const loading = workbench.loadingDirectories.has(entry.path);
   const children = workbench.entriesByDirectory[entry.path] ?? [];
@@ -75,7 +85,11 @@ function TreeRow({ entry, level, workbench, query, onContextMenu }: TreeRowProps
           onContextMenu(entry, event.clientX, event.clientY);
         }}
         onKeyDown={(event) => {
-          if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+          if (
+            event.key !== "ContextMenu" &&
+            !(event.shiftKey && event.key === "F10")
+          )
+            return;
           event.preventDefault();
           const rect = event.currentTarget.getBoundingClientRect();
           onContextMenu(entry, rect.left + 24, rect.top + rect.height / 2);
@@ -102,7 +116,9 @@ function TreeRow({ entry, level, workbench, query, onContextMenu }: TreeRowProps
           size={16}
         />
         <span className="project-file-name">{entry.name}</span>
-        {loading ? <span className="project-file-loading" aria-label="加载中" /> : null}
+        {loading ? (
+          <span className="project-file-loading" aria-label="加载中" />
+        ) : null}
       </button>
       {entry.is_dir && expanded ? (
         <div role="group">
@@ -117,7 +133,10 @@ function TreeRow({ entry, level, workbench, query, onContextMenu }: TreeRowProps
             />
           ))}
           {!loading && children.length === 0 ? (
-            <div className="project-file-empty-row" style={{ "--tree-level": level + 1 } as CSSProperties}>
+            <div
+              className="project-file-empty-row"
+              style={{ "--tree-level": level + 1 } as CSSProperties}
+            >
               空目录
             </div>
           ) : null}
@@ -138,7 +157,11 @@ export default function ProjectFilesPanel({
 }) {
   const [width, setWidth] = useState(initialWidth);
   const [query, setQuery] = useState("");
-  const [menu, setMenu] = useState<{ x: number; y: number; entry: FileEntryDto } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    entry: FileEntryDto;
+  } | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<{ id: number; x: number; width: number } | null>(null);
   const { t } = useI18n();
@@ -219,7 +242,9 @@ export default function ProjectFilesPanel({
           const name = await dialog.prompt({
             title: t(isDirectory ? "workspace.newFolder" : "workspace.newFile"),
             placeholder: t(
-              isDirectory ? "workspace.newFolderPlaceholder" : "workspace.newFilePlaceholder",
+              isDirectory
+                ? "workspace.newFolderPlaceholder"
+                : "workspace.newFilePlaceholder",
             ),
             confirmLabel: t("workspace.create"),
           });
@@ -296,7 +321,10 @@ export default function ProjectFilesPanel({
     ? [
         ...(!menu.entry.is_dir
           ? [
-              { action: "open" as const, labelKey: "workspace.menu.open" as const },
+              {
+                action: "open" as const,
+                labelKey: "workspace.menu.open" as const,
+              },
               {
                 action: "openInVscode" as const,
                 labelKey: "workspace.menu.openInVscode" as const,
@@ -307,8 +335,14 @@ export default function ProjectFilesPanel({
               },
             ]
           : [
-              { action: "newFile" as const, labelKey: "workspace.menu.newFile" as const },
-              { action: "newFolder" as const, labelKey: "workspace.menu.newFolder" as const },
+              {
+                action: "newFile" as const,
+                labelKey: "workspace.menu.newFile" as const,
+              },
+              {
+                action: "newFolder" as const,
+                labelKey: "workspace.menu.newFolder" as const,
+              },
               {
                 action: "openInVscode" as const,
                 labelKey: "workspace.menu.openInVscode" as const,
@@ -376,7 +410,8 @@ export default function ProjectFilesPanel({
           <button
             type="button"
             onClick={() => {
-              for (const root of workbench.roots) workbench.refreshDirectory(root.path);
+              for (const root of workbench.roots)
+                workbench.refreshDirectory(root.path);
             }}
             aria-label="刷新项目文件"
             title="刷新"

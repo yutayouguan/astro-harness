@@ -10,7 +10,11 @@ import {
 test("parseClarifySteps normalizes ids and options", () => {
   const steps = parseClarifySteps([
     { question: "风格？", options: ["民谣", "电子"] },
-    { id: "lyrics", question: "歌词？", options: [{ label: "你写", value: "write" }] },
+    {
+      id: "lyrics",
+      question: "歌词？",
+      options: [{ label: "你写", value: "write" }],
+    },
     { question: "  ", options: ["x"] },
   ]);
   assert.equal(steps.length, 2);
@@ -37,7 +41,9 @@ test("parseApprovalContent separates command fences from the risk explanation", 
 });
 
 test("parseClarifySteps keeps empty options for free-text", () => {
-  const steps = parseClarifySteps([{ id: "a", question: "你的想法？", options: [] }]);
+  const steps = parseClarifySteps([
+    { id: "a", question: "你的想法？", options: [] },
+  ]);
   assert.equal(steps.length, 1);
   assert.deepEqual(steps[0].options, []);
 });

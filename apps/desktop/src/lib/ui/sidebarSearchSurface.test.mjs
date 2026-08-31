@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const sidebarPolishStyles = await readFile(
-  new URL("../../styles/features/shell/layout/sidebar-polish.css", import.meta.url),
+  new URL(
+    "../../styles/features/shell/layout/sidebar-polish.css",
+    import.meta.url,
+  ),
   "utf8",
 );
 
@@ -38,7 +41,10 @@ test("expanded sidebar search uses a matte focused treatment", () => {
   );
 
   assert.ok(field, "missing expanded sidebar search styles");
-  assert.match(field, /background:\s*color-mix\(in srgb, var\(--ink\) 4%, transparent\);/);
+  assert.match(
+    field,
+    /background:\s*color-mix\(in srgb, var\(--ink\) 4%, transparent\);/,
+  );
   assert.match(field, /box-shadow:\s*none;/);
   assert.match(field, /backdrop-filter:\s*none;/);
   assert.ok(focus, "missing expanded sidebar search focus treatment");

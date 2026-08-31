@@ -1,4 +1,3 @@
-
 .page-title-block {
   display: flex;
   align-items: center;
@@ -27,7 +26,11 @@
   --nav-grad-top: color-mix(in srgb, var(--tone, #c084fc) 28%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 82%, #6d28d9);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 70%, #2e1065);
-  --nav-icon-cutout: color-mix(in srgb, #fff 78%, var(--tone-soft, transparent));
+  --nav-icon-cutout: color-mix(
+    in srgb,
+    #fff 78%,
+    var(--tone-soft, transparent)
+  );
   color: var(--nav-grad-bottom);
   background: transparent;
   border: none;
@@ -92,7 +95,11 @@ html[data-theme="dark"] .page-title-icon {
   --nav-grad-top: color-mix(in srgb, var(--tone, #e879f9) 55%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 88%, #5b21b6);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 65%, #1e0b3a);
-  --nav-icon-cutout: color-mix(in srgb, rgba(255, 255, 255, 0.18) 65%, var(--tone-soft, transparent));
+  --nav-icon-cutout: color-mix(
+    in srgb,
+    rgba(255, 255, 255, 0.18) 65%,
+    var(--tone-soft, transparent)
+  );
 }
 
 .page-title-icon[data-tone="blue"] {
@@ -261,7 +268,10 @@ html[data-theme="dark"] .page-title-icon {
   color: var(--tone, var(--ink-soft));
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .sidebar-toggle[data-tone="blue"] {

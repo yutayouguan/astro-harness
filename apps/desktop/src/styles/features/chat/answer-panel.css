@@ -35,7 +35,11 @@ html[data-theme="dark"] .bubble:is(.assistant, .user) {
 }
 
 html[data-theme] .bubble:is(.assistant, .user):focus-within {
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 22%, var(--glass-edge));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 22%,
+    var(--glass-edge)
+  );
 }
 
 /* 时间线是阅读导航，不与内容卡抢视觉重量。 */
@@ -48,14 +52,16 @@ html[data-theme] .bubble:is(.assistant, .user):focus-within {
   padding-top: 9px;
 }
 
-.bubble.assistant .msg-timeline-step:is(
-  .kind-tool,
-  .kind-mcp,
-  .kind-skill,
-  .kind-hook,
-  .kind-memory,
-  .kind-status
-) .msg-timeline-rail {
+.bubble.assistant
+  .msg-timeline-step:is(
+    .kind-tool,
+    .kind-mcp,
+    .kind-skill,
+    .kind-hook,
+    .kind-memory,
+    .kind-status
+  )
+  .msg-timeline-rail {
   padding-top: 4px;
 }
 
@@ -101,11 +107,12 @@ html[data-theme] .bubble:is(.assistant, .user):focus-within {
   min-height: 0;
   padding: 1px 2px 8px;
   border: 0;
-  border-bottom: 1px solid color-mix(
-    in srgb,
-    var(--tone, var(--accent)) 9%,
-    color-mix(in srgb, var(--ink) 8%, transparent)
-  );
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--tone, var(--accent)) 9%,
+      color-mix(in srgb, var(--ink) 8%, transparent)
+    );
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -133,21 +140,23 @@ html[data-theme] .bubble:is(.assistant, .user):focus-within {
 }
 
 .bubble.assistant .msg-activity-io-block + .msg-activity-io-block {
-  border-top: 1px solid color-mix(
-    in srgb,
-    var(--tone, var(--accent)) 10%,
-    color-mix(in srgb, var(--ink) 9%, transparent)
-  );
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--tone, var(--accent)) 10%,
+      color-mix(in srgb, var(--ink) 9%, transparent)
+    );
 }
 
 html[data-theme="light"] .bubble.assistant .msg-activity-io {
-  border: 1px solid color-mix(
-    in srgb,
-    var(--tone, var(--accent)) 12%,
-    rgba(71, 85, 105, 0.18)
-  );
+  border: 1px solid
+    color-mix(in srgb, var(--tone, var(--accent)) 12%, rgba(71, 85, 105, 0.18));
   background:
-    linear-gradient(180deg, rgba(71, 85, 105, 0.052), rgba(255, 255, 255, 0.18)),
+    linear-gradient(
+      180deg,
+      rgba(71, 85, 105, 0.052),
+      rgba(255, 255, 255, 0.18)
+    ),
     color-mix(
       in srgb,
       var(--tone-soft, transparent) 18%,
@@ -163,11 +172,8 @@ html[data-theme="light"] .bubble.assistant .msg-activity-io {
 }
 
 html[data-theme="dark"] .bubble.assistant .msg-activity-io {
-  border: 1px solid color-mix(
-    in srgb,
-    var(--tone, #60a5fa) 18%,
-    rgba(255, 255, 255, 0.14)
-  );
+  border: 1px solid
+    color-mix(in srgb, var(--tone, #60a5fa) 18%, rgba(255, 255, 255, 0.14));
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.16), rgba(255, 255, 255, 0.02)),
     color-mix(
@@ -298,14 +304,16 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
     border-radius: 8px;
   }
 
-  .bubble.assistant .msg-timeline-step:is(
-    .kind-tool,
-    .kind-mcp,
-    .kind-skill,
-    .kind-hook,
-    .kind-memory,
-    .kind-status
-  ) .msg-timeline-rail {
+  .bubble.assistant
+    .msg-timeline-step:is(
+      .kind-tool,
+      .kind-mcp,
+      .kind-skill,
+      .kind-hook,
+      .kind-memory,
+      .kind-status
+    )
+    .msg-timeline-rail {
     padding-top: 5px;
   }
 

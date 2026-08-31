@@ -47,11 +47,17 @@ test("falls back to deepseek/google whitelist when capabilities unknown", () => 
     true,
   );
   assert.equal(
-    shouldShowThinkingControls({ capabilities: undefined, backendId: "google" }),
+    shouldShowThinkingControls({
+      capabilities: undefined,
+      backendId: "google",
+    }),
     true,
   );
   assert.equal(
-    shouldShowThinkingControls({ capabilities: undefined, backendId: "openai" }),
+    shouldShowThinkingControls({
+      capabilities: undefined,
+      backendId: "openai",
+    }),
     false,
   );
 });

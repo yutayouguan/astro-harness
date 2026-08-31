@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const appSource = await readFile(new URL("../../App.tsx", import.meta.url), "utf8");
+const appSource = await readFile(
+  new URL("../../App.tsx", import.meta.url),
+  "utf8",
+);
 const workbenchSource = await readFile(
   new URL("../../hooks/chat/useProjectFileWorkbench.ts", import.meta.url),
   "utf8",
@@ -13,7 +16,10 @@ const rightPanelStyles = await readFile(
 );
 
 test("project files dock starts closed instead of restoring an open state", () => {
-  assert.match(workbenchSource, /const \[panelOpen, setPanelOpenState\] = useState\(false\);/);
+  assert.match(
+    workbenchSource,
+    /const \[panelOpen, setPanelOpenState\] = useState\(false\);/,
+  );
   assert.doesNotMatch(workbenchSource, /astro\.projectFiles\.open/);
 });
 
@@ -27,8 +33,14 @@ test("chat shell keeps the project files surface mounted for reversible motion",
     appSource,
     /activeChatRightDock === "project-files" \? " has-project-files" : ""/,
   );
-  assert.doesNotMatch(appSource, /activeChatRightDock === "project-files" \? \(/);
-  assert.match(appSource, /activeChatRightDock === "side-chat" && sideSessionId/);
+  assert.doesNotMatch(
+    appSource,
+    /activeChatRightDock === "project-files" \? \(/,
+  );
+  assert.match(
+    appSource,
+    /activeChatRightDock === "side-chat"\s*&&\s*sideSessionId/,
+  );
   assert.match(appSource, /activeChatRightDock === "inspector" && \(/);
   assert.doesNotMatch(appSource, /--chat-header-right-offset/);
   assert.doesNotMatch(appSource, /chatRightDockWidth/);

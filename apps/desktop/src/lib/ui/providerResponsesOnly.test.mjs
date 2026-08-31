@@ -12,7 +12,10 @@ const useProviders = await readFile(
 );
 
 test("Agent provider selection exposes Responses-capable providers only", () => {
-  assert.match(useProviders, /p\.enabled && p\.supports_responses_api === true/);
+  assert.match(
+    useProviders,
+    /p\.enabled && p\.supports_responses_api === true/,
+  );
   assert.match(providersPanel, /p\.supports_responses_api === true/);
 });
 

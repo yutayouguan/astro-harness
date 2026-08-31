@@ -73,7 +73,8 @@ export default function MediaPreview({
     );
   }
 
-  const wrap = `media-preview ${compact ? "is-compact" : ""} ${className ?? ""}`.trim();
+  const wrap =
+    `media-preview ${compact ? "is-compact" : ""} ${className ?? ""}`.trim();
 
   if (kind === "video") {
     return (

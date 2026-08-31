@@ -98,8 +98,12 @@
   place-items: center;
   color: color-mix(in srgb, var(--tone, #06b6d4) 55%, var(--ink-mute));
   background: color-mix(in srgb, var(--tone, #06b6d4) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, #06b6d4) 14%, transparent);
-  transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--tone, #06b6d4) 14%, transparent);
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
 }
 
 .fs-cat-label {
@@ -158,12 +162,11 @@
 }
 
 html[data-theme="dark"] .fs-cat.is-active {
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.06)) 0%,
-      color-mix(in srgb, var(--tone) 8%, rgba(255, 255, 255, 0.02)) 100%
-    );
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.06)) 0%,
+    color-mix(in srgb, var(--tone) 8%, rgba(255, 255, 255, 0.02)) 100%
+  );
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
 }
 
@@ -198,22 +201,36 @@ html[data-theme="dark"] .fs-cat-icon {
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 70%, transparent);
   flex-wrap: wrap;
 }
 
 .fs-toolbar-end {
   --fs-ctrl: 36px;
   --fs-ctrl-radius: 12px;
-  --fs-ctrl-edge: color-mix(in srgb, var(--tone, #06b6d4) 16%, rgba(255, 255, 255, 0.32));
+  --fs-ctrl-edge: color-mix(
+    in srgb,
+    var(--tone, #06b6d4) 16%,
+    rgba(255, 255, 255, 0.32)
+  );
   --fs-ctrl-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.14) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 45%, rgba(255, 255, 255, 0.12));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.26) 0%,
+      rgba(255, 255, 255, 0.14) 100%
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 45%,
+      rgba(255, 255, 255, 0.12)
+    );
   --fs-ctrl-shadow:
-    0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
-    0 1px 3px rgba(15, 23, 42, 0.03),
-    var(--glass-rim);
-  --fs-ctrl-blur: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+    0 6px 16px
+      color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
+    0 1px 3px rgba(15, 23, 42, 0.03), var(--glass-rim);
+  --fs-ctrl-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
   display: flex;
   align-items: center;
   gap: 8px;
@@ -242,7 +259,11 @@ html[data-theme="dark"] .fs-cat-icon {
 .fs-toolbar-end .expandable-search-btn:hover {
   border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.48));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.33) 0%, rgba(255, 255, 255, 0.13) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.33) 0%,
+      rgba(255, 255, 255, 0.13) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 58%, rgba(255, 255, 255, 0.14));
   box-shadow:
     0 10px 24px color-mix(in srgb, var(--tone) 14%, transparent),
@@ -278,7 +299,9 @@ html[data-theme="dark"] .fs-cat-icon {
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: color 0.12s ease, background 0.12s ease;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
 }
 
 .fs-layout-btn:hover {
@@ -289,7 +312,11 @@ html[data-theme="dark"] .fs-cat-icon {
 .fs-layout-btn.is-active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.14)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.14)
+    ),
     color-mix(in srgb, var(--tone-soft) 80%, transparent);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
@@ -312,7 +339,11 @@ html[data-theme="dark"] .fs-cat-icon {
   box-shadow: var(--fs-ctrl-shadow);
   backdrop-filter: var(--fs-ctrl-blur);
   -webkit-backdrop-filter: var(--fs-ctrl-blur);
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .fs-close-btn svg {
@@ -328,7 +359,11 @@ html[data-theme="dark"] .fs-cat-icon {
   color: var(--tone);
   border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.48));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.33) 0%, rgba(255, 255, 255, 0.13) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.33) 0%,
+      rgba(255, 255, 255, 0.13) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 58%, rgba(255, 255, 255, 0.14));
   box-shadow:
     0 10px 24px color-mix(in srgb, var(--tone) 14%, transparent),
@@ -337,13 +372,20 @@ html[data-theme="dark"] .fs-cat-icon {
 }
 
 html[data-theme="dark"] .fs-toolbar-end {
-  --fs-ctrl-edge: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.08));
+  --fs-ctrl-edge: color-mix(
+    in srgb,
+    var(--tone) 22%,
+    rgba(255, 255, 255, 0.08)
+  );
   --fs-ctrl-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.015) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.55));
   --fs-ctrl-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.22),
-    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.16),
     var(--glass-rim);
 }
 
@@ -361,7 +403,11 @@ html[data-theme="dark"] .fs-toolbar-end .expandable-search-btn:hover,
 html[data-theme="dark"] .fs-close-btn:hover {
   border-color: color-mix(in srgb, var(--tone) 42%, rgba(255, 255, 255, 0.18));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.06) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 70%, rgba(8, 6, 18, 0.4));
   color: color-mix(in srgb, #fff 18%, var(--tone));
 }
@@ -374,7 +420,11 @@ html[data-theme="dark"] .fs-layout-btn.is-active,
 html[data-theme="dark"] .fs-layout-btn:hover {
   color: color-mix(in srgb, #fff 18%, var(--tone));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.03)
+    ),
     color-mix(in srgb, var(--tone-soft) 60%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent);
 }
@@ -522,22 +572,40 @@ html[data-theme="dark"] .fs-layout-btn:hover {
   font-size: 12px;
   font-weight: 650;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.3)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 70%, transparent);
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.56),
+      rgba(255, 255, 255, 0.3)
+    ),
+    color-mix(
+      in srgb,
+      var(--glass-panel, rgba(255, 255, 255, 0.32)) 70%,
+      transparent
+    );
   color: var(--tone);
   cursor: pointer;
   box-shadow:
     0 1px 3px rgba(15, 23, 42, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    color 0.12s ease;
 }
 
 .fs-continue-btn:hover:not(:disabled),
 .fs-action-btn:hover:not(:disabled) {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.38)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.62),
+      rgba(255, 255, 255, 0.38)
+    ),
     var(--tone-soft);
   border-color: color-mix(in srgb, var(--tone) 32%, transparent);
   box-shadow:
@@ -553,7 +621,11 @@ html[data-theme="dark"] .fs-layout-btn:hover {
 
 .fs-action-btn.is-primary {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.22)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.48),
+      rgba(255, 255, 255, 0.22)
+    ),
     var(--tone-soft);
   border-color: color-mix(in srgb, var(--tone) 28%, transparent);
   color: color-mix(in srgb, var(--tone) 85%, var(--ink));
@@ -602,7 +674,11 @@ html[data-theme="dark"] .fs-layout-btn:hover {
   place-items: center;
   border-radius: 11px;
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.55),
+      rgba(255, 255, 255, 0.22)
+    ),
     color-mix(in srgb, var(--tone) 14%, transparent);
   color: var(--tone);
   box-shadow:
@@ -613,43 +689,99 @@ html[data-theme="dark"] .fs-layout-btn:hover {
 
 .fs-file-glyph svg {
   display: block;
-  filter: drop-shadow(0 0.5px 0.5px color-mix(in srgb, var(--tone) 20%, transparent));
+  filter: drop-shadow(
+    0 0.5px 0.5px color-mix(in srgb, var(--tone) 20%, transparent)
+  );
 }
 
 .fs-file-glyph[data-kind] {
   --tone: var(--fs-glyph-tone, var(--tone-purple, #8b5cf6));
 }
 
-.fs-file-glyph[data-kind="md"] { --fs-glyph-tone: #2563eb; }
-.fs-file-glyph[data-kind="json"] { --fs-glyph-tone: #d97706; }
-.fs-file-glyph[data-kind="config"] { --fs-glyph-tone: #ca8a04; }
+.fs-file-glyph[data-kind="md"] {
+  --fs-glyph-tone: #2563eb;
+}
+.fs-file-glyph[data-kind="json"] {
+  --fs-glyph-tone: #d97706;
+}
+.fs-file-glyph[data-kind="config"] {
+  --fs-glyph-tone: #ca8a04;
+}
 .fs-file-glyph[data-kind="db"],
-.fs-file-glyph[data-kind="code-sql"] { --fs-glyph-tone: #059669; }
-.fs-file-glyph[data-kind="lock"] { --fs-glyph-tone: #dc2626; }
-.fs-file-glyph[data-kind="text"] { --fs-glyph-tone: #64748b; }
-.fs-file-glyph[data-kind="image"] { --fs-glyph-tone: #db2777; }
-.fs-file-glyph[data-kind="video"] { --fs-glyph-tone: #7c3aed; }
-.fs-file-glyph[data-kind="audio"] { --fs-glyph-tone: #c026d3; }
+.fs-file-glyph[data-kind="code-sql"] {
+  --fs-glyph-tone: #059669;
+}
+.fs-file-glyph[data-kind="lock"] {
+  --fs-glyph-tone: #dc2626;
+}
+.fs-file-glyph[data-kind="text"] {
+  --fs-glyph-tone: #64748b;
+}
+.fs-file-glyph[data-kind="image"] {
+  --fs-glyph-tone: #db2777;
+}
+.fs-file-glyph[data-kind="video"] {
+  --fs-glyph-tone: #7c3aed;
+}
+.fs-file-glyph[data-kind="audio"] {
+  --fs-glyph-tone: #c026d3;
+}
 .fs-file-glyph[data-kind="archive"],
-.fs-file-glyph[data-kind="package"] { --fs-glyph-tone: #b45309; }
-.fs-file-glyph[data-kind="pdf"] { --fs-glyph-tone: #e11d48; }
-.fs-file-glyph[data-kind="word"] { --fs-glyph-tone: #2563eb; }
-.fs-file-glyph[data-kind="sheet"] { --fs-glyph-tone: #16a34a; }
-.fs-file-glyph[data-kind="slides"] { --fs-glyph-tone: #ea580c; }
+.fs-file-glyph[data-kind="package"] {
+  --fs-glyph-tone: #b45309;
+}
+.fs-file-glyph[data-kind="pdf"] {
+  --fs-glyph-tone: #e11d48;
+}
+.fs-file-glyph[data-kind="word"] {
+  --fs-glyph-tone: #2563eb;
+}
+.fs-file-glyph[data-kind="sheet"] {
+  --fs-glyph-tone: #16a34a;
+}
+.fs-file-glyph[data-kind="slides"] {
+  --fs-glyph-tone: #ea580c;
+}
 .fs-file-glyph[data-kind="code"],
-.fs-file-glyph[data-kind="notebook"] { --fs-glyph-tone: #4f46e5; }
-.fs-file-glyph[data-kind="code-js"] { --fs-glyph-tone: #ca8a04; }
-.fs-file-glyph[data-kind="code-ts"] { --fs-glyph-tone: #0284c7; }
-.fs-file-glyph[data-kind="code-py"] { --fs-glyph-tone: #3776ab; }
-.fs-file-glyph[data-kind="code-rs"] { --fs-glyph-tone: #b45309; }
-.fs-file-glyph[data-kind="code-go"] { --fs-glyph-tone: #00add8; }
-.fs-file-glyph[data-kind="code-java"] { --fs-glyph-tone: #ea580c; }
-.fs-file-glyph[data-kind="code-c"] { --fs-glyph-tone: #6366f1; }
-.fs-file-glyph[data-kind="code-shell"] { --fs-glyph-tone: #0f766e; }
-.fs-file-glyph[data-kind="code-web"] { --fs-glyph-tone: #e11d48; }
-.fs-file-glyph[data-kind="font"] { --fs-glyph-tone: #7c3aed; }
-.fs-file-glyph[data-kind="binary"] { --fs-glyph-tone: #57534e; }
-.fs-file-glyph[data-kind="unknown"] { --fs-glyph-tone: #94a3b8; }
+.fs-file-glyph[data-kind="notebook"] {
+  --fs-glyph-tone: #4f46e5;
+}
+.fs-file-glyph[data-kind="code-js"] {
+  --fs-glyph-tone: #ca8a04;
+}
+.fs-file-glyph[data-kind="code-ts"] {
+  --fs-glyph-tone: #0284c7;
+}
+.fs-file-glyph[data-kind="code-py"] {
+  --fs-glyph-tone: #3776ab;
+}
+.fs-file-glyph[data-kind="code-rs"] {
+  --fs-glyph-tone: #b45309;
+}
+.fs-file-glyph[data-kind="code-go"] {
+  --fs-glyph-tone: #00add8;
+}
+.fs-file-glyph[data-kind="code-java"] {
+  --fs-glyph-tone: #ea580c;
+}
+.fs-file-glyph[data-kind="code-c"] {
+  --fs-glyph-tone: #6366f1;
+}
+.fs-file-glyph[data-kind="code-shell"] {
+  --fs-glyph-tone: #0f766e;
+}
+.fs-file-glyph[data-kind="code-web"] {
+  --fs-glyph-tone: #e11d48;
+}
+.fs-file-glyph[data-kind="font"] {
+  --fs-glyph-tone: #7c3aed;
+}
+.fs-file-glyph[data-kind="binary"] {
+  --fs-glyph-tone: #57534e;
+}
+.fs-file-glyph[data-kind="unknown"] {
+  --fs-glyph-tone: #94a3b8;
+}
 
 .fs-preview-head .fs-file-glyph {
   width: 42px;
@@ -986,22 +1118,35 @@ html[data-theme="dark"] .fs-preview-img {
   min-width: 196px;
   padding: 6px;
   border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--tone, transparent) 12%, var(--menu-glass-border));
+  border: 1px solid
+    color-mix(in srgb, var(--tone, transparent) 12%, var(--menu-glass-border));
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 22%, rgba(255, 255, 255, 0.35)) 0%,
+      color-mix(
+          in srgb,
+          var(--tone-soft, transparent) 22%,
+          rgba(255, 255, 255, 0.35)
+        )
+        0%,
       rgba(255, 255, 255, 0.18) 55%,
       rgba(255, 255, 255, 0.1) 100%
     ),
-    color-mix(in srgb, var(--menu-glass-bg, rgba(255, 255, 255, 0.26)) 48%, transparent);
+    color-mix(
+      in srgb,
+      var(--menu-glass-bg, rgba(255, 255, 255, 0.26)) 48%,
+      transparent
+    );
   box-shadow:
-    0 18px 48px color-mix(in srgb, var(--tone, transparent) 10%, rgba(15, 23, 42, 0.14)),
+    0 18px 48px
+      color-mix(in srgb, var(--tone, transparent) 10%, rgba(15, 23, 42, 0.14)),
     0 2px 8px rgba(15, 23, 42, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     0 0 0 1px color-mix(in srgb, var(--tone, transparent) 6%, transparent);
-  backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.45));
-  -webkit-backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.45));
+  backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.45));
+  -webkit-backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.45));
   color: var(--ink);
   isolation: isolate;
 }
@@ -1021,7 +1166,9 @@ html[data-theme="dark"] .fs-preview-img {
   font-size: 13px;
   font-weight: 550;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .fs-ctx-item .fs-ctx-ico,
@@ -1053,7 +1200,11 @@ html[data-theme="dark"] .fs-preview-img {
   height: 1px;
   margin: 5px 8px;
   border: 0;
-  background: color-mix(in srgb, var(--ink, #1e293b) 14%, rgba(148, 163, 184, 0.42));
+  background: color-mix(
+    in srgb,
+    var(--ink, #1e293b) 14%,
+    rgba(148, 163, 184, 0.42)
+  );
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
@@ -1063,29 +1214,52 @@ html[data-theme="dark"] .fs-preview-img {
 
 /* Optional FileSpace glass accent class (compatible with workspace className) */
 .fs-glass-ctx.fs-ctx-menu {
-  border-color: color-mix(in srgb, var(--tone, #06b6d4) 22%, rgba(255, 255, 255, 0.45));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #06b6d4) 22%,
+    rgba(255, 255, 255, 0.45)
+  );
 }
 
 html[data-theme="dark"] .fs-ctx-menu {
-  border-color: color-mix(in srgb, var(--tone, transparent) 22%, var(--menu-glass-border));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, transparent) 22%,
+    var(--menu-glass-border)
+  );
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 32%, rgba(255, 255, 255, 0.08)) 0%,
+      color-mix(
+          in srgb,
+          var(--tone-soft, transparent) 32%,
+          rgba(255, 255, 255, 0.08)
+        )
+        0%,
       rgba(255, 255, 255, 0.03) 55%,
       rgba(8, 6, 18, 0.28) 100%
     ),
-    color-mix(in srgb, var(--menu-glass-bg, rgba(14, 12, 28, 0.72)) 42%, transparent);
+    color-mix(
+      in srgb,
+      var(--menu-glass-bg, rgba(14, 12, 28, 0.72)) 42%,
+      transparent
+    );
   box-shadow:
     0 18px 48px rgba(0, 0, 0, 0.45),
     0 2px 8px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.5));
-  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.5));
+  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.5));
+  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.5));
 }
 
 html[data-theme="dark"] .fs-ctx-item:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--tone, #06b6d4) 16%, rgba(255, 255, 255, 0.06));
+  background: color-mix(
+    in srgb,
+    var(--tone, #06b6d4) 16%,
+    rgba(255, 255, 255, 0.06)
+  );
 }
 
 html[data-theme="dark"] .fs-ctx-item.is-danger {
@@ -1102,7 +1276,11 @@ html[data-theme="dark"] .fs-ctx-sep {
 }
 
 html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
-  border-color: color-mix(in srgb, var(--tone, #06b6d4) 28%, rgba(255, 255, 255, 0.14));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #06b6d4) 28%,
+    rgba(255, 255, 255, 0.14)
+  );
 }
 
 /* ── Batch bar: liquid glass ── */
@@ -1119,15 +1297,22 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
     linear-gradient(
       155deg,
       color-mix(in srgb, var(--tone, #06b6d4) 10%, rgba(255, 255, 255, 0.45)) 0%,
-      color-mix(in srgb, var(--tone, #06b6d4) 4%, rgba(255, 255, 255, 0.26)) 100%
+      color-mix(in srgb, var(--tone, #06b6d4) 4%, rgba(255, 255, 255, 0.26))
+        100%
     ),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 78%, transparent);
+    color-mix(
+      in srgb,
+      var(--glass-panel, rgba(255, 255, 255, 0.32)) 78%,
+      transparent
+    );
   box-shadow:
     0 8px 22px rgba(15, 23, 42, 0.08),
     0 1px 3px rgba(15, 23, 42, 0.04),
     var(--glass-rim);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
   color: var(--ink);
 }
 
@@ -1146,8 +1331,16 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
   border-radius: 11px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.35)),
-    color-mix(in srgb, var(--glass-fill, rgba(255, 255, 255, 0.35)) 70%, transparent);
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.58),
+      rgba(255, 255, 255, 0.35)
+    ),
+    color-mix(
+      in srgb,
+      var(--glass-fill, rgba(255, 255, 255, 0.35)) 70%,
+      transparent
+    );
   color: var(--ink);
   padding: 5px 11px;
   font: inherit;
@@ -1173,7 +1366,11 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
 .fs-batch-bar button:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--tone, #06b6d4) 28%, var(--glass-edge));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.44)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.62),
+      rgba(255, 255, 255, 0.44)
+    ),
     color-mix(in srgb, var(--tone, #06b6d4) 8%, transparent);
   box-shadow:
     0 4px 12px rgba(15, 23, 42, 0.08),
@@ -1191,12 +1388,20 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
 
 .fs-batch-bar button.is-danger {
   color: var(--danger, #e11d48);
-  border-color: color-mix(in srgb, var(--danger, #e11d48) 22%, var(--glass-edge));
+  border-color: color-mix(
+    in srgb,
+    var(--danger, #e11d48) 22%,
+    var(--glass-edge)
+  );
 }
 
 .fs-batch-bar button.is-danger:hover:not(:disabled) {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.35)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.6),
+      rgba(255, 255, 255, 0.35)
+    ),
     var(--danger-bg, rgba(244, 63, 94, 0.1));
   border-color: color-mix(in srgb, var(--danger, #e11d48) 36%, transparent);
   color: color-mix(in srgb, var(--danger, #e11d48) 92%, #000);
@@ -1217,20 +1422,27 @@ html[data-theme="dark"] .fs-batch-bar {
     linear-gradient(
       155deg,
       color-mix(in srgb, var(--tone, #06b6d4) 16%, rgba(255, 255, 255, 0.12)) 0%,
-      color-mix(in srgb, var(--tone, #06b6d4) 6%, rgba(255, 255, 255, 0.04)) 100%
+      color-mix(in srgb, var(--tone, #06b6d4) 6%, rgba(255, 255, 255, 0.04))
+        100%
     ),
     color-mix(in srgb, var(--glass-panel, #1a2238) 78%, #0b1224);
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
 }
 
 html[data-theme="dark"] .fs-batch-bar button {
   border-color: rgba(255, 255, 255, 0.14);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.05)
+    ),
     rgba(255, 255, 255, 0.04);
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.28),
@@ -1241,7 +1453,11 @@ html[data-theme="dark"] .fs-batch-bar button {
 html[data-theme="dark"] .fs-batch-bar button:hover:not(:disabled) {
   border-color: rgba(255, 255, 255, 0.24);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.2),
+      rgba(255, 255, 255, 0.08)
+    ),
     color-mix(in srgb, var(--tone, #06b6d4) 12%, transparent);
 }
 
@@ -1252,7 +1468,11 @@ html[data-theme="dark"] .fs-batch-bar button.is-danger {
 
 html[data-theme="dark"] .fs-batch-bar button.is-danger:hover:not(:disabled) {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     rgba(244, 63, 94, 0.16);
   color: #ff8a8a;
 }
@@ -1273,20 +1493,30 @@ html[data-theme="dark"] .fs-batch-bar button.is-danger:hover:not(:disabled) {
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.4)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.56),
+      rgba(255, 255, 255, 0.4)
+    ),
     color-mix(in srgb, var(--glass-panel, #fff) 80%, transparent);
   box-shadow:
     0 16px 40px rgba(15, 23, 42, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
-  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
   color: var(--ink);
 }
 
 html[data-theme="dark"] .fs-confirm {
   border-color: rgba(255, 255, 255, 0.14);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     color-mix(in srgb, var(--glass-panel, #1a2238) 80%, #0b1224);
   box-shadow:
     0 16px 40px rgba(0, 0, 0, 0.45),
@@ -1352,7 +1582,11 @@ html[data-theme="dark"] .fs-confirm {
 
 html[data-theme="dark"] .fs-file-glyph {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.04));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
@@ -1364,7 +1598,11 @@ html[data-theme="dark"] .fs-continue-btn,
 html[data-theme="dark"] .fs-action-btn {
   border-color: color-mix(in srgb, var(--tone) 26%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     color-mix(in srgb, var(--tone-soft) 40%, rgba(8, 6, 18, 0.35));
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.28),
@@ -1375,14 +1613,22 @@ html[data-theme="dark"] .fs-action-btn {
 html[data-theme="dark"] .fs-continue-btn:hover:not(:disabled),
 html[data-theme="dark"] .fs-action-btn:hover:not(:disabled) {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.16),
+      rgba(255, 255, 255, 0.06)
+    ),
     color-mix(in srgb, var(--tone) 18%, transparent);
   border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.16));
 }
 
 html[data-theme="dark"] .fs-action-btn.is-primary {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.05)
+    ),
     color-mix(in srgb, var(--tone) 20%, transparent);
   border-color: color-mix(in srgb, var(--tone) 32%, transparent);
 }

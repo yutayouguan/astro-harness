@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const appSource = await readFile(new URL("../../App.tsx", import.meta.url), "utf8");
+const appSource = await readFile(
+  new URL("../../App.tsx", import.meta.url),
+  "utf8",
+);
 const primitives = await readFile(
   new URL("../../styles/tokens/primitive.css", import.meta.url),
   "utf8",
@@ -33,6 +36,6 @@ test("collapsed window chrome uses one shared safe-left token", () => {
   );
   assert.match(
     headerStyles,
-    /\.app-shell\[data-sidebar-state="collapsed"\][\s\S]*?\.feature-content-inline[\s\S]*?:is\(\.cron-toolbar, \.loop-toolbar, \.loop-editor-toolbar, \.plugins-command-bar\)\s*\{[\s\S]*?padding-inline-start:\s*max\([\s\S]*?var\(--window-chrome-safe-left\)[\s\S]*?var\(--page-body-inline-padding\)/,
+    /\.app-shell\[data-sidebar-state="collapsed"\][\s\S]*?\.feature-content-inline[\s\S]*?:is\(\s*\.cron-toolbar,\s*\.loop-toolbar,\s*\.loop-editor-toolbar,\s*\.plugins-command-bar\s*\)\s*\{[\s\S]*?padding-inline-start:\s*max\([\s\S]*?var\(--window-chrome-safe-left\)[\s\S]*?var\(--page-body-inline-padding\)/,
   );
 });

@@ -10,11 +10,23 @@ import {
 } from "./chatRightPanelWidth.ts";
 
 test("parses a stored right-panel width with safe fallbacks", () => {
-  assert.equal(parseStoredChatRightPanelWidth(null), CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
-  assert.equal(parseStoredChatRightPanelWidth("not-a-number"), CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
+  assert.equal(
+    parseStoredChatRightPanelWidth(null),
+    CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
+  );
+  assert.equal(
+    parseStoredChatRightPanelWidth("not-a-number"),
+    CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
+  );
   assert.equal(parseStoredChatRightPanelWidth("480"), 480);
-  assert.equal(parseStoredChatRightPanelWidth("120"), CHAT_RIGHT_PANEL_MIN_WIDTH);
-  assert.equal(parseStoredChatRightPanelWidth("900"), CHAT_RIGHT_PANEL_MAX_WIDTH);
+  assert.equal(
+    parseStoredChatRightPanelWidth("120"),
+    CHAT_RIGHT_PANEL_MIN_WIDTH,
+  );
+  assert.equal(
+    parseStoredChatRightPanelWidth("900"),
+    CHAT_RIGHT_PANEL_MAX_WIDTH,
+  );
 });
 
 test("clamps the right panel to the current layout width", () => {

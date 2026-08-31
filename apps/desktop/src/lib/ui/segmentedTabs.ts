@@ -1,8 +1,5 @@
 export type SegmentedTabNavigationKey =
-  | "ArrowLeft"
-  | "ArrowRight"
-  | "Home"
-  | "End";
+  "ArrowLeft" | "ArrowRight" | "Home" | "End";
 
 export function nextEnabledTabIndex(
   currentIndex: number,

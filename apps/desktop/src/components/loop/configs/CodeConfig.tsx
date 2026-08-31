@@ -14,7 +14,13 @@ const LANGUAGE_OPTIONS = [
   { value: "python", label: "Python" },
 ];
 
-export default function CodeConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function CodeConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>
@@ -29,7 +35,9 @@ export default function CodeConfig({ config, onChange, upstreamOutputs, aiProvid
         value={cfgStr(config, "source")}
         onChange={(v) => onChange({ ...config, source: v })}
         multiline
-        placeholder={"// 接收 input 对象，返回 output\nconst output = { result: input.value * 2 };\nreturn output;"}
+        placeholder={
+          "// 接收 input 对象，返回 output\nconst output = { result: input.value * 2 };\nreturn output;"
+        }
         hint="入参为 input 对象，需返回 output 对象"
         task="代码编写"
         aiProviderId={aiProviderId}

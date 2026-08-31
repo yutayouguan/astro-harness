@@ -43,7 +43,9 @@ export function useAppIcon(active = true): UseAppIcon {
       // 乐观更新当前选中，失败回滚
       setSettings((prev) => (prev ? { ...prev, current: variant } : prev));
       try {
-        const next = await invoke<AppIconSettingsDto>("set_app_icon", { variant });
+        const next = await invoke<AppIconSettingsDto>("set_app_icon", {
+          variant,
+        });
         setSettings(next);
       } catch (err) {
         setError(errorMessage(err));

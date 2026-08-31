@@ -1,4 +1,13 @@
-import { AiAssistField, NumberField, SelectField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
+import {
+  AiAssistField,
+  NumberField,
+  SelectField,
+  FilePathField,
+  FileArrayField,
+  cfgStr,
+  cfgNum,
+  cfgStrArray,
+} from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -22,7 +31,13 @@ const OPERATION_OPTIONS = [
   { value: "restore", label: "修复/增强" },
 ];
 
-export default function ImageEditConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function ImageEditConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const op = cfgStr(config, "operation", "inpaint");
   const up = upstreamOutputs ?? [];
   return (
@@ -61,7 +76,9 @@ export default function ImageEditConfig({ config, onChange, upstreamOutputs, aiP
         aiModel={aiModel}
         upstream={up}
       />
-      {(op === "style_transfer" || op === "face_swap" || op === "variation") && (
+      {(op === "style_transfer" ||
+        op === "face_swap" ||
+        op === "variation") && (
         <FileArrayField
           label="参考图片"
           value={cfgStrArray(config, "reference_images")}

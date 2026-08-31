@@ -22,7 +22,15 @@ const meta = {
   decorators: [
     (Story) => (
       <LocaleProvider>
-        <div style={{ position: "relative", width: "100%", height: "100vh", minHeight: 620, background: "var(--bg)" }}>
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "100vh",
+            minHeight: 620,
+            background: "var(--bg)",
+          }}
+        >
           <Story />
         </div>
       </LocaleProvider>

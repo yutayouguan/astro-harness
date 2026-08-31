@@ -1,12 +1,7 @@
 /** 技能包文件只读预览：CodeMirror 高亮、MD 预览/源码、复制。 */
 import { useCallback, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import {
-  Eye,
-  FileCode2,
-  FolderOpen,
-  Tags,
-} from "lucide-react";
+import { Eye, FileCode2, FolderOpen, Tags } from "lucide-react";
 import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
@@ -64,8 +59,7 @@ function SkillFrontmatterCard({
   const [extrasOpen, setExtrasOpen] = useState(false);
 
   const showName =
-    Boolean(meta.name?.trim()) &&
-    normText(meta.name) !== normText(knownName);
+    Boolean(meta.name?.trim()) && normText(meta.name) !== normText(knownName);
   const desc = meta.description?.trim() ?? "";
   const showDesc =
     Boolean(desc) && normText(desc) !== normText(knownDescription);
@@ -75,7 +69,10 @@ function SkillFrontmatterCard({
   if (!showName && !showDesc && !showExtras) return null;
 
   return (
-    <section className="skills-frontmatter" aria-label={t("skills.frontmatterTitle")}>
+    <section
+      className="skills-frontmatter"
+      aria-label={t("skills.frontmatterTitle")}
+    >
       <header className="skills-frontmatter-head">
         <Tags size={13} strokeWidth={2.3} aria-hidden />
         <span>{t("skills.frontmatterTitle")}</span>
@@ -197,7 +194,8 @@ export function SkillFileViewer({
   const [copied, setCopied] = useState(false);
   const tooLarge = size > SKILL_PREVIEW_MAX_BYTES;
   const isMd = isMarkdownPath(filename);
-  const showPreview = isMd && mdMode === "preview" && !tooLarge && content != null;
+  const showPreview =
+    isMd && mdMode === "preview" && !tooLarge && content != null;
 
   const split = useMemo(
     () => (content != null ? splitSkillFrontmatter(content) : null),
@@ -230,9 +228,7 @@ export function SkillFileViewer({
   }, [content]);
 
   if (loading) {
-    return (
-      <p className="skills-preview-empty">{t("skills.previewLoading")}</p>
-    );
+    return <p className="skills-preview-empty">{t("skills.previewLoading")}</p>;
   }
 
   if (tooLarge) {
@@ -253,9 +249,7 @@ export function SkillFileViewer({
   }
 
   if (content == null) {
-    return (
-      <p className="skills-preview-empty">{t("skills.previewLoading")}</p>
-    );
+    return <p className="skills-preview-empty">{t("skills.previewLoading")}</p>;
   }
 
   return (

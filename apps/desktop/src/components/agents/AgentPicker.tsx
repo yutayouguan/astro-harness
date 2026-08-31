@@ -40,10 +40,7 @@ type Props = {
   allOption?: { value: string; labelKey: MessageKey };
 };
 
-function agentSubline(
-  agent: AgentInfo,
-  defaultLabel: string,
-): string | null {
+function agentSubline(agent: AgentInfo, defaultLabel: string): string | null {
   if (agent.vibe?.trim()) return agent.vibe.trim();
   if (agent.is_default) return defaultLabel;
   return null;
@@ -84,7 +81,9 @@ export default function AgentPicker({
   const menuRef = useRef<HTMLUListElement | null>(null);
   const listId = useId();
   const allSelected = Boolean(allOption && value === allOption.value);
-  const active = allSelected ? undefined : agents.find((a) => a.id === value) ?? agents[0];
+  const active = allSelected
+    ? undefined
+    : (agents.find((a) => a.id === value) ?? agents[0]);
   const defaultLabel = t("workspace.defaultAgent");
   const allOffset = allOption ? 1 : 0;
   const allIndex = allOption ? 0 : -1;
@@ -185,7 +184,8 @@ export default function AgentPicker({
 
   useEffect(() => {
     if (!open || highlightedIndex < 0 || !menuRef.current) return;
-    const items = menuRef.current.querySelectorAll<HTMLElement>("[data-menu-index]");
+    const items =
+      menuRef.current.querySelectorAll<HTMLElement>("[data-menu-index]");
     items[highlightedIndex]?.scrollIntoView({ block: "nearest" });
   }, [open, highlightedIndex]);
 
@@ -246,7 +246,7 @@ export default function AgentPicker({
 
   const activeSub = active ? agentSubline(active, defaultLabel) : null;
   const allLabel = allOption ? t(allOption.labelKey) : "";
-  const triggerLabel = allSelected ? allLabel : active?.name ?? "—";
+  const triggerLabel = allSelected ? allLabel : (active?.name ?? "—");
 
   const menu =
     open && typeof document !== "undefined"
@@ -390,7 +390,10 @@ export default function AgentPicker({
       >
         {allSelected && allOption ? (
           <>
-            <span className="agent-picker-all-icon agent-picker-all-icon--chip" aria-hidden>
+            <span
+              className="agent-picker-all-icon agent-picker-all-icon--chip"
+              aria-hidden
+            >
               <Users size={14} strokeWidth={2.1} />
             </span>
             <span className="agent-picker-meta">

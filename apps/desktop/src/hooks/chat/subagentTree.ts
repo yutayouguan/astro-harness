@@ -47,7 +47,10 @@ export type AgentThreadDetail = {
   messages: AgentThreadMessage[];
 };
 
-export type AgentThreadChanged = Omit<AgentThread, "createdAt" | "updatedAt"> & {
+export type AgentThreadChanged = Omit<
+  AgentThread,
+  "createdAt" | "updatedAt"
+> & {
   activitySequence: number;
   activityKind: string;
   statusKind: AgentThreadStatus["kind"];
@@ -70,16 +73,16 @@ export type AgentThreadSessionEventPayload = {
 export type AgentThreadSessionEventClassification =
   | { kind: "ignore" }
   | {
-    kind: "delta";
-    changed: AgentThreadChanged;
-    nextStreamId: string;
-  }
+      kind: "delta";
+      changed: AgentThreadChanged;
+      nextStreamId: string;
+    }
   | {
-    kind: "refresh";
-    changed: AgentThreadChanged | null;
-    nextStreamId: string;
-    streamChanged: boolean;
-  };
+      kind: "refresh";
+      changed: AgentThreadChanged | null;
+      nextStreamId: string;
+      streamChanged: boolean;
+    };
 
 export type AgentTreeRequestTicket = {
   root: string;
@@ -163,7 +166,12 @@ function nullableInteger(value: unknown, label: string): number | null {
 export function normalizeAgentThreadStatus(value: unknown): AgentThreadStatus {
   const status = record(value, "agent thread status");
   const kind = stringField(status.kind, "agent thread status kind");
-  if (kind === "pending_init" || kind === "running" || kind === "interrupted" || kind === "shutdown") {
+  if (
+    kind === "pending_init" ||
+    kind === "running" ||
+    kind === "interrupted" ||
+    kind === "shutdown"
+  ) {
     return { kind };
   }
   const payload = record(status.payload, `${kind} payload`);
@@ -192,9 +200,16 @@ export function normalizeAgentThread(value: unknown): AgentThread {
   const parent = item.parentThreadId ?? item.parent_thread_id;
   return {
     threadId: stringField(item.threadId ?? item.thread_id, "thread id"),
-    rootThreadId: stringField(item.rootThreadId ?? item.root_thread_id, "root thread id"),
-    parentThreadId: parent == null ? null : stringField(parent, "parent thread id"),
-    canonicalPath: stringField(item.canonicalPath ?? item.canonical_path, "canonical path"),
+    rootThreadId: stringField(
+      item.rootThreadId ?? item.root_thread_id,
+      "root thread id",
+    ),
+    parentThreadId:
+      parent == null ? null : stringField(parent, "parent thread id"),
+    canonicalPath: stringField(
+      item.canonicalPath ?? item.canonical_path,
+      "canonical path",
+    ),
     taskName: stringField(item.taskName ?? item.task_name, "task name"),
     agentType: stringField(item.agentType ?? item.agent_type, "agent type"),
     sessionId: stringField(item.sessionId ?? item.session_id, "session id"),
@@ -222,55 +237,82 @@ export function normalizeAgentTreeSnapshot(value: unknown): AgentTreeSnapshot {
   };
 }
 
-export function normalizeAgentThreadMessage(value: unknown): AgentThreadMessage {
+export function normalizeAgentThreadMessage(
+  value: unknown,
+): AgentThreadMessage {
   const message = record(value, "agent thread message");
   return {
     id: numberField(message.id, "message id"),
-    sessionId: stringField(message.sessionId ?? message.session_id, "message session id"),
+    sessionId: stringField(
+      message.sessionId ?? message.session_id,
+      "message session id",
+    ),
     role: stringField(message.role, "message role"),
     content: nullableString(message.content, "message content"),
     compressedContent: nullableString(
       message.compressedContent ?? message.compressed_content,
       "message compressed content",
     ),
-    toolCallId: nullableString(message.toolCallId ?? message.tool_call_id, "tool call id"),
+    toolCallId: nullableString(
+      message.toolCallId ?? message.tool_call_id,
+      "tool call id",
+    ),
     toolCalls: message.toolCalls ?? message.tool_calls ?? null,
-    toolName: nullableString(message.toolName ?? message.tool_name, "tool name"),
+    toolName: nullableString(
+      message.toolName ?? message.tool_name,
+      "tool name",
+    ),
     timestamp: finiteNumberField(message.timestamp, "message timestamp"),
-    tokenCount: nullableInteger(message.tokenCount ?? message.token_count, "token count"),
+    tokenCount: nullableInteger(
+      message.tokenCount ?? message.token_count,
+      "token count",
+    ),
     finishReason: nullableString(
       message.finishReason ?? message.finish_reason,
       "finish reason",
     ),
     reasoning: nullableString(message.reasoning, "reasoning"),
-    reasoningDetails: message.reasoningDetails ?? message.reasoning_details ?? null,
-    mediaJson: nullableString(message.mediaJson ?? message.media_json, "media json"),
+    reasoningDetails:
+      message.reasoningDetails ?? message.reasoning_details ?? null,
+    mediaJson: nullableString(
+      message.mediaJson ?? message.media_json,
+      "media json",
+    ),
   };
 }
 
 export function normalizeAgentThreadDetail(value: unknown): AgentThreadDetail {
   const detail = record(value, "agent thread detail");
-  if (!Array.isArray(detail.messages)) throw new Error("invalid agent thread messages");
+  if (!Array.isArray(detail.messages))
+    throw new Error("invalid agent thread messages");
   return {
     thread: normalizeAgentThread(detail.thread),
     messages: detail.messages.map(normalizeAgentThreadMessage),
   };
 }
 
-export function normalizeAgentThreadChanged(value: unknown): AgentThreadChanged {
+export function normalizeAgentThreadChanged(
+  value: unknown,
+): AgentThreadChanged {
   const event = record(value, "agent thread changed event");
-  const statusPayload = stringField(event.statusPayloadJson, "status payload json");
+  const statusPayload = stringField(
+    event.statusPayloadJson,
+    "status payload json",
+  );
   const status = normalizeAgentThreadStatus(JSON.parse(statusPayload));
   const statusKind = stringField(event.statusKind, "event status kind");
   if (status.kind !== statusKind) {
-    throw new Error("agent thread status discriminator does not match its payload");
+    throw new Error(
+      "agent thread status discriminator does not match its payload",
+    );
   }
   return {
     threadId: stringField(event.threadId, "event thread id"),
     rootThreadId: stringField(event.rootThreadId, "event root thread id"),
-    parentThreadId: event.parentThreadId === "" || event.parentThreadId == null
-      ? null
-      : stringField(event.parentThreadId, "event parent thread id"),
+    parentThreadId:
+      event.parentThreadId === "" || event.parentThreadId == null
+        ? null
+        : stringField(event.parentThreadId, "event parent thread id"),
     canonicalPath: stringField(event.canonicalPath, "event canonical path"),
     taskName: stringField(event.taskName, "event task name"),
     agentType: stringField(event.agentType, "event agent type"),
@@ -278,7 +320,10 @@ export function normalizeAgentThreadChanged(value: unknown): AgentThreadChanged 
     status,
     statusKind: status.kind,
     statusPayloadJson: statusPayload,
-    activitySequence: numberField(event.activitySequence, "event activity sequence"),
+    activitySequence: numberField(
+      event.activitySequence,
+      "event activity sequence",
+    ),
     activityKind: stringField(event.activityKind, "event activity kind"),
   };
 }
@@ -296,8 +341,8 @@ export function classifyAgentThreadSessionEvent(
   if (payload.sessionId?.trim() !== root) return { kind: "ignore" };
 
   const nextStreamId = payload.streamId ?? "";
-  const streamChanged = desiredStreamId != null
-    && desiredStreamId !== nextStreamId;
+  const streamChanged =
+    desiredStreamId != null && desiredStreamId !== nextStreamId;
   const changed = hasChanged
     ? normalizeAgentThreadChanged(payload.agentThreadChanged)
     : null;
@@ -315,9 +360,11 @@ export function isAgentTreeRequestCurrent(
   activeGeneration: number,
   latestRequest: number,
 ): boolean {
-  return ticket.root === activeRoot
-    && ticket.generation === activeGeneration
-    && ticket.request === latestRequest;
+  return (
+    ticket.root === activeRoot &&
+    ticket.generation === activeGeneration &&
+    ticket.request === latestRequest
+  );
 }
 
 export function isAgentTreeGenerationCurrent(
@@ -370,7 +417,8 @@ function projectTree(
   unreadByPath: Readonly<Record<string, boolean>>,
 ): AgentTreeState {
   const ordered = [...threads].sort((left, right) =>
-    compareCanonicalPath(left.canonicalPath, right.canonicalPath));
+    compareCanonicalPath(left.canonicalPath, right.canonicalPath),
+  );
   const byId = new Map<string, AgentTreeNode>();
   const byPath: Record<string, AgentTreeNode> = {};
 
@@ -427,8 +475,10 @@ export function fromSnapshotWithBufferedEvents(
   let next = fromSnapshot(snapshot, previous);
   const currentGeneration = buffered
     .filter((item) => streamId == null || item.streamId === streamId)
-    .sort((left, right) =>
-      left.changed.activitySequence - right.changed.activitySequence);
+    .sort(
+      (left, right) =>
+        left.changed.activitySequence - right.changed.activitySequence,
+    );
   for (const item of currentGeneration) {
     next = reduceAgentThreadEvent(next, item.changed);
   }
@@ -437,9 +487,11 @@ export function fromSnapshotWithBufferedEvents(
 
 function isUnreadActivity(event: AgentThreadChanged): boolean {
   if (event.activityKind === "mailbox") return true;
-  return event.status.kind === "completed"
-    || event.status.kind === "errored"
-    || event.status.kind === "interrupted";
+  return (
+    event.status.kind === "completed" ||
+    event.status.kind === "errored" ||
+    event.status.kind === "interrupted"
+  );
 }
 
 export function reduceAgentThreadEvent(
@@ -462,9 +514,11 @@ export function reduceAgentThreadEvent(
     createdAt: current?.thread.createdAt ?? "",
     updatedAt: current?.thread.updatedAt ?? "",
   };
-  const threads = state.threads.filter((thread) =>
-    thread.threadId !== event.threadId
-      && thread.canonicalPath !== event.canonicalPath);
+  const threads = state.threads.filter(
+    (thread) =>
+      thread.threadId !== event.threadId &&
+      thread.canonicalPath !== event.canonicalPath,
+  );
   threads.push(nextThread);
 
   const unreadByPath = Object.fromEntries(
@@ -499,7 +553,9 @@ export function markThreadRead(
   );
 }
 
-export function flattenAgentTree(nodes: readonly AgentTreeNode[]): AgentTreeNode[] {
+export function flattenAgentTree(
+  nodes: readonly AgentTreeNode[],
+): AgentTreeNode[] {
   return nodes.flatMap((node) => [node, ...flattenAgentTree(node.children)]);
 }
 

@@ -51,9 +51,14 @@ export default function ProjectEditDialog({
   const handleAddFolder = useCallback(async () => {
     try {
       const { open: pickDir } = await import("@tauri-apps/plugin-dialog");
-      const selected = await pickDir({ directory: true, title: "选择源文件夹" });
+      const selected = await pickDir({
+        directory: true,
+        title: "选择源文件夹",
+      });
       if (selected && typeof selected === "string") {
-        setRoots((prev) => (prev.includes(selected) ? prev : [...prev, selected]));
+        setRoots((prev) =>
+          prev.includes(selected) ? prev : [...prev, selected],
+        );
         if (!project && !name.trim()) {
           const inferredName = selected.split(/[\\/]/).filter(Boolean).pop();
           if (inferredName) setName(inferredName);
@@ -131,133 +136,143 @@ export default function ProjectEditDialog({
       className="project-edit-panel"
       aria-labelledby={titleId}
     >
+      <button
+        type="button"
+        className="settings-overlay-close"
+        onClick={onClose}
+        aria-label="Close"
+      >
+        <X size={16} strokeWidth={2} />
+      </button>
+
+      <h2 id={titleId} className="project-edit-title">
+        {isCreating ? "创建项目" : "编辑项目"}
+      </h2>
+
+      {/* 项目名称（图标内嵌在名称行左侧，点击即可换） */}
+      <label className="project-edit-label">项目名称</label>
+      <div className="project-edit-name-row">
         <button
           type="button"
-          className="settings-overlay-close"
-          onClick={onClose}
-          aria-label="Close"
+          className="project-edit-name-icon-btn"
+          onClick={() => setIconPickerOpen(true)}
+          title="点击更换图标"
+          aria-label="更换项目图标"
         >
-          <X size={16} strokeWidth={2} />
+          <ProjectFolderIcon iconId={iconId} expanded size={22} />
         </button>
-
-        <h2 id={titleId} className="project-edit-title">
-          {isCreating ? "创建项目" : "编辑项目"}
-        </h2>
-
-        {/* 项目名称（图标内嵌在名称行左侧，点击即可换） */}
-        <label className="project-edit-label">项目名称</label>
-        <div className="project-edit-name-row">
-          <button
-            type="button"
-            className="project-edit-name-icon-btn"
-            onClick={() => setIconPickerOpen(true)}
-            title="点击更换图标"
-            aria-label="更换项目图标"
-          >
-            <ProjectFolderIcon iconId={iconId} expanded size={22} />
-          </button>
-          <input
-            type="text"
-            className="project-edit-name-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="项目名称"
-          />
-        </div>
-        <ProjectFolderIconPicker
-          open={iconPickerOpen}
-          selectedId={iconId}
-          onClose={() => setIconPickerOpen(false)}
-          onSelect={(selectedId) => {
-            setIconId(selectedId);
-            setIconPickerOpen(false);
-          }}
+        <input
+          type="text"
+          className="project-edit-name-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="项目名称"
         />
+      </div>
+      <ProjectFolderIconPicker
+        open={iconPickerOpen}
+        selectedId={iconId}
+        onClose={() => setIconPickerOpen(false)}
+        onSelect={(selectedId) => {
+          setIconId(selectedId);
+          setIconPickerOpen(false);
+        }}
+      />
 
-        {/* 源文件夹列表 */}
-        <label className="project-edit-label">源文件夹</label>
-        <div className="project-edit-roots">
-          {roots.length === 0 && (
-            <div className="project-edit-roots-empty">暂无文件夹</div>
-          )}
-          {roots.map((r, index) => (
-            <div key={r} className="project-edit-root-item">
-              <span className="project-edit-root-path">{r}</span>
-              {index === 0 && <span className="project-edit-root-primary">主目录</span>}
-              <button
-                type="button"
-                className="project-edit-root-remove"
-                onClick={() => moveRoot(index, -1)}
-                disabled={index === 0}
-                aria-label={`上移 ${r}`}
-              >
-                <ArrowUp size={13} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className="project-edit-root-remove"
-                onClick={() => moveRoot(index, 1)}
-                disabled={index === roots.length - 1}
-                aria-label={`下移 ${r}`}
-              >
-                <ArrowDown size={13} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className="project-edit-root-remove"
-                onClick={() => handleRemoveRoot(r)}
-                disabled={isDefaultProject || (!isCreating && roots.length === 1)}
-                aria-label={`移除 ${r}`}
-              >
-                <X size={14} strokeWidth={2} />
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="project-edit-add-folder"
-          onClick={() => void handleAddFolder()}
-          disabled={isDefaultProject}
-        >
-          <Plus size={14} strokeWidth={2} />
-          <span>添加文件夹</span>
-        </button>
-
-        {/* 底部操作栏 */}
-        <div className="project-edit-footer">
-          {isCreating ? (
-            <span className="project-edit-protected">设置名称、图标和项目文件夹</span>
-          ) : isDefaultProject ? (
-            <span className="project-edit-protected">主空间不可移除</span>
-          ) : (
+      {/* 源文件夹列表 */}
+      <label className="project-edit-label">源文件夹</label>
+      <div className="project-edit-roots">
+        {roots.length === 0 && (
+          <div className="project-edit-roots-empty">暂无文件夹</div>
+        )}
+        {roots.map((r, index) => (
+          <div key={r} className="project-edit-root-item">
+            <span className="project-edit-root-path">{r}</span>
+            {index === 0 && (
+              <span className="project-edit-root-primary">主目录</span>
+            )}
             <button
               type="button"
-              className="project-edit-btn project-edit-btn--danger"
-              onClick={() => void handleRemoveProject()}
+              className="project-edit-root-remove"
+              onClick={() => moveRoot(index, -1)}
+              disabled={index === 0}
+              aria-label={`上移 ${r}`}
             >
-              <Trash2 size={14} strokeWidth={1.8} />
-              <span>移除本地项目</span>
-            </button>
-          )}
-          <div className="project-edit-footer-right">
-            <button
-              type="button"
-              className="project-edit-btn project-edit-btn--secondary"
-              onClick={onClose}
-            >
-              取消
+              <ArrowUp size={13} strokeWidth={2} />
             </button>
             <button
               type="button"
-              className="project-edit-btn project-edit-btn--primary"
-              onClick={() => void handleSave()}
-              disabled={saving || !name.trim() || roots.length === 0}
+              className="project-edit-root-remove"
+              onClick={() => moveRoot(index, 1)}
+              disabled={index === roots.length - 1}
+              aria-label={`下移 ${r}`}
             >
-              {saving ? (isCreating ? "创建中…" : "保存中…") : (isCreating ? "创建" : "保存")}
+              <ArrowDown size={13} strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              className="project-edit-root-remove"
+              onClick={() => handleRemoveRoot(r)}
+              disabled={isDefaultProject || (!isCreating && roots.length === 1)}
+              aria-label={`移除 ${r}`}
+            >
+              <X size={14} strokeWidth={2} />
             </button>
           </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="project-edit-add-folder"
+        onClick={() => void handleAddFolder()}
+        disabled={isDefaultProject}
+      >
+        <Plus size={14} strokeWidth={2} />
+        <span>添加文件夹</span>
+      </button>
+
+      {/* 底部操作栏 */}
+      <div className="project-edit-footer">
+        {isCreating ? (
+          <span className="project-edit-protected">
+            设置名称、图标和项目文件夹
+          </span>
+        ) : isDefaultProject ? (
+          <span className="project-edit-protected">主空间不可移除</span>
+        ) : (
+          <button
+            type="button"
+            className="project-edit-btn project-edit-btn--danger"
+            onClick={() => void handleRemoveProject()}
+          >
+            <Trash2 size={14} strokeWidth={1.8} />
+            <span>移除本地项目</span>
+          </button>
+        )}
+        <div className="project-edit-footer-right">
+          <button
+            type="button"
+            className="project-edit-btn project-edit-btn--secondary"
+            onClick={onClose}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="project-edit-btn project-edit-btn--primary"
+            onClick={() => void handleSave()}
+            disabled={saving || !name.trim() || roots.length === 0}
+          >
+            {saving
+              ? isCreating
+                ? "创建中…"
+                : "保存中…"
+              : isCreating
+                ? "创建"
+                : "保存"}
+          </button>
         </div>
+      </div>
     </ModalShell>
   );
 }

@@ -58,7 +58,10 @@ function originAgentId(record: SkillOriginRecord): string {
   return normalizeAgentId(record.agent_id);
 }
 
-function originMatchesAgent(record: SkillOriginRecord, agentId: string): boolean {
+function originMatchesAgent(
+  record: SkillOriginRecord,
+  agentId: string,
+): boolean {
   return originAgentId(record) === normalizeAgentId(agentId);
 }
 
@@ -182,7 +185,9 @@ export function resolveUpdateVersionPresentation(
     latestVersion,
     showVersionFlow:
       row.status === "outdated" &&
-      Boolean(installedVersion && latestVersion && installedVersion !== latestVersion),
+      Boolean(
+        installedVersion && latestVersion && installedVersion !== latestVersion,
+      ),
   };
 }
 
@@ -201,7 +206,9 @@ export function filterUpdateRows(
 }
 
 /** 更新页摘要计数；unknown/error 合并为需要关注，避免把检查失败误报为最新。 */
-export function summarizeUpdateRows(rows: SkillUpdateRow[]): SkillUpdateSummary {
+export function summarizeUpdateRows(
+  rows: SkillUpdateRow[],
+): SkillUpdateSummary {
   return rows.reduce<SkillUpdateSummary>(
     (summary, row) => {
       summary.total += 1;
@@ -214,6 +221,13 @@ export function summarizeUpdateRows(rows: SkillUpdateRow[]): SkillUpdateSummary 
       if (row.status === "no_origin") summary.noOrigin += 1;
       return summary;
     },
-    { total: 0, tracked: 0, outdated: 0, current: 0, attention: 0, noOrigin: 0 },
+    {
+      total: 0,
+      tracked: 0,
+      outdated: 0,
+      current: 0,
+      attention: 0,
+      noOrigin: 0,
+    },
   );
 }

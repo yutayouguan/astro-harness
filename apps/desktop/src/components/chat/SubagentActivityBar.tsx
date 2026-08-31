@@ -50,7 +50,10 @@ export default function SubagentActivityBar({
   const [expanded, setExpanded] = useState(true);
   const [stopping, setStopping] = useState(false);
   const visibleRoots = useMemo(
-    () => roots.map(visibleNode).filter((node): node is AgentTreeNode => node !== null),
+    () =>
+      roots
+        .map(visibleNode)
+        .filter((node): node is AgentTreeNode => node !== null),
     [roots],
   );
   const visible = useMemo(() => flattenAgentTree(visibleRoots), [visibleRoots]);
@@ -92,8 +95,8 @@ export default function SubagentActivityBar({
   const stopAll = async () => {
     if (running.length === 0 || stopping) return;
     const token = rootLifecycle.current();
-    const isCurrentRoot = () => token.root === root
-      && rootLifecycle.isCurrent(token);
+    const isCurrentRoot = () =>
+      token.root === root && rootLifecycle.isCurrent(token);
     if (!isCurrentRoot()) return;
     setStopping(true);
     try {
@@ -104,7 +107,8 @@ export default function SubagentActivityBar({
               rootSessionId: root,
               target: thread.canonicalPath,
             },
-          })),
+          }),
+        ),
       );
       if (!isCurrentRoot()) return;
       await onRefresh();
@@ -116,7 +120,11 @@ export default function SubagentActivityBar({
   const renderNode = (node: AgentTreeNode, depth: number) => {
     const status = statusKey(node.thread.status);
     return (
-      <div className="subagent-activity-branch" key={node.thread.threadId} role="none">
+      <div
+        className="subagent-activity-branch"
+        key={node.thread.threadId}
+        role="none"
+      >
         <button
           type="button"
           role="treeitem"
@@ -131,7 +139,11 @@ export default function SubagentActivityBar({
             <small>{node.thread.agentType}</small>
           </span>
           {node.unread ? (
-            <span className="subagents-unread" role="img" aria-label={t("subagents.unread")} />
+            <span
+              className="subagents-unread"
+              role="img"
+              aria-label={t("subagents.unread")}
+            />
           ) : null}
           <em>{t(`subagents.status.${status}` as never)}</em>
         </button>
@@ -155,7 +167,9 @@ export default function SubagentActivityBar({
         >
           <Bot size={15} strokeWidth={2.1} aria-hidden />
           <span className="subagent-activity-copy">
-            <strong>{t("subagents.activity.title", { count: String(visible.length) })}</strong>
+            <strong>
+              {t("subagents.activity.title", { count: String(visible.length) })}
+            </strong>
             <small>
               {!root
                 ? t("subagents.noSession")
@@ -178,16 +192,26 @@ export default function SubagentActivityBar({
         </button>
         <span className="subagent-activity-actions">
           {running.length > 0 ? (
-            <button type="button" disabled={stopping} onClick={() => void stopAll()}>
+            <button
+              type="button"
+              disabled={stopping}
+              onClick={() => void stopAll()}
+            >
               <Square size={11} strokeWidth={2.4} aria-hidden />
               {t("subagents.activity.stopAll")}
             </button>
           ) : null}
-          <button type="button" onClick={onOpenPanel}>{t("subagents.activity.openAll")}</button>
+          <button type="button" onClick={onOpenPanel}>
+            {t("subagents.activity.openAll")}
+          </button>
         </span>
       </div>
       {expanded && visibleRoots.length > 0 ? (
-        <div className="subagent-activity-list" role="tree" aria-label={t("subagents.threadList")}>
+        <div
+          className="subagent-activity-list"
+          role="tree"
+          aria-label={t("subagents.threadList")}
+        >
           {visibleRoots.map((node) => renderNode(node, 0))}
         </div>
       ) : null}

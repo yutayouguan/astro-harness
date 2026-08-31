@@ -1,8 +1,5 @@
 import { forwardRef, type ComponentProps, type ElementRef } from "react";
-import {
-  MorphIcon as BaseMorphIcon,
-  type MorphHandle,
-} from "morphicons/react";
+import { MorphIcon as BaseMorphIcon, type MorphHandle } from "morphicons/react";
 import { Check as CheckData, Copy as CopyData } from "lucide";
 import { useMorphicons } from "../../hooks/app/useMorphicons";
 import {

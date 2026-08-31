@@ -15,7 +15,8 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../src/styles/", import.meta.url));
-const DECLARATION = /((?:(?:-webkit-)?backdrop-filter|--[a-z0-9-]*blur)\s*:\s*)([^;}]+)/gi;
+const DECLARATION =
+  /((?:(?:-webkit-)?backdrop-filter|--[a-z0-9-]*blur)\s*:\s*)([^;}]+)/gi;
 // 单层嵌套足够覆盖 blur(var(--x, 14px))
 const INNER = "(?:[^()]|\\([^()]*\\))*";
 const BLUR = new RegExp(`\\bblur\\(\\s*(${INNER}?)\\s*\\)`, "g");
@@ -41,7 +42,9 @@ for (const file of cssFiles(ROOT)) {
       .replace(BLUR, (blur, inner) => {
         if (!inner || inner.includes("--glass-blur-scale")) return blur;
         blurCount += 1;
-        const operand = PLAIN_LENGTH.test(inner.trim()) ? inner.trim() : `(${inner.trim()})`;
+        const operand = PLAIN_LENGTH.test(inner.trim())
+          ? inner.trim()
+          : `(${inner.trim()})`;
         return `blur(calc(${operand} * var(--glass-blur-scale, 1)))`;
       })
       .replace(SATURATE, (saturate, inner) => {

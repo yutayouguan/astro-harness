@@ -156,40 +156,50 @@
   border-radius: 12px;
   background: var(--plugins-shell-bg);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
 }
 
-  .skills-usage-bar {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-    margin-top: -4px;
-  }
+.skills-usage-bar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: -4px;
+}
 
-  .skills-usage-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 650;
-    color: var(--tone);
-    background:
-      linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.35)),
-      var(--tone-soft);
-    border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-  }
+.skills-usage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--tone);
+  background:
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(255, 255, 255, 0.35)
+    ),
+    var(--tone-soft);
+  border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
 
-  html[data-theme="dark"] .skills-usage-chip {
-    background:
-      linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-      color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.5));
-    border-color: color-mix(in srgb, var(--tone) 30%, rgba(255, 255, 255, 0.1));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    color: color-mix(in srgb, #fff 22%, var(--tone));
+html[data-theme="dark"] .skills-usage-chip {
+  background:
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
+    color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.5));
+  border-color: color-mix(in srgb, var(--tone) 30%, rgba(255, 255, 255, 0.1));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: color-mix(in srgb, #fff 22%, var(--tone));
 }
 
 .skills-pane {
@@ -215,7 +225,7 @@
   display: none;
 }
 
-.skills-pane>* {
+.skills-pane > * {
   position: relative;
   z-index: 1;
 }
@@ -264,29 +274,46 @@ html[data-theme="dark"] .skills-pane {
   padding: 7px 14px;
   color: var(--ink-soft);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.42)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.88),
+      rgba(255, 255, 255, 0.42)
+    ),
     color-mix(in srgb, var(--tone-soft) 55%, transparent);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 10%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
+  box-shadow: 0 2px 8px
+    color-mix(in srgb, var(--tone) 10%, rgba(15, 23, 42, 0.04));
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
 }
 
 .skills-tab-shell .skills-action-btn:hover {
   color: var(--tone);
   border-color: transparent;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.5)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(255, 255, 255, 0.5)
+    ),
     color-mix(in srgb, var(--tone) 12%, transparent);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.05));
+  box-shadow: 0 4px 12px
+    color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.05));
 }
 
 .skills-tab-shell .skills-action-btn.primary {
   color: var(--tone);
   border-color: transparent;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.9),
+      rgba(255, 255, 255, 0.45)
+    ),
     var(--tone-soft);
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.04));
+  box-shadow: 0 2px 10px
+    color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.04));
 }
 
 .skills-tab-pill {
@@ -307,7 +334,11 @@ html[data-theme="dark"] .skills-pane {
 .skills-tab-pill.is-on {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.9),
+      rgba(255, 255, 255, 0.45)
+    ),
     var(--tone-soft);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
 }
@@ -348,18 +379,29 @@ html[data-theme="dark"] .skills-tab-pill {
   border-radius: 999px;
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.9),
+      rgba(255, 255, 255, 0.45)
+    ),
     var(--tone-soft);
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
+  box-shadow: 0 2px 10px
+    color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
 }
 
 .skills-tab-shell .agent-picker-chip:hover:not(:disabled),
 .skills-tab-shell .agent-picker-chip.is-open {
   border-color: transparent;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.52)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(255, 255, 255, 0.52)
+    ),
     color-mix(in srgb, var(--tone) 14%, transparent);
   box-shadow: 0 4px 14px color-mix(in srgb, var(--tone) 16%, transparent);
 }
@@ -373,7 +415,9 @@ html[data-theme="dark"] .skills-tab-shell .agent-picker-chip {
   -webkit-backdrop-filter: none;
 }
 
-html[data-theme="dark"] .skills-tab-shell .agent-picker-chip:hover:not(:disabled),
+html[data-theme="dark"]
+  .skills-tab-shell
+  .agent-picker-chip:hover:not(:disabled),
 html[data-theme="dark"] .skills-tab-shell .agent-picker-chip.is-open {
   color: color-mix(in srgb, #fff 36%, var(--tone));
   background: color-mix(in srgb, var(--tone) 22%, transparent);
@@ -383,7 +427,8 @@ html[data-theme="dark"] .skills-tab-shell .agent-picker-chip.is-open {
 
 /* 展开搜索时隐藏左侧筛选，腾出空间给输入框 */
 .skills-pane-actions:has(.expandable-search.is-open) .agent-picker,
-.skills-pane-actions:has(.expandable-search.is-open) .skills-tab-shell:has(.agent-picker),
+.skills-pane-actions:has(.expandable-search.is-open)
+  .skills-tab-shell:has(.agent-picker),
 .skills-pane-actions:has(.expandable-search.is-open) .select-menu {
   display: none;
 }
@@ -431,36 +476,67 @@ html[data-theme="dark"] .skills-tab-shell .agent-picker-chip.is-open {
   padding: 6px 10px 6px 12px;
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.9),
+      rgba(255, 255, 255, 0.45)
+    ),
     var(--tone-soft);
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
+  box-shadow: 0 2px 10px
+    color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
 }
 
 .skills-pane-actions .select-menu--sm .select-menu-trigger:hover:not(:disabled),
 .skills-pane-actions .select-menu.is-open .select-menu-trigger,
-.skills-store-toolbar .select-menu--sm .select-menu-trigger:hover:not(:disabled),
+.skills-store-toolbar
+  .select-menu--sm
+  .select-menu-trigger:hover:not(:disabled),
 .skills-store-toolbar .select-menu.is-open .select-menu-trigger {
   color: var(--tone);
   border-color: transparent;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.52)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(255, 255, 255, 0.52)
+    ),
     color-mix(in srgb, var(--tone) 14%, transparent);
   box-shadow: 0 4px 14px color-mix(in srgb, var(--tone) 16%, transparent);
 }
 
-html[data-theme="dark"] .skills-pane-actions .select-menu--sm .select-menu-trigger,
-html[data-theme="dark"] .skills-store-toolbar .select-menu--sm .select-menu-trigger {
+html[data-theme="dark"]
+  .skills-pane-actions
+  .select-menu--sm
+  .select-menu-trigger,
+html[data-theme="dark"]
+  .skills-store-toolbar
+  .select-menu--sm
+  .select-menu-trigger {
   color: color-mix(in srgb, #fff 28%, var(--tone));
   background: color-mix(in srgb, var(--tone) 14%, transparent);
   box-shadow: none;
 }
 
-html[data-theme="dark"] .skills-pane-actions .select-menu--sm .select-menu-trigger:hover:not(:disabled),
-html[data-theme="dark"] .skills-pane-actions .select-menu.is-open .select-menu-trigger,
-html[data-theme="dark"] .skills-store-toolbar .select-menu--sm .select-menu-trigger:hover:not(:disabled),
-html[data-theme="dark"] .skills-store-toolbar .select-menu.is-open .select-menu-trigger {
+html[data-theme="dark"]
+  .skills-pane-actions
+  .select-menu--sm
+  .select-menu-trigger:hover:not(:disabled),
+html[data-theme="dark"]
+  .skills-pane-actions
+  .select-menu.is-open
+  .select-menu-trigger,
+html[data-theme="dark"]
+  .skills-store-toolbar
+  .select-menu--sm
+  .select-menu-trigger:hover:not(:disabled),
+html[data-theme="dark"]
+  .skills-store-toolbar
+  .select-menu.is-open
+  .select-menu-trigger {
   color: color-mix(in srgb, #fff 36%, var(--tone));
   background: color-mix(in srgb, var(--tone) 22%, transparent);
   box-shadow: none;
@@ -557,7 +633,11 @@ html[data-theme="dark"] .skills-store-toolbar .select-menu.is-open .select-menu-
 .skills-store-category-tag.is-active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.35)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.82),
+      rgba(255, 255, 255, 0.35)
+    ),
     var(--tone-soft);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 20%, transparent),
@@ -614,13 +694,15 @@ html[data-theme="dark"] .skills-store-category-tag.is-active {
 .skill-card-link-badge.is-outdated {
   background: color-mix(in srgb, var(--amber, #d97706) 16%, transparent);
   color: color-mix(in srgb, var(--amber, #d97706) 92%, var(--ink));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber, #d97706) 28%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--amber, #d97706) 28%, transparent);
 }
 
 .skill-card-link-badge.is-current {
   color: color-mix(in srgb, var(--tone-green, #16a34a) 88%, var(--ink));
   background: color-mix(in srgb, var(--tone-green, #16a34a) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-green, #16a34a) 24%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--tone-green, #16a34a) 24%, transparent);
 }
 
 .skill-card-status-hint {
@@ -634,7 +716,8 @@ html[data-theme="dark"] .skills-store-category-tag.is-active {
 .skills-detail-item-badge.is-on {
   color: color-mix(in srgb, var(--tone-green, #16a34a) 88%, var(--ink));
   background: color-mix(in srgb, var(--tone-green, #16a34a) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-green, #16a34a) 24%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--tone-green, #16a34a) 24%, transparent);
 }
 
 /* 与 ExpandableSearch 同套玻璃液态图标钮 */
@@ -652,18 +735,32 @@ html[data-theme="dark"] .skills-store-category-tag.is-active {
   color: var(--tone, var(--ink-soft));
   background: var(--plugins-shell-bg);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
   cursor: pointer;
   line-height: 1;
-  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .skills-icon-btn:hover:not(:disabled) {
   color: var(--tone, var(--ink));
-  border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.55));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #64748b) 28%,
+    rgba(255, 255, 255, 0.55)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.58) 0%,
+      rgba(255, 255, 255, 0.22) 100%
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
@@ -677,9 +774,17 @@ html[data-theme="dark"] .skills-store-category-tag.is-active {
 
 .skills-icon-btn.is-active {
   color: var(--tone, var(--ink));
-  border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.55));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #64748b) 28%,
+    rgba(255, 255, 255, 0.55)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.58) 0%,
+      rgba(255, 255, 255, 0.22) 100%
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
@@ -705,9 +810,17 @@ html[data-theme="dark"] .skills-store-category-tag.is-active {
 }
 
 html[data-theme="dark"] .skills-icon-btn {
-  border-color: color-mix(in srgb, var(--tone, #94a3b8) 24%, rgba(255, 255, 255, 0.1));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #94a3b8) 24%,
+    rgba(255, 255, 255, 0.1)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0.02) 100%
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(8, 6, 18, 0.5));
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.2),
@@ -717,16 +830,24 @@ html[data-theme="dark"] .skills-icon-btn {
 
 html[data-theme="dark"] .skills-icon-btn:hover:not(:disabled),
 html[data-theme="dark"] .skills-icon-btn.is-active {
-  border-color: color-mix(in srgb, var(--tone, #94a3b8) 38%, rgba(255, 255, 255, 0.14));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #94a3b8) 38%,
+    rgba(255, 255, 255, 0.14)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 50%, rgba(8, 6, 18, 0.45));
   color: color-mix(in srgb, #fff 18%, var(--tone, var(--ink)));
 }
 
 .skills-pane-head h2 {
   margin: 0 0 4px;
-    font-size: 17px;
+  font-size: 17px;
 }
 
 .skills-pane-head p {

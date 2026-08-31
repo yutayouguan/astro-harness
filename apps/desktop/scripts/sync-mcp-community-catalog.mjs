@@ -7,7 +7,10 @@ import {
 } from "./lib/mcpservers-html.mjs";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const sourceConfigPath = resolve(appRoot, "src/config/mcp-catalog-sources.json");
+const sourceConfigPath = resolve(
+  appRoot,
+  "src/config/mcp-catalog-sources.json",
+);
 
 function wait(milliseconds) {
   return new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
@@ -25,7 +28,8 @@ async function fetchHtml(url, source) {
         },
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      if (!response.ok)
+        throw new Error(`${response.status} ${response.statusText}`);
       return {
         html: await response.text(),
         lastModified: response.headers.get("last-modified") ?? undefined,
@@ -52,7 +56,8 @@ async function fetchJson(url, source) {
         },
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      if (!response.ok)
+        throw new Error(`${response.status} ${response.statusText}`);
       return {
         document: await response.json(),
         lastModified: response.headers.get("last-modified") ?? undefined,
@@ -78,7 +83,10 @@ function renderPath(template, values) {
 
 function expandFeeds(source) {
   return source.feeds.flatMap((feed) => {
-    if (!feed.expand) return [{ ...feed, path: feed.path ?? renderPath(feed.pathTemplate, source) }];
+    if (!feed.expand)
+      return [
+        { ...feed, path: feed.path ?? renderPath(feed.pathTemplate, source) },
+      ];
     const values = source[feed.expand.valuesFrom];
     if (!Array.isArray(values)) {
       throw new Error(`Invalid feed expansion: ${feed.expand.valuesFrom}`);
@@ -96,7 +104,10 @@ function expandFeeds(source) {
 
 function pageUrl(source, feed, page) {
   const url = new URL(feed.path, source.baseUrl);
-  if (url.origin !== new URL(source.baseUrl).origin || url.pathname.startsWith("/api/")) {
+  if (
+    url.origin !== new URL(source.baseUrl).origin ||
+    url.pathname.startsWith("/api/")
+  ) {
     throw new Error(`Unsafe MCP catalog feed: ${url.href}`);
   }
   if (page > 1) url.searchParams.set("page", String(page));
@@ -113,7 +124,8 @@ function mergeServer(target, incoming) {
     ...previous,
     ...incoming,
     description: previous.description || incoming.description,
-    category: previous.category !== "other" ? previous.category : incoming.category,
+    category:
+      previous.category !== "other" ? previous.category : incoming.category,
     url: previous.url || incoming.url,
     websiteUrl: previous.websiteUrl || incoming.websiteUrl,
     logoUrl: previous.logoUrl || incoming.logoUrl,
@@ -163,7 +175,9 @@ function githubAvatarUrl(value) {
     const url = new URL(value);
     if (url.hostname.toLowerCase() !== "github.com") return undefined;
     const owner = url.pathname.split("/").filter(Boolean)[0];
-    return owner ? `https://github.com/${encodeURIComponent(owner)}.png?size=64` : undefined;
+    return owner
+      ? `https://github.com/${encodeURIComponent(owner)}.png?size=64`
+      : undefined;
   } catch {
     return undefined;
   }
@@ -183,7 +197,8 @@ function catalogMatchKeys(server) {
 
 function toCatalogEntry(server, source, config) {
   const category = config.categoryMap[server.category] ?? "other";
-  const icon = config.iconAliases[server.slug] ??
+  const icon =
+    config.iconAliases[server.slug] ??
     httpsUrl(server.logoUrl, source.baseUrl) ??
     githubAvatarUrl(server.url) ??
     githubAvatarUrl(server.websiteUrl);
@@ -203,7 +218,10 @@ function toCatalogEntry(server, source, config) {
       source.baseUrl,
     ).href,
     ...(server.remoteCatalogPath
-      ? { catalogRemoteUrl: new URL(server.remoteCatalogPath, source.baseUrl).href }
+      ? {
+          catalogRemoteUrl: new URL(server.remoteCatalogPath, source.baseUrl)
+            .href,
+        }
       : {}),
     ...(server.url ? { catalogUpstreamUrl: server.url } : {}),
     catalogNativeCategory: server.category,
@@ -224,12 +242,22 @@ export function toRegistryEntry(item, source) {
   const title = server.title || server.name.split("/").at(-1) || server.name;
   const remotes = Array.isArray(server.remotes) ? server.remotes : [];
   const packages = Array.isArray(server.packages) ? server.packages : [];
-  const icon = (Array.isArray(server.icons) ? server.icons : [])
-    .map((candidate) => httpsUrl(candidate?.src, source.baseUrl))
-    .find(Boolean) ?? githubAvatarUrl(server.repository?.url) ?? githubAvatarUrl(server.websiteUrl);
-  const remoteUrl = remotes.find((remote) => remote?.type === "streamable-http")?.url;
-  const sourceUrl = server.websiteUrl || server.repository?.url ||
-    new URL(`${source.path}?search=${encodeURIComponent(server.name)}`, source.baseUrl).href;
+  const icon =
+    (Array.isArray(server.icons) ? server.icons : [])
+      .map((candidate) => httpsUrl(candidate?.src, source.baseUrl))
+      .find(Boolean) ??
+    githubAvatarUrl(server.repository?.url) ??
+    githubAvatarUrl(server.websiteUrl);
+  const remoteUrl = remotes.find(
+    (remote) => remote?.type === "streamable-http",
+  )?.url;
+  const sourceUrl =
+    server.websiteUrl ||
+    server.repository?.url ||
+    new URL(
+      `${source.path}?search=${encodeURIComponent(server.name)}`,
+      source.baseUrl,
+    ).href;
   return {
     id: `registry-${server.name.replace(/[^a-z0-9-]+/gi, "-").toLowerCase()}`,
     name: title,
@@ -244,8 +272,11 @@ export function toRegistryEntry(item, source) {
     catalogRegistered: true,
     catalogRemote: remotes.length > 0,
     catalogRegistryName: server.name,
-    catalogPackageTypes: [...new Set(packages.map((pkg) => pkg?.registryType).filter(Boolean))],
-    catalogUpdatedAt: item?._meta?.["io.modelcontextprotocol.registry/official"]?.updatedAt,
+    catalogPackageTypes: [
+      ...new Set(packages.map((pkg) => pkg?.registryType).filter(Boolean)),
+    ],
+    catalogUpdatedAt:
+      item?._meta?.["io.modelcontextprotocol.registry/official"]?.updatedAt,
     catalogIdentity: normalizedName(title),
   };
 }
@@ -287,24 +318,34 @@ async function syncHtmlSource(source, config) {
     const pageCount = Math.min(feed.maxPages, pagination?.totalPages ?? 1);
 
     for (let page = 1; page <= pageCount; page += 1) {
-      const html = page === 1 ? first.html : (await fetchHtml(pageUrl(source, feed, page), source)).html;
+      const html =
+        page === 1
+          ? first.html
+          : (await fetchHtml(pageUrl(source, feed, page), source)).html;
       const records = parseMcpServersCollections(html, feed.collections);
       for (const record of records) {
         mergeServer(merged, {
           ...record,
           official: record.official || feed.forceOfficial === true,
           featured:
-            record.featured || (feed.featuredCollections ?? []).includes(record.collection),
+            record.featured ||
+            (feed.featuredCollections ?? []).includes(record.collection),
           sponsored: record.collection === "sponsorServers",
           remote: feed.remote === true,
           catalogPath: feed.remote
             ? undefined
-            : renderPath(feed.detailPathTemplate ?? "/{locale}/servers/{slug}", {
+            : renderPath(
+                feed.detailPathTemplate ?? "/{locale}/servers/{slug}",
+                {
+                  ...source,
+                  slug: record.slug,
+                },
+              ),
+          remoteCatalogPath: feed.remote
+            ? renderPath(feed.detailPathTemplate, {
                 ...source,
                 slug: record.slug,
-              }),
-          remoteCatalogPath: feed.remote
-            ? renderPath(feed.detailPathTemplate, { ...source, slug: record.slug })
+              })
             : undefined,
         });
       }
@@ -315,7 +356,9 @@ async function syncHtmlSource(source, config) {
 
   return {
     lastModified,
-    servers: [...merged.values()].map((server) => toCatalogEntry(server, source, config)),
+    servers: [...merged.values()].map((server) =>
+      toCatalogEntry(server, source, config),
+    ),
   };
 }
 
@@ -325,45 +368,55 @@ export function mergeCatalogEntry(previous, incoming) {
     : incoming.catalogRegistered
       ? incoming
       : undefined;
-  const directory = previous.catalogSource === "mcpservers.org"
-    ? previous
-    : incoming.catalogSource === "mcpservers.org"
-      ? incoming
-      : undefined;
+  const directory =
+    previous.catalogSource === "mcpservers.org"
+      ? previous
+      : incoming.catalogSource === "mcpservers.org"
+        ? incoming
+        : undefined;
   const sourceNames = new Set(
     [previous.catalogSource, incoming.catalogSource]
       .flatMap((sourceName) => sourceName?.split(" + ") ?? [])
       .filter(Boolean),
   );
-  const previousDirectoryUrl = previous.catalogDirectoryUrl ??
-    (previous.catalogSource?.includes("mcpservers.org") && !previous.catalogRemoteUrl
+  const previousDirectoryUrl =
+    previous.catalogDirectoryUrl ??
+    (previous.catalogSource?.includes("mcpservers.org") &&
+    !previous.catalogRemoteUrl
       ? previous.catalogSourceUrl
       : undefined);
-  const incomingDirectoryUrl = incoming.catalogDirectoryUrl ??
+  const incomingDirectoryUrl =
+    incoming.catalogDirectoryUrl ??
     (incoming.catalogSource === "mcpservers.org" && !incoming.catalogRemoteUrl
       ? incoming.catalogSourceUrl
       : undefined);
-  const directoryUrl = previousDirectoryUrl ?? incomingDirectoryUrl ??
-    previous.catalogRemoteUrl ?? incoming.catalogRemoteUrl;
+  const directoryUrl =
+    previousDirectoryUrl ??
+    incomingDirectoryUrl ??
+    previous.catalogRemoteUrl ??
+    incoming.catalogRemoteUrl;
   return {
     ...previous,
     ...incoming,
     id: registry?.id ?? previous.id,
     name: directory?.name || registry?.name || incoming.name,
-    description: directory?.description || registry?.description || incoming.description,
+    description:
+      directory?.description || registry?.description || incoming.description,
     category:
       directory?.category && directory.category !== "other"
         ? directory.category
-        : registry?.category ?? incoming.category,
+        : (registry?.category ?? incoming.category),
     icon: directory?.icon ?? registry?.icon ?? previous.icon ?? incoming.icon,
     featured: previous.featured || incoming.featured,
     catalogInstallable: false,
     catalogSource: [...sourceNames].join(" + "),
     catalogSourceUrl: directoryUrl ?? registry?.catalogSourceUrl,
     catalogDirectoryUrl: directoryUrl,
-    catalogUpstreamUrl: registry?.catalogUpstreamUrl ?? directory?.catalogUpstreamUrl,
+    catalogUpstreamUrl:
+      registry?.catalogUpstreamUrl ?? directory?.catalogUpstreamUrl,
     catalogNativeCategory:
-      previous.catalogNativeCategory && previous.catalogNativeCategory !== "other"
+      previous.catalogNativeCategory &&
+      previous.catalogNativeCategory !== "other"
         ? previous.catalogNativeCategory
         : incoming.catalogNativeCategory,
     catalogOfficial: previous.catalogOfficial || incoming.catalogOfficial,
@@ -373,7 +426,12 @@ export function mergeCatalogEntry(previous, incoming) {
     catalogRemoteUrl: previous.catalogRemoteUrl ?? incoming.catalogRemoteUrl,
     catalogRegistryName: registry?.catalogRegistryName,
     catalogPackageTypes: registry?.catalogPackageTypes ?? [],
-    catalogTags: [...new Set([...(previous.catalogTags ?? []), ...(incoming.catalogTags ?? [])])],
+    catalogTags: [
+      ...new Set([
+        ...(previous.catalogTags ?? []),
+        ...(incoming.catalogTags ?? []),
+      ]),
+    ],
     catalogUpdatedAt: registry?.catalogUpdatedAt ?? directory?.catalogUpdatedAt,
     catalogIdentity: registry?.catalogIdentity ?? directory?.catalogIdentity,
   };
@@ -388,10 +446,13 @@ async function main() {
   const allServers = new Map();
   const lookup = new Map();
   const sourceMetadata = [];
-  for (const source of config.sources.filter((candidate) => candidate.enabled)) {
-    const result = source.kind === "registry-api"
-      ? await syncRegistrySource(source)
-      : await syncHtmlSource(source, config);
+  for (const source of config.sources.filter(
+    (candidate) => candidate.enabled,
+  )) {
+    const result =
+      source.kind === "registry-api"
+        ? await syncRegistrySource(source)
+        : await syncHtmlSource(source, config);
     sourceMetadata.push({
       id: source.id,
       kind: source.kind,
@@ -413,10 +474,11 @@ async function main() {
     }
   }
 
-  const servers = [...allServers.values()].sort((left, right) =>
-    Number(right.featured) - Number(left.featured) ||
-    Number(right.catalogOfficial) - Number(left.catalogOfficial) ||
-    left.name.localeCompare(right.name, "zh-CN"),
+  const servers = [...allServers.values()].sort(
+    (left, right) =>
+      Number(right.featured) - Number(left.featured) ||
+      Number(right.catalogOfficial) - Number(left.catalogOfficial) ||
+      left.name.localeCompare(right.name, "zh-CN"),
   );
   const document = {
     version: 1,
@@ -431,10 +493,17 @@ async function main() {
     const current = JSON.parse(await readFile(outputPath, "utf8"));
     const stableSnapshot = (snapshot) => ({
       version: snapshot.version,
-      sources: snapshot.sources.map(({ id, kind, baseUrl }) => ({ id, kind, baseUrl })),
+      sources: snapshot.sources.map(({ id, kind, baseUrl }) => ({
+        id,
+        kind,
+        baseUrl,
+      })),
       servers: snapshot.servers,
     });
-    if (JSON.stringify(stableSnapshot(current)) !== JSON.stringify(stableSnapshot(document))) {
+    if (
+      JSON.stringify(stableSnapshot(current)) !==
+      JSON.stringify(stableSnapshot(document))
+    ) {
       throw new Error("MCP community catalog snapshot is out of date");
     }
     console.log(`MCP community catalog is current (${servers.length} entries)`);
@@ -444,7 +513,9 @@ async function main() {
   const temporaryPath = `${outputPath}.tmp`;
   await writeFile(temporaryPath, serialized, "utf8");
   await rename(temporaryPath, outputPath);
-  console.log(`Updated ${config.output} with ${servers.length} discovery entries`);
+  console.log(
+    `Updated ${config.output} with ${servers.length} discovery entries`,
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

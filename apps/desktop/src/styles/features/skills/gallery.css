@@ -22,10 +22,13 @@
   border-radius: 9px;
   background: transparent;
   color: var(--ink-mute);
-    display: grid;
-    place-items: center;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .skills-view-btn:hover {

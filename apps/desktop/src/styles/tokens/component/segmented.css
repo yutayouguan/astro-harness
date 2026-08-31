@@ -11,7 +11,8 @@
   --seg-item-font: 13px;
   --seg-item-weight: 600;
   --seg-item-color: var(--ink-mute);
-  --seg-shell-blur: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  --seg-shell-blur: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
   --seg-item-blur-active: none;
   --seg-shell-sheen-a: rgba(255, 255, 255, 0.58);
   --seg-shell-sheen-b: rgba(255, 255, 255, 0.2);
@@ -101,20 +102,37 @@ html[data-theme="dark"] {
   .mcp-add-drawer-tab,
   .loop-config-tab
 ) {
-  --seg-shell-border:
-    color-mix(in srgb, var(--tone) var(--seg-border-tone-amt), var(--seg-border-base));
+  --seg-shell-border: color-mix(
+    in srgb,
+    var(--tone) var(--seg-border-tone-amt),
+    var(--seg-border-base)
+  );
   --seg-shell-bg:
     linear-gradient(155deg, var(--seg-shell-sheen-a), var(--seg-shell-sheen-b)),
-    color-mix(in srgb, var(--tone-soft) var(--seg-shell-tone-amt), var(--seg-shell-base));
+    color-mix(
+      in srgb,
+      var(--tone-soft) var(--seg-shell-tone-amt),
+      var(--seg-shell-base)
+    );
   --seg-shell-shadow:
     var(--seg-shell-drop-geo)
-      color-mix(in srgb, var(--tone) var(--seg-shell-drop-tone-amt), var(--seg-shell-drop-base)),
+      color-mix(
+        in srgb,
+        var(--tone) var(--seg-shell-drop-tone-amt),
+        var(--seg-shell-drop-base)
+      ),
     inset 0 1px 0 var(--seg-shell-rim);
   --seg-item-color-hover: var(--tone);
-  --seg-item-bg-hover:
-    color-mix(in srgb, var(--tone) var(--seg-hover-tone-amt), var(--seg-hover-base));
-  --seg-item-color-active:
-    color-mix(in srgb, var(--seg-item-ink) var(--seg-item-ink-amt), var(--tone));
+  --seg-item-bg-hover: color-mix(
+    in srgb,
+    var(--tone) var(--seg-hover-tone-amt),
+    var(--seg-hover-base)
+  );
+  --seg-item-color-active: color-mix(
+    in srgb,
+    var(--seg-item-ink) var(--seg-item-ink-amt),
+    var(--tone)
+  );
   --seg-item-bg-active:
     linear-gradient(165deg, var(--seg-item-sheen-a), var(--seg-item-sheen-b)),
     color-mix(
@@ -124,7 +142,9 @@ html[data-theme="dark"] {
       var(--seg-item-base)
     );
   --seg-item-shadow-active:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) var(--seg-item-ring-amt), transparent),
+    inset 0 0 0 1px
+      color-mix(in srgb, var(--tone) var(--seg-item-ring-amt), transparent),
     inset 0 1px 0 var(--seg-item-rim),
-    0 2px 8px color-mix(in srgb, var(--tone) var(--seg-item-glow-amt), transparent);
+    0 2px 8px
+      color-mix(in srgb, var(--tone) var(--seg-item-glow-amt), transparent);
 }

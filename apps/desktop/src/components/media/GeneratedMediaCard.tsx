@@ -1,5 +1,11 @@
 /** 多媒体生成结果卡片：标题行含操作，下方仅播放/预览。 */
-import { Clapperboard, Code2, FileCode2, Image as ImageIcon, Music2 } from "lucide-react";
+import {
+  Clapperboard,
+  Code2,
+  FileCode2,
+  Image as ImageIcon,
+  Music2,
+} from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { GeneratedMediaKind } from "../../lib/media/parseGeneratedMedia";
 import { displayTitleFromMediaPath } from "../../lib/media/displayTitleFromMediaPath";
@@ -59,7 +65,11 @@ export default function GeneratedMediaCard({
       data-kind={kind}
     >
       <header className="gen-media-card-head">
-        <span className="gen-media-card-glyph" role="img" aria-label={kindLabel}>
+        <span
+          className="gen-media-card-glyph"
+          role="img"
+          aria-label={kindLabel}
+        >
           <KindGlyph kind={kind} />
         </span>
         <div className="gen-media-card-titles">

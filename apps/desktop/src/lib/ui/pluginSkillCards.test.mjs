@@ -20,8 +20,14 @@ const core = await readFile(
 );
 
 test("Skill cards keep per-item color on the icon rather than the whole card", () => {
-  assert.equal(panel.match(/data-skill-tone=\{skillTone\(skill\.id\)\}/g)?.length, 4);
-  assert.match(cards, /\.tool-card\.skill-card \.tool-icon-glyph\s*\{[\s\S]*?var\(--skill-tone/);
+  assert.equal(
+    panel.match(/data-skill-tone=\{skillTone\(skill\.id\)\}/g)?.length,
+    4,
+  );
+  assert.match(
+    cards,
+    /\.tool-card\.skill-card \.tool-icon-glyph\s*\{[\s\S]*?var\(--skill-tone/,
+  );
   assert.match(detail, /\.skill-card-title\s*\{[\s\S]*?color:\s*var\(--ink\);/);
 });
 
@@ -38,7 +44,10 @@ test("Skill descriptions use the card plane without a nested glass surface", () 
 });
 
 test("Skill cards expose one text primary action and grouped secondary icons", () => {
-  assert.match(panel, /className="skills-action-btn is-icon skill-card-update"/);
+  assert.match(
+    panel,
+    /className="skills-action-btn is-icon skill-card-update"/,
+  );
   assert.match(panel, /aria-label=\{t\("skills\.update"\)\}/);
   assert.match(detail, /\.skill-card-actions\s*\{[\s\S]*?border-top:/);
   assert.match(
@@ -60,7 +69,7 @@ test("Skill cards adapt to their pane instead of the whole application window", 
 test("Skill states use stable semantics and expose async progress", () => {
   assert.equal(panel.match(/data-state=/g)?.length, 4);
   assert.match(panel, /aria-busy=\{installingId === skill\.id\}/);
-  assert.match(panel, /role="group" aria-label=\{skill\.name\}/);
+  assert.match(panel, /role="group"\s+aria-label=\{skill\.name\}/);
   assert.match(core, /\.skill-card-link-badge\.is-current[\s\S]*?--tone-green/);
   assert.match(detail, /data-state="error"[\s\S]*?var\(--danger/);
 });
@@ -69,5 +78,8 @@ test("Skill actions provide keyboard focus and reduced-motion feedback", () => {
   assert.match(detail, /\.skills-action-btn:focus-visible/);
   assert.match(detail, /\.skill-card-toggle:has\(input:focus-visible\)/);
   assert.match(detail, /prefers-contrast:\s*more/);
-  assert.match(detail, /prefers-reduced-motion:\s*reduce[\s\S]*?\.skills-action-btn \.is-spin/);
+  assert.match(
+    detail,
+    /prefers-reduced-motion:\s*reduce[\s\S]*?\.skills-action-btn \.is-spin/,
+  );
 });

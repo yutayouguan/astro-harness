@@ -43,7 +43,8 @@
   --chip-border: var(--liquid-glass-soft-edge);
   --glass-inner: var(--liquid-glass-soft-inner);
   --glass-fill: var(--liquid-glass-soft-sheen), var(--liquid-glass-soft-tint);
-  --glass-fill-soft: var(--liquid-glass-soft-sheen), var(--liquid-glass-soft-tint);
+  --glass-fill-soft:
+    var(--liquid-glass-soft-sheen), var(--liquid-glass-soft-tint);
   --glass-card: var(--liquid-glass-soft-sheen), var(--liquid-glass-soft-tint);
   --chip-bg: var(--liquid-glass-soft-tint);
   --surface-panel-background: var(--liquid-glass-soft-tint);

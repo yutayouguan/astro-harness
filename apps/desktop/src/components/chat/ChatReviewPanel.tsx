@@ -97,10 +97,15 @@ export default function ChatReviewPanel({
     <motion.aside
       className="chat-review-panel"
       aria-label="审查文件改动"
-      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 18, scale: 0.99 }}
+      initial={
+        reducedMotion ? { opacity: 0 } : { opacity: 0, x: 18, scale: 0.99 }
+      }
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 18, scale: 0.99 }}
-      transition={{ duration: reducedMotion ? 0.12 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+      transition={{
+        duration: reducedMotion ? 0.12 : 0.24,
+        ease: [0.22, 1, 0.36, 1],
+      }}
     >
       <header className="chat-review-header">
         <div className="chat-review-title">
@@ -120,7 +125,12 @@ export default function ChatReviewPanel({
           >
             <RefreshCw size={14} strokeWidth={1.8} aria-hidden />
           </button>
-          <button type="button" onClick={onClose} aria-label="关闭审查面板" title="关闭">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭审查面板"
+            title="关闭"
+          >
             <X size={15} strokeWidth={1.8} aria-hidden />
           </button>
         </div>
@@ -150,11 +160,17 @@ export default function ChatReviewPanel({
                 <span>{error}</span>
               </div>
             ) : review?.isBinary ? (
-              <div className="chat-review-state">二进制文件无法显示文本差异</div>
+              <div className="chat-review-state">
+                二进制文件无法显示文本差异
+              </div>
             ) : lines.length === 0 ? (
               <div className="chat-review-state">当前文件没有未提交改动</div>
             ) : (
-              <div className="chat-review-lines" role="table" aria-label={fileName(selectedPath)}>
+              <div
+                className="chat-review-lines"
+                role="table"
+                aria-label={fileName(selectedPath)}
+              >
                 {lines.map((line, index) => (
                   <div
                     key={`${index}-${line.kind}`}
@@ -168,7 +184,11 @@ export default function ChatReviewPanel({
                       {line.newLine ?? ""}
                     </span>
                     <code role="cell">
-                      {line.kind === "addition" ? "+" : line.kind === "deletion" ? "−" : " "}
+                      {line.kind === "addition"
+                        ? "+"
+                        : line.kind === "deletion"
+                          ? "−"
+                          : " "}
                       {line.content}
                     </code>
                   </div>

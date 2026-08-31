@@ -46,7 +46,8 @@ class RootErrorBoundary extends React.Component<
         <div
           style={{
             padding: 24,
-            fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+            fontFamily:
+              'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
             color: "var(--ink, #e2e8f0)",
             background: "var(--bg0, #0f172a)",
             minHeight: "100%",

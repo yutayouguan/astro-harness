@@ -122,7 +122,9 @@ export default function ContextUsagePopover({
       onPointerLeave={onPointerLeave}
     >
       <div className="ctx-usage-popover-header">
-        <span className="ctx-usage-popover-title">{t("chat.contextUsage")}</span>
+        <span className="ctx-usage-popover-title">
+          {t("chat.contextUsage")}
+        </span>
         <div className="ctx-usage-popover-header-actions">
           <button
             type="button"
@@ -234,7 +236,9 @@ export default function ContextUsagePopover({
           <span className="ctx-usage-popover-cost-label">
             {t("chat.estimateCostTurn")}
           </span>
-          <span className="ctx-usage-popover-cost-value">{estimateCost.cost}</span>
+          <span className="ctx-usage-popover-cost-value">
+            {estimateCost.cost}
+          </span>
         </div>
       ) : null}
     </div>,

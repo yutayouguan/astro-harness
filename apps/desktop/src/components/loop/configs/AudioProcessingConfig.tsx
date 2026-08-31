@@ -1,4 +1,11 @@
-import { SelectField, NumberField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
+import {
+  SelectField,
+  NumberField,
+  FileArrayField,
+  cfgStr,
+  cfgNum,
+  cfgStrArray,
+} from "./ConfigField";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
@@ -24,7 +31,11 @@ const FORMAT_OPTIONS = [
   { value: "flac", label: "FLAC" },
 ];
 
-export default function AudioProcessingConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function AudioProcessingConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

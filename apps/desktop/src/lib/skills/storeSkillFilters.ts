@@ -28,7 +28,8 @@ export function filterStoreSkills(
   return skills.filter((skill) => {
     if (category !== "all" && skill.category !== category) return false;
     if (apiKey === "required" && skill.requires_api_key !== true) return false;
-    if (apiKey === "not-required" && skill.requires_api_key !== false) return false;
+    if (apiKey === "not-required" && skill.requires_api_key !== false)
+      return false;
     return true;
   });
 }

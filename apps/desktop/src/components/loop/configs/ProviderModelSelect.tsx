@@ -26,38 +26,57 @@ interface ProvidersState {
   active_provider_id: string | null;
 }
 
-export type MediaType = "chat" | "image" | "video" | "tts" | "music" | "subtitle";
+export type MediaType =
+  "chat" | "image" | "video" | "tts" | "music" | "subtitle";
 
 function supportsMedia(provider: ProviderDto, mediaType: MediaType): boolean {
   switch (mediaType) {
-    case "image": return provider.supports_image;
-    case "video": return provider.supports_video;
-    case "tts": return provider.supports_tts;
-    case "music": return provider.supports_music;
-    case "subtitle": return true;
-    default: return true;
+    case "image":
+      return provider.supports_image;
+    case "video":
+      return provider.supports_video;
+    case "tts":
+      return provider.supports_tts;
+    case "music":
+      return provider.supports_music;
+    case "subtitle":
+      return true;
+    default:
+      return true;
   }
 }
 
 function getMediaModel(provider: ProviderDto, mediaType: MediaType): string {
   switch (mediaType) {
-    case "image": return provider.image_model || provider.model;
-    case "video": return provider.video_model || provider.model;
-    case "tts": return provider.tts_model || provider.model;
-    case "music": return provider.music_model || provider.model;
-    case "subtitle": return provider.model;
-    default: return provider.model;
+    case "image":
+      return provider.image_model || provider.model;
+    case "video":
+      return provider.video_model || provider.model;
+    case "tts":
+      return provider.tts_model || provider.model;
+    case "music":
+      return provider.music_model || provider.model;
+    case "subtitle":
+      return provider.model;
+    default:
+      return provider.model;
   }
 }
 
 function mediaLabel(mediaType: MediaType): string {
   switch (mediaType) {
-    case "image": return "图片生成";
-    case "video": return "视频生成";
-    case "tts": return "语音合成";
-    case "music": return "音乐生成";
-    case "subtitle": return "语音识别";
-    default: return "聊天";
+    case "image":
+      return "图片生成";
+    case "video":
+      return "视频生成";
+    case "tts":
+      return "语音合成";
+    case "music":
+      return "音乐生成";
+    case "subtitle":
+      return "语音识别";
+    default:
+      return "聊天";
   }
 }
 
@@ -101,7 +120,9 @@ export default function ProviderModelSelect({
         const matchesCurrent = capable.find((p) => p.id === providerId);
 
         if (!providerId || !matchesCurrent) {
-          const best = capable.find((p) => p.id === state.active_provider_id) ?? capable[0];
+          const best =
+            capable.find((p) => p.id === state.active_provider_id) ??
+            capable[0];
           if (best) {
             providerJustChanged.current = true;
             onProviderChange(best.id);
@@ -113,7 +134,7 @@ export default function ProviderModelSelect({
         setInitialized(true);
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── provider 变化时：加载模型列表并自动选配默认模型 ──
@@ -135,7 +156,11 @@ export default function ProviderModelSelect({
         setModels(list);
 
         // 需要重选模型的条件：供应商刚切换 / model 为空 / model 不在新供应商的列表中
-        if (shouldForceModel || !model || (list.length > 0 && !list.includes(model))) {
+        if (
+          shouldForceModel ||
+          !model ||
+          (list.length > 0 && !list.includes(model))
+        ) {
           const provider = allProviders.find((p) => p.id === effectiveProvider);
           const def = provider ? getMediaModel(provider, mediaType) : list[0];
           onModelChange(def || list[0] || "");
@@ -153,11 +178,13 @@ export default function ProviderModelSelect({
         }
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveProvider, allProviders, mediaType]);
 
   const selectedProvider = providers.find((p) => p.id === providerId);
-  const defaultMediaModel = selectedProvider ? getMediaModel(selectedProvider, mediaType) : "";
+  const defaultMediaModel = selectedProvider
+    ? getMediaModel(selectedProvider, mediaType)
+    : "";
   const displayModel = model || defaultMediaModel;
 
   return (
@@ -176,7 +203,8 @@ export default function ProviderModelSelect({
           {providers.length === 0 && <option value="">无可用供应商</option>}
           {providers.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.display_name}{p.id === activeId ? " (当前)" : ""}
+              {p.display_name}
+              {p.id === activeId ? " (当前)" : ""}
             </option>
           ))}
         </select>
@@ -204,7 +232,9 @@ export default function ProviderModelSelect({
               <option value={displayModel}>{displayModel}</option>
             )}
             {models.map((m) => (
-              <option key={m} value={m}>{m}</option>
+              <option key={m} value={m}>
+                {m}
+              </option>
             ))}
           </select>
         ) : (
@@ -216,9 +246,7 @@ export default function ProviderModelSelect({
           />
         )}
         {defaultMediaModel && !model && (
-          <span className="loop-config-hint">
-            默认: {defaultMediaModel}
-          </span>
+          <span className="loop-config-hint">默认: {defaultMediaModel}</span>
         )}
       </label>
     </>

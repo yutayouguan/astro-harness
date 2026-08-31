@@ -49,7 +49,10 @@ test("extracts configured SSR collections without evaluating page scripts", () =
 
 test("only returns explicitly requested collections", () => {
   assert.equal(parseMcpServersCollections(page, ["servers"]).length, 1);
-  assert.equal(parseMcpServersCollections(page, ["sponsorServers"])[0]?.slug, "sponsor");
+  assert.equal(
+    parseMcpServersCollections(page, ["sponsorServers"])[0]?.slug,
+    "sponsor",
+  );
   assert.equal(parseMcpServersCollections(page, ["featured"]).length, 0);
 });
 
@@ -111,9 +114,13 @@ test("normalizes official Registry entries without treating registry status as v
           title: "Example Search",
           description: "Search example data",
           version: "1.0.0",
-          icons: [{ src: "https://example.com/icon.png", mimeType: "image/png" }],
+          icons: [
+            { src: "https://example.com/icon.png", mimeType: "image/png" },
+          ],
           repository: { url: "https://github.com/example/search" },
-          remotes: [{ type: "streamable-http", url: "https://example.com/mcp" }],
+          remotes: [
+            { type: "streamable-http", url: "https://example.com/mcp" },
+          ],
           packages: [{ registryType: "npm", identifier: "@example/search" }],
         },
         _meta: {

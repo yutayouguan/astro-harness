@@ -159,7 +159,9 @@ export function Toast({
           role={tone === "error" ? "alert" : "status"}
           aria-live={tone === "error" ? "assertive" : "polite"}
           data-tone={tone}
-          initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.97 }}
+          initial={
+            reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.97 }
+          }
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={
             reducedMotion

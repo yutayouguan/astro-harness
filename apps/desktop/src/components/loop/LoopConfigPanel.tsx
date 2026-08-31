@@ -15,18 +15,34 @@ import ErrorHandlingConfig from "./configs/ErrorHandlingConfig";
 // ── Lazy imports for all 29 config forms ──
 
 const ManualTriggerConfig = lazy(() => import("./configs/ManualTriggerConfig"));
-const ScheduledTriggerConfig = lazy(() => import("./configs/ScheduledTriggerConfig"));
-const WebhookTriggerConfig = lazy(() => import("./configs/WebhookTriggerConfig"));
+const ScheduledTriggerConfig = lazy(
+  () => import("./configs/ScheduledTriggerConfig"),
+);
+const WebhookTriggerConfig = lazy(
+  () => import("./configs/WebhookTriggerConfig"),
+);
 const EmailTriggerConfig = lazy(() => import("./configs/EmailTriggerConfig"));
 const FileWatchConfig = lazy(() => import("./configs/FileWatchConfig"));
 const AiAgentTaskConfig = lazy(() => import("./configs/AiAgentTaskConfig"));
-const ParameterExtractionConfig = lazy(() => import("./configs/ParameterExtractionConfig"));
-const QuestionClassificationConfig = lazy(() => import("./configs/QuestionClassificationConfig"));
-const KnowledgeRetrievalConfig = lazy(() => import("./configs/KnowledgeRetrievalConfig"));
+const ParameterExtractionConfig = lazy(
+  () => import("./configs/ParameterExtractionConfig"),
+);
+const QuestionClassificationConfig = lazy(
+  () => import("./configs/QuestionClassificationConfig"),
+);
+const KnowledgeRetrievalConfig = lazy(
+  () => import("./configs/KnowledgeRetrievalConfig"),
+);
 const SummarizationConfig = lazy(() => import("./configs/SummarizationConfig"));
-const SentimentAnalysisConfig = lazy(() => import("./configs/SentimentAnalysisConfig"));
-const DocumentUnderstandingConfig = lazy(() => import("./configs/DocumentUnderstandingConfig"));
-const VisionUnderstandingConfig = lazy(() => import("./configs/VisionUnderstandingConfig"));
+const SentimentAnalysisConfig = lazy(
+  () => import("./configs/SentimentAnalysisConfig"),
+);
+const DocumentUnderstandingConfig = lazy(
+  () => import("./configs/DocumentUnderstandingConfig"),
+);
+const VisionUnderstandingConfig = lazy(
+  () => import("./configs/VisionUnderstandingConfig"),
+);
 const ImageGenConfig = lazy(() => import("./configs/ImageGenConfig"));
 const VideoGenConfig = lazy(() => import("./configs/VideoGenConfig"));
 const MusicGenConfig = lazy(() => import("./configs/MusicGenConfig"));
@@ -53,14 +69,21 @@ const HttpRequestConfig = lazy(() => import("./configs/HttpRequestConfig"));
 const RunLoopConfig = lazy(() => import("./configs/RunLoopConfig"));
 const DelayWaitConfig = lazy(() => import("./configs/DelayWaitConfig"));
 const OutputConfig = lazy(() => import("./configs/OutputConfig"));
-const AudioProcessingConfig = lazy(() => import("./configs/AudioProcessingConfig"));
-const SendNotificationConfig = lazy(() => import("./configs/SendNotificationConfig"));
+const AudioProcessingConfig = lazy(
+  () => import("./configs/AudioProcessingConfig"),
+);
+const SendNotificationConfig = lazy(
+  () => import("./configs/SendNotificationConfig"),
+);
 const FileIoConfig = lazy(() => import("./configs/FileIoConfig"));
 const CustomLoopConfig = lazy(() => import("./configs/CustomLoopConfig"));
 
 // ── Config form registry ──
 
-const CONFIG_MAP: Record<NodeType, React.LazyExoticComponent<React.ComponentType<ConfigProps>>> = {
+const CONFIG_MAP: Record<
+  NodeType,
+  React.LazyExoticComponent<React.ComponentType<ConfigProps>>
+> = {
   manual_trigger: ManualTriggerConfig,
   scheduled_trigger: ScheduledTriggerConfig,
   webhook_trigger: WebhookTriggerConfig,
@@ -155,7 +178,13 @@ interface RunRow {
   finished_at: string | null;
 }
 
-function NodeStepLogs({ nodeId, workflowId }: { nodeId: string; workflowId: string | null }) {
+function NodeStepLogs({
+  nodeId,
+  workflowId,
+}: {
+  nodeId: string;
+  workflowId: string | null;
+}) {
   const { t } = useI18n();
   const [logs, setLogs] = useState<StepLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,34 +202,53 @@ function NodeStepLogs({ nodeId, workflowId }: { nodeId: string; workflowId: stri
         for (const run of runs.slice(0, 3)) {
           try {
             // list_loop_step_logs returns Vec<WorkflowStepLogRow> directly
-            const steps = await invoke<StepLog[]>("list_loop_step_logs", { runId: run.id });
+            const steps = await invoke<StepLog[]>("list_loop_step_logs", {
+              runId: run.id,
+            });
             allLogs.push(...steps.filter((s) => s.node_id === nodeId));
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
         }
         setLogs(allLogs);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       setLoading(false);
     })();
   }, [nodeId, workflowId]);
 
-  if (loading) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">{t("loop.loading")}</div></div>;
-  if (logs.length === 0) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">{t("loop.logsEmpty")}</div></div>;
+  if (loading)
+    return (
+      <div className="loop-config-panel-body">
+        <div className="loop-config-placeholder">{t("loop.loading")}</div>
+      </div>
+    );
+  if (logs.length === 0)
+    return (
+      <div className="loop-config-panel-body">
+        <div className="loop-config-placeholder">{t("loop.logsEmpty")}</div>
+      </div>
+    );
 
   return (
     <div className="loop-config-panel-body loop-config-logs">
       {logs.map((log) => (
-        <div key={log.id} className={`loop-step-log loop-step-log--${log.status}`}>
+        <div
+          key={log.id}
+          className={`loop-step-log loop-step-log--${log.status}`}
+        >
           <div className="loop-step-log-header">
-            <span className={`loop-step-log-dot loop-step-log-dot--${log.status}`} />
+            <span
+              className={`loop-step-log-dot loop-step-log-dot--${log.status}`}
+            />
             <span className="loop-step-log-status">{log.status}</span>
             <span className="loop-step-log-time">{log.started_at}</span>
           </div>
           {log.output && (
             <pre className="loop-step-log-output">{log.output}</pre>
           )}
-          {log.error && (
-            <pre className="loop-step-log-error">{log.error}</pre>
-          )}
+          {log.error && <pre className="loop-step-log-error">{log.error}</pre>}
         </div>
       ))}
     </div>
@@ -258,27 +306,45 @@ export default function LoopConfigPanel({
           <div className="loop-config-node-header">
             <div className="loop-config-node-type-row">
               {NodeIcon && (
-                <span className="loop-config-node-icon" style={{ color: meta.color }}>
+                <span
+                  className="loop-config-node-icon"
+                  style={{ color: meta.color }}
+                >
                   <NodeIcon size={18} />
                 </span>
               )}
               <span className="loop-config-node-type">{meta.label}</span>
             </div>
             {validationErrors.length > 0 && (
-              <span className="loop-config-validation-badge" title={validationErrors.join("、") + " 未填写"}>
+              <span
+                className="loop-config-validation-badge"
+                title={validationErrors.join("、") + " 未填写"}
+              >
                 <AlertCircle size={13} />
                 {validationErrors.length}
               </span>
             )}
             <div className="loop-config-node-actions">
-              <button className={`loop-icon-btn${showJson ? " is-active" : ""}`} title={t("loop.viewJson")} onClick={() => setShowJson((v) => !v)}>
+              <button
+                className={`loop-icon-btn${showJson ? " is-active" : ""}`}
+                title={t("loop.viewJson")}
+                onClick={() => setShowJson((v) => !v)}
+              >
                 <Braces size={14} />
               </button>
               <button
                 className="loop-icon-btn loop-icon-btn--danger"
                 title={t("loop.deleteNode")}
                 onClick={async () => {
-                  const ok = await confirm({ title: t("loop.deleteNode"), message: t("loop.deleteNodeConfirm").replace("{name}", label), confirmLabel: t("loop.delete"), variant: "danger" });
+                  const ok = await confirm({
+                    title: t("loop.deleteNode"),
+                    message: t("loop.deleteNodeConfirm").replace(
+                      "{name}",
+                      label,
+                    ),
+                    confirmLabel: t("loop.delete"),
+                    variant: "danger",
+                  });
                   if (ok) onDelete();
                 }}
               >
@@ -308,7 +374,13 @@ export default function LoopConfigPanel({
             <div className="loop-config-divider" />
 
             {/* ── Node-specific config form ── */}
-            <Suspense fallback={<div className="loop-config-placeholder">{t("loop.loading")}</div>}>
+            <Suspense
+              fallback={
+                <div className="loop-config-placeholder">
+                  {t("loop.loading")}
+                </div>
+              }
+            >
               {ConfigForm && (
                 <ConfigForm
                   config={config}
@@ -348,8 +420,6 @@ export default function LoopConfigPanel({
       {tab === "logs" && (
         <NodeStepLogs nodeId={nodeId} workflowId={workflowId} />
       )}
-
     </div>
   );
 }
-

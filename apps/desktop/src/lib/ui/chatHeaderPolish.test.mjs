@@ -2,16 +2,28 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const cssUrl = new URL("../../styles/features/shell/header.css", import.meta.url);
+const cssUrl = new URL(
+  "../../styles/features/shell/header.css",
+  import.meta.url,
+);
 const unifiedColorUrl = new URL(
   "../../styles/tokens/unified-color.css",
   import.meta.url,
 );
-const titleUrl = new URL("../../components/chat/ConversationTitle.tsx", import.meta.url);
+const titleUrl = new URL(
+  "../../components/chat/ConversationTitle.tsx",
+  import.meta.url,
+);
 const tipsUrl = new URL("../../hooks/ui/useBeautifyTips.ts", import.meta.url);
 const appUrl = new URL("../../App.tsx", import.meta.url);
-const modelPickerUrl = new URL("../../components/agents/ModelPicker.tsx", import.meta.url);
-const projectStylesUrl = new URL("../../styles/features/shell/layout/projects.css", import.meta.url);
+const modelPickerUrl = new URL(
+  "../../components/agents/ModelPicker.tsx",
+  import.meta.url,
+);
+const projectStylesUrl = new URL(
+  "../../styles/features/shell/layout/projects.css",
+  import.meta.url,
+);
 
 test("conversation title truncates and only exposes its full text when overflowing", async () => {
   const [css, source, tips] = await Promise.all([
@@ -43,7 +55,9 @@ test("header tool groups reuse the titlebar session-menu surface recipe", async 
       ...css.matchAll(new RegExp(`\\${selector} \\{([\\s\\S]*?)\\n\\}`, "g")),
     ].map((match) => match[1]);
     assert.ok(
-      blocks.some((block) => expectedSurface.every((declaration) => block.includes(declaration))),
+      blocks.some((block) =>
+        expectedSurface.every((declaration) => block.includes(declaration)),
+      ),
     );
   }
 });
@@ -58,7 +72,10 @@ test("compact header controls share the 32px height contract", async () => {
     assert.ok(blocks.some((block) => /height:\s*32px;/.test(block)));
   }
 
-  assert.match(css, /\.header-icon-btn\s*\{[\s\S]*?width:\s*28px;[\s\S]*?height:\s*28px;/);
+  assert.match(
+    css,
+    /\.header-icon-btn\s*\{[\s\S]*?width:\s*28px;[\s\S]*?height:\s*28px;/,
+  );
 });
 
 test("model picker panel shares the titlebar session-menu surface", async () => {
@@ -66,9 +83,8 @@ test("model picker panel shares the titlebar session-menu surface", async () => 
     readFile(cssUrl, "utf8"),
     readFile(projectStylesUrl, "utf8"),
   ]);
-  const panel = css.match(
-    /\.model-picker-panel\s*\{(?<body>[\s\S]*?)\n\}/,
-  )?.groups?.body;
+  const panel = css.match(/\.model-picker-panel\s*\{(?<body>[\s\S]*?)\n\}/)
+    ?.groups?.body;
   const titlebarMenu = projectStyles.match(
     /\.project-context-menu\s*\{(?<body>[\s\S]*?)\n\}/,
   )?.groups?.body;
@@ -81,8 +97,14 @@ test("model picker panel shares the titlebar session-menu surface", async () => 
     "box-shadow: var(--titlebar-menu-shadow);",
     "backdrop-filter: var(--titlebar-menu-blur);",
   ]) {
-    assert.ok(panel.includes(declaration), `model picker is missing ${declaration}`);
-    assert.ok(titlebarMenu.includes(declaration), `titlebar menu is missing ${declaration}`);
+    assert.ok(
+      panel.includes(declaration),
+      `model picker is missing ${declaration}`,
+    );
+    assert.ok(
+      titlebarMenu.includes(declaration),
+      `titlebar menu is missing ${declaration}`,
+    );
   }
 });
 

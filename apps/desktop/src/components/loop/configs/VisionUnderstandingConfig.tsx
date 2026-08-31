@@ -11,7 +11,10 @@ const INPUT_TYPE_OPTIONS = [
   { value: "url", label: "图片 URL" },
 ];
 
-export default function VisionUnderstandingConfig({ config, onChange }: ConfigProps) {
+export default function VisionUnderstandingConfig({
+  config,
+  onChange,
+}: ConfigProps) {
   return (
     <>
       <SelectField
@@ -24,7 +27,11 @@ export default function VisionUnderstandingConfig({ config, onChange }: ConfigPr
         label="图片路径 / URL"
         value={cfgStr(config, "input_path")}
         onChange={(v) => onChange({ ...config, input_path: v })}
-        placeholder={cfgStr(config, "input_type", "file") === "url" ? "https://..." : "图片文件路径或 {{var}}"}
+        placeholder={
+          cfgStr(config, "input_type", "file") === "url"
+            ? "https://..."
+            : "图片文件路径或 {{var}}"
+        }
         hint="支持 jpg/png/webp/gif"
       />
       <TextField

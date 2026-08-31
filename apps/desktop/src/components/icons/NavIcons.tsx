@@ -46,11 +46,18 @@ function paintDetailChildren(children: ReactNode, paint: string): ReactNode {
   return Children.map(children, (child) => {
     if (!isValidElement<PaintedProps>(child)) return child;
 
-    const cls = typeof child.props.className === "string" ? child.props.className : "";
+    const cls =
+      typeof child.props.className === "string" ? child.props.className : "";
     const nextChildren =
-      child.props.children != null ? paintDetailChildren(child.props.children, paint) : child.props.children;
+      child.props.children != null
+        ? paintDetailChildren(child.props.children, paint)
+        : child.props.children;
 
-    if (cls.includes("nav-icon-cutout") || cls.includes("nav-icon-hole") || cls.includes("nav-icon-stroke")) {
+    if (
+      cls.includes("nav-icon-cutout") ||
+      cls.includes("nav-icon-hole") ||
+      cls.includes("nav-icon-stroke")
+    ) {
       return cloneElement(child as ReactElement<PaintedProps>, {
         fill: "none",
         stroke: paint,
@@ -76,7 +83,9 @@ function paintDetailChildren(children: ReactNode, paint: string): ReactNode {
     }
 
     if (nextChildren !== child.props.children) {
-      return cloneElement(child as ReactElement<PaintedProps>, { children: nextChildren });
+      return cloneElement(child as ReactElement<PaintedProps>, {
+        children: nextChildren,
+      });
     }
 
     return child;
@@ -99,14 +108,19 @@ function NavIconBase({ children, style, ...props }: IconProps) {
       strokeLinejoin="round"
       aria-hidden
       {...props}
-      style={{ ["--nav-grad-paint" as string]: paint, ...style } as CSSProperties}
+      style={
+        { ["--nav-grad-paint" as string]: paint, ...style } as CSSProperties
+      }
       fill="none"
       stroke={paint}
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="var(--nav-grad-top, currentColor)" />
-          <stop offset="100%" stopColor="var(--nav-grad-bottom, currentColor)" />
+          <stop
+            offset="100%"
+            stopColor="var(--nav-grad-bottom, currentColor)"
+          />
         </linearGradient>
       </defs>
       {paintDetailChildren(children, paint)}
@@ -219,7 +233,10 @@ export function IconPlugin(props: IconProps) {
       <circle cx="12" cy="12" r="9" />
       {/* 插脚与电线合并进带宽度的路径：渐变描边对零宽包围盒不渲染 */}
       <path className="nav-icon-cutout" d="M9.7 7.9v2.3M14.3 7.9v2.3" />
-      <path className="nav-icon-cutout" d="M8.5 10.4h7v1.9a3.5 3.5 0 0 1-7 0zM12 15.8v2.1" />
+      <path
+        className="nav-icon-cutout"
+        d="M8.5 10.4h7v1.9a3.5 3.5 0 0 1-7 0zM12 15.8v2.1"
+      />
     </NavIconBase>
   );
 }
@@ -390,7 +407,12 @@ export function IconSidebarLabels(props: IconProps) {
   return (
     <ChromeIconBase {...props}>
       <rect width="18" height="18" x="3" y="3" rx="3" />
-      <path d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z" fill="currentColor" opacity="0.25" stroke="none" />
+      <path
+        d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z"
+        fill="currentColor"
+        opacity="0.25"
+        stroke="none"
+      />
       <path d="M9 3v18" />
       <path d="M13 8h5M13 12h5M13 16h3" />
     </ChromeIconBase>
@@ -402,7 +424,12 @@ export function IconSidebarIcons(props: IconProps) {
   return (
     <ChromeIconBase {...props}>
       <rect width="18" height="18" x="3" y="3" rx="3" />
-      <path d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z" fill="currentColor" opacity="0.25" stroke="none" />
+      <path
+        d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z"
+        fill="currentColor"
+        opacity="0.25"
+        stroke="none"
+      />
       <path d="M9 3v18" />
     </ChromeIconBase>
   );

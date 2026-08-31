@@ -194,7 +194,11 @@ test("same-name third-party listing is not installed when another source is trac
 
 test("untracked legacy install keeps folder-name fallback", () => {
   assert.equal(
-    isStoreSkillInstalledWithOrigins(findSkillsStoreItem, new Set(["find-skills"]), []),
+    isStoreSkillInstalledWithOrigins(
+      findSkillsStoreItem,
+      new Set(["find-skills"]),
+      [],
+    ),
     true,
   );
 });

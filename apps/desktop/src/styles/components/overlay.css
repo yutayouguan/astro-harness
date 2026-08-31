@@ -5,10 +5,17 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: color-mix(in srgb, var(--color-bg-base, #0f172a) 48%, transparent);
-  backdrop-filter: blur(calc(8px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.12));
-  -webkit-backdrop-filter: blur(calc(8px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.12));
-  animation: ui-overlay-fade-in var(--duration-fast, 140ms) var(--ease-out, ease-out);
+  background: color-mix(
+    in srgb,
+    var(--color-bg-base, #0f172a) 48%,
+    transparent
+  );
+  backdrop-filter: blur(calc(8px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.12));
+  -webkit-backdrop-filter: blur(calc(8px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.12));
+  animation: ui-overlay-fade-in var(--duration-fast, 140ms)
+    var(--ease-out, ease-out);
 }
 
 .ui-overlay--drawer {
@@ -48,17 +55,21 @@
   );
   color: var(--color-text, #111827);
   box-shadow:
-    0 24px 64px color-mix(in srgb, var(--color-bg-base, #0f172a) 28%, transparent),
+    0 24px 64px
+      color-mix(in srgb, var(--color-bg-base, #0f172a) 28%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent);
-  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.24));
-  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.24));
+  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.24));
+  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.24));
   outline: none;
 }
 
 .ui-overlay__surface--modal {
   border-radius: var(--primitive-radius-lg, 18px);
   padding: 22px;
-  animation: ui-overlay-rise-in var(--duration-normal, 220ms) var(--ease-out, ease-out);
+  animation: ui-overlay-rise-in var(--duration-normal, 220ms)
+    var(--ease-out, ease-out);
 }
 
 .ui-modal-shell--sm {
@@ -78,7 +89,8 @@
   max-height: 100vh;
   padding: 24px;
   border-radius: 0;
-  animation: ui-overlay-drawer-in var(--duration-normal, 220ms) var(--ease-out, ease-out);
+  animation: ui-overlay-drawer-in var(--duration-normal, 220ms)
+    var(--ease-out, ease-out);
 }
 
 .ui-overlay--drawer-start .ui-overlay__surface--drawer {
@@ -107,7 +119,8 @@
   position: fixed;
   padding: 12px;
   border-radius: 14px;
-  animation: ui-overlay-popover-in var(--duration-fast, 140ms) var(--ease-out, ease-out);
+  animation: ui-overlay-popover-in var(--duration-fast, 140ms)
+    var(--ease-out, ease-out);
 }
 
 .ui-popover-surface.is-up {

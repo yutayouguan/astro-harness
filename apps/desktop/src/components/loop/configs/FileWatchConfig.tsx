@@ -14,7 +14,11 @@ const EVENT_OPTIONS = [
   { value: "any", label: "任何变化" },
 ];
 
-export default function FileWatchConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function FileWatchConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

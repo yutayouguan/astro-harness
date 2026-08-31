@@ -21,7 +21,12 @@ export default function MsgCitations({ citations }: Props) {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <BookOpen size={14} strokeWidth={1.75} className="msg-citations-icon" aria-hidden />
+        <BookOpen
+          size={14}
+          strokeWidth={1.75}
+          className="msg-citations-icon"
+          aria-hidden
+        />
         <span className="msg-citations-label">
           {citations.length} {citations.length === 1 ? "citation" : "citations"}
         </span>

@@ -1,10 +1,6 @@
 // apps/desktop/src/lib/insightsView.ts
 export type InsightsViewMode =
-  | "overview"
-  | "models"
-  | "tools"
-  | "tracing"
-  | "api";
+  "overview" | "models" | "tools" | "tracing" | "api";
 
 export const DEFAULT_INSIGHTS_VIEW: InsightsViewMode = "overview";
 
@@ -36,9 +32,7 @@ export function providerSpendTop(
   return [...items]
     .sort(
       (a, b) =>
-        b.cost_usd - a.cost_usd ||
-        b.tokens - a.tokens ||
-        b.calls - a.calls,
+        b.cost_usd - a.cost_usd || b.tokens - a.tokens || b.calls - a.calls,
     )
     .slice(0, Math.max(0, n));
 }
@@ -86,7 +80,9 @@ export function inferProvider(modelName: string): string {
 }
 
 /** 将按模型排行聚合为按厂商排行。 */
-export function aggregateByProvider(models: InsightsRankItem[]): InsightsRankItem[] {
+export function aggregateByProvider(
+  models: InsightsRankItem[],
+): InsightsRankItem[] {
   const map = new Map<string, InsightsRankItem>();
   for (const m of models) {
     const provider = inferProvider(m.name);

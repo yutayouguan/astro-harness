@@ -270,7 +270,11 @@ html[data-theme="dark"] .bubble.assistant .msg-activity-io {
 
 .composer-shell .chat-scroll-latest:hover {
   color: var(--ink);
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 24%, var(--glass-edge));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 24%,
+    var(--glass-edge)
+  );
 }
 
 .composer-shell .chat-scroll-latest:active {
@@ -278,7 +282,8 @@ html[data-theme="dark"] .bubble.assistant .msg-activity-io {
 }
 
 .composer-shell .chat-scroll-latest:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 48%, transparent);
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--accent)) 48%, transparent);
   outline-offset: 2px;
 }
 

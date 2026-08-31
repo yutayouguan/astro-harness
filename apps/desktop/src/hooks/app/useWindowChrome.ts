@@ -54,11 +54,12 @@ export function useWindowChrome() {
       if (zoomingRef.current) return;
       zoomingRef.current = true;
       const win = getCurrentWindow();
-      void win.isMaximized().then((max) =>
-        max ? win.unmaximize() : win.maximize()
-      ).finally(() => {
-        zoomingRef.current = false;
-      });
+      void win
+        .isMaximized()
+        .then((max) => (max ? win.unmaximize() : win.maximize()))
+        .finally(() => {
+          zoomingRef.current = false;
+        });
       return;
     }
 

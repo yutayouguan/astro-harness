@@ -93,8 +93,10 @@
   border-radius: 16px;
   border: 1px solid var(--nav-label-border);
   background: var(--nav-label-bg);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
   color: var(--nav-label-fg);
   font-size: 13px;
   line-height: 1.45;
@@ -209,7 +211,10 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink-mute) 48%, transparent);
   transform: translateY(-50%);
-  transition: width 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  transition:
+    width 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .chat-msg-nav-item .chat-msg-nav-dot {
@@ -225,7 +230,9 @@
 }
 
 /* 鼠标离开后回落丝滑一点 */
-.chat-msg-nav:not(.is-dock-active) .chat-msg-nav-item .chat-msg-nav-dot::before {
+.chat-msg-nav:not(.is-dock-active)
+  .chat-msg-nav-item
+  .chat-msg-nav-dot::before {
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -285,6 +292,7 @@
 
 .chat-msg-nav-dot:focus-visible,
 .chat-msg-nav-bottom:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 52%, transparent);
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--accent)) 52%, transparent);
   outline-offset: 1px;
 }

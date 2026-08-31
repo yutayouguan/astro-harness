@@ -11,7 +11,8 @@ import {
 
 export type ThemeMode = "light" | "dark" | "auto";
 export type ResolvedTheme = "light" | "dark";
-export type GlassLevel = "liquid" | "liquid-soft" | "rich" | "normal" | "minimal";
+export type GlassLevel =
+  "liquid" | "liquid-soft" | "rich" | "normal" | "minimal";
 
 const GLASS_LEVELS: readonly GlassLevel[] = [
   "liquid",
@@ -56,7 +57,9 @@ function readGlassLevel(): GlassLevel {
   try {
     const v = localStorage.getItem(GLASS_KEY);
     if (GLASS_LEVELS.includes(v as GlassLevel)) return v as GlassLevel;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return DEFAULT_GLASS_LEVEL;
 }
 
@@ -77,9 +80,16 @@ function applyResolved(next: ResolvedTheme) {
   root.style.colorScheme = next;
   root.setAttribute("data-theme", next);
 
-  if (prev && prev !== next && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (
+    prev &&
+    prev !== next &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
     root.classList.add("theme-transitioning");
-    const tid = setTimeout(() => root.classList.remove("theme-transitioning"), 350);
+    const tid = setTimeout(
+      () => root.classList.remove("theme-transitioning"),
+      350,
+    );
     root.dataset.themeTimer = String(tid);
   }
 }
@@ -148,7 +158,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setGlassLevel = useCallback((level: GlassLevel) => {
     setGlassState(level);
     applyGlass(level);
-    try { localStorage.setItem(GLASS_KEY, level); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(GLASS_KEY, level);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const reassert = useCallback(() => {

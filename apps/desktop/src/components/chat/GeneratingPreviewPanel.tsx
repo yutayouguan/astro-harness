@@ -53,7 +53,12 @@ export default function GeneratingPreviewPanel({ preview }: Props) {
         >
           {preview.status === "streaming" ? (
             <>
-              <Loader2 size={12} strokeWidth={2.2} className="gen-preview-spin" aria-hidden />
+              <Loader2
+                size={12}
+                strokeWidth={2.2}
+                className="gen-preview-spin"
+                aria-hidden
+              />
               {t("chat.preview.streaming")}
             </>
           ) : (

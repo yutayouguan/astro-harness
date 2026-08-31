@@ -203,9 +203,7 @@ export default function ChatMessageNav({
   }, [listRef]);
 
   const layoutTips = useCallback(
-    (
-      ranks: { id: string; index: number; dist: number; scale: number }[],
-    ) => {
+    (ranks: { id: string; index: number; dist: number; scale: number }[]) => {
       if (ranks.length === 0) {
         tipSizeCache.current.clear();
         if (tipMetaRef.current.length > 0) {
@@ -223,7 +221,9 @@ export default function ChatMessageNav({
         const item = ranks[rank]!;
         const btn = buttonRefs.current.get(item.id);
         if (!btn) continue;
-        const turn = turnsRef.current.find((candidate) => candidate.id === item.id);
+        const turn = turnsRef.current.find(
+          (candidate) => candidate.id === item.id,
+        );
         if (!turn) continue;
 
         const t = ranks.length === 1 ? 0 : Math.min(1, item.dist / maxDist);
@@ -286,8 +286,7 @@ export default function ChatMessageNav({
           if (size.width < 2 || size.height < 2) continue;
           tipSizeCache.current.set(item.id, size);
           const maxD = Math.max(ranks[ranks.length - 1]?.dist ?? 0, 1);
-          const tt =
-            ranks.length === 1 ? 0 : Math.min(1, item.dist / maxD);
+          const tt = ranks.length === 1 ? 0 : Math.min(1, item.dist / maxD);
           const placed = clampFloatingTip({
             anchorRect: btn.getBoundingClientRect(),
             tipSize: size,
@@ -345,9 +344,7 @@ export default function ChatMessageNav({
       } else if (focusId) {
         const index = list.findIndex((m) => m.id === focusId);
         if (index >= 0) {
-          ranks = [
-            { id: focusId, index, dist: 0, scale: scales[index] ?? 1 },
-          ];
+          ranks = [{ id: focusId, index, dist: 0, scale: scales[index] ?? 1 }];
         }
       }
 

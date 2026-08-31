@@ -79,14 +79,16 @@ export function buildBranchFlow(graph: BranchGraphDto): BranchFlowModel {
 
   const edges = graph.nodes.flatMap<Edge>((node) => {
     if (!node.parentId || !source.has(node.parentId)) return [];
-    return [{
-      id: `${node.parentId}:${node.id}`,
-      source: node.parentId,
-      target: node.id,
-      type: "smoothstep",
-      className: edgeClass(node.edgeKind),
-      animated: node.isCurrent && node.edgeKind !== "spawn",
-    }];
+    return [
+      {
+        id: `${node.parentId}:${node.id}`,
+        source: node.parentId,
+        target: node.id,
+        type: "smoothstep",
+        className: edgeClass(node.edgeKind),
+        animated: node.isCurrent && node.edgeKind !== "spawn",
+      },
+    ];
   });
 
   return { nodes, edges };

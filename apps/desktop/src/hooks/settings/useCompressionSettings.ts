@@ -25,7 +25,9 @@ export function useCompressionSettings(active = true): UseCompressionSettings {
     setLoading(true);
     setError(null);
     try {
-      const next = await invoke<CompressionSettingsDto>("get_compression_settings");
+      const next = await invoke<CompressionSettingsDto>(
+        "get_compression_settings",
+      );
       setSettings(next);
     } catch (err) {
       setError(errorMessage(err));
@@ -41,9 +43,12 @@ export function useCompressionSettings(active = true): UseCompressionSettings {
   const save = useCallback(async (next: CompressionSettingsDto) => {
     setError(null);
     try {
-      const saved = await invoke<CompressionSettingsDto>("set_compression_settings", {
-        settings: next,
-      });
+      const saved = await invoke<CompressionSettingsDto>(
+        "set_compression_settings",
+        {
+          settings: next,
+        },
+      );
       setSettings(saved);
     } catch (err) {
       setError(errorMessage(err));
@@ -54,7 +59,9 @@ export function useCompressionSettings(active = true): UseCompressionSettings {
   const reset = useCallback(async () => {
     setError(null);
     try {
-      const next = await invoke<CompressionSettingsDto>("reset_compression_settings");
+      const next = await invoke<CompressionSettingsDto>(
+        "reset_compression_settings",
+      );
       setSettings(next);
     } catch (err) {
       setError(errorMessage(err));

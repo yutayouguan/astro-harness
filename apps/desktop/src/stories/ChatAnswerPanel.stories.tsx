@@ -26,7 +26,8 @@ const groupedActivities: ChatActivity[] = [
     id: "storybook-read",
     kind: "tool",
     title: "exec_command",
-    input: '{"operation":"read","path":"apps/desktop/src/components/chat/ChatView.tsx"}',
+    input:
+      '{"operation":"read","path":"apps/desktop/src/components/chat/ChatView.tsx"}',
     output: "读取 2146 行",
     status: "done",
     durationSec: 0.4,
@@ -99,71 +100,73 @@ function ChatAnswerPanel() {
   return (
     <MorphiconProvider>
       <LocaleProvider>
-      <main
-        data-testid="chat-answer-panel"
-        style={{
-          minHeight: "100vh",
-          boxSizing: "border-box",
-          padding: "44px 24px",
-          background: "var(--shell-bg)",
-          color: "var(--ink)",
-        }}
-      >
-        <div className="msg-row assistant" style={{ margin: "0 auto" }}>
-          <div className="avatar" aria-hidden>AI</div>
-          <div className="msg-stack">
-            <article className="bubble assistant">
-              <MsgTimeline>
-                <MsgTimelineStep kind="reasoning">
-                  <MsgReasoning
-                    reasoning="先梳理用户目标，再检查工具执行结果与当前任务进度。"
-                    active={false}
-                    durationSec={65}
-                  />
-                </MsgTimelineStep>
-                <MsgTimelineStep kind="tool">
-                  <MsgActivityGroup
-                    activities={groupedActivities}
-                    defaultOpen
-                    showTimestamp={false}
-                  />
-                </MsgTimelineStep>
-                <MsgTimelineStep kind="reply">
-                  <ChatMarkdown content="已经完成目录扫描，接下来检查构建状态。" />
-                </MsgTimelineStep>
-                <MsgTimelineStep kind="reasoning">
-                  <MsgReasoning
-                    reasoning="根据目录结果选择最小验证范围。"
-                    active={false}
-                    durationSec={12}
-                  />
-                </MsgTimelineStep>
-                <MsgTimelineStep kind="tool">
-                  <MsgActivity
-                    activity={terminalActivity}
-                    defaultOpen={false}
-                    showTimestamp={false}
-                  />
-                </MsgTimelineStep>
-                <MsgTimelineStep kind="reply" isLast>
-                  <ChatMarkdown content={answer} />
-                </MsgTimelineStep>
-              </MsgTimeline>
-              <div className="msg-token-stats" aria-label="回答统计">
-                <span className="msg-token-stats-duration">用时 4.8s</span>
-                <span className="msg-token-stats-usage">428 tokens</span>
-              </div>
-            </article>
-            <MessageActions
-              messageId="storybook-assistant"
-              content={answer}
-              role="assistant"
-              onRegenerate={() => {}}
-              onBranch={() => {}}
-            />
+        <main
+          data-testid="chat-answer-panel"
+          style={{
+            minHeight: "100vh",
+            boxSizing: "border-box",
+            padding: "44px 24px",
+            background: "var(--shell-bg)",
+            color: "var(--ink)",
+          }}
+        >
+          <div className="msg-row assistant" style={{ margin: "0 auto" }}>
+            <div className="avatar" aria-hidden>
+              AI
+            </div>
+            <div className="msg-stack">
+              <article className="bubble assistant">
+                <MsgTimeline>
+                  <MsgTimelineStep kind="reasoning">
+                    <MsgReasoning
+                      reasoning="先梳理用户目标，再检查工具执行结果与当前任务进度。"
+                      active={false}
+                      durationSec={65}
+                    />
+                  </MsgTimelineStep>
+                  <MsgTimelineStep kind="tool">
+                    <MsgActivityGroup
+                      activities={groupedActivities}
+                      defaultOpen
+                      showTimestamp={false}
+                    />
+                  </MsgTimelineStep>
+                  <MsgTimelineStep kind="reply">
+                    <ChatMarkdown content="已经完成目录扫描，接下来检查构建状态。" />
+                  </MsgTimelineStep>
+                  <MsgTimelineStep kind="reasoning">
+                    <MsgReasoning
+                      reasoning="根据目录结果选择最小验证范围。"
+                      active={false}
+                      durationSec={12}
+                    />
+                  </MsgTimelineStep>
+                  <MsgTimelineStep kind="tool">
+                    <MsgActivity
+                      activity={terminalActivity}
+                      defaultOpen={false}
+                      showTimestamp={false}
+                    />
+                  </MsgTimelineStep>
+                  <MsgTimelineStep kind="reply" isLast>
+                    <ChatMarkdown content={answer} />
+                  </MsgTimelineStep>
+                </MsgTimeline>
+                <div className="msg-token-stats" aria-label="回答统计">
+                  <span className="msg-token-stats-duration">用时 4.8s</span>
+                  <span className="msg-token-stats-usage">428 tokens</span>
+                </div>
+              </article>
+              <MessageActions
+                messageId="storybook-assistant"
+                content={answer}
+                role="assistant"
+                onRegenerate={() => {}}
+                onBranch={() => {}}
+              />
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
       </LocaleProvider>
     </MorphiconProvider>
   );
@@ -203,13 +206,19 @@ function GroupedAnswerLayoutPreview() {
       role: "assistant",
       reasoning: "先梳理目标，再核对工具输出。",
       reasoningDurationSec: 2.4,
-      content: "已完成目录检查。\n\n### 结果\n\n所有正文片段都已合并为一个 Markdown 回答。",
+      content:
+        "已完成目录检查。\n\n### 结果\n\n所有正文片段都已合并为一个 Markdown 回答。",
       activities,
       segments: [
         { type: "reasoning", id: "reasoning-1", text: "先梳理目标，", at: 1 },
         { type: "activity", id: activities[0]!.id, at: 2 },
         { type: "text", id: "text-1", text: "已完成目录检查。", at: 3 },
-        { type: "reasoning", id: "reasoning-2", text: "再核对工具输出。", at: 4 },
+        {
+          type: "reasoning",
+          id: "reasoning-2",
+          text: "再核对工具输出。",
+          at: 4,
+        },
         { type: "activity", id: activities[1]!.id, at: 5 },
         {
           type: "text",
@@ -265,9 +274,21 @@ function GroupedAnswerLayoutPreview() {
 function InlineUserEditPreview() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: "u-1", role: "user", content: "先给我解释一下这个模块。" },
-    { id: "a-1", role: "assistant", content: "这是上一轮回答，历史问题不可编辑。" },
-    { id: "u-2", role: "user", content: "把结论整理得更简洁，并补充一个示例。" },
-    { id: "a-2", role: "assistant", content: "这是当前回答；最后一个问题可以原位修改。" },
+    {
+      id: "a-1",
+      role: "assistant",
+      content: "这是上一轮回答，历史问题不可编辑。",
+    },
+    {
+      id: "u-2",
+      role: "user",
+      content: "把结论整理得更简洁，并补充一个示例。",
+    },
+    {
+      id: "a-2",
+      role: "assistant",
+      content: "这是当前回答；最后一个问题可以原位修改。",
+    },
   ]);
 
   return (
@@ -307,7 +328,9 @@ function InlineUserEditPreview() {
               onEditUserMessage={async (messageId, content) => {
                 setMessages((current) =>
                   current.map((message) =>
-                    message.id === messageId ? { ...message, content } : message,
+                    message.id === messageId
+                      ? { ...message, content }
+                      : message,
                   ),
                 );
                 return true;

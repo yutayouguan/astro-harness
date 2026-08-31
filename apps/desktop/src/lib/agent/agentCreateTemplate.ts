@@ -137,10 +137,7 @@ export function prepareAgentCreateSend(text: string): AgentCreatePrepareResult {
   };
 }
 
-export function findSlotAt(
-  text: string,
-  caret: number,
-): BracketSlot | null {
+export function findSlotAt(text: string, caret: number): BracketSlot | null {
   return findPromptTemplateSlotAt(text, caret, [...SLOT_HINT_SET]);
 }
 

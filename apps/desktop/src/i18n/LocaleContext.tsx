@@ -9,11 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  translate,
-  type Locale,
-  type MessageKey,
-} from "./messages";
+import { translate, type Locale, type MessageKey } from "./messages";
 
 const STORAGE_KEY = "astro-locale";
 
@@ -77,9 +73,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
   // 必须用 JSX Provider（与 ThemeProvider 一致），避免 createElement 与 jsx-runtime
   // 在打包后落到不同 React 副本时出现「useI18n must be used within LocaleProvider」
-  return (
-    <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
-  );
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
 export function useI18n() {

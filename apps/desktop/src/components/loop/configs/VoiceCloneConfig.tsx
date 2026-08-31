@@ -16,7 +16,11 @@ const OUTPUT_FORMAT_OPTIONS = [
   { value: "opus", label: "Opus" },
 ];
 
-export default function VoiceCloneConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function VoiceCloneConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

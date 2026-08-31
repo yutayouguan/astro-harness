@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildChatTurnPreviews, compactMessagePreview } from "./chatMessageNav.ts";
+import {
+  buildChatTurnPreviews,
+  compactMessagePreview,
+} from "./chatMessageNav.ts";
 
 describe("buildChatTurnPreviews", () => {
   it("groups each user question with its following assistant answer", () => {
@@ -46,7 +49,10 @@ describe("buildChatTurnPreviews", () => {
 
 describe("compactMessagePreview", () => {
   it("removes markdown decoration and bounds long previews", () => {
-    assert.equal(compactMessagePreview("# Result\n[docs](https://example.com)"), "Result docs");
+    assert.equal(
+      compactMessagePreview("# Result\n[docs](https://example.com)"),
+      "Result docs",
+    );
     assert.equal(compactMessagePreview("abcdefgh", 6), "abcde…");
   });
 

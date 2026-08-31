@@ -92,7 +92,9 @@ function createPieces(width: number, height: number, startedAt: number) {
   for (let index = rainCount; index < density; index += 1) {
     const fromLeft = index % 2 === 0;
     pieces.push({
-      x: fromLeft ? randomBetween(-8, width * 0.08) : randomBetween(width * 0.92, width + 8),
+      x: fromLeft
+        ? randomBetween(-8, width * 0.08)
+        : randomBetween(width * 0.92, width + 8),
       y: randomBetween(height * 0.68, height * 0.94),
       vx: (fromLeft ? 1 : -1) * randomBetween(width * 0.26, width * 0.58),
       vy: randomBetween(-height * 0.92, -height * 0.58),
@@ -148,7 +150,10 @@ export default function TaskCompletionCelebration({ trigger }: Props) {
 
     if (reducedMotion) {
       const startedAt = performance.now();
-      const pieces = createPieces(bounds.width, bounds.height, startedAt).slice(0, 28);
+      const pieces = createPieces(bounds.width, bounds.height, startedAt).slice(
+        0,
+        28,
+      );
       for (const [index, piece] of pieces.entries()) {
         piece.x = ((index + 0.5) / pieces.length) * bounds.width;
         piece.y = bounds.height * randomBetween(0.18, 0.62);

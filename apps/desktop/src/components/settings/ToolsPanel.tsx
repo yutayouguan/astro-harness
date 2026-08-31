@@ -43,7 +43,11 @@ type ApprovalSettings = {
   browserApprovalRules: BrowserApprovalRule[];
 };
 
-const APPROVAL_MODES: PermissionPreset[] = ["ask_for_approval", "approve_for_me", "full_access"];
+const APPROVAL_MODES: PermissionPreset[] = [
+  "ask_for_approval",
+  "approve_for_me",
+  "full_access",
+];
 
 /** 危险命令审批设置区（全局，非按 Agent） */
 function ApprovalsSection({ active }: { active: boolean }) {
@@ -117,10 +121,12 @@ function ApprovalsSection({ active }: { active: boolean }) {
 
   const removeTypeRule = async (rule: CommandTypeRule) => {
     try {
-      setSettings(await invoke<ApprovalSettings>("remove_command_type_allowlist", {
-        commandFamily: rule.commandFamily,
-        risk: rule.risk,
-      }));
+      setSettings(
+        await invoke<ApprovalSettings>("remove_command_type_allowlist", {
+          commandFamily: rule.commandFamily,
+          risk: rule.risk,
+        }),
+      );
     } catch (cause) {
       setError(String(cause));
     }
@@ -128,10 +134,12 @@ function ApprovalsSection({ active }: { active: boolean }) {
 
   const removeBrowserRule = async (rule: BrowserApprovalRule) => {
     try {
-      setSettings(await invoke<ApprovalSettings>("remove_browser_approval_rule", {
-        origin: rule.origin,
-        actionClass: rule.actionClass,
-      }));
+      setSettings(
+        await invoke<ApprovalSettings>("remove_browser_approval_rule", {
+          origin: rule.origin,
+          actionClass: rule.actionClass,
+        }),
+      );
     } catch (cause) {
       setError(String(cause));
     }
@@ -143,16 +151,21 @@ function ApprovalsSection({ active }: { active: boolean }) {
 
   const modeOptions = APPROVAL_MODES.map((m) => ({
     value: m,
-    label: t(`chat.approval.${m === "ask_for_approval" ? "askForApproval" : m === "approve_for_me" ? "approveForMe" : "fullAccess"}` as MessageKey),
+    label: t(
+      `chat.approval.${m === "ask_for_approval" ? "askForApproval" : m === "approve_for_me" ? "approveForMe" : "fullAccess"}` as MessageKey,
+    ),
   }));
-  const activePreset = APPROVAL_MODES.includes(settings.preset as PermissionPreset)
+  const activePreset = APPROVAL_MODES.includes(
+    settings.preset as PermissionPreset,
+  )
     ? settings.preset
     : "ask_for_approval";
-  const modeHintKey = activePreset === "ask_for_approval"
-    ? "askForApproval"
-    : activePreset === "approve_for_me"
-      ? "approveForMe"
-      : "fullAccess";
+  const modeHintKey =
+    activePreset === "ask_for_approval"
+      ? "askForApproval"
+      : activePreset === "approve_for_me"
+        ? "approveForMe"
+        : "fullAccess";
 
   return (
     <div className="approvals-section">
@@ -182,11 +195,16 @@ function ApprovalsSection({ active }: { active: boolean }) {
         </h4>
         <p className="tools-detail-body">{t("approvals.browser.hint")}</p>
         {settings.browserApprovalRules.length === 0 ? (
-          <p className="tools-detail-empty-params">{t("approvals.browser.empty")}</p>
+          <p className="tools-detail-empty-params">
+            {t("approvals.browser.empty")}
+          </p>
         ) : (
           <ul className="approvals-allow-list">
             {settings.browserApprovalRules.map((rule) => (
-              <li key={`${rule.origin}:${rule.actionClass}`} className="mcp-tool-row">
+              <li
+                key={`${rule.origin}:${rule.actionClass}`}
+                className="mcp-tool-row"
+              >
                 <span className="approvals-rule-copy">
                   <code className="mcp-tool-name">{rule.origin}</code>
                   <small className="tools-detail-body">
@@ -217,11 +235,16 @@ function ApprovalsSection({ active }: { active: boolean }) {
         </h4>
         <p className="tools-detail-body">{t("approvals.typeAllowlist.hint")}</p>
         {settings.commandTypeAllowlist.length === 0 ? (
-          <p className="tools-detail-empty-params">{t("approvals.typeAllowlist.empty")}</p>
+          <p className="tools-detail-empty-params">
+            {t("approvals.typeAllowlist.empty")}
+          </p>
         ) : (
           <ul className="approvals-allow-list">
             {settings.commandTypeAllowlist.map((rule) => (
-              <li key={`${rule.commandFamily}:${rule.risk}`} className="mcp-tool-row">
+              <li
+                key={`${rule.commandFamily}:${rule.risk}`}
+                className="mcp-tool-row"
+              >
                 <span className="approvals-rule-copy">
                   <code className="mcp-tool-name">{rule.commandFamily}</code>
                   <small className="tools-detail-body">
@@ -365,9 +388,21 @@ function ParamTypeGlyph({ type }: { type: string }) {
 }
 
 const VIEW_OPTIONS = [
-  { id: "gallery" as const, Icon: IconViewGallery, labelKey: "tools.view.gallery" as MessageKey },
-  { id: "list" as const, Icon: IconViewList, labelKey: "tools.view.list" as MessageKey },
-  { id: "detail" as const, Icon: IconViewDetail, labelKey: "tools.view.detail" as MessageKey },
+  {
+    id: "gallery" as const,
+    Icon: IconViewGallery,
+    labelKey: "tools.view.gallery" as MessageKey,
+  },
+  {
+    id: "list" as const,
+    Icon: IconViewList,
+    labelKey: "tools.view.list" as MessageKey,
+  },
+  {
+    id: "detail" as const,
+    Icon: IconViewDetail,
+    labelKey: "tools.view.detail" as MessageKey,
+  },
 ];
 
 /** Tools 面板入参 */
@@ -397,7 +432,11 @@ export default function ToolsPanel({
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [selectedFnName, setSelectedFnName] = useState<string | null>(null);
   const [usage, setUsage] = useState<AgentUsageSummary | null>(null);
-  const { enabled, toggle: onToggle, tools: agentTools } = useAgentTools(agentId);
+  const {
+    enabled,
+    toggle: onToggle,
+    tools: agentTools,
+  } = useAgentTools(agentId);
   const query = search.trim().toLowerCase();
 
   useEffect(() => {
@@ -452,7 +491,10 @@ export default function ToolsPanel({
     });
   }, [tab, query, t, agentTools]);
 
-  const detailIds = useMemo<string[]>(() => items.map((tool) => tool.id), [items]);
+  const detailIds = useMemo<string[]>(
+    () => items.map((tool) => tool.id),
+    [items],
+  );
 
   useEffect(() => {
     if (viewMode !== "detail") return;
@@ -552,300 +594,346 @@ export default function ToolsPanel({
       </div>
 
       <div className="agent-tools-body">
-      <MotionSwitch switchKey={tab} className="anim-switch--fill">
-      {tab === "builtin" && (
-        <>
-          {items.length === 0 ? (
-            <p className="agent-tools-empty">{t("agentTools.empty")}</p>
-          ) : viewMode === "detail" ? (
-            <div className="tools-detail">
-              <div className="tools-detail-list" role="list">
-                {items.map((tool) => {
-                  const isOn = enabled[tool.id];
-                  return (
-                    <button
-                      key={tool.id}
-                      type="button"
-                      role="listitem"
-                      className={`tools-detail-item ${selectedDetailId === tool.id ? "is-selected" : ""} ${isOn ? "" : "is-disabled"}`}
-                      onClick={() => setSelectedDetailId(tool.id)}
-                    >
-                      <span className="tools-detail-item-title">
-                        <span className="tool-lucide-inline" aria-hidden>
-                          <LucideByName
-                            name={tool.emoji}
-                            fallback={tool.Icon}
-                            size={14}
-                            strokeWidth={2}
-                          />
-                        </span>
-                        {t(tool.titleKey)}
-                        <span className="tools-detail-item-calls">
-                          {t("tools.callCount", {
-                            n: String(usage?.tools[tool.id] ?? 0),
-                          })}
-                        </span>
-                      </span>
-                      <span
-                        className={`tools-detail-item-badge ${isOn ? "is-on" : ""}`}
-                      >
-                        {isOn ? t("agentTools.on") : t("agentTools.off")}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="tools-detail-panel">
-                {selectedTool ? (
-                  <>
-                    <header className="tools-detail-head">
-                      <div className="tools-detail-head-main">
-                        <div className="tool-icon" aria-hidden data-tone={selectedTool.tone}>
-                          <span className="tool-icon-lens" />
-                          <span className="tool-icon-glyph">
-                            <LucideByName
-                              name={activeFn?.emoji ?? selectedTool.emoji}
-                              fallback={selectedTool.Icon}
-                              width={28}
-                              height={28}
-                              strokeWidth={2}
-                            />
-                          </span>
-                        </div>
-                        <div>
-                          <h3 className="tools-detail-title">
-                            {t(selectedTool.titleKey)}
-                          </h3>
-                          <div className="tools-detail-ids">
-                            <span className="tools-detail-id-chip" title={t("tools.detail.toolset")}>
-                              <span className="tools-detail-id-label">
-                                {t("tools.detail.toolset")}
-                              </span>
-                              <code>{selectedTool.id}</code>
+        <MotionSwitch switchKey={tab} className="anim-switch--fill">
+          {tab === "builtin" && (
+            <>
+              {items.length === 0 ? (
+                <p className="agent-tools-empty">{t("agentTools.empty")}</p>
+              ) : viewMode === "detail" ? (
+                <div className="tools-detail">
+                  <div className="tools-detail-list" role="list">
+                    {items.map((tool) => {
+                      const isOn = enabled[tool.id];
+                      return (
+                        <button
+                          key={tool.id}
+                          type="button"
+                          role="listitem"
+                          className={`tools-detail-item ${selectedDetailId === tool.id ? "is-selected" : ""} ${isOn ? "" : "is-disabled"}`}
+                          onClick={() => setSelectedDetailId(tool.id)}
+                        >
+                          <span className="tools-detail-item-title">
+                            <span className="tool-lucide-inline" aria-hidden>
+                              <LucideByName
+                                name={tool.emoji}
+                                fallback={tool.Icon}
+                                size={14}
+                                strokeWidth={2}
+                              />
                             </span>
-                            <span className="tools-detail-id-chip" title={t("tools.detail.apiName")}>
-                              <span className="tools-detail-id-label">
-                                {t("tools.detail.apiName")}
+                            {t(tool.titleKey)}
+                            <span className="tools-detail-item-calls">
+                              {t("tools.callCount", {
+                                n: String(usage?.tools[tool.id] ?? 0),
+                              })}
+                            </span>
+                          </span>
+                          <span
+                            className={`tools-detail-item-badge ${isOn ? "is-on" : ""}`}
+                          >
+                            {isOn ? t("agentTools.on") : t("agentTools.off")}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="tools-detail-panel">
+                    {selectedTool ? (
+                      <>
+                        <header className="tools-detail-head">
+                          <div className="tools-detail-head-main">
+                            <div
+                              className="tool-icon"
+                              aria-hidden
+                              data-tone={selectedTool.tone}
+                            >
+                              <span className="tool-icon-lens" />
+                              <span className="tool-icon-glyph">
+                                <LucideByName
+                                  name={activeFn?.emoji ?? selectedTool.emoji}
+                                  fallback={selectedTool.Icon}
+                                  width={28}
+                                  height={28}
+                                  strokeWidth={2}
+                                />
                               </span>
-                              <code>
-                                {activeFn?.name ??
-                                  selectedTool.tools?.[0] ??
-                                  selectedTool.id}
-                              </code>
+                            </div>
+                            <div>
+                              <h3 className="tools-detail-title">
+                                {t(selectedTool.titleKey)}
+                              </h3>
+                              <div className="tools-detail-ids">
+                                <span
+                                  className="tools-detail-id-chip"
+                                  title={t("tools.detail.toolset")}
+                                >
+                                  <span className="tools-detail-id-label">
+                                    {t("tools.detail.toolset")}
+                                  </span>
+                                  <code>{selectedTool.id}</code>
+                                </span>
+                                <span
+                                  className="tools-detail-id-chip"
+                                  title={t("tools.detail.apiName")}
+                                >
+                                  <span className="tools-detail-id-label">
+                                    {t("tools.detail.apiName")}
+                                  </span>
+                                  <code>
+                                    {activeFn?.name ??
+                                      selectedTool.tools?.[0] ??
+                                      selectedTool.id}
+                                  </code>
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                role="switch"
+                                className="tool-toggle"
+                                aria-checked={!!enabled[selectedTool.id]}
+                                aria-label={t("agentTools.toggleAria", {
+                                  name: t(selectedTool.titleKey),
+                                  state: enabled[selectedTool.id]
+                                    ? t("agentTools.on")
+                                    : t("agentTools.off"),
+                                })}
+                                onClick={() => onToggle(selectedTool.id)}
+                              >
+                                <span className="tool-toggle-thumb" />
+                              </button>
+                            </div>
+                          </div>
+                        </header>
+                        <div className="tools-detail-scroll">
+                          <section className="tools-detail-section">
+                            <h4 className="tools-detail-label">
+                              <FileText
+                                size={15}
+                                strokeWidth={2.25}
+                                aria-hidden
+                              />
+                              {t("tools.detail.description")}
+                            </h4>
+                            <p className="tools-detail-body">
+                              {t(selectedTool.descKey)}
+                            </p>
+                            {detailApiDesc ? (
+                              <div className="tools-detail-api-block">
+                                <h4 className="tools-detail-label">
+                                  <FileJson2
+                                    size={15}
+                                    strokeWidth={2.25}
+                                    aria-hidden
+                                  />
+                                  {t("tools.detail.apiSchema")}
+                                </h4>
+                                <p className="tools-detail-api-desc">
+                                  {detailApiDesc}
+                                </p>
+                              </div>
+                            ) : null}
+                          </section>
+                          {(selectedTool.functions?.length ?? 0) > 0 && (
+                            <section className="tools-detail-section">
+                              <h4 className="tools-detail-label">
+                                <FunctionSquare
+                                  size={15}
+                                  strokeWidth={2.25}
+                                  aria-hidden
+                                />
+                                {t("tools.detail.functions")}
+                                <span className="tools-detail-label-hint">
+                                  {" "}
+                                  ·{" "}
+                                  {t("tools.detail.fnCount", {
+                                    n: String(selectedTool.functions!.length),
+                                  })}
+                                </span>
+                              </h4>
+                              <div className="tools-fn-chips" role="tablist">
+                                {selectedTool.functions!.map((fn) => (
+                                  <button
+                                    key={fn.name}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={activeFn?.name === fn.name}
+                                    className={`tools-fn-chip ${
+                                      activeFn?.name === fn.name
+                                        ? "is-active"
+                                        : ""
+                                    }`}
+                                    onClick={() => setSelectedFnName(fn.name)}
+                                    title={fn.description || fn.name}
+                                  >
+                                    <span
+                                      className="tool-lucide-inline"
+                                      aria-hidden
+                                    >
+                                      <LucideByName
+                                        name={fn.emoji}
+                                        size={14}
+                                        strokeWidth={2}
+                                      />
+                                    </span>
+                                    <code>{fn.name}</code>
+                                  </button>
+                                ))}
+                              </div>
+                              {activeFn?.description &&
+                              activeFn.description.trim() !==
+                                (detailApiDesc ?? "").trim() ? (
+                                <p className="tools-detail-fn-desc">
+                                  {activeFn.description}
+                                </p>
+                              ) : null}
+                            </section>
+                          )}
+                          <section className="tools-detail-section">
+                            <h4 className="tools-detail-label">
+                              <Braces
+                                size={15}
+                                strokeWidth={2.25}
+                                aria-hidden
+                              />
+                              {t("tools.detail.params")}
+                              {activeFn ? (
+                                <span className="tools-detail-label-hint">
+                                  {" "}
+                                  · <code>{activeFn.name}</code>
+                                </span>
+                              ) : null}
+                            </h4>
+                            {detailParams.length > 0 ? (
+                              <ul className="agent-tool-params-list is-detail">
+                                {detailParams.map((param) => (
+                                  <li
+                                    key={param.name}
+                                    className="agent-tool-param is-detail"
+                                  >
+                                    <div className="agent-tool-param-row">
+                                      <code className="agent-tool-param-name">
+                                        {param.name}
+                                      </code>
+                                      <span className="agent-tool-param-type">
+                                        <ParamTypeGlyph type={param.type} />
+                                        {param.type}
+                                      </span>
+                                      <span
+                                        className={`agent-tool-param-req ${param.optional ? "is-optional" : "is-required"}`}
+                                      >
+                                        {param.optional
+                                          ? t("tools.detail.optional")
+                                          : t("tools.detail.required")}
+                                      </span>
+                                    </div>
+                                    {param.description ? (
+                                      <p className="agent-tool-param-desc">
+                                        {param.description}
+                                      </p>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="tools-detail-empty-params">
+                                {t("tools.detail.noParams")}
+                              </p>
+                            )}
+                          </section>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="agent-tools-empty">
+                        {t("tools.detail.selectHint")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className={`agent-tools-grid is-${viewMode}`}>
+                  {items.map((tool) => {
+                    const isOn = enabled[tool.id];
+                    return (
+                      <article
+                        key={tool.id}
+                        className={`tool-card agent-tool-card ${isOn ? "is-on" : "is-off"}`}
+                        data-tone={tool.tone}
+                      >
+                        <header className="agent-tool-head">
+                          <div className="tool-icon" aria-hidden>
+                            <span className="tool-icon-lens" />
+                            <span className="tool-icon-glyph">
+                              <LucideByName
+                                name={tool.emoji}
+                                fallback={tool.Icon}
+                                width={28}
+                                height={28}
+                                strokeWidth={2}
+                              />
                             </span>
                           </div>
+                          <h3 className="agent-tool-title">
+                            {t(tool.titleKey)}
+                          </h3>
+                          <span className="agent-tool-call-stat">
+                            {t("tools.callCount", {
+                              n: String(usage?.tools[tool.id] ?? 0),
+                            })}
+                          </span>
                           <button
                             type="button"
                             role="switch"
                             className="tool-toggle"
-                            aria-checked={!!enabled[selectedTool.id]}
+                            aria-checked={isOn}
                             aria-label={t("agentTools.toggleAria", {
-                              name: t(selectedTool.titleKey),
-                              state: enabled[selectedTool.id]
+                              name: t(tool.titleKey),
+                              state: isOn
                                 ? t("agentTools.on")
                                 : t("agentTools.off"),
                             })}
-                            onClick={() => onToggle(selectedTool.id)}
+                            onClick={() => onToggle(tool.id)}
                           >
                             <span className="tool-toggle-thumb" />
                           </button>
-                        </div>
-                      </div>
-                    </header>
-                    <div className="tools-detail-scroll">
-                      <section className="tools-detail-section">
-                        <h4 className="tools-detail-label">
-                          <FileText size={15} strokeWidth={2.25} aria-hidden />
-                          {t("tools.detail.description")}
-                        </h4>
-                        <p className="tools-detail-body">{t(selectedTool.descKey)}</p>
-                        {detailApiDesc ? (
-                          <div className="tools-detail-api-block">
-                            <h4 className="tools-detail-label">
-                              <FileJson2 size={15} strokeWidth={2.25} aria-hidden />
-                              {t("tools.detail.apiSchema")}
-                            </h4>
-                            <p className="tools-detail-api-desc">{detailApiDesc}</p>
-                          </div>
-                        ) : null}
-                      </section>
-                      {(selectedTool.functions?.length ?? 0) > 0 && (
-                        <section className="tools-detail-section">
-                          <h4 className="tools-detail-label">
-                            <FunctionSquare size={15} strokeWidth={2.25} aria-hidden />
-                            {t("tools.detail.functions")}
-                            <span className="tools-detail-label-hint">
-                              {" "}
-                              ·{" "}
-                              {t("tools.detail.fnCount", {
-                                n: String(selectedTool.functions!.length),
-                              })}
-                            </span>
-                          </h4>
-                          <div className="tools-fn-chips" role="tablist">
-                            {selectedTool.functions!.map((fn) => (
-                              <button
-                                key={fn.name}
-                                type="button"
-                                role="tab"
-                                aria-selected={activeFn?.name === fn.name}
-                                className={`tools-fn-chip ${
-                                  activeFn?.name === fn.name ? "is-active" : ""
-                                }`}
-                                onClick={() => setSelectedFnName(fn.name)}
-                                title={fn.description || fn.name}
-                              >
-                                <span className="tool-lucide-inline" aria-hidden>
-                                  <LucideByName
-                                    name={fn.emoji}
-                                    size={14}
-                                    strokeWidth={2}
-                                  />
-                                </span>
-                                <code>{fn.name}</code>
-                              </button>
-                            ))}
-                          </div>
-                          {activeFn?.description &&
-                          activeFn.description.trim() !==
-                            (detailApiDesc ?? "").trim() ? (
-                            <p className="tools-detail-fn-desc">
-                              {activeFn.description}
-                            </p>
-                          ) : null}
-                        </section>
-                      )}
-                      <section className="tools-detail-section">
-                        <h4 className="tools-detail-label">
-                          <Braces size={15} strokeWidth={2.25} aria-hidden />
-                          {t("tools.detail.params")}
-                          {activeFn ? (
-                            <span className="tools-detail-label-hint">
-                              {" "}
-                              · <code>{activeFn.name}</code>
-                            </span>
-                          ) : null}
-                        </h4>
-                        {detailParams.length > 0 ? (
-                          <ul className="agent-tool-params-list is-detail">
-                            {detailParams.map((param) => (
-                              <li key={param.name} className="agent-tool-param is-detail">
-                                <div className="agent-tool-param-row">
-                                  <code className="agent-tool-param-name">
-                                    {param.name}
-                                  </code>
-                                  <span className="agent-tool-param-type">
-                                    <ParamTypeGlyph type={param.type} />
-                                    {param.type}
-                                  </span>
-                                  <span
-                                    className={`agent-tool-param-req ${param.optional ? "is-optional" : "is-required"}`}
+                        </header>
+
+                        <div className="tool-card-body agent-tool-detail">
+                          <p className="agent-tool-desc">{t(tool.descKey)}</p>
+                          {tool.params.length > 0 && (
+                            <div className="agent-tool-params">
+                              <span className="agent-tool-params-label">
+                                {t("agentTools.params")}
+                              </span>
+                              <ul className="agent-tool-params-list">
+                                {tool.params.map((param) => (
+                                  <li
+                                    key={param.name}
+                                    className="agent-tool-param"
                                   >
-                                    {param.optional
-                                      ? t("tools.detail.optional")
-                                      : t("tools.detail.required")}
-                                  </span>
-                                </div>
-                                {param.description ? (
-                                  <p className="agent-tool-param-desc">
-                                    {param.description}
-                                  </p>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="tools-detail-empty-params">
-                            {t("tools.detail.noParams")}
-                          </p>
-                        )}
-                      </section>
-                    </div>
-                  </>
-                ) : (
-                  <p className="agent-tools-empty">{t("tools.detail.selectHint")}</p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className={`agent-tools-grid is-${viewMode}`}>
-              {items.map((tool) => {
-                const isOn = enabled[tool.id];
-                return (
-                  <article
-                    key={tool.id}
-                    className={`tool-card agent-tool-card ${isOn ? "is-on" : "is-off"}`}
-                    data-tone={tool.tone}
-                  >
-                    <header className="agent-tool-head">
-                      <div className="tool-icon" aria-hidden>
-                        <span className="tool-icon-lens" />
-                        <span className="tool-icon-glyph">
-                          <LucideByName
-                            name={tool.emoji}
-                            fallback={tool.Icon}
-                            width={28}
-                            height={28}
-                            strokeWidth={2}
-                          />
-                        </span>
-                      </div>
-                      <h3 className="agent-tool-title">{t(tool.titleKey)}</h3>
-                      <span className="agent-tool-call-stat">
-                        {t("tools.callCount", {
-                          n: String(usage?.tools[tool.id] ?? 0),
-                        })}
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        className="tool-toggle"
-                        aria-checked={isOn}
-                        aria-label={t("agentTools.toggleAria", {
-                          name: t(tool.titleKey),
-                          state: isOn ? t("agentTools.on") : t("agentTools.off"),
-                        })}
-                        onClick={() => onToggle(tool.id)}
-                      >
-                        <span className="tool-toggle-thumb" />
-                      </button>
-                    </header>
-
-                    <div className="tool-card-body agent-tool-detail">
-                      <p className="agent-tool-desc">{t(tool.descKey)}</p>
-                      {tool.params.length > 0 && (
-                        <div className="agent-tool-params">
-                          <span className="agent-tool-params-label">
-                            {t("agentTools.params")}
-                          </span>
-                          <ul className="agent-tool-params-list">
-                            {tool.params.map((param) => (
-                              <li key={param.name} className="agent-tool-param">
-                                <code className="agent-tool-param-name">
-                                  {param.name}
-                                </code>
-                                <span className="agent-tool-param-type">
-                                  {param.type}
-                                  {param.optional ? "?" : ""}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
+                                    <code className="agent-tool-param-name">
+                                      {param.name}
+                                    </code>
+                                    <span className="agent-tool-param-type">
+                                      {param.type}
+                                      {param.optional ? "?" : ""}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
 
-      {tab === "approvals" && <ApprovalsSection active={active} />}
-      </MotionSwitch>
+          {tab === "approvals" && <ApprovalsSection active={active} />}
+        </MotionSwitch>
       </div>
-
     </div>
   );
 }

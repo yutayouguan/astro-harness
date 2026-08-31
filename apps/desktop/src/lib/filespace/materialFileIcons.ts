@@ -26,8 +26,13 @@ export function materialFileIconUrl(name: string): string {
   if (exact) return iconUrl(exact);
 
   // `foo.spec.ts` 先试 `spec.ts` 再试 `ts`，与 VSCode 的后缀匹配一致
-  for (let dot = base.indexOf("."); dot !== -1; dot = base.indexOf(".", dot + 1)) {
-    const byExtension = materialIconManifest.fileExtensions[base.slice(dot + 1)];
+  for (
+    let dot = base.indexOf(".");
+    dot !== -1;
+    dot = base.indexOf(".", dot + 1)
+  ) {
+    const byExtension =
+      materialIconManifest.fileExtensions[base.slice(dot + 1)];
     if (byExtension) return iconUrl(byExtension);
   }
 
@@ -36,7 +41,12 @@ export function materialFileIconUrl(name: string): string {
 
 export function materialIconUrl(
   name: string,
-  { isDir = false, expanded = false }: { isDir?: boolean; expanded?: boolean } = {},
+  {
+    isDir = false,
+    expanded = false,
+  }: { isDir?: boolean; expanded?: boolean } = {},
 ): string {
-  return isDir ? materialFolderIconUrl(name, expanded) : materialFileIconUrl(name);
+  return isDir
+    ? materialFolderIconUrl(name, expanded)
+    : materialFileIconUrl(name);
 }

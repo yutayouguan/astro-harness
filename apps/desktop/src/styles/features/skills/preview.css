@@ -15,8 +15,10 @@
       transparent 65%
     ),
     color-mix(in srgb, var(--bg-base, #0f172a) 32%, transparent);
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
 }
 
 html[data-theme="light"] .skills-preview-backdrop {
@@ -39,13 +41,23 @@ html[data-theme="light"] .skills-preview-backdrop {
   overflow: hidden;
   border-left: 1px solid color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.32)),
-    color-mix(in srgb, var(--tone-soft) 55%, var(--glass-panel, rgba(255, 255, 255, 0.5)));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.78),
+      rgba(255, 255, 255, 0.32)
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft) 55%,
+      var(--glass-panel, rgba(255, 255, 255, 0.5))
+    );
   box-shadow:
     -16px 0 48px color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.1)),
     var(--glass-rim);
-  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.3));
-  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.3));
+  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.3));
+  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.3));
   animation: skills-drawer-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -56,15 +68,31 @@ html[data-theme="light"] .skills-preview-backdrop {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--tone) 22%, transparent), transparent 48%),
-    radial-gradient(ellipse at 90% 100%, color-mix(in srgb, var(--tone) 12%, transparent), transparent 42%);
+    radial-gradient(
+      circle at 12% 8%,
+      color-mix(in srgb, var(--tone) 22%, transparent),
+      transparent 48%
+    ),
+    radial-gradient(
+      ellipse at 90% 100%,
+      color-mix(in srgb, var(--tone) 12%, transparent),
+      transparent 42%
+    );
   opacity: 0.9;
 }
 
 html[data-theme="dark"] .skills-preview {
-  border-left-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.08));
+  border-left-color: color-mix(
+    in srgb,
+    var(--tone) 28%,
+    rgba(255, 255, 255, 0.08)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.07) 0%,
+      rgba(255, 255, 255, 0.015) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 40%, rgba(8, 6, 18, 0.82));
   box-shadow:
     -16px 0 48px rgba(0, 0, 0, 0.45),
@@ -74,8 +102,16 @@ html[data-theme="dark"] .skills-preview {
 
 html[data-theme="dark"] .skills-preview::before {
   background:
-    radial-gradient(circle at 14% 6%, color-mix(in srgb, var(--tone) 28%, transparent), transparent 50%),
-    radial-gradient(ellipse at 88% 96%, color-mix(in srgb, var(--tone) 14%, transparent), transparent 44%);
+    radial-gradient(
+      circle at 14% 6%,
+      color-mix(in srgb, var(--tone) 28%, transparent),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 88% 96%,
+      color-mix(in srgb, var(--tone) 14%, transparent),
+      transparent 44%
+    );
   opacity: 0.85;
 }
 
@@ -104,22 +140,20 @@ html[data-theme="dark"] .skills-preview::before {
   padding: 16px 16px 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--tone) 8%, transparent);
   flex-shrink: 0;
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.5)),
-      color-mix(in srgb, var(--tone-soft) 8%, transparent) 72%
-    );
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.5)),
+    color-mix(in srgb, var(--tone-soft) 8%, transparent) 72%
+  );
 }
 
 html[data-theme="dark"] .skills-preview-head {
   border-bottom-color: color-mix(in srgb, var(--tone) 12%, transparent);
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.04)),
-      transparent 78%
-    );
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.04)),
+    transparent 78%
+  );
 }
 
 .skills-preview-head-main {
@@ -146,9 +180,14 @@ html[data-theme="dark"] .skills-preview-head {
   height: 44px;
   border-radius: 14px;
   color: var(--tone);
-  border: 1px solid color-mix(in srgb, var(--tone) 24%, rgba(255, 255, 255, 0.65));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 24%, rgba(255, 255, 255, 0.65));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.28)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.88),
+      rgba(255, 255, 255, 0.28)
+    ),
     var(--tone-soft);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.95),
@@ -173,7 +212,11 @@ html[data-theme="dark"] .skills-preview-head {
 html[data-theme="dark"] .skills-preview-mark {
   border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.1));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 70%, rgba(8, 6, 18, 0.55));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
@@ -287,7 +330,10 @@ html[data-theme="dark"] .skills-preview-mark {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease;
 }
 
 .skills-preview-filechip small {
@@ -351,22 +397,35 @@ html[data-theme="dark"] .skills-preview-mark {
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.55));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.55));
   color: var(--tone);
   cursor: pointer;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.18) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.18) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 40%, rgba(255, 255, 255, 0.2));
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--tone) 10%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
 }
 
 .skills-preview-close:hover {
   border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.45));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.35)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.78),
+      rgba(255, 255, 255, 0.35)
+    ),
     var(--tone-soft);
   box-shadow:
     0 8px 18px color-mix(in srgb, var(--tone) 16%, transparent),
@@ -376,7 +435,11 @@ html[data-theme="dark"] .skills-preview-mark {
 html[data-theme="dark"] .skills-preview-close {
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.5));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: color-mix(in srgb, #fff 18%, var(--tone));
@@ -411,7 +474,11 @@ html[data-theme="dark"] .skills-preview-close:hover {
   word-break: break-word;
   color: var(--ink-soft);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.55)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.88),
+      rgba(255, 255, 255, 0.55)
+    ),
     var(--glass-inner, rgba(255, 255, 255, 0.78));
   border: 1px solid rgba(255, 255, 255, 0.78);
   box-shadow:

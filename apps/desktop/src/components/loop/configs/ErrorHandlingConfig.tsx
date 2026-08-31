@@ -9,8 +9,10 @@ interface Props {
 
 export default function ErrorHandlingConfig({ config, onChange }: Props) {
   const onError = (config.on_error as string) || "abort";
-  const retryCount = typeof config.retry_count === "number" ? config.retry_count : 0;
-  const retryInterval = typeof config.retry_interval_ms === "number" ? config.retry_interval_ms : 0;
+  const retryCount =
+    typeof config.retry_count === "number" ? config.retry_count : 0;
+  const retryInterval =
+    typeof config.retry_interval_ms === "number" ? config.retry_interval_ms : 0;
 
   return (
     <div className="loop-config-section">

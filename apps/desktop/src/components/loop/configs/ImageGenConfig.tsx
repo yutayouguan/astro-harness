@@ -1,4 +1,13 @@
-import { AiAssistField, NumberField, SelectField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
+import {
+  AiAssistField,
+  NumberField,
+  SelectField,
+  FilePathField,
+  FileArrayField,
+  cfgStr,
+  cfgNum,
+  cfgStrArray,
+} from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -34,7 +43,13 @@ const OUTPUT_FORMAT_OPTIONS = [
   { value: "jpg", label: "JPG" },
 ];
 
-export default function ImageGenConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function ImageGenConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const mode = cfgStr(config, "mode", "text_to_image");
   const up = upstreamOutputs ?? [];
   return (

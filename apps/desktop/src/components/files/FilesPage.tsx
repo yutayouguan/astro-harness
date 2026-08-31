@@ -14,7 +14,10 @@ type Props = {
   submode: FilesSubmode;
   onSubmodeChange: (mode: FilesSubmode) => void;
   onOpenSession: (sessionId: string, messageId?: string | null) => void;
-  onAttachFiles?: (files: ArtifactDto[], mode: AttachMode) => void | Promise<void>;
+  onAttachFiles?: (
+    files: ArtifactDto[],
+    mode: AttachMode,
+  ) => void | Promise<void>;
   onClose?: () => void;
 };
 

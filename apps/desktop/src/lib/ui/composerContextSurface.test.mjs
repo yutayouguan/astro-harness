@@ -33,11 +33,17 @@ test("selected attachments and tools render as interactive composer tokens", asy
 test("quoted code and documents become file context tokens instead of image prompts", async () => {
   const [source, toolbar] = await Promise.all([
     readFile(chatViewUrl, "utf8"),
-    readFile(new URL("../../components/media/MediaToolbar.tsx", import.meta.url), "utf8"),
+    readFile(
+      new URL("../../components/media/MediaToolbar.tsx", import.meta.url),
+      "utf8",
+    ),
   ]);
 
   assert.match(toolbar, /attachMediaPath\(path, kind\)/);
-  assert.match(source, /kind === "code" \|\| kind === "html" \|\| kind === "document"/);
+  assert.match(
+    source,
+    /kind === "code" \|\| kind === "html" \|\| kind === "document"/,
+  );
   assert.match(source, /createFileComposerContextToken\(path, description\)/);
   assert.match(source, /media\.quoteCodePrompt/);
   assert.match(source, /file: t\("chat\.contextToken\.file"\)/);
@@ -58,6 +64,12 @@ test("skills and MCP servers can be added to the composer and previewed", async 
 test("context preview honors reduced motion and transparency", async () => {
   const styles = await readFile(stylesUrl, "utf8");
 
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.composer-context-preview-dialog/);
-  assert.match(styles, /@media \(prefers-reduced-transparency: reduce\)[\s\S]*?\.composer-context-preview-dialog/);
+  assert.match(
+    styles,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.composer-context-preview-dialog/,
+  );
+  assert.match(
+    styles,
+    /@media \(prefers-reduced-transparency: reduce\)[\s\S]*?\.composer-context-preview-dialog/,
+  );
 });

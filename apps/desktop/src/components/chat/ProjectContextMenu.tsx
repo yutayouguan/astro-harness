@@ -1,21 +1,9 @@
 // 项目右键菜单 / 更多菜单。
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  Edit3,
-  FolderOpen,
-  GitBranch,
-  Archive,
-  Pin,
-  X,
-} from "lucide-react";
+import { Edit3, FolderOpen, GitBranch, Archive, Pin, X } from "lucide-react";
 
 export type ProjectMenuAction =
-  | "pin"
-  | "edit"
-  | "reveal"
-  | "worktree"
-  | "archive"
-  | "remove";
+  "pin" | "edit" | "reveal" | "worktree" | "archive" | "remove";
 
 type Props = {
   x: number;
@@ -35,7 +23,12 @@ const ITEMS: Array<{
 }> = [
   { id: "pin", label: "置顶", Icon: Pin },
   { id: "edit", label: "编辑", Icon: Edit3 },
-  { id: "reveal", label: "在 Finder 中显示", Icon: FolderOpen, separator: true },
+  {
+    id: "reveal",
+    label: "在 Finder 中显示",
+    Icon: FolderOpen,
+    separator: true,
+  },
   { id: "worktree", label: "创建永久工作树", Icon: GitBranch },
   { id: "archive", label: "归档聊天", Icon: Archive, separator: true },
   { id: "remove", label: "移除项目", Icon: X },
@@ -98,7 +91,10 @@ export default function ProjectContextMenu({
           type="button"
           role="menuitem"
           className={`project-context-menu-item ${item.id === "remove" ? "is-danger" : ""}`}
-          onClick={() => { onAction(item.id); onClose(); }}
+          onClick={() => {
+            onAction(item.id);
+            onClose();
+          }}
         >
           <item.Icon size={14} strokeWidth={1.8} aria-hidden />
           <span>{item.label}</span>

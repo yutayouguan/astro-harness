@@ -11,8 +11,7 @@ export function resolveSessionStatus(
   if (
     runtime?.status === "active" &&
     runtime.activeFlags.some(
-      (flag) =>
-        flag === "waitingOnApproval" || flag === "waitingOnUserInput",
+      (flag) => flag === "waitingOnApproval" || flag === "waitingOnUserInput",
     )
   ) {
     return "awaiting";
@@ -28,7 +27,11 @@ type Props = {
   label?: string;
 };
 
-export default function SessionStatusIcon({ status, unread = false, label }: Props) {
+export default function SessionStatusIcon({
+  status,
+  unread = false,
+  label,
+}: Props) {
   if (status === "idle" && !unread) return null;
 
   const a11y = label

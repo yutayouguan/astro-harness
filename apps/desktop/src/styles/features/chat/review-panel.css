@@ -27,7 +27,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 72%, transparent);
   background: color-mix(in srgb, var(--glass-panel) 24%, transparent);
 }
 
@@ -53,7 +54,13 @@
 .chat-review-total {
   gap: 5px;
   margin-left: 5px;
-  font: 500 12px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font:
+    500 12px/1 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
 }
 
 .chat-review-total b,
@@ -85,7 +92,10 @@
   background: color-mix(in srgb, var(--glass-panel) 42%, transparent);
   color: var(--ink-soft);
   cursor: pointer;
-  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease;
 }
 
 .chat-review-header-actions button:hover {
@@ -115,7 +125,8 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 68%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 68%, transparent);
   color: var(--ink);
   font-size: 12.5px;
 }
@@ -137,7 +148,13 @@
   flex: none;
   justify-content: flex-end;
   gap: 5px;
-  font: 500 11.5px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font:
+    500 11.5px/1 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
 }
 
 .chat-review-code {
@@ -170,7 +187,13 @@
 .chat-review-lines {
   min-width: max-content;
   padding: 8px 0 18px;
-  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font:
+    12px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
 }
 
 .chat-review-line {
@@ -235,7 +258,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 68%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 68%, transparent);
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 650;
@@ -263,7 +287,10 @@
   color: var(--ink-soft);
   text-align: left;
   cursor: pointer;
-  transition: background 130ms ease, border-color 130ms ease, color 130ms ease;
+  transition:
+    background 130ms ease,
+    border-color 130ms ease,
+    color 130ms ease;
 }
 
 .chat-review-file-list > button:hover {

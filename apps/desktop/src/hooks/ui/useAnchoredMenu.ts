@@ -1,9 +1,5 @@
 /** 锚定菜单：测量宽度 + layoutAnchoredMenu + rAF 二次夹紧。 */
-import {
-  useLayoutEffect,
-  useState,
-  type RefObject,
-} from "react";
+import { useLayoutEffect, useState, type RefObject } from "react";
 import {
   layoutAnchoredMenu,
   type AnchoredMenuLayout,

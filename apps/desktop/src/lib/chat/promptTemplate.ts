@@ -114,7 +114,9 @@ export function nextEmptyPromptTemplateSlot(
   fromCaret: number,
   hints: readonly string[] = [],
 ): PromptTemplateSlot | null {
-  const slots = listPromptTemplateSlots(text, hints).filter((slot) => slot.empty);
+  const slots = listPromptTemplateSlots(text, hints).filter(
+    (slot) => slot.empty,
+  );
   return slots.find((slot) => slot.innerStart > fromCaret) ?? slots[0] ?? null;
 }
 
@@ -123,7 +125,9 @@ export function prevEmptyPromptTemplateSlot(
   fromCaret: number,
   hints: readonly string[] = [],
 ): PromptTemplateSlot | null {
-  const slots = listPromptTemplateSlots(text, hints).filter((slot) => slot.empty);
+  const slots = listPromptTemplateSlots(text, hints).filter(
+    (slot) => slot.empty,
+  );
   for (let index = slots.length - 1; index >= 0; index -= 1) {
     if (slots[index].innerEnd < fromCaret) return slots[index];
   }
@@ -134,7 +138,9 @@ export function preparePromptTemplateSend(
   text: string,
   hints: readonly string[],
 ): { ok: boolean; missing: PromptTemplateSlot[]; sanitized: string } {
-  const missing = listPromptTemplateSlots(text, hints).filter((slot) => slot.empty);
+  const missing = listPromptTemplateSlots(text, hints).filter(
+    (slot) => slot.empty,
+  );
   return {
     ok: missing.length === 0,
     missing,

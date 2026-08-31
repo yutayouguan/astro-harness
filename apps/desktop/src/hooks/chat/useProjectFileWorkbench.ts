@@ -32,7 +32,11 @@ export type ProjectFileWorkbench = {
   roots: FileEntryDto[];
   toggleDirectory: (path: string) => void;
   refreshDirectory: (path: string) => void;
-  createEntry: (parent: string, name: string, isDirectory: boolean) => Promise<void>;
+  createEntry: (
+    parent: string,
+    name: string,
+    isDirectory: boolean,
+  ) => Promise<void>;
   renameEntry: (entry: FileEntryDto, newName: string) => Promise<void>;
   trashEntry: (entry: FileEntryDto) => Promise<void>;
   tabs: ProjectFileTab[];
@@ -64,10 +68,16 @@ export function useProjectFileWorkbench(
   generatingPreview: GeneratingPreview | null,
 ): ProjectFileWorkbench {
   const [panelOpen, setPanelOpenState] = useState(false);
-  const [entriesByDirectory, setEntriesByDirectory] = useState<Record<string, FileEntryDto[]>>({});
+  const [entriesByDirectory, setEntriesByDirectory] = useState<
+    Record<string, FileEntryDto[]>
+  >({});
   const entriesRef = useRef<Record<string, FileEntryDto[]>>({});
-  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set());
-  const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(new Set());
+  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(
+    new Set(),
+  );
+  const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(
+    new Set(),
+  );
   const [tabs, setTabs] = useState<ProjectFileTab[]>([]);
   const [activeKey, setActiveKeyState] = useState<string | null>(null);
 
@@ -266,7 +276,13 @@ export function useProjectFileWorkbench(
           setTabs((prev) =>
             prev.map((tab) =>
               tab.key === entry.path
-                ? { ...tab, content, savedContent: content, loading: false, error: null }
+                ? {
+                    ...tab,
+                    content,
+                    savedContent: content,
+                    loading: false,
+                    error: null,
+                  }
                 : tab,
             ),
           );
@@ -322,7 +338,12 @@ export function useProjectFileWorkbench(
       return prev.map((tab, i) => (i === index ? next : tab));
     });
 
-    if (generatingPreview.status !== "done" || !generatingPreview.path || !project) return;
+    if (
+      generatingPreview.status !== "done" ||
+      !generatingPreview.path ||
+      !project
+    )
+      return;
     const path = generatingPreview.path;
     const name = basename(path);
     const plan = projectFileOpenPlan(name);
@@ -396,9 +417,12 @@ export function useProjectFileWorkbench(
   );
 
   const saveActive = useCallback(async () => {
-    if (!project || !activeTab?.path || activeTab.readonly || activeTab.loading) return;
+    if (!project || !activeTab?.path || activeTab.readonly || activeTab.loading)
+      return;
     const key = activeTab.key;
-    setTabs((prev) => prev.map((tab) => (tab.key === key ? { ...tab, saving: true } : tab)));
+    setTabs((prev) =>
+      prev.map((tab) => (tab.key === key ? { ...tab, saving: true } : tab)),
+    );
     try {
       await invoke("project_write_file", {
         projectId: project.id,
@@ -415,7 +439,9 @@ export function useProjectFileWorkbench(
     } catch (error) {
       setTabs((prev) =>
         prev.map((tab) =>
-          tab.key === key ? { ...tab, saving: false, error: String(error) } : tab,
+          tab.key === key
+            ? { ...tab, saving: false, error: String(error) }
+            : tab,
         ),
       );
     }
@@ -432,14 +458,20 @@ export function useProjectFileWorkbench(
   const closeTab = useCallback(
     (key: string) => {
       const target = tabs.find((tab) => tab.key === key);
-      if (target && dirty(target) && !window.confirm(`“${target.name}”尚未保存，仍要关闭吗？`)) {
+      if (
+        target &&
+        dirty(target) &&
+        !window.confirm(`“${target.name}”尚未保存，仍要关闭吗？`)
+      ) {
         return;
       }
       setTabs((prev) => {
         const index = prev.findIndex((tab) => tab.key === key);
         const next = prev.filter((tab) => tab.key !== key);
         if (activeKey === key) {
-          setActiveKeyState(next[Math.max(0, index - 1)]?.key ?? next[0]?.key ?? null);
+          setActiveKeyState(
+            next[Math.max(0, index - 1)]?.key ?? next[0]?.key ?? null,
+          );
         }
         return next;
       });
@@ -448,7 +480,11 @@ export function useProjectFileWorkbench(
   );
 
   const closeAll = useCallback(() => {
-    if (tabs.some(dirty) && !window.confirm("仍有未保存文件，确定关闭全部文件吗？")) return;
+    if (
+      tabs.some(dirty) &&
+      !window.confirm("仍有未保存文件，确定关闭全部文件吗？")
+    )
+      return;
     setTabs([]);
     setActiveKeyState(null);
   }, [tabs]);

@@ -104,8 +104,10 @@
   background: var(--plugins-shell-bg);
   border: 1px solid var(--plugins-shell-border);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
 }
 
 .loop-view-btn {
@@ -119,7 +121,11 @@
   background: transparent;
   color: var(--ink-tertiary);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
 }
 .loop-view-btn:hover {
   color: var(--ink);
@@ -145,7 +151,11 @@
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background 0.15s ease, color 0.15s ease, filter 0.15s ease, transform 0.12s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    filter 0.15s ease,
+    transform 0.12s ease;
 }
 
 .loop-btn--primary {
@@ -163,14 +173,24 @@
   color: var(--ink);
   border: 1px solid var(--plugins-shell-border);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
 }
 .loop-btn--secondary:hover {
   color: var(--tone);
-  border-color: color-mix(in srgb, var(--tone) 28%, var(--plugins-shell-border));
+  border-color: color-mix(
+    in srgb,
+    var(--tone) 28%,
+    var(--plugins-shell-border)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.24)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.66),
+      rgba(255, 255, 255, 0.24)
+    ),
     color-mix(in srgb, var(--tone-soft) 42%, transparent);
 }
 
@@ -185,7 +205,10 @@
   background: transparent;
   color: var(--ink-secondary);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
 }
 .loop-icon-btn:hover {
   background: var(--glass-hover);
@@ -239,8 +262,10 @@
     ),
     var(--glass-panel, var(--bg0));
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
   overflow: hidden;
 }
 .loop-template-picker-header {
@@ -267,13 +292,21 @@
   border: 1px solid color-mix(in srgb, var(--tone, #6366f1) 20%, var(--border));
   background: var(--glass-panel, var(--bg0, #fff));
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    background 0.15s;
   text-align: center;
 }
 .loop-template-card:hover {
   border-color: var(--tone, #6366f1);
-  background: color-mix(in srgb, var(--tone, #6366f1) 6%, var(--glass-panel, var(--bg0, #fff)));
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone, #6366f1) 6%,
+    var(--glass-panel, var(--bg0, #fff))
+  );
+  box-shadow: 0 2px 8px
+    color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
 }
 .loop-template-card-icon {
   display: flex;
@@ -327,7 +360,9 @@
   background: var(--glass-panel);
   border: 1px solid var(--border);
   backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
-  transition: border-color 0.15s, transform 0.15s;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
   overflow: hidden;
 }
 .loop-card:hover {
@@ -478,11 +513,14 @@
   background: var(--glass-panel);
   border: 1px solid var(--border);
   backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)));
-  transition: transform 0.1s, box-shadow 0.15s;
+  transition:
+    transform 0.1s,
+    box-shadow 0.15s;
 }
 .loop-list-row:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--tone, #ec4899) 10%, transparent);
+  box-shadow: 0 2px 8px
+    color-mix(in srgb, var(--tone, #ec4899) 10%, transparent);
 }
 
 .loop-list-row-icon {
@@ -574,7 +612,11 @@
   background: var(--glass-hover);
 }
 .loop-detail-sidebar-item.is-selected {
-  background: color-mix(in srgb, var(--tone-soft, var(--tone, #ec4899)) 65%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone-soft, var(--tone, #ec4899)) 65%,
+    transparent
+  );
 }
 
 .loop-detail-sidebar-icon {

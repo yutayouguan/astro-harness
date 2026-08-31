@@ -8,7 +8,9 @@ test("tracks old and new line numbers across a unified diff hunk", () => {
   );
 
   assert.deepEqual(
-    rows.filter((row) => ["context", "addition", "deletion"].includes(row.kind)),
+    rows.filter((row) =>
+      ["context", "addition", "deletion"].includes(row.kind),
+    ),
     [
       { kind: "context", content: "same", oldLine: 4, newLine: 4 },
       { kind: "deletion", content: "old", oldLine: 5, newLine: null },
@@ -20,7 +22,9 @@ test("tracks old and new line numbers across a unified diff hunk", () => {
 });
 
 test("keeps patch headers as metadata instead of counting them as changes", () => {
-  const rows = parseUnifiedDiff("--- /dev/null\n+++ b/new.ts\n@@ -0,0 +1 @@\n+hello\n");
+  const rows = parseUnifiedDiff(
+    "--- /dev/null\n+++ b/new.ts\n@@ -0,0 +1 @@\n+hello\n",
+  );
   assert.equal(rows.filter((row) => row.kind === "meta").length, 2);
   assert.deepEqual(rows.at(-1), {
     kind: "addition",

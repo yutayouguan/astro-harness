@@ -57,10 +57,16 @@ export const MAX_MCP_STARTUP_TIMEOUT_SECS = 120;
 export const MAX_MCP_TOOL_TIMEOUT_SECS = 3600;
 
 const STARTUP_TIMEOUT_KEYS = [
-  "startupTimeoutSecs", "startupTimeoutSec", "startup_timeout_secs", "startup_timeout_sec",
+  "startupTimeoutSecs",
+  "startupTimeoutSec",
+  "startup_timeout_secs",
+  "startup_timeout_sec",
 ] as const;
 const TOOL_TIMEOUT_KEYS = [
-  "toolTimeoutSecs", "toolTimeoutSec", "tool_timeout_secs", "tool_timeout_sec",
+  "toolTimeoutSecs",
+  "toolTimeoutSec",
+  "tool_timeout_secs",
+  "tool_timeout_sec",
 ] as const;
 
 /** 旧 SSE 不能安全地推断为 Streamable HTTP，必须由用户提供新的 /mcp endpoint。 */
@@ -128,12 +134,20 @@ export function normalizeMcpRuntimeStatus(
       ? raw.tools.filter((tool): tool is string => typeof tool === "string")
       : [],
     required: raw.required === true,
-    error: typeof raw.error === "string" && raw.error.trim() ? raw.error.trim() : undefined,
+    error:
+      typeof raw.error === "string" && raw.error.trim()
+        ? raw.error.trim()
+        : undefined,
     retryable: raw.retryable === true,
-    retryAttempt: Number.isFinite(retryAttempt) ? Math.max(0, Math.trunc(retryAttempt)) : 0,
+    retryAttempt: Number.isFinite(retryAttempt)
+      ? Math.max(0, Math.trunc(retryAttempt))
+      : 0,
     nextRetryAtUnixMs:
-      Number.isFinite(nextRetryAt) && nextRetryAt > 0 ? Math.trunc(nextRetryAt) : undefined,
-    oauthAvailable: values.oauthAvailable === true || values.oauth_available === true,
+      Number.isFinite(nextRetryAt) && nextRetryAt > 0
+        ? Math.trunc(nextRetryAt)
+        : undefined,
+    oauthAvailable:
+      values.oauthAvailable === true || values.oauth_available === true,
     authenticated: values.authenticated === true,
   };
 }
@@ -221,14 +235,16 @@ export type McpServer = {
 };
 
 export function isMcpToolEnabled(server: McpServer, toolName: string): boolean {
-  if (server.enabledTools && !server.enabledTools.includes(toolName)) return false;
+  if (server.enabledTools && !server.enabledTools.includes(toolName))
+    return false;
   if (server.disabledTools.includes(toolName)) return false;
   return server.tools[toolName] ?? true;
 }
 
 const isTauri = () =>
   typeof window !== "undefined" &&
-  !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  !!(window as unknown as { __TAURI_INTERNALS__?: unknown })
+    .__TAURI_INTERNALS__;
 
 function readTimeout(
   raw: Record<string, unknown>,
@@ -278,7 +294,10 @@ function readStringRecord(
   return {};
 }
 
-function readOptionalString(raw: Record<string, unknown>, keys: readonly string[]): string | undefined {
+function readOptionalString(
+  raw: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
   for (const key of keys) {
     const value = raw[key];
     if (typeof value === "string" && value.trim()) return value.trim();
@@ -287,7 +306,10 @@ function readOptionalString(raw: Record<string, unknown>, keys: readonly string[
 }
 
 function readApprovalMode(value: unknown): McpToolApprovalMode | undefined {
-  return value === "auto" || value === "prompt" || value === "writes" || value === "approve"
+  return value === "auto" ||
+    value === "prompt" ||
+    value === "writes" ||
+    value === "approve"
     ? value
     : undefined;
 }
@@ -300,20 +322,30 @@ function readToolSettings(raw: Record<string, unknown>): {
   const approvalModes: Record<string, McpToolApprovalMode> = {};
   const source = raw.tools;
   if (source && typeof source === "object" && !Array.isArray(source)) {
-    for (const [name, value] of Object.entries(source as Record<string, unknown>)) {
+    for (const [name, value] of Object.entries(
+      source as Record<string, unknown>,
+    )) {
       if (typeof value === "boolean") {
         enabled[name] = value;
       } else if (value && typeof value === "object" && !Array.isArray(value)) {
         const settings = value as Record<string, unknown>;
         enabled[name] = settings.enabled !== false;
-        const mode = readApprovalMode(settings.approvalMode ?? settings.approval_mode);
+        const mode = readApprovalMode(
+          settings.approvalMode ?? settings.approval_mode,
+        );
         if (mode) approvalModes[name] = mode;
       }
     }
   }
   const explicitModes = raw.toolApprovalModes ?? raw.tool_approval_modes;
-  if (explicitModes && typeof explicitModes === "object" && !Array.isArray(explicitModes)) {
-    for (const [name, value] of Object.entries(explicitModes as Record<string, unknown>)) {
+  if (
+    explicitModes &&
+    typeof explicitModes === "object" &&
+    !Array.isArray(explicitModes)
+  ) {
+    for (const [name, value] of Object.entries(
+      explicitModes as Record<string, unknown>,
+    )) {
       const mode = readApprovalMode(value);
       if (mode) approvalModes[name] = mode;
     }
@@ -321,7 +353,9 @@ function readToolSettings(raw: Record<string, unknown>): {
   return { enabled, approvalModes };
 }
 
-export function normalizeMcpServer(raw: Partial<McpServer> & { id?: string; name?: string }): McpServer {
+export function normalizeMcpServer(
+  raw: Partial<McpServer> & { id?: string; name?: string },
+): McpServer {
   const config = raw as unknown as Record<string, unknown>;
   const type = inferType(config);
   const toolSettings = readToolSettings(config);
@@ -331,10 +365,16 @@ export function normalizeMcpServer(raw: Partial<McpServer> & { id?: string; name
         name: d.name ?? "",
         description: d.description ?? "",
         title: typeof d.title === "string" ? d.title : undefined,
-        readOnlyHint: typeof d.readOnlyHint === "boolean" ? d.readOnlyHint : undefined,
-        destructiveHint: typeof d.destructiveHint === "boolean" ? d.destructiveHint : undefined,
-        idempotentHint: typeof d.idempotentHint === "boolean" ? d.idempotentHint : undefined,
-        openWorldHint: typeof d.openWorldHint === "boolean" ? d.openWorldHint : undefined,
+        readOnlyHint:
+          typeof d.readOnlyHint === "boolean" ? d.readOnlyHint : undefined,
+        destructiveHint:
+          typeof d.destructiveHint === "boolean"
+            ? d.destructiveHint
+            : undefined,
+        idempotentHint:
+          typeof d.idempotentHint === "boolean" ? d.idempotentHint : undefined,
+        openWorldHint:
+          typeof d.openWorldHint === "boolean" ? d.openWorldHint : undefined,
       }))
     : [];
   const category = MCP_PUBLIC_ENTRY_CATEGORY_IDS.find(
@@ -353,11 +393,19 @@ export function normalizeMcpServer(raw: Partial<McpServer> & { id?: string; name
     env: raw.env && typeof raw.env === "object" ? raw.env : {},
     envVars: readStringArray(config, ["envVars", "env_vars"]) ?? [],
     url: raw.url ?? "",
-    headers: readStringRecord(config, ["headers", "httpHeaders", "http_headers"]),
-    bearerTokenEnvVar: readOptionalString(config, [
-      "bearerTokenEnvVar", "bearer_token_env_var",
+    headers: readStringRecord(config, [
+      "headers",
+      "httpHeaders",
+      "http_headers",
     ]),
-    envHttpHeaders: readStringRecord(config, ["envHttpHeaders", "env_http_headers"]),
+    bearerTokenEnvVar: readOptionalString(config, [
+      "bearerTokenEnvVar",
+      "bearer_token_env_var",
+    ]),
+    envHttpHeaders: readStringRecord(config, [
+      "envHttpHeaders",
+      "env_http_headers",
+    ]),
     auth:
       readOptionalString(config, ["auth"]) === "chatgpt"
         ? "chatgpt"
@@ -366,43 +414,70 @@ export function normalizeMcpServer(raw: Partial<McpServer> & { id?: string; name
           : undefined,
     enabled: raw.enabled ?? true,
     required: config.required === true,
-    cwd: typeof config.cwd === "string" && config.cwd.trim() ? config.cwd.trim() : undefined,
+    cwd:
+      typeof config.cwd === "string" && config.cwd.trim()
+        ? config.cwd.trim()
+        : undefined,
     startupTimeoutSecs: readTimeout(
-      config, STARTUP_TIMEOUT_KEYS, DEFAULT_MCP_STARTUP_TIMEOUT_SECS, MAX_MCP_STARTUP_TIMEOUT_SECS,
+      config,
+      STARTUP_TIMEOUT_KEYS,
+      DEFAULT_MCP_STARTUP_TIMEOUT_SECS,
+      MAX_MCP_STARTUP_TIMEOUT_SECS,
     ),
     toolTimeoutSecs: readTimeout(
-      config, TOOL_TIMEOUT_KEYS, DEFAULT_MCP_TOOL_TIMEOUT_SECS, MAX_MCP_TOOL_TIMEOUT_SECS,
+      config,
+      TOOL_TIMEOUT_KEYS,
+      DEFAULT_MCP_TOOL_TIMEOUT_SECS,
+      MAX_MCP_TOOL_TIMEOUT_SECS,
     ),
     enabledTools: readStringArray(config, ["enabledTools", "enabled_tools"]),
-    disabledTools: readStringArray(config, ["disabledTools", "disabled_tools"]) ?? [],
+    disabledTools:
+      readStringArray(config, ["disabledTools", "disabled_tools"]) ?? [],
     defaultToolsApprovalMode:
-      readApprovalMode(config.defaultToolsApprovalMode ?? config.default_tools_approval_mode) ?? "auto",
+      readApprovalMode(
+        config.defaultToolsApprovalMode ?? config.default_tools_approval_mode,
+      ) ?? "auto",
     tools,
     toolApprovalModes: toolSettings.approvalModes,
     discovered,
     scope:
-      config.scope === "builtin" || config.scope === "project" ? config.scope : "global",
-    provenance: typeof config.provenance === "string" ? config.provenance : "user",
+      config.scope === "builtin" || config.scope === "project"
+        ? config.scope
+        : "global",
+    provenance:
+      typeof config.provenance === "string" ? config.provenance : "user",
     editable: config.editable !== false,
     category,
     featured: config.featured === true,
     websiteUrl: readOptionalString(config, ["websiteUrl", "website_url"]),
     icon: readOptionalString(config, ["icon"]),
     catalogInstallable:
-      typeof config.catalogInstallable === "boolean" ? config.catalogInstallable : undefined,
+      typeof config.catalogInstallable === "boolean"
+        ? config.catalogInstallable
+        : undefined,
     catalogSource: readOptionalString(config, ["catalogSource"]),
     catalogSourceUrl: readOptionalString(config, ["catalogSourceUrl"]),
     catalogDirectoryUrl: readOptionalString(config, ["catalogDirectoryUrl"]),
     catalogUpstreamUrl: readOptionalString(config, ["catalogUpstreamUrl"]),
-    catalogNativeCategory: readOptionalString(config, ["catalogNativeCategory"]),
+    catalogNativeCategory: readOptionalString(config, [
+      "catalogNativeCategory",
+    ]),
     catalogOfficial:
-      typeof config.catalogOfficial === "boolean" ? config.catalogOfficial : undefined,
+      typeof config.catalogOfficial === "boolean"
+        ? config.catalogOfficial
+        : undefined,
     catalogSponsored:
-      typeof config.catalogSponsored === "boolean" ? config.catalogSponsored : undefined,
+      typeof config.catalogSponsored === "boolean"
+        ? config.catalogSponsored
+        : undefined,
     catalogRegistered:
-      typeof config.catalogRegistered === "boolean" ? config.catalogRegistered : undefined,
+      typeof config.catalogRegistered === "boolean"
+        ? config.catalogRegistered
+        : undefined,
     catalogRemote:
-      typeof config.catalogRemote === "boolean" ? config.catalogRemote : undefined,
+      typeof config.catalogRemote === "boolean"
+        ? config.catalogRemote
+        : undefined,
     catalogRemoteUrl: readOptionalString(config, ["catalogRemoteUrl"]),
     catalogRegistryName: readOptionalString(config, ["catalogRegistryName"]),
     catalogPackageTypes: readStringArray(config, ["catalogPackageTypes"]),
@@ -460,11 +535,19 @@ export function parseMcpJson(raw: string): McpServer[] {
             : {},
         envVars: readStringArray(cfg, ["envVars", "env_vars"]) ?? [],
         url: typeof cfg.url === "string" ? cfg.url : "",
-        headers: readStringRecord(cfg, ["headers", "httpHeaders", "http_headers"]),
-        bearerTokenEnvVar: readOptionalString(cfg, [
-          "bearerTokenEnvVar", "bearer_token_env_var",
+        headers: readStringRecord(cfg, [
+          "headers",
+          "httpHeaders",
+          "http_headers",
         ]),
-        envHttpHeaders: readStringRecord(cfg, ["envHttpHeaders", "env_http_headers"]),
+        bearerTokenEnvVar: readOptionalString(cfg, [
+          "bearerTokenEnvVar",
+          "bearer_token_env_var",
+        ]),
+        envHttpHeaders: readStringRecord(cfg, [
+          "envHttpHeaders",
+          "env_http_headers",
+        ]),
         auth:
           readOptionalString(cfg, ["auth"]) === "chatgpt"
             ? "chatgpt"
@@ -472,23 +555,30 @@ export function parseMcpJson(raw: string): McpServer[] {
               ? "oauth"
               : undefined,
         startupTimeoutSecs: readTimeout(
-          cfg, STARTUP_TIMEOUT_KEYS, DEFAULT_MCP_STARTUP_TIMEOUT_SECS, MAX_MCP_STARTUP_TIMEOUT_SECS,
+          cfg,
+          STARTUP_TIMEOUT_KEYS,
+          DEFAULT_MCP_STARTUP_TIMEOUT_SECS,
+          MAX_MCP_STARTUP_TIMEOUT_SECS,
         ),
         toolTimeoutSecs: readTimeout(
-          cfg, TOOL_TIMEOUT_KEYS, DEFAULT_MCP_TOOL_TIMEOUT_SECS, MAX_MCP_TOOL_TIMEOUT_SECS,
+          cfg,
+          TOOL_TIMEOUT_KEYS,
+          DEFAULT_MCP_TOOL_TIMEOUT_SECS,
+          MAX_MCP_TOOL_TIMEOUT_SECS,
         ),
         required: cfg.required === true,
         cwd: typeof cfg.cwd === "string" ? cfg.cwd : undefined,
         enabledTools: readStringArray(cfg, ["enabledTools", "enabled_tools"]),
-        disabledTools: readStringArray(cfg, ["disabledTools", "disabled_tools"]) ?? [],
+        disabledTools:
+          readStringArray(cfg, ["disabledTools", "disabled_tools"]) ?? [],
         defaultToolsApprovalMode:
-          readApprovalMode(cfg.defaultToolsApprovalMode ?? cfg.default_tools_approval_mode) ??
-          "auto",
+          readApprovalMode(
+            cfg.defaultToolsApprovalMode ?? cfg.default_tools_approval_mode,
+          ) ?? "auto",
         tools: (cfg.tools ?? {}) as Record<string, boolean>,
-        toolApprovalModes: (cfg.toolApprovalModes ?? cfg.tool_approval_modes ?? {}) as Record<
-          string,
-          McpToolApprovalMode
-        >,
+        toolApprovalModes: (cfg.toolApprovalModes ??
+          cfg.tool_approval_modes ??
+          {}) as Record<string, McpToolApprovalMode>,
         enabled: true,
       }),
     );
@@ -515,10 +605,18 @@ export function useMcpTools(
   const [ready, setReady] = useState(false);
   const [skipNextSave, setSkipNextSave] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, McpRuntimeStatus>>({});
-  const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(null);
-  const [reconnectingServerIds, setReconnectingServerIds] = useState<Set<string>>(new Set());
-  const [authenticatingServerIds, setAuthenticatingServerIds] = useState<Set<string>>(new Set());
+  const [runtimeStatuses, setRuntimeStatuses] = useState<
+    Record<string, McpRuntimeStatus>
+  >({});
+  const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(
+    null,
+  );
+  const [reconnectingServerIds, setReconnectingServerIds] = useState<
+    Set<string>
+  >(new Set());
+  const [authenticatingServerIds, setAuthenticatingServerIds] = useState<
+    Set<string>
+  >(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -529,7 +627,11 @@ export function useMcpTools(
         if (!cancelled) {
           try {
             const raw = localStorage.getItem("mcp-tools");
-            setServers(raw ? (JSON.parse(raw) as McpServer[]).map(normalizeMcpServer) : []);
+            setServers(
+              raw
+                ? (JSON.parse(raw) as McpServer[]).map(normalizeMcpServer)
+                : [],
+            );
           } catch {
             setServers([]);
           }
@@ -538,7 +640,9 @@ export function useMcpTools(
         return;
       }
       try {
-        const list = await invoke<Partial<McpServer>[]>("get_mcp_servers", { scope });
+        const list = await invoke<Partial<McpServer>[]>("get_mcp_servers", {
+          scope,
+        });
         if (!cancelled) {
           setServers(list.map((s) => normalizeMcpServer(s)));
           setReady(true);
@@ -558,13 +662,18 @@ export function useMcpTools(
   const refreshRuntimeStatuses = useCallback(async () => {
     if (!isTauri()) return;
     try {
-      const list = await invoke<Partial<McpRuntimeStatus>[]>("get_mcp_server_statuses", {
-        agentId: agentId || null,
-      });
+      const list = await invoke<Partial<McpRuntimeStatus>[]>(
+        "get_mcp_server_statuses",
+        {
+          agentId: agentId || null,
+        },
+      );
       setRuntimeStatuses(runtimeStatusRecord(list));
       setRuntimeStatusError(null);
     } catch (error) {
-      setRuntimeStatusError(error instanceof Error ? error.message : String(error));
+      setRuntimeStatusError(
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }, [agentId]);
 
@@ -575,7 +684,10 @@ export function useMcpTools(
       return;
     }
     void refreshRuntimeStatuses();
-    const interval = window.setInterval(() => void refreshRuntimeStatuses(), 5_000);
+    const interval = window.setInterval(
+      () => void refreshRuntimeStatuses(),
+      5_000,
+    );
     return () => window.clearInterval(interval);
   }, [refreshRuntimeStatuses, watchRuntime]);
 
@@ -584,14 +696,19 @@ export function useMcpTools(
       if (!isTauri()) return;
       setReconnectingServerIds((current) => new Set(current).add(serverId));
       try {
-        const list = await invoke<Partial<McpRuntimeStatus>[]>("reconnect_mcp_server", {
-          agentId: agentId || null,
-          serverId,
-        });
+        const list = await invoke<Partial<McpRuntimeStatus>[]>(
+          "reconnect_mcp_server",
+          {
+            agentId: agentId || null,
+            serverId,
+          },
+        );
         setRuntimeStatuses(runtimeStatusRecord(list));
         setRuntimeStatusError(null);
       } catch (error) {
-        setRuntimeStatusError(error instanceof Error ? error.message : String(error));
+        setRuntimeStatusError(
+          error instanceof Error ? error.message : String(error),
+        );
       } finally {
         setReconnectingServerIds((current) => {
           const next = new Set(current);
@@ -621,7 +738,9 @@ export function useMcpTools(
         if (flowId) {
           await invoke("cancel_mcp_oauth", { flowId }).catch(() => undefined);
         }
-        setRuntimeStatusError(error instanceof Error ? error.message : String(error));
+        setRuntimeStatusError(
+          error instanceof Error ? error.message : String(error),
+        );
       } finally {
         setAuthenticatingServerIds((current) => {
           const next = new Set(current);
@@ -641,7 +760,9 @@ export function useMcpTools(
         await invoke("logout_mcp_oauth", { serverId });
         await reconnectServer(serverId);
       } catch (error) {
-        setRuntimeStatusError(error instanceof Error ? error.message : String(error));
+        setRuntimeStatusError(
+          error instanceof Error ? error.message : String(error),
+        );
       } finally {
         setAuthenticatingServerIds((current) => {
           const next = new Set(current);
@@ -672,7 +793,10 @@ export function useMcpTools(
   }, [servers, ready, skipNextSave, scope]);
 
   const addServers = useCallback((incoming: McpServer[]) => {
-    setServers((prev) => [...prev, ...incoming.map((s) => normalizeMcpServer(s))]);
+    setServers((prev) => [
+      ...prev,
+      ...incoming.map((s) => normalizeMcpServer(s)),
+    ]);
   }, []);
 
   const toggleServer = useCallback((id: string) => {
@@ -706,7 +830,9 @@ export function useMcpTools(
     (serverId: string, mode: McpToolApprovalMode) => {
       setServers((prev) =>
         prev.map((server) =>
-          server.id === serverId ? { ...server, defaultToolsApprovalMode: mode } : server,
+          server.id === serverId
+            ? { ...server, defaultToolsApprovalMode: mode }
+            : server,
         ),
       );
     },
@@ -741,7 +867,9 @@ export function useMcpTools(
           agentId: agentId || null,
           serverId: serverId || null,
         });
-        const list = await invoke<Partial<McpServer>[]>("get_mcp_servers", { scope });
+        const list = await invoke<Partial<McpServer>[]>("get_mcp_servers", {
+          scope,
+        });
         setSkipNextSave(true);
         setServers(list.map((s) => normalizeMcpServer(s)));
       } finally {

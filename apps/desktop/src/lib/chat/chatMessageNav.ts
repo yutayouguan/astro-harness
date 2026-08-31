@@ -40,7 +40,8 @@ export function buildChatTurnPreviews(
         id: message.id,
         targetMessageId: message.id,
         messageIds: [message.id],
-        question: compactMessagePreview(message.content, 72) || fallbackQuestion,
+        question:
+          compactMessagePreview(message.content, 72) || fallbackQuestion,
         answer: "",
       });
       continue;
@@ -49,7 +50,9 @@ export function buildChatTurnPreviews(
     const turn = turns[turns.length - 1];
     if (!turn) continue;
     turn.messageIds.push(message.id);
-    const answer = compactMessagePreview(message.content || message.reasoning || "");
+    const answer = compactMessagePreview(
+      message.content || message.reasoning || "",
+    );
     if (answer) turn.answer = answer;
   }
 

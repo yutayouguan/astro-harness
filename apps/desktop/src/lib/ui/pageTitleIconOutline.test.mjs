@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const headerStyles = await readFile(
-  new URL("../../styles/features/shell/layout/content-header.css", import.meta.url),
+  new URL(
+    "../../styles/features/shell/layout/content-header.css",
+    import.meta.url,
+  ),
   "utf8",
 );
 const navigationStyles = await readFile(

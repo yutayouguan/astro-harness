@@ -38,9 +38,12 @@ export type ActivityTitlePresentation = {
 
 const SEARCH_NAMES = /(^|[_-])(search|grep|rg|find|glob|query)([_-]|$)/;
 const READ_NAMES = /(^|[_-])(read|open|list|view|inspect|stat)([_-]|$)/;
-const RUN_NAMES = /(^|[_-])(run|exec|execute|exec_command|shell|command|code_exec)([_-]|$)/;
-const EDIT_NAMES = /(^|[_-])(edit|write|patch|apply|create|delete|remove|move|copy|rename)([_-]|$)/;
-const BROWSE_NAMES = /(^|[_-])(browser|fetch|crawl|navigate|visit|http|url)([_-]|$)/;
+const RUN_NAMES =
+  /(^|[_-])(run|exec|execute|exec_command|shell|command|code_exec)([_-]|$)/;
+const EDIT_NAMES =
+  /(^|[_-])(edit|write|patch|apply|create|delete|remove|move|copy|rename)([_-]|$)/;
+const BROWSE_NAMES =
+  /(^|[_-])(browser|fetch|crawl|navigate|visit|http|url)([_-]|$)/;
 const MEDIA_NAMES = /(^|[_-])(image|video|audio|media|render|generate)([_-]|$)/;
 const IMAGE_GENERATION_NAMES =
   /(^|[_:-])(image[_-]?(gen|generate|generation)|generate[_-]?image)([_:-]|$)/;
@@ -88,14 +91,14 @@ export function activityDisplayTarget(activity: ChatActivity): string {
   const kind = activityVisualKind(activity);
   const raw =
     kind === "search"
-      ? input.query ?? input.pattern ?? input.path
+      ? (input.query ?? input.pattern ?? input.path)
       : kind === "run"
-        ? input.command ?? input.cmd ?? input.code
+        ? (input.command ?? input.cmd ?? input.code)
         : kind === "browse"
-          ? input.url ?? input.href
+          ? (input.url ?? input.href)
           : kind === "media"
-            ? input.prompt ?? input.path
-            : input.path ?? input.file ?? input.target;
+            ? (input.prompt ?? input.path)
+            : (input.path ?? input.file ?? input.target);
   if (typeof raw !== "string") return patchTarget;
 
   const firstLine = raw.trim().split(/\r?\n/, 1)[0] ?? "";
@@ -115,7 +118,9 @@ export function activityTitlePresentation(
   if (!isSemanticTitleKind(kind)) return null;
   // Media prompts can be long and visually unstable. Keep the summary terse;
   // the complete prompt remains available in the expanded input section.
-  const target = isGeneratedMediaKind(kind) ? "" : activityDisplayTarget(activity);
+  const target = isGeneratedMediaKind(kind)
+    ? ""
+    : activityDisplayTarget(activity);
   const namespace = target ? "item" : "action";
   const state = activity.status ? `.${activity.status}` : "";
   return {
@@ -170,13 +175,19 @@ function activityPatchTarget(input: string | undefined): string {
     // Freeform tool arguments are valid input even when they are not JSON.
   }
 
-  const paths = [...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s*(.+?)\s*$/gm)]
+  const paths = [
+    ...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s*(.+?)\s*$/gm),
+  ]
     .map((match) => match[1]?.trim() ?? "")
     .filter(Boolean);
   if (paths.length === 0) return "";
 
   const unique = [...new Set(paths)];
-  const first = unique[0]!.replace(/\\/g, "/").split("/").filter(Boolean).pop()!;
+  const first = unique[0]!
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .pop()!;
   return unique.length > 1 ? `${first} +${unique.length - 1}` : first;
 }
 
@@ -186,7 +197,9 @@ function activityOperation(input: string | undefined): string {
   return typeof operation === "string" ? operation.trim().toLowerCase() : "";
 }
 
-function activityInput(input: string | undefined): Record<string, unknown> | null {
+function activityInput(
+  input: string | undefined,
+): Record<string, unknown> | null {
   if (!input?.trim()) return null;
   try {
     const value = JSON.parse(input);

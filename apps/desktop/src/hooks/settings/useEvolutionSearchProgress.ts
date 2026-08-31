@@ -16,19 +16,13 @@ export function useEvolutionSearchProgress(
 
   useEffect(() => {
     if (!active) return;
-    if (
-      typeof window === "undefined" ||
-      !("__TAURI_INTERNALS__" in window)
-    )
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
       return;
     let unlisten: (() => void) | undefined;
-    void listen<SearchProgressEvent>(
-      "evolution-search-progress",
-      (ev) => {
-        eventsRef.current = [...eventsRef.current, ev.payload];
-        setEvents(eventsRef.current);
-      },
-    )
+    void listen<SearchProgressEvent>("evolution-search-progress", (ev) => {
+      eventsRef.current = [...eventsRef.current, ev.payload];
+      setEvents(eventsRef.current);
+    })
       .then((fn) => {
         unlisten = fn;
       })

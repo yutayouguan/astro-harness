@@ -26,13 +26,19 @@ test("welcome logo mounts a lazily loaded vgpu material layer", () => {
 test("3D logo lighting follows pointer and respects reduced motion and fallback", () => {
   assert.match(canvas, /addEventListener\("pointermove"/);
   assert.match(canvas, /prefers-reduced-motion: reduce/);
-  assert.match(canvas, /frame\(gpu, \(currentFrame\) => draw\(currentFrame, 0\)\)/);
+  assert.match(
+    canvas,
+    /frame\(gpu, \(currentFrame\) => draw\(currentFrame, 0\)\)/,
+  );
   assert.match(canvas, /canvas\.dataset\.ready = "false"/);
   assert.match(canvas, /ASTRO_MARK_PATH/);
   assert.match(canvas, /className="chat-welcome-logo-stack"/);
   assert.match(canvas, /chat-welcome-logo--depth-far/);
   assert.match(canvas, /className="chat-welcome-logo-lighting-fallback"/);
-  assert.match(styles, /\.chat-welcome-logo-lighting\[data-ready="true"\] \+ \.chat-welcome-logo-lighting-fallback/);
+  assert.match(
+    styles,
+    /\.chat-welcome-logo-lighting\[data-ready="true"\]\s*\+\s*\.chat-welcome-logo-lighting-fallback/,
+  );
   assert.match(styles, /@keyframes welcome-logo-material-sweep/);
   assert.doesNotMatch(canvas, /inside_triangle|chat-welcome-led-fallback/);
   assert.match(styles, /\.chat-welcome-orb/);

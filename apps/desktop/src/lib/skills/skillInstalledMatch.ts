@@ -17,7 +17,9 @@ function folderFromId(id: string): string | undefined {
 }
 
 /** 从 install_ref 推断本地技能文件夹名（与 Rust `infer_folder` 对齐）。 */
-export function inferFolderFromInstallRef(installRef: string): string | undefined {
+export function inferFolderFromInstallRef(
+  installRef: string,
+): string | undefined {
   const trimmed = installRef.trim();
   if (!trimmed) return undefined;
   if (trimmed.startsWith("skillhub:")) {
@@ -84,7 +86,9 @@ export function isStoreSkillInstalled(
   return storeSkillMatchKeys(skill).some((k) => availableKeys.has(k));
 }
 
-function skillHubIdentity(value: string | undefined | null): string | undefined {
+function skillHubIdentity(
+  value: string | undefined | null,
+): string | undefined {
   const raw = value?.trim().toLowerCase();
   if (!raw) return undefined;
   if (raw.startsWith("skillhub:")) {
@@ -141,7 +145,9 @@ export function isStoreSkillInstalledWithOrigins(
   });
   if (
     installedOrigins.some((origin) =>
-      [...originIdentities(origin)].some((identity) => identities.has(identity)),
+      [...originIdentities(origin)].some((identity) =>
+        identities.has(identity),
+      ),
     )
   ) {
     return true;

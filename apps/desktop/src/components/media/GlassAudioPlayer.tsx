@@ -50,7 +50,10 @@ export default function GlassAudioPlayer({ src, className, onError }: Props) {
     const el = audioRef.current;
     if (!el) return;
     if (el.paused) {
-      void el.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+      void el
+        .play()
+        .then(() => setPlaying(true))
+        .catch(() => setPlaying(false));
     } else {
       el.pause();
       setPlaying(false);

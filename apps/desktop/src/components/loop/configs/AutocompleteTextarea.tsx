@@ -27,12 +27,21 @@ interface SuggestionItem {
 }
 
 export default function AutocompleteTextarea({
-  value, onChange, upstream, placeholder, className, rows = 4, multiline = true,
+  value,
+  onChange,
+  upstream,
+  placeholder,
+  className,
+  rows = 4,
+  multiline = true,
 }: Props) {
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [triggerPos, setTriggerPos] = useState<number | null>(null);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -114,7 +123,8 @@ export default function AutocompleteTextarea({
       // 恢复光标位置
       requestAnimationFrame(() => {
         if (el) {
-          const newPos = before.length + inserted.length + (after.startsWith("}}") ? 2 : 0);
+          const newPos =
+            before.length + inserted.length + (after.startsWith("}}") ? 2 : 0);
           el.selectionStart = el.selectionEnd = newPos;
           el.focus();
         }
@@ -132,7 +142,9 @@ export default function AutocompleteTextarea({
         setSelectedIdx((i) => (i + 1) % suggestions.length);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIdx((i) => (i - 1 + suggestions.length) % suggestions.length);
+        setSelectedIdx(
+          (i) => (i - 1 + suggestions.length) % suggestions.length,
+        );
       } else if (e.key === "Enter" || e.key === "Tab") {
         if (suggestions[selectedIdx]) {
           e.preventDefault();
@@ -166,9 +178,12 @@ export default function AutocompleteTextarea({
 
   const sharedProps = {
     ref: inputRef as React.RefObject<HTMLTextAreaElement & HTMLInputElement>,
-    className: className ?? (multiline ? "loop-config-textarea" : "loop-config-input"),
+    className:
+      className ?? (multiline ? "loop-config-textarea" : "loop-config-input"),
     value,
-    onChange: (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+    onChange: (
+      e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>,
+    ) => {
       onChange(e.target.value);
     },
     onKeyUp: checkTrigger,

@@ -13,7 +13,8 @@
 .ui-surface--card {
   border-radius: var(--primitive-radius-lg, 18px);
   padding: 20px;
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--color-text, #111827) 5%, transparent);
+  box-shadow: 0 1px 4px
+    color-mix(in srgb, var(--color-text, #111827) 5%, transparent);
 }
 
 .ui-surface--elevated {
@@ -48,7 +49,8 @@
 }
 
 .ui-surface.is-interactive:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-accent, #7c3aed) 62%, transparent);
+  outline: 2px solid
+    color-mix(in srgb, var(--color-accent, #7c3aed) 62%, transparent);
   outline-offset: 2px;
 }
 

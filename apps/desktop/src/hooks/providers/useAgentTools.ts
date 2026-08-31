@@ -26,7 +26,8 @@ import type { MessageKey } from "../../i18n/messages";
 
 const IS_TAURI =
   typeof window !== "undefined" &&
-  !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  !!(window as unknown as { __TAURI_INTERNALS__?: unknown })
+    .__TAURI_INTERNALS__;
 
 export type AgentToolId =
   | "web_search"
@@ -504,7 +505,6 @@ type CatalogItemDto = {
   functions?: CatalogFnDto[];
 };
 
-
 function defaultEnabled(): Record<AgentToolId, boolean> {
   return Object.fromEntries(
     AGENT_TOOLS.map((tool) => [tool.id, true]),
@@ -598,7 +598,8 @@ export function useAgentToolDefs() {
 }
 
 export function useAgentTools(agentId?: string | null) {
-  const [enabled, setEnabled] = useState<Record<AgentToolId, boolean>>(defaultEnabled);
+  const [enabled, setEnabled] =
+    useState<Record<AgentToolId, boolean>>(defaultEnabled);
   const [ready, setReady] = useState(false);
   const skipNextSave = useRef(true);
   const { tools, catalogReady } = useAgentToolDefs();
@@ -622,9 +623,12 @@ export function useAgentTools(agentId?: string | null) {
         return;
       }
       try {
-        const stored = await invoke<Record<string, boolean>>("get_tools_enabled", {
-          agentId: agentId || null,
-        });
+        const stored = await invoke<Record<string, boolean>>(
+          "get_tools_enabled",
+          {
+            agentId: agentId || null,
+          },
+        );
         if (!cancelled) {
           setEnabled(mergeEnabled(stored));
           setReady(true);
@@ -653,7 +657,10 @@ export function useAgentTools(agentId?: string | null) {
       }
       return;
     }
-    void invoke("set_tools_enabled", { enabled, agentId: agentId || null }).catch(() => {});
+    void invoke("set_tools_enabled", {
+      enabled,
+      agentId: agentId || null,
+    }).catch(() => {});
   }, [enabled, ready, agentId]);
 
   const toggle = useCallback((id: AgentToolId) => {

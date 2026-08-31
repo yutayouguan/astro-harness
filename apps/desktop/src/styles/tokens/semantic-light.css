@@ -20,15 +20,33 @@ html[data-theme="light"] {
   --surface-panel-hover: rgba(255, 255, 255, 0.38);
 
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(147, 197, 253, 0.42), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(196, 181, 253, 0.32), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(167, 243, 208, 0.22), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(147, 197, 253, 0.42),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(196, 181, 253, 0.32),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(167, 243, 208, 0.22),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f4f6fa 0%, #e9eef6 48%, #e4eaf3 100%);
-  --user-fill: linear-gradient(145deg, rgba(219, 234, 254, 0.72), rgba(191, 219, 254, 0.42));
+  --user-fill: linear-gradient(
+    145deg,
+    rgba(219, 234, 254, 0.72),
+    rgba(191, 219, 254, 0.42)
+  );
   --assist-fill: rgba(255, 255, 255, 0.18);
   --shadow-ink: 18, 18, 22;
   --shadow: 0 4px 16px rgba(var(--shadow-ink), 0.05);
-  --shadow-card: 0 1px 6px rgba(var(--shadow-ink), 0.04), 0 0 1px rgba(var(--shadow-ink), 0.03);
+  --shadow-card:
+    0 1px 6px rgba(var(--shadow-ink), 0.04),
+    0 0 1px rgba(var(--shadow-ink), 0.03);
   --scroll-thumb: rgba(148, 163, 184, 0.16);
   --send-fg: #1e293b;
 

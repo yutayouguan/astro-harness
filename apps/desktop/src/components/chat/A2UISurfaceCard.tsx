@@ -1,7 +1,13 @@
 /** 可折叠的 A2UI surface 卡头：非 HITL 的 present_* 工具结果用此包裹。 */
 
 import { useState } from "react";
-import { AlertCircle, BarChart3, CheckCircle, Info, Music2 } from "lucide-react";
+import {
+  AlertCircle,
+  BarChart3,
+  CheckCircle,
+  Info,
+  Music2,
+} from "lucide-react";
 import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
@@ -27,7 +33,11 @@ function surfaceComponents(surface: UiSurface) {
 function detectKind(surface: UiSurface): SurfaceKind {
   const components = surfaceComponents(surface);
   const types = new Set(components.map((c) => c.component));
-  if (types.has("Audio") || types.has("Video") || (types.has("Image") && types.has("Badge"))) {
+  if (
+    types.has("Audio") ||
+    types.has("Video") ||
+    (types.has("Image") && types.has("Badge"))
+  ) {
     const card = components.find((c) => c.component === "Card");
     if (card?.variant === "media" || types.has("Audio") || types.has("Video")) {
       return "media";

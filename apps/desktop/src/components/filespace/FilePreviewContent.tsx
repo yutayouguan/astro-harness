@@ -11,13 +11,7 @@ import MediaPreview from "../media/MediaPreview";
 import MediaToolbar from "../media/MediaToolbar";
 
 export type PreviewContentKind =
-  | "text"
-  | "markdown"
-  | "html"
-  | "image"
-  | "video"
-  | "audio"
-  | "pdf";
+  "text" | "markdown" | "html" | "image" | "video" | "audio" | "pdf";
 
 type Props = {
   kind: PreviewContentKind;

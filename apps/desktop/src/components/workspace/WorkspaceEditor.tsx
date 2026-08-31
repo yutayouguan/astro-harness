@@ -16,7 +16,12 @@ type Props = {
   onChange: (value: string) => void;
 };
 
-export default function WorkspaceEditor({ value, filename, theme, onChange }: Props) {
+export default function WorkspaceEditor({
+  value,
+  filename,
+  theme,
+  onChange,
+}: Props) {
   const extensions = useMemo(
     () => [codeMirrorTheme(theme), ...languageForFilename(filename)],
     [filename, theme],

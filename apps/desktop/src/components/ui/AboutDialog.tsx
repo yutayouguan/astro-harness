@@ -109,11 +109,7 @@ export default function AboutDialog({ open, onClose }: Props) {
           ))}
         </ul>
 
-        <button
-          type="button"
-          className="about-dialog-ok"
-          onClick={onClose}
-        >
+        <button type="button" className="about-dialog-ok" onClick={onClose}>
           {t("about.close")}
         </button>
       </div>

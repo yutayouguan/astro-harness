@@ -78,9 +78,7 @@ function RunStatusBadge({ status }: { status: string }) {
       );
     default:
       return (
-        <span className="loop-run-badge loop-run-badge--pending">
-          {status}
-        </span>
+        <span className="loop-run-badge loop-run-badge--pending">{status}</span>
       );
   }
 }
@@ -175,7 +173,12 @@ export default function LoopRunDetail({ runId, onBack }: Props) {
   if (error) {
     return (
       <div className="loop-run-detail">
-        <div className="loop-empty" style={{ color: "var(--ink-error, #ef4444)" }}>{error}</div>
+        <div
+          className="loop-empty"
+          style={{ color: "var(--ink-error, #ef4444)" }}
+        >
+          {error}
+        </div>
       </div>
     );
   }
@@ -188,8 +191,7 @@ export default function LoopRunDetail({ runId, onBack }: Props) {
     );
   }
 
-  const truncatedId =
-    run.id.length > 12 ? run.id.slice(0, 12) + "…" : run.id;
+  const truncatedId = run.id.length > 12 ? run.id.slice(0, 12) + "…" : run.id;
 
   return (
     <div className="loop-run-detail">

@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
+import {
+  TextField,
+  NumberField,
+  SelectField,
+  cfgStr,
+  cfgNum,
+} from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import { getVoiceOptions } from "./minimaxVoices";
 import type { UpstreamOutput } from "./upstreamOutputs";
@@ -17,7 +23,11 @@ const OUTPUT_FORMAT_OPTIONS = [
   { value: "flac", label: "FLAC" },
 ];
 
-export default function TtsConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function TtsConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   const providerId = cfgStr(config, "provider_id");
   const voices = useMemo(() => getVoiceOptions(providerId), [providerId]);
@@ -71,7 +81,11 @@ export default function TtsConfig({ config, onChange, upstreamOutputs }: ConfigP
       {hasVoiceList && (
         <TextField
           label="自定义 Voice ID（可选）"
-          value={currentVoice && !voices.some((v) => v.value === currentVoice) ? currentVoice : ""}
+          value={
+            currentVoice && !voices.some((v) => v.value === currentVoice)
+              ? currentVoice
+              : ""
+          }
           onChange={(v) => onChange({ ...config, voice: v })}
           placeholder="手动输入 voice_id（覆盖上方选择）"
           hint="如已克隆的音色 ID"

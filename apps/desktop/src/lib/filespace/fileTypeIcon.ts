@@ -357,10 +357,7 @@ export function fileExt(name: string): string {
  * 解析文件类型图标。
  * `isDir` 时固定为文件夹图标。
  */
-export function resolveFileType(
-  name: string,
-  isDir = false,
-): ResolvedFileType {
+export function resolveFileType(name: string, isDir = false): ResolvedFileType {
   if (isDir) return entry("folder", Folder, "folder");
 
   const base = (name.split(/[/\\]/).pop() ?? name).toLowerCase();
@@ -368,7 +365,11 @@ export function resolveFileType(
   if (base === "dockerfile" || base.startsWith("dockerfile.")) {
     return entry("package", Package);
   }
-  if (base === "makefile" || base === "gnumakefile" || base === "cmakelists.txt") {
+  if (
+    base === "makefile" ||
+    base === "gnumakefile" ||
+    base === "cmakelists.txt"
+  ) {
     return entry("config", FileCog);
   }
   if (
@@ -402,7 +403,8 @@ export function resolveFileType(
   // README / LICENSE 等（含 README.md）
   const stem = base.includes(".") ? base.slice(0, base.indexOf(".")) : base;
   if (stem === "readme") return entry("md", BookText);
-  if (stem === "license" || stem === "licence") return entry("text", ScrollText);
+  if (stem === "license" || stem === "licence")
+    return entry("text", ScrollText);
   if (BASENAME_MAP[base]) return BASENAME_MAP[base];
 
   const ext = fileExt(name);

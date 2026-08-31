@@ -19,7 +19,10 @@ export function useFileSelection(visibleIds: string[]) {
   const [state, setState] = useState<SelectionState>(() => emptySelection());
 
   const onItemClick = useCallback(
-    (id: string, e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean }) => {
+    (
+      id: string,
+      e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean },
+    ) => {
       setState((prev) => {
         if (e.shiftKey) return applyRange(prev, id, visibleIds);
         if (e.metaKey || e.ctrlKey) return applyToggle(prev, id, visibleIds);
@@ -49,6 +52,7 @@ export function useFileSelection(visibleIds: string[]) {
     onCheckboxToggle,
     prepareMenu,
     clear,
-    setOnly: (id: string) => setState(applyClick(emptySelection(), id, visibleIds)),
+    setOnly: (id: string) =>
+      setState(applyClick(emptySelection(), id, visibleIds)),
   };
 }

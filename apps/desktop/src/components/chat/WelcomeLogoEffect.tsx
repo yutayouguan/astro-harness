@@ -69,7 +69,8 @@ export function WelcomeLogoEffect() {
     let disposeRenderer: (() => void) | undefined;
 
     const initialize = async () => {
-      const { clock, effect, frame, frameLoop, init, surface } = await import("vgpu");
+      const { clock, effect, frame, frameLoop, init, surface } =
+        await import("vgpu");
       if (cancelled) return;
 
       const gpu = await init();
@@ -120,15 +121,34 @@ export function WelcomeLogoEffect() {
       const interactionRoot = canvas.closest<HTMLElement>(".chat-welcome-mark");
       const updatePointer = (event: PointerEvent) => {
         const bounds = canvas.getBoundingClientRect();
-        pointer.x = Math.min(1, Math.max(0, (event.clientX - bounds.left) / Math.max(1, bounds.width)));
-        pointer.y = Math.min(1, Math.max(0, (event.clientY - bounds.top) / Math.max(1, bounds.height)));
-        pointer.active = event.clientX >= bounds.left && event.clientX <= bounds.right &&
-          event.clientY >= bounds.top && event.clientY <= bounds.bottom ? 1 : 0;
+        pointer.x = Math.min(
+          1,
+          Math.max(
+            0,
+            (event.clientX - bounds.left) / Math.max(1, bounds.width),
+          ),
+        );
+        pointer.y = Math.min(
+          1,
+          Math.max(
+            0,
+            (event.clientY - bounds.top) / Math.max(1, bounds.height),
+          ),
+        );
+        pointer.active =
+          event.clientX >= bounds.left &&
+          event.clientX <= bounds.right &&
+          event.clientY >= bounds.top &&
+          event.clientY <= bounds.bottom
+            ? 1
+            : 0;
       };
       const clearPointer = () => {
         pointer.active = 0;
       };
-      interactionRoot?.addEventListener("pointermove", updatePointer, { passive: true });
+      interactionRoot?.addEventListener("pointermove", updatePointer, {
+        passive: true,
+      });
       interactionRoot?.addEventListener("pointerleave", clearPointer);
 
       let dark = isDarkTheme();
@@ -141,9 +161,14 @@ export function WelcomeLogoEffect() {
         attributeFilter: ["data-theme"],
       });
 
-      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const reducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
       const timer = clock(gpu);
-      const draw = (currentFrame: Parameters<Parameters<typeof frameLoop>[1]>[0], time: number) => {
+      const draw = (
+        currentFrame: Parameters<Parameters<typeof frameLoop>[1]>[0],
+        time: number,
+      ) => {
         ledEffect.set({
           motion: {
             pointer: [pointer.x, pointer.y],
@@ -158,7 +183,9 @@ export function WelcomeLogoEffect() {
       if (reducedMotion) {
         frame(gpu, (currentFrame) => draw(currentFrame, 0));
       } else {
-        loop = frameLoop(gpu, (currentFrame) => draw(currentFrame, timer.time % 4096));
+        loop = frameLoop(gpu, (currentFrame) =>
+          draw(currentFrame, timer.time % 4096),
+        );
       }
       canvas.dataset.ready = "true";
 
@@ -189,10 +216,26 @@ export function WelcomeLogoEffect() {
 
   return (
     <span className="chat-welcome-logo-stack" style={maskStyle}>
-      <AstroLogoMark className="chat-welcome-logo chat-welcome-logo--depth chat-welcome-logo--depth-far" width={72} height={72} />
-      <AstroLogoMark className="chat-welcome-logo chat-welcome-logo--depth chat-welcome-logo--depth-near" width={72} height={72} />
-      <AstroLogoMark className="chat-welcome-logo chat-welcome-logo--front" width={72} height={72} />
-      <canvas ref={canvasRef} className="chat-welcome-logo-lighting" aria-hidden />
+      <AstroLogoMark
+        className="chat-welcome-logo chat-welcome-logo--depth chat-welcome-logo--depth-far"
+        width={72}
+        height={72}
+      />
+      <AstroLogoMark
+        className="chat-welcome-logo chat-welcome-logo--depth chat-welcome-logo--depth-near"
+        width={72}
+        height={72}
+      />
+      <AstroLogoMark
+        className="chat-welcome-logo chat-welcome-logo--front"
+        width={72}
+        height={72}
+      />
+      <canvas
+        ref={canvasRef}
+        className="chat-welcome-logo-lighting"
+        aria-hidden
+      />
       <span className="chat-welcome-logo-lighting-fallback" aria-hidden />
     </span>
   );

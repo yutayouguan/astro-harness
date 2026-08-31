@@ -123,7 +123,10 @@ export default function ShellGradientEditor({
     return { x: clampPercent(x), y: clampPercent(y) };
   };
 
-  const onPointerDownStop = (index: number, e: ReactPointerEvent<HTMLButtonElement>) => {
+  const onPointerDownStop = (
+    index: number,
+    e: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
     e.preventDefault();
     e.stopPropagation();
     setActive(index);
@@ -140,7 +143,10 @@ export default function ShellGradientEditor({
   };
 
   const onPointerUp = (e: ReactPointerEvent<HTMLElement>) => {
-    if (dragRef.current != null && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+    if (
+      dragRef.current != null &&
+      e.currentTarget.hasPointerCapture?.(e.pointerId)
+    ) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     dragRef.current = null;
@@ -153,7 +159,10 @@ export default function ShellGradientEditor({
     updateStop(active, pt);
   };
 
-  const onStopKeyDown = (index: number, e: ReactKeyboardEvent<HTMLButtonElement>) => {
+  const onStopKeyDown = (
+    index: number,
+    e: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => {
     const step = e.shiftKey ? 5 : 2;
     let dx = 0;
     let dy = 0;
@@ -174,7 +183,9 @@ export default function ShellGradientEditor({
     if (stops.length >= 5) return;
     const index = stops.length;
     const color =
-      SHELL_GRADIENT_SWATCH_COLORS[(index + 2) % SHELL_GRADIENT_SWATCH_COLORS.length];
+      SHELL_GRADIENT_SWATCH_COLORS[
+        (index + 2) % SHELL_GRADIENT_SWATCH_COLORS.length
+      ];
     const offsets = [
       { x: 50, y: 50 },
       { x: 35, y: 65 },
@@ -226,7 +237,9 @@ export default function ShellGradientEditor({
             <h3 id={titleId} className="shell-grad-editor-title">
               {t("prefs.colorStyle.editorTitle")}
             </h3>
-            <p className="shell-grad-editor-sub">{t("prefs.colorStyle.editorSub")}</p>
+            <p className="shell-grad-editor-sub">
+              {t("prefs.colorStyle.editorSub")}
+            </p>
           </div>
         </header>
 
@@ -291,7 +304,11 @@ export default function ShellGradientEditor({
           </div>
         </div>
 
-        <div className="shell-grad-palette" role="group" aria-label={t("prefs.colorStyle.swatches")}>
+        <div
+          className="shell-grad-palette"
+          role="group"
+          aria-label={t("prefs.colorStyle.swatches")}
+        >
           {SHELL_GRADIENT_SWATCH_COLORS.map((color) => (
             <button
               key={color}
@@ -304,7 +321,10 @@ export default function ShellGradientEditor({
               onClick={() => updateStop(active, { color })}
             />
           ))}
-          <label className="shell-grad-custom-color" title={t("prefs.colorStyle.pickColor")}>
+          <label
+            className="shell-grad-custom-color"
+            title={t("prefs.colorStyle.pickColor")}
+          >
             <span className="shell-grad-custom-color-core" aria-hidden />
             <span
               className="shell-grad-custom-color-dot"
@@ -321,7 +341,11 @@ export default function ShellGradientEditor({
         </div>
 
         <footer className="shell-grad-editor-actions">
-          <button type="button" className="shell-grad-btn shell-grad-btn--ghost" onClick={onCancel}>
+          <button
+            type="button"
+            className="shell-grad-btn shell-grad-btn--ghost"
+            onClick={onCancel}
+          >
             {t("prefs.colorStyle.cancel")}
           </button>
           <button

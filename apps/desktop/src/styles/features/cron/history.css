@@ -12,11 +12,17 @@
   z-index: 40;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--glass-fill) 70%, transparent);
   box-shadow: none;
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
   box-sizing: border-box;
 }
 
@@ -34,7 +40,11 @@
 
 html[data-theme="dark"] .cron-history-filters {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 18%, rgba(8, 6, 18, 0.32));
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow: none;
@@ -64,12 +74,24 @@ html[data-theme="dark"] .cron-history-filters {
 
 html[data-theme="dark"] .cron-history-filters .select-menu {
   --select-glass-fill:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     color-mix(in srgb, var(--tone) 14%, transparent);
   --select-glass-fill-hover:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.05)
+    ),
     color-mix(in srgb, var(--tone) 18%, transparent);
-  --select-glass-edge: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.14));
+  --select-glass-edge: color-mix(
+    in srgb,
+    var(--tone) 28%,
+    rgba(255, 255, 255, 0.14)
+  );
   --select-glass-rim: none;
   --select-glass-shadow: none;
 }
@@ -79,8 +101,13 @@ html[data-theme="dark"] .cron-history-filters .select-menu-trigger {
   box-shadow: none;
 }
 
-html[data-theme="dark"] .cron-history-filters .select-menu-trigger:hover:not(:disabled),
-html[data-theme="dark"] .cron-history-filters .select-menu.is-open .select-menu-trigger {
+html[data-theme="dark"]
+  .cron-history-filters
+  .select-menu-trigger:hover:not(:disabled),
+html[data-theme="dark"]
+  .cron-history-filters
+  .select-menu.is-open
+  .select-menu-trigger {
   border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.16));
   color: color-mix(in srgb, #fff 36%, var(--tone));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone) 16%, transparent);
@@ -119,7 +146,11 @@ html[data-theme="dark"] .cron-history-filters .select-menu.is-open .select-menu-
   text-align: left;
   color: var(--ink);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.16)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.4),
+      rgba(255, 255, 255, 0.16)
+    ),
     rgba(255, 255, 255, 0.24);
   border-color: color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   box-shadow: none;
@@ -133,7 +164,11 @@ html[data-theme="dark"] .cron-history-filters .select-menu.is-open .select-menu-
 
 html[data-theme="dark"] .cron-history-date-btn.cron-sched-field-shell {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     color-mix(in srgb, var(--tone) 14%, transparent);
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.14));
   box-shadow: none;
@@ -148,7 +183,8 @@ html[data-theme="dark"] .cron-history-date-btn.cron-sched-field-shell {
 }
 
 html[data-theme="dark"] .cron-history-date-btn.is-open,
-html[data-theme="dark"] .cron-history-date-btn.cron-sched-field-shell:focus-visible {
+html[data-theme="dark"]
+  .cron-history-date-btn.cron-sched-field-shell:focus-visible {
   border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.16));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent);
 }
@@ -189,7 +225,9 @@ html[data-theme="dark"] .cron-history-date-btn.cron-sched-field-shell:focus-visi
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .cron-dt-clear:hover {
@@ -238,13 +276,23 @@ html[data-theme="dark"] .cron-dt-clear {
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.45),
+      rgba(255, 255, 255, 0.15)
+    ),
+    color-mix(
+      in srgb,
+      var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%,
+      transparent
+    );
   box-shadow:
     var(--glass-rim),
     0 4px 12px color-mix(in srgb, var(--tone) 6%, transparent);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
   overflow: hidden;
 }
 
@@ -253,14 +301,21 @@ html[data-theme="dark"] .cron-dt-clear {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--tone) 18%, transparent), transparent 55%);
+  background: radial-gradient(
+    circle at 12% 16%,
+    color-mix(in srgb, var(--tone) 18%, transparent),
+    transparent 55%
+  );
   opacity: 0.75;
 }
 
 html[data-theme="dark"] .cron-timeline-card {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.01) 100%
+    ),
     rgba(8, 6, 18, 0.55);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
@@ -354,8 +409,11 @@ html[data-theme="dark"] .cron-timeline-card {
   font-weight: 650;
   line-height: 1.2;
   color: var(--ink-soft);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.28));
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0.28)
+  );
   border: 1px solid color-mix(in srgb, var(--glass-edge) 85%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
   white-space: nowrap;
@@ -372,7 +430,11 @@ html[data-theme="dark"] .cron-timeline-card {
 html[data-theme="dark"] .cron-timeline-meta-chip {
   color: var(--ink-soft);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -387,25 +449,39 @@ html[data-theme="dark"] .cron-timeline-meta-chip {
   border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
   border-radius: 999px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.12)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.25),
+      rgba(255, 255, 255, 0.12)
+    ),
     var(--tone-soft);
   color: var(--tone);
   font-size: 11px;
   font-weight: 650;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .cron-timeline-log-btn:hover {
   border-color: color-mix(in srgb, var(--tone) 36%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.32),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 85%, transparent);
 }
 
 html[data-theme="dark"] .cron-timeline-log-btn {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.4));
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
   color: color-mix(in srgb, #fff 20%, var(--tone));
@@ -413,7 +489,11 @@ html[data-theme="dark"] .cron-timeline-log-btn {
 
 html[data-theme="dark"] .cron-timeline-log-btn:hover {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.03)
+    ),
     color-mix(in srgb, var(--tone-soft) 70%, rgba(8, 6, 18, 0.35));
   border-color: color-mix(in srgb, var(--tone) 38%, rgba(255, 255, 255, 0.12));
 }
@@ -479,21 +559,34 @@ html[data-theme="dark"] .cron-timeline-log-btn:hover {
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--chip-border));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 32%, var(--glass-fill, transparent));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
     0 4px 14px color-mix(in srgb, var(--tone) 8%, transparent);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
   cursor: pointer;
   user-select: none;
-  transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    background 0.14s ease;
 }
 
 html[data-theme="dark"] .cron-dialog-check {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.07),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.5));
   border-color: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.1));
   box-shadow:
@@ -508,13 +601,21 @@ html[data-theme="dark"] .cron-dialog-check {
 .cron-dialog-check.is-checked {
   border-color: color-mix(in srgb, var(--tone) 36%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.12)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.38),
+      rgba(255, 255, 255, 0.12)
+    ),
     color-mix(in srgb, var(--tone-soft) 55%, transparent);
 }
 
 html[data-theme="dark"] .cron-dialog-check.is-checked {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.03)
+    ),
     color-mix(in srgb, var(--tone-soft) 45%, rgba(8, 6, 18, 0.45));
 }
 
@@ -537,16 +638,27 @@ html[data-theme="dark"] .cron-dialog-check.is-checked {
   border-radius: 7px;
   border: 1.5px solid color-mix(in srgb, var(--tone) 28%, var(--chip-border));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.45),
+      rgba(255, 255, 255, 0.15)
+    ),
     color-mix(in srgb, var(--glass-fill) 80%, transparent);
   color: #fff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.49);
-  transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
 }
 
 html[data-theme="dark"] .cron-dialog-check-box {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     rgba(8, 6, 18, 0.45);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
@@ -554,7 +666,11 @@ html[data-theme="dark"] .cron-dialog-check-box {
 .cron-dialog-check.is-checked .cron-dialog-check-box {
   border-color: color-mix(in srgb, var(--tone) 55%, transparent);
   background:
-    linear-gradient(155deg, color-mix(in srgb, #fff 35%, transparent), transparent),
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, #fff 35%, transparent),
+      transparent
+    ),
     var(--tone);
   box-shadow:
     0 4px 12px color-mix(in srgb, var(--tone) 28%, transparent),
@@ -588,4 +704,3 @@ html[data-theme="dark"] .cron-dialog-check-box {
   color: var(--ink-mute);
   line-height: 1.4;
 }
-

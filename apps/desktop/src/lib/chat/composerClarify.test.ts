@@ -38,8 +38,18 @@ test("selects the active clarify surface linked to the pending interrupt", () =>
     interrupts: [{ id: "interrupt-current", reason: "input_required" }],
   };
   const messages: ChatMessage[] = [
-    { id: "assistant-old", role: "assistant", content: "", uiSurfaces: [older] },
-    { id: "assistant-current", role: "assistant", content: "", uiSurfaces: [current] },
+    {
+      id: "assistant-old",
+      role: "assistant",
+      content: "",
+      uiSurfaces: [older],
+    },
+    {
+      id: "assistant-current",
+      role: "assistant",
+      content: "",
+      uiSurfaces: [current],
+    },
   ];
   const pending: PendingInterrupt[] = [
     {

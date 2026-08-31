@@ -49,7 +49,9 @@ export default function SidebarContextMenu({
   const items: Item[] = [
     {
       action: "toggleLabels",
-      labelKey: labelsVisible ? "sidebar.menu.hideLabels" : "sidebar.menu.showLabels",
+      labelKey: labelsVisible
+        ? "sidebar.menu.hideLabels"
+        : "sidebar.menu.showLabels",
       icon: <Type className="fs-ctx-ico" {...ICO} aria-hidden />,
     },
     {

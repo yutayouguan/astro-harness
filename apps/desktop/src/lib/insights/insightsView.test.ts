@@ -73,10 +73,7 @@ test("aggregateByProvider does not create a fake models vendor", () => {
       cost_usd: 0.02,
     },
   ]);
-  assert.deepEqual(
-    rows.map((r) => r.name).sort(),
-    ["deepseek", "google"],
-  );
+  assert.deepEqual(rows.map((r) => r.name).sort(), ["deepseek", "google"]);
   const google = rows.find((r) => r.name === "google");
   assert.equal(google?.calls, 2);
   assert.equal(google?.tokens, 100);

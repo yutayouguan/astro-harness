@@ -14,7 +14,11 @@ type Props = {
   className?: string;
 };
 
-export default function AgentAvatar({ agent, size = 22, className = "" }: Props) {
+export default function AgentAvatar({
+  agent,
+  size = 22,
+  className = "",
+}: Props) {
   const src = resolveAgentIconSrc(agent);
   if (src) {
     return (

@@ -30,7 +30,8 @@ const fixtures: CardFixture[] = [
   {
     id: "browser",
     name: "agent-browser",
-    description: "Browser automation for agents that need to inspect and interact with websites.",
+    description:
+      "Browser automation for agents that need to inspect and interact with websites.",
     meta: "个人 · ~/.astro/skills",
     state: "已启用",
     stateClass: "is-on",
@@ -57,7 +58,8 @@ const fixtures: CardFixture[] = [
   {
     id: "market",
     name: "research-assistant",
-    description: "Research workflow with source collection, synthesis, and structured reports.",
+    description:
+      "Research workflow with source collection, synthesis, and structured reports.",
     meta: "SkillHub",
     state: "1.2k 安装",
     stateKind: "available",
@@ -70,7 +72,8 @@ const fixtures: CardFixture[] = [
   {
     id: "update",
     name: "workflow-toolkit",
-    description: "检测到可用更新；更新动作保持突出，但不会改变整张卡片的来源色。",
+    description:
+      "检测到可用更新；更新动作保持突出，但不会改变整张卡片的来源色。",
     meta: "个人 · ~/.astro/skills",
     state: "可更新",
     stateClass: "is-outdated",
@@ -95,10 +98,18 @@ function SkillCard({ item }: { item: CardFixture }) {
       <header className="skill-card-top">
         <div className="tool-icon skill-card-icon" aria-hidden>
           <span className="tool-icon-lens" />
-          <span className="tool-icon-glyph"><Icon size={22} strokeWidth={2} /></span>
+          <span className="tool-icon-glyph">
+            <Icon size={22} strokeWidth={2} />
+          </span>
         </div>
         <h3 className="skill-card-title">{item.name}</h3>
-        <span className={item.stateClass ? `skill-card-link-badge ${item.stateClass}` : "skill-card-stat"}>
+        <span
+          className={
+            item.stateClass
+              ? `skill-card-link-badge ${item.stateClass}`
+              : "skill-card-stat"
+          }
+        >
           {item.state}
         </span>
       </header>
@@ -107,13 +118,25 @@ function SkillCard({ item }: { item: CardFixture }) {
         <span className="skill-card-tag">{item.meta}</span>
       </div>
       <div className="skill-card-actions">
-        <button type="button" className="skills-action-btn primary skill-card-primary">
+        <button
+          type="button"
+          className="skills-action-btn primary skill-card-primary"
+        >
           <ActionIcon size={15} aria-hidden />
           <span>{item.action}</span>
         </button>
-        <div className="skill-card-action-icons" role="group" aria-label={item.name}>
+        <div
+          className="skill-card-action-icons"
+          role="group"
+          aria-label={item.name}
+        >
           {item.secondary.map((SecondaryIcon, index) => (
-            <button key={index} type="button" className="skills-action-btn is-icon" aria-label={`次要操作 ${index + 1}`}>
+            <button
+              key={index}
+              type="button"
+              className="skills-action-btn is-icon"
+              aria-label={`次要操作 ${index + 1}`}
+            >
               <SecondaryIcon size={15} aria-hidden />
             </button>
           ))}
@@ -131,10 +154,23 @@ function SkillCardGallery({
   containerWidth?: number;
 }) {
   return (
-    <main className="skills-page" data-tone="indigo" style={{ boxSizing: "border-box", minHeight: "100vh", padding: 28, background: "var(--shell-bg)" }}>
+    <main
+      className="skills-page"
+      data-tone="indigo"
+      style={{
+        boxSizing: "border-box",
+        minHeight: "100vh",
+        padding: 28,
+        background: "var(--shell-bg)",
+      }}
+    >
       <section
         className="skills-pane"
-        style={containerWidth ? { flex: "0 0 auto", width: containerWidth } : undefined}
+        style={
+          containerWidth
+            ? { flex: "0 0 auto", width: containerWidth }
+            : undefined
+        }
       >
         <header className="skills-pane-head">
           <div>
@@ -142,8 +178,13 @@ function SkillCardGallery({
             <p>扁平表面、单一主操作与克制的来源色</p>
           </div>
         </header>
-        <div className={`skills-gallery ${list ? "is-list" : "is-gallery"}`} role="list">
-          {fixtures.map((item) => <SkillCard key={item.id} item={item} />)}
+        <div
+          className={`skills-gallery ${list ? "is-list" : "is-gallery"}`}
+          role="list"
+        >
+          {fixtures.map((item) => (
+            <SkillCard key={item.id} item={item} />
+          ))}
         </div>
       </section>
     </main>

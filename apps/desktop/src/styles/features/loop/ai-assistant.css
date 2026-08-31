@@ -91,7 +91,10 @@
   font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 .loop-ai-suggestion:hover {
   background: color-mix(in srgb, var(--tone, #6366f1) 6%, transparent);
@@ -241,7 +244,9 @@
   color: #fff;
   cursor: pointer;
   flex-shrink: 0;
-  transition: filter 0.12s, transform 0.12s ease;
+  transition:
+    filter 0.12s,
+    transform 0.12s ease;
 }
 .loop-ai-send-btn:hover:not(:disabled) {
   filter: brightness(1.1);

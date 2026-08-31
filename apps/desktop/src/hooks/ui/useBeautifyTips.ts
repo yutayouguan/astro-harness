@@ -37,7 +37,10 @@ function resolvePos(el: HTMLElement): TipSide {
     return explicit;
   }
   // 行尾操作按钮：优先左侧，避免贴右缘时 tip 盖住按钮导致 hover 粘滞
-  if (el.classList.contains("ws-file-delete") || el.closest(".ws-file-delete, .fs-more-btn")) {
+  if (
+    el.classList.contains("ws-file-delete") ||
+    el.closest(".ws-file-delete, .fs-more-btn")
+  ) {
     return "left";
   }
   if (el.closest(".sidebar")) return "right";
@@ -83,7 +86,10 @@ function placeTip(el: HTMLElement, text: string) {
   // 强制同步布局后再量尺寸，避免 transition/transform 把 tipRect 量成 0
   void tipEl.offsetWidth;
   const tipW = Math.max(tipEl.offsetWidth, tipEl.getBoundingClientRect().width);
-  const tipH = Math.max(tipEl.offsetHeight, tipEl.getBoundingClientRect().height);
+  const tipH = Math.max(
+    tipEl.offsetHeight,
+    tipEl.getBoundingClientRect().height,
+  );
   const rect = el.getBoundingClientRect();
   const placed = clampFloatingTip({
     anchorRect: rect,
@@ -124,7 +130,9 @@ function hideTip() {
     showRaf = 0;
   }
   lastCloseTime = Date.now();
-  const tipEl = document.getElementById(HOST_ID)?.querySelector<HTMLElement>(".ui-tip");
+  const tipEl = document
+    .getElementById(HOST_ID)
+    ?.querySelector<HTMLElement>(".ui-tip");
   if (!tipEl) return;
   tipEl.dataset.show = "0";
   delete tipEl.dataset.pos;
@@ -142,7 +150,8 @@ export function useBeautifyTips(enabled = true) {
     if (!enabled || typeof document === "undefined") return;
 
     const upgradeOne = (el: HTMLElement) => {
-      const tip = el.getAttribute("title")?.trim() || el.getAttribute("data-tip")?.trim();
+      const tip =
+        el.getAttribute("title")?.trim() || el.getAttribute("data-tip")?.trim();
       if (!tip) return;
 
       if (!el.getAttribute("data-tip")) el.setAttribute("data-tip", tip);
@@ -150,7 +159,10 @@ export function useBeautifyTips(enabled = true) {
       if (el.hasAttribute("title")) el.removeAttribute("title");
 
       if (!el.hasAttribute("data-tip-pos")) {
-        if (el.classList.contains("ws-file-delete") || el.closest(".ws-file-delete, .fs-more-btn")) {
+        if (
+          el.classList.contains("ws-file-delete") ||
+          el.closest(".ws-file-delete, .fs-more-btn")
+        ) {
           el.setAttribute("data-tip-pos", "left");
         } else if (el.closest(".sidebar")) {
           el.setAttribute("data-tip-pos", "right");
@@ -166,9 +178,12 @@ export function useBeautifyTips(enabled = true) {
 
     const upgrade = (root: ParentNode = document.body) => {
       if (root instanceof HTMLElement) {
-        if (root.hasAttribute("title") || root.hasAttribute("data-tip")) upgradeOne(root);
+        if (root.hasAttribute("title") || root.hasAttribute("data-tip"))
+          upgradeOne(root);
       }
-      root.querySelectorAll<HTMLElement>("[title], [data-tip]").forEach(upgradeOne);
+      root
+        .querySelectorAll<HTMLElement>("[title], [data-tip]")
+        .forEach(upgradeOne);
     };
 
     let activeEl: HTMLElement | null = null;
@@ -211,7 +226,9 @@ export function useBeautifyTips(enabled = true) {
     // mouseover/out 会冒泡，比 pointerenter/leave 更适合委托；用 relatedTarget 避免子节点间误触发
     const onOver = (e: Event) => {
       const ne = e as MouseEvent;
-      const el = (ne.target as HTMLElement | null)?.closest?.("[data-tip]") as HTMLElement | null;
+      const el = (ne.target as HTMLElement | null)?.closest?.(
+        "[data-tip]",
+      ) as HTMLElement | null;
       if (!el) return;
       const from = ne.relatedTarget as Node | null;
       if (from && el.contains(from)) return;
@@ -220,7 +237,9 @@ export function useBeautifyTips(enabled = true) {
 
     const onOut = (e: Event) => {
       const ne = e as MouseEvent;
-      const el = (ne.target as HTMLElement | null)?.closest?.("[data-tip]") as HTMLElement | null;
+      const el = (ne.target as HTMLElement | null)?.closest?.(
+        "[data-tip]",
+      ) as HTMLElement | null;
       if (!el) return;
       const to = ne.relatedTarget as Node | null;
       if (to && el.contains(to)) return;
@@ -228,13 +247,17 @@ export function useBeautifyTips(enabled = true) {
     };
 
     const onFocusIn = (e: Event) => {
-      const el = (e.target as HTMLElement | null)?.closest?.("[data-tip]") as HTMLElement | null;
+      const el = (e.target as HTMLElement | null)?.closest?.(
+        "[data-tip]",
+      ) as HTMLElement | null;
       if (!el) return;
       showFor(el);
     };
 
     const onFocusOut = (e: Event) => {
-      const el = (e.target as HTMLElement | null)?.closest?.("[data-tip]") as HTMLElement | null;
+      const el = (e.target as HTMLElement | null)?.closest?.(
+        "[data-tip]",
+      ) as HTMLElement | null;
       hideIfActive(el);
     };
 

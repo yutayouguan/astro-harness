@@ -26,11 +26,23 @@ import { build } from "esbuild";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP = resolve(HERE, "..");
 const ICON_OUT = join(APP, "public", "file-icons");
-const MANIFEST_OUT = join(APP, "src", "lib", "filespace", "generated", "materialIconManifest.ts");
+const MANIFEST_OUT = join(
+  APP,
+  "src",
+  "lib",
+  "filespace",
+  "generated",
+  "materialIconManifest.ts",
+);
 
 const themeRoot = resolve(process.argv[2] ?? "");
-if (!themeRoot || !existsSync(join(themeRoot, "src", "core", "icons", "fileIcons.ts"))) {
-  console.error("用法: node scripts/vendor-file-icons.mjs <material-icon-theme 源码目录>");
+if (
+  !themeRoot ||
+  !existsSync(join(themeRoot, "src", "core", "icons", "fileIcons.ts"))
+) {
+  console.error(
+    "用法: node scripts/vendor-file-icons.mjs <material-icon-theme 源码目录>",
+  );
   process.exit(1);
 }
 
@@ -47,7 +59,14 @@ async function loadIconDefinitions() {
       "export const definitions = { fileIcons, folderIcons };",
     ].join("\n"),
   );
-  await build({ entryPoints: [entry], outfile: out, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+  await build({
+    entryPoints: [entry],
+    outfile: out,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    logLevel: "silent",
+  });
   const { definitions } = await import(pathToFileURL(out).href);
   rmSync(work, { recursive: true, force: true });
   return definitions;
@@ -60,8 +79,13 @@ function folderNameVariants(name) {
 
 /** 从主题源码里取出内联的 path 常量，避免在这里复制一份会过期的坐标。 */
 function pathConstant(file, constName) {
-  const source = readFileSync(join(themeRoot, "src/core/generator", file), "utf8");
-  const match = new RegExp(`const ${constName}\\s*=\\s*\n?\\s*'([^']+)'`).exec(source);
+  const source = readFileSync(
+    join(themeRoot, "src/core/generator", file),
+    "utf8",
+  );
+  const match = new RegExp(`const ${constName}\\s*=\\s*\n?\\s*'([^']+)'`).exec(
+    source,
+  );
   if (!match) throw new Error(`未能在 ${file} 中找到 ${constName}`);
   return match[1];
 }
@@ -83,7 +107,10 @@ const synthesized = new Map(
 
 /** 打开态文件夹图标同样是构建期产物：把 id="folder" 的路径换成打开态路径。 */
 function openFolderVariant(closedName) {
-  const svg = readFileSync(join(themeRoot, "icons", `${closedName}.svg`), "utf8");
+  const svg = readFileSync(
+    join(themeRoot, "icons", `${closedName}.svg`),
+    "utf8",
+  );
   const tag = /<path[^>]*\bid="folder"[^>]*\/?>/.exec(svg);
   if (!tag) return null;
   const opened = tag[0].replace(/\bd="[^"]*"/, `d="${OPEN_FOLDER_PATH}"`);
@@ -101,7 +128,9 @@ const used = new Set();
 function useIcon(name) {
   if (!name) return null;
   if (!onDisk.has(name) && !synthesized.has(name)) {
-    const closed = name.endsWith("-open") ? name.slice(0, -"-open".length) : null;
+    const closed = name.endsWith("-open")
+      ? name.slice(0, -"-open".length)
+      : null;
     if (!closed || !onDisk.has(closed)) return null;
     const svg = openFolderVariant(closed);
     if (!svg) return null;
@@ -120,11 +149,15 @@ for (const icon of definitions.fileIcons.icons ?? []) {
   if (icon.disabled || icon.enabledFor) continue;
   const name = useIcon(icon.name);
   if (!name) continue;
-  for (const fileName of icon.fileNames ?? []) fileNames[fileName.toLowerCase()] = name;
-  for (const ext of icon.fileExtensions ?? []) fileExtensions[ext.toLowerCase()] = name;
+  for (const fileName of icon.fileNames ?? [])
+    fileNames[fileName.toLowerCase()] = name;
+  for (const ext of icon.fileExtensions ?? [])
+    fileExtensions[ext.toLowerCase()] = name;
 }
 
-const specific = (definitions.folderIcons ?? []).find((theme) => theme.name === "specific");
+const specific = (definitions.folderIcons ?? []).find(
+  (theme) => theme.name === "specific",
+);
 const folderNames = {};
 const folderNamesExpanded = {};
 for (const icon of specific?.icons ?? []) {
@@ -132,7 +165,10 @@ for (const icon of specific?.icons ?? []) {
   const name = useIcon(icon.name);
   if (!name) continue;
   const open = useIcon(`${icon.name}-open`);
-  for (const raw of [...(icon.folderNames ?? []), ...(icon.rootFolderNames ?? [])]) {
+  for (const raw of [
+    ...(icon.folderNames ?? []),
+    ...(icon.rootFolderNames ?? []),
+  ]) {
     for (const variant of folderNameVariants(raw.toLowerCase())) {
       folderNames[variant] = name;
       if (open) folderNamesExpanded[variant] = open;
@@ -151,21 +187,33 @@ for (const [key, value] of Object.entries(defaults)) {
 }
 
 mkdirSync(ICON_OUT, { recursive: true });
-for (const stale of readdirSync(ICON_OUT).filter((file) => file.endsWith(".svg"))) {
+for (const stale of readdirSync(ICON_OUT).filter((file) =>
+  file.endsWith(".svg"),
+)) {
   if (!used.has(basename(stale, ".svg"))) rmSync(join(ICON_OUT, stale));
 }
 for (const name of used) {
   const generated = synthesized.get(name);
   if (generated) writeFileSync(join(ICON_OUT, `${name}.svg`), generated);
-  else copyFileSync(join(themeRoot, "icons", `${name}.svg`), join(ICON_OUT, `${name}.svg`));
+  else
+    copyFileSync(
+      join(themeRoot, "icons", `${name}.svg`),
+      join(ICON_OUT, `${name}.svg`),
+    );
 }
 
 const sorted = (record) =>
-  Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
+  Object.fromEntries(
+    Object.entries(record).sort(([a], [b]) => a.localeCompare(b)),
+  );
 
 const version = (() => {
   try {
-    return execFileSync("git", ["-C", themeRoot, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+    return execFileSync(
+      "git",
+      ["-C", themeRoot, "rev-parse", "--short", "HEAD"],
+      { encoding: "utf8" },
+    ).trim();
   } catch {
     return "unknown";
   }

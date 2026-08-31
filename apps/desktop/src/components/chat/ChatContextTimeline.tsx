@@ -57,7 +57,10 @@ export default function ChatContextTimeline({ messages }: Props) {
       {activities.map((a) => {
         const open = openId === a.id;
         return (
-          <li key={a.id} className={a.status === "running" ? "is-running" : undefined}>
+          <li
+            key={a.id}
+            className={a.status === "running" ? "is-running" : undefined}
+          >
             <button
               type="button"
               className={`chat-context-item ${a.status === "running" ? "is-running" : ""}`}

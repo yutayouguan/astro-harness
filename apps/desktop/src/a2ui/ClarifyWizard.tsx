@@ -214,10 +214,12 @@ export default function ClarifyWizard({
       approvalChoice === "approve_always"
         ? t("chat.a2ui.approvalAlwaysApproved")
         : approvalChoice === "approve_type"
-          ? t("chat.a2ui.approvalTypeApproved", { type: approvalTypeLabel ?? "" })
-        : approved
-          ? t("chat.a2ui.approvalApproved")
-          : t("chat.a2ui.approvalDenied");
+          ? t("chat.a2ui.approvalTypeApproved", {
+              type: approvalTypeLabel ?? "",
+            })
+          : approved
+            ? t("chat.a2ui.approvalApproved")
+            : t("chat.a2ui.approvalDenied");
     return (
       <div
         className={`a2ui-clarify-wizard is-collapsed is-approval-result ${approved ? "is-approved" : "is-denied"}`}
@@ -226,7 +228,11 @@ export default function ClarifyWizard({
       >
         <div className="a2ui-approval-result">
           <span className="a2ui-approval-result-icon" aria-hidden>
-            {approved ? <Check size={15} strokeWidth={2.5} /> : <X size={15} strokeWidth={2.5} />}
+            {approved ? (
+              <Check size={15} strokeWidth={2.5} />
+            ) : (
+              <X size={15} strokeWidth={2.5} />
+            )}
           </span>
           <span>{label}</span>
         </div>
@@ -252,7 +258,9 @@ export default function ClarifyWizard({
         onKeyDown={(e) => e.key === "Enter" && setCollapsed(false)}
       >
         <div className="a2ui-clarify-collapsed">
-          <span className="a2ui-clarify-collapsed-icon" aria-hidden>✓</span>
+          <span className="a2ui-clarify-collapsed-icon" aria-hidden>
+            ✓
+          </span>
           <div className="a2ui-clarify-collapsed-body">
             {summaryParts.map((p) => (
               <span key={p.question} className="a2ui-clarify-collapsed-pair">
@@ -261,7 +269,9 @@ export default function ClarifyWizard({
               </span>
             ))}
           </div>
-          <span className="a2ui-clarify-collapsed-expand" aria-hidden>▸</span>
+          <span className="a2ui-clarify-collapsed-expand" aria-hidden>
+            ▸
+          </span>
         </div>
       </div>
     );
@@ -320,7 +330,9 @@ export default function ClarifyWizard({
     const commandLabel = isSandboxRetry
       ? t("chat.a2ui.sandboxRetryDetail")
       : t("chat.a2ui.approvalCommand");
-    const submitApproval = (choice: "approve" | "approve_always" | "approve_type" | "deny") => {
+    const submitApproval = (
+      choice: "approve" | "approve_always" | "approve_type" | "deny",
+    ) => {
       if (disabled) return;
       setApprovalChoice(choice);
       setCollapsed(true);
@@ -356,7 +368,9 @@ export default function ClarifyWizard({
               <TerminalSquare size={14} aria-hidden />
               <span>{commandLabel}</span>
             </div>
-            <pre><code>{content.command}</code></pre>
+            <pre>
+              <code>{content.command}</code>
+            </pre>
           </div>
         ) : null}
 
@@ -400,7 +414,11 @@ export default function ClarifyWizard({
                 <strong>{t("chat.a2ui.approvalAlways")}</strong>
                 <small>{t("chat.a2ui.approvalAlwaysHint")}</small>
               </span>
-              <ArrowRight className="a2ui-approval-always-arrow" size={16} aria-hidden />
+              <ArrowRight
+                className="a2ui-approval-always-arrow"
+                size={16}
+                aria-hidden
+              />
             </button>
             {approvalTypeLabel ? (
               <button
@@ -411,10 +429,16 @@ export default function ClarifyWizard({
               >
                 <TerminalSquare size={17} strokeWidth={2} aria-hidden />
                 <span className="a2ui-approval-action-copy">
-                  <strong>{t("chat.a2ui.approvalType", { type: approvalTypeLabel })}</strong>
+                  <strong>
+                    {t("chat.a2ui.approvalType", { type: approvalTypeLabel })}
+                  </strong>
                   <small>{t("chat.a2ui.approvalTypeHint")}</small>
                 </span>
-                <ArrowRight className="a2ui-approval-always-arrow" size={16} aria-hidden />
+                <ArrowRight
+                  className="a2ui-approval-always-arrow"
+                  size={16}
+                  aria-hidden
+                />
               </button>
             ) : null}
           </div>
@@ -480,9 +504,15 @@ export default function ClarifyWizard({
       data-a2ui-id="wizard"
     >
       {multi ? (
-        <div className="a2ui-clarify-tabs" role="tablist" aria-label={t("chat.a2ui.clarifyTabs")}>
+        <div
+          className="a2ui-clarify-tabs"
+          role="tablist"
+          aria-label={t("chat.a2ui.clarifyTabs")}
+        >
           {steps.map((s, i) => {
-            const answered = Boolean(answers[s.id]?.trim() || customDrafts[s.id]?.trim());
+            const answered = Boolean(
+              answers[s.id]?.trim() || customDrafts[s.id]?.trim(),
+            );
             const active = i === safeIndex;
             return (
               <button
@@ -502,7 +532,9 @@ export default function ClarifyWizard({
               >
                 <span className="a2ui-clarify-tab-index">{i + 1}</span>
                 <span className="a2ui-clarify-tab-label">
-                  {s.question.length > 10 ? `${s.question.slice(0, 10)}…` : s.question}
+                  {s.question.length > 10
+                    ? `${s.question.slice(0, 10)}…`
+                    : s.question}
                 </span>
               </button>
             );
@@ -569,7 +601,6 @@ export default function ClarifyWizard({
           ) : (
             customInput
           )}
-
         </div>
       </div>
     </div>

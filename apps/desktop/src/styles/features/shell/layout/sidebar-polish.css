@@ -8,13 +8,14 @@
     color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
     transparent 72%
   );
-  --sidebar-chrome-background:
-    var(--sidebar-chrome-sheen),
-    var(--sidebar-bg);
-  --sidebar-chrome-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
+  --sidebar-chrome-background: var(--sidebar-chrome-sheen), var(--sidebar-bg);
+  --sidebar-chrome-filter: blur(
+      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
+    )
     saturate(var(--glass-saturate, 1.25));
   border: 0;
-  border-right: 0.5px solid color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  border-right: 0.5px solid
+    color-mix(in srgb, var(--glass-edge) 62%, transparent);
   border-radius: 0;
   background: var(--sidebar-chrome-background);
   box-shadow:
@@ -115,7 +116,8 @@ html[data-theme="dark"] .sidebar.is-settings {
 }
 
 .sidebar-new-chat:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 34%, transparent);
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 34%, transparent);
   outline-offset: -2px;
 }
 
@@ -144,7 +146,9 @@ html[data-theme="dark"] .sidebar-new-chat:hover {
   border-radius: 5px;
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: color-mix(in srgb, var(--ink-mute) 80%, transparent);
-  font: 600 10px/1.2 system-ui, sans-serif;
+  font:
+    600 10px/1.2 system-ui,
+    sans-serif;
   letter-spacing: 0;
   text-align: center;
 }
@@ -188,7 +192,11 @@ html[data-theme="dark"] .sidebar-new-chat:hover {
 }
 
 .sidebar-global-search .expandable-search-field:focus-within {
-  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 30%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 30%,
+    transparent
+  );
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   box-shadow: none;
 }
@@ -290,7 +298,8 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
   gap: 2px;
 }
 
-.sidebar-collapsible-section:is(:hover, :focus-within) .sidebar-section-chevron {
+.sidebar-collapsible-section:is(:hover, :focus-within)
+  .sidebar-section-chevron {
   opacity: 0.68;
 }
 

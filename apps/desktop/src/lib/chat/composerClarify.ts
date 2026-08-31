@@ -44,17 +44,29 @@ export function findComposerClarifySurface(
   if (pendingInterrupts.length === 0) return null;
 
   let fallback: ComposerClarifySurface | null = null;
-  let hasExplicitLink = pendingInterrupts.some(
-    (interrupt) => Boolean(interrupt.assistantMessageId),
+  let hasExplicitLink = pendingInterrupts.some((interrupt) =>
+    Boolean(interrupt.assistantMessageId),
   );
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
     const message = messages[messageIndex];
     if (!message || message.role !== "assistant") continue;
 
     const surfaces = message.uiSurfaces ?? [];
-    for (let surfaceIndex = surfaces.length - 1; surfaceIndex >= 0; surfaceIndex -= 1) {
+    for (
+      let surfaceIndex = surfaces.length - 1;
+      surfaceIndex >= 0;
+      surfaceIndex -= 1
+    ) {
       const surface = surfaces[surfaceIndex];
-      if (!surface || surface.status !== "active" || !isClarifySurface(surface)) {
+      if (
+        !surface ||
+        surface.status !== "active" ||
+        !isClarifySurface(surface)
+      ) {
         continue;
       }
 

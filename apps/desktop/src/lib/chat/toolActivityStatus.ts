@@ -28,7 +28,9 @@ export function resolveToolActivityStatus(
   return "running";
 }
 
-export function isLiveActivityStatus(status: ChatActivityStatus | undefined): boolean {
+export function isLiveActivityStatus(
+  status: ChatActivityStatus | undefined,
+): boolean {
   return status === "waiting" || status === "running" || status === "retrying";
 }
 

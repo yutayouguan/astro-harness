@@ -21,13 +21,20 @@
     background 0.28s ease,
     box-shadow 0.28s ease;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.06)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.26),
+      rgba(255, 255, 255, 0.06)
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 68%, transparent);
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone, transparent) 24%, transparent),
+    inset 0 0 0 1px
+      color-mix(in srgb, var(--tone, transparent) 24%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.32);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
 }
 
 .sidebar.is-icons .sidebar-nav-indicator {
@@ -41,7 +48,11 @@
 
 html[data-theme="dark"] .sidebar-nav-indicator {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 48%, rgba(8, 6, 18, 0.4));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
@@ -244,8 +255,13 @@ html[data-theme="dark"] .nav-icon {
   line-height: 16px;
   text-align: center;
   color: #fff;
-  background: color-mix(in srgb, var(--tone, var(--tone-green, #16a34a)) 88%, #000);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--glass-fill, #fff) 80%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-green, #16a34a)) 88%,
+    #000
+  );
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--glass-fill, #fff) 80%, transparent);
   pointer-events: none;
   z-index: 3;
 }
@@ -259,14 +275,22 @@ html[data-theme="dark"] .nav-icon {
   --nav-grad-top: color-mix(in srgb, var(--tone, #c084fc) 28%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 82%, #6d28d9);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 70%, #2e1065);
-  --nav-icon-cutout: color-mix(in srgb, #fff 78%, var(--tone-soft, transparent));
+  --nav-icon-cutout: color-mix(
+    in srgb,
+    #fff 78%,
+    var(--tone-soft, transparent)
+  );
 }
 
 html[data-theme="dark"] .nav-item.active .nav-icon {
   --nav-grad-top: color-mix(in srgb, var(--tone, #e879f9) 55%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 88%, #5b21b6);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 65%, #1e0b3a);
-  --nav-icon-cutout: color-mix(in srgb, rgba(255, 255, 255, 0.18) 65%, var(--tone-soft, transparent));
+  --nav-icon-cutout: color-mix(
+    in srgb,
+    rgba(255, 255, 255, 0.18) 65%,
+    var(--tone-soft, transparent)
+  );
 }
 
 .nav-icon svg {

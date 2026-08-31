@@ -15,7 +15,10 @@ test("chat turn anchors reserve a left-side hit area", async () => {
   ]);
   const trackRule = css.match(/\.chat-msg-nav-track\s*\{(?<body>[\s\S]*?)\}/);
 
-  assert.ok(trackRule?.groups?.body, "missing chat message navigation track rule");
+  assert.ok(
+    trackRule?.groups?.body,
+    "missing chat message navigation track rule",
+  );
   assert.match(
     trackRule.groups.body,
     /padding:\s*8px 28px 8px 0;/,
@@ -69,8 +72,14 @@ test("chat anchor labels use a translucent blurred surface", async () => {
   );
   const labelRule = css.match(/\.chat-msg-nav-label\s*\{(?<body>[\s\S]*?)\}/);
 
-  assert.ok(labelRule?.groups?.body, "missing chat message navigation label rule");
-  assert.match(labelRule.groups.body, /background:[\s\S]*var\(--nav-label-bg\)/);
+  assert.ok(
+    labelRule?.groups?.body,
+    "missing chat message navigation label rule",
+  );
+  assert.match(
+    labelRule.groups.body,
+    /background:[\s\S]*var\(--nav-label-bg\)/,
+  );
   assert.doesNotMatch(
     labelRule.groups.body,
     /linear-gradient\(/,

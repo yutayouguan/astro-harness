@@ -38,7 +38,9 @@ function HeaderActions({
             G
           </span>
           <span className="model-picker-label">gemini-3.7-flash</span>
-          <span className="model-picker-chevron" aria-hidden>⌄</span>
+          <span className="model-picker-chevron" aria-hidden>
+            ⌄
+          </span>
         </button>
       </div>
       <div className="chat-header-tools">
@@ -71,7 +73,9 @@ function HeaderActions({
           onClick={() => toggle("runtime")}
         >
           <Activity size={16} />
-          <span className="header-summary-badge" aria-hidden>2</span>
+          <span className="header-summary-badge" aria-hidden>
+            2
+          </span>
         </button>
       </div>
     </div>
@@ -103,7 +107,9 @@ function DockPanel({ kind }: { kind: DockKind }) {
                   <div className="msg-stack">
                     <div className="bubble assistant">
                       <div className="msg-content">
-                        <p>当前任务已完成界面梳理，我可以继续检查工具调用和审批流程。</p>
+                        <p>
+                          当前任务已完成界面梳理，我可以继续检查工具调用和审批流程。
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -111,7 +117,9 @@ function DockPanel({ kind }: { kind: DockKind }) {
                 <article className="msg-row user">
                   <div className="msg-stack">
                     <div className="bubble user">
-                      <div className="msg-content">再检查一下 Skills 和附件</div>
+                      <div className="msg-content">
+                        再检查一下 Skills 和附件
+                      </div>
                     </div>
                   </div>
                 </article>
@@ -120,17 +128,31 @@ function DockPanel({ kind }: { kind: DockKind }) {
             <form className="composer-shell">
               <div className="composer composer--stacked">
                 <div className="composer-input-wrap">
-                  <textarea className="composer-input" placeholder="询问当前任务…" rows={1} />
+                  <textarea
+                    className="composer-input"
+                    placeholder="询问当前任务…"
+                    rows={1}
+                  />
                 </div>
                 <div className="composer-bar">
                   <div className="composer-bar-left">
-                    <button type="button" className="composer-mode-pill">∞ Agent</button>
-                    <button type="button" className="composer-icon-btn" aria-label="添加">
+                    <button type="button" className="composer-mode-pill">
+                      ∞ Agent
+                    </button>
+                    <button
+                      type="button"
+                      className="composer-icon-btn"
+                      aria-label="添加"
+                    >
                       <Plus size={17} />
                     </button>
                   </div>
                   <div className="composer-bar-right">
-                    <button type="button" className="send-btn send-btn--round" aria-label="发送">
+                    <button
+                      type="button"
+                      className="send-btn send-btn--round"
+                      aria-label="发送"
+                    >
                       <SendHorizontal size={15} />
                     </button>
                   </div>
@@ -150,21 +172,40 @@ function DockPanel({ kind }: { kind: DockKind }) {
     >
       <div className="chat-right-header">
         <h2 className="chat-right-title">
-          <PanelRight size={17} />会话详情
+          <PanelRight size={17} />
+          会话详情
         </h2>
         <button type="button" className="chat-right-close" aria-label="关闭">
           <X size={14} />
         </button>
       </div>
       <div className="chat-right-tabs" role="tablist">
-        <button type="button" role="tab" aria-selected className="chat-right-tab is-active">
-          <Activity size={15} />运行摘要
+        <button
+          type="button"
+          role="tab"
+          aria-selected
+          className="chat-right-tab is-active"
+        >
+          <Activity size={15} />
+          运行摘要
         </button>
-        <button type="button" role="tab" aria-selected={false} className="chat-right-tab">
-          <Layers size={15} />上下文
+        <button
+          type="button"
+          role="tab"
+          aria-selected={false}
+          className="chat-right-tab"
+        >
+          <Layers size={15} />
+          上下文
         </button>
-        <button type="button" role="tab" aria-selected={false} className="chat-right-tab">
-          <GitBranch size={15} />分支
+        <button
+          type="button"
+          role="tab"
+          aria-selected={false}
+          className="chat-right-tab"
+        >
+          <GitBranch size={15} />
+          分支
         </button>
       </div>
       <div className="chat-right-body">
@@ -173,7 +214,9 @@ function DockPanel({ kind }: { kind: DockKind }) {
             <div className="chat-summary-panel">
               <div className="chat-agent-info">
                 <header className="chat-agent-hero">
-                  <div className="chat-agent-avatar" aria-hidden>A</div>
+                  <div className="chat-agent-avatar" aria-hidden>
+                    A
+                  </div>
                   <div className="chat-agent-identity">
                     <h3>Astro</h3>
                     <p className="chat-agent-status">官方默认 Agent</p>
@@ -186,7 +229,9 @@ function DockPanel({ kind }: { kind: DockKind }) {
                     </span>
                     用量参考
                   </h4>
-                  <p className="chat-agent-usage-empty muted">本轮暂无用量数据</p>
+                  <p className="chat-agent-usage-empty muted">
+                    本轮暂无用量数据
+                  </p>
                 </section>
               </div>
               <SubagentActivityBar
@@ -237,7 +282,13 @@ function ChatDockLayout({
 }) {
   useBeautifyTips();
   const dockWidth =
-    kind === "files" ? 320 : kind === "side" ? 384 : kind === "runtime" ? 360 : 0;
+    kind === "files"
+      ? 320
+      : kind === "side"
+        ? 384
+        : kind === "runtime"
+          ? 360
+          : 0;
   const dockClasses =
     kind === "files"
       ? " has-project-files"
@@ -249,17 +300,26 @@ function ChatDockLayout({
   const hasDock = kind !== null;
   return (
     <main
-      style={{ minHeight: "100vh", display: "flex", background: "var(--shell-bg)" }}
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        background: "var(--shell-bg)",
+      }}
     >
       <section className="content-pane content-pane--chat">
-        <div className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}`}>
+        <div
+          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}`}
+        >
           <div className="content-heading">
             <div className="page-title-block">
               <div className="page-title-icon" data-tone="blue" aria-hidden>
                 <MessageSquare size={15} />
               </div>
               <div className="page-title-text">
-                <h1 className="content-title conversation-title" data-tone="blue">
+                <h1
+                  className="content-title conversation-title"
+                  data-tone="blue"
+                >
                   <ConversationTitle
                     title="请用 Python 写一个简单的 Web 爬虫，抓取页面标题并整理运行结果"
                     renameLabel="重命名"
@@ -274,10 +334,12 @@ function ChatDockLayout({
         <div className="page-body page-body--chat">
           <div
             className={`chat-layout-with-right${hasDock ? " has-right-dock" : ""}${dockClasses}`}
-            style={{
-              "--project-files-current-width": `${dockWidth}px`,
-              "--project-files-width": `${dockWidth}px`,
-            } as CSSProperties}
+            style={
+              {
+                "--project-files-current-width": `${dockWidth}px`,
+                "--project-files-width": `${dockWidth}px`,
+              } as CSSProperties
+            }
           >
             <div className="chat-main">
               <div className="chat-pane" style={{ padding: 28 }}>
@@ -288,7 +350,9 @@ function ChatDockLayout({
               </div>
             </div>
             <ProjectFilesDockPreview open={kind === "files"} />
-            <div className={`side-chat-dock${kind === "side" ? " is-open" : ""}`}>
+            <div
+              className={`side-chat-dock${kind === "side" ? " is-open" : ""}`}
+            >
               {kind === "side" ? <DockPanel kind="side" /> : null}
             </div>
             {kind === "runtime" ? <DockPanel kind={kind} /> : null}

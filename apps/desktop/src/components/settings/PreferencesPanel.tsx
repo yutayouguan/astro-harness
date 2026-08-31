@@ -1,5 +1,11 @@
 /** 偏好设置（主题、语言、日志诊断、关于）。 */
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -23,7 +29,11 @@ import { useAppIcon } from "../../hooks/settings/useAppIcon";
 import { useMorphicons } from "../../hooks/app/useMorphicons";
 import type { AppIconId } from "../../types";
 import type { ShellColorStyle } from "../../hooks/app/useShellColorStyle";
-import { useTheme, type ThemeMode, type GlassLevel } from "../../hooks/app/useTheme";
+import {
+  useTheme,
+  type ThemeMode,
+  type GlassLevel,
+} from "../../hooks/app/useTheme";
 import type {
   ChatAnswerLayout,
   ChatDisplayPrefs,
@@ -44,7 +54,14 @@ import {
   type MorphiconSpring,
 } from "../../lib/ui/morphiconPrefs";
 import { AppMorphIcon } from "../icons/MorphIcon";
-import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "../icons/NavIcons";
+import {
+  IconGlobe,
+  IconMonitor,
+  IconMoon,
+  IconSun,
+  IconChat,
+  IconAtom,
+} from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
 import CompressionSettingsCard from "./CompressionSettingsCard";
 import ShellGradientEditor from "./ShellGradientEditor";
@@ -68,15 +85,22 @@ const MORPHICON_SPRING_LABEL: Record<MorphiconSpring, MessageKey> = {
   bouncy: "prefs.morphicons.spring.bouncy",
 };
 
-
 function AutostartSwitch({ tone }: { tone: string }) {
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    import("@tauri-apps/plugin-autostart").then((mod) => {
-      mod.isEnabled().then((v) => { setEnabled(v); setLoading(false); }).catch(() => setLoading(false));
-    }).catch(() => setLoading(false));
+    import("@tauri-apps/plugin-autostart")
+      .then((mod) => {
+        mod
+          .isEnabled()
+          .then((v) => {
+            setEnabled(v);
+            setLoading(false);
+          })
+          .catch(() => setLoading(false));
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   const toggle = async () => {
@@ -372,8 +396,7 @@ export default function PreferencesPanel({
     },
   ];
 
-  const ModeIcon =
-    themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
+  const ModeIcon = themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
   const ColorStyleIcon =
     colorStyleOptions.find((o) => o.id === colorStyle)?.Icon ?? Palette;
   const categoryOptions = [
@@ -414,7 +437,7 @@ export default function PreferencesPanel({
   async function refreshLogs() {
     const manual = manualSession.trim();
     const effectiveSession =
-      manual || (scope === "current" ? activeSessionId ?? null : null);
+      manual || (scope === "current" ? (activeSessionId ?? null) : null);
     setBusy(true);
     setErrorMsg("");
     try {
@@ -456,8 +479,15 @@ export default function PreferencesPanel({
   }
 
   return (
-    <div className={`prefs-page ${section ? "is-embedded" : ""}`} data-tone={tone}>
-      <nav className="prefs-category-nav" aria-label={t("prefs.category.aria")} hidden={!showInternalNav}>
+    <div
+      className={`prefs-page ${section ? "is-embedded" : ""}`}
+      data-tone={tone}
+    >
+      <nav
+        className="prefs-category-nav"
+        aria-label={t("prefs.category.aria")}
+        hidden={!showInternalNav}
+      >
         {categoryOptions.map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -477,702 +507,798 @@ export default function PreferencesPanel({
       </nav>
 
       <div className="prefs-category-content">
-      <div
-        className="prefs-category-stack"
-        hidden={activeCategory !== "appearance"}
-      >
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <ModeIcon width={22} height={22} />
-          </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.theme.title")}</h2>
-            <p className="prefs-card-sub">{t("prefs.theme.sub")}</p>
-          </div>
-        </div>
-
         <div
-          className="theme-options"
-          role="radiogroup"
-          aria-label={t("prefs.theme.title")}
+          className="prefs-category-stack"
+          hidden={activeCategory !== "appearance"}
         >
-          {themeOptions.map(({ id, label, desc, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={mode === id}
-              className={`theme-option ${mode === id ? "active" : ""}`}
-              data-tone={tone}
-              onClick={() => onChange(id)}
+          <section className="prefs-card">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <ModeIcon width={22} height={22} />
+              </div>
+              <div>
+                <h2 className="prefs-card-title">{t("prefs.theme.title")}</h2>
+                <p className="prefs-card-sub">{t("prefs.theme.sub")}</p>
+              </div>
+            </div>
+
+            <div
+              className="theme-options"
+              role="radiogroup"
+              aria-label={t("prefs.theme.title")}
             >
-              <span className="theme-option-icon" aria-hidden>
-                <Icon />
-              </span>
-              <span className="theme-option-text">
-                <span className="theme-option-label">{label}</span>
-                <span className="theme-option-desc">{desc}</span>
-              </span>
-              <span className="theme-option-check" aria-hidden />
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <Layers size={22} />
-          </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.glass.title")}</h2>
-            <p className="prefs-card-sub">{t("prefs.glass.sub")}</p>
-          </div>
-        </div>
-        <div className="theme-options" role="radiogroup" aria-label={t("prefs.glass.title")}>
-          {([
-            { id: "liquid" as GlassLevel, label: t("prefs.glass.liquid"), desc: t("prefs.glass.liquidDesc") },
-            { id: "liquid-soft" as GlassLevel, label: t("prefs.glass.liquidSoft"), desc: t("prefs.glass.liquidSoftDesc") },
-            { id: "rich" as GlassLevel, label: t("prefs.glass.rich"), desc: t("prefs.glass.richDesc") },
-            { id: "normal" as GlassLevel, label: t("prefs.glass.normal"), desc: t("prefs.glass.normalDesc") },
-            { id: "minimal" as GlassLevel, label: t("prefs.glass.minimal"), desc: t("prefs.glass.minimalDesc") },
-          ]).map(({ id, label, desc }) => (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={glassLevel === id}
-              className={`theme-option ${glassLevel === id ? "active" : ""}`}
-              data-tone={tone}
-              onClick={() => setGlassLevel(id)}
-            >
-              <span className="theme-option-text">
-                <span className="theme-option-label">{label}</span>
-                <span className="theme-option-desc">{desc}</span>
-              </span>
-              <span className="theme-option-check" aria-hidden />
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <ColorStyleIcon width={22} height={22} />
-          </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.colorStyle.title")}</h2>
-            <p className="prefs-card-sub">{t("prefs.colorStyle.sub")}</p>
-          </div>
-        </div>
-
-        <div
-          className="theme-options"
-          role="radiogroup"
-          aria-label={t("prefs.colorStyle.title")}
-        >
-          {colorStyleOptions.map(({ id, label, desc, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={colorStyle === id}
-              className={`theme-option ${colorStyle === id ? "active" : ""}`}
-              data-tone={tone}
-              onClick={() => onColorStyleChange(id)}
-            >
-              <span className="theme-option-icon" aria-hidden>
-                <Icon />
-              </span>
-              <span className="theme-option-text">
-                <span className="theme-option-label">{label}</span>
-                <span className="theme-option-desc">{desc}</span>
-              </span>
-              <span className="theme-option-check" aria-hidden />
-            </button>
-          ))}
-        </div>
-
-        {colorStyle === "unified" ? (
-          <div
-            className="shell-color-presets"
-            role="radiogroup"
-            aria-label={t("prefs.colorStyle.presets")}
-          >
-            {SHELL_GRADIENT_PRESETS.map((preset) => {
-              const g = gradientFromPreset(preset.id);
-              const selected = gradient.id === preset.id;
-              return (
+              {themeOptions.map(({ id, label, desc, Icon }) => (
                 <button
-                  key={preset.id}
+                  key={id}
                   type="button"
                   role="radio"
-                  aria-checked={selected}
-                  className={`shell-color-swatch ${selected ? "is-active" : ""}`}
+                  aria-checked={mode === id}
+                  className={`theme-option ${mode === id ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => onChange(id)}
+                >
+                  <span className="theme-option-icon" aria-hidden>
+                    <Icon />
+                  </span>
+                  <span className="theme-option-text">
+                    <span className="theme-option-label">{label}</span>
+                    <span className="theme-option-desc">{desc}</span>
+                  </span>
+                  <span className="theme-option-check" aria-hidden />
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="prefs-card">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <Layers size={22} />
+              </div>
+              <div>
+                <h2 className="prefs-card-title">{t("prefs.glass.title")}</h2>
+                <p className="prefs-card-sub">{t("prefs.glass.sub")}</p>
+              </div>
+            </div>
+            <div
+              className="theme-options"
+              role="radiogroup"
+              aria-label={t("prefs.glass.title")}
+            >
+              {[
+                {
+                  id: "liquid" as GlassLevel,
+                  label: t("prefs.glass.liquid"),
+                  desc: t("prefs.glass.liquidDesc"),
+                },
+                {
+                  id: "liquid-soft" as GlassLevel,
+                  label: t("prefs.glass.liquidSoft"),
+                  desc: t("prefs.glass.liquidSoftDesc"),
+                },
+                {
+                  id: "rich" as GlassLevel,
+                  label: t("prefs.glass.rich"),
+                  desc: t("prefs.glass.richDesc"),
+                },
+                {
+                  id: "normal" as GlassLevel,
+                  label: t("prefs.glass.normal"),
+                  desc: t("prefs.glass.normalDesc"),
+                },
+                {
+                  id: "minimal" as GlassLevel,
+                  label: t("prefs.glass.minimal"),
+                  desc: t("prefs.glass.minimalDesc"),
+                },
+              ].map(({ id, label, desc }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={glassLevel === id}
+                  className={`theme-option ${glassLevel === id ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => setGlassLevel(id)}
+                >
+                  <span className="theme-option-text">
+                    <span className="theme-option-label">{label}</span>
+                    <span className="theme-option-desc">{desc}</span>
+                  </span>
+                  <span className="theme-option-check" aria-hidden />
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="prefs-card">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <ColorStyleIcon width={22} height={22} />
+              </div>
+              <div>
+                <h2 className="prefs-card-title">
+                  {t("prefs.colorStyle.title")}
+                </h2>
+                <p className="prefs-card-sub">{t("prefs.colorStyle.sub")}</p>
+              </div>
+            </div>
+
+            <div
+              className="theme-options"
+              role="radiogroup"
+              aria-label={t("prefs.colorStyle.title")}
+            >
+              {colorStyleOptions.map(({ id, label, desc, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={colorStyle === id}
+                  className={`theme-option ${colorStyle === id ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => onColorStyleChange(id)}
+                >
+                  <span className="theme-option-icon" aria-hidden>
+                    <Icon />
+                  </span>
+                  <span className="theme-option-text">
+                    <span className="theme-option-label">{label}</span>
+                    <span className="theme-option-desc">{desc}</span>
+                  </span>
+                  <span className="theme-option-check" aria-hidden />
+                </button>
+              ))}
+            </div>
+
+            {colorStyle === "unified" ? (
+              <div
+                className="shell-color-presets"
+                role="radiogroup"
+                aria-label={t("prefs.colorStyle.presets")}
+              >
+                {SHELL_GRADIENT_PRESETS.map((preset) => {
+                  const g = gradientFromPreset(preset.id);
+                  const selected = gradient.id === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      className={`shell-color-swatch ${selected ? "is-active" : ""}`}
+                      style={
+                        {
+                          "--swatch-bg": gradientSwatchBackground(g),
+                          "--swatch-ring": g.primary.color,
+                        } as CSSProperties
+                      }
+                      title={t(preset.labelKey)}
+                      aria-label={t(preset.labelKey)}
+                      onClick={() => onGradientChange(g)}
+                    >
+                      <span className="shell-color-swatch-core" aria-hidden />
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={gradient.id === "custom"}
+                  className={`shell-color-swatch shell-color-swatch--custom ${
+                    gradient.id === "custom" ? "is-active" : ""
+                  }`}
                   style={
                     {
-                      "--swatch-bg": gradientSwatchBackground(g),
-                      "--swatch-ring": g.primary.color,
+                      "--swatch-ring": gradient.primary.color,
                     } as CSSProperties
                   }
-                  title={t(preset.labelKey)}
-                  aria-label={t(preset.labelKey)}
-                  onClick={() => onGradientChange(g)}
+                  title={t("prefs.colorStyle.custom")}
+                  aria-label={t("prefs.colorStyle.custom")}
+                  onClick={() => {
+                    onBeginCustomGradient();
+                    setGradientEditorOpen(true);
+                  }}
                 >
-                  <span className="shell-color-swatch-core" aria-hidden />
+                  <span className="shell-color-swatch-core" aria-hidden>
+                    <span className="shell-color-swatch-plus">+</span>
+                  </span>
                 </button>
-              );
-            })}
-            <button
-              type="button"
-              role="radio"
-              aria-checked={gradient.id === "custom"}
-              className={`shell-color-swatch shell-color-swatch--custom ${
-                gradient.id === "custom" ? "is-active" : ""
-              }`}
-              style={
-                {
-                  "--swatch-ring": gradient.primary.color,
-                } as CSSProperties
-              }
-              title={t("prefs.colorStyle.custom")}
-              aria-label={t("prefs.colorStyle.custom")}
-              onClick={() => {
-                onBeginCustomGradient();
-                setGradientEditorOpen(true);
-              }}
-            >
-              <span className="shell-color-swatch-core" aria-hidden>
-                <span className="shell-color-swatch-plus">+</span>
-              </span>
-            </button>
-          </div>
-        ) : null}
+              </div>
+            ) : null}
 
-        {colorStyle === "dynamic" ? (
-          <div className="shell-dynamic-actions">
-            <p className="shell-dynamic-hint">{t("prefs.colorStyle.dynamicHint")}</p>
-            <button
-              type="button"
-              className="shell-dynamic-reshuffle"
-              data-tone={tone}
-              onClick={onReshuffleDynamic}
-            >
-              <Dices width={16} height={16} aria-hidden />
-              {t("prefs.colorStyle.reshuffle")}
-            </button>
-          </div>
-        ) : null}
-      </section>
+            {colorStyle === "dynamic" ? (
+              <div className="shell-dynamic-actions">
+                <p className="shell-dynamic-hint">
+                  {t("prefs.colorStyle.dynamicHint")}
+                </p>
+                <button
+                  type="button"
+                  className="shell-dynamic-reshuffle"
+                  data-tone={tone}
+                  onClick={onReshuffleDynamic}
+                >
+                  <Dices width={16} height={16} aria-hidden />
+                  {t("prefs.colorStyle.reshuffle")}
+                </button>
+              </div>
+            ) : null}
+          </section>
 
-      <ShellGradientEditor
-        open={gradientEditorOpen}
-        initial={gradient}
-        onPreview={onPreviewGradient}
-        onConfirm={(g) => {
-          onCommitCustomGradient(g);
-          setGradientEditorOpen(false);
-        }}
-        onCancel={() => {
-          onCancelCustomGradient();
-          setGradientEditorOpen(false);
-        }}
-      />
+          <ShellGradientEditor
+            open={gradientEditorOpen}
+            initial={gradient}
+            onPreview={onPreviewGradient}
+            onConfirm={(g) => {
+              onCommitCustomGradient(g);
+              setGradientEditorOpen(false);
+            }}
+            onCancel={() => {
+              onCancelCustomGradient();
+              setGradientEditorOpen(false);
+            }}
+          />
 
-      <section className="prefs-card morphicon-settings-card">
-        <div className="prefs-card-head">
-          <button
-            type="button"
-            className="prefs-icon-badge morphicon-preview-button"
-            data-tone={tone}
-            onClick={playMorphPreview}
-            aria-label={t("prefs.morphicons.preview")}
-          >
-            <AppMorphIcon
-              icon={morphPreviewActive ? SparklesData : ActivityData}
-              size={22}
-            />
-          </button>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.morphicons.title")}</h2>
-            <p className="prefs-card-sub">{t("prefs.morphicons.sub")}</p>
-          </div>
-        </div>
-
-        <div className="morphicon-setting-row">
-          <span className="morphicon-setting-label">{t("prefs.morphicons.spring")}</span>
-          <div
-            className="morphicon-segmented"
-            role="radiogroup"
-            aria-label={t("prefs.morphicons.spring")}
-          >
-            {MORPHICON_SPRINGS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={spring === value}
-                className={spring === value ? "is-active" : ""}
-                onClick={() => {
-                  setSpring(value);
-                  playMorphPreview();
-                }}
-              >
-                {t(MORPHICON_SPRING_LABEL[value])}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="morphicon-setting-row">
-          <span className="morphicon-setting-label">{t("prefs.morphicons.stroke")}</span>
-          <div
-            className="morphicon-segmented"
-            role="radiogroup"
-            aria-label={t("prefs.morphicons.stroke")}
-          >
-            {MORPHICON_STROKE_WIDTHS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={strokeWidth === value}
-                className={strokeWidth === value ? "is-active" : ""}
-                onClick={() => {
-                  setStrokeWidth(value);
-                  playMorphPreview();
-                }}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <IconAtom width={22} height={22} />
-          </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.appIcon.title")}</h2>
-            <p className="prefs-card-sub">{t("prefs.appIcon.sub")}</p>
-          </div>
-        </div>
-
-        <div
-          className="app-icon-grid"
-          role="radiogroup"
-          aria-label={t("prefs.appIcon.title")}
-        >
-          {(appIcon?.options ?? []).map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              role="radio"
-              aria-checked={appIcon?.current === opt.id}
-              className={`app-icon-option ${appIcon?.current === opt.id ? "active" : ""}`}
-              data-tone={tone}
-              onClick={() => void setAppIcon(opt.id)}
-            >
-              <img className="app-icon-thumb" src={opt.dataUrl} alt={appIconLabel(opt.id)} />
-              <span className="app-icon-label">{appIconLabel(opt.id)}</span>
-            </button>
-          ))}
-        </div>
-        <p className="prefs-card-note">{t("prefs.appIcon.finderNote")}</p>
-      </section>
-      </div>
-
-      <div
-        className="prefs-category-stack"
-        hidden={activeCategory !== "conversation"}
-      >
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <List width={22} height={22} />
-          </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.chat.layout.title")}</h2>
-            <p className="prefs-card-sub">{t("prefs.chat.layout.sub")}</p>
-          </div>
-        </div>
-
-        <div
-          className="theme-options answer-layout-options"
-          role="radiogroup"
-          aria-label={t("prefs.chat.layout.title")}
-        >
-          {answerLayoutOptions.map(({ id, labelKey, descKey, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={prefs.answerLayout === id}
-              className={`theme-option ${prefs.answerLayout === id ? "active" : ""}`}
-              data-tone={tone}
-              onClick={() => onChatAnswerLayoutChange(id)}
-            >
-              <span className="theme-option-icon" aria-hidden>
-                <Icon size={18} strokeWidth={2} />
-              </span>
-              <span className="theme-option-text">
-                <span className="theme-option-label">{t(labelKey)}</span>
-                <span className="theme-option-desc">{t(descKey)}</span>
-              </span>
-              <span className="theme-option-check" aria-hidden />
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <IconChat width={22} height={22} />
-          </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.chat.title")}</h2>
-            <p className="prefs-card-sub">{t("prefs.chat.sub")}</p>
-          </div>
-        </div>
-
-        <div
-          className="theme-options"
-          role="radiogroup"
-          aria-label={t("prefs.chat.verbosity")}
-        >
-          {verbosityOptions.map(({ id, labelKey, descKey }) => (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={prefs.verbosity === id}
-              className={`theme-option ${prefs.verbosity === id ? "active" : ""}`}
-              data-tone={tone}
-              onClick={() => onChatVerbosityChange(id)}
-            >
-              <span className="theme-option-icon lang-badge" aria-hidden>
-                {id === "compact" ? "简" : id === "normal" ? "常" : "详"}
-              </span>
-              <span className="theme-option-text">
-                <span className="theme-option-label">{t(labelKey)}</span>
-                <span className="theme-option-desc">{t(descKey)}</span>
-              </span>
-              <span className="theme-option-check" aria-hidden />
-            </button>
-          ))}
-        </div>
-
-        <div className="prefs-toggle-list" role="group" aria-label={t("prefs.chat.details")}>
-          <h3 className="prefs-toggle-heading">{t("prefs.chat.details")}</h3>
-          {TOGGLE_KEYS.map(({ key, labelKey, descKey, Icon }) => (
-            <label key={key} className="prefs-toggle-row">
-              <span className="prefs-toggle-icon" aria-hidden>
-                <Icon size={15} strokeWidth={2.25} />
-              </span>
-              <span className="prefs-toggle-text">
-                <span className="prefs-toggle-label">{t(labelKey)}</span>
-                <span className="prefs-toggle-desc">{t(descKey)}</span>
-              </span>
+          <section className="prefs-card morphicon-settings-card">
+            <div className="prefs-card-head">
               <button
                 type="button"
-                role="switch"
-                className="prefs-switch"
-                aria-checked={prefs[key]}
+                className="prefs-icon-badge morphicon-preview-button"
                 data-tone={tone}
-                onClick={() => onChatToggleChange(key, !prefs[key])}
+                onClick={playMorphPreview}
+                aria-label={t("prefs.morphicons.preview")}
               >
-                <span className="prefs-switch-thumb" />
+                <AppMorphIcon
+                  icon={morphPreviewActive ? SparklesData : ActivityData}
+                  size={22}
+                />
               </button>
-            </label>
-          ))}
-        </div>
-
-        <div className="prefs-toggle-list" role="group" aria-label="侧栏显示">
-          <h3 className="prefs-toggle-heading">侧栏</h3>
-          <SidebarVisibleSetting tone={tone} />
-        </div>
-      </section>
-
-      </div>
-
-      <div
-        className="prefs-category-stack"
-        hidden={activeCategory !== "context"}
-      >
-      <CompressionSettingsCard tone={tone} />
-      </div>
-
-      <div
-        className="prefs-category-stack"
-        hidden={activeCategory !== "diagnostics"}
-      >
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <ScrollText width={22} height={22} />
-          </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.diag.title")}</h2>
-            <p className="prefs-card-sub">{t("prefs.diag.sub")}</p>
-          </div>
-        </div>
-
-        <div className="prefs-diag-form">
-          <div className="prefs-diag-quick">
-            <div className="prefs-diag-group">
-              <span className="prefs-diag-group-label">{t("prefs.diag.scope")}</span>
-              <div className="prefs-chip-row" role="radiogroup" aria-label={t("prefs.diag.scope")}>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={scope === "current"}
-                  className={`prefs-chip ${scope === "current" ? "active" : ""}`}
-                  data-tone={tone}
-                  disabled={!hasSession}
-                  title={hasSession ? undefined : t("prefs.diag.scope.currentNone")}
-                  onClick={() => setScope("current")}
-                >
-                  {t("prefs.diag.scope.current")}
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={scope === "all"}
-                  className={`prefs-chip ${scope === "all" ? "active" : ""}`}
-                  data-tone={tone}
-                  onClick={() => setScope("all")}
-                >
-                  {t("prefs.diag.scope.all")}
-                </button>
+              <div>
+                <h2 className="prefs-card-title">
+                  {t("prefs.morphicons.title")}
+                </h2>
+                <p className="prefs-card-sub">{t("prefs.morphicons.sub")}</p>
               </div>
             </div>
 
-            <div className="prefs-diag-group">
-              <span className="prefs-diag-group-label">{t("prefs.diag.level")}</span>
-              <div className="prefs-chip-row" role="radiogroup" aria-label={t("prefs.diag.level")}>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={level === "all"}
-                  className={`prefs-chip ${level === "all" ? "active" : ""}`}
-                  data-tone={tone}
-                  onClick={() => setLevel("all")}
-                >
-                  {t("prefs.diag.level.all")}
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={level === "issues"}
-                  className={`prefs-chip ${level === "issues" ? "active" : ""}`}
-                  data-tone={tone}
-                  onClick={() => setLevel("issues")}
-                >
-                  {t("prefs.diag.level.issues")}
-                </button>
-              </div>
-            </div>
-
-            <div className="prefs-diag-group">
-              <span className="prefs-diag-group-label">{t("prefs.diag.lines")}</span>
-              <div className="prefs-chip-row" role="radiogroup" aria-label={t("prefs.diag.lines")}>
-                {LINE_PRESETS.map((n) => (
+            <div className="morphicon-setting-row">
+              <span className="morphicon-setting-label">
+                {t("prefs.morphicons.spring")}
+              </span>
+              <div
+                className="morphicon-segmented"
+                role="radiogroup"
+                aria-label={t("prefs.morphicons.spring")}
+              >
+                {MORPHICON_SPRINGS.map((value) => (
                   <button
-                    key={n}
+                    key={value}
                     type="button"
                     role="radio"
-                    aria-checked={lines === n}
-                    className={`prefs-chip ${lines === n ? "active" : ""}`}
-                    data-tone={tone}
-                    onClick={() => setLines(n)}
+                    aria-checked={spring === value}
+                    className={spring === value ? "is-active" : ""}
+                    onClick={() => {
+                      setSpring(value);
+                      playMorphPreview();
+                    }}
                   >
-                    {n}
+                    {t(MORPHICON_SPRING_LABEL[value])}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
 
-          <div className="prefs-diag-actions">
-            <button
-              type="button"
-              className="prefs-diag-btn primary"
-              data-tone={tone}
-              disabled={busy}
-              onClick={() => void refreshLogs()}
-            >
-              {busy ? t("prefs.diag.loading") : t("prefs.diag.refresh")}
-            </button>
-            <button
-              type="button"
-              className="prefs-diag-btn"
-              data-tone={tone}
-              disabled={busy || rows.length === 0}
-              onClick={() => void copyLogs()}
-            >
-              {t("prefs.diag.copy")}
-            </button>
-            <button
-              type="button"
-              className="prefs-diag-link"
-              onClick={() => setShowAdvanced((v) => !v)}
-              aria-expanded={showAdvanced}
-            >
-              {showAdvanced ? t("prefs.diag.advanced.hide") : t("prefs.diag.advanced.show")}
-            </button>
-          </div>
-
-          {showAdvanced && (
-            <div className="prefs-diag-advanced">
-              <label className="prefs-diag-row">
-                <span className="prefs-diag-label">{t("prefs.diag.session")}</span>
-                <input
-                  className="prefs-diag-input"
-                  type="text"
-                  value={manualSession}
-                  placeholder={t("prefs.diag.session.ph")}
-                  onChange={(e) => setManualSession(e.target.value)}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-              </label>
-              <label className="prefs-diag-row">
-                <span className="prefs-diag-label">{t("prefs.diag.turn")}</span>
-                <input
-                  className="prefs-diag-input"
-                  type="text"
-                  value={turnId}
-                  placeholder={t("prefs.diag.turn.ph")}
-                  onChange={(e) => setTurnId(e.target.value)}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-              </label>
-              <label className="prefs-diag-row">
-                <span className="prefs-diag-label">{t("prefs.diag.source")}</span>
-                <SelectMenu
-                  className="prefs-diag-select"
-                  value={source}
-                  aria-label={t("prefs.diag.source")}
-                  onChange={(v) => setSource(v as LogSourceFilter)}
-                  options={[
-                    { value: "both", label: t("prefs.diag.source.both") },
-                    { value: "agent", label: t("prefs.diag.source.agent") },
-                    { value: "errors", label: t("prefs.diag.source.errors") },
-                  ]}
-                />
-              </label>
-            </div>
-          )}
-
-          {errorMsg && <p className="prefs-diag-error">{errorMsg}</p>}
-          {queried && !errorMsg && rows.length === 0 && (
-            <p className="prefs-diag-empty">{t("prefs.diag.empty")}</p>
-          )}
-          {rows.length > 0 && (
-            <pre className="prefs-diag-log">
-              {rows.map((r) => `[${r.source}] ${r.raw}`).join("\n")}
-            </pre>
-          )}
-        </div>
-      </section>
-      </div>
-
-      <div
-        className="prefs-category-stack prefs-category-stack--general"
-        hidden={activeCategory !== "general"}
-      >
-      <section className="prefs-card prefs-card--general">
-        <div className="prefs-general-group">
-          <div className="prefs-card-head">
-            <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-              <IconGlobe width={22} height={22} />
-            </div>
-            <div>
-              <h2 className="prefs-card-title">{t("prefs.lang.title")}</h2>
-              <p className="prefs-card-sub">{t("prefs.lang.sub")}</p>
-            </div>
-          </div>
-
-          <div
-            className="theme-options lang-options"
-            role="radiogroup"
-            aria-label={t("prefs.lang.title")}
-          >
-            {langOptions.map(({ id, label, desc }) => (
-              <button
-                key={id}
-                type="button"
-                role="radio"
-                aria-checked={locale === id}
-                className={`theme-option ${locale === id ? "active" : ""}`}
-                data-tone={tone}
-                onClick={() => setLocale(id)}
+            <div className="morphicon-setting-row">
+              <span className="morphicon-setting-label">
+                {t("prefs.morphicons.stroke")}
+              </span>
+              <div
+                className="morphicon-segmented"
+                role="radiogroup"
+                aria-label={t("prefs.morphicons.stroke")}
               >
-                <span className="theme-option-icon lang-badge" aria-hidden>
-                  {id === "zh" ? "中" : "En"}
-                </span>
-                <span className="theme-option-text">
-                  <span className="theme-option-label">{label}</span>
-                  <span className="theme-option-desc">{desc}</span>
-                </span>
-                <span className="theme-option-check" aria-hidden />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="prefs-general-divider" aria-hidden />
-
-        <div className="prefs-general-group">
-          <div className="prefs-card-head">
-            <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-              <Wrench width={22} height={22} />
+                {MORPHICON_STROKE_WIDTHS.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={strokeWidth === value}
+                    className={strokeWidth === value ? "is-active" : ""}
+                    onClick={() => {
+                      setStrokeWidth(value);
+                      playMorphPreview();
+                    }}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div>
-              <h2 className="prefs-card-title">{t("prefs.system.title" as never)}</h2>
-              <p className="prefs-card-sub">{t("prefs.system.sub" as never)}</p>
+          </section>
+
+          <section className="prefs-card">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <IconAtom width={22} height={22} />
+              </div>
+              <div>
+                <h2 className="prefs-card-title">{t("prefs.appIcon.title")}</h2>
+                <p className="prefs-card-sub">{t("prefs.appIcon.sub")}</p>
+              </div>
             </div>
-          </div>
 
-          <div className="prefs-toggle-list" role="group" aria-label={t("prefs.system.title" as never)}>
-            <label className="prefs-toggle-row">
-              <span className="prefs-toggle-icon" aria-hidden>
-                <Play size={15} strokeWidth={2.25} />
-              </span>
-              <span className="prefs-toggle-text">
-                <span className="prefs-toggle-label">{t("prefs.system.autostart" as never)}</span>
-                <span className="prefs-toggle-desc">{t("prefs.system.autostartDesc" as never)}</span>
-              </span>
-              <AutostartSwitch tone={tone} />
-            </label>
-          </div>
+            <div
+              className="app-icon-grid"
+              role="radiogroup"
+              aria-label={t("prefs.appIcon.title")}
+            >
+              {(appIcon?.options ?? []).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={appIcon?.current === opt.id}
+                  className={`app-icon-option ${appIcon?.current === opt.id ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => void setAppIcon(opt.id)}
+                >
+                  <img
+                    className="app-icon-thumb"
+                    src={opt.dataUrl}
+                    alt={appIconLabel(opt.id)}
+                  />
+                  <span className="app-icon-label">{appIconLabel(opt.id)}</span>
+                </button>
+              ))}
+            </div>
+            <p className="prefs-card-note">{t("prefs.appIcon.finderNote")}</p>
+          </section>
         </div>
-      </section>
-      </div>
 
-      <div
-        className="prefs-category-stack"
-        hidden={activeCategory !== "about"}
-      >
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <IconAtom width={22} height={22} />
-          </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.app.aboutTitle")}</h2>
-            <p className="prefs-card-sub">{t("prefs.app.about")}</p>
-          </div>
+        <div
+          className="prefs-category-stack"
+          hidden={activeCategory !== "conversation"}
+        >
+          <section className="prefs-card">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <List width={22} height={22} />
+              </div>
+              <div>
+                <h2 className="prefs-card-title">
+                  {t("prefs.chat.layout.title")}
+                </h2>
+                <p className="prefs-card-sub">{t("prefs.chat.layout.sub")}</p>
+              </div>
+            </div>
+
+            <div
+              className="theme-options answer-layout-options"
+              role="radiogroup"
+              aria-label={t("prefs.chat.layout.title")}
+            >
+              {answerLayoutOptions.map(({ id, labelKey, descKey, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={prefs.answerLayout === id}
+                  className={`theme-option ${prefs.answerLayout === id ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => onChatAnswerLayoutChange(id)}
+                >
+                  <span className="theme-option-icon" aria-hidden>
+                    <Icon size={18} strokeWidth={2} />
+                  </span>
+                  <span className="theme-option-text">
+                    <span className="theme-option-label">{t(labelKey)}</span>
+                    <span className="theme-option-desc">{t(descKey)}</span>
+                  </span>
+                  <span className="theme-option-check" aria-hidden />
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="prefs-card">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <IconChat width={22} height={22} />
+              </div>
+              <div>
+                <h2 className="prefs-card-title">{t("prefs.chat.title")}</h2>
+                <p className="prefs-card-sub">{t("prefs.chat.sub")}</p>
+              </div>
+            </div>
+
+            <div
+              className="theme-options"
+              role="radiogroup"
+              aria-label={t("prefs.chat.verbosity")}
+            >
+              {verbosityOptions.map(({ id, labelKey, descKey }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={prefs.verbosity === id}
+                  className={`theme-option ${prefs.verbosity === id ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => onChatVerbosityChange(id)}
+                >
+                  <span className="theme-option-icon lang-badge" aria-hidden>
+                    {id === "compact" ? "简" : id === "normal" ? "常" : "详"}
+                  </span>
+                  <span className="theme-option-text">
+                    <span className="theme-option-label">{t(labelKey)}</span>
+                    <span className="theme-option-desc">{t(descKey)}</span>
+                  </span>
+                  <span className="theme-option-check" aria-hidden />
+                </button>
+              ))}
+            </div>
+
+            <div
+              className="prefs-toggle-list"
+              role="group"
+              aria-label={t("prefs.chat.details")}
+            >
+              <h3 className="prefs-toggle-heading">
+                {t("prefs.chat.details")}
+              </h3>
+              {TOGGLE_KEYS.map(({ key, labelKey, descKey, Icon }) => (
+                <label key={key} className="prefs-toggle-row">
+                  <span className="prefs-toggle-icon" aria-hidden>
+                    <Icon size={15} strokeWidth={2.25} />
+                  </span>
+                  <span className="prefs-toggle-text">
+                    <span className="prefs-toggle-label">{t(labelKey)}</span>
+                    <span className="prefs-toggle-desc">{t(descKey)}</span>
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    className="prefs-switch"
+                    aria-checked={prefs[key]}
+                    data-tone={tone}
+                    onClick={() => onChatToggleChange(key, !prefs[key])}
+                  >
+                    <span className="prefs-switch-thumb" />
+                  </button>
+                </label>
+              ))}
+            </div>
+
+            <div
+              className="prefs-toggle-list"
+              role="group"
+              aria-label="侧栏显示"
+            >
+              <h3 className="prefs-toggle-heading">侧栏</h3>
+              <SidebarVisibleSetting tone={tone} />
+            </div>
+          </section>
         </div>
-      </section>
-      </div>
+
+        <div
+          className="prefs-category-stack"
+          hidden={activeCategory !== "context"}
+        >
+          <CompressionSettingsCard tone={tone} />
+        </div>
+
+        <div
+          className="prefs-category-stack"
+          hidden={activeCategory !== "diagnostics"}
+        >
+          <section className="prefs-card">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <ScrollText width={22} height={22} />
+              </div>
+              <div>
+                <h2 className="prefs-card-title">{t("prefs.diag.title")}</h2>
+                <p className="prefs-card-sub">{t("prefs.diag.sub")}</p>
+              </div>
+            </div>
+
+            <div className="prefs-diag-form">
+              <div className="prefs-diag-quick">
+                <div className="prefs-diag-group">
+                  <span className="prefs-diag-group-label">
+                    {t("prefs.diag.scope")}
+                  </span>
+                  <div
+                    className="prefs-chip-row"
+                    role="radiogroup"
+                    aria-label={t("prefs.diag.scope")}
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={scope === "current"}
+                      className={`prefs-chip ${scope === "current" ? "active" : ""}`}
+                      data-tone={tone}
+                      disabled={!hasSession}
+                      title={
+                        hasSession
+                          ? undefined
+                          : t("prefs.diag.scope.currentNone")
+                      }
+                      onClick={() => setScope("current")}
+                    >
+                      {t("prefs.diag.scope.current")}
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={scope === "all"}
+                      className={`prefs-chip ${scope === "all" ? "active" : ""}`}
+                      data-tone={tone}
+                      onClick={() => setScope("all")}
+                    >
+                      {t("prefs.diag.scope.all")}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="prefs-diag-group">
+                  <span className="prefs-diag-group-label">
+                    {t("prefs.diag.level")}
+                  </span>
+                  <div
+                    className="prefs-chip-row"
+                    role="radiogroup"
+                    aria-label={t("prefs.diag.level")}
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={level === "all"}
+                      className={`prefs-chip ${level === "all" ? "active" : ""}`}
+                      data-tone={tone}
+                      onClick={() => setLevel("all")}
+                    >
+                      {t("prefs.diag.level.all")}
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={level === "issues"}
+                      className={`prefs-chip ${level === "issues" ? "active" : ""}`}
+                      data-tone={tone}
+                      onClick={() => setLevel("issues")}
+                    >
+                      {t("prefs.diag.level.issues")}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="prefs-diag-group">
+                  <span className="prefs-diag-group-label">
+                    {t("prefs.diag.lines")}
+                  </span>
+                  <div
+                    className="prefs-chip-row"
+                    role="radiogroup"
+                    aria-label={t("prefs.diag.lines")}
+                  >
+                    {LINE_PRESETS.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        role="radio"
+                        aria-checked={lines === n}
+                        className={`prefs-chip ${lines === n ? "active" : ""}`}
+                        data-tone={tone}
+                        onClick={() => setLines(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="prefs-diag-actions">
+                <button
+                  type="button"
+                  className="prefs-diag-btn primary"
+                  data-tone={tone}
+                  disabled={busy}
+                  onClick={() => void refreshLogs()}
+                >
+                  {busy ? t("prefs.diag.loading") : t("prefs.diag.refresh")}
+                </button>
+                <button
+                  type="button"
+                  className="prefs-diag-btn"
+                  data-tone={tone}
+                  disabled={busy || rows.length === 0}
+                  onClick={() => void copyLogs()}
+                >
+                  {t("prefs.diag.copy")}
+                </button>
+                <button
+                  type="button"
+                  className="prefs-diag-link"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  aria-expanded={showAdvanced}
+                >
+                  {showAdvanced
+                    ? t("prefs.diag.advanced.hide")
+                    : t("prefs.diag.advanced.show")}
+                </button>
+              </div>
+
+              {showAdvanced && (
+                <div className="prefs-diag-advanced">
+                  <label className="prefs-diag-row">
+                    <span className="prefs-diag-label">
+                      {t("prefs.diag.session")}
+                    </span>
+                    <input
+                      className="prefs-diag-input"
+                      type="text"
+                      value={manualSession}
+                      placeholder={t("prefs.diag.session.ph")}
+                      onChange={(e) => setManualSession(e.target.value)}
+                      spellCheck={false}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="prefs-diag-row">
+                    <span className="prefs-diag-label">
+                      {t("prefs.diag.turn")}
+                    </span>
+                    <input
+                      className="prefs-diag-input"
+                      type="text"
+                      value={turnId}
+                      placeholder={t("prefs.diag.turn.ph")}
+                      onChange={(e) => setTurnId(e.target.value)}
+                      spellCheck={false}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="prefs-diag-row">
+                    <span className="prefs-diag-label">
+                      {t("prefs.diag.source")}
+                    </span>
+                    <SelectMenu
+                      className="prefs-diag-select"
+                      value={source}
+                      aria-label={t("prefs.diag.source")}
+                      onChange={(v) => setSource(v as LogSourceFilter)}
+                      options={[
+                        { value: "both", label: t("prefs.diag.source.both") },
+                        { value: "agent", label: t("prefs.diag.source.agent") },
+                        {
+                          value: "errors",
+                          label: t("prefs.diag.source.errors"),
+                        },
+                      ]}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {errorMsg && <p className="prefs-diag-error">{errorMsg}</p>}
+              {queried && !errorMsg && rows.length === 0 && (
+                <p className="prefs-diag-empty">{t("prefs.diag.empty")}</p>
+              )}
+              {rows.length > 0 && (
+                <pre className="prefs-diag-log">
+                  {rows.map((r) => `[${r.source}] ${r.raw}`).join("\n")}
+                </pre>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div
+          className="prefs-category-stack prefs-category-stack--general"
+          hidden={activeCategory !== "general"}
+        >
+          <section className="prefs-card prefs-card--general">
+            <div className="prefs-general-group">
+              <div className="prefs-card-head">
+                <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                  <IconGlobe width={22} height={22} />
+                </div>
+                <div>
+                  <h2 className="prefs-card-title">{t("prefs.lang.title")}</h2>
+                  <p className="prefs-card-sub">{t("prefs.lang.sub")}</p>
+                </div>
+              </div>
+
+              <div
+                className="theme-options lang-options"
+                role="radiogroup"
+                aria-label={t("prefs.lang.title")}
+              >
+                {langOptions.map(({ id, label, desc }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={locale === id}
+                    className={`theme-option ${locale === id ? "active" : ""}`}
+                    data-tone={tone}
+                    onClick={() => setLocale(id)}
+                  >
+                    <span className="theme-option-icon lang-badge" aria-hidden>
+                      {id === "zh" ? "中" : "En"}
+                    </span>
+                    <span className="theme-option-text">
+                      <span className="theme-option-label">{label}</span>
+                      <span className="theme-option-desc">{desc}</span>
+                    </span>
+                    <span className="theme-option-check" aria-hidden />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="prefs-general-divider" aria-hidden />
+
+            <div className="prefs-general-group">
+              <div className="prefs-card-head">
+                <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                  <Wrench width={22} height={22} />
+                </div>
+                <div>
+                  <h2 className="prefs-card-title">
+                    {t("prefs.system.title" as never)}
+                  </h2>
+                  <p className="prefs-card-sub">
+                    {t("prefs.system.sub" as never)}
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className="prefs-toggle-list"
+                role="group"
+                aria-label={t("prefs.system.title" as never)}
+              >
+                <label className="prefs-toggle-row">
+                  <span className="prefs-toggle-icon" aria-hidden>
+                    <Play size={15} strokeWidth={2.25} />
+                  </span>
+                  <span className="prefs-toggle-text">
+                    <span className="prefs-toggle-label">
+                      {t("prefs.system.autostart" as never)}
+                    </span>
+                    <span className="prefs-toggle-desc">
+                      {t("prefs.system.autostartDesc" as never)}
+                    </span>
+                  </span>
+                  <AutostartSwitch tone={tone} />
+                </label>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div
+          className="prefs-category-stack"
+          hidden={activeCategory !== "about"}
+        >
+          <section className="prefs-card">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <IconAtom width={22} height={22} />
+              </div>
+              <div>
+                <h2 className="prefs-card-title">
+                  {t("prefs.app.aboutTitle")}
+                </h2>
+                <p className="prefs-card-sub">{t("prefs.app.about")}</p>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );
@@ -1182,7 +1308,10 @@ function SidebarVisibleSetting({ tone }: { tone?: string }) {
   const [count, setCount] = useState(() => {
     try {
       const v = localStorage.getItem("astro:sidebar-visible-sessions");
-      if (v) { const n = Number(v); if (n >= 1 && n <= 50) return n; }
+      if (v) {
+        const n = Number(v);
+        if (n >= 1 && n <= 50) return n;
+      }
     } catch {}
     return 5;
   });
@@ -1203,11 +1332,15 @@ function SidebarVisibleSetting({ tone }: { tone?: string }) {
         onChange={(e) => {
           const n = Number(e.target.value);
           setCount(n);
-          try { localStorage.setItem("astro:sidebar-visible-sessions", String(n)); } catch {}
+          try {
+            localStorage.setItem("astro:sidebar-visible-sessions", String(n));
+          } catch {}
         }}
       >
         {[3, 5, 8, 10, 15, 20].map((n) => (
-          <option key={n} value={n}>{n} 条</option>
+          <option key={n} value={n}>
+            {n} 条
+          </option>
         ))}
       </select>
     </label>

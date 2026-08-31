@@ -17,7 +17,11 @@ const OPERATION_OPTIONS = [
   { value: "list", label: "列出目录" },
 ];
 
-export default function FileIoConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function FileIoConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   const operation = cfgStr(config, "operation", "read");
   return (

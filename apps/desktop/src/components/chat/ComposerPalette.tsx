@@ -66,7 +66,10 @@ export function ComposerPalette({
   }, [activeIndex]);
 
   const groups = useMemo(() => {
-    const map = new Map<string, { label: string; items: { item: PaletteItem; globalIdx: number }[] }>();
+    const map = new Map<
+      string,
+      { label: string; items: { item: PaletteItem; globalIdx: number }[] }
+    >();
     filtered.forEach((item, idx) => {
       const g = item.group || "";
       if (!map.has(g)) map.set(g, { label: g, items: [] });
@@ -88,7 +91,9 @@ export function ComposerPalette({
           groups.map((group) => (
             <div key={group.label} className="composer-palette-group">
               {group.label && (
-                <div className="composer-palette-group-label">{group.label}</div>
+                <div className="composer-palette-group-label">
+                  {group.label}
+                </div>
               )}
               {group.items.map(({ item, globalIdx }) => {
                 const active = globalIdx === activeIndex;
@@ -105,14 +110,22 @@ export function ComposerPalette({
                     onClick={() => onSelect(item)}
                   >
                     {item.icon && (
-                      <span className="composer-palette-ico" aria-hidden>{item.icon}</span>
+                      <span className="composer-palette-ico" aria-hidden>
+                        {item.icon}
+                      </span>
                     )}
-                    <span className="composer-palette-item-name">{item.title}</span>
+                    <span className="composer-palette-item-name">
+                      {item.title}
+                    </span>
                     {item.description && (
-                      <span className="composer-palette-item-hint">{item.description}</span>
+                      <span className="composer-palette-item-hint">
+                        {item.description}
+                      </span>
                     )}
                     {selected && (
-                      <span className="composer-palette-check" aria-hidden>✓</span>
+                      <span className="composer-palette-check" aria-hidden>
+                        ✓
+                      </span>
                     )}
                   </button>
                 );

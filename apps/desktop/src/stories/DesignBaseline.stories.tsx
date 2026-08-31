@@ -42,17 +42,32 @@ function DesignBaseline() {
             marginBottom: 20,
           }}
         >
-          <div className="app-dialog-emphasis" style={{ margin: 0, padding: 20 }}>
+          <div
+            className="app-dialog-emphasis"
+            style={{ margin: 0, padding: 20 }}
+          >
             <span className="app-dialog-emphasis-label">Surface</span>
             <strong className="app-dialog-emphasis-value">柔和玻璃表面</strong>
-            <span style={{ color: "var(--ink-mute)", fontSize: 13, lineHeight: 1.5 }}>
+            <span
+              style={{
+                color: "var(--ink-mute)",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
               表面、边框和文字均来自当前主题的语义 token。
             </span>
           </div>
 
-          <div className="app-dialog-emphasis" style={{ margin: 0, padding: 20 }}>
+          <div
+            className="app-dialog-emphasis"
+            style={{ margin: 0, padding: 20 }}
+          >
             <span className="app-dialog-emphasis-label">Button</span>
-            <div className="app-dialog-actions" style={{ justifyContent: "flex-start" }}>
+            <div
+              className="app-dialog-actions"
+              style={{ justifyContent: "flex-start" }}
+            >
               <button className="app-dialog-btn is-cancel" type="button">
                 次要操作
               </button>
@@ -64,14 +79,30 @@ function DesignBaseline() {
         </section>
 
         <section aria-label="标签页" style={{ marginBottom: 20 }}>
-          <div className="skills-main-tabs" role="tablist" aria-label="基线标签页">
-            <button className="skills-main-tab active" role="tab" aria-selected="true">
+          <div
+            className="skills-main-tabs"
+            role="tablist"
+            aria-label="基线标签页"
+          >
+            <button
+              className="skills-main-tab active"
+              role="tab"
+              aria-selected="true"
+            >
               概览
             </button>
-            <button className="skills-main-tab" role="tab" aria-selected="false">
+            <button
+              className="skills-main-tab"
+              role="tab"
+              aria-selected="false"
+            >
               活动
             </button>
-            <button className="skills-main-tab" role="tab" aria-selected="false">
+            <button
+              className="skills-main-tab"
+              role="tab"
+              aria-selected="false"
+            >
               设置
             </button>
           </div>
@@ -85,8 +116,7 @@ function DesignBaseline() {
             placeItems: "center",
             padding: 24,
             borderRadius: "var(--radius-xl)",
-            background:
-              "color-mix(in srgb, var(--bg-base) 36%, transparent)",
+            background: "color-mix(in srgb, var(--bg-base) 36%, transparent)",
             backdropFilter: "blur(8px)",
           }}
         >

@@ -1,18 +1,10 @@
 import type { ModelInfo } from "../../types.ts";
 
 export type MediaCapabilityKey =
-  | "image_gen"
-  | "video_gen"
-  | "audio_gen"
-  | "music_gen"
-  | "vision";
+  "image_gen" | "video_gen" | "audio_gen" | "music_gen" | "vision";
 
 export type MediaModelField =
-  | "image_model"
-  | "video_model"
-  | "tts_model"
-  | "music_model"
-  | "vision_model";
+  "image_model" | "video_model" | "tts_model" | "music_model" | "vision_model";
 
 export type MediaModelOption = {
   value: string;
@@ -20,9 +12,7 @@ export type MediaModelOption = {
 };
 
 export type MediaModelsResultKind =
-  | "cache"
-  | "online-success"
-  | "online-failure";
+  "cache" | "online-success" | "online-failure";
 
 export type MediaModelsResultDecision = {
   accept: boolean;

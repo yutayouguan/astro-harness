@@ -15,7 +15,10 @@ const TIMEZONE_OPTIONS = [
   { value: "UTC", label: "UTC" },
 ];
 
-export default function ScheduledTriggerConfig({ config, onChange }: ConfigProps) {
+export default function ScheduledTriggerConfig({
+  config,
+  onChange,
+}: ConfigProps) {
   return (
     <>
       <TextField

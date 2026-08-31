@@ -6,8 +6,14 @@
   border: 1px solid var(--surface-panel-border, rgba(148, 163, 184, 0.24));
   border-radius: var(--seg-shell-radius, 12px);
   background: var(--surface-panel-background, rgba(255, 255, 255, 0.24));
-  backdrop-filter: var(--seg-shell-blur, blur(calc(14px * var(--glass-blur-scale, 1))));
-  -webkit-backdrop-filter: var(--seg-shell-blur, blur(calc(14px * var(--glass-blur-scale, 1))));
+  backdrop-filter: var(
+    --seg-shell-blur,
+    blur(calc(14px * var(--glass-blur-scale, 1)))
+  );
+  -webkit-backdrop-filter: var(
+    --seg-shell-blur,
+    blur(calc(14px * var(--glass-blur-scale, 1)))
+  );
 }
 
 .ui-segmented-tabs__tab {
@@ -51,12 +57,14 @@
     var(--color-bg-raised, #fff)
   );
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-accent, #7c3aed) 20%, transparent),
+    inset 0 0 0 1px
+      color-mix(in srgb, var(--color-accent, #7c3aed) 20%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 42%, transparent);
 }
 
 .ui-segmented-tabs__tab:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-accent, #7c3aed) 60%, transparent);
+  outline: 2px solid
+    color-mix(in srgb, var(--color-accent, #7c3aed) 60%, transparent);
   outline-offset: 1px;
 }
 

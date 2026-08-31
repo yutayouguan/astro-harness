@@ -63,7 +63,8 @@ export function cronRunStatusKind(
   const normalized = status.toLowerCase();
   if (["success", "ok", "completed"].includes(normalized)) return "success";
   if (["failure", "failed", "error"].includes(normalized)) return "failure";
-  if (["running", "in_progress", "pending"].includes(normalized)) return "running";
+  if (["running", "in_progress", "pending"].includes(normalized))
+    return "running";
   return "other";
 }
 
@@ -88,7 +89,14 @@ function CronRunStatusIcon({ status }: { status: string }) {
     return <CircleAlert size={12} strokeWidth={2.4} aria-hidden />;
   }
   if (kind === "running") {
-    return <LoaderCircle size={12} strokeWidth={2.4} className="is-spin" aria-hidden />;
+    return (
+      <LoaderCircle
+        size={12}
+        strokeWidth={2.4}
+        className="is-spin"
+        aria-hidden
+      />
+    );
   }
   return <Clock3 size={12} strokeWidth={2.4} aria-hidden />;
 }
@@ -430,7 +438,9 @@ export function CronRunDetailDrawer({
       </header>
       <div className="cron-run-drawer-body">
         <div className="cron-run-drawer-meta">
-          <span className={`cron-status-pill is-${cronRunStatusKind(run.status)}`}>
+          <span
+            className={`cron-status-pill is-${cronRunStatusKind(run.status)}`}
+          >
             <CronRunStatusIcon status={run.status} />
             {statusLabel(run.status)}
           </span>
@@ -515,7 +525,13 @@ export function CronRunDetailDrawer({
 function TrashIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

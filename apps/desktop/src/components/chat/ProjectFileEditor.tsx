@@ -37,7 +37,8 @@ export default function ProjectFileEditor({
     activeTab?.previewKind === "video" ||
     activeTab?.previewKind === "audio" ||
     activeTab?.previewKind === "pdf";
-  const opensExternally = isMediaPreview || activeTab?.previewKind === "external";
+  const opensExternally =
+    isMediaPreview || activeTab?.previewKind === "external";
 
   const toggleMarkdownMode = () => {
     const next = mdMode === "preview" ? "source" : "preview";
@@ -47,7 +48,11 @@ export default function ProjectFileEditor({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLocaleLowerCase() !== "s") return;
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        event.key.toLocaleLowerCase() !== "s"
+      )
+        return;
       if (!activeTab) return;
       event.preventDefault();
       void workbench.saveActive();
@@ -80,9 +85,15 @@ export default function ProjectFileEditor({
                 }}
                 title={tab.path ?? tab.name}
               >
-                <FileTypeIcon className="project-file-icon" name={tab.name} size={15} />
+                <FileTypeIcon
+                  className="project-file-icon"
+                  name={tab.name}
+                  size={15}
+                />
                 <span>{tab.name}</span>
-                {dirty ? <i className="project-file-dirty" aria-label="未保存" /> : null}
+                {dirty ? (
+                  <i className="project-file-dirty" aria-label="未保存" />
+                ) : null}
                 <button
                   type="button"
                   className="project-file-tab-close"
@@ -122,7 +133,9 @@ export default function ProjectFileEditor({
               className={showMarkdownPreview ? "is-active" : undefined}
               onClick={toggleMarkdownMode}
               title={showMarkdownPreview ? "显示源码" : "预览 Markdown"}
-              aria-label={showMarkdownPreview ? "显示 Markdown 源码" : "预览 Markdown"}
+              aria-label={
+                showMarkdownPreview ? "显示 Markdown 源码" : "预览 Markdown"
+              }
               aria-pressed={showMarkdownPreview}
             >
               {showMarkdownPreview ? (
@@ -143,13 +156,15 @@ export default function ProjectFileEditor({
                 activeTab.saving ||
                 activeTab.content === activeTab.savedContent
               }
-              title={
-                activeTab?.readonly ? "生成中，完成后可编辑" : "保存 (⌘S)"
-              }
+              title={activeTab?.readonly ? "生成中，完成后可编辑" : "保存 (⌘S)"}
               aria-label="保存当前文件"
             >
               {activeTab?.saving ? (
-                <LoaderCircle className="project-file-spin" size={14} aria-hidden />
+                <LoaderCircle
+                  className="project-file-spin"
+                  size={14}
+                  aria-hidden
+                />
               ) : (
                 <Save size={14} aria-hidden />
               )}
@@ -182,7 +197,10 @@ export default function ProjectFileEditor({
             <FileQuestion size={24} strokeWidth={1.8} aria-hidden />
             <strong>此格式暂不支持内嵌预览</strong>
             <span>{activeTab.name}</span>
-            <button type="button" onClick={() => void workbench.openActiveExternally()}>
+            <button
+              type="button"
+              onClick={() => void workbench.openActiveExternally()}
+            >
               <ExternalLink size={14} aria-hidden />
               使用系统应用打开
             </button>

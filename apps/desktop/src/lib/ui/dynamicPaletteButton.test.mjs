@@ -34,7 +34,10 @@ test("dynamic seed changes crossfade from the current shell palette", () => {
 });
 
 test("each activation restarts the pinwheel feedback", () => {
-  assert.match(component, /const rotorRef = useRef<SVGGElement \| null>\(null\)/);
+  assert.match(
+    component,
+    /const rotorRef = useRef<SVGGElement \| null>\(null\)/,
+  );
   assert.match(component, /rotor\.getAnimations\(\)\.forEach/);
   assert.match(component, /animation\.cancel\(\)/);
   assert.match(component, /rotor\.animate\(/);
@@ -50,9 +53,18 @@ test("each activation restarts the pinwheel feedback", () => {
   assert.match(component, /data-blade="green"/);
   assert.match(component, /data-blade="cyan"/);
   assert.match(component, /data-blade="red"/);
-  assert.match(styles, /\.shell-dynamic-palette-button\s*\{[\s\S]*border:\s*0;/);
-  assert.match(styles, /\.shell-dynamic-palette-button\s*\{[\s\S]*background:\s*transparent;/);
-  assert.match(styles, /\.shell-dynamic-palette-rotor\s*\{[\s\S]*will-change:\s*transform;/);
+  assert.match(
+    styles,
+    /\.shell-dynamic-palette-button\s*\{[\s\S]*border:\s*0;/,
+  );
+  assert.match(
+    styles,
+    /\.shell-dynamic-palette-button\s*\{[\s\S]*background:\s*transparent;/,
+  );
+  assert.match(
+    styles,
+    /\.shell-dynamic-palette-rotor\s*\{[\s\S]*will-change:\s*transform;/,
+  );
 });
 
 test("dynamic palette control has accessible motion and input states", () => {
@@ -61,6 +73,9 @@ test("dynamic palette control has accessible motion and input states", () => {
   assert.match(styles, /\.shell-dynamic-palette-button:active/);
   assert.match(styles, /@media \(hover: hover\) and \(pointer: fine\)/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(styles, /\.shell-dynamic-palette-button\s*\{[\s\S]*bottom:\s*0;/);
+  assert.match(
+    styles,
+    /\.shell-dynamic-palette-button\s*\{[\s\S]*bottom:\s*0;/,
+  );
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*bottom:\s*0;/);
 });

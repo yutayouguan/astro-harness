@@ -16,17 +16,37 @@ html[data-theme="dark"] {
   --color-danger-background: var(--palette-danger-bg);
 
   --surface-panel-background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.015) 100%
+    ),
     rgba(8, 6, 18, 0.62);
   --surface-panel-border: var(--color-border);
   --surface-panel-hover: rgba(255, 255, 255, 0.07);
 
   --shell-bg:
-    radial-gradient(ellipse 80% 70% at 20% 0%, rgba(124, 58, 237, 0.28), transparent 55%),
-    radial-gradient(ellipse 70% 60% at 90% 20%, rgba(59, 130, 246, 0.16), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(236, 72, 153, 0.1), transparent 55%),
+    radial-gradient(
+      ellipse 80% 70% at 20% 0%,
+      rgba(124, 58, 237, 0.28),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 60% at 90% 20%,
+      rgba(59, 130, 246, 0.16),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(236, 72, 153, 0.1),
+      transparent 55%
+    ),
     linear-gradient(160deg, #100816 0%, #1a1028 45%, #0e0a18 100%);
-  --user-fill: linear-gradient(145deg, rgba(147, 197, 253, 0.32), rgba(96, 165, 250, 0.18));
+  --user-fill: linear-gradient(
+    145deg,
+    rgba(147, 197, 253, 0.32),
+    rgba(96, 165, 250, 0.18)
+  );
   --assist-fill: rgba(255, 255, 255, 0.05);
   --shadow-ink: 0, 0, 0;
   --shadow: 0 8px 24px rgba(var(--shadow-ink), 0.28);

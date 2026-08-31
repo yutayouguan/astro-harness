@@ -45,7 +45,10 @@ test("expanded tool activity gains depth while running state avoids full-card gl
   const css = await source("styles/features/chat/activity-surfaces.css");
 
   assert.match(css, /> \.msg-activity\.is-open \{/);
-  assert.match(css, /\.msg-activity\.is-open[\s\S]*\.msg-activity-collapse-inner/);
+  assert.match(
+    css,
+    /\.msg-activity\.is-open[\s\S]*\.msg-activity-collapse-inner/,
+  );
   assert.match(css, /\.msg-reasoning\.is-active \{[\s\S]*animation: none/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   assert.match(css, /prefers-reduced-transparency: reduce/);
@@ -59,7 +62,10 @@ test("TODO updates stay out of answers and use a compact centered composer statu
     source("styles/features/chat/activity-surfaces.css"),
   ]);
 
-  assert.match(activity, /const \[inputOpen, setInputOpen\] = useState\(false\)/);
+  assert.match(
+    activity,
+    /const \[inputOpen, setInputOpen\] = useState\(false\)/,
+  );
   assert.match(activity, /className="msg-activity-io-disclosure"/);
   assert.match(activity, /msg-activity-input-collapse/);
   assert.match(progress, /className="todo-progress-current"/);
@@ -82,7 +88,10 @@ test("TODO updates stay out of answers and use a compact centered composer statu
     css,
     /\.composer-shell \.chat-scroll-latest \{[\s\S]*align-self: center;[\s\S]*width: 36px;[\s\S]*height: 36px/,
   );
-  assert.match(css, /\.chat-scroll-latest-dots > span \{[\s\S]*animation: chat-scroll-latest-dot/);
+  assert.match(
+    css,
+    /\.chat-scroll-latest-dots > span \{[\s\S]*animation: chat-scroll-latest-dot/,
+  );
   assert.match(
     css,
     /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.chat-scroll-latest-dots > span,[\s\S]*animation: none/,

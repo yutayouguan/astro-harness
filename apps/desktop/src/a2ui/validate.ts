@@ -8,10 +8,14 @@ import {
 
 export function parseOperations(raw: unknown): A2uiOperation[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter((item) => item && typeof item === "object") as A2uiOperation[];
+  return raw.filter(
+    (item) => item && typeof item === "object",
+  ) as A2uiOperation[];
 }
 
-export function collectComponents(operations: A2uiOperation[]): A2uiComponent[] {
+export function collectComponents(
+  operations: A2uiOperation[],
+): A2uiComponent[] {
   const out: A2uiComponent[] = [];
   for (const op of operations) {
     const list = op.updateComponents?.components;

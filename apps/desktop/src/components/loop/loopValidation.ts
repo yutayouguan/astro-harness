@@ -16,7 +16,10 @@ const REQUIRED_FIELDS: Partial<Record<NodeType, ValidationRule[]>> = {
   voice_clone: [{ field: "reference_audio", label: "参考音频" }],
   speech_to_text: [{ field: "input_path", label: "音频路径" }],
   image_edit: [{ field: "input_image", label: "输入图片" }],
-  translation: [{ field: "text_template", label: "输入文本" }, { field: "target_lang", label: "目标语言" }],
+  translation: [
+    { field: "text_template", label: "输入文本" },
+    { field: "target_lang", label: "目标语言" },
+  ],
   knowledge_retrieval: [{ field: "query_template", label: "查询文本" }],
   summarization: [{ field: "text_template", label: "输入文本" }],
   sentiment_analysis: [{ field: "text_template", label: "输入文本" }],

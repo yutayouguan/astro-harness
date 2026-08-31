@@ -17,7 +17,10 @@ const styles = await readFile(
 
 test("welcome cards send localized templates with explicit slot hints", () => {
   assert.match(welcomeSource, /promptTemplateHints\(prompt\)/);
-  assert.match(welcomeSource, /onPick\(prompt, promptTemplateHints\(prompt\)\)/);
+  assert.match(
+    welcomeSource,
+    /onPick\(prompt, promptTemplateHints\(prompt\)\)/,
+  );
 });
 
 test("composer renders, navigates, validates, and sanitizes welcome slots", () => {

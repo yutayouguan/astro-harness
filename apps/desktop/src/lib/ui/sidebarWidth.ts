@@ -9,11 +9,17 @@ export function maxSidebarWidth(containerWidth: number): number {
   if (!Number.isFinite(containerWidth)) return SIDEBAR_MAX_WIDTH;
   return Math.max(
     0,
-    Math.min(SIDEBAR_MAX_WIDTH, Math.floor(containerWidth) - SIDEBAR_MIN_CONTENT_WIDTH),
+    Math.min(
+      SIDEBAR_MAX_WIDTH,
+      Math.floor(containerWidth) - SIDEBAR_MIN_CONTENT_WIDTH,
+    ),
   );
 }
 
-export function clampSidebarWidth(width: number, containerWidth = Number.POSITIVE_INFINITY): number {
+export function clampSidebarWidth(
+  width: number,
+  containerWidth = Number.POSITIVE_INFINITY,
+): number {
   const maxWidth = maxSidebarWidth(containerWidth);
   const minWidth = Math.min(SIDEBAR_MIN_WIDTH, maxWidth);
   const fallback = Math.min(SIDEBAR_DEFAULT_WIDTH, maxWidth);

@@ -1,29 +1,77 @@
 /* Window underlay follows the active document tone. */
-html[data-theme="light"] { --window-underlay: #e9eef6; }
-html[data-theme="light"][data-tone="blue"] { --window-underlay: #dbeafe; }
-html[data-theme="light"][data-tone="green"] { --window-underlay: #dcfce7; }
-html[data-theme="light"][data-tone="purple"] { --window-underlay: #ede9fe; }
-html[data-theme="light"][data-tone="orange"] { --window-underlay: #ffedd5; }
-html[data-theme="light"][data-tone="pink"] { --window-underlay: #fce7f3; }
-html[data-theme="light"][data-tone="cyan"] { --window-underlay: #cffafe; }
-html[data-theme="light"][data-tone="indigo"] { --window-underlay: #e0e7ff; }
-html[data-theme="light"][data-tone="amber"] { --window-underlay: #fef3c7; }
-html[data-theme="light"][data-tone="teal"] { --window-underlay: #ccfbf1; }
-html[data-theme="light"][data-tone="aurora"] { --window-underlay: #cffafe; }
-html[data-theme="light"][data-tone="twilight"] { --window-underlay: #ede9fe; }
+html[data-theme="light"] {
+  --window-underlay: #e9eef6;
+}
+html[data-theme="light"][data-tone="blue"] {
+  --window-underlay: #dbeafe;
+}
+html[data-theme="light"][data-tone="green"] {
+  --window-underlay: #dcfce7;
+}
+html[data-theme="light"][data-tone="purple"] {
+  --window-underlay: #ede9fe;
+}
+html[data-theme="light"][data-tone="orange"] {
+  --window-underlay: #ffedd5;
+}
+html[data-theme="light"][data-tone="pink"] {
+  --window-underlay: #fce7f3;
+}
+html[data-theme="light"][data-tone="cyan"] {
+  --window-underlay: #cffafe;
+}
+html[data-theme="light"][data-tone="indigo"] {
+  --window-underlay: #e0e7ff;
+}
+html[data-theme="light"][data-tone="amber"] {
+  --window-underlay: #fef3c7;
+}
+html[data-theme="light"][data-tone="teal"] {
+  --window-underlay: #ccfbf1;
+}
+html[data-theme="light"][data-tone="aurora"] {
+  --window-underlay: #cffafe;
+}
+html[data-theme="light"][data-tone="twilight"] {
+  --window-underlay: #ede9fe;
+}
 
-html[data-theme="dark"] { --window-underlay: #100816; }
-html[data-theme="dark"][data-tone="blue"] { --window-underlay: #0a1018; }
-html[data-theme="dark"][data-tone="green"] { --window-underlay: #07140f; }
-html[data-theme="dark"][data-tone="purple"] { --window-underlay: #100816; }
-html[data-theme="dark"][data-tone="orange"] { --window-underlay: #16120c; }
-html[data-theme="dark"][data-tone="pink"] { --window-underlay: #1a0c16; }
-html[data-theme="dark"][data-tone="cyan"] { --window-underlay: #0a161a; }
-html[data-theme="dark"][data-tone="indigo"] { --window-underlay: #0c0c1a; }
-html[data-theme="dark"][data-tone="amber"] { --window-underlay: #16120c; }
-html[data-theme="dark"][data-tone="teal"] { --window-underlay: #071412; }
-html[data-theme="dark"][data-tone="aurora"] { --window-underlay: #07141a; }
-html[data-theme="dark"][data-tone="twilight"] { --window-underlay: #140818; }
+html[data-theme="dark"] {
+  --window-underlay: #100816;
+}
+html[data-theme="dark"][data-tone="blue"] {
+  --window-underlay: #0a1018;
+}
+html[data-theme="dark"][data-tone="green"] {
+  --window-underlay: #07140f;
+}
+html[data-theme="dark"][data-tone="purple"] {
+  --window-underlay: #100816;
+}
+html[data-theme="dark"][data-tone="orange"] {
+  --window-underlay: #16120c;
+}
+html[data-theme="dark"][data-tone="pink"] {
+  --window-underlay: #1a0c16;
+}
+html[data-theme="dark"][data-tone="cyan"] {
+  --window-underlay: #0a161a;
+}
+html[data-theme="dark"][data-tone="indigo"] {
+  --window-underlay: #0c0c1a;
+}
+html[data-theme="dark"][data-tone="amber"] {
+  --window-underlay: #16120c;
+}
+html[data-theme="dark"][data-tone="teal"] {
+  --window-underlay: #071412;
+}
+html[data-theme="dark"][data-tone="aurora"] {
+  --window-underlay: #07141a;
+}
+html[data-theme="dark"][data-tone="twilight"] {
+  --window-underlay: #140818;
+}
 
 /*
  * Document-level mapping keeps body portals on the active tab tone. A nearer

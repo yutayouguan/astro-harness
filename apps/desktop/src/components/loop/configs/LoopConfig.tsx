@@ -7,7 +7,11 @@ interface ConfigProps {
   upstreamOutputs?: UpstreamOutput[];
 }
 
-export default function LoopConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function LoopConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

@@ -1,5 +1,12 @@
 /** 记忆面板：MEMORY/USER/日记编辑与召回。 */
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowLeft,
   Book,
@@ -152,7 +159,9 @@ function IconList(props: { width?: number; height?: number }) {
 
 /** 写入审批 */
 function IconPending(props: { width?: number; height?: number }) {
-  return <ClipboardList size={props.width ?? 16} strokeWidth={1.8} aria-hidden />;
+  return (
+    <ClipboardList size={props.width ?? 16} strokeWidth={1.8} aria-hidden />
+  );
 }
 
 /** 编辑 */
@@ -175,18 +184,11 @@ function IconSave(props: { width?: number; height?: number }) {
   return <Save size={props.width ?? 16} strokeWidth={1.8} aria-hidden />;
 }
 
-export default function MemoryPanel({
-  onClose,
-  sessionId = null,
-}: Props) {
+export default function MemoryPanel({ onClose, sessionId = null }: Props) {
   const { t, locale } = useI18n();
   const confirm = useConfirm();
-  const {
-    agents,
-    activeAgentId,
-    setActiveAgent,
-    refreshAgents,
-  } = useActiveAgent();
+  const { agents, activeAgentId, setActiveAgent, refreshAgents } =
+    useActiveAgent();
   const [view, setView] = useState<MemoryView>("diary");
   const [, setMemoryDir] = useState("");
   const [workspaceDir, setWorkspaceDir] = useState("");
@@ -199,11 +201,13 @@ export default function MemoryPanel({
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth() + 1);
   const [dailyDate, setDailyDate] = useState(todayLocal());
   const [dailyDates, setDailyDates] = useState<string[]>([]);
-  const [allDiaryDates, setAllDiaryDates] = useState<Set<string>>(() => new Set());
-  /** agentId → 有日记的日期，用于「全部」模式下点日历跳转 */
-  const [diaryDatesByAgent, setDiaryDatesByAgent] = useState<Record<string, string[]>>(
-    {},
+  const [allDiaryDates, setAllDiaryDates] = useState<Set<string>>(
+    () => new Set(),
   );
+  /** agentId → 有日记的日期，用于「全部」模式下点日历跳转 */
+  const [diaryDatesByAgent, setDiaryDatesByAgent] = useState<
+    Record<string, string[]>
+  >({});
   const [dailyDraft, setDailyDraft] = useState("");
   const [dailySaved, setDailySaved] = useState("");
 
@@ -236,7 +240,13 @@ export default function MemoryPanel({
   const memoryDirty = memoryDraft !== memorySaved;
   const archiveDirty = archiveDraft !== archiveSaved;
   const dirty =
-    view === "diary" ? diaryDirty : view === "longterm" ? (showArchives ? archiveDirty : memoryDirty) : false;
+    view === "diary"
+      ? diaryDirty
+      : view === "longterm"
+        ? showArchives
+          ? archiveDirty
+          : memoryDirty
+        : false;
 
   const diaryCount = useMemo(() => {
     if (filterAgentId === ALL_AGENTS) return allDiaryDates.size;
@@ -284,7 +294,9 @@ export default function MemoryPanel({
 
   const refreshPendingWrites = useCallback(async () => {
     try {
-      const rows = await invoke<PendingMemoryWrite[]>("list_pending_memory_writes");
+      const rows = await invoke<PendingMemoryWrite[]>(
+        "list_pending_memory_writes",
+      );
       setPendingWrites(rows ?? []);
     } catch {
       setPendingWrites([]);
@@ -309,10 +321,14 @@ export default function MemoryPanel({
     setSaveMsg(null);
     setSettingsBusy(true);
     try {
-      const s = await invoke<MemorySettings>("set_memory_write_approval", { enabled });
+      const s = await invoke<MemorySettings>("set_memory_write_approval", {
+        enabled,
+      });
       setMemorySettings(s);
       setSaveMsg(
-        enabled ? t("memory.settings.writeApprovalOn") : t("memory.settings.writeApprovalOff"),
+        enabled
+          ? t("memory.settings.writeApprovalOn")
+          : t("memory.settings.writeApprovalOff"),
       );
     } catch (e) {
       setError(String(e));
@@ -326,7 +342,9 @@ export default function MemoryPanel({
     setSaveMsg(null);
     setSettingsBusy(true);
     try {
-      const s = await invoke<MemorySettings>("set_background_review_enabled", { enabled });
+      const s = await invoke<MemorySettings>("set_background_review_enabled", {
+        enabled,
+      });
       setMemorySettings(s);
       setSaveMsg(
         enabled
@@ -345,10 +363,14 @@ export default function MemoryPanel({
     setSaveMsg(null);
     setSettingsBusy(true);
     try {
-      const s = await invoke<MemorySettings>("set_memory_auto_refresh", { enabled });
+      const s = await invoke<MemorySettings>("set_memory_auto_refresh", {
+        enabled,
+      });
       setMemorySettings(s);
       setSaveMsg(
-        enabled ? t("memory.settings.autoRefreshOn") : t("memory.settings.autoRefreshOff"),
+        enabled
+          ? t("memory.settings.autoRefreshOn")
+          : t("memory.settings.autoRefreshOff"),
       );
     } catch (e) {
       setError(String(e));
@@ -413,7 +435,9 @@ export default function MemoryPanel({
     setError(null);
     setSaveMsg(null);
     try {
-      const st = await invoke<DreamingStatus>("set_dreaming_enabled_cmd", { enabled: true });
+      const st = await invoke<DreamingStatus>("set_dreaming_enabled_cmd", {
+        enabled: true,
+      });
       setDreamStatus(st);
       setSaveMsg(t("memory.dream.enabledHint"));
     } catch (e) {
@@ -425,7 +449,9 @@ export default function MemoryPanel({
     setError(null);
     setSaveMsg(null);
     try {
-      const st = await invoke<DreamingStatus>("set_dreaming_enabled_cmd", { enabled: false });
+      const st = await invoke<DreamingStatus>("set_dreaming_enabled_cmd", {
+        enabled: false,
+      });
       setDreamStatus(st);
     } catch (e) {
       setError(String(e));
@@ -463,7 +489,9 @@ export default function MemoryPanel({
     const pairs = await Promise.all(
       list.map(async (a) => {
         try {
-          const dates = await invoke<string[]>("list_daily_memory", { agentId: a.id });
+          const dates = await invoke<string[]>("list_daily_memory", {
+            agentId: a.id,
+          });
           return [a.id, dates] as const;
         } catch {
           return [a.id, [] as string[]] as const;
@@ -483,7 +511,10 @@ export default function MemoryPanel({
   const loadDaily = useCallback(async (agentId: string, date: string) => {
     const dates = await invoke<string[]>("list_daily_memory", { agentId });
     setDailyDates(dates);
-    const content = await invoke<string>("read_daily_memory", { date, agentId });
+    const content = await invoke<string>("read_daily_memory", {
+      date,
+      agentId,
+    });
     setDailyDraft(content);
     setDailySaved(content);
   }, []);
@@ -512,7 +543,10 @@ export default function MemoryPanel({
       setWorkspaceDir(cfg.workspace_dir);
       await refreshAgents();
       let nextFilter = filterAgentId;
-      if (filterAgentId !== ALL_AGENTS && !cfg.agents.some((a) => a.id === filterAgentId)) {
+      if (
+        filterAgentId !== ALL_AGENTS &&
+        !cfg.agents.some((a) => a.id === filterAgentId)
+      ) {
         nextFilter = ALL_AGENTS;
         setFilterAgentId(ALL_AGENTS);
         setDiaryPaneAgentId(ALL_AGENTS);
@@ -729,7 +763,8 @@ export default function MemoryPanel({
   };
 
   const saveDiary = async () => {
-    const agentId = filterAgentId === ALL_AGENTS ? activeAgentId : filterAgentId;
+    const agentId =
+      filterAgentId === ALL_AGENTS ? activeAgentId : filterAgentId;
     setSaving(true);
     setError(null);
     try {
@@ -817,9 +852,21 @@ export default function MemoryPanel({
             </span>
             {(
               [
-                { id: "diary" as const, label: t("memory.view.diary"), Icon: IconBook },
-                { id: "dream" as const, label: t("memory.view.dream"), Icon: IconMoon },
-                { id: "longterm" as const, label: t("memory.view.longterm"), Icon: IconList },
+                {
+                  id: "diary" as const,
+                  label: t("memory.view.diary"),
+                  Icon: IconBook,
+                },
+                {
+                  id: "dream" as const,
+                  label: t("memory.view.dream"),
+                  Icon: IconMoon,
+                },
+                {
+                  id: "longterm" as const,
+                  label: t("memory.view.longterm"),
+                  Icon: IconList,
+                },
               ] as const
             ).map((item, index) => (
               <Fragment key={item.id}>
@@ -874,11 +921,18 @@ export default function MemoryPanel({
                 </span>
                 <span className="mem-stat-body">
                   <strong>{diaryCount}</strong>
-                  <span className="mem-stat-label">{t("memory.diaryTotal")}</span>
+                  <span className="mem-stat-label">
+                    {t("memory.diaryTotal")}
+                  </span>
                 </span>
               </div>
-              <label className="mem-enhance" data-tip={t("memory.enhanceDiaryTip")}>
-                <span className="mem-enhance-label">{t("memory.enhanceDiary")}</span>
+              <label
+                className="mem-enhance"
+                data-tip={t("memory.enhanceDiaryTip")}
+              >
+                <span className="mem-enhance-label">
+                  {t("memory.enhanceDiary")}
+                </span>
                 <button
                   type="button"
                   role="switch"
@@ -886,7 +940,9 @@ export default function MemoryPanel({
                   aria-checked={dreamingEnabled}
                   aria-label={t("memory.enhanceDiary")}
                   onClick={() => {
-                    void (dreamingEnabled ? disableDreaming() : enableDreaming());
+                    void (dreamingEnabled
+                      ? disableDreaming()
+                      : enableDreaming());
                   }}
                 >
                   <span className="prefs-switch-thumb" />
@@ -906,513 +962,590 @@ export default function MemoryPanel({
       )}
 
       <MotionSwitch switchKey={view} className="anim-switch--fill">
-      {view === "diary" && (
-        <div className="mem-split">
-          <aside className="mem-sidebar">
-            <section className="mem-card mem-calendar-card">
-              <div className="mem-cal-header">
-                <button type="button" className="ws-tool-btn" onClick={() => shiftMonth(-1)} aria-label={t("memory.prevMonth")}>
-                  ‹
-                </button>
-                <div className="mem-cal-title">
-                  {locale === "zh"
-                    ? `${calYear}年${calMonth}月`
-                    : new Date(calYear, calMonth - 1).toLocaleDateString("en-US", {
-                        month: "long",
-                        year: "numeric",
-                      })}
+        {view === "diary" && (
+          <div className="mem-split">
+            <aside className="mem-sidebar">
+              <section className="mem-card mem-calendar-card">
+                <div className="mem-cal-header">
+                  <button
+                    type="button"
+                    className="ws-tool-btn"
+                    onClick={() => shiftMonth(-1)}
+                    aria-label={t("memory.prevMonth")}
+                  >
+                    ‹
+                  </button>
+                  <div className="mem-cal-title">
+                    {locale === "zh"
+                      ? `${calYear}年${calMonth}月`
+                      : new Date(calYear, calMonth - 1).toLocaleDateString(
+                          "en-US",
+                          {
+                            month: "long",
+                            year: "numeric",
+                          },
+                        )}
+                  </div>
+                  <button
+                    type="button"
+                    className="ws-tool-btn"
+                    onClick={() => shiftMonth(1)}
+                    aria-label={t("memory.nextMonth")}
+                  >
+                    ›
+                  </button>
                 </div>
-                <button type="button" className="ws-tool-btn" onClick={() => shiftMonth(1)} aria-label={t("memory.nextMonth")}>
-                  ›
-                </button>
-              </div>
-              <div className="mem-cal-legend">
-                <span>
-                  <i className="mem-dot diary" />
-                  {t("memory.hasDiary")}
-                </span>
-                <span>
-                  <i className="mem-dot dream" />
-                  {t("memory.hasDream")}
-                </span>
-              </div>
-              <div className="mem-cal-weekdays">
-                {weekdays.map((w) => (
-                  <span key={w}>{w}</span>
-                ))}
-              </div>
-              <div className="mem-cal-grid">
-                {calendarCells.map((cell, i) =>
-                  cell ? (
+                <div className="mem-cal-legend">
+                  <span>
+                    <i className="mem-dot diary" />
+                    {t("memory.hasDiary")}
+                  </span>
+                  <span>
+                    <i className="mem-dot dream" />
+                    {t("memory.hasDream")}
+                  </span>
+                </div>
+                <div className="mem-cal-weekdays">
+                  {weekdays.map((w) => (
+                    <span key={w}>{w}</span>
+                  ))}
+                </div>
+                <div className="mem-cal-grid">
+                  {calendarCells.map((cell, i) =>
+                    cell ? (
+                      <button
+                        key={cell.ymd}
+                        type="button"
+                        className={[
+                          "mem-cal-day",
+                          cell.ymd === dailyDate ? "selected" : "",
+                          markedDates.has(cell.ymd) ? "has-diary" : "",
+                          dreamMarkedDates.has(cell.ymd) ? "has-dream" : "",
+                          cell.ymd === todayLocal() ? "today" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onClick={() => void switchDailyDate(cell.ymd)}
+                      >
+                        {cell.day}
+                      </button>
+                    ) : (
+                      <span key={`e-${i}`} className="mem-cal-day empty" />
+                    ),
+                  )}
+                </div>
+              </section>
+            </aside>
+
+            <section className="mem-main mem-card">
+              <div className="mem-main-header">
+                <h3>{weekdayLabel(dailyDate, locale)}</h3>
+                {diaryDirty && (
+                  <div className="memory-editor-actions">
                     <button
-                      key={cell.ymd}
                       type="button"
-                      className={[
-                        "mem-cal-day",
-                        cell.ymd === dailyDate ? "selected" : "",
-                        markedDates.has(cell.ymd) ? "has-diary" : "",
-                        dreamMarkedDates.has(cell.ymd) ? "has-dream" : "",
-                        cell.ymd === todayLocal() ? "today" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onClick={() => void switchDailyDate(cell.ymd)}
+                      className="ghost-btn"
+                      onClick={() => setDailyDraft(dailySaved)}
+                      disabled={saving}
+                      data-tip={t("memory.undo")}
                     >
-                      {cell.day}
+                      {t("memory.undo")}
                     </button>
-                  ) : (
-                    <span key={`e-${i}`} className="mem-cal-day empty" />
-                  ),
+                    <button
+                      type="button"
+                      className="ghost-btn active"
+                      onClick={() => void saveDiary()}
+                      disabled={saving || filterAgentId === ALL_AGENTS}
+                      data-tip={t("memory.save")}
+                    >
+                      {saving ? "…" : t("memory.save")}
+                    </button>
+                  </div>
                 )}
               </div>
-            </section>
-          </aside>
 
-          <section className="mem-main mem-card">
-            <div className="mem-main-header">
-              <h3>{weekdayLabel(dailyDate, locale)}</h3>
-              {diaryDirty && (
+              {diaryPaneAgentId === ALL_AGENTS ? (
+                <div className="mem-empty mem-empty-pick">
+                  <EmptyIllustration
+                    scene="memory"
+                    size="lg"
+                    className="mem-empty-illust"
+                    title={t("memory.pickExpertForDiaryAll")}
+                    hint={t("memory.pickExpertHintDiaryAll")}
+                  />
+                </div>
+              ) : diaryEmpty ? (
+                <div className="mem-empty mem-empty-diary">
+                  <EmptyIllustration
+                    scene="memory"
+                    size="lg"
+                    className="mem-empty-illust"
+                    title={t("memory.diaryEmptyTitle")}
+                    hint={t("memory.diaryEmptySub")}
+                  />
+                  {onClose && (
+                    <button type="button" className="mem-cta" onClick={onClose}>
+                      {t("memory.goChat")}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  className="memory-editor mem-editor-fill"
+                  value={dailyDraft}
+                  onChange={(e) => {
+                    setDailyDraft(e.target.value);
+                    setSaveMsg(null);
+                  }}
+                  placeholder={t("memory.dailyEmptyHint")}
+                  spellCheck={false}
+                  aria-label={`memory/${dailyDate}.md`}
+                />
+              )}
+            </section>
+          </div>
+        )}
+
+        {view === "dream" && (
+          <div className="mem-dream">
+            {!dreamingEnabled ? (
+              <section className="mem-card mem-dream-empty">
+                <div className="mem-dream-moon" aria-hidden>
+                  <MoonStar size={40} strokeWidth={1.6} />
+                </div>
+                <h3>{t("memory.dream.enableTitle")}</h3>
+                <p className="muted">{t("memory.dream.enableSub")}</p>
+                <button
+                  type="button"
+                  className="mem-cta"
+                  disabled={dreamRunning}
+                  onClick={() => void enableDreaming()}
+                >
+                  {t("memory.dream.enable")}
+                </button>
+              </section>
+            ) : (
+              <>
+                <section className="mem-card mem-dream-banner">
+                  <div className="mem-dream-banner-text">
+                    <strong>
+                      {dreamRunning
+                        ? t("memory.dream.running")
+                        : (dreamStatus?.pending_diaries ?? 0) > 0
+                          ? t("memory.dream.pending", {
+                              count: String(dreamStatus?.pending_diaries ?? 0),
+                            })
+                          : t("memory.dream.idle")}
+                    </strong>
+                    <span className="muted">
+                      {t("memory.dream.runningSub")}
+                    </span>
+                    {dreamStatus?.last_error && (
+                      <span className="mem-dream-error">
+                        {dreamStatus.last_error}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mem-dream-banner-stats">
+                    <span>
+                      <strong>{dreamStatus?.total_points ?? 0}</strong>{" "}
+                      {t("memory.dream.points")}
+                    </span>
+                    <span>
+                      <strong>{dreamStatus?.total_summaries ?? 0}</strong>{" "}
+                      {t("memory.dream.summaries")}
+                    </span>
+                  </div>
+                  <div className="mem-dream-banner-actions">
+                    <button
+                      type="button"
+                      className="ghost-btn active"
+                      disabled={dreamRunning}
+                      onClick={() => void runDreamingAgain()}
+                      data-tip={
+                        dreamRunning
+                          ? t("memory.dream.runningShort")
+                          : t("memory.dream.runNow")
+                      }
+                    >
+                      {dreamRunning
+                        ? t("memory.dream.runningShort")
+                        : t("memory.dream.runNow")}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      disabled={dreamRunning}
+                      onClick={() => void disableDreaming()}
+                      data-tip={t("memory.dream.disable")}
+                    >
+                      {t("memory.dream.disable")}
+                    </button>
+                  </div>
+                </section>
+                <div className="mem-dream-grid">
+                  {(dreamStatus?.agents?.length
+                    ? dreamStatus.agents
+                    : agents.map((a) => ({
+                        agent_id: a.id,
+                        agent_name: a.name,
+                        points: 0,
+                        new_memories: 0,
+                        pending_diaries: 0,
+                        last_run_at: null,
+                        last_error: null,
+                      }))
+                  ).map((a) => (
+                    <article
+                      key={a.agent_id}
+                      className="mem-card mem-dream-agent-card"
+                    >
+                      <div className="mem-dream-agent-head">
+                        <span className="mem-agent-avatar lg" aria-hidden>
+                          <AgentAvatar
+                            agent={
+                              agents.find((x) => x.id === a.agent_id) ?? {
+                                id: a.agent_id,
+                                name: a.agent_name,
+                                is_default: a.agent_id === "default",
+                              }
+                            }
+                            size={36}
+                          />
+                        </span>
+                        <div>
+                          <div className="mem-dream-agent-name">
+                            {a.agent_name}
+                          </div>
+                          <div className="muted mem-dream-agent-desc">
+                            {a.pending_diaries > 0
+                              ? t("memory.dream.agentPending", {
+                                  count: String(a.pending_diaries),
+                                })
+                              : t("memory.dream.agentDesc")}
+                          </div>
+                          {a.last_error && (
+                            <div className="mem-dream-error">
+                              {a.last_error}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mem-dream-agent-foot">
+                        <span>
+                          {t("memory.dream.points")} <strong>{a.points}</strong>
+                        </span>
+                        <span>
+                          {t("memory.dream.newMemories")}{" "}
+                          <strong>{a.new_memories}</strong>
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {view === "longterm" && (
+          <div className="mem-longterm">
+            <section className="mem-card mem-main">
+              <div className="mem-main-header">
+                <h3>
+                  {showArchives
+                    ? t("memory.archives")
+                    : t("memory.view.longterm")}
+                </h3>
                 <div className="memory-editor-actions">
                   <button
                     type="button"
-                    className="ghost-btn"
-                    onClick={() => setDailyDraft(dailySaved)}
-                    disabled={saving}
-                    data-tip={t("memory.undo")}
-                  >
-                    {t("memory.undo")}
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-btn active"
-                    onClick={() => void saveDiary()}
-                    disabled={saving || filterAgentId === ALL_AGENTS}
-                    data-tip={t("memory.save")}
-                  >
-                    {saving ? "…" : t("memory.save")}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {diaryPaneAgentId === ALL_AGENTS ? (
-              <div className="mem-empty mem-empty-pick">
-                <EmptyIllustration
-                  scene="memory"
-                  size="lg"
-                  className="mem-empty-illust"
-                  title={t("memory.pickExpertForDiaryAll")}
-                  hint={t("memory.pickExpertHintDiaryAll")}
-                />
-              </div>
-            ) : diaryEmpty ? (
-              <div className="mem-empty mem-empty-diary">
-                <EmptyIllustration
-                  scene="memory"
-                  size="lg"
-                  className="mem-empty-illust"
-                  title={t("memory.diaryEmptyTitle")}
-                  hint={t("memory.diaryEmptySub")}
-                />
-                {onClose && (
-                  <button type="button" className="mem-cta" onClick={onClose}>
-                    {t("memory.goChat")}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <textarea
-                className="memory-editor mem-editor-fill"
-                value={dailyDraft}
-                onChange={(e) => {
-                  setDailyDraft(e.target.value);
-                  setSaveMsg(null);
-                }}
-                placeholder={t("memory.dailyEmptyHint")}
-                spellCheck={false}
-                aria-label={`memory/${dailyDate}.md`}
-              />
-            )}
-          </section>
-        </div>
-      )}
-
-      {view === "dream" && (
-        <div className="mem-dream">
-          {!dreamingEnabled ? (
-            <section className="mem-card mem-dream-empty">
-              <div className="mem-dream-moon" aria-hidden>
-                <MoonStar size={40} strokeWidth={1.6} />
-              </div>
-              <h3>{t("memory.dream.enableTitle")}</h3>
-              <p className="muted">{t("memory.dream.enableSub")}</p>
-              <button
-                type="button"
-                className="mem-cta"
-                disabled={dreamRunning}
-                onClick={() => void enableDreaming()}
-              >
-                {t("memory.dream.enable")}
-              </button>
-            </section>
-          ) : (
-            <>
-              <section className="mem-card mem-dream-banner">
-                <div className="mem-dream-banner-text">
-                  <strong>
-                    {dreamRunning
-                      ? t("memory.dream.running")
-                      : (dreamStatus?.pending_diaries ?? 0) > 0
-                        ? t("memory.dream.pending", {
-                            count: String(dreamStatus?.pending_diaries ?? 0),
-                          })
-                        : t("memory.dream.idle")}
-                  </strong>
-                  <span className="muted">{t("memory.dream.runningSub")}</span>
-                  {dreamStatus?.last_error && (
-                    <span className="mem-dream-error">{dreamStatus.last_error}</span>
-                  )}
-                </div>
-                <div className="mem-dream-banner-stats">
-                  <span>
-                    <strong>{dreamStatus?.total_points ?? 0}</strong> {t("memory.dream.points")}
-                  </span>
-                  <span>
-                    <strong>{dreamStatus?.total_summaries ?? 0}</strong>{" "}
-                    {t("memory.dream.summaries")}
-                  </span>
-                </div>
-                <div className="mem-dream-banner-actions">
-                  <button
-                    type="button"
-                    className="ghost-btn active"
-                    disabled={dreamRunning}
-                    onClick={() => void runDreamingAgain()}
-                    data-tip={
-                      dreamRunning ? t("memory.dream.runningShort") : t("memory.dream.runNow")
+                    className={`mem-glass-btn ${showArchives ? "is-active" : ""}`}
+                    onClick={() => {
+                      setShowArchives((v) => !v);
+                      setSaveMsg(null);
+                    }}
+                    title={
+                      showArchives
+                        ? t("memory.backToMemory")
+                        : t("memory.moreArchives")
+                    }
+                    aria-label={
+                      showArchives
+                        ? t("memory.backToMemory")
+                        : t("memory.moreArchives")
                     }
                   >
-                    {dreamRunning ? t("memory.dream.runningShort") : t("memory.dream.runNow")}
+                    {showArchives ? <IconArrowLeft /> : <IconFiles />}
+                    <span>
+                      {showArchives
+                        ? t("memory.backToMemory")
+                        : t("memory.moreArchives")}
+                    </span>
                   </button>
                   <button
                     type="button"
-                    className="ghost-btn"
-                    disabled={dreamRunning}
-                    onClick={() => void disableDreaming()}
-                    data-tip={t("memory.dream.disable")}
+                    className={`mem-glass-btn ${memoryEditing ? "is-active" : ""}`}
+                    onClick={() => setMemoryEditing((v) => !v)}
+                    title={t("memory.edit")}
+                    aria-label={t("memory.edit")}
+                    aria-pressed={memoryEditing}
                   >
-                    {t("memory.dream.disable")}
+                    <IconPencil />
+                    <span>{t("memory.edit")}</span>
                   </button>
+                  {(showArchives ? archiveDirty : memoryDirty) && (
+                    <button
+                      type="button"
+                      className="mem-glass-btn is-primary"
+                      onClick={() => void saveLongterm()}
+                      disabled={saving || filterAgentId === ALL_AGENTS}
+                      title={t("memory.save")}
+                    >
+                      <IconSave />
+                      <span>{saving ? "…" : t("memory.save")}</span>
+                    </button>
+                  )}
                 </div>
-              </section>
-              <div className="mem-dream-grid">
-                {(dreamStatus?.agents?.length ? dreamStatus.agents : agents.map((a) => ({
-                  agent_id: a.id,
-                  agent_name: a.name,
-                  points: 0,
-                  new_memories: 0,
-                  pending_diaries: 0,
-                  last_run_at: null,
-                  last_error: null,
-                }))).map((a) => (
-                  <article key={a.agent_id} className="mem-card mem-dream-agent-card">
-                    <div className="mem-dream-agent-head">
-                      <span className="mem-agent-avatar lg" aria-hidden>
-                        <AgentAvatar
-                          agent={
-                            agents.find((x) => x.id === a.agent_id) ?? {
-                              id: a.agent_id,
-                              name: a.agent_name,
-                              is_default: a.agent_id === "default",
+              </div>
+
+              {filterAgentId === ALL_AGENTS ? (
+                <div className="mem-empty mem-empty-pick">
+                  <EmptyIllustration
+                    scene="memory"
+                    title={t("memory.pickExpertForMemory")}
+                    hint={t("memory.pickExpertHint")}
+                  />
+                </div>
+              ) : showArchives ? (
+                <>
+                  <div className="memory-file-tabs" role="tablist">
+                    {ARCHIVE_FILES.map((f) => {
+                      const { Icon } = f;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          role="tab"
+                          className={`memory-file-tab ${archiveId === f.id ? "active" : ""}`}
+                          onClick={async () => {
+                            if (
+                              archiveDirty &&
+                              !(await confirm({
+                                title: t("dialog.unsavedTitle"),
+                                message: t("memory.unsavedConfirm"),
+                              }))
+                            ) {
+                              return;
                             }
-                          }
-                          size={36}
-                        />
-                      </span>
-                      <div>
-                        <div className="mem-dream-agent-name">{a.agent_name}</div>
-                        <div className="muted mem-dream-agent-desc">
-                          {a.pending_diaries > 0
-                            ? t("memory.dream.agentPending", {
-                                count: String(a.pending_diaries),
-                              })
-                            : t("memory.dream.agentDesc")}
-                        </div>
-                        {a.last_error && (
-                          <div className="mem-dream-error">{a.last_error}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mem-dream-agent-foot">
-                      <span>
-                        {t("memory.dream.points")} <strong>{a.points}</strong>
-                      </span>
-                      <span>
-                        {t("memory.dream.newMemories")} <strong>{a.new_memories}</strong>
-                      </span>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {view === "longterm" && (
-        <div className="mem-longterm">
-          <section className="mem-card mem-main">
-            <div className="mem-main-header">
-              <h3>{showArchives ? t("memory.archives") : t("memory.view.longterm")}</h3>
-              <div className="memory-editor-actions">
-                <button
-                  type="button"
-                  className={`mem-glass-btn ${showArchives ? "is-active" : ""}`}
-                  onClick={() => {
-                    setShowArchives((v) => !v);
-                    setSaveMsg(null);
-                  }}
-                  title={showArchives ? t("memory.backToMemory") : t("memory.moreArchives")}
-                  aria-label={showArchives ? t("memory.backToMemory") : t("memory.moreArchives")}
-                >
-                  {showArchives ? <IconArrowLeft /> : <IconFiles />}
-                  <span>{showArchives ? t("memory.backToMemory") : t("memory.moreArchives")}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`mem-glass-btn ${memoryEditing ? "is-active" : ""}`}
-                  onClick={() => setMemoryEditing((v) => !v)}
-                  title={t("memory.edit")}
-                  aria-label={t("memory.edit")}
-                  aria-pressed={memoryEditing}
-                >
-                  <IconPencil />
-                  <span>{t("memory.edit")}</span>
-                </button>
-                {(showArchives ? archiveDirty : memoryDirty) && (
-                  <button
-                    type="button"
-                    className="mem-glass-btn is-primary"
-                    onClick={() => void saveLongterm()}
-                    disabled={saving || filterAgentId === ALL_AGENTS}
-                    title={t("memory.save")}
-                  >
-                    <IconSave />
-                    <span>{saving ? "…" : t("memory.save")}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {filterAgentId === ALL_AGENTS ? (
-              <div className="mem-empty mem-empty-pick">
-                <EmptyIllustration
-                  scene="memory"
-                  title={t("memory.pickExpertForMemory")}
-                  hint={t("memory.pickExpertHint")}
-                />
-              </div>
-            ) : showArchives ? (
-              <>
-                <div className="memory-file-tabs" role="tablist">
-                  {ARCHIVE_FILES.map((f) => {
-                    const { Icon } = f;
-                    return (
-                      <button
-                        key={f.id}
-                        type="button"
-                        role="tab"
-                        className={`memory-file-tab ${archiveId === f.id ? "active" : ""}`}
-                        onClick={async () => {
-                          if (
-                            archiveDirty &&
-                            !(await confirm({
-                              title: t("dialog.unsavedTitle"),
-                              message: t("memory.unsavedConfirm"),
-                            }))
-                          ) {
-                            return;
-                          }
-                          setArchiveId(f.id);
-                          void loadArchive(workspaceDir, f.id);
-                        }}
-                      >
-                        <Icon size={13} strokeWidth={2.1} aria-hidden />
-                        <span>{f.filename}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                            setArchiveId(f.id);
+                            void loadArchive(workspaceDir, f.id);
+                          }}
+                        >
+                          <Icon size={13} strokeWidth={2.1} aria-hidden />
+                          <span>{f.filename}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <textarea
+                    className="memory-editor mem-editor-fill"
+                    value={archiveDraft}
+                    onChange={(e) => {
+                      setArchiveDraft(e.target.value);
+                      setSaveMsg(null);
+                    }}
+                    readOnly={!memoryEditing}
+                    placeholder={t("memory.emptyHint")}
+                    spellCheck={false}
+                  />
+                </>
+              ) : (
                 <textarea
                   className="memory-editor mem-editor-fill"
-                  value={archiveDraft}
+                  value={memoryDraft}
                   onChange={(e) => {
-                    setArchiveDraft(e.target.value);
+                    setMemoryDraft(e.target.value);
                     setSaveMsg(null);
                   }}
                   readOnly={!memoryEditing}
-                  placeholder={t("memory.emptyHint")}
+                  placeholder={t("memory.longtermEmptyHint")}
                   spellCheck={false}
+                  aria-label="MEMORY.md"
                 />
-              </>
-            ) : (
-              <textarea
-                className="memory-editor mem-editor-fill"
-                value={memoryDraft}
-                onChange={(e) => {
-                  setMemoryDraft(e.target.value);
-                  setSaveMsg(null);
-                }}
-                readOnly={!memoryEditing}
-                placeholder={t("memory.longtermEmptyHint")}
-                spellCheck={false}
-                aria-label="MEMORY.md"
-              />
-            )}
-          </section>
-        </div>
-      )}
+              )}
+            </section>
+          </div>
+        )}
 
-      {view === "pending" && (
-        <div className="mem-pending-wrap">
-          <section className="mem-card mem-main mem-pending-settings">
-            <div className="mem-main-header">
-              <h3>{t("memory.settings.title")}</h3>
-              <button
-                type="button"
-                className="mem-glass-btn"
-                onClick={() => void refreshIntoChat()}
-                title={t("memory.refresh.intoChat")}
-              >
-                {t("memory.refresh.intoChat")}
-              </button>
-            </div>
-            <div className="mem-settings-list" role="group" aria-label={t("memory.settings.title")}>
-              <label className="mem-settings-row">
-                <span className="mem-settings-text">
-                  <span className="mem-settings-label">{t("memory.settings.writeApproval")}</span>
-                  <span className="mem-settings-desc">{t("memory.settings.writeApprovalDesc")}</span>
-                </span>
+        {view === "pending" && (
+          <div className="mem-pending-wrap">
+            <section className="mem-card mem-main mem-pending-settings">
+              <div className="mem-main-header">
+                <h3>{t("memory.settings.title")}</h3>
                 <button
                   type="button"
-                  role="switch"
-                  className="prefs-switch"
-                  aria-checked={memorySettings.writeApproval}
-                  aria-label={t("memory.settings.writeApproval")}
-                  disabled={settingsBusy}
-                  onClick={() => void setWriteApproval(!memorySettings.writeApproval)}
+                  className="mem-glass-btn"
+                  onClick={() => void refreshIntoChat()}
+                  title={t("memory.refresh.intoChat")}
                 >
-                  <span className="prefs-switch-thumb" />
+                  {t("memory.refresh.intoChat")}
                 </button>
-              </label>
-              <label className="mem-settings-row">
-                <span className="mem-settings-text">
-                  <span className="mem-settings-label">{t("memory.settings.backgroundReview")}</span>
-                  <span className="mem-settings-desc">
-                    {t("memory.settings.backgroundReviewDesc")}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  className="prefs-switch"
-                  aria-checked={memorySettings.backgroundReviewEnabled}
-                  aria-label={t("memory.settings.backgroundReview")}
-                  disabled={settingsBusy}
-                  onClick={() => void setBackgroundReview(!memorySettings.backgroundReviewEnabled)}
-                >
-                  <span className="prefs-switch-thumb" />
-                </button>
-              </label>
-              <label className="mem-settings-row">
-                <span className="mem-settings-text">
-                  <span className="mem-settings-label">{t("memory.settings.autoRefresh")}</span>
-                  <span className="mem-settings-desc">{t("memory.settings.autoRefreshDesc")}</span>
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  className="prefs-switch"
-                  aria-checked={memorySettings.autoRefreshOnUpdate}
-                  aria-label={t("memory.settings.autoRefresh")}
-                  disabled={settingsBusy}
-                  onClick={() => void setAutoRefresh(!memorySettings.autoRefreshOnUpdate)}
-                >
-                  <span className="prefs-switch-thumb" />
-                </button>
-              </label>
-            </div>
-          </section>
-          <section className="mem-card mem-main mem-pending">
-            <div className="mem-main-header">
-              <h3>{t("memory.view.pending")}</h3>
-              <button
-                type="button"
-                className="mem-glass-btn"
-                onClick={() => void refreshPendingWrites()}
-                title={t("memory.pending.refresh")}
-              >
-                {t("memory.pending.refresh")}
-              </button>
-            </div>
-            <p className="mem-pending-hint">{t("memory.pending.hint")}</p>
-            {pendingWrites.length === 0 ? (
-              <div className="mem-empty">
-                <EmptyIllustration
-                  scene="memory"
-                  size="sm"
-                  title={t("memory.pending.emptyTitle")}
-                  hint={
-                    memorySettings.writeApproval
-                      ? t("memory.pending.emptyHintOn")
-                      : t("memory.pending.emptyHint")
-                  }
-                />
               </div>
-            ) : (
-              <ul className="mem-pending-list">
-                {pendingWrites.map((p) => (
-                  <li key={p.id} className="mem-pending-item">
-                    <div className="mem-pending-meta">
-                      <span className="mem-pending-badge">{p.action}</span>
-                      <span className="mem-pending-badge soft">{p.target}</span>
-                      <span className="mem-pending-badge soft">{p.source}</span>
-                      <span className="mem-pending-agent">{p.agentId}</span>
-                      <span className="mem-pending-time">{p.createdAt}</span>
-                    </div>
-                    {p.content ? (
-                      <pre className="mem-pending-body">{p.content}</pre>
-                    ) : null}
-                    {p.oldText ? (
-                      <pre className="mem-pending-body muted">{p.oldText}</pre>
-                    ) : null}
-                    <div className="mem-pending-actions">
-                      <button
-                        type="button"
-                        className="mem-glass-btn is-primary"
-                        disabled={pendingBusyId === p.id}
-                        onClick={() => void approvePending(p.id)}
-                      >
-                        <Check size={14} strokeWidth={2} aria-hidden />
-                        {t("memory.pending.approve")}
-                      </button>
-                      <button
-                        type="button"
-                        className="mem-glass-btn"
-                        disabled={pendingBusyId === p.id}
-                        onClick={() => void rejectPending(p.id)}
-                      >
-                        <X size={14} strokeWidth={2} aria-hidden />
-                        {t("memory.pending.reject")}
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
-      )}
+              <div
+                className="mem-settings-list"
+                role="group"
+                aria-label={t("memory.settings.title")}
+              >
+                <label className="mem-settings-row">
+                  <span className="mem-settings-text">
+                    <span className="mem-settings-label">
+                      {t("memory.settings.writeApproval")}
+                    </span>
+                    <span className="mem-settings-desc">
+                      {t("memory.settings.writeApprovalDesc")}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    className="prefs-switch"
+                    aria-checked={memorySettings.writeApproval}
+                    aria-label={t("memory.settings.writeApproval")}
+                    disabled={settingsBusy}
+                    onClick={() =>
+                      void setWriteApproval(!memorySettings.writeApproval)
+                    }
+                  >
+                    <span className="prefs-switch-thumb" />
+                  </button>
+                </label>
+                <label className="mem-settings-row">
+                  <span className="mem-settings-text">
+                    <span className="mem-settings-label">
+                      {t("memory.settings.backgroundReview")}
+                    </span>
+                    <span className="mem-settings-desc">
+                      {t("memory.settings.backgroundReviewDesc")}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    className="prefs-switch"
+                    aria-checked={memorySettings.backgroundReviewEnabled}
+                    aria-label={t("memory.settings.backgroundReview")}
+                    disabled={settingsBusy}
+                    onClick={() =>
+                      void setBackgroundReview(
+                        !memorySettings.backgroundReviewEnabled,
+                      )
+                    }
+                  >
+                    <span className="prefs-switch-thumb" />
+                  </button>
+                </label>
+                <label className="mem-settings-row">
+                  <span className="mem-settings-text">
+                    <span className="mem-settings-label">
+                      {t("memory.settings.autoRefresh")}
+                    </span>
+                    <span className="mem-settings-desc">
+                      {t("memory.settings.autoRefreshDesc")}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    className="prefs-switch"
+                    aria-checked={memorySettings.autoRefreshOnUpdate}
+                    aria-label={t("memory.settings.autoRefresh")}
+                    disabled={settingsBusy}
+                    onClick={() =>
+                      void setAutoRefresh(!memorySettings.autoRefreshOnUpdate)
+                    }
+                  >
+                    <span className="prefs-switch-thumb" />
+                  </button>
+                </label>
+              </div>
+            </section>
+            <section className="mem-card mem-main mem-pending">
+              <div className="mem-main-header">
+                <h3>{t("memory.view.pending")}</h3>
+                <button
+                  type="button"
+                  className="mem-glass-btn"
+                  onClick={() => void refreshPendingWrites()}
+                  title={t("memory.pending.refresh")}
+                >
+                  {t("memory.pending.refresh")}
+                </button>
+              </div>
+              <p className="mem-pending-hint">{t("memory.pending.hint")}</p>
+              {pendingWrites.length === 0 ? (
+                <div className="mem-empty">
+                  <EmptyIllustration
+                    scene="memory"
+                    size="sm"
+                    title={t("memory.pending.emptyTitle")}
+                    hint={
+                      memorySettings.writeApproval
+                        ? t("memory.pending.emptyHintOn")
+                        : t("memory.pending.emptyHint")
+                    }
+                  />
+                </div>
+              ) : (
+                <ul className="mem-pending-list">
+                  {pendingWrites.map((p) => (
+                    <li key={p.id} className="mem-pending-item">
+                      <div className="mem-pending-meta">
+                        <span className="mem-pending-badge">{p.action}</span>
+                        <span className="mem-pending-badge soft">
+                          {p.target}
+                        </span>
+                        <span className="mem-pending-badge soft">
+                          {p.source}
+                        </span>
+                        <span className="mem-pending-agent">{p.agentId}</span>
+                        <span className="mem-pending-time">{p.createdAt}</span>
+                      </div>
+                      {p.content ? (
+                        <pre className="mem-pending-body">{p.content}</pre>
+                      ) : null}
+                      {p.oldText ? (
+                        <pre className="mem-pending-body muted">
+                          {p.oldText}
+                        </pre>
+                      ) : null}
+                      <div className="mem-pending-actions">
+                        <button
+                          type="button"
+                          className="mem-glass-btn is-primary"
+                          disabled={pendingBusyId === p.id}
+                          onClick={() => void approvePending(p.id)}
+                        >
+                          <Check size={14} strokeWidth={2} aria-hidden />
+                          {t("memory.pending.approve")}
+                        </button>
+                        <button
+                          type="button"
+                          className="mem-glass-btn"
+                          disabled={pendingBusyId === p.id}
+                          onClick={() => void rejectPending(p.id)}
+                        >
+                          <X size={14} strokeWidth={2} aria-hidden />
+                          {t("memory.pending.reject")}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
       </MotionSwitch>
     </aside>
   );

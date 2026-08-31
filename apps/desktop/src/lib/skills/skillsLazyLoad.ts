@@ -20,7 +20,8 @@ export function isNearScrollEnd(
   threshold = 160,
 ): boolean {
   if (metrics.clientHeight <= 0 || metrics.scrollHeight <= 0) return false;
-  const remaining = metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight;
+  const remaining =
+    metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight;
   return remaining <= Math.max(0, threshold);
 }
 

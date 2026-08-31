@@ -37,7 +37,11 @@ function sumReasoningDurations(
   let sum = 0;
   let any = false;
   for (const seg of segments) {
-    if (seg.type === "reasoning" && seg.durationSec != null && seg.durationSec > 0) {
+    if (
+      seg.type === "reasoning" &&
+      seg.durationSec != null &&
+      seg.durationSec > 0
+    ) {
       sum += seg.durationSec;
       any = true;
     }
@@ -68,11 +72,20 @@ export function coalesceConsecutiveAssistants(
       .map((c) => (c ?? "").trim())
       .filter(Boolean);
     prev.content = contents.join("\n\n");
-    prev.activities = mergeActivities(prev.activities ?? [], m.activities ?? []);
-    if ((m.segments?.length ?? 0) >= (prev.segments?.length ?? 0) && m.segments?.length) {
+    prev.activities = mergeActivities(
+      prev.activities ?? [],
+      m.activities ?? [],
+    );
+    if (
+      (m.segments?.length ?? 0) >= (prev.segments?.length ?? 0) &&
+      m.segments?.length
+    ) {
       prev.segments = m.segments;
     }
-    if ((m.uiSurfaces?.length ?? 0) >= (prev.uiSurfaces?.length ?? 0) && m.uiSurfaces?.length) {
+    if (
+      (m.uiSurfaces?.length ?? 0) >= (prev.uiSurfaces?.length ?? 0) &&
+      m.uiSurfaces?.length
+    ) {
       prev.uiSurfaces = m.uiSurfaces;
     }
     if (m.reasoning?.trim()) {
@@ -193,7 +206,8 @@ function enrichActivityDurations(
     );
     if (idx < 0) return act;
     const at = segments[idx]!.at;
-    const activitySegment = segments[idx]!.type === "activity" ? segments[idx]! : null;
+    const activitySegment =
+      segments[idx]!.type === "activity" ? segments[idx]! : null;
     const next = segments[idx + 1];
     let durationSec = act.durationSec;
     if (next && next.at > at) {
@@ -217,7 +231,7 @@ function mapActivity(a: ChatHistoryActivityDto): ChatActivity {
     ? (a.status as ChatActivityStatus)
     : undefined;
   const media = Array.isArray(a.media)
-    ? a.media
+    ? (a.media
         .map((item) => {
           const mediaKind =
             item.kind === "image" ||
@@ -230,7 +244,7 @@ function mapActivity(a: ChatHistoryActivityDto): ChatActivity {
           if (!mediaKind || !path) return null;
           return { kind: mediaKind, path };
         })
-        .filter(Boolean) as NonNullable<ChatActivity["media"]>
+        .filter(Boolean) as NonNullable<ChatActivity["media"]>)
     : undefined;
   return {
     id: a.id,
@@ -252,7 +266,11 @@ export function settleRestoredActivities(
   settledAt = Date.now(),
 ): ChatMessage[] {
   return messages.map((message) => {
-    if (!message.activities?.some((activity) => isLiveActivityStatus(activity.status))) {
+    if (
+      !message.activities?.some((activity) =>
+        isLiveActivityStatus(activity.status),
+      )
+    ) {
       return message;
     }
     return {
@@ -274,7 +292,9 @@ export function settleRestoredActivities(
   });
 }
 
-export function mapHistoryMessages(messages: ChatHistoryMessageDto[]): ChatMessage[] {
+export function mapHistoryMessages(
+  messages: ChatHistoryMessageDto[],
+): ChatMessage[] {
   return coalesceConsecutiveAssistants(messages)
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => {

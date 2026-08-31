@@ -78,7 +78,9 @@ export default function ChatAgentInfo({
         if (cancelled) return;
 
         const active =
-          cfg.agents.find((a) => a.id === cfg.active_agent_id) ?? cfg.agents[0] ?? null;
+          cfg.agents.find((a) => a.id === cfg.active_agent_id) ??
+          cfg.agents[0] ??
+          null;
         setAgent(active);
         if (!active) return;
 
@@ -90,7 +92,9 @@ export default function ChatAgentInfo({
           });
           if (cancelled) return;
           const trimmed = mem.trim();
-          setMemoryPreview(trimmed ? trimmed.slice(0, MEMORY_PREVIEW_LEN) : memoryEmpty);
+          setMemoryPreview(
+            trimmed ? trimmed.slice(0, MEMORY_PREVIEW_LEN) : memoryEmpty,
+          );
         } catch {
           if (!cancelled) setMemoryPreview(memoryEmpty);
         }
@@ -115,7 +119,9 @@ export default function ChatAgentInfo({
         }
 
         try {
-          const skills = await invoke<InstalledSkill[]>("list_installed_skills");
+          const skills = await invoke<InstalledSkill[]>(
+            "list_installed_skills",
+          );
           if (cancelled) return;
           const enabled = skills.filter((s) => s.enabled);
           setSkillTotal(enabled.length);
@@ -171,7 +177,9 @@ export default function ChatAgentInfo({
             <div className="chat-agent-identity">
               <h3>{agent.name}</h3>
               <p className="chat-agent-status">
-                {agent.is_default ? t("chat.rightPanel.defaultAgent") : agent.id}
+                {agent.is_default
+                  ? t("chat.rightPanel.defaultAgent")
+                  : agent.id}
               </p>
             </div>
           </header>
@@ -184,7 +192,11 @@ export default function ChatAgentInfo({
                 </span>
                 <span>{t("chat.rightPanel.usageTitle")}</span>
               </h4>
-              <button type="button" className="linkish" onClick={onOpenContextTab}>
+              <button
+                type="button"
+                className="linkish"
+                onClick={onOpenContextTab}
+              >
                 <span>{t("chat.contextUsageDetail")}</span>
                 <ArrowUpRight size={12} strokeWidth={2.1} aria-hidden />
               </button>
@@ -224,7 +236,9 @@ export default function ChatAgentInfo({
             {turnId && sessionId ? (
               <div className="chat-agent-turn">
                 <span>{t("chat.rightPanel.turnLabel")}</span>
-                <code>{turnId.length > 8 ? `${turnId.slice(0, 8)}…` : turnId}</code>
+                <code>
+                  {turnId.length > 8 ? `${turnId.slice(0, 8)}…` : turnId}
+                </code>
                 <button
                   type="button"
                   className="linkish"
@@ -289,7 +303,11 @@ export default function ChatAgentInfo({
             ) : (
               <p className="muted">暂无已启用技能</p>
             )}
-            <button type="button" className="chat-agent-view-all" onClick={onOpenSkills}>
+            <button
+              type="button"
+              className="chat-agent-view-all"
+              onClick={onOpenSkills}
+            >
               <span>{`${t("chat.rightPanel.viewAllSkills")} (${skillTotal})`}</span>
               <ArrowUpRight size={14} strokeWidth={2.1} aria-hidden />
             </button>

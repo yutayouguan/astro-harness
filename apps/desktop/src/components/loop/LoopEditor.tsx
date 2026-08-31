@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -36,8 +43,19 @@ import {
 } from "lucide";
 import { LOOP_ICON_MAP } from "./loopIcons";
 import type { LoopDto, NodeType, NodeMeta, LoopIconData } from "./loopTypes";
-import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta, parseLoopIcon, serializeLoopIcon } from "./loopTypes";
-import { clampPopover, pointAnchor, measurePopoverSize } from "../../lib/ui/clampPopover";
+import {
+  NODE_CATEGORIES,
+  NODE_REGISTRY,
+  getNodesByCategory,
+  getNodeMeta,
+  parseLoopIcon,
+  serializeLoopIcon,
+} from "./loopTypes";
+import {
+  clampPopover,
+  pointAnchor,
+  measurePopoverSize,
+} from "../../lib/ui/clampPopover";
 import LoopConfigPanel from "./LoopConfigPanel";
 import { computeUpstreamOutputs } from "./configs/upstreamOutputs";
 import { validateNodeConfig } from "./loopValidation";
@@ -72,7 +90,13 @@ interface LoopNodeData {
   onDeleteNode?: () => void;
 }
 
-function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
+function LoopNode({
+  data,
+  selected,
+}: {
+  data: LoopNodeData;
+  selected?: boolean;
+}) {
   const { t } = useI18n();
   const IconComp = LOOP_ICON_MAP[data.meta.icon];
   const raw = data as unknown as Record<string, unknown>;
@@ -90,25 +114,38 @@ function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }
           <button
             className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
             title={data.disabled ? t("loop.enabledYes") : t("loop.enabledNo")}
-            onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onToggleDisable?.();
+            }}
           >
             <LOOP_ICON_MAP.Power size={12} />
           </button>
           <button
             className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger"
             title={t("loop.delete")}
-            onClick={(e) => { e.stopPropagation(); data.onDeleteNode?.(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onDeleteNode?.();
+            }}
           >
             <LOOP_ICON_MAP.Trash2 size={12} />
           </button>
         </div>
       )}
       {warnings.length > 0 && (
-        <span className="loop-rf-node-warn" title={warnings.join("、") + " " + t("loop.notConfigured")}>
+        <span
+          className="loop-rf-node-warn"
+          title={warnings.join("、") + " " + t("loop.notConfigured")}
+        >
           <LOOP_ICON_MAP.AlertTriangle size={10} />
         </span>
       )}
-      <Handle type="target" position={Position.Left} className="loop-rf-handle" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="loop-rf-handle"
+      />
       <div className="loop-rf-node-header">
         <span className="loop-rf-node-icon">
           {IconComp && <IconComp size={16} />}
@@ -118,7 +155,11 @@ function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }
           <span className="loop-rf-node-type-tag">{data.meta.labelEn}</span>
         </div>
       </div>
-      <Handle type="source" position={Position.Right} className="loop-rf-handle" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="loop-rf-handle"
+      />
     </div>
   );
 }
@@ -129,7 +170,13 @@ interface BranchCondition {
   expression?: string;
 }
 
-function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
+function BranchNode({
+  data,
+  selected,
+}: {
+  data: LoopNodeData;
+  selected?: boolean;
+}) {
   const { t } = useI18n();
   const IconComp = LOOP_ICON_MAP[data.meta.icon];
   const raw = data as unknown as Record<string, unknown>;
@@ -138,14 +185,20 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
     (raw.nodeType as NodeType) ?? data.meta.type,
     config ?? {},
   );
-  const conditionsRaw = config?.conditions ?? config?.branches ?? config?.classes;
+  const conditionsRaw =
+    config?.conditions ?? config?.branches ?? config?.classes;
   let branches: BranchCondition[] = [];
   if (typeof conditionsRaw === "string") {
-    try { branches = JSON.parse(conditionsRaw); } catch { /* ignore */ }
+    try {
+      branches = JSON.parse(conditionsRaw);
+    } catch {
+      /* ignore */
+    }
   } else if (Array.isArray(conditionsRaw)) {
     branches = conditionsRaw as BranchCondition[];
   }
-  if (branches.length === 0) branches = [{ id: "default", label: t("loop.branchDefault") }];
+  if (branches.length === 0)
+    branches = [{ id: "default", label: t("loop.branchDefault") }];
 
   return (
     <div
@@ -154,23 +207,41 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
     >
       {selected && (
         <div className="loop-rf-node-toolbar">
-          <button className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
+          <button
+            className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
             title={data.disabled ? t("loop.enabledYes") : t("loop.enabledNo")}
-            onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}>
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onToggleDisable?.();
+            }}
+          >
             <LOOP_ICON_MAP.Power size={12} />
           </button>
-          <button className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger" title={t("loop.delete")}
-            onClick={(e) => { e.stopPropagation(); data.onDeleteNode?.(); }}>
+          <button
+            className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger"
+            title={t("loop.delete")}
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onDeleteNode?.();
+            }}
+          >
             <LOOP_ICON_MAP.Trash2 size={12} />
           </button>
         </div>
       )}
       {warnings.length > 0 && (
-        <span className="loop-rf-node-warn" title={warnings.join("、") + " " + t("loop.notConfigured")}>
+        <span
+          className="loop-rf-node-warn"
+          title={warnings.join("、") + " " + t("loop.notConfigured")}
+        >
           <LOOP_ICON_MAP.AlertTriangle size={10} />
         </span>
       )}
-      <Handle type="target" position={Position.Left} className="loop-rf-handle" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="loop-rf-handle"
+      />
       <div className="loop-rf-node-header">
         <span className="loop-rf-node-icon">
           {IconComp && <IconComp size={16} />}
@@ -182,7 +253,9 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
       </div>
       <div className="loop-rf-branch-labels">
         {branches.map((b) => (
-          <span key={b.id} className="loop-rf-branch-label">{b.label || b.id}</span>
+          <span key={b.id} className="loop-rf-branch-label">
+            {b.label || b.id}
+          </span>
         ))}
       </div>
       {branches.map((b) => (
@@ -198,7 +271,11 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
   );
 }
 
-const BRANCH_NODE_TYPES: Set<string> = new Set(["conditional", "multi_branch", "question_classification"]);
+const BRANCH_NODE_TYPES: Set<string> = new Set([
+  "conditional",
+  "multi_branch",
+  "question_classification",
+]);
 
 function rfNodeType(nodeType: string): string {
   return BRANCH_NODE_TYPES.has(nodeType) ? "branchNode" : "loopNode";
@@ -230,11 +307,21 @@ interface NodePickerProps {
   x: number;
   y: number;
   savedLoops: LoopDto[];
-  onSelect: (nodeType: NodeType, label?: string, config?: Record<string, unknown>) => void;
+  onSelect: (
+    nodeType: NodeType,
+    label?: string,
+    config?: Record<string, unknown>,
+  ) => void;
   onClose: () => void;
 }
 
-function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps) {
+function LoopNodePicker({
+  x,
+  y,
+  savedLoops,
+  onSelect,
+  onClose,
+}: NodePickerProps) {
   const { t } = useI18n();
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -267,7 +354,8 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
       if (e.key === "Escape") onClose();
     };
     const onPointer = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+      if (menuRef.current && !menuRef.current.contains(e.target as Node))
+        onClose();
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onPointer);
@@ -292,7 +380,10 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
       }}
     >
       <div className="loop-node-picker-search">
-        <LOOP_ICON_MAP.Search size={14} className="loop-node-picker-search-icon" />
+        <LOOP_ICON_MAP.Search
+          size={14}
+          className="loop-node-picker-search-icon"
+        />
         <input
           ref={inputRef}
           type="text"
@@ -305,7 +396,10 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
       <div className="loop-node-picker-body">
         {NODE_CATEGORIES.filter((cat) => cat.key !== "custom").map((cat) => {
           const items = getNodesByCategory(cat.key).filter(
-            (m) => !q || m.label.toLowerCase().includes(q) || m.labelEn.toLowerCase().includes(q),
+            (m) =>
+              !q ||
+              m.label.toLowerCase().includes(q) ||
+              m.labelEn.toLowerCase().includes(q),
           );
           if (items.length === 0) return null;
           const CatIcon = LOOP_ICON_MAP[cat.icon];
@@ -323,7 +417,10 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
                     className="loop-node-picker-item"
                     onClick={() => onSelect(meta.type)}
                   >
-                    <span className="loop-node-picker-item-icon" style={{ color: meta.color }}>
+                    <span
+                      className="loop-node-picker-item-icon"
+                      style={{ color: meta.color }}
+                    >
                       {IconComp && <IconComp size={16} />}
                     </span>
                     <span>{meta.label}</span>
@@ -345,9 +442,16 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
                 <button
                   key={lp.id}
                   className="loop-node-picker-item"
-                  onClick={() => onSelect("custom_loop" as NodeType, lp.name, { workflow_id: lp.id })}
+                  onClick={() =>
+                    onSelect("custom_loop" as NodeType, lp.name, {
+                      workflow_id: lp.id,
+                    })
+                  }
                 >
-                  <span className="loop-node-picker-item-icon" style={{ color: "#8b5cf6" }}>
+                  <span
+                    className="loop-node-picker-item-icon"
+                    style={{ color: "#8b5cf6" }}
+                  >
                     <LOOP_ICON_MAP.Workflow size={16} />
                   </span>
                   <span>{lp.name}</span>
@@ -392,7 +496,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [fullscreen, setFullscreen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [paletteSearch, setPaletteSearch] = useState("");
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    nodeId?: string;
+  } | null>(null);
   const [canvasSearch, setCanvasSearch] = useState("");
   const [showCanvasSearch, setShowCanvasSearch] = useState(false);
   const [edgeType, setEdgeType] = useState<string>("smoothstep");
@@ -406,12 +514,15 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [running, setRunning] = useState(false);
 
   const { pushSnapshot, undo, redo } = useLoopHistory(
-    setNodes, setEdges,
+    setNodes,
+    setEdges,
     () => reactFlowInstance.getNodes(),
     () => reactFlowInstance.getEdges(),
   );
 
-  const clipboardRef = useRef<{ nodes: RFNode[]; edges: RFEdge[] } | null>(null);
+  const clipboardRef = useRef<{ nodes: RFNode[]; edges: RFEdge[] } | null>(
+    null,
+  );
   const saveRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -421,12 +532,16 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) {
         if (e.key === "Delete" || e.key === "Backspace") {
-          const selected = reactFlowInstance.getNodes().filter((n) => n.selected);
+          const selected = reactFlowInstance
+            .getNodes()
+            .filter((n) => n.selected);
           if (selected.length > 0) {
             pushSnapshot();
             const ids = new Set(selected.map((n) => n.id));
             setNodes((nds) => nds.filter((n) => !ids.has(n.id)));
-            setEdges((eds) => eds.filter((ed) => !ids.has(ed.source) && !ids.has(ed.target)));
+            setEdges((eds) =>
+              eds.filter((ed) => !ids.has(ed.source) && !ids.has(ed.target)),
+            );
             setSelectedNodeId(null);
             setDirty(true);
           }
@@ -447,9 +562,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         const selected = reactFlowInstance.getNodes().filter((n) => n.selected);
         if (selected.length === 0) return;
         const selectedIds = new Set(selected.map((n) => n.id));
-        const relatedEdges = reactFlowInstance.getEdges().filter(
-          (e) => selectedIds.has(e.source) && selectedIds.has(e.target),
-        );
+        const relatedEdges = reactFlowInstance
+          .getEdges()
+          .filter(
+            (e) => selectedIds.has(e.source) && selectedIds.has(e.target),
+          );
         clipboardRef.current = { nodes: selected, edges: relatedEdges };
       } else if (e.key === "v" && clipboardRef.current) {
         e.preventDefault();
@@ -484,15 +601,30 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [undo, redo, reactFlowInstance, setNodes, setEdges, pushSnapshot, setSelectedNodeId]);
+  }, [
+    undo,
+    redo,
+    reactFlowInstance,
+    setNodes,
+    setEdges,
+    pushSnapshot,
+    setSelectedNodeId,
+  ]);
 
   const selectedUpstreamOutputs = useMemo(() => {
     if (!selectedNodeId) return [];
     const allNodes = nodes.map((n) => {
       const d = n.data as Record<string, unknown>;
-      return { id: n.id, nodeType: d.nodeType as NodeType, label: (d.label as string) || n.id };
+      return {
+        id: n.id,
+        nodeType: d.nodeType as NodeType,
+        label: (d.label as string) || n.id,
+      };
     });
-    const simpleEdges = edges.map((e) => ({ source: e.source, target: e.target }));
+    const simpleEdges = edges.map((e) => ({
+      source: e.source,
+      target: e.target,
+    }));
     return computeUpstreamOutputs(selectedNodeId, allNodes, simpleEdges);
   }, [selectedNodeId, nodes, edges]);
 
@@ -512,23 +644,28 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     setShowAiAssistant(false);
   }, []);
 
-  const toggleSidePanel = useCallback((panel: "history" | "variables" | "ai") => {
-    const shouldOpen = panel === "history"
-      ? !showHistory
-      : panel === "variables"
-        ? !showVarsPanel
-        : !showAiAssistant;
-    setShowHistory(panel === "history" && shouldOpen);
-    setShowVarsPanel(panel === "variables" && shouldOpen);
-    setShowAiAssistant(panel === "ai" && shouldOpen);
-    setSelectedRunId(null);
-    if (shouldOpen) setSelectedNodeId(null);
-  }, [showHistory, showVarsPanel, showAiAssistant]);
+  const toggleSidePanel = useCallback(
+    (panel: "history" | "variables" | "ai") => {
+      const shouldOpen =
+        panel === "history"
+          ? !showHistory
+          : panel === "variables"
+            ? !showVarsPanel
+            : !showAiAssistant;
+      setShowHistory(panel === "history" && shouldOpen);
+      setShowVarsPanel(panel === "variables" && shouldOpen);
+      setShowAiAssistant(panel === "ai" && shouldOpen);
+      setSelectedRunId(null);
+      if (shouldOpen) setSelectedNodeId(null);
+    },
+    [showHistory, showVarsPanel, showAiAssistant],
+  );
 
   useEffect(() => {
     if (!showMoreMenu) return;
     const closeMenu = (event: PointerEvent) => {
-      if (!moreMenuRef.current?.contains(event.target as Node)) setShowMoreMenu(false);
+      if (!moreMenuRef.current?.contains(event.target as Node))
+        setShowMoreMenu(false);
     };
     window.addEventListener("pointerdown", closeMenu);
     return () => window.removeEventListener("pointerdown", closeMenu);
@@ -561,15 +698,33 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       }),
     );
     setDirty(true);
-    setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, maxZoom: 1.05, duration: 300 }), 50);
+    setTimeout(
+      () =>
+        reactFlowInstance.fitView({
+          padding: 0.2,
+          maxZoom: 1.05,
+          duration: 300,
+        }),
+      50,
+    );
   }, [reactFlowInstance, setNodes]);
 
   const handleExportImage = useCallback(async () => {
     try {
-      const container = document.querySelector<HTMLElement>(".loop-canvas-container .react-flow__viewport");
-      if (!container) { showToast("画布未就绪", { tone: "error" }); return; }
-      const svgEdges = container.closest(".react-flow")?.querySelector<SVGElement>("svg.react-flow__edges");
-      if (!svgEdges) { showToast("未找到连线元素", { tone: "error" }); return; }
+      const container = document.querySelector<HTMLElement>(
+        ".loop-canvas-container .react-flow__viewport",
+      );
+      if (!container) {
+        showToast("画布未就绪", { tone: "error" });
+        return;
+      }
+      const svgEdges = container
+        .closest(".react-flow")
+        ?.querySelector<SVGElement>("svg.react-flow__edges");
+      if (!svgEdges) {
+        showToast("未找到连线元素", { tone: "error" });
+        return;
+      }
       const bbox = container.getBoundingClientRect();
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.setAttribute("width", String(bbox.width));
@@ -578,7 +733,10 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       svg.appendChild(svgEdges.cloneNode(true));
       const svgStr = new XMLSerializer().serializeToString(svg);
       const fileName = `workflow-${name || "export"}-${Date.now()}.svg`;
-      const savedPath = await invoke<string>("export_loop_svg", { path: fileName, content: svgStr });
+      const savedPath = await invoke<string>("export_loop_svg", {
+        path: fileName,
+        content: svgStr,
+      });
       showToast(`${t("loop.exported")}: ${savedPath}`, { tone: "success" });
     } catch (e) {
       showToast(String(e), { tone: "error" });
@@ -586,24 +744,38 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   }, [name, showToast, t]);
 
   // node action callbacks (injected into node data for toolbar buttons)
-  const deleteNode = useCallback((nodeId: string) => {
-    pushSnapshot();
-    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
-    setSelectedNodeId(null);
-    setDirty(true);
-  }, [setNodes, setEdges]);
+  const deleteNode = useCallback(
+    (nodeId: string) => {
+      pushSnapshot();
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) =>
+        eds.filter((e) => e.source !== nodeId && e.target !== nodeId),
+      );
+      setSelectedNodeId(null);
+      setDirty(true);
+    },
+    [setNodes, setEdges],
+  );
 
-  const toggleNodeDisabled = useCallback((nodeId: string) => {
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === nodeId
-          ? { ...n, data: { ...n.data, disabled: !(n.data as Record<string, unknown>).disabled } }
-          : n,
-      ),
-    );
-    setDirty(true);
-  }, [setNodes]);
+  const toggleNodeDisabled = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  disabled: !(n.data as Record<string, unknown>).disabled,
+                },
+              }
+            : n,
+        ),
+      );
+      setDirty(true);
+    },
+    [setNodes],
+  );
 
   // inject callbacks + validation state into nodes
   const nodesWithCallbacks = useMemo(
@@ -619,7 +791,15 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             hasErrors: validateNodeConfig(nodeType, cfg).length > 0,
             onToggleDisable: () => toggleNodeDisabled(n.id),
             onDeleteNode: async () => {
-              const ok = await confirm({ title: t("loop.deleteNode"), message: t("loop.deleteNodeConfirm").replace("{name}", String(d.label)), confirmLabel: t("loop.delete"), variant: "danger" });
+              const ok = await confirm({
+                title: t("loop.deleteNode"),
+                message: t("loop.deleteNodeConfirm").replace(
+                  "{name}",
+                  String(d.label),
+                ),
+                confirmLabel: t("loop.delete"),
+                variant: "danger",
+              });
               if (ok) deleteNode(n.id);
             },
           },
@@ -630,12 +810,17 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
 
   // sidebar collapsed categories
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(NODE_CATEGORIES.map((category, index) => [category.key, index > 0])),
+    Object.fromEntries(
+      NODE_CATEGORIES.map((category, index) => [category.key, index > 0]),
+    ),
   );
 
   // custom drag state (HTML5 drag-and-drop doesn't work in Tauri WKWebView)
   const [draggingType, setDraggingType] = useState<NodeType | null>(null);
-  const [dragGhostPos, setDragGhostPos] = useState<{ x: number; y: number } | null>(null);
+  const [dragGhostPos, setDragGhostPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const customLoopRef = useRef<string | null>(null);
@@ -646,7 +831,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       try {
         const list = await invoke<LoopDto[]>("list_loops");
         setSavedLoops(list.filter((l) => l.id !== workflowId));
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
   }, [workflowId]);
 
@@ -669,7 +856,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             position: { x: n.position.x, y: n.position.y },
             data: {
               label: n.label,
-              meta: NODE_REGISTRY.find((m) => m.type === n.node_type) ?? NODE_REGISTRY[0],
+              meta:
+                NODE_REGISTRY.find((m) => m.type === n.node_type) ??
+                NODE_REGISTRY[0],
               config: n.config,
               nodeType: n.node_type,
               disabled: n.disabled,
@@ -686,7 +875,15 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             ...edgePresentation(e.source_handle),
           })),
         );
-        setTimeout(() => reactFlowInstance.fitView({ padding: 0.22, maxZoom: 1.05, duration: 320 }), 80);
+        setTimeout(
+          () =>
+            reactFlowInstance.fitView({
+              padding: 0.22,
+              maxZoom: 1.05,
+              duration: 320,
+            }),
+          80,
+        );
       } catch (e) {
         showToast(String(e), { tone: "error" });
       }
@@ -696,7 +893,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const onConnect: OnConnect = useCallback(
     (conn: Connection) => {
       pushSnapshot();
-      setEdges((eds) => addEdge({ ...conn, ...edgePresentation(conn.sourceHandle) }, eds));
+      setEdges((eds) =>
+        addEdge({ ...conn, ...edgePresentation(conn.sourceHandle) }, eds),
+      );
       setDirty(true);
     },
     [setEdges, pushSnapshot],
@@ -704,18 +903,28 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
 
   // ── Connection-drop node picker ──────────────────────────────────
   const [connectDrop, setConnectDrop] = useState<{
-    x: number; y: number;
+    x: number;
+    y: number;
     flowPos: { x: number; y: number };
     sourceNodeId: string;
     sourceHandleId: string | null;
   } | null>(null);
 
-  const connectStartRef = useRef<{ nodeId: string; handleId: string | null } | null>(null);
+  const connectStartRef = useRef<{
+    nodeId: string;
+    handleId: string | null;
+  } | null>(null);
 
   const onConnectStart = useCallback(
-    (_: unknown, params: { nodeId: string | null; handleId: string | null }) => {
+    (
+      _: unknown,
+      params: { nodeId: string | null; handleId: string | null },
+    ) => {
       if (params.nodeId) {
-        connectStartRef.current = { nodeId: params.nodeId, handleId: params.handleId };
+        connectStartRef.current = {
+          nodeId: params.nodeId,
+          handleId: params.handleId,
+        };
       }
     },
     [],
@@ -728,16 +937,35 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       if (!src) return;
 
       const target = (event as MouseEvent).target as Element | null;
-      if (target?.closest(".react-flow__handle") || target?.closest(".react-flow__node")) return;
+      if (
+        target?.closest(".react-flow__handle") ||
+        target?.closest(".react-flow__node")
+      )
+        return;
 
-      const clientX = "clientX" in event ? event.clientX : event.changedTouches?.[0]?.clientX ?? 0;
-      const clientY = "clientY" in event ? event.clientY : event.changedTouches?.[0]?.clientY ?? 0;
+      const clientX =
+        "clientX" in event
+          ? event.clientX
+          : (event.changedTouches?.[0]?.clientX ?? 0);
+      const clientY =
+        "clientY" in event
+          ? event.clientY
+          : (event.changedTouches?.[0]?.clientY ?? 0);
 
       const bounds = reactFlowWrapper.current?.getBoundingClientRect();
       if (!bounds) return;
-      if (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) return;
+      if (
+        clientX < bounds.left ||
+        clientX > bounds.right ||
+        clientY < bounds.top ||
+        clientY > bounds.bottom
+      )
+        return;
 
-      const flowPos = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY });
+      const flowPos = reactFlowInstance.screenToFlowPosition({
+        x: clientX,
+        y: clientY,
+      });
       setConnectDrop({
         x: clientX,
         y: clientY,
@@ -750,7 +978,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   );
 
   const handleNodePickerSelect = useCallback(
-    (nodeType: NodeType, overrideLabel?: string, overrideConfig?: Record<string, unknown>) => {
+    (
+      nodeType: NodeType,
+      overrideLabel?: string,
+      overrideConfig?: Record<string, unknown>,
+    ) => {
       if (!connectDrop) return;
       const meta = getNodeMeta(nodeType);
       const newId = crypto.randomUUID();
@@ -802,7 +1034,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           node_type: (n.data as Record<string, unknown>).nodeType as NodeType,
           label: (n.data as Record<string, unknown>).label as string,
           position: { x: n.position.x, y: n.position.y },
-          config: ((n.data as Record<string, unknown>).config as Record<string, unknown>) ?? {},
+          config:
+            ((n.data as Record<string, unknown>).config as Record<
+              string,
+              unknown
+            >) ?? {},
           disabled: !!(n.data as Record<string, unknown>).disabled,
         })),
         edges: edges.map((e) => ({
@@ -844,12 +1080,24 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     const onMouseUp = (e: MouseEvent) => {
       const meta = NODE_REGISTRY.find((m) => m.type === draggingType);
       const bounds = reactFlowWrapper.current?.getBoundingClientRect();
-      if (meta && bounds && e.clientX >= bounds.left && e.clientX <= bounds.right && e.clientY >= bounds.top && e.clientY <= bounds.bottom) {
-        const flowPos = reactFlowInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      if (
+        meta &&
+        bounds &&
+        e.clientX >= bounds.left &&
+        e.clientX <= bounds.right &&
+        e.clientY >= bounds.top &&
+        e.clientY <= bounds.bottom
+      ) {
+        const flowPos = reactFlowInstance.screenToFlowPosition({
+          x: e.clientX,
+          y: e.clientY,
+        });
         const newId = crypto.randomUUID();
         // custom_loop 节点使用引用的工作流名称和 ID
         const refLoopId = customLoopRef.current;
-        const refLoop = refLoopId ? savedLoops.find((l) => l.id === refLoopId) : null;
+        const refLoop = refLoopId
+          ? savedLoops.find((l) => l.id === refLoopId)
+          : null;
         const nodeLabel = refLoop ? refLoop.name : meta.label;
         const nodeConfig = refLoop ? { workflow_id: refLoopId } : {};
         setNodes((nds) => [
@@ -887,8 +1135,12 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       const meta = NODE_REGISTRY.find((m) => m.type === nodeType);
       if (!meta) return;
       const center = reactFlowInstance.screenToFlowPosition({
-        x: (reactFlowWrapper.current?.clientWidth ?? 600) / 2 + (reactFlowWrapper.current?.getBoundingClientRect().left ?? 0),
-        y: (reactFlowWrapper.current?.clientHeight ?? 400) / 2 + (reactFlowWrapper.current?.getBoundingClientRect().top ?? 0),
+        x:
+          (reactFlowWrapper.current?.clientWidth ?? 600) / 2 +
+          (reactFlowWrapper.current?.getBoundingClientRect().left ?? 0),
+        y:
+          (reactFlowWrapper.current?.clientHeight ?? 400) / 2 +
+          (reactFlowWrapper.current?.getBoundingClientRect().top ?? 0),
       });
       const newId = crypto.randomUUID();
       const offset = nodes.length * 20;
@@ -898,7 +1150,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           id: newId,
           type: rfNodeType(nodeType),
           position: { x: center.x + offset, y: center.y + offset },
-          data: { label: meta.label, meta, config: {}, nodeType, disabled: false },
+          data: {
+            label: meta.label,
+            meta,
+            config: {},
+            nodeType,
+            disabled: false,
+          },
         },
       ]);
       setDirty(true);
@@ -910,8 +1168,12 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     (loopId: string, loopName: string) => {
       const meta = getNodeMeta("custom_loop");
       const center = reactFlowInstance.screenToFlowPosition({
-        x: (reactFlowWrapper.current?.clientWidth ?? 600) / 2 + (reactFlowWrapper.current?.getBoundingClientRect().left ?? 0),
-        y: (reactFlowWrapper.current?.clientHeight ?? 400) / 2 + (reactFlowWrapper.current?.getBoundingClientRect().top ?? 0),
+        x:
+          (reactFlowWrapper.current?.clientWidth ?? 600) / 2 +
+          (reactFlowWrapper.current?.getBoundingClientRect().left ?? 0),
+        y:
+          (reactFlowWrapper.current?.clientHeight ?? 400) / 2 +
+          (reactFlowWrapper.current?.getBoundingClientRect().top ?? 0),
       });
       const newId = crypto.randomUUID();
       const offset = nodes.length * 20;
@@ -944,138 +1206,164 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     [nodes, selectedNodeId],
   );
   const invalidNodes = useMemo(
-    () => nodes.flatMap((node) => {
-      const data = node.data as Record<string, unknown>;
-      const errors = validateNodeConfig(
-        data.nodeType as NodeType,
-        (data.config as Record<string, unknown>) ?? {},
-      );
-      return errors.length > 0 ? [{ id: node.id, label: String(data.label), errors }] : [];
-    }),
+    () =>
+      nodes.flatMap((node) => {
+        const data = node.data as Record<string, unknown>;
+        const errors = validateNodeConfig(
+          data.nodeType as NodeType,
+          (data.config as Record<string, unknown>) ?? {},
+        );
+        return errors.length > 0
+          ? [{ id: node.id, label: String(data.label), errors }]
+          : [];
+      }),
     [nodes],
   );
 
   return (
-    <div ref={editorRef} className={`loop-editor${fullscreen ? " loop-editor--fullscreen" : ""}`}>
+    <div
+      ref={editorRef}
+      className={`loop-editor${fullscreen ? " loop-editor--fullscreen" : ""}`}
+    >
       {/* ── Toolbar ── */}
       <div className="loop-editor-toolbar">
         <div className="loop-editor-toolbar-lead">
-        <button className="loop-icon-btn" onClick={async () => {
-          if (dirty) {
-            const ok = await confirm({ title: t("loop.unsavedTitle"), message: t("loop.unsavedMessage"), confirmLabel: t("loop.unsavedLeave"), variant: "danger" });
-            if (!ok) return;
-          }
-          onBack();
-        }} title={t("loop.back")}>
-          <ArrowLeft size={16} />
-        </button>
-        <button
-          className="loop-editor-icon-btn"
-          title={t("loop.selectIcon")}
-          onClick={() => setIconPickerOpen(true)}
-        >
-          <LoopIcon icon={iconData} size={20} />
-        </button>
-        <div className="loop-editor-name-wrap">
-          {editingName ? (
-            <input
-              ref={nameInputRef}
-              className="loop-editor-name loop-editor-name--editing"
-              value={name}
-              autoFocus
-              onChange={(e) => {
-                setName(e.target.value);
-                setDirty(true);
-              }}
-              onBlur={() => setEditingName(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === "Escape") {
-                  setEditingName(false);
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-            />
-          ) : (
-            <button
-              className="loop-editor-name-display"
-              onClick={() => setEditingName(true)}
-            >
-              <span>{name}</span>
-              <LOOP_ICON_MAP.Pencil size={12} className="loop-editor-name-edit" />
-            </button>
-          )}
-        </div>
-        <input
-          className="loop-editor-desc"
-          value={description}
-          onChange={(e) => { setDescription(e.target.value); setDirty(true); }}
-          placeholder={t("loop.descPlaceholder")}
-        />
-        </div>
-        <div className="loop-editor-toolbar-tools" aria-label={t("loop.canvasTools")}>
-          <div className="loop-editor-tool-group">
           <button
             className="loop-icon-btn"
-            title={`${t("loop.undo")} (⌘Z)`}
-            onClick={undo}
+            onClick={async () => {
+              if (dirty) {
+                const ok = await confirm({
+                  title: t("loop.unsavedTitle"),
+                  message: t("loop.unsavedMessage"),
+                  confirmLabel: t("loop.unsavedLeave"),
+                  variant: "danger",
+                });
+                if (!ok) return;
+              }
+              onBack();
+            }}
+            title={t("loop.back")}
           >
-            <LOOP_ICON_MAP.Undo2 size={16} />
+            <ArrowLeft size={16} />
           </button>
           <button
-            className="loop-icon-btn"
-            title={`${t("loop.redo")} (⌘⇧Z)`}
-            onClick={redo}
+            className="loop-editor-icon-btn"
+            title={t("loop.selectIcon")}
+            onClick={() => setIconPickerOpen(true)}
           >
-            <LOOP_ICON_MAP.Redo2 size={16} />
+            <LoopIcon icon={iconData} size={20} />
           </button>
+          <div className="loop-editor-name-wrap">
+            {editingName ? (
+              <input
+                ref={nameInputRef}
+                className="loop-editor-name loop-editor-name--editing"
+                value={name}
+                autoFocus
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setDirty(true);
+                }}
+                onBlur={() => setEditingName(false)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "Escape") {
+                    setEditingName(false);
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+              />
+            ) : (
+              <button
+                className="loop-editor-name-display"
+                onClick={() => setEditingName(true)}
+              >
+                <span>{name}</span>
+                <LOOP_ICON_MAP.Pencil
+                  size={12}
+                  className="loop-editor-name-edit"
+                />
+              </button>
+            )}
           </div>
-          <div className="loop-editor-tool-group">
-          <button
-            className={`loop-icon-btn${showAiAssistant ? " is-active" : ""}`}
-            title={t("loop.aiAssistant")}
-            onClick={() => toggleSidePanel("ai")}
-          >
-            <LOOP_ICON_MAP.Sparkles size={16} />
-          </button>
-          <button
-            className={`loop-icon-btn${showVarsPanel ? " is-active" : ""}`}
-            title={t("loop.variables")}
-            onClick={() => toggleSidePanel("variables")}
-          >
-            <LOOP_ICON_MAP.Variable size={16} />
-          </button>
-          </div>
-          <div className="loop-editor-tool-group">
-          <button
-            className="loop-icon-btn"
-            title={t("loop.autoLayout")}
-            onClick={handleAutoLayout}
-          >
-            <LOOP_ICON_MAP.LayoutGrid size={16} />
-          </button>
-          <select
-            className="loop-edge-type-select"
-            value={edgeType}
+          <input
+            className="loop-editor-desc"
+            value={description}
             onChange={(e) => {
-              const newType = e.target.value;
-              setEdgeType(newType);
-              setEdges((eds) => eds.map((ed) => ({ ...ed, type: newType })));
+              setDescription(e.target.value);
               setDirty(true);
             }}
-            title={t("loop.edgeType")}
-          >
-            <option value="smoothstep">⌐ {t("loop.edgeSmoothStep")}</option>
-            <option value="default">∿ {t("loop.edgeBezier")}</option>
-            <option value="straight">╱ {t("loop.edgeStraight")}</option>
-            <option value="step">⌐⌐ {t("loop.edgeStep")}</option>
-          </select>
-          <button
-            className="loop-icon-btn"
-            title={t("loop.fitView")}
-            onClick={() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 })}
-          >
-            <LOOP_ICON_MAP.Maximize size={16} />
-          </button>
+            placeholder={t("loop.descPlaceholder")}
+          />
+        </div>
+        <div
+          className="loop-editor-toolbar-tools"
+          aria-label={t("loop.canvasTools")}
+        >
+          <div className="loop-editor-tool-group">
+            <button
+              className="loop-icon-btn"
+              title={`${t("loop.undo")} (⌘Z)`}
+              onClick={undo}
+            >
+              <LOOP_ICON_MAP.Undo2 size={16} />
+            </button>
+            <button
+              className="loop-icon-btn"
+              title={`${t("loop.redo")} (⌘⇧Z)`}
+              onClick={redo}
+            >
+              <LOOP_ICON_MAP.Redo2 size={16} />
+            </button>
+          </div>
+          <div className="loop-editor-tool-group">
+            <button
+              className={`loop-icon-btn${showAiAssistant ? " is-active" : ""}`}
+              title={t("loop.aiAssistant")}
+              onClick={() => toggleSidePanel("ai")}
+            >
+              <LOOP_ICON_MAP.Sparkles size={16} />
+            </button>
+            <button
+              className={`loop-icon-btn${showVarsPanel ? " is-active" : ""}`}
+              title={t("loop.variables")}
+              onClick={() => toggleSidePanel("variables")}
+            >
+              <LOOP_ICON_MAP.Variable size={16} />
+            </button>
+          </div>
+          <div className="loop-editor-tool-group">
+            <button
+              className="loop-icon-btn"
+              title={t("loop.autoLayout")}
+              onClick={handleAutoLayout}
+            >
+              <LOOP_ICON_MAP.LayoutGrid size={16} />
+            </button>
+            <select
+              className="loop-edge-type-select"
+              value={edgeType}
+              onChange={(e) => {
+                const newType = e.target.value;
+                setEdgeType(newType);
+                setEdges((eds) => eds.map((ed) => ({ ...ed, type: newType })));
+                setDirty(true);
+              }}
+              title={t("loop.edgeType")}
+            >
+              <option value="smoothstep">⌐ {t("loop.edgeSmoothStep")}</option>
+              <option value="default">∿ {t("loop.edgeBezier")}</option>
+              <option value="straight">╱ {t("loop.edgeStraight")}</option>
+              <option value="step">⌐⌐ {t("loop.edgeStep")}</option>
+            </select>
+            <button
+              className="loop-icon-btn"
+              title={t("loop.fitView")}
+              onClick={() =>
+                reactFlowInstance.fitView({ padding: 0.15, duration: 300 })
+              }
+            >
+              <LOOP_ICON_MAP.Maximize size={16} />
+            </button>
           </div>
           <div className="loop-editor-more" ref={moreMenuRef}>
             <button
@@ -1089,15 +1377,33 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             </button>
             {showMoreMenu && (
               <div className="loop-editor-more-menu" role="menu">
-                <button role="menuitem" onClick={() => { void handleExportImage(); setShowMoreMenu(false); }}>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    void handleExportImage();
+                    setShowMoreMenu(false);
+                  }}
+                >
                   <LOOP_ICON_MAP.Camera size={15} />
                   <span>{t("loop.exportImage")}</span>
                 </button>
-                <button role="menuitem" onClick={() => { setShowShortcuts(true); setShowMoreMenu(false); }}>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setShowShortcuts(true);
+                    setShowMoreMenu(false);
+                  }}
+                >
                   <LOOP_ICON_MAP.Keyboard size={15} />
                   <span>{t("loop.shortcuts")}</span>
                 </button>
-                <button role="menuitem" onClick={() => { setFullscreen((value) => !value); setShowMoreMenu(false); }}>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setFullscreen((value) => !value);
+                    setShowMoreMenu(false);
+                  }}
+                >
                   <MorphToggleIcon
                     active={fullscreen}
                     activeIcon={Minimize2Data}
@@ -1105,7 +1411,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                     size={15}
                     aria-hidden
                   />
-                  <span>{fullscreen ? t("loop.exitFullscreen") : t("loop.fullscreen")}</span>
+                  <span>
+                    {fullscreen
+                      ? t("loop.exitFullscreen")
+                      : t("loop.fullscreen")}
+                  </span>
                 </button>
               </div>
             )}
@@ -1128,7 +1438,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             disabled={saving}
           >
             <Save size={14} />
-            <span className="loop-btn-label">{saving ? t("loop.saving") : t("loop.save")}</span>
+            <span className="loop-btn-label">
+              {saving ? t("loop.saving") : t("loop.save")}
+            </span>
           </button>
           <button
             className="loop-btn loop-btn--primary"
@@ -1138,14 +1450,27 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               // 运行前校验所有节点
               if (invalidNodes.length > 0) {
                 openNodeInspector(invalidNodes[0].id);
-                showToast(`${invalidNodes.length} 个节点有未填写的必填字段:\n${invalidNodes.map((item) => `${item.label}: ${item.errors.join("、")}`).join("\n")}`, { tone: "error" });
+                showToast(
+                  `${invalidNodes.length} 个节点有未填写的必填字段:\n${invalidNodes.map((item) => `${item.label}: ${item.errors.join("、")}`).join("\n")}`,
+                  { tone: "error" },
+                );
                 return;
               }
               await handleSave();
               setRunning(true);
               try {
-                const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: workflow.id });
-                showToast(t("loop.runComplete").replace("{count}", String(result.steps_executed)), { tone: "success" });
+                const result = await invoke<{
+                  run_id: string;
+                  status: string;
+                  steps_executed: number;
+                }>("run_loop", { id: workflow.id });
+                showToast(
+                  t("loop.runComplete").replace(
+                    "{count}",
+                    String(result.steps_executed),
+                  ),
+                  { tone: "success" },
+                );
                 setShowHistory(true);
                 setShowVarsPanel(false);
                 setShowAiAssistant(false);
@@ -1157,8 +1482,14 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               }
             }}
           >
-            {running ? <LOOP_ICON_MAP.Loader2 size={14} className="loop-spin" /> : <Play size={14} />}
-            <span className="loop-btn-label">{running ? t("loop.running") : t("loop.run")}</span>
+            {running ? (
+              <LOOP_ICON_MAP.Loader2 size={14} className="loop-spin" />
+            ) : (
+              <Play size={14} />
+            )}
+            <span className="loop-btn-label">
+              {running ? t("loop.running") : t("loop.run")}
+            </span>
           </button>
         </div>
       </div>
@@ -1175,128 +1506,149 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           </button>
         )}
         {paletteOpen && (
-        <div className="loop-node-palette">
-          <div className="loop-palette-top">
-            <div className="loop-palette-title">{t("loop.paletteTitle")}</div>
-            <label className="loop-palette-search-wrap">
-              <LOOP_ICON_MAP.Search size={14} aria-hidden />
-              <input
-                className="loop-palette-search"
-                placeholder={t("loop.searchNodes")}
-                value={paletteSearch}
-                onChange={(e) => setPaletteSearch(e.target.value)}
-              />
-            </label>
-          </div>
-          {NODE_CATEGORIES.map((cat) => {
-            const pq = paletteSearch.trim().toLowerCase();
-            const items = getNodesByCategory(cat.key).filter(
-              (m) => !pq || m.label.toLowerCase().includes(pq) || m.labelEn.toLowerCase().includes(pq) || m.type.includes(pq),
-            );
-            if (pq && items.length === 0) return null;
-            const isCollapsed = pq ? false : !!collapsed[cat.key];
-            const CatIcon = LOOP_ICON_MAP[cat.icon];
-            return (
-              <div key={cat.key} className={`loop-palette-group${!isCollapsed ? " is-open" : ""}`}>
-                <button
-                  className="loop-palette-group-header"
-                  onClick={() => toggleCategory(cat.key)}
-                  aria-expanded={!isCollapsed}
+          <div className="loop-node-palette">
+            <div className="loop-palette-top">
+              <div className="loop-palette-title">{t("loop.paletteTitle")}</div>
+              <label className="loop-palette-search-wrap">
+                <LOOP_ICON_MAP.Search size={14} aria-hidden />
+                <input
+                  className="loop-palette-search"
+                  placeholder={t("loop.searchNodes")}
+                  value={paletteSearch}
+                  onChange={(e) => setPaletteSearch(e.target.value)}
+                />
+              </label>
+            </div>
+            {NODE_CATEGORIES.map((cat) => {
+              const pq = paletteSearch.trim().toLowerCase();
+              const items = getNodesByCategory(cat.key).filter(
+                (m) =>
+                  !pq ||
+                  m.label.toLowerCase().includes(pq) ||
+                  m.labelEn.toLowerCase().includes(pq) ||
+                  m.type.includes(pq),
+              );
+              if (pq && items.length === 0) return null;
+              const isCollapsed = pq ? false : !!collapsed[cat.key];
+              const CatIcon = LOOP_ICON_MAP[cat.icon];
+              return (
+                <div
+                  key={cat.key}
+                  className={`loop-palette-group${!isCollapsed ? " is-open" : ""}`}
                 >
-                  <MorphToggleIcon
-                    active={!isCollapsed}
-                    activeIcon={ChevronDownData}
-                    inactiveIcon={ChevronRightData}
-                    size={12}
-                    aria-hidden
-                  />
-                  {CatIcon && <CatIcon size={14} className="loop-palette-cat-icon" />}
-                  <span>{cat.label}</span>
-                  <span className="loop-palette-count">
-                    {items.filter((item) => item.type !== "custom_loop").length + (cat.key === "custom" ? savedLoops.length : 0)}
-                  </span>
-                </button>
-                {!isCollapsed && (
-                  <div className="loop-palette-items">
-                    {/* 静态节点列表 */}
-                    {items.filter((m) => m.type !== "custom_loop").map((meta) => {
-                      const IconComp = LOOP_ICON_MAP[meta.icon];
-                      return (
-                        <div
-                          key={meta.type}
-                          className="loop-palette-item"
-                          onMouseDown={(e) => {
-                            if (e.button !== 0) return;
-                            e.preventDefault();
-                            setDraggingType(meta.type);
-                            setDragGhostPos({ x: e.clientX, y: e.clientY });
-                          }}
-                        >
-                          <span
-                            className="loop-palette-item-icon"
-                            style={{ background: `color-mix(in srgb, ${meta.color} 15%, transparent)`, color: meta.color }}
-                          >
-                            {IconComp && <IconComp size={14} />}
-                          </span>
-                          <span>{meta.label}</span>
-                          <button
-                            className="loop-palette-item-plus"
-                            title={t("loop.addNode")}
-                            aria-label={`${t("loop.addNode")}: ${meta.label}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              addNodeToCenter(meta.type);
+                  <button
+                    className="loop-palette-group-header"
+                    onClick={() => toggleCategory(cat.key)}
+                    aria-expanded={!isCollapsed}
+                  >
+                    <MorphToggleIcon
+                      active={!isCollapsed}
+                      activeIcon={ChevronDownData}
+                      inactiveIcon={ChevronRightData}
+                      size={12}
+                      aria-hidden
+                    />
+                    {CatIcon && (
+                      <CatIcon size={14} className="loop-palette-cat-icon" />
+                    )}
+                    <span>{cat.label}</span>
+                    <span className="loop-palette-count">
+                      {items.filter((item) => item.type !== "custom_loop")
+                        .length +
+                        (cat.key === "custom" ? savedLoops.length : 0)}
+                    </span>
+                  </button>
+                  {!isCollapsed && (
+                    <div className="loop-palette-items">
+                      {/* 静态节点列表 */}
+                      {items
+                        .filter((m) => m.type !== "custom_loop")
+                        .map((meta) => {
+                          const IconComp = LOOP_ICON_MAP[meta.icon];
+                          return (
+                            <div
+                              key={meta.type}
+                              className="loop-palette-item"
+                              onMouseDown={(e) => {
+                                if (e.button !== 0) return;
+                                e.preventDefault();
+                                setDraggingType(meta.type);
+                                setDragGhostPos({ x: e.clientX, y: e.clientY });
+                              }}
+                            >
+                              <span
+                                className="loop-palette-item-icon"
+                                style={{
+                                  background: `color-mix(in srgb, ${meta.color} 15%, transparent)`,
+                                  color: meta.color,
+                                }}
+                              >
+                                {IconComp && <IconComp size={14} />}
+                              </span>
+                              <span>{meta.label}</span>
+                              <button
+                                className="loop-palette-item-plus"
+                                title={t("loop.addNode")}
+                                aria-label={`${t("loop.addNode")}: ${meta.label}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addNodeToCenter(meta.type);
+                                }}
+                              >
+                                <Plus size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      {/* 自定义分组：已保存的工作流 */}
+                      {cat.key === "custom" &&
+                        savedLoops.map((lp) => (
+                          <div
+                            key={lp.id}
+                            className="loop-palette-item"
+                            onMouseDown={(e) => {
+                              if (e.button !== 0) return;
+                              e.preventDefault();
+                              setDraggingType("custom_loop");
+                              setDragGhostPos({ x: e.clientX, y: e.clientY });
+                              customLoopRef.current = lp.id;
                             }}
                           >
-                            <Plus size={12} />
-                          </button>
+                            <span
+                              className="loop-palette-item-icon"
+                              style={{
+                                background:
+                                  "color-mix(in srgb, #8b5cf6 15%, transparent)",
+                                color: "#8b5cf6",
+                              }}
+                            >
+                              <LOOP_ICON_MAP.Workflow size={14} />
+                            </span>
+                            <span>{lp.name}</span>
+                            <button
+                              className="loop-palette-item-plus"
+                              title={t("loop.addNode")}
+                              aria-label={`${t("loop.addNode")}: ${lp.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addCustomLoopNode(lp.id, lp.name);
+                              }}
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      {cat.key === "custom" && savedLoops.length === 0 && (
+                        <div className="loop-palette-empty">
+                          {t("loop.presetEmpty")}
                         </div>
-                      );
-                    })}
-                    {/* 自定义分组：已保存的工作流 */}
-                    {cat.key === "custom" && savedLoops.map((lp) => (
-                      <div
-                        key={lp.id}
-                        className="loop-palette-item"
-                        onMouseDown={(e) => {
-                          if (e.button !== 0) return;
-                          e.preventDefault();
-                          setDraggingType("custom_loop");
-                          setDragGhostPos({ x: e.clientX, y: e.clientY });
-                          customLoopRef.current = lp.id;
-                        }}
-                      >
-                        <span
-                          className="loop-palette-item-icon"
-                          style={{ background: "color-mix(in srgb, #8b5cf6 15%, transparent)", color: "#8b5cf6" }}
-                        >
-                          <LOOP_ICON_MAP.Workflow size={14} />
-                        </span>
-                        <span>{lp.name}</span>
-                        <button
-                          className="loop-palette-item-plus"
-                          title={t("loop.addNode")}
-                          aria-label={`${t("loop.addNode")}: ${lp.name}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addCustomLoopNode(lp.id, lp.name);
-                          }}
-                        >
-                          <Plus size={12} />
-                        </button>
-                      </div>
-                    ))}
-                    {cat.key === "custom" && savedLoops.length === 0 && (
-                      <div className="loop-palette-empty">
-                        {t("loop.presetEmpty")}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
         {paletteOpen && (
           <button
@@ -1314,13 +1666,17 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             nodes={nodesWithCallbacks}
             edges={edges}
             onNodesChange={(changes) => {
-              const hasStructural = changes.some((c) => c.type === "remove" || c.type === "add");
+              const hasStructural = changes.some(
+                (c) => c.type === "remove" || c.type === "add",
+              );
               if (hasStructural) pushSnapshot();
               onNodesChange(changes);
               if (hasStructural) setDirty(true);
             }}
             onEdgesChange={(changes) => {
-              const hasStructural = changes.some((c) => c.type === "remove" || c.type === "add");
+              const hasStructural = changes.some(
+                (c) => c.type === "remove" || c.type === "add",
+              );
               if (hasStructural) pushSnapshot();
               onEdgesChange(changes);
               if (hasStructural) setDirty(true);
@@ -1330,15 +1686,36 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onConnect={onConnect}
             onConnectStart={onConnectStart}
             onConnectEnd={onConnectEnd}
-            onNodeClick={(_, node) => { openNodeInspector(node.id); setContextMenu(null); }}
+            onNodeClick={(_, node) => {
+              openNodeInspector(node.id);
+              setContextMenu(null);
+            }}
             onNodeDoubleClick={(_, node) => openNodeInspector(node.id)}
-            onNodeContextMenu={(e, node) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.id }); }}
-            onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); setContextMenu(null); }}
-            onPaneContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
+            onNodeContextMenu={(e, node) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
+            }}
+            onPaneClick={() => {
+              setSelectedNodeId(null);
+              setConnectDrop(null);
+              setContextMenu(null);
+            }}
+            onPaneContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY });
+            }}
             nodeTypes={nodeTypes}
             defaultEdgeOptions={{ type: edgeType, animated: false }}
-            connectionLineType={edgeType === "straight" ? ConnectionLineType.Straight : edgeType === "default" ? ConnectionLineType.Bezier : ConnectionLineType.SmoothStep}
-            isValidConnection={(conn) => isValidConnection(conn as Connection, nodes)}
+            connectionLineType={
+              edgeType === "straight"
+                ? ConnectionLineType.Straight
+                : edgeType === "default"
+                  ? ConnectionLineType.Bezier
+                  : ConnectionLineType.SmoothStep
+            }
+            isValidConnection={(conn) =>
+              isValidConnection(conn as Connection, nodes)
+            }
             snapToGrid
             snapGrid={[20, 20]}
             fitView
@@ -1348,9 +1725,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             <Background gap={24} size={1} />
             <Controls showInteractive={false} />
             <div className="loop-statusbar">
-              <span>{nodes.length} {t("loop.statusNodes")}</span>
+              <span>
+                {nodes.length} {t("loop.statusNodes")}
+              </span>
               <span className="loop-statusbar-sep">·</span>
-              <span>{edges.length} {t("loop.statusEdges")}</span>
+              <span>
+                {edges.length} {t("loop.statusEdges")}
+              </span>
               {invalidNodes.length > 0 && (
                 <>
                   <span className="loop-statusbar-sep">·</span>
@@ -1359,7 +1740,10 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                     onClick={() => openNodeInspector(invalidNodes[0].id)}
                   >
                     <LOOP_ICON_MAP.AlertTriangle size={11} />
-                    {t("loop.statusIssues").replace("{count}", String(invalidNodes.length))}
+                    {t("loop.statusIssues").replace(
+                      "{count}",
+                      String(invalidNodes.length),
+                    )}
                   </button>
                 </>
               )}
@@ -1375,20 +1759,31 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               {dirty && (
                 <>
                   <span className="loop-statusbar-sep">·</span>
-                  <span className="loop-statusbar-dirty">{t("loop.statusUnsaved")}</span>
+                  <span className="loop-statusbar-dirty">
+                    {t("loop.statusUnsaved")}
+                  </span>
                 </>
               )}
             </div>
             <MiniMap
               nodeColor={(n) =>
-                ((n.data as Record<string, unknown>)?.meta as NodeMeta)?.color ?? "#888"
+                ((n.data as Record<string, unknown>)?.meta as NodeMeta)
+                  ?.color ?? "#888"
               }
             />
           </ReactFlow>
           {showShortcuts && (
-            <div className="loop-shortcuts-overlay" onClick={() => setShowShortcuts(false)}>
-              <div className="loop-shortcuts-panel" onClick={(e) => e.stopPropagation()}>
-                <div className="loop-shortcuts-title">{t("loop.shortcuts")}</div>
+            <div
+              className="loop-shortcuts-overlay"
+              onClick={() => setShowShortcuts(false)}
+            >
+              <div
+                className="loop-shortcuts-panel"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="loop-shortcuts-title">
+                  {t("loop.shortcuts")}
+                </div>
                 {[
                   ["⌘Z", t("loop.undo")],
                   ["⌘⇧Z", t("loop.redo")],
@@ -1426,16 +1821,31 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                     });
                     if (found) {
                       openNodeInspector(found.id);
-                      reactFlowInstance.fitView({ nodes: [found], padding: 0.5, duration: 300 });
+                      reactFlowInstance.fitView({
+                        nodes: [found],
+                        padding: 0.5,
+                        duration: 300,
+                      });
                     }
                   }
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Escape") { setShowCanvasSearch(false); setCanvasSearch(""); }
-                  if (e.key === "Enter") { setShowCanvasSearch(false); }
+                  if (e.key === "Escape") {
+                    setShowCanvasSearch(false);
+                    setCanvasSearch("");
+                  }
+                  if (e.key === "Enter") {
+                    setShowCanvasSearch(false);
+                  }
                 }}
               />
-              <button className="loop-icon-btn" onClick={() => { setShowCanvasSearch(false); setCanvasSearch(""); }}>
+              <button
+                className="loop-icon-btn"
+                onClick={() => {
+                  setShowCanvasSearch(false);
+                  setCanvasSearch("");
+                }}
+              >
                 <LOOP_ICON_MAP.X size={12} />
               </button>
             </div>
@@ -1448,33 +1858,68 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             >
               {contextMenu.nodeId ? (
                 <>
-                  <button onClick={() => { openNodeInspector(contextMenu.nodeId!); setContextMenu(null); }}>
+                  <button
+                    onClick={() => {
+                      openNodeInspector(contextMenu.nodeId!);
+                      setContextMenu(null);
+                    }}
+                  >
                     <LOOP_ICON_MAP.Settings2 size={13} /> {t("loop.configTab")}
                   </button>
-                  <button onClick={() => {
-                    const n = reactFlowInstance.getNode(contextMenu.nodeId!);
-                    if (n) {
-                      clipboardRef.current = { nodes: [n], edges: [] };
-                      showToast(t("loop.shortcutCopy"), { tone: "success" });
-                    }
-                    setContextMenu(null);
-                  }}>
+                  <button
+                    onClick={() => {
+                      const n = reactFlowInstance.getNode(contextMenu.nodeId!);
+                      if (n) {
+                        clipboardRef.current = { nodes: [n], edges: [] };
+                        showToast(t("loop.shortcutCopy"), { tone: "success" });
+                      }
+                      setContextMenu(null);
+                    }}
+                  >
                     <LOOP_ICON_MAP.Copy size={13} /> {t("loop.shortcutCopy")}
                   </button>
-                  <button onClick={() => { pushSnapshot(); deleteNode(contextMenu.nodeId!); setContextMenu(null); }}>
+                  <button
+                    onClick={() => {
+                      pushSnapshot();
+                      deleteNode(contextMenu.nodeId!);
+                      setContextMenu(null);
+                    }}
+                  >
                     <LOOP_ICON_MAP.Trash2 size={13} /> {t("loop.delete")}
                   </button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => { handleAutoLayout(); setContextMenu(null); }}>
-                    <LOOP_ICON_MAP.LayoutGrid size={13} /> {t("loop.autoLayout")}
+                  <button
+                    onClick={() => {
+                      handleAutoLayout();
+                      setContextMenu(null);
+                    }}
+                  >
+                    <LOOP_ICON_MAP.LayoutGrid size={13} />{" "}
+                    {t("loop.autoLayout")}
                   </button>
-                  <button onClick={() => { reactFlowInstance.fitView({ padding: 0.15, duration: 300 }); setContextMenu(null); }}>
+                  <button
+                    onClick={() => {
+                      reactFlowInstance.fitView({
+                        padding: 0.15,
+                        duration: 300,
+                      });
+                      setContextMenu(null);
+                    }}
+                  >
                     <LOOP_ICON_MAP.Maximize size={13} /> {t("loop.fitView")}
                   </button>
-                  <button onClick={() => { setNodes((nds) => nds.map((n) => ({ ...n, selected: true }))); setContextMenu(null); }}>
-                    <LOOP_ICON_MAP.CheckSquare size={13} /> {t("loop.shortcutSelectAll")}
+                  <button
+                    onClick={() => {
+                      setNodes((nds) =>
+                        nds.map((n) => ({ ...n, selected: true })),
+                      );
+                      setContextMenu(null);
+                    }}
+                  >
+                    <LOOP_ICON_MAP.CheckSquare size={13} />{" "}
+                    {t("loop.shortcutSelectAll")}
                   </button>
                 </>
               )}
@@ -1497,16 +1942,30 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         {selectedNode && (
           <LoopConfigPanel
             nodeId={selectedNode.id}
-            nodeType={(selectedNode.data as Record<string, unknown>).nodeType as NodeType}
-            label={(selectedNode.data as Record<string, unknown>).label as string}
-            config={((selectedNode.data as Record<string, unknown>).config as Record<string, unknown>) ?? {}}
-            disabled={!!((selectedNode.data as Record<string, unknown>).disabled)}
+            nodeType={
+              (selectedNode.data as Record<string, unknown>)
+                .nodeType as NodeType
+            }
+            label={
+              (selectedNode.data as Record<string, unknown>).label as string
+            }
+            config={
+              ((selectedNode.data as Record<string, unknown>).config as Record<
+                string,
+                unknown
+              >) ?? {}
+            }
+            disabled={!!(selectedNode.data as Record<string, unknown>).disabled}
             workflowId={workflowId}
             upstreamOutputs={selectedUpstreamOutputs}
             aiProviderId={(variables.__ai_provider_id as string) ?? ""}
             aiModel={(variables.__ai_model as string) ?? ""}
             onAiProviderChange={(pid, m) => {
-              setVariables((v) => ({ ...v, __ai_provider_id: pid, __ai_model: m }));
+              setVariables((v) => ({
+                ...v,
+                __ai_provider_id: pid,
+                __ai_model: m,
+              }));
               setDirty(true);
             }}
             onLabelChange={(label) => {
@@ -1542,7 +2001,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onDelete={() => {
               setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
               setEdges((eds) =>
-                eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id),
+                eds.filter(
+                  (e) =>
+                    e.source !== selectedNode.id &&
+                    e.target !== selectedNode.id,
+                ),
               );
               setSelectedNodeId(null);
               setDirty(true);
@@ -1570,8 +2033,14 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         {showVarsPanel && (
           <div className="loop-vars-panel">
             <div className="loop-vars-panel-header">
-              <span className="loop-vars-panel-title">{t("loop.variables")}</span>
-              <button className="loop-icon-btn" onClick={() => setShowVarsPanel(false)} title={t("loop.close")}>
+              <span className="loop-vars-panel-title">
+                {t("loop.variables")}
+              </span>
+              <button
+                className="loop-icon-btn"
+                onClick={() => setShowVarsPanel(false)}
+                title={t("loop.close")}
+              >
                 <LOOP_ICON_MAP.X size={14} />
               </button>
             </div>
@@ -1637,9 +2106,15 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           <LoopAiAssistant
             currentNodes={nodes.map((n) => ({
               id: n.id,
-              node_type: ((n.data as Record<string, unknown>).nodeType as string) ?? "",
-              label: ((n.data as Record<string, unknown>).label as string) ?? "",
-              config: ((n.data as Record<string, unknown>).config as Record<string, unknown>) ?? {},
+              node_type:
+                ((n.data as Record<string, unknown>).nodeType as string) ?? "",
+              label:
+                ((n.data as Record<string, unknown>).label as string) ?? "",
+              config:
+                ((n.data as Record<string, unknown>).config as Record<
+                  string,
+                  unknown
+                >) ?? {},
             }))}
             onApply={(genNodes, genEdges) => {
               const dtoNodes = genNodes.map((n) => ({
@@ -1660,7 +2135,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               const positions = layoutNodes(dtoNodes, dtoEdges);
 
               const newRfNodes = genNodes.map((n) => {
-                const meta = NODE_REGISTRY.find((m) => m.type === n.node_type) ?? NODE_REGISTRY[0];
+                const meta =
+                  NODE_REGISTRY.find((m) => m.type === n.node_type) ??
+                  NODE_REGISTRY[0];
                 const pos = positions.get(n.id) ?? { x: 0, y: 0 };
                 return {
                   id: n.id,
@@ -1689,7 +2166,15 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               setEdges(newRfEdges);
               setDirty(true);
               setShowAiAssistant(false);
-              setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, maxZoom: 1.05, duration: 300 }), 100);
+              setTimeout(
+                () =>
+                  reactFlowInstance.fitView({
+                    padding: 0.2,
+                    maxZoom: 1.05,
+                    duration: 300,
+                  }),
+                100,
+              );
             }}
             onClose={() => setShowAiAssistant(false)}
           />
@@ -1722,25 +2207,30 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       )}
 
       {/* ── Drag ghost (follows cursor during custom drag) ── */}
-      {draggingType && dragGhostPos && (() => {
-        const meta = NODE_REGISTRY.find((m) => m.type === draggingType);
-        if (!meta) return null;
-        const IconComp = LOOP_ICON_MAP[meta.icon];
-        return (
-          <div
-            className="loop-drag-ghost"
-            style={{ left: dragGhostPos.x, top: dragGhostPos.y }}
-          >
-            <span
-              className="loop-palette-item-icon"
-              style={{ background: `color-mix(in srgb, ${meta.color} 15%, transparent)`, color: meta.color }}
+      {draggingType &&
+        dragGhostPos &&
+        (() => {
+          const meta = NODE_REGISTRY.find((m) => m.type === draggingType);
+          if (!meta) return null;
+          const IconComp = LOOP_ICON_MAP[meta.icon];
+          return (
+            <div
+              className="loop-drag-ghost"
+              style={{ left: dragGhostPos.x, top: dragGhostPos.y }}
             >
-              {IconComp && <IconComp size={14} />}
-            </span>
-            <span>{meta.label}</span>
-          </div>
-        );
-      })()}
+              <span
+                className="loop-palette-item-icon"
+                style={{
+                  background: `color-mix(in srgb, ${meta.color} 15%, transparent)`,
+                  color: meta.color,
+                }}
+              >
+                {IconComp && <IconComp size={14} />}
+              </span>
+              <span>{meta.label}</span>
+            </div>
+          );
+        })()}
       {toastHost}
     </div>
   );

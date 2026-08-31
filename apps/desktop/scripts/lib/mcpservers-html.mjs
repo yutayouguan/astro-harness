@@ -102,7 +102,9 @@ function buildStringArrayReferences(html) {
   let match;
   while ((match = pattern.exec(html))) {
     const values = match[2]
-      ? [...match[2].matchAll(/"(?:\\.|[^"\\])*"/g)].map((item) => decodeJsString(item[0]))
+      ? [...match[2].matchAll(/"(?:\\.|[^"\\])*"/g)].map((item) =>
+          decodeJsString(item[0]),
+        )
       : [];
     references.set(match[1], values.filter(Boolean));
   }
@@ -126,11 +128,18 @@ function referencedValue(record, name, references) {
 
 function parseRecord(record, arrayReferences, dateReferences) {
   const idToken = fieldToken(record, "id");
-  const decodedId = idToken?.startsWith('"') ? decodeJsString(idToken) : Number(idToken);
-  const slug = decodeJsString(fieldToken(record, "slug")) ??
+  const decodedId = idToken?.startsWith('"')
+    ? decodeJsString(idToken)
+    : Number(idToken);
+  const slug =
+    decodeJsString(fieldToken(record, "slug")) ??
     (typeof decodedId === "string" ? decodedId : undefined);
   const name = decodeJsString(fieldToken(record, "name"));
-  if ((typeof decodedId !== "string" && !Number.isFinite(decodedId)) || !slug || !name) {
+  if (
+    (typeof decodedId !== "string" && !Number.isFinite(decodedId)) ||
+    !slug ||
+    !name
+  ) {
     return undefined;
   }
   return {

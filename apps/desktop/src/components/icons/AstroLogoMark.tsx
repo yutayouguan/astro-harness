@@ -35,9 +35,18 @@ export function AstroLogoMark({ width = 24, height = 24, ...props }: Props) {
           x2="620"
           y2="240"
         >
-          <stop offset="0%" style={{ stopColor: "var(--astro-mark-c0, #0084fd)" }} />
-          <stop offset="46%" style={{ stopColor: "var(--astro-mark-c1, #1d57fd)" }} />
-          <stop offset="100%" style={{ stopColor: "var(--astro-mark-c2, #6020fc)" }} />
+          <stop
+            offset="0%"
+            style={{ stopColor: "var(--astro-mark-c0, #0084fd)" }}
+          />
+          <stop
+            offset="46%"
+            style={{ stopColor: "var(--astro-mark-c1, #1d57fd)" }}
+          />
+          <stop
+            offset="100%"
+            style={{ stopColor: "var(--astro-mark-c2, #6020fc)" }}
+          />
         </linearGradient>
       </defs>
       <path fill={`url(#${gradId})`} d={ASTRO_MARK_PATH} />

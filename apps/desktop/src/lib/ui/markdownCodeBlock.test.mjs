@@ -78,10 +78,13 @@ test("copy feedback is visible, accessible, and self-clearing", () => {
   const feedback = rule(markdownStyles, ".msg-md-code-copy-feedback");
 
   assert.match(component, /function CodeCopyButton\(/);
-  assert.match(component, /role="status" aria-live="polite"/);
+  assert.match(component, /role="status"\s+aria-live="polite"/);
   assert.match(component, /window\.clearTimeout\(resetTimerRef\.current\)/);
   assert.match(component, /}, 1200\);/);
-  assert.match(component, /data-single-line=\{!codeText\.includes\("\\n"\) \|\| undefined\}/);
+  assert.match(
+    component,
+    /data-single-line=\{!codeText\.includes\("\\n"\) \|\| undefined\}/,
+  );
   assert.ok(button, "missing copy button styles");
   assert.match(button, /width:\s*28px;/);
   assert.match(button, /opacity:\s*0\.72;/);

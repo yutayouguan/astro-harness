@@ -22,7 +22,9 @@ export function upsertAsyncAssistantMessage(
     delivery: "async",
     createdAt,
   };
-  const active = messages.findIndex((candidate) => candidate.id === activeAssistantId);
+  const active = messages.findIndex(
+    (candidate) => candidate.id === activeAssistantId,
+  );
   if (active < 0) return [...messages, message];
   return [...messages.slice(0, active), message, ...messages.slice(active)];
 }

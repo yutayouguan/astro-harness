@@ -6,11 +6,7 @@
 import type { PendingInterrupt } from "../../types";
 
 export type ParallelTaskStatus =
-  | "running"
-  | "waiting"
-  | "done"
-  | "error"
-  | "cancelled";
+  "running" | "waiting" | "done" | "error" | "cancelled";
 
 export type ParallelWorktreeInfo = {
   path: string;
@@ -43,7 +39,8 @@ export function newParallelTaskId(): string {
 
 /** 仍占用并发槽：执行中或等待用户审批/澄清 */
 export function countRunningParallel(tasks: ParallelChatTask[]): number {
-  return tasks.filter((t) => t.status === "running" || t.status === "waiting").length;
+  return tasks.filter((t) => t.status === "running" || t.status === "waiting")
+    .length;
 }
 
 export function isParallelTaskActive(status: ParallelTaskStatus): boolean {

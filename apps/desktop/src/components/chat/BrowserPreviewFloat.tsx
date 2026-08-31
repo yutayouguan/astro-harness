@@ -1,6 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ExternalLink, Globe2, GripHorizontal, Loader2, Unplug, X } from "lucide-react";
+import {
+  ExternalLink,
+  Globe2,
+  GripHorizontal,
+  Loader2,
+  Unplug,
+  X,
+} from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
 
@@ -29,21 +42,24 @@ export default function BrowserPreviewFloat({ preview, onClose }: Props) {
     setOffset({ x: 0, y: 0 });
   }, [preview.sessionId]);
 
-  const onPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !panelRef.current?.parentElement) return;
-    const target = event.target as HTMLElement;
-    if (target.closest("button,a")) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: offset.x,
-      originY: offset.y,
-      panelRect: panelRef.current.getBoundingClientRect(),
-      parentRect: panelRef.current.parentElement.getBoundingClientRect(),
-    };
-  }, [offset.x, offset.y]);
+  const onPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0 || !panelRef.current?.parentElement) return;
+      const target = event.target as HTMLElement;
+      if (target.closest("button,a")) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: offset.x,
+        originY: offset.y,
+        panelRect: panelRef.current.getBoundingClientRect(),
+        parentRect: panelRef.current.parentElement.getBoundingClientRect(),
+      };
+    },
+    [offset.x, offset.y],
+  );
 
   const onPointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
@@ -80,7 +96,8 @@ export default function BrowserPreviewFloat({ preview, onClose }: Props) {
 
   const statusKey = `chat.browserPreview.${preview.status}` as const;
   const screenshot = preview.screenshotPath
-    ? preview.screenshotPath.startsWith("data:") || preview.screenshotPath.startsWith("http")
+    ? preview.screenshotPath.startsWith("data:") ||
+      preview.screenshotPath.startsWith("http")
       ? preview.screenshotPath
       : `${convertFileSrc(preview.screenshotPath)}?v=${preview.updatedAt}`
     : null;
@@ -99,30 +116,59 @@ export default function BrowserPreviewFloat({ preview, onClose }: Props) {
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
       >
-        <span className="browser-preview-brand" aria-hidden><Globe2 size={14} /></span>
+        <span className="browser-preview-brand" aria-hidden>
+          <Globe2 size={14} />
+        </span>
         <span className="browser-preview-heading">
           <strong>{preview.title || t("chat.browserPreview.title")}</strong>
-          <small title={preview.url}>{preview.url || t("chat.browserPreview.connecting")}</small>
+          <small title={preview.url}>
+            {preview.url || t("chat.browserPreview.connecting")}
+          </small>
         </span>
         <span className={`browser-preview-status is-${preview.status}`}>
-          {preview.status === "connecting" ? <Loader2 size={11} className="browser-preview-spin" aria-hidden /> : null}
+          {preview.status === "connecting" ? (
+            <Loader2 size={11} className="browser-preview-spin" aria-hidden />
+          ) : null}
           {t(statusKey)}
         </span>
-        <GripHorizontal className="browser-preview-grip" size={14} aria-hidden />
-        <button type="button" onClick={openExternal} disabled={!preview.url} title={t("chat.browserPreview.openExternal")} aria-label={t("chat.browserPreview.openExternal")}>
+        <GripHorizontal
+          className="browser-preview-grip"
+          size={14}
+          aria-hidden
+        />
+        <button
+          type="button"
+          onClick={openExternal}
+          disabled={!preview.url}
+          title={t("chat.browserPreview.openExternal")}
+          aria-label={t("chat.browserPreview.openExternal")}
+        >
           <ExternalLink size={14} />
         </button>
-        <button type="button" onClick={onClose} title={t("chat.browserPreview.close")} aria-label={t("chat.browserPreview.close")}>
+        <button
+          type="button"
+          onClick={onClose}
+          title={t("chat.browserPreview.close")}
+          aria-label={t("chat.browserPreview.close")}
+        >
           <X size={14} />
         </button>
       </div>
       <div className="browser-preview-body">
         {screenshot ? <img src={screenshot} alt="" draggable={false} /> : null}
-        {!screenshot || preview.status === "disconnected" || preview.status === "error" ? (
+        {!screenshot ||
+        preview.status === "disconnected" ||
+        preview.status === "error" ? (
           <div className="browser-preview-placeholder">
-            {preview.status === "disconnected" ? <Unplug size={24} aria-hidden /> : <Globe2 size={24} aria-hidden />}
+            {preview.status === "disconnected" ? (
+              <Unplug size={24} aria-hidden />
+            ) : (
+              <Globe2 size={24} aria-hidden />
+            )}
             <span>{t(statusKey)}</span>
-            {preview.status === "disconnected" ? <small>{t("chat.browserPreview.restoreHint")}</small> : null}
+            {preview.status === "disconnected" ? (
+              <small>{t("chat.browserPreview.restoreHint")}</small>
+            ) : null}
           </div>
         ) : null}
       </div>

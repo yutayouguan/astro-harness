@@ -43,8 +43,13 @@ type CommunityCatalogEntry = {
   catalogIdentity?: string;
 };
 
-function isCatalogCategory(category: string | undefined): category is McpPublicEntryCategory {
-  return !!category && MCP_PUBLIC_ENTRY_CATEGORY_IDS.includes(category as McpPublicEntryCategory);
+function isCatalogCategory(
+  category: string | undefined,
+): category is McpPublicEntryCategory {
+  return (
+    !!category &&
+    MCP_PUBLIC_ENTRY_CATEGORY_IDS.includes(category as McpPublicEntryCategory)
+  );
 }
 
 /** Validate and normalize the packaged public directory before it reaches the UI. */
@@ -64,7 +69,11 @@ function loadCuratedCatalog(): McpServer[] {
 
   const ids = new Set<string>();
   return (document.servers as CatalogEntry[]).map((entry) => {
-    if (!entry.id?.trim() || !entry.name?.trim() || !isCatalogCategory(entry.category)) {
+    if (
+      !entry.id?.trim() ||
+      !entry.name?.trim() ||
+      !isCatalogCategory(entry.category)
+    ) {
       throw new Error("Invalid public MCP catalog entry");
     }
     if (ids.has(entry.id)) {
@@ -97,7 +106,8 @@ function loadCommunityCatalog(curated: McpServer[]): McpServer[] {
   const ids = new Set(curated.map((entry) => entry.id));
 
   return (document.servers as CommunityCatalogEntry[]).flatMap((entry) => {
-    const identity = entry.catalogIdentity ?? normalizedIdentity(entry.name ?? "");
+    const identity =
+      entry.catalogIdentity ?? normalizedIdentity(entry.name ?? "");
     if (
       !entry.id?.trim() ||
       !entry.name?.trim() ||
@@ -110,22 +120,24 @@ function loadCommunityCatalog(curated: McpServer[]): McpServer[] {
       return [];
     }
     ids.add(entry.id);
-    return [{
-      ...normalizeMcpServer({
-        ...entry,
-        category: entry.category as McpPublicEntryCategory,
-        type: "stdio",
-        command: "",
-        enabled: false,
-        websiteUrl: entry.catalogSourceUrl,
-      }),
-      scope: "builtin" as const,
-      provenance: entry.catalogSource ?? "community-catalog",
-      editable: false,
-      category: entry.category,
-      featured: entry.featured === true,
-      catalogInstallable: false,
-    }];
+    return [
+      {
+        ...normalizeMcpServer({
+          ...entry,
+          category: entry.category as McpPublicEntryCategory,
+          type: "stdio",
+          command: "",
+          enabled: false,
+          websiteUrl: entry.catalogSourceUrl,
+        }),
+        scope: "builtin" as const,
+        provenance: entry.catalogSource ?? "community-catalog",
+        editable: false,
+        category: entry.category,
+        featured: entry.featured === true,
+        catalogInstallable: false,
+      },
+    ];
   });
 }
 

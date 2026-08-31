@@ -124,19 +124,33 @@ export default function ChatRightPanel({
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const panelWidthRef = useRef(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
-  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
-  const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+  const resizeRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const [indicator, setIndicator] = useState({
+    left: 0,
+    width: 0,
+    ready: false,
+  });
   const [panelWidth, setPanelWidth] = useState(() => {
     try {
-      return parseStoredChatRightPanelWidth(localStorage.getItem(CHAT_RIGHT_PANEL_WIDTH_KEY));
+      return parseStoredChatRightPanelWidth(
+        localStorage.getItem(CHAT_RIGHT_PANEL_WIDTH_KEY),
+      );
     } catch {
       return CHAT_RIGHT_PANEL_DEFAULT_WIDTH;
     }
   });
-  const [maxPanelWidth, setMaxPanelWidth] = useState(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
+  const [maxPanelWidth, setMaxPanelWidth] = useState(
+    CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
+  );
   const [resizing, setResizing] = useState(false);
   const [subagentsOpen, setSubagentsOpen] = useState(false);
-  const [selectedSubagentPath, setSelectedSubagentPath] = useState<string | null>(null);
+  const [selectedSubagentPath, setSelectedSubagentPath] = useState<
+    string | null
+  >(null);
 
   panelWidthRef.current = panelWidth;
 
@@ -152,22 +166,26 @@ export default function ChatRightPanel({
   }, [tab]);
 
   const containerWidth = useCallback(() => {
-    const width = panelRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
+    const width =
+      panelRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
     return width > 0 ? width : Number.POSITIVE_INFINITY;
   }, []);
 
-  const updatePanelWidth = useCallback((nextWidth: number, persist = false) => {
-    const next = clampChatRightPanelWidth(nextWidth, containerWidth());
-    panelWidthRef.current = next;
-    setPanelWidth(next);
-    if (persist) {
-      try {
-        localStorage.setItem(CHAT_RIGHT_PANEL_WIDTH_KEY, String(next));
-      } catch {
-        // Storage can be unavailable in private or locked-down webviews.
+  const updatePanelWidth = useCallback(
+    (nextWidth: number, persist = false) => {
+      const next = clampChatRightPanelWidth(nextWidth, containerWidth());
+      panelWidthRef.current = next;
+      setPanelWidth(next);
+      if (persist) {
+        try {
+          localStorage.setItem(CHAT_RIGHT_PANEL_WIDTH_KEY, String(next));
+        } catch {
+          // Storage can be unavailable in private or locked-down webviews.
+        }
       }
-    }
-  }, [containerWidth]);
+    },
+    [containerWidth],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -192,7 +210,10 @@ export default function ChatRightPanel({
     };
 
     syncBounds();
-    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncBounds) : null;
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(syncBounds)
+        : null;
     observer?.observe(container);
     window.addEventListener("resize", syncBounds);
     return () => {
@@ -206,7 +227,10 @@ export default function ChatRightPanel({
     resizeRef.current = null;
     setResizing(false);
     try {
-      localStorage.setItem(CHAT_RIGHT_PANEL_WIDTH_KEY, String(panelWidthRef.current));
+      localStorage.setItem(
+        CHAT_RIGHT_PANEL_WIDTH_KEY,
+        String(panelWidthRef.current),
+      );
     } catch {
       // Storage can be unavailable in private or locked-down webviews.
     }
@@ -218,7 +242,9 @@ export default function ChatRightPanel({
     resizeRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startWidth: panelRef.current?.getBoundingClientRect().width ?? panelWidthRef.current,
+      startWidth:
+        panelRef.current?.getBoundingClientRect().width ??
+        panelWidthRef.current,
     };
     setResizing(true);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -238,10 +264,13 @@ export default function ChatRightPanel({
   };
 
   const onResizeKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    const step = event.shiftKey ? RESIZE_KEYBOARD_LARGE_STEP : RESIZE_KEYBOARD_STEP;
+    const step = event.shiftKey
+      ? RESIZE_KEYBOARD_LARGE_STEP
+      : RESIZE_KEYBOARD_STEP;
     let nextWidth: number | null = null;
     if (event.key === "ArrowLeft") nextWidth = panelWidthRef.current + step;
-    else if (event.key === "ArrowRight") nextWidth = panelWidthRef.current - step;
+    else if (event.key === "ArrowRight")
+      nextWidth = panelWidthRef.current - step;
     else if (event.key === "Home") nextWidth = CHAT_RIGHT_PANEL_MIN_WIDTH;
     else if (event.key === "End") nextWidth = maxPanelWidth;
     if (nextWidth == null) return;
@@ -254,7 +283,9 @@ export default function ChatRightPanel({
     if (!root) return;
 
     const sync = () => {
-      const active = root.querySelector<HTMLElement>(".chat-right-tab.is-active");
+      const active = root.querySelector<HTMLElement>(
+        ".chat-right-tab.is-active",
+      );
       if (!active) return;
       const inset = Math.round(active.offsetWidth * 0.16);
       setIndicator({
@@ -265,7 +296,8 @@ export default function ChatRightPanel({
     };
 
     sync();
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
     ro?.observe(root);
     window.addEventListener("resize", sync);
     return () => {
@@ -290,8 +322,12 @@ export default function ChatRightPanel({
         ref={panelRef}
         className={`chat-right-panel${resizing ? " is-resizing" : ""}`}
         aria-label={t("chat.rightPanel.title")}
-        style={{ "--chat-right-panel-width": `${panelWidth}px` } as CSSProperties}
-        initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 12, scale: 0.98 }}
+        style={
+          { "--chat-right-panel-width": `${panelWidth}px` } as CSSProperties
+        }
+        initial={
+          reducedMotion ? { opacity: 0 } : { opacity: 0, x: 12, scale: 0.98 }
+        }
         animate={{ opacity: 1, x: 0, scale: 1 }}
         exit={
           reducedMotion
@@ -318,7 +354,9 @@ export default function ChatRightPanel({
           aria-valuemax={maxPanelWidth}
           aria-valuenow={panelWidth}
           title={t("chat.rightPanel.resize")}
-          onDoubleClick={() => updatePanelWidth(CHAT_RIGHT_PANEL_DEFAULT_WIDTH, true)}
+          onDoubleClick={() =>
+            updatePanelWidth(CHAT_RIGHT_PANEL_DEFAULT_WIDTH, true)
+          }
           onKeyDown={onResizeKeyDown}
           onPointerDown={onResizePointerDown}
           onPointerMove={onResizePointerMove}
@@ -373,8 +411,8 @@ export default function ChatRightPanel({
             className="anim-switch--fill"
             variant="fade"
           >
-            {tab === "summary" && (
-              subagentsOpen ? (
+            {tab === "summary" &&
+              (subagentsOpen ? (
                 <SubagentsPanel
                   embedded
                   open
@@ -421,8 +459,7 @@ export default function ChatRightPanel({
                   />
                   <TaskMonitorPanel messages={messages} streaming={streaming} />
                 </div>
-              )
-            )}
+              ))}
             {tab === "context" && (
               <div className="chat-context-stack">
                 <ContextExplorer

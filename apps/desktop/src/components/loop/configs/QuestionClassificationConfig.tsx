@@ -7,7 +7,10 @@ interface ConfigProps {
   onChange: (config: Record<string, unknown>) => void;
 }
 
-export default function QuestionClassificationConfig({ config, onChange }: ConfigProps) {
+export default function QuestionClassificationConfig({
+  config,
+  onChange,
+}: ConfigProps) {
   return (
     <>
       <RowListEditor

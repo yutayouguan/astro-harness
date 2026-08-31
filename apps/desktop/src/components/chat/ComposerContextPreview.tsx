@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Bot, File, FileVideo, FolderOpen, Image, Music2, Sparkles, X } from "lucide-react";
+import {
+  Bot,
+  File,
+  FileVideo,
+  FolderOpen,
+  Image,
+  Music2,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ComposerContextToken } from "../../lib/chat/composerContext";
 import type { ChatAttachment, SkillContent } from "../../types";
@@ -138,7 +147,11 @@ export default function ComposerContextPreview({
             role="dialog"
             aria-modal="true"
             aria-label={t("chat.contextPreviewTitle", { name: title })}
-            initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.985 }}
+            initial={
+              reducedMotion
+                ? { opacity: 0 }
+                : { opacity: 0, y: 8, scale: 0.985 }
+            }
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={
               reducedMotion
@@ -184,15 +197,23 @@ export default function ComposerContextPreview({
               </button>
             </header>
             <div className="composer-context-preview-body">
-              {target.type === "attachment" && target.item.kind === "image" && target.item.previewUrl ? (
+              {target.type === "attachment" &&
+              target.item.kind === "image" &&
+              target.item.previewUrl ? (
                 <img src={target.item.previewUrl} alt={target.item.name} />
-              ) : target.type === "attachment" && target.item.kind === "video" && target.item.previewUrl ? (
+              ) : target.type === "attachment" &&
+                target.item.kind === "video" &&
+                target.item.previewUrl ? (
                 <video src={target.item.previewUrl} controls />
-              ) : target.type === "attachment" && target.item.kind === "audio" && target.item.previewUrl ? (
+              ) : target.type === "attachment" &&
+                target.item.kind === "audio" &&
+                target.item.previewUrl ? (
                 <audio src={target.item.previewUrl} controls />
               ) : attachmentText ? (
                 <pre>{attachmentText}</pre>
-              ) : target.type === "context" && target.item.kind === "skill" && skillContent ? (
+              ) : target.type === "context" &&
+                target.item.kind === "skill" &&
+                skillContent ? (
                 <ChatMarkdown content={skillContent} />
               ) : (
                 <div className="composer-context-preview-summary">
@@ -202,7 +223,8 @@ export default function ComposerContextPreview({
                     <>
                       <p>
                         {target.type === "context"
-                          ? target.item.description || t("chat.contextPreviewUnavailable")
+                          ? target.item.description ||
+                            t("chat.contextPreviewUnavailable")
                           : t("chat.contextPreviewUnavailable")}
                       </p>
                       {target.type === "attachment" && target.item.localPath ? (

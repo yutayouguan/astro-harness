@@ -16,7 +16,10 @@ const sessionStyles = await readFile(
   "utf8",
 );
 const sidebarPolishStyles = await readFile(
-  new URL("../../styles/features/shell/layout/sidebar-polish.css", import.meta.url),
+  new URL(
+    "../../styles/features/shell/layout/sidebar-polish.css",
+    import.meta.url,
+  ),
   "utf8",
 );
 const unifiedColorStyles = await readFile(
@@ -53,10 +56,17 @@ test("sidebar keeps primary actions above the workspace navigation", () => {
   const featureNavigation = app.indexOf('className="sidebar-feature-tabs"');
 
   assert.ok(primaryActions >= 0, "missing grouped primary actions");
-  assert.ok(workspaceLabel > primaryActions, "workspace label should follow primary actions");
-  assert.ok(featureNavigation > workspaceLabel, "workspace navigation should follow its label");
+  assert.ok(
+    workspaceLabel > primaryActions,
+    "workspace label should follow primary actions",
+  );
+  assert.ok(
+    featureNavigation > workspaceLabel,
+    "workspace navigation should follow its label",
+  );
   assert.equal(
-    app.match(/className="sidebar-session-search sidebar-global-search"/g)?.length,
+    app.match(/className="sidebar-session-search sidebar-global-search"/g)
+      ?.length,
     1,
     "session search should have one global entry point",
   );
@@ -75,13 +85,25 @@ test("project, automation, and recent sections keep distinct responsibilities", 
   const addProject = app.indexOf('className="sidebar-add-btn"', projects);
   const automation = app.indexOf('t("sidebar.automationRuns")');
   const recent = app.indexOf('t("sidebar.recent")');
-  const archive = app.indexOf('className={`sidebar-session-filter-btn', recent);
+  const archive = app.indexOf("className={`sidebar-session-filter-btn", recent);
 
-  assert.ok(projects >= 0 && addProject > projects, "new project action must follow the Projects heading");
-  assert.ok(automation > projects && recent > automation, "automation runs should sit between projects and recent sessions");
-  assert.ok(recent >= 0 && archive > recent, "archive action must follow the Recent heading");
+  assert.ok(
+    projects >= 0 && addProject > projects,
+    "new project action must follow the Projects heading",
+  );
+  assert.ok(
+    automation > projects && recent > automation,
+    "automation runs should sit between projects and recent sessions",
+  );
+  assert.ok(
+    recent >= 0 && archive > recent,
+    "archive action must follow the Recent heading",
+  );
   assert.match(app, /aria-expanded=\{!collapsedSections\.has\("projects"\)\}/);
-  assert.match(app, /aria-expanded=\{!collapsedSections\.has\("automation"\)\}/);
+  assert.match(
+    app,
+    /aria-expanded=\{!collapsedSections\.has\("automation"\)\}/,
+  );
   assert.match(app, /aria-expanded=\{!collapsedSections\.has\("recent"\)\}/);
   assert.match(app, /placement="pinned"/);
   assert.match(app, /placement="project"/);
@@ -108,14 +130,8 @@ test("project folders only expand while sessions own selection", () => {
     /className="sidebar-project-name"[\s\S]*?onClick=\{\(\) => \{[\s\S]*?setCollapsedProjects\([\s\S]*?next\.has\(proj\.id\)[\s\S]*?next\.add\(proj\.id\);[\s\S]*?return next;[\s\S]*?\}\);[\s\S]*?\}\}/,
     "project folder clicks should only toggle expansion",
   );
-  assert.match(
-    sessionList,
-    /aria-current=\{isActive \? "page" : undefined\}/,
-  );
-  assert.doesNotMatch(
-    sidebarPolishStyles,
-    /\.sidebar-project\.is-active/,
-  );
+  assert.match(sessionList, /aria-current=\{isActive \? "page" : undefined\}/);
+  assert.doesNotMatch(sidebarPolishStyles, /\.sidebar-project\.is-active/);
   assert.doesNotMatch(projectStyles, /\.sidebar-project\.is-active/);
 });
 
@@ -134,15 +150,24 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
     ".sidebar-project > .sidebar-sessions::before",
   );
   const session = rule(sidebarPolishStyles, ".sidebar-session-item");
-  const activeSession = rule(sidebarPolishStyles, ".sidebar-session-item.is-active");
+  const activeSession = rule(
+    sidebarPolishStyles,
+    ".sidebar-session-item.is-active",
+  );
   const footer = rule(sidebarPolishStyles, ".sidebar-footer");
   const settingsButton = rule(sidebarPolishStyles, ".sidebar-settings-btn");
   const footerDivider = rule(sidebarPolishStyles, ".sidebar-footer::before");
 
   assert.ok(pinnedSidebar, "missing stable pinned sidebar surface");
-  assert.match(pinnedSidebar, /background:\s*var\(--sidebar-chrome-background\);/);
+  assert.match(
+    pinnedSidebar,
+    /background:\s*var\(--sidebar-chrome-background\);/,
+  );
   assert.match(pinnedSidebar, /box-shadow:[\s\S]*var\(--glass-rim\)/);
-  assert.match(pinnedSidebar, /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/);
+  assert.match(
+    pinnedSidebar,
+    /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/,
+  );
   assert.ok(labelledSidebar, "missing labelled sidebar spacing");
   assert.match(labelledSidebar, /padding-inline:\s*16px;/);
   assert.ok(primaryActions, "missing primary action row styles");
@@ -151,13 +176,27 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.ok(newChat, "missing new-chat styles");
   assert.match(newChat, /min-height:\s*40px;/);
   assert.match(newChat, /font-size:\s*14px;/);
-  assert.match(newChat, /box-shadow:\s*none;/, "new chat should sit flat in the sidebar");
-  assert.match(newChat, /backdrop-filter:\s*none;/, "new chat should not stack another glass layer");
+  assert.match(
+    newChat,
+    /box-shadow:\s*none;/,
+    "new chat should sit flat in the sidebar",
+  );
+  assert.match(
+    newChat,
+    /backdrop-filter:\s*none;/,
+    "new chat should not stack another glass layer",
+  );
   assert.ok(groupLabel, "missing workspace group heading styles");
   assert.match(groupLabel, /margin:\s*0 4px 6px;/);
   assert.match(sidebarPolishStyles, /font-size:\s*12px;/);
-  assert.ok(activeNav, "active workspace navigation needs a quiet selected state");
-  assert.match(activeNav, /background:\s*color-mix\(in srgb, var\(--ink\) 8%, transparent\);/);
+  assert.ok(
+    activeNav,
+    "active workspace navigation needs a quiet selected state",
+  );
+  assert.match(
+    activeNav,
+    /background:\s*color-mix\(in srgb, var\(--ink\) 8%, transparent\);/,
+  );
   assert.match(activeNav, /border-color:\s*transparent;/);
   assert.match(activeNav, /box-shadow:\s*none;/);
   assert.ok(sectionToggle, "missing collapsible section toggle styles");
@@ -165,7 +204,10 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.ok(sectionChevron, "missing section chevron styles");
   assert.match(sectionChevron, /opacity:\s*0\.4;/);
   assert.ok(sectionTitle, "missing section heading styles");
-  assert.ok(projectGuide, "project nesting should explicitly remove the long guide line");
+  assert.ok(
+    projectGuide,
+    "project nesting should explicitly remove the long guide line",
+  );
   assert.match(projectGuide, /display:\s*none;/);
   assert.ok(session, "missing session row density styles");
   assert.match(session, /min-height:\s*38px;/);
@@ -201,7 +243,7 @@ test("left sidebar shares the flush glass chrome contract", () => {
   assert.ok(sidebar, "missing sidebar surface rule");
   assert.match(sidebar, /--sidebar-chrome-background:/);
   assert.match(sidebar, /border-radius:\s*0;/);
-  assert.match(sidebar, /border-right:\s*0\.5px solid color-mix\(/);
+  assert.match(sidebar, /border-right:\s*0\.5px\s+solid\s+color-mix\(/);
   assert.match(sidebar, /background:\s*var\(--sidebar-chrome-background\);/);
   assert.match(sidebar, /1px 0 2px rgba\(var\(--shadow-ink\), 0\.018\);/);
   assert.match(sidebar, /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/);
@@ -209,7 +251,10 @@ test("left sidebar shares the flush glass chrome contract", () => {
   assert.match(unifiedSidebar, /--sidebar-chrome-sheen:\s*linear-gradient\(/);
   assert.doesNotMatch(unifiedSidebar, /\n\s*background:/);
   assert.match(a11yStyles, /--sidebar-chrome-filter:\s*none;/);
-  assert.match(a11yStyles, /--sidebar-chrome-background:\s*var\(--sidebar-bg\);/);
+  assert.match(
+    a11yStyles,
+    /--sidebar-chrome-background:\s*var\(--sidebar-bg\);/,
+  );
 });
 
 test("session activity uses trailing status and hover-revealed tools", () => {
@@ -254,11 +299,11 @@ test("session activity uses trailing status and hover-revealed tools", () => {
 
 test("session action menu stays inside the app viewport", () => {
   assert.match(sessionActionsMenu, /useLayoutEffect\(\(\) => \{/);
-  assert.match(sessionActionsMenu, /const size = measurePopoverSize\(element\);/);
   assert.match(
     sessionActionsMenu,
-    /anchorRect:\s*pointAnchor\(x, y\)/,
+    /const size = measurePopoverSize\(element\);/,
   );
+  assert.match(sessionActionsMenu, /anchorRect:\s*pointAnchor\(x, y\)/);
   assert.match(
     sessionActionsMenu,
     /const bounds = resolveClipBoundsAt\(x, y\);/,
@@ -268,7 +313,10 @@ test("session action menu stays inside the app viewport", () => {
     /size\.height > spaceBelow && spaceAbove > spaceBelow \? "above" : "below"/,
   );
   assert.match(sessionActionsMenu, /placement,/);
-  assert.match(sessionActionsMenu, /element\.style\.maxHeight = `\$\{position\.maxHeight\}px`;/);
+  assert.match(
+    sessionActionsMenu,
+    /element\.style\.maxHeight = `\$\{position\.maxHeight\}px`;/,
+  );
   assert.match(
     sessionActionsMenu,
     /element\.style\.overflowY = position\.maxHeight < size\.height \? "auto" : "";/,
@@ -295,6 +343,9 @@ test("archive filter and tips keep optical alignment with glass fallbacks", () =
   assert.match(tipArrow, /border-radius:\s*2px;/);
   assert.match(tipArrow, /background:\s*var\(--ui-tip-bg\);/);
   assert.doesNotMatch(tipArrow, /border-style:\s*solid;/);
-  assert.match(tooltipStyles, /@media \(prefers-reduced-transparency: reduce\)/);
+  assert.match(
+    tooltipStyles,
+    /@media \(prefers-reduced-transparency: reduce\)/,
+  );
   assert.match(tooltipStyles, /@media \(prefers-contrast: more\)/);
 });

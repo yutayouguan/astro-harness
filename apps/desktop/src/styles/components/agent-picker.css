@@ -2,23 +2,54 @@
 
 .agent-picker {
   --agent-glass-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.14) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 45%, rgba(255, 255, 255, 0.12));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.26) 0%,
+      rgba(255, 255, 255, 0.14) 100%
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 45%,
+      rgba(255, 255, 255, 0.12)
+    );
   --agent-glass-fill-hover:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.33) 0%, rgba(255, 255, 255, 0.13) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 58%, rgba(255, 255, 255, 0.14));
-      --agent-glass-edge: color-mix(in srgb, var(--tone, #64748b) 16%, rgba(255, 255, 255, 0.32));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.33) 0%,
+      rgba(255, 255, 255, 0.13) 100%
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 58%,
+      rgba(255, 255, 255, 0.14)
+    );
+  --agent-glass-edge: color-mix(
+    in srgb,
+    var(--tone, #64748b) 16%,
+    rgba(255, 255, 255, 0.32)
+  );
   --agent-glass-rim:
     inset 0 1px 0 rgba(255, 255, 255, 0.35),
-      inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
   --agent-glass-shadow:
-    0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
-      0 1px 3px rgba(15, 23, 42, 0.03);
-      --agent-glass-blur: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+    0 6px 16px
+      color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
+    0 1px 3px rgba(15, 23, 42, 0.03);
+  --agent-glass-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
   --agent-avatar-fill:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.1) 45%, transparent 72%),
-      linear-gradient(160deg, color-mix(in srgb, var(--tone-soft, #dbeafe) 50%, transparent) 0%, color-mix(in srgb, var(--tone, #93c5fd) 16%, #e2e8f0) 100%);
-      --agent-avatar-ink: var(--ink);
+    radial-gradient(
+      circle at 32% 26%,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.1) 45%,
+      transparent 72%
+    ),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--tone-soft, #dbeafe) 50%, transparent) 0%,
+      color-mix(in srgb, var(--tone, #93c5fd) 16%, #e2e8f0) 100%
+    );
+  --agent-avatar-ink: var(--ink);
 
   position: relative;
   flex-shrink: 0;
@@ -43,13 +74,21 @@
   box-shadow: var(--agent-glass-shadow), var(--agent-glass-rim);
   backdrop-filter: var(--agent-glass-blur);
   -webkit-backdrop-filter: var(--agent-glass-blur);
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 
 .agent-picker-chip:hover:not(:disabled),
 .agent-picker-chip.is-open {
   background: var(--agent-glass-fill-hover);
-  border-color: color-mix(in srgb, var(--tone, #64748b) 32%, rgba(255, 255, 255, 0.48));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #64748b) 32%,
+    rgba(255, 255, 255, 0.48)
+  );
   box-shadow:
     0 10px 24px color-mix(in srgb, var(--tone, #64748b) 14%, transparent),
     0 2px 6px rgba(15, 23, 42, 0.05),
@@ -143,7 +182,9 @@
   height: 14px;
   color: var(--ink-mute);
   opacity: 0.75;
-  transition: color 0.14s ease, opacity 0.14s ease;
+  transition:
+    color 0.14s ease,
+    opacity 0.14s ease;
 }
 
 .agent-picker-chip.is-open .agent-picker-chevron,
@@ -161,24 +202,38 @@
   list-style: none;
   border-radius: 16px;
   transform-origin: top center;
-  animation: agent-picker-in 0.15s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
-  border: 1px solid color-mix(in srgb, var(--tone, transparent) 12%, var(--menu-glass-border));
+  animation: agent-picker-in 0.15s
+    var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+  border: 1px solid
+    color-mix(in srgb, var(--tone, transparent) 12%, var(--menu-glass-border));
   /* 更透的磨砂：靠 blur 保证可读 */
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(255, 255, 255, 0.22)) 0%,
+      color-mix(
+          in srgb,
+          var(--tone-soft, transparent) 28%,
+          rgba(255, 255, 255, 0.22)
+        )
+        0%,
       rgba(255, 255, 255, 0.12) 55%,
       rgba(255, 255, 255, 0.12) 100%
     ),
-    color-mix(in srgb, var(--menu-glass-bg, rgba(255, 255, 255, 0.26)) 55%, transparent);
+    color-mix(
+      in srgb,
+      var(--menu-glass-bg, rgba(255, 255, 255, 0.26)) 55%,
+      transparent
+    );
   box-shadow:
-    0 18px 48px color-mix(in srgb, var(--tone, transparent) 10%, rgba(15, 23, 42, 0.14)),
+    0 18px 48px
+      color-mix(in srgb, var(--tone, transparent) 10%, rgba(15, 23, 42, 0.14)),
     0 2px 8px rgba(15, 23, 42, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.48),
     0 0 0 1px color-mix(in srgb, var(--tone, transparent) 6%, transparent);
-  backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.45));
-  -webkit-backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.45));
+  backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.45));
+  -webkit-backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.45));
   max-height: 300px;
   overflow: auto;
   isolation: isolate;
@@ -213,9 +268,14 @@
 
 .agent-picker-option.is-active {
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.12)),
-      var(--tone-soft, rgba(147, 197, 253, 0.14));
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, #64748b) 18%, rgba(255, 255, 255, 0.28));
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.28),
+      rgba(255, 255, 255, 0.12)
+    ),
+    var(--tone-soft, rgba(147, 197, 253, 0.14));
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--tone, #64748b) 18%, rgba(255, 255, 255, 0.28));
 }
 
 .agent-picker-option .agent-avatar {
@@ -289,48 +349,86 @@
 
 html[data-theme="dark"] .agent-picker {
   --agent-glass-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(8, 6, 18, 0.55));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.015) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(8, 6, 18, 0.55));
   --agent-glass-fill-hover:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 42%, rgba(8, 6, 18, 0.52));
-      --agent-glass-edge: color-mix(in srgb, var(--tone, #94a3b8) 22%, rgba(255, 255, 255, 0.08));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0.03) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 42%, rgba(8, 6, 18, 0.52));
+  --agent-glass-edge: color-mix(
+    in srgb,
+    var(--tone, #94a3b8) 22%,
+    rgba(255, 255, 255, 0.08)
+  );
   --agent-glass-rim:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
   --agent-glass-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.4),
-      0 1px 3px rgba(0, 0, 0, 0.24);
+    0 8px 22px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.24);
   --agent-avatar-fill:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.1) 0%, transparent 55%),
-      linear-gradient(160deg, rgba(148, 163, 184, 0.18), color-mix(in srgb, var(--tone, #60a5fa) 18%, rgba(8, 6, 18, 0.4)));
-      --agent-avatar-ink: var(--ink);
+    radial-gradient(
+      circle at 32% 26%,
+      rgba(255, 255, 255, 0.1) 0%,
+      transparent 55%
+    ),
+    linear-gradient(
+      160deg,
+      rgba(148, 163, 184, 0.18),
+      color-mix(in srgb, var(--tone, #60a5fa) 18%, rgba(8, 6, 18, 0.4))
+    );
+  --agent-avatar-ink: var(--ink);
 }
 
 html[data-theme="dark"] .agent-picker-chip:hover:not(:disabled),
 html[data-theme="dark"] .agent-picker-chip.is-open {
-  border-color: color-mix(in srgb, var(--tone, #94a3b8) 40%, rgba(255, 255, 255, 0.16));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #94a3b8) 40%,
+    rgba(255, 255, 255, 0.16)
+  );
   box-shadow:
     0 12px 28px color-mix(in srgb, var(--tone, #64748b) 18%, rgba(0, 0, 0, 0.4)),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 html[data-theme="dark"] .agent-picker-menu {
-  border-color: color-mix(in srgb, var(--tone, transparent) 22%, var(--menu-glass-border));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, transparent) 22%,
+    var(--menu-glass-border)
+  );
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 32%, rgba(255, 255, 255, 0.08)) 0%,
+      color-mix(
+          in srgb,
+          var(--tone-soft, transparent) 32%,
+          rgba(255, 255, 255, 0.08)
+        )
+        0%,
       rgba(255, 255, 255, 0.03) 55%,
       rgba(8, 6, 18, 0.28) 100%
     ),
-    color-mix(in srgb, var(--menu-glass-bg, rgba(14, 12, 28, 0.72)) 50%, transparent);
+    color-mix(
+      in srgb,
+      var(--menu-glass-bg, rgba(14, 12, 28, 0.72)) 50%,
+      transparent
+    );
   box-shadow:
     0 18px 48px rgba(0, 0, 0, 0.45),
     0 2px 8px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.5));
-  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.5));
+  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.5));
+  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.5));
 }
 
 html[data-theme="dark"] .agent-picker-option:hover {
@@ -343,9 +441,18 @@ html[data-theme="dark"] .agent-picker-option.is-highlighted {
 
 html[data-theme="dark"] .agent-picker-option.is-active {
   background:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
-      color-mix(in srgb, var(--tone-soft, rgba(96, 165, 250, 0.16)) 70%, rgba(8, 6, 18, 0.4));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, #94a3b8) 26%, rgba(255, 255, 255, 0.1));
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.07),
+      rgba(255, 255, 255, 0.02)
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, rgba(96, 165, 250, 0.16)) 70%,
+      rgba(8, 6, 18, 0.4)
+    );
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--tone, #94a3b8) 26%, rgba(255, 255, 255, 0.1));
 }
 
 /* 面板顶栏：左 Agent / 右搜索 —— 高于下方列表，避免下拉被遮挡 */
@@ -378,7 +485,8 @@ html[data-theme="dark"] .agent-picker-option.is-active {
 
 /* 展开搜索时隐藏左侧 Agent 等，腾出空间 */
 .panel-agent-toolbar:has(.expandable-search.is-open) > .agent-picker,
-.panel-agent-toolbar:has(.expandable-search.is-open) .panel-agent-toolbar-start {
+.panel-agent-toolbar:has(.expandable-search.is-open)
+  .panel-agent-toolbar-start {
   display: none;
 }
 
@@ -398,30 +506,54 @@ html[data-theme="dark"] .agent-picker-option.is-active {
   width: 36px;
   height: 36px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.35));
+  border: 1px solid
+    color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.35));
   border-radius: 12px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(255, 255, 255, 0.13));
-      color: var(--tone, var(--ink-soft));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.3) 0%,
+      rgba(255, 255, 255, 0.1) 100%
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 35%,
+      rgba(255, 255, 255, 0.13)
+    );
+  color: var(--tone, var(--ink-soft));
   cursor: pointer;
   box-shadow:
-    0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
-      inset 0 1px 0 rgba(255, 255, 255, 0.35);
-      backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-      -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+    0 6px 16px
+      color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .expandable-search-btn:hover {
   color: var(--tone, var(--ink));
-    border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.35));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #64748b) 28%,
+    rgba(255, 255, 255, 0.35)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.37) 0%, rgba(255, 255, 255, 0.14) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.37) 0%,
+      rgba(255, 255, 255, 0.14) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .expandable-search-field {
@@ -432,15 +564,22 @@ html[data-theme="dark"] .agent-picker-option.is-active {
   height: 36px;
   padding: 0 6px 0 10px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.46));
+  border: 1px solid
+    color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.46));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.3) 100%),
-      var(--tone-soft, rgba(255, 255, 255, 0.26));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.3) 100%
+    ),
+    var(--tone-soft, rgba(255, 255, 255, 0.26));
   box-shadow:
     0 6px 18px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
 }
 
 .expandable-search-glyph {
@@ -475,37 +614,55 @@ html[data-theme="dark"] .agent-picker-option.is-active {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .expandable-search-close:hover {
   background: var(--tone-soft, rgba(15, 23, 42, 0.06));
-    color: var(--tone, var(--ink));
+  color: var(--tone, var(--ink));
 }
 
 html[data-theme="dark"] .expandable-search-btn,
 html[data-theme="dark"] .expandable-search-field {
-  border-color: color-mix(in srgb, var(--tone, #94a3b8) 24%, rgba(255, 255, 255, 0.1));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #94a3b8) 24%,
+    rgba(255, 255, 255, 0.1)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(8, 6, 18, 0.5));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0.02) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(8, 6, 18, 0.5));
   box-shadow:
     0 8px 22px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      color: color-mix(in srgb, #fff 12%, var(--tone, var(--ink-soft)));
+  color: color-mix(in srgb, #fff 12%, var(--tone, var(--ink-soft)));
 }
 
 html[data-theme="dark"] .expandable-search-btn:hover {
-  border-color: color-mix(in srgb, var(--tone, #94a3b8) 38%, rgba(255, 255, 255, 0.14));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #94a3b8) 38%,
+    rgba(255, 255, 255, 0.14)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 50%, rgba(8, 6, 18, 0.45));
-      color: color-mix(in srgb, #fff 18%, var(--tone, var(--ink)));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 50%, rgba(8, 6, 18, 0.45));
+  color: color-mix(in srgb, #fff 18%, var(--tone, var(--ink)));
 }
 
 html[data-theme="dark"] .expandable-search-close:hover {
   background: var(--tone-soft, rgba(255, 255, 255, 0.1));
-    color: var(--tone, var(--ink));
+  color: var(--tone, var(--ink));
 }
 
 @keyframes agent-picker-in {
@@ -520,8 +677,12 @@ html[data-theme="dark"] .expandable-search-close:hover {
 }
 
 @keyframes agent-picker-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

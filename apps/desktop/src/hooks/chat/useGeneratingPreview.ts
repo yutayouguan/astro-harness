@@ -86,17 +86,14 @@ export function useGeneratingPreview(opts: { onActivate?: () => void }) {
     [flush],
   );
 
-  const commit = useCallback(
-    (next: GeneratingPreview | null) => {
-      if (throttleRef.current != null) {
-        window.clearTimeout(throttleRef.current);
-        throttleRef.current = null;
-      }
-      pendingRef.current = null;
-      setPreview(next);
-    },
-    [],
-  );
+  const commit = useCallback((next: GeneratingPreview | null) => {
+    if (throttleRef.current != null) {
+      window.clearTimeout(throttleRef.current);
+      throttleRef.current = null;
+    }
+    pendingRef.current = null;
+    setPreview(next);
+  }, []);
 
   const reset = useCallback(() => {
     argsRef.current.clear();
@@ -145,7 +142,12 @@ export function useGeneratingPreview(opts: { onActivate?: () => void }) {
   );
 
   const onToolCall = useCallback(
-    (c: { id?: string; name?: string; arguments_json?: string; result?: string }) => {
+    (c: {
+      id?: string;
+      name?: string;
+      arguments_json?: string;
+      result?: string;
+    }) => {
       const activeKey = activeKeyRef.current;
       if (!activeKey) return;
       const parsed = parsePartialFileWrite(c.arguments_json);

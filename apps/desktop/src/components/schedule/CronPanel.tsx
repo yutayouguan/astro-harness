@@ -1,5 +1,12 @@
 /** 定时任务面板：任务列表、运行记录与创建抽屉。 */
-import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SVGProps,
+} from "react";
 import { createPortal } from "react-dom";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { invoke } from "@tauri-apps/api/core";
@@ -223,11 +230,14 @@ function formatDayLabel(key: string, locale: "zh" | "en"): string {
 }
 
 /** 运行状态归一化为展示种类 */
-function runStatusKind(status: string): "success" | "failure" | "running" | "other" {
+function runStatusKind(
+  status: string,
+): "success" | "failure" | "running" | "other" {
   const s = status.toLowerCase();
   if (s === "success" || s === "ok" || s === "completed") return "success";
   if (s === "failure" || s === "failed" || s === "error") return "failure";
-  if (s === "running" || s === "in_progress" || s === "pending") return "running";
+  if (s === "running" || s === "in_progress" || s === "pending")
+    return "running";
   return "other";
 }
 
@@ -241,7 +251,14 @@ function RunStatusIcon({ status }: { status: string }) {
     return <CircleAlert size={12} strokeWidth={2.4} aria-hidden />;
   }
   if (kind === "running") {
-    return <LoaderCircle size={12} strokeWidth={2.4} className="is-spin" aria-hidden />;
+    return (
+      <LoaderCircle
+        size={12}
+        strokeWidth={2.4}
+        className="is-spin"
+        aria-hidden
+      />
+    );
   }
   return <Clock3 size={12} strokeWidth={2.4} aria-hidden />;
 }
@@ -270,7 +287,14 @@ async function fetchCronRuns(filters: {
 /** 更多操作（三点） */
 function IconMore(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      {...props}
+    >
       <circle cx="5" cy="12" r="1.8" />
       <circle cx="12" cy="12" r="1.8" />
       <circle cx="19" cy="12" r="1.8" />
@@ -281,7 +305,18 @@ function IconMore(props: SVGProps<SVGSVGElement>) {
 /** 立即运行 */
 function IconPlay(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none" />
     </svg>
   );
@@ -290,7 +325,18 @@ function IconPlay(props: SVGProps<SVGSVGElement>) {
 /** 编辑任务 */
 function IconEdit(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </svg>
@@ -300,7 +346,18 @@ function IconEdit(props: SVGProps<SVGSVGElement>) {
 /** 运行历史 */
 function IconHistory(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
       <path d="M14 2v6h6" />
       <circle cx="12" cy="15" r="3" />
@@ -312,7 +369,18 @@ function IconHistory(props: SVGProps<SVGSVGElement>) {
 /** 定时任务卡片主图标 */
 function IconCronGlyph(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M9 3.2 7.2 5.6" />
       <path d="M15 3.2 16.8 5.6" />
       <circle cx="12" cy="13" r="8" />
@@ -324,7 +392,18 @@ function IconCronGlyph(props: SVGProps<SVGSVGElement>) {
 /** 删除 */
 function IconTrash(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M3 6h18" />
       <path d="M8 6V4h8v2" />
       <path d="M19 6l-1 14H6L5 6" />
@@ -336,7 +415,18 @@ function IconTrash(props: SVGProps<SVGSVGElement>) {
 /** 画廊视图 */
 function IconViewGallery(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <rect x="3" y="3" width="7" height="7" rx="1.5" />
       <rect x="14" y="3" width="7" height="7" rx="1.5" />
       <rect x="3" y="14" width="7" height="7" rx="1.5" />
@@ -348,7 +438,18 @@ function IconViewGallery(props: SVGProps<SVGSVGElement>) {
 /** 列表视图 */
 function IconViewList(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M8 6h13M8 12h13M8 18h13" />
       <circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" />
       <circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" />
@@ -360,7 +461,18 @@ function IconViewList(props: SVGProps<SVGSVGElement>) {
 /** 详情分栏视图 */
 function IconViewDetail(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <rect x="3" y="4" width="8" height="16" rx="1.5" />
       <rect x="13" y="4" width="8" height="16" rx="1.5" />
     </svg>
@@ -370,7 +482,18 @@ function IconViewDetail(props: SVGProps<SVGSVGElement>) {
 /** 调度时间元信息 */
 function IconSchedule(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
     </svg>
@@ -380,7 +503,18 @@ function IconSchedule(props: SVGProps<SVGSVGElement>) {
 /** 上次运行元信息 */
 function IconLastRun(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M3 12a9 9 0 1 0 3-6.7" />
       <path d="M3 4v5h5" />
       <path d="M12 7v5l3 2" />
@@ -505,7 +639,9 @@ export default function CronPanel({
     }
     setDetailRunsLoading(true);
     try {
-      const runs = await invoke<CronRunDto[]>("list_cron_job_runs", { id: jobId });
+      const runs = await invoke<CronRunDto[]>("list_cron_job_runs", {
+        id: jobId,
+      });
       setDetailRuns(runs);
     } catch (err) {
       setError(String(err));
@@ -591,9 +727,7 @@ export default function CronPanel({
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
     const raf = requestAnimationFrame(() => {
-      menuRef.current
-        ?.querySelector<HTMLElement>('[role="menuitem"]')
-        ?.focus();
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     });
     return () => {
       cancelAnimationFrame(raf);
@@ -632,7 +766,10 @@ export default function CronPanel({
       setDetailRuns([]);
       return;
     }
-    if (!selectedDetailId || !filteredJobs.some((j) => j.id === selectedDetailId)) {
+    if (
+      !selectedDetailId ||
+      !filteredJobs.some((j) => j.id === selectedDetailId)
+    ) {
       setSelectedDetailId(filteredJobs[0].id);
     }
   }, [jobsView, filteredJobs, selectedDetailId]);
@@ -697,9 +834,7 @@ export default function CronPanel({
       }
     } catch (err) {
       setJobs((prev) =>
-        prev.map((j) =>
-          j.id === job.id ? { ...j, enabled: job.enabled } : j,
-        ),
+        prev.map((j) => (j.id === job.id ? { ...j, enabled: job.enabled } : j)),
       );
       setError(String(err));
     }
@@ -819,11 +954,14 @@ export default function CronPanel({
     setDrawerRun(run);
   }, []);
 
-  const openJobDrawer = useCallback((job: CronJobDto) => {
-    closeMenu();
-    setDrawerJobRuns([]);
-    setDrawerJobId(job.id);
-  }, [closeMenu]);
+  const openJobDrawer = useCallback(
+    (job: CronJobDto) => {
+      closeMenu();
+      setDrawerJobRuns([]);
+      setDrawerJobId(job.id);
+    },
+    [closeMenu],
+  );
 
   // 执行记录抽屉：轮询 run 状态 + session 历史（对齐 Tracing 步骤）
   useEffect(() => {
@@ -835,7 +973,9 @@ export default function CronPanel({
 
     const refresh = async () => {
       try {
-        const latest = await invoke<CronRunDto | null>("get_cron_run", { id: runId });
+        const latest = await invoke<CronRunDto | null>("get_cron_run", {
+          id: runId,
+        });
         if (cancelled) return;
         if (latest) setDrawerRun(latest);
 
@@ -851,8 +991,7 @@ export default function CronPanel({
           setDrawerTraceLoading(false);
         }
 
-        const stillRunning =
-          (latest?.status || "").toLowerCase() === "running";
+        const stillRunning = (latest?.status || "").toLowerCase() === "running";
         if (!stillRunning && timer != null) {
           window.clearInterval(timer);
           timer = null;
@@ -1038,7 +1177,9 @@ export default function CronPanel({
           <>
             <header className="cron-job-detail-head">
               <div>
-                <h3 className="cron-job-detail-title">{selectedDetailJob.title}</h3>
+                <h3 className="cron-job-detail-title">
+                  {selectedDetailJob.title}
+                </h3>
                 <span
                   className={`cron-card-status ${selectedDetailJob.enabled ? "is-on" : "is-off"}`}
                 >
@@ -1064,7 +1205,9 @@ export default function CronPanel({
                   <CalendarClock size={12} strokeWidth={2.2} aria-hidden />
                   {t("cron.field.schedule")}
                 </span>
-                <span>{formatScheduleLabel(selectedDetailJob.schedule, locale)}</span>
+                <span>
+                  {formatScheduleLabel(selectedDetailJob.schedule, locale)}
+                </span>
               </div>
               <div className="cron-job-detail-meta-item">
                 <span className="cron-job-detail-label">
@@ -1089,14 +1232,20 @@ export default function CronPanel({
                   )}
                   {t("cron.detail.showInChat")}
                 </span>
-                <span>{selectedDetailJob.show_in_chat ? t("cron.yes") : t("cron.no")}</span>
+                <span>
+                  {selectedDetailJob.show_in_chat
+                    ? t("cron.yes")
+                    : t("cron.no")}
+                </span>
               </div>
               <div className="cron-job-detail-meta-item">
                 <span className="cron-job-detail-label">
                   <History size={12} strokeWidth={2.2} aria-hidden />
                   {t("cron.lastRun")}
                 </span>
-                <span>{formatLastRun(selectedDetailJob.last_run_at, locale)}</span>
+                <span>
+                  {formatLastRun(selectedDetailJob.last_run_at, locale)}
+                </span>
               </div>
             </section>
 
@@ -1194,7 +1343,9 @@ export default function CronPanel({
       <div className="cron-timeline">
         {historyGrouped.map(([day, runs]) => (
           <section key={day} className="cron-timeline-day">
-            <h3 className="cron-timeline-day-label">{formatDayLabel(day, locale)}</h3>
+            <h3 className="cron-timeline-day-label">
+              {formatDayLabel(day, locale)}
+            </h3>
             <div className="cron-timeline-items">
               {runs.map((run) => (
                 <article key={run.id} className="cron-timeline-card">
@@ -1223,7 +1374,11 @@ export default function CronPanel({
                           {run.trigger === "manual" ? (
                             <Hand size={12} strokeWidth={2.2} aria-hidden />
                           ) : (
-                            <CalendarClock size={12} strokeWidth={2.2} aria-hidden />
+                            <CalendarClock
+                              size={12}
+                              strokeWidth={2.2}
+                              aria-hidden
+                            />
                           )}
                           {runStatusLabel(run.trigger)}
                         </span>
@@ -1366,9 +1521,21 @@ export default function CronPanel({
               >
                 {(
                   [
-                    { id: "gallery" as const, Icon: IconViewGallery, labelKey: "cron.view.gallery" as const },
-                    { id: "list" as const, Icon: IconViewList, labelKey: "cron.view.list" as const },
-                    { id: "detail" as const, Icon: IconViewDetail, labelKey: "cron.view.detail" as const },
+                    {
+                      id: "gallery" as const,
+                      Icon: IconViewGallery,
+                      labelKey: "cron.view.gallery" as const,
+                    },
+                    {
+                      id: "list" as const,
+                      Icon: IconViewList,
+                      labelKey: "cron.view.list" as const,
+                    },
+                    {
+                      id: "detail" as const,
+                      Icon: IconViewDetail,
+                      labelKey: "cron.view.detail" as const,
+                    },
                   ] as const
                 ).map(({ id, Icon, labelKey }) => (
                   <button
@@ -1414,7 +1581,11 @@ export default function CronPanel({
                 aria-label={t("cron.history.filterJob")}
                 className="cron-history-filter"
               />
-              <div className="cron-history-dates" role="group" aria-label={t("cron.history.filterDate")}>
+              <div
+                className="cron-history-dates"
+                role="group"
+                aria-label={t("cron.history.filterDate")}
+              >
                 <GlassDatePicker
                   value={filterDateFrom}
                   onChange={setFilterDateFrom}
@@ -1453,41 +1624,52 @@ export default function CronPanel({
         )}
 
         <MotionSwitch switchKey={activeTab} className="anim-switch--fill">
-        {activeTab === "jobs" && loading && filteredJobs.length === 0 && (
-          <p className="cron-loading">{t("workspace.loading")}</p>
-        )}
+          {activeTab === "jobs" && loading && filteredJobs.length === 0 && (
+            <p className="cron-loading">{t("workspace.loading")}</p>
+          )}
 
-        {error && <p className="cron-error">{error}</p>}
+          {error && <p className="cron-error">{error}</p>}
 
-        {activeTab === "jobs" && !loading && filteredJobs.length === 0 && !error && (
-          <div className="cron-empty-with-templates">
-            <EmptyIllustration
-              scene="cron"
-              className="cron-empty"
-              title={t("cron.empty")}
-              hint={t("cron.emptyHint")}
-            >
-              <button type="button" className="cron-btn-primary cron-empty-cta" onClick={openCreate}>
-                <CalendarPlus size={15} strokeWidth={2.2} aria-hidden />
-                {t("cron.create")}
-              </button>
-            </EmptyIllustration>
-            {!showTemplates && <section className="cron-templates">
-              <h3 className="cron-templates-title">{t("cron.templates.title")}</h3>
-              {renderTemplateGrid()}
-            </section>}
-          </div>
-        )}
+          {activeTab === "jobs" &&
+            !loading &&
+            filteredJobs.length === 0 &&
+            !error && (
+              <div className="cron-empty-with-templates">
+                <EmptyIllustration
+                  scene="cron"
+                  className="cron-empty"
+                  title={t("cron.empty")}
+                  hint={t("cron.emptyHint")}
+                >
+                  <button
+                    type="button"
+                    className="cron-btn-primary cron-empty-cta"
+                    onClick={openCreate}
+                  >
+                    <CalendarPlus size={15} strokeWidth={2.2} aria-hidden />
+                    {t("cron.create")}
+                  </button>
+                </EmptyIllustration>
+                {!showTemplates && (
+                  <section className="cron-templates">
+                    <h3 className="cron-templates-title">
+                      {t("cron.templates.title")}
+                    </h3>
+                    {renderTemplateGrid()}
+                  </section>
+                )}
+              </div>
+            )}
 
-        {activeTab === "jobs" && filteredJobs.length > 0 && (
-          <>
-            {jobsView === "gallery" && renderGallery()}
-            {jobsView === "list" && renderList()}
-            {jobsView === "detail" && renderDetail()}
-          </>
-        )}
+          {activeTab === "jobs" && filteredJobs.length > 0 && (
+            <>
+              {jobsView === "gallery" && renderGallery()}
+              {jobsView === "list" && renderList()}
+              {jobsView === "detail" && renderDetail()}
+            </>
+          )}
 
-        {activeTab === "history" && renderHistory()}
+          {activeTab === "history" && renderHistory()}
         </MotionSwitch>
       </section>
 

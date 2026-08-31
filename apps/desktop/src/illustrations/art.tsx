@@ -29,7 +29,14 @@ function frame(props: IllustProps, children: ReactNode) {
 function ground() {
   return (
     <>
-      <ellipse cx="80" cy="98" rx="54" ry="8" fill="currentColor" opacity="0.08" />
+      <ellipse
+        cx="80"
+        cy="98"
+        rx="54"
+        ry="8"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <circle cx="28" cy="28" r="3" fill="currentColor" opacity="0.12" />
       <circle cx="138" cy="36" r="2.5" fill="currentColor" opacity="0.1" />
       <circle cx="122" cy="18" r="2" fill="currentColor" opacity="0.08" />
@@ -43,7 +50,15 @@ export function IllustEmptyChat(props: IllustProps) {
     props,
     <>
       {ground()}
-      <rect x="38" y="28" width="84" height="58" rx="14" fill="currentColor" opacity="0.1" />
+      <rect
+        x="38"
+        y="28"
+        width="84"
+        height="58"
+        rx="14"
+        fill="currentColor"
+        opacity="0.1"
+      />
       <rect
         x="38"
         y="28"
@@ -94,8 +109,24 @@ export function IllustEmptyWorkspace(props: IllustProps) {
         stroke="currentColor"
         strokeWidth="2"
       />
-      <rect x="56" y="58" width="48" height="6" rx="3" fill="currentColor" opacity="0.28" />
-      <rect x="56" y="68" width="32" height="6" rx="3" fill="currentColor" opacity="0.18" />
+      <rect
+        x="56"
+        y="58"
+        width="48"
+        height="6"
+        rx="3"
+        fill="currentColor"
+        opacity="0.28"
+      />
+      <rect
+        x="56"
+        y="68"
+        width="32"
+        height="6"
+        rx="3"
+        fill="currentColor"
+        opacity="0.18"
+      />
       <circle cx="118" cy="34" r="14" fill="currentColor" opacity="0.12" />
       <path
         d="M118 28v12M112 34h12"
@@ -181,9 +212,30 @@ export function IllustEmptyFiles(props: IllustProps) {
         stroke="currentColor"
         strokeWidth="2"
       />
-      <path d="M88 34v12h12" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <rect x="60" y="56" width="28" height="4" rx="2" fill="currentColor" opacity="0.3" />
-      <rect x="60" y="66" width="20" height="4" rx="2" fill="currentColor" opacity="0.2" />
+      <path
+        d="M88 34v12h12"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <rect
+        x="60"
+        y="56"
+        width="28"
+        height="4"
+        rx="2"
+        fill="currentColor"
+        opacity="0.3"
+      />
+      <rect
+        x="60"
+        y="66"
+        width="20"
+        height="4"
+        rx="2"
+        fill="currentColor"
+        opacity="0.2"
+      />
       <rect
         x="96"
         y="48"
@@ -352,7 +404,13 @@ export function IllustCoverAssistant(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <circle cx="80" cy="48" r="22" fill="currentColor" opacity="0.18" />
       <circle cx="80" cy="48" r="14" fill="currentColor" opacity="0.28" />
       <path
@@ -378,7 +436,13 @@ export function IllustCoverCode(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <rect
         x="36"
         y="30"
@@ -407,7 +471,13 @@ export function IllustCoverResearch(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <circle
         cx="72"
         cy="50"
@@ -434,7 +504,13 @@ export function IllustCoverWriting(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <rect
         x="46"
         y="28"
@@ -467,7 +543,13 @@ export function IllustCoverSchedule(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <rect
         x="44"
         y="30"
@@ -479,7 +561,12 @@ export function IllustCoverSchedule(props: IllustProps) {
         stroke="currentColor"
         strokeWidth="2"
       />
-      <path d="M44 48h72" stroke="currentColor" strokeWidth="2" opacity="0.35" />
+      <path
+        d="M44 48h72"
+        stroke="currentColor"
+        strokeWidth="2"
+        opacity="0.35"
+      />
       <path
         d="M60 24v12M100 24v12"
         stroke="currentColor"
@@ -499,7 +586,13 @@ export function IllustCoverData(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <path
         d="M48 84V52M72 84V40M96 84V60M120 84V34"
         stroke="currentColor"
@@ -524,7 +617,13 @@ export function IllustCoverCreative(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <path
         d="M80 26c-2 18-18 28-18 42a18 18 0 0 0 36 0c0-14-16-24-18-42Z"
         fill="currentColor"
@@ -550,7 +649,13 @@ export function IllustCoverExplore(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <circle
         cx="80"
         cy="56"
@@ -560,8 +665,21 @@ export function IllustCoverExplore(props: IllustProps) {
         stroke="currentColor"
         strokeWidth="2"
       />
-      <ellipse cx="80" cy="56" rx="12" ry="28" stroke="currentColor" strokeWidth="2" opacity="0.4" />
-      <path d="M52 56h56M80 28v56" stroke="currentColor" strokeWidth="2" opacity="0.35" />
+      <ellipse
+        cx="80"
+        cy="56"
+        rx="12"
+        ry="28"
+        stroke="currentColor"
+        strokeWidth="2"
+        opacity="0.4"
+      />
+      <path
+        d="M52 56h56M80 28v56"
+        stroke="currentColor"
+        strokeWidth="2"
+        opacity="0.35"
+      />
       <path
         d="M54 42c16 6 36 6 52 0M54 70c16-6 36-6 52 0"
         stroke="currentColor"
@@ -577,7 +695,13 @@ export function IllustCoverShield(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <path
         d="M80 26l34 12v24c0 22-14 36-34 42-20-6-34-20-34-42V38l34-12Z"
         fill="currentColor"
@@ -602,7 +726,13 @@ export function IllustCoverChat(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <rect
         x="34"
         y="34"
@@ -632,7 +762,13 @@ export function IllustCoverMusic(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <path
         d="M70 34v42"
         stroke="currentColor"
@@ -657,7 +793,13 @@ export function IllustCoverStars(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <path
         d="M80 28l6 16h17l-14 10 5 17-14-10-14 10 5-17-14-10h17l6-16Z"
         fill="currentColor"
@@ -676,7 +818,13 @@ export function IllustCoverToolkit(props: IllustProps) {
   return frame(
     props,
     <>
-      <rect width="160" height="120" rx="16" fill="currentColor" opacity="0.08" />
+      <rect
+        width="160"
+        height="120"
+        rx="16"
+        fill="currentColor"
+        opacity="0.08"
+      />
       <rect
         x="40"
         y="48"
@@ -694,7 +842,15 @@ export function IllustCoverToolkit(props: IllustProps) {
         strokeWidth="2.5"
         opacity="0.45"
       />
-      <rect x="72" y="60" width="16" height="10" rx="3" fill="currentColor" opacity="0.35" />
+      <rect
+        x="72"
+        y="60"
+        width="16"
+        height="10"
+        rx="3"
+        fill="currentColor"
+        opacity="0.35"
+      />
     </>,
   );
 }

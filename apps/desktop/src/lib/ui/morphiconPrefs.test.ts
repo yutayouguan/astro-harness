@@ -27,14 +27,20 @@ function installStorage(): Map<string, string> {
 
 test("normalizeMorphiconPrefs validates each preference independently", () => {
   assert.deepEqual(normalizeMorphiconPrefs(null), DEFAULT_MORPHICON_PREFS);
-  assert.deepEqual(normalizeMorphiconPrefs({ spring: "bouncy", strokeWidth: 1.5 }), {
-    spring: "bouncy",
-    strokeWidth: 1.5,
-  });
-  assert.deepEqual(normalizeMorphiconPrefs({ spring: "elastic", strokeWidth: 8 }), {
-    spring: "smooth",
-    strokeWidth: 2,
-  });
+  assert.deepEqual(
+    normalizeMorphiconPrefs({ spring: "bouncy", strokeWidth: 1.5 }),
+    {
+      spring: "bouncy",
+      strokeWidth: 1.5,
+    },
+  );
+  assert.deepEqual(
+    normalizeMorphiconPrefs({ spring: "elastic", strokeWidth: 8 }),
+    {
+      spring: "smooth",
+      strokeWidth: 2,
+    },
+  );
 });
 
 test("morphicon preferences round-trip through localStorage", () => {
@@ -42,7 +48,10 @@ test("morphicon preferences round-trip through localStorage", () => {
   assert.deepEqual(readMorphiconPrefs(), DEFAULT_MORPHICON_PREFS);
 
   writeMorphiconPrefs({ spring: "snappy", strokeWidth: 2.5 });
-  assert.deepEqual(readMorphiconPrefs(), { spring: "snappy", strokeWidth: 2.5 });
+  assert.deepEqual(readMorphiconPrefs(), {
+    spring: "snappy",
+    strokeWidth: 2.5,
+  });
   assert.equal(
     store.get(MORPHICON_PREFS_KEY),
     JSON.stringify({ spring: "snappy", strokeWidth: 2.5 }),

@@ -21,7 +21,8 @@ const settingsTabsSource = await readFile(
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return css.match(new RegExp(`${escaped}\\s*\\{(?<body>[\\s\\S]*?)\\}`))?.groups?.body;
+  return css.match(new RegExp(`${escaped}\\s*\\{(?<body>[\\s\\S]*?)\\}`))
+    ?.groups?.body;
 }
 
 test("active sidebar settings navigation uses a flat tinted selection", () => {
@@ -96,7 +97,10 @@ test("preference category navigation keeps the shared glass material", () => {
   assert.match(categories, /border-color:\s*color-mix\(/);
   assert.match(categories, /box-shadow:[\s\S]*var\(--glass-rim\)/);
   assert.match(categories, /backdrop-filter:\s*var\(--backdrop-glass\);/);
-  assert.match(categories, /-webkit-backdrop-filter:\s*var\(--backdrop-glass\);/);
+  assert.match(
+    categories,
+    /-webkit-backdrop-filter:\s*var\(--backdrop-glass\);/,
+  );
 });
 
 test("reduced transparency replaces settings glass with a solid surface", () => {

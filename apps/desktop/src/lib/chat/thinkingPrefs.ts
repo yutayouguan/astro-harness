@@ -6,14 +6,7 @@ import type { ModelReasoningMeta, ReasoningEffort } from "../../types";
 
 /** UI 思考级别（含 off + OpenRouter supported_efforts） */
 export type ThinkingLevel =
-  | "off"
-  | "none"
-  | "minimal"
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh"
-  | "max";
+  "off" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 /** 聊天思考偏好 */
 export type ChatThinkingPrefs = {
@@ -33,7 +26,9 @@ const EFFORT_ORDER: ThinkingLevel[] = [
 const DEFAULT_EFFORTS: ThinkingLevel[] = ["low", "high", "max"];
 
 /** 是否为合法 ThinkingLevel（不含 off） */
-export function parseEffortLevel(raw: string | null | undefined): ThinkingLevel | null {
+export function parseEffortLevel(
+  raw: string | null | undefined,
+): ThinkingLevel | null {
   const s = (raw ?? "").trim().toLowerCase();
   if (
     s === "none" ||
@@ -77,7 +72,7 @@ export function defaultThinkingLevelFromMeta(
     );
   }
   if (meta?.default_enabled === false) {
-    return levels.includes("off") ? "off" : levels[0] ?? "off";
+    return levels.includes("off") ? "off" : (levels[0] ?? "off");
   }
   const preferred = parseEffortLevel(meta?.default_effort);
   if (preferred && levels.includes(preferred)) return preferred;

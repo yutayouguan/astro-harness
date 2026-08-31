@@ -14,12 +14,15 @@ const drawerUrl = new URL(
   "../../styles/features/cron/run-drawer.css",
   import.meta.url,
 );
-const dialogUrl = new URL("../../styles/components/dialog.css", import.meta.url);
-const overlayUrl = new URL("../../styles/components/overlay.css", import.meta.url);
-const chatUrl = new URL(
-  "../../components/chat/ChatView.tsx",
+const dialogUrl = new URL(
+  "../../styles/components/dialog.css",
   import.meta.url,
 );
+const overlayUrl = new URL(
+  "../../styles/components/overlay.css",
+  import.meta.url,
+);
+const chatUrl = new URL("../../components/chat/ChatView.tsx", import.meta.url);
 const runDetailUrl = new URL(
   "../../components/schedule/CronRunDetailDrawer.tsx",
   import.meta.url,

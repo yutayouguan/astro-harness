@@ -57,7 +57,8 @@
 }
 .loop-editor-toolbar .loop-btn--primary:hover {
   filter: brightness(1.08);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--tone, #ec4899) 30%, transparent);
+  box-shadow: 0 2px 8px
+    color-mix(in srgb, var(--tone, #ec4899) 30%, transparent);
 }
 
 /* 编辑器工具栏图标选择按钮 */
@@ -72,7 +73,10 @@
   background: none;
   cursor: pointer;
   color: var(--ink-secondary);
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
   flex-shrink: 0;
   padding: 0;
 }
@@ -135,7 +139,8 @@
   outline: none;
   width: 240px;
   max-width: 280px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
 }
 
 .loop-editor-desc {
@@ -278,7 +283,9 @@
   z-index: 25;
   padding: 0;
   overflow: visible;
-  transition: color 0.12s, background 0.12s;
+  transition:
+    color 0.12s,
+    background 0.12s;
 }
 .loop-collapse-toggle:hover {
   color: var(--ink);
@@ -351,12 +358,16 @@
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg0, #fff) 72%, transparent);
   color: var(--ink-tertiary);
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
 }
 .loop-palette-search-wrap:focus-within {
   border-color: color-mix(in srgb, var(--tone, #6366f1) 70%, var(--border));
   background: color-mix(in srgb, var(--bg0, #fff) 84%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
 }
 .loop-palette-search {
   width: 100%;
@@ -414,7 +425,9 @@
 .loop-palette-group.is-open > .loop-palette-group-header {
   color: var(--tone, #6366f1);
 }
-.loop-palette-group.is-open > .loop-palette-group-header .loop-palette-cat-icon {
+.loop-palette-group.is-open
+  > .loop-palette-group-header
+  .loop-palette-cat-icon {
   color: var(--tone, #6366f1);
 }
 
@@ -524,8 +537,14 @@
 }
 
 @keyframes loop-picker-in {
-  from { opacity: 0; transform: scale(0.95); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .loop-node-picker-search {

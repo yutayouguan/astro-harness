@@ -9,12 +9,18 @@ export function maxChatRightPanelWidth(containerWidth: number): number {
   if (!Number.isFinite(containerWidth)) return CHAT_RIGHT_PANEL_MAX_WIDTH;
   return Math.max(
     0,
-    Math.min(CHAT_RIGHT_PANEL_MAX_WIDTH, Math.floor(containerWidth) - CHAT_RIGHT_PANEL_EDGE_GAP),
+    Math.min(
+      CHAT_RIGHT_PANEL_MAX_WIDTH,
+      Math.floor(containerWidth) - CHAT_RIGHT_PANEL_EDGE_GAP,
+    ),
   );
 }
 
 /** Keep the panel usable while preserving the existing 20px gap on narrow layouts. */
-export function clampChatRightPanelWidth(width: number, containerWidth = Number.POSITIVE_INFINITY): number {
+export function clampChatRightPanelWidth(
+  width: number,
+  containerWidth = Number.POSITIVE_INFINITY,
+): number {
   const maxWidth = maxChatRightPanelWidth(containerWidth);
   const minWidth = Math.min(CHAT_RIGHT_PANEL_MIN_WIDTH, maxWidth);
   const fallback = Math.min(CHAT_RIGHT_PANEL_DEFAULT_WIDTH, maxWidth);

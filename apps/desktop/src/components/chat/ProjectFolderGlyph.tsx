@@ -17,7 +17,12 @@ type Props = {
   className?: string;
 };
 
-export default function ProjectFolderGlyph({ expanded, brand, size, className }: Props) {
+export default function ProjectFolderGlyph({
+  expanded,
+  brand,
+  size,
+  className,
+}: Props) {
   const gradId = `projectFolderGrad-${useId().replace(/:/g, "")}`;
 
   return (
@@ -39,9 +44,18 @@ export default function ProjectFolderGlyph({ expanded, brand, size, className }:
             x2="14.5"
             y2="3"
           >
-            <stop offset="0%" style={{ stopColor: "var(--astro-mark-c0, #0084fd)" }} />
-            <stop offset="46%" style={{ stopColor: "var(--astro-mark-c1, #1d57fd)" }} />
-            <stop offset="100%" style={{ stopColor: "var(--astro-mark-c2, #6020fc)" }} />
+            <stop
+              offset="0%"
+              style={{ stopColor: "var(--astro-mark-c0, #0084fd)" }}
+            />
+            <stop
+              offset="46%"
+              style={{ stopColor: "var(--astro-mark-c1, #1d57fd)" }}
+            />
+            <stop
+              offset="100%"
+              style={{ stopColor: "var(--astro-mark-c2, #6020fc)" }}
+            />
           </linearGradient>
         </defs>
       )}

@@ -8,11 +8,21 @@
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.45),
+      rgba(255, 255, 255, 0.15)
+    ),
+    color-mix(
+      in srgb,
+      var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%,
+      transparent
+    );
   box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
   overflow: hidden;
   animation: rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
   transition:
@@ -21,27 +31,48 @@
     box-shadow 0.18s ease;
 }
 
-.cron-card:nth-child(2) { animation-delay: 30ms; }
-.cron-card:nth-child(3) { animation-delay: 60ms; }
-.cron-card:nth-child(4) { animation-delay: 90ms; }
-.cron-card:nth-child(5) { animation-delay: 120ms; }
-.cron-card:nth-child(6) { animation-delay: 150ms; }
-.cron-card:nth-child(7) { animation-delay: 180ms; }
-.cron-card:nth-child(n+8) { animation-delay: 210ms; }
+.cron-card:nth-child(2) {
+  animation-delay: 30ms;
+}
+.cron-card:nth-child(3) {
+  animation-delay: 60ms;
+}
+.cron-card:nth-child(4) {
+  animation-delay: 90ms;
+}
+.cron-card:nth-child(5) {
+  animation-delay: 120ms;
+}
+.cron-card:nth-child(6) {
+  animation-delay: 150ms;
+}
+.cron-card:nth-child(7) {
+  animation-delay: 180ms;
+}
+.cron-card:nth-child(n + 8) {
+  animation-delay: 210ms;
+}
 
 .cron-card::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--tone) 18%, transparent), transparent 55%);
+  background: radial-gradient(
+    circle at 12% 16%,
+    color-mix(in srgb, var(--tone) 18%, transparent),
+    transparent 55%
+  );
   opacity: 0.75;
 }
 
 html[data-theme="dark"] .cron-card {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.01) 100%
+    ),
     rgba(8, 6, 18, 0.55);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
@@ -107,14 +138,12 @@ html[data-theme="dark"] .cron-card {
   display: grid;
   place-items: center;
   color: var(--tone);
-  filter:
-    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35))
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35))
     drop-shadow(0 2px 3px color-mix(in srgb, var(--tone) 28%, transparent));
 }
 
 html[data-theme="dark"] .cron-card-glyph {
-  filter:
-    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.16))
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.16))
     drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
 }
 
@@ -182,7 +211,8 @@ html[data-theme="dark"] .cron-card-glyph {
 .cron-more-btn {
   width: 32px;
   height: 32px;
-  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.35));
+  border: 1px solid
+    color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.35));
   border-radius: 10px;
   display: grid;
   place-items: center;
@@ -192,16 +222,26 @@ html[data-theme="dark"] .cron-card-glyph {
   color: var(--ink-soft);
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .cron-more-btn:hover:not(:disabled),
 .cron-more.is-open .cron-more-btn {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.12)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.36),
+      rgba(255, 255, 255, 0.12)
+    ),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.29));
 }
@@ -214,7 +254,11 @@ html[data-theme="dark"] .cron-card-glyph {
 html[data-theme="dark"] .cron-more-btn {
   border-color: rgba(255, 255, 255, 0.1);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     rgba(8, 6, 18, 0.45);
   color: var(--ink-soft);
   box-shadow:
@@ -227,7 +271,11 @@ html[data-theme="dark"] .cron-more.is-open .cron-more-btn {
   color: color-mix(in srgb, #fff 14%, var(--tone));
   border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.03)
+    ),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.45));
 }
 
@@ -237,16 +285,23 @@ html[data-theme="dark"] .cron-more.is-open .cron-more-btn {
   min-width: 176px;
   padding: 6px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.38));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.38));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.22)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.45),
+      rgba(255, 255, 255, 0.22)
+    ),
     rgba(255, 255, 255, 0.3);
   box-shadow:
     0 16px 40px rgba(15, 23, 42, 0.12),
     0 2px 8px rgba(15, 23, 42, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -256,7 +311,11 @@ html[data-theme="dark"] .cron-more.is-open .cron-more-btn {
 html[data-theme="dark"] .cron-more-menu {
   border-color: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     rgba(14, 12, 28, 0.72);
   box-shadow:
     0 16px 40px rgba(0, 0, 0, 0.5),
@@ -278,7 +337,9 @@ html[data-theme="dark"] .cron-more-menu {
   font-weight: 550;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .cron-more-item svg {
@@ -368,8 +429,16 @@ html[data-theme="dark"] .cron-more-menu {
   padding: 12px;
   border-radius: 16px;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.49), rgba(255, 255, 255, 0.22)),
-    color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.72)) 70%, transparent);
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.49),
+      rgba(255, 255, 255, 0.22)
+    ),
+    color-mix(
+      in srgb,
+      var(--glass-inner, rgba(255, 255, 255, 0.72)) 70%,
+      transparent
+    );
   border: 1px solid rgba(255, 255, 255, 0.45);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.6),
@@ -473,8 +542,11 @@ html[data-theme="dark"] .cron-more-menu {
 .cron-card-tag.is-agent,
 .cron-card-meta-tag.is-agent {
   color: var(--ink-soft);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.28));
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0.28)
+  );
   border: 1px solid color-mix(in srgb, var(--glass-edge) 85%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
@@ -497,7 +569,11 @@ html[data-theme="dark"] .cron-more-menu {
 
 html[data-theme="dark"] .cron-card-meta {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.02)
+    ),
     rgba(0, 0, 0, 0.28);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);

@@ -68,7 +68,11 @@ export default function ExpandableSearch({
     >
       {expanded ? (
         <div className="expandable-search-field">
-          <IconSearch width={15} height={15} className="expandable-search-glyph" />
+          <IconSearch
+            width={15}
+            height={15}
+            className="expandable-search-glyph"
+          />
           <input
             ref={inputRef}
             className="expandable-search-input"

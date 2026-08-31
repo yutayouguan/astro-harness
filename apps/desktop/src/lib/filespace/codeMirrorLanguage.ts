@@ -38,8 +38,18 @@ export const codeMirrorLightTheme = createTheme({
   styles: [
     { tag: t.comment, color: "#94a3b8", fontStyle: "italic" },
     { tag: t.heading, color: "#5b21b6", fontWeight: "700" },
-    { tag: t.heading1, color: "#4c1d95", fontWeight: "800", fontSize: "1.15em" },
-    { tag: t.heading2, color: "#6d28d9", fontWeight: "700", fontSize: "1.08em" },
+    {
+      tag: t.heading1,
+      color: "#4c1d95",
+      fontWeight: "800",
+      fontSize: "1.15em",
+    },
+    {
+      tag: t.heading2,
+      color: "#6d28d9",
+      fontWeight: "700",
+      fontSize: "1.08em",
+    },
     { tag: t.heading3, color: "#7c3aed", fontWeight: "700" },
     { tag: t.strong, color: "#0f172a", fontWeight: "700" },
     { tag: t.emphasis, color: "#475569", fontStyle: "italic" },
@@ -68,7 +78,11 @@ export const codeMirrorLightTheme = createTheme({
     { tag: t.variableName, color: "#0f172a" },
     { tag: t.definition(t.variableName), color: "#1d4ed8" },
     { tag: t.function(t.variableName), color: "#7c3aed" },
-    { tag: t.monospace, color: "#0f766e", background: "rgba(13, 148, 136, 0.08)" },
+    {
+      tag: t.monospace,
+      color: "#0f766e",
+      background: "rgba(13, 148, 136, 0.08)",
+    },
     { tag: t.contentSeparator, color: "#c4b5fd" },
   ],
 });
@@ -92,8 +106,18 @@ export const codeMirrorDarkTheme = createTheme({
   styles: [
     { tag: t.comment, color: "#64748b", fontStyle: "italic" },
     { tag: t.heading, color: "#ddd6fe", fontWeight: "700" },
-    { tag: t.heading1, color: "#f5f3ff", fontWeight: "800", fontSize: "1.15em" },
-    { tag: t.heading2, color: "#e9d5ff", fontWeight: "700", fontSize: "1.08em" },
+    {
+      tag: t.heading1,
+      color: "#f5f3ff",
+      fontWeight: "800",
+      fontSize: "1.15em",
+    },
+    {
+      tag: t.heading2,
+      color: "#e9d5ff",
+      fontWeight: "700",
+      fontSize: "1.08em",
+    },
     { tag: t.heading3, color: "#c4b5fd", fontWeight: "700" },
     { tag: t.strong, color: "#f8fafc", fontWeight: "700" },
     { tag: t.emphasis, color: "#cbd5e1", fontStyle: "italic" },
@@ -122,7 +146,11 @@ export const codeMirrorDarkTheme = createTheme({
     { tag: t.variableName, color: "#e2e8f0" },
     { tag: t.definition(t.variableName), color: "#93c5fd" },
     { tag: t.function(t.variableName), color: "#c4b5fd" },
-    { tag: t.monospace, color: "#5eead4", background: "rgba(45, 212, 191, 0.1)" },
+    {
+      tag: t.monospace,
+      color: "#5eead4",
+      background: "rgba(45, 212, 191, 0.1)",
+    },
     { tag: t.contentSeparator, color: "#7c3aed" },
   ],
 });
@@ -132,9 +160,7 @@ export function languageForFilename(filename: string): Extension[] {
   const base = filename.includes("/")
     ? filename.slice(filename.lastIndexOf("/") + 1)
     : filename;
-  const ext = base.includes(".")
-    ? base.split(".").pop()?.toLowerCase()
-    : "";
+  const ext = base.includes(".") ? base.split(".").pop()?.toLowerCase() : "";
   switch (ext) {
     case "json":
       return [json()];

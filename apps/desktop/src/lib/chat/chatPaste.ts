@@ -19,7 +19,9 @@ function kindFromMime(mime: string, name: string): ChatAttachmentKind {
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext)) {
+  if (
+    ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext)
+  ) {
     return "image";
   }
   if (["mp4", "webm", "mov", "mkv", "avi"].includes(ext)) return "video";
@@ -156,9 +158,7 @@ export async function filesFromClipboardRead(): Promise<File[]> {
         if (!type.startsWith("image/")) continue;
         const blob = await item.getType(type);
         const ext = type.split("/")[1] || "png";
-        files.push(
-          new File([blob], `pasted-image-${index}.${ext}`, { type }),
-        );
+        files.push(new File([blob], `pasted-image-${index}.${ext}`, { type }));
         index += 1;
       }
     }

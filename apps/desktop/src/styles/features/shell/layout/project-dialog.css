@@ -50,7 +50,10 @@
   background: transparent;
   color: var(--ink-mute);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
 }
 
 .project-edit-name-icon-btn:hover {
@@ -118,7 +121,9 @@
   background: transparent;
   color: var(--ink-mute);
   cursor: pointer;
-  transition: background 0.08s, color 0.08s;
+  transition:
+    background 0.08s,
+    color 0.08s;
 }
 
 .project-edit-root-remove:hover {
@@ -138,7 +143,10 @@
   font-weight: 450;
   color: var(--ink-soft);
   cursor: pointer;
-  transition: background 0.08s, color 0.08s, border-color 0.08s;
+  transition:
+    background 0.08s,
+    color 0.08s,
+    border-color 0.08s;
   margin-bottom: 24px;
 }
 
@@ -172,7 +180,10 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.1s, color 0.1s, opacity 0.1s;
+  transition:
+    background 0.1s,
+    color 0.1s,
+    opacity 0.1s;
 }
 
 .project-edit-btn--primary {
@@ -206,4 +217,3 @@
 .project-edit-btn--danger:hover {
   background: color-mix(in srgb, var(--danger, #ef4444) 10%, transparent);
 }
-

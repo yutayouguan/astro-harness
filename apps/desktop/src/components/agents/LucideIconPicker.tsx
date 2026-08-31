@@ -1,5 +1,12 @@
 /** Lucide 图标选择器。 */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useMorphicons } from "../../hooks/app/useMorphicons";
@@ -33,7 +40,11 @@ type Props = {
   /** 初始渲染风格（描边/填充等） */
   initialStyle?: LucideRenderStyle;
   onClose: () => void;
-  onSelect: (icon: LucideAgentIcon, paint: LucidePaint, style: LucideRenderStyle) => void;
+  onSelect: (
+    icon: LucideAgentIcon,
+    paint: LucidePaint,
+    style: LucideRenderStyle,
+  ) => void;
   /** 若提供，抽屉内显示上传按钮并回调 File */
   onUploadImage?: (file: File) => void;
   /** 异步操作进行中时禁止关闭与上传 */
@@ -94,7 +105,9 @@ export default function LucideIconPicker({
 }: Props) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
-  const [paint, setPaint] = useState<LucidePaint>(initialPaint ?? DEFAULT_LUCIDE_PAINT);
+  const [paint, setPaint] = useState<LucidePaint>(
+    initialPaint ?? DEFAULT_LUCIDE_PAINT,
+  );
   const [renderStyle, setRenderStyle] = useState<LucideRenderStyle>(
     initialStyle ?? DEFAULT_LUCIDE_RENDER_STYLE,
   );
@@ -161,7 +174,9 @@ export default function LucideIconPicker({
       >
         <header className="agent-icon-drawer-head lucide-picker-head">
           <div>
-            <h3 className="lucide-picker-title">{t("chat.lucidePickerTitle")}</h3>
+            <h3 className="lucide-picker-title">
+              {t("chat.lucidePickerTitle")}
+            </h3>
             <p className="lucide-picker-sub">{t("chat.lucidePickerSub")}</p>
           </div>
           <button
@@ -222,7 +237,9 @@ export default function LucideIconPicker({
                     <AppMorphIcon
                       icon={previewIcon.data}
                       size={34}
-                      color={paint.kind === "solid" ? paint.color : "currentColor"}
+                      color={
+                        paint.kind === "solid" ? paint.color : "currentColor"
+                      }
                     />
                   ) : (
                     <PaintedLucideIcon
@@ -233,12 +250,20 @@ export default function LucideIconPicker({
                     />
                   )}
                 </span>
-                <span className="lucide-picker-morph-name">{previewIcon.label}</span>
+                <span className="lucide-picker-morph-name">
+                  {previewIcon.label}
+                </span>
               </div>
             ) : null}
 
-            <div className="lucide-picker-style" role="group" aria-label={t("chat.lucidePickerStyle")}>
-              <span className="lucide-picker-colors-label">{t("chat.lucidePickerStyle")}</span>
+            <div
+              className="lucide-picker-style"
+              role="group"
+              aria-label={t("chat.lucidePickerStyle")}
+            >
+              <span className="lucide-picker-colors-label">
+                {t("chat.lucidePickerStyle")}
+              </span>
               <div className="lucide-picker-style-toggle">
                 <button
                   type="button"
@@ -259,8 +284,14 @@ export default function LucideIconPicker({
               </div>
             </div>
 
-            <div className="lucide-picker-colors" role="group" aria-label={t("chat.lucidePickerColor")}>
-              <span className="lucide-picker-colors-label">{t("chat.lucidePickerColor")}</span>
+            <div
+              className="lucide-picker-colors"
+              role="group"
+              aria-label={t("chat.lucidePickerColor")}
+            >
+              <span className="lucide-picker-colors-label">
+                {t("chat.lucidePickerColor")}
+              </span>
               <div className="lucide-picker-swatches">
                 {LUCIDE_ICON_COLORS.map((c) => {
                   const next = solidPaint(c.value);
@@ -277,11 +308,15 @@ export default function LucideIconPicker({
                     />
                   );
                 })}
-                <label className="lucide-picker-custom-color" title={t("chat.lucidePickerCustomColor")}>
+                <label
+                  className="lucide-picker-custom-color"
+                  title={t("chat.lucidePickerCustomColor")}
+                >
                   <input
                     type="color"
                     value={
-                      paint.kind === "solid" && /^#[0-9a-fA-F]{6}$/.test(paint.color)
+                      paint.kind === "solid" &&
+                      /^#[0-9a-fA-F]{6}$/.test(paint.color)
                         ? paint.color
                         : DEFAULT_LUCIDE_ICON_COLOR
                     }
@@ -297,7 +332,9 @@ export default function LucideIconPicker({
               role="group"
               aria-label={t("chat.lucidePickerGradient")}
             >
-              <span className="lucide-picker-colors-label">{t("chat.lucidePickerGradient")}</span>
+              <span className="lucide-picker-colors-label">
+                {t("chat.lucidePickerGradient")}
+              </span>
               <div className="lucide-picker-swatches">
                 {LUCIDE_ICON_GRADIENTS.map((g) => {
                   const next = gradientPaint(g);
@@ -319,12 +356,16 @@ export default function LucideIconPicker({
                 <button
                   type="button"
                   className={`lucide-picker-swatch lucide-picker-swatch--grad ${
-                    paint.kind === "gradient" && paint.id === "custom" ? "is-active" : ""
+                    paint.kind === "gradient" && paint.id === "custom"
+                      ? "is-active"
+                      : ""
                   }`}
                   style={{ background: paintCssBackground(customGradient) }}
                   title={t("chat.lucidePickerCustomGradient")}
                   aria-label={t("chat.lucidePickerCustomGradient")}
-                  aria-pressed={paint.kind === "gradient" && paint.id === "custom"}
+                  aria-pressed={
+                    paint.kind === "gradient" && paint.id === "custom"
+                  }
                   onClick={() => setPaint(customGradient)}
                 />
               </div>
@@ -340,7 +381,13 @@ export default function LucideIconPicker({
                     onChange={(e) => {
                       const from = e.target.value;
                       setCustomFrom(from);
-                      setPaint({ kind: "gradient", id: "custom", from, to: customTo, angle: 135 });
+                      setPaint({
+                        kind: "gradient",
+                        id: "custom",
+                        from,
+                        to: customTo,
+                        angle: 135,
+                      });
                     }}
                   />
                 </label>
@@ -352,7 +399,13 @@ export default function LucideIconPicker({
                     onChange={(e) => {
                       const to = e.target.value;
                       setCustomTo(to);
-                      setPaint({ kind: "gradient", id: "custom", from: customFrom, to, angle: 135 });
+                      setPaint({
+                        kind: "gradient",
+                        id: "custom",
+                        from: customFrom,
+                        to,
+                        angle: 135,
+                      });
                     }}
                   />
                 </label>
@@ -362,9 +415,15 @@ export default function LucideIconPicker({
 
           {/* 滚动区：仅图标网格 */}
           <div className="lucide-picker-gridwrap">
-            <div className="lucide-picker-grid" role="listbox" aria-label={t("chat.lucidePickerTitle")}>
+            <div
+              className="lucide-picker-grid"
+              role="listbox"
+              aria-label={t("chat.lucidePickerTitle")}
+            >
               {icons.length === 0 ? (
-                <p className="lucide-picker-empty">{t("chat.lucidePickerEmpty")}</p>
+                <p className="lucide-picker-empty">
+                  {t("chat.lucidePickerEmpty")}
+                </p>
               ) : (
                 icons.map((item) => {
                   const active = selectedId === item.id;
@@ -389,7 +448,9 @@ export default function LucideIconPicker({
                         style={renderStyle}
                         size={20}
                       />
-                      <span className="lucide-picker-item-label">{item.label}</span>
+                      <span className="lucide-picker-item-label">
+                        {item.label}
+                      </span>
                     </button>
                   );
                 })

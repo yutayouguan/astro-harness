@@ -53,14 +53,7 @@ export type CoverId =
   | "toolkit";
 
 export type CoverTone =
-  | "blue"
-  | "purple"
-  | "cyan"
-  | "orange"
-  | "green"
-  | "rose"
-  | "amber"
-  | "indigo";
+  "blue" | "purple" | "cyan" | "orange" | "green" | "rose" | "amber" | "indigo";
 
 export type CoverMeta = {
   id: CoverId;
@@ -82,19 +75,97 @@ export const EMPTY_SCENE_ART: Record<EmptyScene, ComponentType<IllustProps>> = {
 };
 
 export const AGENT_COVERS: CoverMeta[] = [
-  { id: "assistant", labelZh: "助手", labelEn: "Assistant", tone: "blue", Art: IllustCoverAssistant },
-  { id: "code", labelZh: "代码", labelEn: "Code", tone: "indigo", Art: IllustCoverCode },
-  { id: "research", labelZh: "研究", labelEn: "Research", tone: "cyan", Art: IllustCoverResearch },
-  { id: "writing", labelZh: "写作", labelEn: "Writing", tone: "purple", Art: IllustCoverWriting },
-  { id: "schedule", labelZh: "日程", labelEn: "Schedule", tone: "orange", Art: IllustCoverSchedule },
-  { id: "data", labelZh: "数据", labelEn: "Data", tone: "green", Art: IllustCoverData },
-  { id: "creative", labelZh: "创意", labelEn: "Creative", tone: "amber", Art: IllustCoverCreative },
-  { id: "explore", labelZh: "探索", labelEn: "Explore", tone: "cyan", Art: IllustCoverExplore },
-  { id: "shield", labelZh: "安全", labelEn: "Security", tone: "green", Art: IllustCoverShield },
-  { id: "chat", labelZh: "对话", labelEn: "Chat", tone: "blue", Art: IllustCoverChat },
-  { id: "music", labelZh: "音乐", labelEn: "Music", tone: "rose", Art: IllustCoverMusic },
-  { id: "stars", labelZh: "灵感", labelEn: "Stars", tone: "purple", Art: IllustCoverStars },
-  { id: "toolkit", labelZh: "工具", labelEn: "Toolkit", tone: "amber", Art: IllustCoverToolkit },
+  {
+    id: "assistant",
+    labelZh: "助手",
+    labelEn: "Assistant",
+    tone: "blue",
+    Art: IllustCoverAssistant,
+  },
+  {
+    id: "code",
+    labelZh: "代码",
+    labelEn: "Code",
+    tone: "indigo",
+    Art: IllustCoverCode,
+  },
+  {
+    id: "research",
+    labelZh: "研究",
+    labelEn: "Research",
+    tone: "cyan",
+    Art: IllustCoverResearch,
+  },
+  {
+    id: "writing",
+    labelZh: "写作",
+    labelEn: "Writing",
+    tone: "purple",
+    Art: IllustCoverWriting,
+  },
+  {
+    id: "schedule",
+    labelZh: "日程",
+    labelEn: "Schedule",
+    tone: "orange",
+    Art: IllustCoverSchedule,
+  },
+  {
+    id: "data",
+    labelZh: "数据",
+    labelEn: "Data",
+    tone: "green",
+    Art: IllustCoverData,
+  },
+  {
+    id: "creative",
+    labelZh: "创意",
+    labelEn: "Creative",
+    tone: "amber",
+    Art: IllustCoverCreative,
+  },
+  {
+    id: "explore",
+    labelZh: "探索",
+    labelEn: "Explore",
+    tone: "cyan",
+    Art: IllustCoverExplore,
+  },
+  {
+    id: "shield",
+    labelZh: "安全",
+    labelEn: "Security",
+    tone: "green",
+    Art: IllustCoverShield,
+  },
+  {
+    id: "chat",
+    labelZh: "对话",
+    labelEn: "Chat",
+    tone: "blue",
+    Art: IllustCoverChat,
+  },
+  {
+    id: "music",
+    labelZh: "音乐",
+    labelEn: "Music",
+    tone: "rose",
+    Art: IllustCoverMusic,
+  },
+  {
+    id: "stars",
+    labelZh: "灵感",
+    labelEn: "Stars",
+    tone: "purple",
+    Art: IllustCoverStars,
+  },
+  {
+    id: "toolkit",
+    labelZh: "工具",
+    labelEn: "Toolkit",
+    tone: "amber",
+    Art: IllustCoverToolkit,
+  },
 ];
 
 export function getCoverMeta(id: string | null | undefined): CoverMeta | null {

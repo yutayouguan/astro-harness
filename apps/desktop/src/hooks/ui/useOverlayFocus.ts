@@ -1,8 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  type RefObject,
-} from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -84,11 +80,5 @@ export function useOverlayFocus({
       document.removeEventListener("keydown", onKeyDown);
       previousFocus?.focus?.();
     };
-  }, [
-    closeOnEscape,
-    containerRef,
-    initialFocusRef,
-    open,
-    trapFocus,
-  ]);
+  }, [closeOnEscape, containerRef, initialFocusRef, open, trapFocus]);
 }

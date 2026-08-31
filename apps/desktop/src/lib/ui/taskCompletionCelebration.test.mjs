@@ -17,13 +17,22 @@ test("successful primary and parallel tasks request a celebration", async () => 
   ]);
 
   assert.match(send, /resolveTaskCompletion\([\s\S]*completion\.celebrate/);
-  assert.match(parallel, /resolveParallelTaskCompletion\([\s\S]*completion\.celebrate/);
-  assert.match(send, /completionSettled \|\| terminalOutcome === "hitl_waiting"/);
+  assert.match(
+    parallel,
+    /resolveParallelTaskCompletion\([\s\S]*completion\.celebrate/,
+  );
+  assert.match(
+    send,
+    /completionSettled \|\| terminalOutcome === "hitl_waiting"/,
+  );
   assert.match(parallel, /if \(completionSettled\) return/);
   assert.match(completion, /outcome === "success" && !failed/);
   assert.match(completion, /outcome === "interrupt"/);
   assert.match(completion, /outcome === "hitl_waiting"/);
-  assert.match(session, /setCompletionCelebrationId\(\(current\) => current \+ 1\)/);
+  assert.match(
+    session,
+    /setCompletionCelebrationId\(\(current\) => current \+ 1\)/,
+  );
   assert.match(session, /onTurnSucceeded: celebrateTaskCompletion/);
   assert.match(session, /onTaskSucceeded: celebrateTaskCompletion/);
 });
@@ -38,12 +47,18 @@ test("celebration is a non-interactive content overlay with reduced-motion fallb
   assert.match(component, /requestAnimationFrame/);
   assert.match(component, /prefers-reduced-motion: reduce/);
   assert.match(component, /previousTriggerRef = useRef\(trigger\)/);
-  assert.match(component, /shouldStartCompletionCelebration\(previousTrigger, trigger\)/);
+  assert.match(
+    component,
+    /shouldStartCompletionCelebration\(previousTrigger, trigger\)/,
+  );
   assert.match(component, /const releaseCanvasBackingStore = \(\) =>/);
   assert.match(component, /canvas\.width = 1/);
   assert.match(component, /setTimeout\(releaseCanvasBackingStore, 560\)/);
   assert.match(component, /aria-hidden="true"/);
-  assert.match(view, /<TaskCompletionCelebration trigger=\{completionCelebrationId\}/);
+  assert.match(
+    view,
+    /<TaskCompletionCelebration trigger=\{completionCelebrationId\}/,
+  );
   assert.match(styles, /position: absolute/);
   assert.match(styles, /inset: 0/);
   assert.match(styles, /pointer-events: none/);

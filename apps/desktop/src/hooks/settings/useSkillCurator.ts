@@ -60,7 +60,8 @@ export function useSkillCurator(active = true): UseSkillCurator {
   // 后台到期策展完成后刷新报告 / 状态
   useEffect(() => {
     if (!active) return;
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let unlisten: (() => void) | undefined;
     void listen<CuratorUpdatedPayload>("curator-updated", (ev) => {
       void reload();
@@ -80,24 +81,23 @@ export function useSkillCurator(active = true): UseSkillCurator {
 
   const clearAutoNotice = useCallback(() => setAutoNotice(null), []);
 
-  const run = useCallback(
-    async (enqueue = false) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const next = await invoke<CuratorRunReport>("run_skill_curator", { enqueue });
-        setReport(next.report);
-        setLastEnqueued(next.enqueued);
-        const st = await invoke<CuratorStatusDto>("curator_status");
-        setStatus(st);
-      } catch (err) {
-        setError(errorMessage(err));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  const run = useCallback(async (enqueue = false) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await invoke<CuratorRunReport>("run_skill_curator", {
+        enqueue,
+      });
+      setReport(next.report);
+      setLastEnqueued(next.enqueued);
+      const st = await invoke<CuratorStatusDto>("curator_status");
+      setStatus(st);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const enqueue = useCallback(async () => {
     setLoading(true);

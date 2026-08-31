@@ -1,9 +1,4 @@
-import {
-  useId,
-  useRef,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import {
   isSegmentedTabNavigationKey,
   nextEnabledTabIndex,
@@ -62,11 +57,7 @@ export function SegmentedTabs({
 
   return (
     <div
-      className={[
-        "ui-segmented-tabs",
-        `ui-segmented-tabs--${size}`,
-        className,
-      ]
+      className={["ui-segmented-tabs", `ui-segmented-tabs--${size}`, className]
         .filter(Boolean)
         .join(" ")}
       role="tablist"

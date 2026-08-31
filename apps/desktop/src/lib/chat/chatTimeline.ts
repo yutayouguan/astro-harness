@@ -22,7 +22,11 @@ export function sumReasoningDurations(
   let sum = 0;
   let any = false;
   for (const seg of segments) {
-    if (seg.type === "reasoning" && seg.durationSec != null && seg.durationSec > 0) {
+    if (
+      seg.type === "reasoning" &&
+      seg.durationSec != null &&
+      seg.durationSec > 0
+    ) {
       sum += seg.durationSec;
       any = true;
     }
@@ -44,7 +48,10 @@ export function sealOpenReasoning(
   let target = -1;
   for (let i = segments.length - 1; i >= 0; i -= 1) {
     const seg = segments[i];
-    if (seg?.type === "reasoning" && (seg.durationSec == null || seg.durationSec <= 0)) {
+    if (
+      seg?.type === "reasoning" &&
+      (seg.durationSec == null || seg.durationSec <= 0)
+    ) {
       target = i;
       break;
     }
@@ -174,7 +181,9 @@ function reconcileTextualSegments(
         const { durationSec: _, ...open } = segment;
         return [{ ...open, text: replacement }];
       }
-      return segment.type === "text" ? [{ ...segment, text: replacement }] : [segment];
+      return segment.type === "text"
+        ? [{ ...segment, text: replacement }]
+        : [segment];
     });
   }
 
@@ -199,7 +208,12 @@ export function reconcileText(
   return {
     ...m,
     content: canonical,
-    segments: reconcileTextualSegments(ensureSegments(m), "text", canonical, at),
+    segments: reconcileTextualSegments(
+      ensureSegments(m),
+      "text",
+      canonical,
+      at,
+    ),
   };
 }
 
@@ -317,7 +331,8 @@ export function applyActivityUpsert(
     ...base,
     activities,
     segments,
-    reasoningDurationSec: sumReasoningDurations(segments) ?? base.reasoningDurationSec,
+    reasoningDurationSec:
+      sumReasoningDurations(segments) ?? base.reasoningDurationSec,
   };
 }
 
@@ -346,7 +361,8 @@ export function parseActivityOperations(contentJson?: string): unknown[] {
   if (!contentJson?.trim()) return [];
   try {
     const parsed = JSON.parse(contentJson) as unknown;
-    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed))
+      return [];
     const operations = (parsed as { operations?: unknown }).operations;
     return Array.isArray(operations) ? operations : [];
   } catch {

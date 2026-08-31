@@ -1,5 +1,10 @@
 import { useRef, type ReactNode } from "react";
-import { AnimatePresence, motion, type Transition, type TargetAndTransition } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  type Transition,
+  type TargetAndTransition,
+} from "framer-motion";
 
 type Variant = "soft" | "fade" | "slide-left" | "slide-right";
 type Mode = "wait" | "popLayout";
@@ -20,7 +25,12 @@ const FAST: Transition = {
 
 const VARIANTS: Record<
   Variant,
-  { initial: TargetAndTransition; animate: TargetAndTransition; exit: TargetAndTransition; transition: Transition }
+  {
+    initial: TargetAndTransition;
+    animate: TargetAndTransition;
+    exit: TargetAndTransition;
+    transition: Transition;
+  }
 > = {
   soft: {
     initial: { opacity: 0, y: 8, scale: 0.985 },

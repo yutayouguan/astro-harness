@@ -4,8 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { markSessionUnread } from "../../lib/chat/sessionUnread";
 
 export type SessionRuntimeActiveFlag =
-  | "waitingOnApproval"
-  | "waitingOnUserInput";
+  "waitingOnApproval" | "waitingOnUserInput";
 
 export type SessionRuntimeStatus = {
   status: "idle" | "active" | "systemError";
@@ -59,9 +58,9 @@ function normalizeStatus(
  * sessionId 索引，供左右会话列表共同消费。
  */
 export function useSessionStatusMap(): SessionStatusMap {
-  const [statuses, setStatuses] = useState<Record<string, SessionRuntimeStatus>>(
-    {},
-  );
+  const [statuses, setStatuses] = useState<
+    Record<string, SessionRuntimeStatus>
+  >({});
   const statusesRef = useRef<Record<string, SessionRuntimeStatus>>({});
 
   useEffect(() => {

@@ -65,8 +65,7 @@ export function peelLeadingSkillSlashes(
     if (resolveBuiltinSlash(name)) break;
     if (!skillSet.has(norm(name))) break;
     // 还原原始大小写名
-    const original =
-      skillNames.find((s) => norm(s) === norm(name)) ?? name;
+    const original = skillNames.find((s) => norm(s) === norm(name)) ?? name;
     skills.push(original);
     i += 1;
   }
@@ -116,7 +115,10 @@ export function peelAtMentions(
     agents,
     skills,
     mcps,
-    rest: rest.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim(),
+    rest: rest
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
   };
 }
 
@@ -139,10 +141,7 @@ export function formatSkillInjection(
   if (loaded.length === 0) return instruction;
 
   const blocks = loaded
-    .map(
-      (s) =>
-        `Please follow this skill (${s.name}):\n\n${s.content.trim()}`,
-    )
+    .map((s) => `Please follow this skill (${s.name}):\n\n${s.content.trim()}`)
     .join("\n\n---\n\n");
 
   if (!instruction) {
@@ -202,10 +201,7 @@ export async function resolveComposerTurn(
   const instruction = peeledAt.rest;
   const displayText =
     uniqueSkills.length > 0
-      ? [
-          ...uniqueSkills.map((n) => `/${n}`),
-          instruction,
-        ]
+      ? [...uniqueSkills.map((n) => `/${n}`), instruction]
           .filter(Boolean)
           .join(" ")
       : instruction || trimmed;

@@ -24,7 +24,9 @@ const MorphiconContext = createContext<MorphiconContextValue | null>(null);
 
 export function MorphiconProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<MorphiconPrefs>(() =>
-    typeof window === "undefined" ? { spring: "smooth", strokeWidth: 2 } : readMorphiconPrefs(),
+    typeof window === "undefined"
+      ? { spring: "smooth", strokeWidth: 2 }
+      : readMorphiconPrefs(),
   );
 
   useEffect(() => {
@@ -44,11 +46,16 @@ export function MorphiconProvider({ children }: { children: ReactNode }) {
     [prefs, setSpring, setStrokeWidth],
   );
 
-  return <MorphiconContext.Provider value={value}>{children}</MorphiconContext.Provider>;
+  return (
+    <MorphiconContext.Provider value={value}>
+      {children}
+    </MorphiconContext.Provider>
+  );
 }
 
 export function useMorphicons(): MorphiconContextValue {
   const context = useContext(MorphiconContext);
-  if (!context) throw new Error("useMorphicons must be used within MorphiconProvider");
+  if (!context)
+    throw new Error("useMorphicons must be used within MorphiconProvider");
   return context;
 }

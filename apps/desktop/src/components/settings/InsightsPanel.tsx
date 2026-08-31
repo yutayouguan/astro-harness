@@ -64,7 +64,12 @@ type RankItem = {
 };
 
 type UsageInsights = {
-  kpis: { calls: number; tokens: number; cost_usd: number; active_agents: number };
+  kpis: {
+    calls: number;
+    tokens: number;
+    cost_usd: number;
+    active_agents: number;
+  };
   series: { bucket: string; calls: number; tokens: number; cost_usd: number }[];
   rankings: {
     by_kind: RankItem[];
@@ -221,7 +226,11 @@ const EN_MONTHS = [
 ] as const;
 
 /** 按 period / locale 格式化桶标签（后端：月=YYYY-MM-DD，季/年=YYYY-MM） */
-function formatBucketLabel(bucket: string, period: Period, locale: Locale): string {
+function formatBucketLabel(
+  bucket: string,
+  period: Period,
+  locale: Locale,
+): string {
   if (period === "month") {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(bucket);
     if (m) {
@@ -336,7 +345,9 @@ function InsightsTrendChart({
       {series.length > 0 && hasSignal ? (
         <div className="insights-chart" aria-label={`${metric} trend`}>
           {sparse && (
-            <p className="insights-chart-sparse-hint">{t("insights.chart.sparse")}</p>
+            <p className="insights-chart-sparse-hint">
+              {t("insights.chart.sparse")}
+            </p>
           )}
           {series.map((s) => {
             const v = seriesValue(s, metric);
@@ -346,7 +357,10 @@ function InsightsTrendChart({
                 className="insights-bar-col"
                 title={formatSeriesTip(s, metric)}
               >
-                <div className="insights-bar-plot" style={{ height: CHART_PLOT_H }}>
+                <div
+                  className="insights-bar-plot"
+                  style={{ height: CHART_PLOT_H }}
+                >
                   <div
                     className={`insights-bar${v > 0 ? "" : " is-empty"}`}
                     style={{ height: barHeightPx(v, maxVal) }}
@@ -377,7 +391,9 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   const [data, setData] = useState<UsageInsights | null>(null);
   const [traces, setTraces] = useState<TraceInsights | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
-  const [expandedTurns, setExpandedTurns] = useState<Record<string, boolean>>({});
+  const [expandedTurns, setExpandedTurns] = useState<Record<string, boolean>>(
+    {},
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -420,7 +436,8 @@ export default function InsightsPanel({ active }: { active: boolean }) {
         if (!cancelled) {
           setTraces(res);
           setSelectedTraceId((prev) => {
-            if (prev && res.traces.some((t) => t.session_id === prev)) return prev;
+            if (prev && res.traces.some((t) => t.session_id === prev))
+              return prev;
             return res.traces[0]?.session_id ?? null;
           });
           setError(null);
@@ -556,460 +573,499 @@ export default function InsightsPanel({ active }: { active: boolean }) {
       </div>
 
       <div className="insights-body">
-      {error && <p className="insights-error">{error}</p>}
+        {error && <p className="insights-error">{error}</p>}
 
-      {view === "overview" && data && (
-        <>
-          {hasUnpriced && (
-            <div className="insights-unpriced" role="status">
-              <AlertTriangle size={15} strokeWidth={2.25} aria-hidden />
-              <div className="insights-unpriced-copy">
-                <strong>{t("insights.unpriced")}</strong>
-                <span>{t("insights.unpriced.hint")}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="insights-kpis insights-kpis-overview">
-            <KpiCard
-              emphasis={data.kpis.cost_usd <= 0 ? "muted" : "default"}
-              icon={<DollarSign size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.cost")}
-              value={formatCost(data.kpis.cost_usd)}
-            />
-            <KpiCard
-              emphasis="primary"
-              icon={<Coins size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.tokens")}
-              value={formatTokens(data.kpis.tokens)}
-            />
-            <KpiCard
-              icon={<Activity size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.calls")}
-              value={String(data.kpis.calls)}
-            />
-          </div>
-
-          <div className="insights-overview-grid">
-            <InsightsTrendChart
-              title={t("insights.chart.usageTrend")}
-              series={data.series}
-              metric={metric}
-              onMetricChange={setMetric}
-              maxVal={maxVal}
-              period={period}
-              locale={locale}
-              emptyMessage={t("insights.chart.empty")}
-              t={t}
-            />
-
-            <section className="insights-hbar-panel">
-              <div className="insights-rank-title-row">
-                <h3 className="insights-rank-title">
-                  <Building2 size={14} strokeWidth={2.25} aria-hidden />
-                  {t("insights.rank.providerSpend")}
-                </h3>
-                <button
-                  type="button"
-                  className="insights-more-btn"
-                  onClick={() => setView("models")}
-                >
-                  {t("insights.rank.more")}
-                </button>
-              </div>
-              {overviewProviderTop.length === 0 ? (
-                <p className="insights-rank-empty">{t("insights.rank.empty")}</p>
-              ) : (
-                <ul className="insights-hbar-list">
-                  {overviewProviderTop.map((r, idx) => {
-                    const val = overviewUseCost ? r.cost_usd : r.tokens;
-                    return (
-                      <li
-                        key={r.name}
-                        className={`insights-hbar-item${idx < 3 ? ` rank-${idx + 1}` : ""}`}
-                      >
-                        <span className="insights-hbar-label">
-                          <span className="insights-hbar-rank" aria-hidden>
-                            {idx + 1}
-                          </span>
-                          <span className="insights-rank-kind-icon" title="provider">
-                            <ProviderBrandIcon kind={r.name} size={14} />
-                          </span>
-                          {r.name}
-                        </span>
-                        <div className="insights-hbar-track">
-                          <div
-                            className="insights-hbar-fill"
-                            style={{
-                              width: `${(val / overviewProviderMax) * 100}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="insights-hbar-value">
-                          {overviewUseCost
-                            ? formatCost(r.cost_usd)
-                            : formatTokens(r.tokens)}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          </div>
-
-          {data.series.length === 0 && overviewProviderTop.length === 0 && (
-            <p className="insights-panel-hint">{t("insights.empty.overview")}</p>
-          )}
-        </>
-      )}
-
-      {view === "models" && data && (
-        <>
-          <div className="insights-kpis insights-kpis-models-secondary">
-            <KpiCard
-              icon={<Layers size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.models")}
-              value={String(modelStats.modelCount)}
-            />
-            <KpiCard
-              icon={<Bot size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.agents")}
-              value={String(modelStats.agentCount || data.kpis.active_agents)}
-            />
-          </div>
-
-          <section className="insights-hbar-panel">
-            <h3 className="insights-rank-title">
-              <Cpu size={14} strokeWidth={2.25} aria-hidden />
-              {t("insights.rank.modelTop")}
-            </h3>
-            {modelBars.items.length === 0 ? (
-              <p className="insights-rank-empty">{t("insights.rank.empty")}</p>
-            ) : (
-              <ul className="insights-hbar-list">
-                {modelBars.items.map((r) => (
-                  <li key={r.name} className="insights-hbar-item">
-                    <span className="insights-hbar-label">
-                      <span className="insights-rank-kind-icon" title="llm">
-                        <ModelBrandIcon modelId={r.name} size={14} />
-                      </span>
-                      {r.name}
-                    </span>
-                    <div className="insights-hbar-track">
-                      <div
-                        className="insights-hbar-fill"
-                        style={{
-                          width: `${((r.tokens || r.calls) / modelBars.max) * 100}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="insights-hbar-value">
-                      {r.tokens > 0
-                        ? `${formatTokens(r.tokens)} · ${formatCost(r.cost_usd)}`
-                        : r.calls}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <div className="insights-ranks">
-            <RankList
-              title={t("insights.rank.provider")}
-              icon={<Building2 size={14} strokeWidth={2.25} aria-hidden />}
-              items={byProvider}
-              identityType="provider"
-              showCost
-              showTokens
-              emptyHint={t("insights.rank.empty")}
-            />
-            <RankList
-              title={t("insights.rank.model")}
-              icon={<Cpu size={14} strokeWidth={2.25} aria-hidden />}
-              items={data.rankings.by_model}
-              identityType="model"
-              showCost
-              showTokens
-              emptyHint={t("insights.rank.empty")}
-            />
-            <RankList
-              title={t("insights.rank.agent")}
-              icon={<Bot size={14} strokeWidth={2.25} aria-hidden />}
-              items={data.rankings.by_agent}
-              showCost
-              showTokens
-              emptyHint={t("insights.rank.empty")}
-            />
-          </div>
-
-          {modelsEmpty && (
-            <p className="insights-panel-hint">{t("insights.empty.modelsHint")}</p>
-          )}
-        </>
-      )}
-
-      {view === "tools" && data && (
-        <>
-          <div className="insights-kpis">
-            <KpiCard
-              icon={<Wrench size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.tools")}
-              value={String(toolCallTotal)}
-            />
-            <KpiCard
-              icon={<Puzzle size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.skills")}
-              value={String(skillCallTotal)}
-            />
-            <KpiCard
-              icon={<McpIcon size={16} />}
-              label={t("insights.kpi.mcp")}
-              value={String(mcpCallTotal)}
-            />
-            <KpiCard
-              icon={<Timer size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.cron")}
-              value={String(cronCallTotal)}
-            />
-          </div>
-
-          {data.series.length > 0 && (
-            <div className="insights-chart-wrap">
-              <div className="insights-chart-heading">
-                <div className="insights-chart-heading-label">
-                  <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
-                  <span>{t("insights.chart.toolCalls")}</span>
+        {view === "overview" && data && (
+          <>
+            {hasUnpriced && (
+              <div className="insights-unpriced" role="status">
+                <AlertTriangle size={15} strokeWidth={2.25} aria-hidden />
+                <div className="insights-unpriced-copy">
+                  <strong>{t("insights.unpriced")}</strong>
+                  <span>{t("insights.unpriced.hint")}</span>
                 </div>
               </div>
-              <div className="insights-chart" aria-label="calls trend">
-                {data.series.map((s) => (
-                  <div
-                    key={s.bucket}
-                    className="insights-bar-col"
-                    title={`${s.bucket}: ${s.calls}`}
-                  >
-                    <div className="insights-bar-plot" style={{ height: CHART_PLOT_H }}>
-                      <div
-                        className={`insights-bar${s.calls > 0 ? "" : " is-empty"}`}
-                        style={{
-                          height: barHeightPx(s.calls, toolSeriesMax),
-                        }}
-                      />
-                    </div>
-                    <span className="insights-bar-label">
-                      {formatBucketLabel(s.bucket, period, locale)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            )}
 
-          {topInvocationBars.items.length > 0 && (
+            <div className="insights-kpis insights-kpis-overview">
+              <KpiCard
+                emphasis={data.kpis.cost_usd <= 0 ? "muted" : "default"}
+                icon={<DollarSign size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.kpi.cost")}
+                value={formatCost(data.kpis.cost_usd)}
+              />
+              <KpiCard
+                emphasis="primary"
+                icon={<Coins size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.kpi.tokens")}
+                value={formatTokens(data.kpis.tokens)}
+              />
+              <KpiCard
+                icon={<Activity size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.kpi.calls")}
+                value={String(data.kpis.calls)}
+              />
+            </div>
+
+            <div className="insights-overview-grid">
+              <InsightsTrendChart
+                title={t("insights.chart.usageTrend")}
+                series={data.series}
+                metric={metric}
+                onMetricChange={setMetric}
+                maxVal={maxVal}
+                period={period}
+                locale={locale}
+                emptyMessage={t("insights.chart.empty")}
+                t={t}
+              />
+
+              <section className="insights-hbar-panel">
+                <div className="insights-rank-title-row">
+                  <h3 className="insights-rank-title">
+                    <Building2 size={14} strokeWidth={2.25} aria-hidden />
+                    {t("insights.rank.providerSpend")}
+                  </h3>
+                  <button
+                    type="button"
+                    className="insights-more-btn"
+                    onClick={() => setView("models")}
+                  >
+                    {t("insights.rank.more")}
+                  </button>
+                </div>
+                {overviewProviderTop.length === 0 ? (
+                  <p className="insights-rank-empty">
+                    {t("insights.rank.empty")}
+                  </p>
+                ) : (
+                  <ul className="insights-hbar-list">
+                    {overviewProviderTop.map((r, idx) => {
+                      const val = overviewUseCost ? r.cost_usd : r.tokens;
+                      return (
+                        <li
+                          key={r.name}
+                          className={`insights-hbar-item${idx < 3 ? ` rank-${idx + 1}` : ""}`}
+                        >
+                          <span className="insights-hbar-label">
+                            <span className="insights-hbar-rank" aria-hidden>
+                              {idx + 1}
+                            </span>
+                            <span
+                              className="insights-rank-kind-icon"
+                              title="provider"
+                            >
+                              <ProviderBrandIcon kind={r.name} size={14} />
+                            </span>
+                            {r.name}
+                          </span>
+                          <div className="insights-hbar-track">
+                            <div
+                              className="insights-hbar-fill"
+                              style={{
+                                width: `${(val / overviewProviderMax) * 100}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="insights-hbar-value">
+                            {overviewUseCost
+                              ? formatCost(r.cost_usd)
+                              : formatTokens(r.tokens)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            </div>
+
+            {data.series.length === 0 && overviewProviderTop.length === 0 && (
+              <p className="insights-panel-hint">
+                {t("insights.empty.overview")}
+              </p>
+            )}
+          </>
+        )}
+
+        {view === "models" && data && (
+          <>
+            <div className="insights-kpis insights-kpis-models-secondary">
+              <KpiCard
+                icon={<Layers size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.kpi.models")}
+                value={String(modelStats.modelCount)}
+              />
+              <KpiCard
+                icon={<Bot size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.kpi.agents")}
+                value={String(modelStats.agentCount || data.kpis.active_agents)}
+              />
+            </div>
+
             <section className="insights-hbar-panel">
               <h3 className="insights-rank-title">
-                <Layers size={14} strokeWidth={2.25} aria-hidden />
-                {t("insights.rank.kind")}
+                <Cpu size={14} strokeWidth={2.25} aria-hidden />
+                {t("insights.rank.modelTop")}
               </h3>
-              <ul className="insights-hbar-list">
-                {topInvocationBars.items.map((r) => (
-                  <li key={`${r.kind}:${r.name}`} className="insights-hbar-item">
-                    <span className="insights-hbar-label">
-                      <span className="insights-rank-kind-icon" title={r.kind}>
-                        <KindIcon kind={r.kind} />
-                      </span>
-                      {r.name}
-                    </span>
-                    <div className="insights-hbar-track">
-                      <div
-                        className="insights-hbar-fill"
-                        style={{
-                          width: `${(r.calls / topInvocationBars.max) * 100}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="insights-hbar-value">{r.calls}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <div className="insights-ranks insights-ranks-tools">
-            <RankList
-              title={t("insights.rank.tool")}
-              icon={<Wrench size={14} strokeWidth={2.25} aria-hidden />}
-              items={toolRanks}
-              emptyHint={t("insights.rank.empty")}
-            />
-            <RankList
-              title={t("insights.rank.skill")}
-              icon={<Puzzle size={14} strokeWidth={2.25} aria-hidden />}
-              items={skillRanks}
-              emptyHint={t("insights.rank.empty")}
-            />
-            <RankList
-              title={t("insights.rank.mcp")}
-              icon={<McpIcon size={14} />}
-              items={mcpRanks}
-              emptyHint={t("insights.rank.empty")}
-            />
-            <RankList
-              title={t("insights.rank.cron")}
-              icon={<Timer size={14} strokeWidth={2.25} aria-hidden />}
-              items={cronRanks}
-              emptyHint={t("insights.rank.empty")}
-            />
-          </div>
-
-          {toolCallTotal + skillCallTotal + mcpCallTotal + cronCallTotal === 0 && (
-            <p className="insights-panel-hint">{t("insights.empty.toolsHint")}</p>
-          )}
-        </>
-      )}
-
-      {view === "tracing" && traces && (
-        <>
-          <div className="insights-kpis">
-            <KpiCard
-              icon={<Activity size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.trace.kpi.traces")}
-              value={String(traces.kpis.traces)}
-            />
-            <KpiCard
-              icon={<Layers size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.trace.kpi.events")}
-              value={String(traces.kpis.events)}
-            />
-            <KpiCard
-              icon={<Cpu size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.trace.kpi.llm")}
-              value={String(traces.kpis.llm)}
-            />
-            <KpiCard
-              icon={<Wrench size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.trace.kpi.tools")}
-              value={String(traces.kpis.tools)}
-            />
-          </div>
-
-          <div className="insights-trace-layout">
-            <section className="insights-trace-list-panel">
-              <h3 className="insights-collab-section-title">
-                <Activity size={14} strokeWidth={2.25} aria-hidden />
-                {t("insights.trace.listTitle")}
-              </h3>
-              {traces.traces.length === 0 ? (
-                <div className="insights-panel-empty">
-                  <p>{t("insights.trace.listEmpty")}</p>
-                  <p className="insights-panel-hint">{t("insights.trace.emptyHint")}</p>
-                </div>
+              {modelBars.items.length === 0 ? (
+                <p className="insights-rank-empty">
+                  {t("insights.rank.empty")}
+                </p>
               ) : (
-                <ul className="insights-collab-list">
-                  {traces.traces.map((tr) => (
-                    <li key={tr.session_id}>
-                      <button
-                        type="button"
-                        className={`insights-collab-list-item${selectedTraceId === tr.session_id ? " active" : ""}`}
-                        onClick={() => setSelectedTraceId(tr.session_id)}
-                      >
-                        <span
-                          className="insights-collab-list-goal"
-                          title={tr.session_id}
-                        >
-                          {traceSessionTitle(
-                            tr.title,
-                            t("insights.trace.unnamedSession"),
-                          )}
+                <ul className="insights-hbar-list">
+                  {modelBars.items.map((r) => (
+                    <li key={r.name} className="insights-hbar-item">
+                      <span className="insights-hbar-label">
+                        <span className="insights-rank-kind-icon" title="llm">
+                          <ModelBrandIcon modelId={r.name} size={14} />
                         </span>
-                        <span className="insights-collab-list-meta">
-                          <span className="insights-collab-list-agent">{tr.agent_id}</span>
-                          <span className="insights-trace-meta-chip">
-                            {formatTraceTime(tr.started_at)} · {tr.event_count} ·{" "}
-                            {formatTokens(tr.tokens)}
-                          </span>
-                        </span>
-                        <span className="insights-trace-kinds">
-                          {tr.kinds.map((k) => (
-                            <span key={k} className={`insights-trace-kind kind-${k}`}>
-                              {k}
-                            </span>
-                          ))}
-                        </span>
-                      </button>
+                        {r.name}
+                      </span>
+                      <div className="insights-hbar-track">
+                        <div
+                          className="insights-hbar-fill"
+                          style={{
+                            width: `${((r.tokens || r.calls) / modelBars.max) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="insights-hbar-value">
+                        {r.tokens > 0
+                          ? `${formatTokens(r.tokens)} · ${formatCost(r.cost_usd)}`
+                          : r.calls}
+                      </span>
                     </li>
                   ))}
                 </ul>
               )}
             </section>
 
-            <section className="insights-trace-chain-panel">
-              <h3 className="insights-collab-section-title">
-                <GitBranch size={14} strokeWidth={2.25} aria-hidden />
-                {t("insights.trace.chainTitle")}
-              </h3>
-              {!selectedTrace ? (
-                <p className="insights-collab-hint">{t("insights.trace.noSelection")}</p>
-              ) : selectedTrace.events.length === 0 ? (
-                <p className="insights-collab-hint">{t("insights.trace.listEmpty")}</p>
-              ) : (
-                <ol className="insights-turn-groups">
-                  {turnGroups.map((g) => {
-                    const open = !!expandedTurns[g.turnKey];
-                    const label = turnGroupTitle(
-                      g.events,
-                      g.turn_id,
-                      t("insights.trace.unlabeledTurn"),
-                      t("insights.trace.turnGroup"),
-                    );
-                    const turnHint = g.turn_id
-                      ? shortTurnId(g.turn_id, t("insights.trace.unlabeledTurn"))
-                      : undefined;
-                    return (
-                      <li key={g.turnKey} className="insights-turn-group">
+            <div className="insights-ranks">
+              <RankList
+                title={t("insights.rank.provider")}
+                icon={<Building2 size={14} strokeWidth={2.25} aria-hidden />}
+                items={byProvider}
+                identityType="provider"
+                showCost
+                showTokens
+                emptyHint={t("insights.rank.empty")}
+              />
+              <RankList
+                title={t("insights.rank.model")}
+                icon={<Cpu size={14} strokeWidth={2.25} aria-hidden />}
+                items={data.rankings.by_model}
+                identityType="model"
+                showCost
+                showTokens
+                emptyHint={t("insights.rank.empty")}
+              />
+              <RankList
+                title={t("insights.rank.agent")}
+                icon={<Bot size={14} strokeWidth={2.25} aria-hidden />}
+                items={data.rankings.by_agent}
+                showCost
+                showTokens
+                emptyHint={t("insights.rank.empty")}
+              />
+            </div>
+
+            {modelsEmpty && (
+              <p className="insights-panel-hint">
+                {t("insights.empty.modelsHint")}
+              </p>
+            )}
+          </>
+        )}
+
+        {view === "tools" && data && (
+          <>
+            <div className="insights-kpis">
+              <KpiCard
+                icon={<Wrench size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.kpi.tools")}
+                value={String(toolCallTotal)}
+              />
+              <KpiCard
+                icon={<Puzzle size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.kpi.skills")}
+                value={String(skillCallTotal)}
+              />
+              <KpiCard
+                icon={<McpIcon size={16} />}
+                label={t("insights.kpi.mcp")}
+                value={String(mcpCallTotal)}
+              />
+              <KpiCard
+                icon={<Timer size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.kpi.cron")}
+                value={String(cronCallTotal)}
+              />
+            </div>
+
+            {data.series.length > 0 && (
+              <div className="insights-chart-wrap">
+                <div className="insights-chart-heading">
+                  <div className="insights-chart-heading-label">
+                    <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
+                    <span>{t("insights.chart.toolCalls")}</span>
+                  </div>
+                </div>
+                <div className="insights-chart" aria-label="calls trend">
+                  {data.series.map((s) => (
+                    <div
+                      key={s.bucket}
+                      className="insights-bar-col"
+                      title={`${s.bucket}: ${s.calls}`}
+                    >
+                      <div
+                        className="insights-bar-plot"
+                        style={{ height: CHART_PLOT_H }}
+                      >
+                        <div
+                          className={`insights-bar${s.calls > 0 ? "" : " is-empty"}`}
+                          style={{
+                            height: barHeightPx(s.calls, toolSeriesMax),
+                          }}
+                        />
+                      </div>
+                      <span className="insights-bar-label">
+                        {formatBucketLabel(s.bucket, period, locale)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {topInvocationBars.items.length > 0 && (
+              <section className="insights-hbar-panel">
+                <h3 className="insights-rank-title">
+                  <Layers size={14} strokeWidth={2.25} aria-hidden />
+                  {t("insights.rank.kind")}
+                </h3>
+                <ul className="insights-hbar-list">
+                  {topInvocationBars.items.map((r) => (
+                    <li
+                      key={`${r.kind}:${r.name}`}
+                      className="insights-hbar-item"
+                    >
+                      <span className="insights-hbar-label">
+                        <span
+                          className="insights-rank-kind-icon"
+                          title={r.kind}
+                        >
+                          <KindIcon kind={r.kind} />
+                        </span>
+                        {r.name}
+                      </span>
+                      <div className="insights-hbar-track">
+                        <div
+                          className="insights-hbar-fill"
+                          style={{
+                            width: `${(r.calls / topInvocationBars.max) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="insights-hbar-value">{r.calls}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            <div className="insights-ranks insights-ranks-tools">
+              <RankList
+                title={t("insights.rank.tool")}
+                icon={<Wrench size={14} strokeWidth={2.25} aria-hidden />}
+                items={toolRanks}
+                emptyHint={t("insights.rank.empty")}
+              />
+              <RankList
+                title={t("insights.rank.skill")}
+                icon={<Puzzle size={14} strokeWidth={2.25} aria-hidden />}
+                items={skillRanks}
+                emptyHint={t("insights.rank.empty")}
+              />
+              <RankList
+                title={t("insights.rank.mcp")}
+                icon={<McpIcon size={14} />}
+                items={mcpRanks}
+                emptyHint={t("insights.rank.empty")}
+              />
+              <RankList
+                title={t("insights.rank.cron")}
+                icon={<Timer size={14} strokeWidth={2.25} aria-hidden />}
+                items={cronRanks}
+                emptyHint={t("insights.rank.empty")}
+              />
+            </div>
+
+            {toolCallTotal + skillCallTotal + mcpCallTotal + cronCallTotal ===
+              0 && (
+              <p className="insights-panel-hint">
+                {t("insights.empty.toolsHint")}
+              </p>
+            )}
+          </>
+        )}
+
+        {view === "tracing" && traces && (
+          <>
+            <div className="insights-kpis">
+              <KpiCard
+                icon={<Activity size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.trace.kpi.traces")}
+                value={String(traces.kpis.traces)}
+              />
+              <KpiCard
+                icon={<Layers size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.trace.kpi.events")}
+                value={String(traces.kpis.events)}
+              />
+              <KpiCard
+                icon={<Cpu size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.trace.kpi.llm")}
+                value={String(traces.kpis.llm)}
+              />
+              <KpiCard
+                icon={<Wrench size={16} strokeWidth={2.25} aria-hidden />}
+                label={t("insights.trace.kpi.tools")}
+                value={String(traces.kpis.tools)}
+              />
+            </div>
+
+            <div className="insights-trace-layout">
+              <section className="insights-trace-list-panel">
+                <h3 className="insights-collab-section-title">
+                  <Activity size={14} strokeWidth={2.25} aria-hidden />
+                  {t("insights.trace.listTitle")}
+                </h3>
+                {traces.traces.length === 0 ? (
+                  <div className="insights-panel-empty">
+                    <p>{t("insights.trace.listEmpty")}</p>
+                    <p className="insights-panel-hint">
+                      {t("insights.trace.emptyHint")}
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="insights-collab-list">
+                    {traces.traces.map((tr) => (
+                      <li key={tr.session_id}>
                         <button
                           type="button"
-                          className="insights-turn-group-head"
-                          aria-expanded={open}
-                          title={turnHint ? `${label} · ${turnHint}` : label}
-                          onClick={() =>
-                            setExpandedTurns((s) => ({
-                              ...s,
-                              [g.turnKey]: !s[g.turnKey],
-                            }))
-                          }
+                          className={`insights-collab-list-item${selectedTraceId === tr.session_id ? " active" : ""}`}
+                          onClick={() => setSelectedTraceId(tr.session_id)}
                         >
-                          <span className="insights-turn-group-label">{label}</span>
-                          <span className="insights-turn-group-meta">
-                            {g.events.length} · {formatTokens(g.tokens)} tok ·{" "}
-                            {formatCost(g.cost_usd)}
+                          <span
+                            className="insights-collab-list-goal"
+                            title={tr.session_id}
+                          >
+                            {traceSessionTitle(
+                              tr.title,
+                              t("insights.trace.unnamedSession"),
+                            )}
+                          </span>
+                          <span className="insights-collab-list-meta">
+                            <span className="insights-collab-list-agent">
+                              {tr.agent_id}
+                            </span>
+                            <span className="insights-trace-meta-chip">
+                              {formatTraceTime(tr.started_at)} ·{" "}
+                              {tr.event_count} · {formatTokens(tr.tokens)}
+                            </span>
+                          </span>
+                          <span className="insights-trace-kinds">
+                            {tr.kinds.map((k) => (
+                              <span
+                                key={k}
+                                className={`insights-trace-kind kind-${k}`}
+                              >
+                                {k}
+                              </span>
+                            ))}
                           </span>
                         </button>
-                        {open && (
-                          <ol className="insights-trace-timeline insights-trace-timeline-nested">
-                            {g.events.map((ev, i) => (
-                              <TraceEventItem
-                                key={ev.id}
-                                event={ev}
-                                isLast={i === g.events.length - 1}
-                                t={t}
-                              />
-                            ))}
-                          </ol>
-                        )}
                       </li>
-                    );
-                  })}
-                </ol>
-              )}
-            </section>
-          </div>
-        </>
-      )}
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-      {view === "api" && <ApiToolsPanel />}
+              <section className="insights-trace-chain-panel">
+                <h3 className="insights-collab-section-title">
+                  <GitBranch size={14} strokeWidth={2.25} aria-hidden />
+                  {t("insights.trace.chainTitle")}
+                </h3>
+                {!selectedTrace ? (
+                  <p className="insights-collab-hint">
+                    {t("insights.trace.noSelection")}
+                  </p>
+                ) : selectedTrace.events.length === 0 ? (
+                  <p className="insights-collab-hint">
+                    {t("insights.trace.listEmpty")}
+                  </p>
+                ) : (
+                  <ol className="insights-turn-groups">
+                    {turnGroups.map((g) => {
+                      const open = !!expandedTurns[g.turnKey];
+                      const label = turnGroupTitle(
+                        g.events,
+                        g.turn_id,
+                        t("insights.trace.unlabeledTurn"),
+                        t("insights.trace.turnGroup"),
+                      );
+                      const turnHint = g.turn_id
+                        ? shortTurnId(
+                            g.turn_id,
+                            t("insights.trace.unlabeledTurn"),
+                          )
+                        : undefined;
+                      return (
+                        <li key={g.turnKey} className="insights-turn-group">
+                          <button
+                            type="button"
+                            className="insights-turn-group-head"
+                            aria-expanded={open}
+                            title={turnHint ? `${label} · ${turnHint}` : label}
+                            onClick={() =>
+                              setExpandedTurns((s) => ({
+                                ...s,
+                                [g.turnKey]: !s[g.turnKey],
+                              }))
+                            }
+                          >
+                            <span className="insights-turn-group-label">
+                              {label}
+                            </span>
+                            <span className="insights-turn-group-meta">
+                              {g.events.length} · {formatTokens(g.tokens)} tok ·{" "}
+                              {formatCost(g.cost_usd)}
+                            </span>
+                          </button>
+                          {open && (
+                            <ol className="insights-trace-timeline insights-trace-timeline-nested">
+                              {g.events.map((ev, i) => (
+                                <TraceEventItem
+                                  key={ev.id}
+                                  event={ev}
+                                  isLast={i === g.events.length - 1}
+                                  t={t}
+                                />
+                              ))}
+                            </ol>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </section>
+            </div>
+          </>
+        )}
+
+        {view === "api" && <ApiToolsPanel />}
       </div>
     </div>
   );
@@ -1289,7 +1345,14 @@ function ApiToolsPanel() {
           <Hash size={14} strokeWidth={2.25} aria-hidden />
           Token Counter (Anthropic)
         </h3>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", padding: "0.5rem 0" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.5rem",
+            alignItems: "center",
+            padding: "0.5rem 0",
+          }}
+        >
           <input
             type="text"
             value={tokenModel}
@@ -1315,7 +1378,13 @@ function ApiToolsPanel() {
           </button>
         </div>
         {tokenCount != null && (
-          <p style={{ fontSize: "0.82rem", color: "var(--ink-soft)", padding: "0.25rem 0" }}>
+          <p
+            style={{
+              fontSize: "0.82rem",
+              color: "var(--ink-soft)",
+              padding: "0.25rem 0",
+            }}
+          >
             Input tokens: <strong>{tokenCount.toLocaleString()}</strong>
           </p>
         )}
@@ -1338,22 +1407,30 @@ function ApiToolsPanel() {
           </button>
         </div>
         {batchError && (
-          <p style={{ fontSize: "0.78rem", color: "var(--danger, #ef4444)", padding: "0.25rem 0" }}>
+          <p
+            style={{
+              fontSize: "0.78rem",
+              color: "var(--danger, #ef4444)",
+              padding: "0.25rem 0",
+            }}
+          >
             {batchError}
           </p>
         )}
         {batches && (
-          <pre style={{
-            fontSize: "0.72rem",
-            color: "var(--ink-soft)",
-            maxHeight: "16rem",
-            overflow: "auto",
-            padding: "0.5rem",
-            borderRadius: 8,
-            background: "var(--surface-raised, rgba(255,255,255,0.04))",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-all",
-          }}>
+          <pre
+            style={{
+              fontSize: "0.72rem",
+              color: "var(--ink-soft)",
+              maxHeight: "16rem",
+              overflow: "auto",
+              padding: "0.5rem",
+              borderRadius: 8,
+              background: "var(--surface-raised, rgba(255,255,255,0.04))",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-all",
+            }}
+          >
             {(() => {
               try {
                 return JSON.stringify(JSON.parse(batches), null, 2);
@@ -1364,7 +1441,9 @@ function ApiToolsPanel() {
           </pre>
         )}
         {!batches && !batchError && (
-          <p className="insights-rank-empty">Click Refresh to load batch list</p>
+          <p className="insights-rank-empty">
+            Click Refresh to load batch list
+          </p>
         )}
       </section>
     </>

@@ -7,8 +7,7 @@ import {
 } from "./htmlAssetRewrite.ts";
 
 // 模拟 Tauri macOS 版 convertFileSrc：整路径 encodeURIComponent
-const fakeConvert = (p: string) =>
-  `asset://localhost/${encodeURIComponent(p)}`;
+const fakeConvert = (p: string) => `asset://localhost/${encodeURIComponent(p)}`;
 
 test("resolveAgainstDir handles same-dir, parent and decodes CJK", () => {
   const dir = "/Users/a/.astro/workspace/generated/html";

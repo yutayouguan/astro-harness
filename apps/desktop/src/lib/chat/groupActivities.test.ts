@@ -25,7 +25,10 @@ test("groups adjacent activities but keeps narrative boundaries", () => {
   assert.equal(grouped[0]?.key, "reasoning");
   assert.ok(grouped[1] && isConsecutiveActivityGroup(grouped[1]));
   if (grouped[1] && isConsecutiveActivityGroup(grouped[1])) {
-    assert.deepEqual(grouped[1].items.map((item) => item.key), ["read", "search"]);
+    assert.deepEqual(
+      grouped[1].items.map((item) => item.key),
+      ["read", "search"],
+    );
   }
   assert.equal(grouped[2]?.key, "reply");
   assert.equal(grouped[3]?.key, "run");
@@ -53,7 +56,13 @@ test("does not merge adjacent activities from different execution batches", () =
     grouped[1] &&
     isConsecutiveActivityGroup(grouped[1])
   ) {
-    assert.deepEqual(grouped[0].items.map((item) => item.key), ["read", "search"]);
-    assert.deepEqual(grouped[1].items.map((item) => item.key), ["run", "edit"]);
+    assert.deepEqual(
+      grouped[0].items.map((item) => item.key),
+      ["read", "search"],
+    );
+    assert.deepEqual(
+      grouped[1].items.map((item) => item.key),
+      ["run", "edit"],
+    );
   }
 });

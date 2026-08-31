@@ -210,22 +210,35 @@ function resolveModelBrand(modelId: string): BrandKey | null {
   if (id.includes("kimi")) return "kimi";
   if (id.includes("moonshot")) return "moonshot";
   if (id.includes("doubao")) return "doubao";
-  if (id.includes("bytedance") || id.includes("seedance") || id.includes("seedream")) return "bytedance";
+  if (
+    id.includes("bytedance") ||
+    id.includes("seedance") ||
+    id.includes("seedream")
+  )
+    return "bytedance";
   if (id.includes("hunyuan") || id.includes("tencent")) return "hunyuan";
   if (id.includes("mimo") || id.includes("xiaomi")) return "xiaomi";
   if (id.includes("volc") || id.includes("ep-")) return "volcengine";
   if (id.includes("minimax") || id.includes("minmax") || id.includes("abab")) {
     return "minimax";
   }
-  if (id.includes("llama") || id.startsWith("meta/") || id.includes("meta-llama")) return "meta";
+  if (
+    id.includes("llama") ||
+    id.startsWith("meta/") ||
+    id.includes("meta-llama")
+  )
+    return "meta";
   if (id.includes("mistral") || id.startsWith("mistralai/")) return "mistral";
-  if (id.includes("grok") || id.startsWith("x-ai/") || id.startsWith("xai/")) return "xai";
+  if (id.includes("grok") || id.startsWith("x-ai/") || id.startsWith("xai/"))
+    return "xai";
   if (id.includes("cohere") || id.startsWith("cohere/")) return "cohere";
   if (id.startsWith("groq/")) return "groq";
-  if (id.includes("perplexity") || id.startsWith("perplexity/")) return "perplexity";
+  if (id.includes("perplexity") || id.startsWith("perplexity/"))
+    return "perplexity";
   if (id.startsWith("together/")) return "together";
   if (id.startsWith("fireworks/")) return "fireworks";
-  if (id.includes("hugging") || id.startsWith("huggingface/")) return "huggingface";
+  if (id.includes("hugging") || id.startsWith("huggingface/"))
+    return "huggingface";
   if (id.includes("step-") || id.startsWith("stepfun/")) return "stepfun";
   if (id.includes("internlm") || id.includes("intern")) return "internlm";
   if (id.startsWith("01-ai/") || id.includes("/yi-")) return "yi";

@@ -15,11 +15,12 @@
 
 .bubble.assistant .msg-activity-group {
   padding: 1px 2px 8px;
-  border-bottom: 1px solid color-mix(
-    in srgb,
-    var(--tone, var(--accent)) 9%,
-    color-mix(in srgb, var(--ink) 8%, transparent)
-  );
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--tone, var(--accent)) 9%,
+      color-mix(in srgb, var(--ink) 8%, transparent)
+    );
 }
 
 .bubble.assistant .msg-activity-group-toggle {

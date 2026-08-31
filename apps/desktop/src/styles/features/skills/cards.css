@@ -16,7 +16,8 @@
   border-radius: 50%;
   pointer-events: none;
   background: color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--tone, var(--accent)) 14%, transparent);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
@@ -73,8 +74,16 @@
 }
 
 .tool-card.skill-card .tool-icon-lens {
-  background: color-mix(in srgb, var(--skill-tone, var(--tone)) 10%, transparent);
-  border-color: color-mix(in srgb, var(--skill-tone, var(--tone)) 16%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--skill-tone, var(--tone)) 10%,
+    transparent
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--skill-tone, var(--tone)) 16%,
+    transparent
+  );
 }
 
 .tool-card.skill-card .tool-icon-glyph {

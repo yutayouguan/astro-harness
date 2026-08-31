@@ -9,12 +9,15 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FolderOpen, Paperclip, Search, Settings2, Sparkles } from "lucide-react";
-import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
-  useMcpTools,
-  type McpServer,
-} from "../../hooks/providers/useMcpTools";
+  FolderOpen,
+  Paperclip,
+  Search,
+  Settings2,
+  Sparkles,
+} from "lucide-react";
+import { useClampPopover } from "../../hooks/ui/useClampPopover";
+import { useMcpTools, type McpServer } from "../../hooks/providers/useMcpTools";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { InstalledSkill } from "../../types";
 import McpIcon from "../icons/McpIcon";
@@ -125,10 +128,13 @@ export default function ComposerPlusMenu({
           role="dialog"
           aria-label={t("chat.plusMenu")}
           style={{
-            ...(style ?? positionedStyleRef.current ?? { visibility: "hidden" }),
+            ...(style ??
+              positionedStyleRef.current ?? { visibility: "hidden" }),
             transformOrigin: "left bottom",
           }}
-          initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.98 }}
+          initial={
+            reducedMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.98 }
+          }
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={
             reducedMotion
@@ -146,7 +152,9 @@ export default function ComposerPlusMenu({
           }}
         >
           <div className="composer-plus-section">
-            <div className="composer-mcp-menu-group">{t("chat.plusMenuAdd")}</div>
+            <div className="composer-mcp-menu-group">
+              {t("chat.plusMenuAdd")}
+            </div>
             <button
               type="button"
               className="composer-plus-action"
@@ -191,9 +199,13 @@ export default function ComposerPlusMenu({
           </div>
 
           <div className="composer-mcp-menu-body">
-            <div className="composer-mcp-menu-group">{t("chat.plusMenuPlugins")}</div>
+            <div className="composer-mcp-menu-group">
+              {t("chat.plusMenuPlugins")}
+            </div>
             {noPlugins ? (
-              <p className="composer-mcp-menu-empty">{t("chat.plusMenuEmpty")}</p>
+              <p className="composer-mcp-menu-empty">
+                {t("chat.plusMenuEmpty")}
+              </p>
             ) : (
               <>
                 {filteredSkills.length > 0 ? (
@@ -213,7 +225,10 @@ export default function ComposerPlusMenu({
                               onClose();
                             }}
                           >
-                            <span className="composer-mcp-menu-name" title={skill.name}>
+                            <span
+                              className="composer-mcp-menu-name"
+                              title={skill.name}
+                            >
                               {skill.name}
                             </span>
                             <span className="composer-plus-plugin-hint">
@@ -243,7 +258,10 @@ export default function ComposerPlusMenu({
                               onClose();
                             }}
                           >
-                            <span className="composer-mcp-menu-name" title={server.name}>
+                            <span
+                              className="composer-mcp-menu-name"
+                              title={server.name}
+                            >
                               {server.name}
                             </span>
                             <span className="composer-plus-plugin-hint">

@@ -5,11 +5,11 @@
  */
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-const PASSTHROUGH =
-  /^(https?:|data:|blob:|asset:|tauri:|ipc:)/i;
+const PASSTHROUGH = /^(https?:|data:|blob:|asset:|tauri:|ipc:)/i;
 
 /** 文档/工具描述中常见的占位符，不应被当成工作区文件请求。 */
-const BARE_PATH_PLACEHOLDER = /^(?:path|file_path|image_path|media_path|src|url)$/i;
+const BARE_PATH_PLACEHOLDER =
+  /^(?:path|file_path|image_path|media_path|src|url)$/i;
 
 function isBarePathPlaceholder(src: string): boolean {
   return BARE_PATH_PLACEHOLDER.test(src.trim());

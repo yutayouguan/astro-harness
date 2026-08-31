@@ -143,8 +143,13 @@ export default function ContextExplorer({
           <span className="ctx-explorer-metric-icon" aria-hidden>
             <MessageSquare size={16} strokeWidth={2} />
           </span>
-          <span className="ctx-explorer-metric-label">{t("chat.rightPanel.context")}</span>
-          <span className="ctx-explorer-metric-value ctx-explorer-session" title={sessionLabel}>
+          <span className="ctx-explorer-metric-label">
+            {t("chat.rightPanel.context")}
+          </span>
+          <span
+            className="ctx-explorer-metric-value ctx-explorer-session"
+            title={sessionLabel}
+          >
             {sessionLabel}
           </span>
         </div>
@@ -152,14 +157,20 @@ export default function ContextExplorer({
           <span className="ctx-explorer-metric-icon" aria-hidden>
             <Database size={16} strokeWidth={2} />
           </span>
-          <span className="ctx-explorer-metric-label">{t("chat.contextExplorer.contextSize")}</span>
-          <span className="ctx-explorer-metric-value">{win > 0 ? formatTokenCount(win) : "—"}</span>
+          <span className="ctx-explorer-metric-label">
+            {t("chat.contextExplorer.contextSize")}
+          </span>
+          <span className="ctx-explorer-metric-value">
+            {win > 0 ? formatTokenCount(win) : "—"}
+          </span>
         </div>
         <div className="ctx-explorer-metric">
           <span className="ctx-explorer-metric-icon" aria-hidden>
             <Coins size={16} strokeWidth={2} />
           </span>
-          <span className="ctx-explorer-metric-label">{t("chat.contextExplorer.tokensUsed")}</span>
+          <span className="ctx-explorer-metric-label">
+            {t("chat.contextExplorer.tokensUsed")}
+          </span>
           <span className="ctx-explorer-metric-value">
             {snapshot?.source === "local_estimate" ? "~" : ""}
             {formatTokenCount(used)}
@@ -176,7 +187,11 @@ export default function ContextExplorer({
           height={DONUT_SIZE}
           viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}
           role="img"
-          aria-label={win > 0 ? t("chat.contextUsageFull", { pct: String(pct) }) : t("chat.contextUsage")}
+          aria-label={
+            win > 0
+              ? t("chat.contextUsageFull", { pct: String(pct) })
+              : t("chat.contextUsage")
+          }
         >
           <g transform={`rotate(-90 ${DONUT_SIZE / 2} ${DONUT_SIZE / 2})`}>
             {arcs.map((arc) => {
@@ -216,7 +231,9 @@ export default function ContextExplorer({
         </svg>
         <div className="ctx-donut-center" aria-hidden>
           <span className="ctx-donut-pct">{pct}%</span>
-          <span className="ctx-donut-caption">{t("chat.contextExplorer.tokensUsed")}</span>
+          <span className="ctx-donut-caption">
+            {t("chat.contextExplorer.tokensUsed")}
+          </span>
         </div>
       </div>
 
@@ -258,7 +275,10 @@ export default function ContextExplorer({
             const open = isOpen(s.id);
             const SegmentIcon = SEG_ICON[s.id] ?? Layers3;
             return (
-              <li key={s.id} className={`ctx-explorer-row ${open ? "is-open" : ""}`}>
+              <li
+                key={s.id}
+                className={`ctx-explorer-row ${open ? "is-open" : ""}`}
+              >
                 <button
                   type="button"
                   className="ctx-explorer-row-btn"
@@ -294,12 +314,17 @@ export default function ContextExplorer({
                 </button>
                 {open && (
                   <div className="ctx-explorer-row-detail">
-                    {hint ? <p className="ctx-explorer-row-hint">{hint}</p> : null}
+                    {hint ? (
+                      <p className="ctx-explorer-row-hint">{hint}</p>
+                    ) : null}
                     {s.items && s.items.length > 0 ? (
                       <ul className="ctx-explorer-items">
                         {s.items.map((it) => (
                           <li key={it.id} className="ctx-explorer-item">
-                            <span className="ctx-explorer-item-label" title={it.label}>
+                            <span
+                              className="ctx-explorer-item-label"
+                              title={it.label}
+                            >
                               {it.label}
                             </span>
                             <span className="ctx-explorer-item-tokens">

@@ -26,7 +26,9 @@ function StoryCanvas({ children }: { children: ReactNode }) {
         color: "var(--color-text)",
       }}
     >
-      <div style={{ width: "min(960px, 100%)", margin: "0 auto" }}>{children}</div>
+      <div style={{ width: "min(960px, 100%)", margin: "0 auto" }}>
+        {children}
+      </div>
     </main>
   );
 }
@@ -37,18 +39,29 @@ function PrimitiveGallery() {
     <StoryCanvas>
       <h1 style={{ margin: "0 0 24px", fontSize: 26 }}>UI 原语状态矩阵</h1>
       <Surface variant="elevated" style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: "0 0 16px", fontSize: 15 }}>Button / IconButton</h2>
+        <h2 style={{ margin: "0 0 16px", fontSize: 15 }}>
+          Button / IconButton
+        </h2>
         <div style={{ display: "grid", gap: 12 }}>
           {variants.map((variant) => (
-            <div key={variant} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div
+              key={variant}
+              style={{ display: "flex", gap: 10, alignItems: "center" }}
+            >
               {sizes.map((size) => (
                 <Button key={size} variant={variant} size={size}>
                   {variant} · {size}
                 </Button>
               ))}
-              <Button variant={variant} active>Active</Button>
-              <Button variant={variant} busy>Busy</Button>
-              <Button variant={variant} disabled>Disabled</Button>
+              <Button variant={variant} active>
+                Active
+              </Button>
+              <Button variant={variant} busy>
+                Busy
+              </Button>
+              <Button variant={variant} disabled>
+                Disabled
+              </Button>
               <IconButton variant={variant} aria-label={`${variant} 通知`}>
                 <Bell size={16} aria-hidden />
               </IconButton>
@@ -83,9 +96,23 @@ function PrimitiveGallery() {
             value={tab}
             onValueChange={setTab}
             items={[
-              { value: "overview", label: "概览", icon: <Sparkles size={14} />, count: 8 },
-              { value: "files", label: "文件", icon: <Folder size={14} />, count: 24 },
-              { value: "settings", label: "设置", icon: <Settings size={14} /> },
+              {
+                value: "overview",
+                label: "概览",
+                icon: <Sparkles size={14} />,
+                count: 8,
+              },
+              {
+                value: "files",
+                label: "文件",
+                icon: <Folder size={14} />,
+                count: 24,
+              },
+              {
+                value: "settings",
+                label: "设置",
+                icon: <Settings size={14} />,
+              },
               { value: "disabled", label: "禁用", disabled: true },
             ]}
           />
@@ -111,7 +138,9 @@ function ModalStory() {
   const initialFocusRef = useRef<HTMLInputElement | null>(null);
   return (
     <StoryCanvas>
-      <Button variant="primary" onClick={() => setOpen(true)}>打开 Modal</Button>
+      <Button variant="primary" onClick={() => setOpen(true)}>
+        打开 Modal
+      </Button>
       <ModalShell
         open={open}
         onClose={() => setOpen(false)}
@@ -122,10 +151,16 @@ function ModalStory() {
         <p style={{ color: "var(--color-text-secondary)" }}>
           Escape、背景点击、焦点恢复与 Tab 焦点环均由 Overlay 原语统一处理。
         </p>
-        <input ref={initialFocusRef} aria-label="初始焦点示例" placeholder="初始焦点" />
+        <input
+          ref={initialFocusRef}
+          aria-label="初始焦点示例"
+          placeholder="初始焦点"
+        />
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <Button onClick={() => setOpen(false)}>取消</Button>
-          <Button variant="primary" onClick={() => setOpen(false)}>确认</Button>
+          <Button variant="primary" onClick={() => setOpen(false)}>
+            确认
+          </Button>
         </div>
       </ModalShell>
     </StoryCanvas>
@@ -137,7 +172,9 @@ function DrawerStory() {
   const initialFocusRef = useRef<HTMLButtonElement | null>(null);
   return (
     <StoryCanvas>
-      <Button variant="primary" onClick={() => setOpen(true)}>打开 Drawer</Button>
+      <Button variant="primary" onClick={() => setOpen(true)}>
+        打开 Drawer
+      </Button>
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
@@ -150,8 +187,12 @@ function DrawerStory() {
         aria-label="示例抽屉"
       >
         <h2 style={{ marginTop: 0 }}>Drawer</h2>
-        <p style={{ color: "var(--color-text-secondary)" }}>适用于上下文编辑和详情检查。</p>
-        <Button ref={initialFocusRef} onClick={() => setOpen(false)}>关闭</Button>
+        <p style={{ color: "var(--color-text-secondary)" }}>
+          适用于上下文编辑和详情检查。
+        </p>
+        <Button ref={initialFocusRef} onClick={() => setOpen(false)}>
+          关闭
+        </Button>
       </Drawer>
     </StoryCanvas>
   );
@@ -162,7 +203,11 @@ function PopoverStory() {
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   return (
     <StoryCanvas>
-      <Button ref={anchorRef} variant="primary" onClick={() => setOpen((value) => !value)}>
+      <Button
+        ref={anchorRef}
+        variant="primary"
+        onClick={() => setOpen((value) => !value)}
+      >
         切换 Popover
       </Button>
       <PopoverSurface
@@ -172,10 +217,14 @@ function PopoverStory() {
         aria-label="示例浮层"
       >
         <strong>PopoverSurface</strong>
-        <p style={{ margin: "8px 0 12px", color: "var(--color-text-secondary)" }}>
+        <p
+          style={{ margin: "8px 0 12px", color: "var(--color-text-secondary)" }}
+        >
           复用现有锚点定位逻辑，并在视口边界内自动翻转。
         </p>
-        <Button size="sm" onClick={() => setOpen(false)}>完成</Button>
+        <Button size="sm" onClick={() => setOpen(false)}>
+          完成
+        </Button>
       </PopoverSurface>
     </StoryCanvas>
   );

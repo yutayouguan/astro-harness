@@ -13,7 +13,10 @@ test("hides the generated short id from duplicate cron session titles", () => {
 });
 
 test("keeps normal titles and unrelated suffixes intact", () => {
-  assert.equal(visibleSessionTitle("test · 737536f4", "737536f4-rest"), "test · 737536f4");
+  assert.equal(
+    visibleSessionTitle("test · 737536f4", "737536f4-rest"),
+    "test · 737536f4",
+  );
   assert.equal(
     visibleSessionTitle("定时任务 · test · abcdef12", "737536f4-rest"),
     "定时任务 · test · abcdef12",

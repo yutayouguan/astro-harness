@@ -9,9 +9,7 @@ import {
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import {
-  sealOpenReasoning,
-} from "../../lib/chat/chatTimeline";
+import { sealOpenReasoning } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import {
   type ChatInteractionMode,
@@ -88,13 +86,17 @@ function kindFromMime(mime: string, name: string): ChatAttachmentKind {
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext)) return "image";
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext))
+    return "image";
   if (["mp4", "webm", "mov", "mkv", "avi"].includes(ext)) return "video";
   if (["mp3", "wav", "m4a", "aac", "ogg", "flac"].includes(ext)) return "audio";
   return "file";
 }
 
-function calcTokensPerSec(completionTokens: number, durationMs: number): number | undefined {
+function calcTokensPerSec(
+  completionTokens: number,
+  durationMs: number,
+): number | undefined {
   if (completionTokens <= 0 || durationMs <= 0) return undefined;
   const sec = Math.max(0.1, durationMs / 1000);
   return Math.round((completionTokens / sec) * 10) / 10;
@@ -152,13 +154,16 @@ export function useChatSession({
   });
   const [emptyMode, setEmptyMode] = useState<ChatEmptyMode>(() => {
     if (initialSessionId) return null;
-    return initialStored && !isWelcomeOnly(initialStored.messages) ? null : "chat";
+    return initialStored && !isWelcomeOnly(initialStored.messages)
+      ? null
+      : "chat";
   });
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [queuedFollowUps, setQueuedFollowUps] = useState<QueuedFollowUp[]>([]);
   const [queueKick, setQueueKick] = useState(0);
-  const [modeSwitchPrompt, setModeSwitchPrompt] = useState<ModeSwitchRequest | null>(null);
+  const [modeSwitchPrompt, setModeSwitchPrompt] =
+    useState<ModeSwitchRequest | null>(null);
   const modeSwitchArmedRef = useRef(false);
   const [streaming, setStreaming] = useState(false);
   const [turnInFlight, setTurnInFlight] = useState(false);
@@ -190,9 +195,9 @@ export function useChatSession({
   const [sessionEphemeral, setSessionEphemeral] = useState(
     () => initialEphemeral || initialStored?.ephemeral || false,
   );
-  const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<PendingInterrupt[]>(
-    () => initialStored?.pendingInterrupts ?? [],
-  );
+  const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<
+    PendingInterrupt[]
+  >(() => initialStored?.pendingInterrupts ?? []);
   const [sessionReadOnly, setSessionReadOnly] = useState(false);
   const [sessionEndReason, setSessionEndReason] = useState<string | null>(null);
   const [currentTurnId, setCurrentTurnId] = useState<string | null>(null);
@@ -214,7 +219,13 @@ export function useChatSession({
   const confirm = useConfirm();
 
   useEffect(() => {
-    if (!persistClientState || !sessionEphemeral || !sessionId || isWelcomeOnly(messages)) return;
+    if (
+      !persistClientState ||
+      !sessionEphemeral ||
+      !sessionId ||
+      isWelcomeOnly(messages)
+    )
+      return;
     saveEphemeralSessionMeta(
       sessionId,
       sideParentSessionId,
@@ -442,7 +453,9 @@ export function useChatSession({
   const writeParallelSummary = useCallback(() => {
     if (parallelTasks.length === 0) return;
     if (countRunningParallel(parallelTasks) > 0) {
-      showTransientToast(t("chat.task.summaryStillRunning"), { tone: "warning" });
+      showTransientToast(t("chat.task.summaryStillRunning"), {
+        tone: "warning",
+      });
       return;
     }
     const replyByAssistantId = new Map<string, string>();
@@ -482,8 +495,7 @@ export function useChatSession({
     modeSwitchArmedRef.current = false;
     onChatModeChangeRef.current(req.to);
     if (req.to === "agent" && req.summary) {
-      const inject =
-        `[Authorized mode switch: Plan → Agent]\n\nConfirmed plan:\n${req.summary}`;
+      const inject = `[Authorized mode switch: Plan → Agent]\n\nConfirmed plan:\n${req.summary}`;
       await sendImmediateRef.current({
         text: inject,
         interactionMode: "agent",
@@ -510,7 +522,11 @@ export function useChatSession({
   /** 当前任务忙时入队；空闲时立即发送。 */
   const send = useCallback(
     async (opts?: SendOpts) => {
-      if (streaming || turnInFlightRef.current || sessionPendingInterrupts.length > 0) {
+      if (
+        streaming ||
+        turnInFlightRef.current ||
+        sessionPendingInterrupts.length > 0
+      ) {
         const text = (opts?.text ?? input).trim();
         const pending = opts?.attachments ?? attachments;
         if (!text && pending.length === 0) return;
@@ -542,9 +558,12 @@ export function useChatSession({
           ];
         });
         if (overflow) {
-          showTransientToast(t("chat.queue.full", { max: String(MAX_QUEUED_FOLLOWUPS) }), {
-            tone: "warning",
-          });
+          showTransientToast(
+            t("chat.queue.full", { max: String(MAX_QUEUED_FOLLOWUPS) }),
+            {
+              tone: "warning",
+            },
+          );
           return;
         }
         if (opts?.text == null) setInput("");
@@ -618,24 +637,30 @@ export function useChatSession({
     t,
   ]);
 
-  const dropQueuedFollowUp = useCallback((id: string, revokePreview: boolean) => {
-    if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
-    setQueuedFollowUps((prev) => {
-      const hit = prev.find((q) => q.id === id);
-      if (hit && revokePreview) {
-        for (const a of hit.attachments) {
-          if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+  const dropQueuedFollowUp = useCallback(
+    (id: string, revokePreview: boolean) => {
+      if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
+      setQueuedFollowUps((prev) => {
+        const hit = prev.find((q) => q.id === id);
+        if (hit && revokePreview) {
+          for (const a of hit.attachments) {
+            if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+          }
         }
-      }
-      return prev.filter((q) => q.id !== id);
-    });
-    setQueueKick((k) => k + 1);
-  }, []);
+        return prev.filter((q) => q.id !== id);
+      });
+      setQueueKick((k) => k + 1);
+    },
+    [],
+  );
 
-  const removeQueuedFollowUp = useCallback((id: string) => {
-    if (steeringQueueIdsRef.current.has(id)) return;
-    dropQueuedFollowUp(id, true);
-  }, [dropQueuedFollowUp]);
+  const removeQueuedFollowUp = useCallback(
+    (id: string) => {
+      if (steeringQueueIdsRef.current.has(id)) return;
+      dropQueuedFollowUp(id, true);
+    },
+    [dropQueuedFollowUp],
+  );
 
   const updateQueuedFollowUpText = useCallback((id: string, text: string) => {
     if (steeringQueueIdsRef.current.has(id)) return;
@@ -663,65 +688,90 @@ export function useChatSession({
     setQueueKick((k) => k + 1);
   }, []);
 
-  const steerQueuedFollowUp = useCallback(async (id: string) => {
-    const item = queuedFollowUps.find((queued) => queued.id === id);
-    if (
-      !item ||
-      !sessionId ||
-      !currentTurnId ||
-      !turnInFlightRef.current ||
-      steeringQueueIdsRef.current.has(id)
-    ) return false;
-    steeringQueueIdsRef.current.add(id);
-    try {
-      const accepted = await invoke<boolean>("steer_chat", {
-        sessionId,
-        expectedTurnId: currentTurnId,
-        clientMessageId: id,
-        content: item.text,
-        attachments: item.attachments.map((a) => ({
-          name: a.name,
-          mime: a.mime,
-          kind: a.kind,
-          size: a.size,
-          dataBase64: a.dataBase64 ?? null,
-          localPath: a.localPath ?? null,
-        })),
-      });
-      if (!accepted) {
+  const steerQueuedFollowUp = useCallback(
+    async (id: string) => {
+      const item = queuedFollowUps.find((queued) => queued.id === id);
+      if (
+        !item ||
+        !sessionId ||
+        !currentTurnId ||
+        !turnInFlightRef.current ||
+        steeringQueueIdsRef.current.has(id)
+      )
+        return false;
+      steeringQueueIdsRef.current.add(id);
+      try {
+        const accepted = await invoke<boolean>("steer_chat", {
+          sessionId,
+          expectedTurnId: currentTurnId,
+          clientMessageId: id,
+          content: item.text,
+          attachments: item.attachments.map((a) => ({
+            name: a.name,
+            mime: a.mime,
+            kind: a.kind,
+            size: a.size,
+            dataBase64: a.dataBase64 ?? null,
+            localPath: a.localPath ?? null,
+          })),
+        });
+        if (!accepted) {
+          steeringQueueIdsRef.current.delete(id);
+          showTransientToast(t("chat.queue.steerUnavailable"), {
+            tone: "warning",
+          });
+          return false;
+        }
+        setQueuedFollowUps((prev) =>
+          prev.map((queued) =>
+            queued.id === id ? { ...queued, delivery: "steering" } : queued,
+          ),
+        );
+        return true;
+      } catch (error) {
         steeringQueueIdsRef.current.delete(id);
-        showTransientToast(t("chat.queue.steerUnavailable"), { tone: "warning" });
+        showTransientToast(
+          t("chat.queue.steerFailed", { error: String(error) }),
+          {
+            tone: "error",
+          },
+        );
         return false;
       }
-      setQueuedFollowUps((prev) =>
-        prev.map((queued) =>
-          queued.id === id ? { ...queued, delivery: "steering" } : queued,
-        ),
-      );
-      return true;
-    } catch (error) {
-      steeringQueueIdsRef.current.delete(id);
-      showTransientToast(t("chat.queue.steerFailed", { error: String(error) }), {
-        tone: "error",
-      });
-      return false;
-    }
-  }, [currentTurnId, queuedFollowUps, sessionId, showTransientToast, t, turnInFlightRef]);
+    },
+    [
+      currentTurnId,
+      queuedFollowUps,
+      sessionId,
+      showTransientToast,
+      t,
+      turnInFlightRef,
+    ],
+  );
 
-  const openQueuedFollowUpInNewTask = useCallback(async (id: string) => {
-    const item = queuedFollowUps.find((queued) => queued.id === id);
-    if (!item) return false;
-    const started = await startParallelTask({
-      text: item.text,
-      attachments: item.attachments,
-      clearComposer: false,
-    });
-    if (!started) return false;
-    // 附件预览 URL 已转移给独立任务气泡，不能在这里 revoke。
-    dropQueuedFollowUp(id, false);
-    showTransientToast(t("chat.queue.openedInNewTask"), { tone: "success" });
-    return true;
-  }, [dropQueuedFollowUp, queuedFollowUps, showTransientToast, startParallelTask, t]);
+  const openQueuedFollowUpInNewTask = useCallback(
+    async (id: string) => {
+      const item = queuedFollowUps.find((queued) => queued.id === id);
+      if (!item) return false;
+      const started = await startParallelTask({
+        text: item.text,
+        attachments: item.attachments,
+        clearComposer: false,
+      });
+      if (!started) return false;
+      // 附件预览 URL 已转移给独立任务气泡，不能在这里 revoke。
+      dropQueuedFollowUp(id, false);
+      showTransientToast(t("chat.queue.openedInNewTask"), { tone: "success" });
+      return true;
+    },
+    [
+      dropQueuedFollowUp,
+      queuedFollowUps,
+      showTransientToast,
+      startParallelTask,
+      t,
+    ],
+  );
 
   const closeQueuedFollowUps = useCallback(() => {
     if (queuedFollowUps.length === 0) return true;
@@ -730,13 +780,19 @@ export function useChatSession({
       return false;
     }
     if (input.trim() || attachments.length > 0) {
-      showTransientToast(t("chat.queue.closeNeedsEmptyComposer"), { tone: "warning" });
+      showTransientToast(t("chat.queue.closeNeedsEmptyComposer"), {
+        tone: "warning",
+      });
       return false;
     }
-    const restoredAttachments = queuedFollowUps.flatMap((item) => item.attachments);
+    const restoredAttachments = queuedFollowUps.flatMap(
+      (item) => item.attachments,
+    );
     if (restoredAttachments.length > MAX_ATTACHMENTS) {
       showTransientToast(
-        t("chat.queue.closeTooManyAttachments", { max: String(MAX_ATTACHMENTS) }),
+        t("chat.queue.closeTooManyAttachments", {
+          max: String(MAX_ATTACHMENTS),
+        }),
         { tone: "warning" },
       );
       return false;
@@ -757,11 +813,23 @@ export function useChatSession({
   // ── Persist session ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!persistClientState || restoringRef.current || streaming) return;
-    saveChatSession(sessionId, messages, sessionPendingInterrupts, contextUsage);
+    saveChatSession(
+      sessionId,
+      messages,
+      sessionPendingInterrupts,
+      contextUsage,
+    );
     if (sessionId && contextUsage) {
       saveContextUsageForSession(sessionId, contextUsage);
     }
-  }, [messages, sessionId, streaming, sessionPendingInterrupts, contextUsage, persistClientState]);
+  }, [
+    messages,
+    sessionId,
+    streaming,
+    sessionPendingInterrupts,
+    contextUsage,
+    persistClientState,
+  ]);
 
   useEffect(() => {
     if (!persistClientState) return;
@@ -774,10 +842,13 @@ export function useChatSession({
 
   // ── Memory pending count init ─────────────────────────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     void (async () => {
       try {
-        const rows = await invoke<{ id: string }[]>("list_pending_memory_writes");
+        const rows = await invoke<{ id: string }[]>(
+          "list_pending_memory_writes",
+        );
         setMemoryPendingCount(rows?.length ?? 0);
       } catch {
         setMemoryPendingCount(0);
@@ -787,7 +858,8 @@ export function useChatSession({
 
   // ── Skills seeded toast ───────────────────────────────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let unlisten: (() => void) | undefined;
     void listen<{ installed: string[]; failed: string[] }>(
       "default-skills-seeded",
@@ -800,14 +872,19 @@ export function useChatSession({
         );
       },
     )
-      .then((fn) => { unlisten = fn; })
+      .then((fn) => {
+        unlisten = fn;
+      })
       .catch(() => {});
-    return () => { unlisten?.(); };
+    return () => {
+      unlisten?.();
+    };
   }, [t, showTransientToast]);
 
   // ── memory-updated event ──────────────────────────────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let unlisten: (() => void) | undefined;
     void listen<{ op?: string; content?: string; new_memories?: number }>(
       "memory-updated",
@@ -820,14 +897,19 @@ export function useChatSession({
         showTransientToast(msg);
       },
     )
-      .then((fn) => { unlisten = fn; })
+      .then((fn) => {
+        unlisten = fn;
+      })
       .catch(() => {});
-    return () => { unlisten?.(); };
+    return () => {
+      unlisten?.();
+    };
   }, [t, showTransientToast, chatDisplayPrefsRef]);
 
   // ── session_event: badge + memory refresh ────────────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let unlisten: (() => void) | undefined;
     type SessionEventPayload = {
       sessionId?: string | null;
@@ -872,9 +954,13 @@ export function useChatSession({
         }
       }
     })
-      .then((fn) => { unlisten = fn; })
+      .then((fn) => {
+        unlisten = fn;
+      })
       .catch(() => {});
-    return () => { unlisten?.(); };
+    return () => {
+      unlisten?.();
+    };
   }, [sessionId, showTransientToast, t]);
 
   // ── Cleanup event listener on unmount ────────────────────────────────────
@@ -944,8 +1030,12 @@ export function useChatSession({
         })
           .then((h) => {
             setSessionEphemeral(!!h.ephemeral);
-            setSideParentSessionId(h.ephemeral ? h.parentSessionId ?? null : null);
-            setSideExcludedTurnCount(h.ephemeral ? h.excludedTurnCount ?? 0 : 0);
+            setSideParentSessionId(
+              h.ephemeral ? (h.parentSessionId ?? null) : null,
+            );
+            setSideExcludedTurnCount(
+              h.ephemeral ? (h.excludedTurnCount ?? 0) : 0,
+            );
             if (h.endReason) {
               setSessionReadOnly(true);
               setSessionEndReason(h.endReason);
@@ -971,8 +1061,12 @@ export function useChatSession({
         limit: 200,
       });
       setSessionEphemeral(!!history.ephemeral);
-      setSideParentSessionId(history.ephemeral ? history.parentSessionId ?? null : null);
-      setSideExcludedTurnCount(history.ephemeral ? history.excludedTurnCount ?? 0 : 0);
+      setSideParentSessionId(
+        history.ephemeral ? (history.parentSessionId ?? null) : null,
+      );
+      setSideExcludedTurnCount(
+        history.ephemeral ? (history.excludedTurnCount ?? 0) : 0,
+      );
       if (history.ephemeral && history.sessionId && persistClientState) {
         saveEphemeralSessionMeta(
           history.sessionId,
@@ -987,11 +1081,18 @@ export function useChatSession({
     } catch {
       // keep welcome page if backend unavailable
     }
-  }, [applyRestoredHistory, messages, sessionId, streaming, persistClientState]);
+  }, [
+    applyRestoredHistory,
+    messages,
+    sessionId,
+    streaming,
+    persistClientState,
+  ]);
 
   const discardCurrentSide = useCallback(
     async (nextSessionId?: string | null) => {
-      if (!sessionEphemeral || !sessionId || nextSessionId === sessionId) return;
+      if (!sessionEphemeral || !sessionId || nextSessionId === sessionId)
+        return;
       try {
         await invoke("discard_side_session", { sessionId });
       } catch (error) {
@@ -1059,7 +1160,13 @@ export function useChatSession({
       }).catch(() => {});
       sessionWorktreeRef.current = null;
     }
-  }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, persistClientState, setNav]);
+  }, [
+    activeAssistantIdRef,
+    clearStreamBuffers,
+    currentRunIdRef,
+    persistClientState,
+    setNav,
+  ]);
 
   /** 永久删除当前会话前：先取消流并丢弃本地监听，避免 ghost token。 */
   const prepareDeleteCurrentSession = useCallback(async () => {
@@ -1096,15 +1203,21 @@ export function useChatSession({
       return;
     }
     if (streaming) {
-      showTransientToast(t("chat.compactBlockedStreaming"), { tone: "warning" });
+      showTransientToast(t("chat.compactBlockedStreaming"), {
+        tone: "warning",
+      });
       return;
     }
     if (sessionPendingInterrupts.length > 0) {
-      showTransientToast(t("chat.compactBlockedInterrupt"), { tone: "warning" });
+      showTransientToast(t("chat.compactBlockedInterrupt"), {
+        tone: "warning",
+      });
       return;
     }
     if (!sessionId) {
-      showTransientToast(t("chat.compactFailed", { error: "no session" }), { tone: "error" });
+      showTransientToast(t("chat.compactFailed", { error: "no session" }), {
+        tone: "error",
+      });
       return;
     }
 
@@ -1112,7 +1225,11 @@ export function useChatSession({
     setIsCompacting(true);
     let splitNewId: string | null = null;
     try {
-      const res = await invoke<{ newSessionId: string; summaryPreview: string; degraded: boolean }>(
+      const res = await invoke<{
+        newSessionId: string;
+        summaryPreview: string;
+        degraded: boolean;
+      }>(
         "compact_chat_session",
         // keepTailBubbles 缺省时由后端读 compression.keep_tail_bubbles
         { sessionId, keepTailBubbles: null, focus: null },
@@ -1142,7 +1259,8 @@ export function useChatSession({
         const restored = mapHistoryMessages(history.messages ?? []);
         if (!applyRestoredHistory(res.newSessionId, restored, [], null)) {
           setMessages(restored);
-          if (persistClientState) saveChatSession(res.newSessionId, restored, []);
+          if (persistClientState)
+            saveChatSession(res.newSessionId, restored, []);
         }
         showTransientToast(
           res.degraded ? t("chat.compactDegraded") : t("chat.compactDone"),
@@ -1151,7 +1269,10 @@ export function useChatSession({
       } catch (histErr) {
         showTransientToast(
           t("chat.compactHistoryFailed", {
-            error: histErr instanceof Error ? histErr.message : String(histErr ?? "error"),
+            error:
+              histErr instanceof Error
+                ? histErr.message
+                : String(histErr ?? "error"),
           }),
           { tone: "warning" },
         );
@@ -1343,7 +1464,9 @@ export function useChatSession({
       if (userIdx < 0) return;
       const userMsg = messages[userIdx];
       // 截断到 user 消息之前，让后端正常追加（避免重复）
-      pendingKeepChatBubblesRef.current = countChatBubbles(messages.slice(0, userIdx));
+      pendingKeepChatBubblesRef.current = countChatBubbles(
+        messages.slice(0, userIdx),
+      );
       void send({
         text: userMsg.content,
         attachments: userMsg.attachments ?? [],
@@ -1408,7 +1531,9 @@ export function useChatSession({
       setSessionPendingInterrupts([]);
       const accepted = await sendImmediate({
         text: nextText,
-        attachments: (userMsg.attachments ?? []).map((attachment) => ({ ...attachment })),
+        attachments: (userMsg.attachments ?? []).map((attachment) => ({
+          ...attachment,
+        })),
         truncateTo: idx,
         skipUserAppend: false,
         reuseUserId: userMsg.id,
@@ -1465,12 +1590,25 @@ export function useChatSession({
       dispatchSessionsChanged();
       showTransientToast(t("chat.branchDone"), { tone: "success" });
     },
-    [messages, streaming, sessionId, clearStreamBuffers, persistClientState, showTransientToast, t, currentRunIdRef],
+    [
+      messages,
+      streaming,
+      sessionId,
+      clearStreamBuffers,
+      persistClientState,
+      showTransientToast,
+      t,
+      currentRunIdRef,
+    ],
   );
 
   // ── HITL UI action ────────────────────────────────────────────────────────
   const onUiAction = useCallback(
-    async (messageId: string, name: string, context: Record<string, unknown>) => {
+    async (
+      messageId: string,
+      name: string,
+      context: Record<string, unknown>,
+    ) => {
       const parallelTask = parallelTasks.find(
         (t) =>
           t.assistantMessageId === messageId &&
@@ -1482,24 +1620,31 @@ export function useChatSession({
         : sessionPendingInterrupts;
       if (!activeProvider || interrupts.length === 0) return;
 
-      const isLocationHitl = interrupts.some((p) => p.reason === "location_required");
+      const isLocationHitl = interrupts.some(
+        (p) => p.reason === "location_required",
+      );
 
       let payload: Record<string, unknown>;
       if (name === "share_location") {
-        if (typeof navigator === "undefined" || !navigator.geolocation?.getCurrentPosition) {
+        if (
+          typeof navigator === "undefined" ||
+          !navigator.geolocation?.getCurrentPosition
+        ) {
           showTransientToast(t("chat.location.geoUnavailable"), {
             tone: "error",
           });
           return;
         }
         try {
-          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 15_000,
-              maximumAge: 60_000,
-            });
-          });
+          const pos = await new Promise<GeolocationPosition>(
+            (resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 15_000,
+                maximumAge: 60_000,
+              });
+            },
+          );
           payload = {
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
@@ -1513,7 +1658,9 @@ export function useChatSession({
         const cityRaw = context.city;
         const city = typeof cityRaw === "string" ? cityRaw.trim() : "";
         if (!city) {
-          showTransientToast(t("chat.location.cityRequired"), { tone: "warning" });
+          showTransientToast(t("chat.location.cityRequired"), {
+            tone: "warning",
+          });
           return;
         }
         payload = { city };
@@ -1587,7 +1734,10 @@ export function useChatSession({
           if (m.id !== messageId) return m;
           return {
             ...m,
-            uiSurfaces: m.uiSurfaces?.map((s) => ({ ...s, status: "resolved" as const })),
+            uiSurfaces: m.uiSurfaces?.map((s) => ({
+              ...s,
+              status: "resolved" as const,
+            })),
           };
         }),
       );
@@ -1604,7 +1754,9 @@ export function useChatSession({
         await invoke("interrupt_resume", { sessionId, resumeJson });
       } catch (e) {
         setStreaming(false);
-        showTransientToast(e instanceof Error ? e.message : String(e ?? "HITL resume failed"));
+        showTransientToast(
+          e instanceof Error ? e.message : String(e ?? "HITL resume failed"),
+        );
       }
     },
     [
@@ -1627,18 +1779,17 @@ export function useChatSession({
     const sid = sessionId;
     if (sessionEphemeral && sid) {
       void discardCurrentSide(null);
-    } else if (sid && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    } else if (
+      sid &&
+      typeof window !== "undefined" &&
+      "__TAURI_INTERNALS__" in window
+    ) {
       void invoke("chat_control", { sessionId: sid, action: "new_chat" }).catch(
         (e) => console.warn("chat_control new_chat failed", e),
       );
     }
     clearLocalChatSurface();
-  }, [
-    sessionId,
-    sessionEphemeral,
-    discardCurrentSide,
-    clearLocalChatSurface,
-  ]);
+  }, [sessionId, sessionEphemeral, discardCurrentSide, clearLocalChatSurface]);
 
   const confirmIfStreaming = useCallback(async () => {
     if (!streaming && !turnInFlight) return true;
@@ -1710,8 +1861,12 @@ export function useChatSession({
           setContextUsage(usage);
         }
         setSessionEphemeral(!!hist.ephemeral);
-        setSideParentSessionId(hist.ephemeral ? hist.parentSessionId ?? null : null);
-        setSideExcludedTurnCount(hist.ephemeral ? hist.excludedTurnCount ?? 0 : 0);
+        setSideParentSessionId(
+          hist.ephemeral ? (hist.parentSessionId ?? null) : null,
+        );
+        setSideExcludedTurnCount(
+          hist.ephemeral ? (hist.excludedTurnCount ?? 0) : 0,
+        );
         if (hist.ephemeral && persistClientState) {
           saveEphemeralSessionMeta(
             resolvedSessionId,
@@ -1719,7 +1874,8 @@ export function useChatSession({
             hist.excludedTurnCount ?? 0,
           );
         }
-        const canFocus = !!messageId && restored.some((m) => m.id === messageId);
+        const canFocus =
+          !!messageId && restored.some((m) => m.id === messageId);
         setFocusMessageId(canFocus ? messageId! : null);
         setEmptyMode(null);
         setNav("chat");
@@ -1748,20 +1904,28 @@ export function useChatSession({
 
       for (const f of usable) {
         try {
-          const dto = await invoke<{ name: string; mime: string; size: number; base64: string }>(
-            "read_file_base64",
-            { path: f.path },
-          );
+          const dto = await invoke<{
+            name: string;
+            mime: string;
+            size: number;
+            base64: string;
+          }>("read_file_base64", { path: f.path });
           const kind = kindFromMime(dto.mime, dto.name);
           const shouldInline =
             (kind === "image" && dto.size <= MAX_INLINE_BYTES) ||
             (kind === "file" &&
               dto.size <= 256 * 1024 &&
               (dto.mime.startsWith("text/") ||
-                /\.(txt|md|json|csv|xml|yaml|yml|toml|rs|ts|tsx|js|py|html|css)$/i.test(dto.name)));
+                /\.(txt|md|json|csv|xml|yaml|yml|toml|rs|ts|tsx|js|py|html|css)$/i.test(
+                  dto.name,
+                )));
           let previewUrl: string | undefined;
           if (kind === "image" || kind === "video") {
-            try { previewUrl = convertFileSrc(f.path); } catch { previewUrl = undefined; }
+            try {
+              previewUrl = convertFileSrc(f.path);
+            } catch {
+              previewUrl = undefined;
+            }
           }
           converted.push({
             id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

@@ -92,7 +92,9 @@ const meta = {
   component: CronPanel,
   args: {
     active: true,
-    providers: [{ id: "openai", name: "OpenAI", model: "gpt-5.2", kind: "openai" }],
+    providers: [
+      { id: "openai", name: "OpenAI", model: "gpt-5.2", kind: "openai" },
+    ],
     activeProviderId: "openai",
     tone: "teal",
   },

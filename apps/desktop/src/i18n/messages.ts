@@ -41,7 +41,8 @@ export const zh = {
   "page.chat.title": "智能对话",
   "page.chat.sub": "与 Astro Agent 对话，自动召回记忆并调用工具",
   "page.memory.title": "记忆",
-  "page.memory.sub": "每个 Agent 一个工作区：长期 MEMORY.md、每日日记、专属 skills/",
+  "page.memory.sub":
+    "每个 Agent 一个工作区：长期 MEMORY.md、每日日记、专属 skills/",
   "page.files.title": "工作空间",
   "page.files.sub": "浏览工作区文件，或按类型查看对话产物",
   "page.skills.title": "插件",
@@ -53,7 +54,8 @@ export const zh = {
   "page.insights.title": "数据洞察",
   "page.insights.sub": "模型用量与工具调用分开展示",
   "page.loop.title": "智能流程",
-  "page.loop.sub": "用节点搭好一条自动化流程：手动运行、按定时 / Webhook 自动触发，或让 code 模式的智能体直接调用",
+  "page.loop.sub":
+    "用节点搭好一条自动化流程：手动运行、按定时 / Webhook 自动触发，或让 code 模式的智能体直接调用",
   "page.cron.title": "定时任务",
   "page.cron.sub": "按 Agent 创建与管理计划自动执行的任务",
   "insights.period.month": "月",
@@ -92,10 +94,13 @@ export const zh = {
   "insights.chart.periodTotal": "合计 {v}",
   "insights.empty": "上线后开始累计。新的工具调用与对话用量会出现在这里。",
   "insights.empty.overview": "暂无用量数据。对话与工具调用会出现在这里。",
-  "insights.empty.models": "暂无模型调用用量。对话产生的 Tokens 与费用会出现在这里。",
-  "insights.empty.modelsHint": "发起对话后，Tokens、费用与按厂商 / 模型 / Agent 的排行会出现在这里。",
+  "insights.empty.models":
+    "暂无模型调用用量。对话产生的 Tokens 与费用会出现在这里。",
+  "insights.empty.modelsHint":
+    "发起对话后，Tokens、费用与按厂商 / 模型 / Agent 的排行会出现在这里。",
   "insights.empty.tools": "暂无工具或 Skills 调用记录。",
-  "insights.empty.toolsHint": "在对话中调用工具或 Skills 后，排行与趋势会出现在这里。",
+  "insights.empty.toolsHint":
+    "在对话中调用工具或 Skills 后，排行与趋势会出现在这里。",
   "insights.unpriced": "部分模型未计价",
   "insights.unpriced.hint": "费用仅统计已配置单价的模型，Tokens 与调用不受影响",
   "insights.view.overview": "总览",
@@ -108,7 +113,8 @@ export const zh = {
   "insights.trace.chainTitle": "调用链",
   "insights.trace.listEmpty": "此筛选下暂无会话 Trace",
   "insights.trace.noSelection": "选择一条会话查看调用链",
-  "insights.trace.emptyHint": "对话产生的 llm / 工具 / Skills 事件会按 session 串成调用链。",
+  "insights.trace.emptyHint":
+    "对话产生的 llm / 工具 / Skills 事件会按 session 串成调用链。",
   "insights.trace.unnamedSession": "未命名会话",
   "insights.trace.kpi.traces": "Traces",
   "insights.trace.kpi.events": "事件",
@@ -234,7 +240,8 @@ export const zh = {
   "loop.configTab": "配置",
   "loop.logsTab": "运行日志",
   "loop.aiModelTab": "辅助模型",
-  "loop.aiModelIntro": "配置面板中带 ✨ AI 生成 按钮的字段，将使用此处选择的模型来润色或生成内容。",
+  "loop.aiModelIntro":
+    "配置面板中带 ✨ AI 生成 按钮的字段，将使用此处选择的模型来润色或生成内容。",
   "loop.aiModelCurrent": "当前使用",
   "loop.aiModelDefault": "默认模型",
   "loop.aiModelFallbackHint": "未单独配置，使用「模型服务」中的活跃供应商",
@@ -293,7 +300,8 @@ export const zh = {
   "common.close": "关闭",
 
   "aux.title": "辅助模型",
-  "aux.subtitle": "为低成本或后台任务单独选择模型；不可用时会自动回退到当前主模型。",
+  "aux.subtitle":
+    "为低成本或后台任务单独选择模型；不可用时会自动回退到当前主模型。",
   "aux.routesTitle": "任务路由",
   "aux.routesSub": "默认跟随主模型，也可以为单个任务指定已启用供应商和模型。",
   "aux.refresh": "刷新",
@@ -306,7 +314,8 @@ export const zh = {
   "aux.inherits": "继承：{provider} / {model}",
   "aux.inheritsUnknown": "继承主模型（尚未选择主模型）",
   "aux.costSameAsPrimary": "与主模型相同，后台调用也会计费",
-  "aux.backgroundReviewHint": "默认关闭；开启后每回合调用，可能产生额外费用（记忆设置中开关）",
+  "aux.backgroundReviewHint":
+    "默认关闭；开启后每回合调用，可能产生额外费用（记忆设置中开关）",
   "aux.usePrimary": "设为主模型",
   "aux.change": "更改",
   "aux.cancel": "取消",
@@ -317,7 +326,8 @@ export const zh = {
   "aux.titleGenerationDesc": "首轮回复后异步生成会话标题。",
   "aux.compaction": "上下文压缩",
   "aux.compactionDesc": "长对话压缩和摘要续聊时使用。",
-  "aux.compactionThresholdHint": "触发阈值与字符预算请在「偏好设置 → 上下文与压缩」调整。",
+  "aux.compactionThresholdHint":
+    "触发阈值与字符预算请在「偏好设置 → 上下文与压缩」调整。",
   "aux.smartApproval": "智能审批",
   "aux.smartApprovalDesc": "判断高风险操作是否需要继续询问。",
   "aux.dreaming": "入梦",
@@ -325,10 +335,12 @@ export const zh = {
   "aux.backgroundReview": "记忆审查",
   "aux.backgroundReviewDesc": "回合后审查并建议写入 MEMORY/USER。",
   "aux.workflowAiPolish": "工作流 AI 辅助",
-  "aux.workflowAiPolishDesc": "智能流程配置面板中 ✨ AI 生成/润色按钮使用的模型。",
+  "aux.workflowAiPolishDesc":
+    "智能流程配置面板中 ✨ AI 生成/润色按钮使用的模型。",
 
   "evo.title": "离线进化",
-  "evo.subtitle": "为技能/提示的离线遗传优化选择反思与评测模型（与在线辅助模型分开）。",
+  "evo.subtitle":
+    "为技能/提示的离线遗传优化选择反思与评测模型（与在线辅助模型分开）。",
   "evo.sections": "离线进化分区",
   "evo.section.setup": "配置",
   "evo.section.run": "运行",
@@ -340,7 +352,8 @@ export const zh = {
   "evo.dspyReady": "已安装",
   "evo.dspyMissing": "未安装",
   "evo.enabled": "启用离线进化",
-  "evo.enabledDesc": "总开关；开启后可用反思运行、GEPA-lite 遗传搜索与待审提案，批准前不会写入技能。",
+  "evo.enabledDesc":
+    "总开关；开启后可用反思运行、GEPA-lite 遗传搜索与待审提案，批准前不会写入技能。",
   "evo.enable": "启用",
   "evo.disable": "停用",
   "evo.on": "开",
@@ -352,19 +365,24 @@ export const zh = {
   "evo.gatesTitle": "门禁",
   "evo.gatesSub": "每个候选变体必须通过静态门禁；写入技能前始终需人工审批。",
   "evo.runTests": "运行测试",
-  "evo.runTestsDesc": "批准写入后跑 scripts/test.*；遗传搜索期间若技能含测试脚本，也会在沙箱预跑并作为 Pareto 第三维（test↑）。",
+  "evo.runTestsDesc":
+    "批准写入后跑 scripts/test.*；遗传搜索期间若技能含测试脚本，也会在沙箱预跑并作为 Pareto 第三维（test↑）。",
   "evo.requirePr": "始终人工审批",
   "evo.requirePrLocked": "不可关",
-  "evo.requirePrDesc": "产物只进待审队列，批准前不会写入技能。此为产品不变量，无法关闭。",
+  "evo.requirePrDesc":
+    "产物只进待审队列，批准前不会写入技能。此为产品不变量，无法关闭。",
   "evo.maxSkillBytes": "技能体积上限（字节）",
   "evo.maxSkillBytesDesc": "超过上限的候选被拒（默认 15360 ≈ 15KB）。",
-  "evo.phaseNote": "注：Rust 内置流水线（单轮反思 + GEPA-lite Pareto 搜索 + judge/评测集打分 + 应用内审批）。完整外部 DSPy/GEPA 为可选扩展；默认不自动改写运行时技能。",
+  "evo.phaseNote":
+    "注：Rust 内置流水线（单轮反思 + GEPA-lite Pareto 搜索 + judge/评测集打分 + 应用内审批）。完整外部 DSPy/GEPA 为可选扩展；默认不自动改写运行时技能。",
   "evo.proposalsTitle": "进化提案",
-  "evo.proposalsSub": "运行后由反思模型生成技能候选，经门禁过滤入此待审队列；批准后才写入技能，绝不自动应用。",
+  "evo.proposalsSub":
+    "运行后由反思模型生成技能候选，经门禁过滤入此待审队列；批准后才写入技能，绝不自动应用。",
   "evo.run": "运行进化",
   "evo.running": "运行中…",
   "evo.disabledHint": "请先在上方开启「启用离线进化」。",
-  "evo.runSummary": "本次生成 {generated} 条，门禁拦截 {gated} 条，judge 拒绝 {judged} 条，待审 {proposals} 条。",
+  "evo.runSummary":
+    "本次生成 {generated} 条，门禁拦截 {gated} 条，judge 拒绝 {judged} 条，待审 {proposals} 条。",
   "evo.noProposals": "暂无待审提案。",
   "evo.kindNew": "新建技能",
   "evo.kindPatch": "技能 patch",
@@ -377,7 +395,8 @@ export const zh = {
   "evo.approveMerge": "批准合并",
   "evo.approveToBranch": "批准到分支",
   "evo.minJudgeScore": "judge 最低分（0–1）",
-  "evo.minJudgeScoreDesc": "judge 模型对候选打分，低于该分丢弃；设为 0 关闭 judge 评审。",
+  "evo.minJudgeScoreDesc":
+    "judge 模型对候选打分，低于该分丢弃；设为 0 关闭 judge 评审。",
   "evo.searchRun": "遗传搜索",
   "evo.searchRunHint": "多变体 + judge 打分 + Pareto 选择，多代迭代，更慢更贵",
   "evo.focusSkill": "定向技能",
@@ -394,11 +413,14 @@ export const zh = {
   "evo.maxEvalExamplesDesc": "每个候选最多用几条评测例打分；0 = 不限",
   "evo.maxLlmCalls": "LLM 预算",
   "evo.maxLlmCallsDesc": "单次遗传搜索的模型调用上限；0 = 不限（默认 40）",
-  "evo.searchCostHint": "调用量 ≈ 目标 × 代数 × 变体（另加 judge）；受 LLM 预算硬顶约束",
+  "evo.searchCostHint":
+    "调用量 ≈ 目标 × 代数 × 变体（另加 judge）；受 LLM 预算硬顶约束",
   "evo.crossover": "交叉算子",
-  "evo.searchSummary": "遗传搜索：{gen} 代，评测 {evaluated} 个变体，Pareto 保留 {kept}，待审 {proposals}。",
+  "evo.searchSummary":
+    "遗传搜索：{gen} 代，评测 {evaluated} 个变体，Pareto 保留 {kept}，待审 {proposals}。",
   "evo.runningSearch": "搜索中…",
-  "evo.runningSearchHint": "遗传搜索进行中，可能需数分钟；可点「取消搜索」提前结束。",
+  "evo.runningSearchHint":
+    "遗传搜索进行中，可能需数分钟；可点「取消搜索」提前结束。",
   "evo.runningReflectHint": "单轮反思运行中…",
   "evo.cancelSearch": "取消搜索",
   "evo.searchProgress": "搜索进度",
@@ -413,10 +435,12 @@ export const zh = {
   "evo.holdoutUsed": "已用 holdout 验证",
   "evo.holdoutOn": "holdout 开",
   "evo.holdoutOff": "holdout 关",
-  "evo.historySearchLine": "search · 提案 {proposals} · LLM {budget}/{limit} · {holdout} · {term}",
+  "evo.historySearchLine":
+    "search · 提案 {proposals} · LLM {budget}/{limit} · {holdout} · {term}",
   "evo.evalSkillGeneric": "通用（不限技能）",
   "evo.historyTitle": "进化历史 / 可观测",
-  "evo.historySub": "运行记录、提案采纳率与分数趋势（运行/批准/拒绝/分支时累积）。",
+  "evo.historySub":
+    "运行记录、提案采纳率与分数趋势（运行/批准/拒绝/分支时累积）。",
   "evo.statRuns": "运行次数",
   "evo.statProposals": "生成提案",
   "evo.statAdoption": "采纳率",
@@ -425,7 +449,8 @@ export const zh = {
   "evo.historyEmpty": "暂无历史，先运行一次进化。",
   "evo.trend": "分数趋势",
   "evo.evalTitle": "评测集",
-  "evo.evalSub": "标注任务 + 期望要点，进化打分时对匹配技能做 grounded 客观评分（无匹配则回退泛化 judge）。",
+  "evo.evalSub":
+    "标注任务 + 期望要点，进化打分时对匹配技能做 grounded 客观评分（无匹配则回退泛化 judge）。",
   "evo.evalTaskPlaceholder": "任务 / 用户诉求",
   "evo.evalSkillPlaceholder": "关联技能 id（可留空 = 通用）",
   "evo.evalExpectPlaceholder": "期望要点，每行一条",
@@ -433,13 +458,15 @@ export const zh = {
   "evo.evalVerdictPass": "曾通过",
   "evo.evalAdd": "加入评测集",
   "evo.evalEmpty": "评测集为空。",
-  "evo.evalImportHint": "从 DecisionLog 关联的失败会话导入（工具失败 / 用户纠错），verdict 固定为「曾失败」。",
+  "evo.evalImportHint":
+    "从 DecisionLog 关联的失败会话导入（工具失败 / 用户纠错），verdict 固定为「曾失败」。",
   "evo.evalImportScan": "扫描失败会话",
   "evo.evalImportScanning": "扫描中…",
   "evo.evalImportBtn": "导入",
   "evo.evalImportFailCount": "{n} 条失败信号",
   "evo.curatorTitle": "技能策展",
-  "evo.curatorSub": "扫描闲置、体积、进化采纳与评测 Fail；只建议，不自动禁用或删除。",
+  "evo.curatorSub":
+    "扫描闲置、体积、进化采纳与评测 Fail；只建议，不自动禁用或删除。",
   "evo.curatorRun": "运行策展",
   "evo.curatorRunning": "策展中…",
   "evo.curatorEmpty": "尚未运行策展。",
@@ -449,20 +476,25 @@ export const zh = {
   "evo.curatorRewrite": "建议改写",
   "evo.curatorEvolve": "定向进化",
   "evo.curatorEnqueue": "建议入待审",
-  "evo.curatorEnqueueDesc": "运行时把 Disable/Merge 建议写入待审队列（Rewrite 不入队）",
+  "evo.curatorEnqueueDesc":
+    "运行时把 Disable/Merge 建议写入待审队列（Rewrite 不入队）",
   "evo.curatorEnqueueBtn": "将建议入队",
   "evo.curatorEnqueued": "已入队 {n}",
   "evo.curatorCfgTitle": "策展参数",
-  "evo.curatorCfgSub": "间隔提示与入队上限；默认关闭。开启不会自动删改技能，也不会默认入队。",
+  "evo.curatorCfgSub":
+    "间隔提示与入队上限；默认关闭。开启不会自动删改技能，也不会默认入队。",
   "evo.curatorCfgEnabled": "启用策展提醒",
-  "evo.curatorCfgEnabledDesc": "仅表示允许按间隔提示/报告；实际入队需在 Lab 显式操作。",
+  "evo.curatorCfgEnabledDesc":
+    "仅表示允许按间隔提示/报告；实际入队需在 Lab 显式操作。",
   "evo.curatorLlmDiagnose": "LLM 辅助诊断",
-  "evo.curatorLlmDiagnoseDesc": "运行策展时用 judge 路由为建议生成一句可操作诊断（默认关）。",
+  "evo.curatorLlmDiagnoseDesc":
+    "运行策展时用 judge 路由为建议生成一句可操作诊断（默认关）。",
   "evo.curatorInterval": "间隔（天）",
   "evo.curatorMaxEnqueue": "单次入队上限",
   "evo.curatorMaxLlm": "诊断 LLM 上限",
   "evo.curatorCfgHint": "产物始终人审；Rewrite 不入队，可跳转定向遗传搜索。",
-  "evo.curatorDueBanner": "策展已到期：{detail}。启动/对话结束会自动刷新报告（不入队）；也可在下方手动运行。",
+  "evo.curatorDueBanner":
+    "策展已到期：{detail}。启动/对话结束会自动刷新报告（不入队）；也可在下方手动运行。",
   "evo.curatorDueDefault": "建议尽快运行策展",
   "evo.curatorNotDue": "距上次策展 {days}/{interval} 天",
   "evo.curatorHealthTitle": "健康信号",
@@ -476,23 +508,28 @@ export const zh = {
   "evo.curatorAutoRefreshed": "策展报告已自动更新（{n} 条建议）",
   "evo.dismiss": "知道了",
   "evo.dspyTitle": "DSPy 优化（外部引擎）",
-  "evo.dspySub": "调用外部 Python DSPy+GEPA 优化指定技能，产物入待审提案；默认关闭，需自备 Python 依赖。",
+  "evo.dspySub":
+    "调用外部 Python DSPy+GEPA 优化指定技能，产物入待审提案；默认关闭，需自备 Python 依赖。",
   "evo.dspyStatus": "状态",
   "evo.dspySkillPlaceholder": "要优化的技能 id",
   "evo.dspySetup": "安装依赖（建 venv）",
   "evo.dspyRun": "DSPy 优化",
-  "evo.dspyNote": "需在 config.yaml 设 evolution.dspy.enabled=true，并安装 evolution-dspy 依赖；凭据复用 reflection 路由。",
+  "evo.dspyNote":
+    "需在 config.yaml 设 evolution.dspy.enabled=true，并安装 evolution-dspy 依赖；凭据复用 reflection 路由。",
   "evo.dspyMock": "mock 自测",
   "evo.dspyMockHint": "不调用真实 dspy，验证导出→子进程→提案的契约是否打通",
   "evo.autoTitle": "自动触发",
-  "evo.autoSub": "Chat 回合结束后尝试跑一次单轮反思进化；默认关闭，带冷却/日限额/最低新决策护栏；产物只入待审，绝不自动写入。",
+  "evo.autoSub":
+    "Chat 回合结束后尝试跑一次单轮反思进化；默认关闭，带冷却/日限额/最低新决策护栏；产物只入待审，绝不自动写入。",
   "evo.autoEnabled": "启用自动触发",
-  "evo.autoEnabledDesc": "需先开启上方「启用离线进化」。仅跑便宜的单轮 reflect，不跑遗传搜索或 DSPy。",
+  "evo.autoEnabledDesc":
+    "需先开启上方「启用离线进化」。仅跑便宜的单轮 reflect，不跑遗传搜索或 DSPy。",
   "evo.autoNeedMaster": "请先开启「启用离线进化」总开关。",
   "evo.autoCooldown": "冷却（秒）",
   "evo.autoMinDecisions": "最低新决策",
   "evo.autoMaxRuns": "每日上限",
-  "evo.autoCostHint": "护栏：冷却内不跑、今日达上限不跑、新决策不足不跑；失败也会记冷却，避免热重试烧钱。",
+  "evo.autoCostHint":
+    "护栏：冷却内不跑、今日达上限不跑、新决策不足不跑；失败也会记冷却，避免热重试烧钱。",
   "evo.autoStatusLine": "今日 {runs}/{max} · 新决策 {new}/{need} · {gate}",
   "evo.autoWouldRun": "护栏通过，下次 Chat Done 将运行",
   "evo.autoSkipped": "护栏未通过",
@@ -503,23 +540,29 @@ export const zh = {
   "approvals.loading": "加载中…",
   "approvals.mode.label": "审批模式",
   "approvals.allowlist.label": "命令白名单",
-  "approvals.allowlist.hint": "命中的命令自动放行。支持精确匹配或 glob（* ? [ ]）。批准弹卡时点「永久放行」也会写到这里。",
-  "approvals.allowlist.placeholder": "如：git push --force* 或 rm -rf /tmp/build",
+  "approvals.allowlist.hint":
+    "命中的命令自动放行。支持精确匹配或 glob（* ? [ ]）。批准弹卡时点「永久放行」也会写到这里。",
+  "approvals.allowlist.placeholder":
+    "如：git push --force* 或 rm -rf /tmp/build",
   "approvals.allowlist.add": "添加",
   "approvals.allowlist.empty": "白名单为空。",
   "approvals.allowlist.remove": "移除",
   "approvals.typeAllowlist.label": "同类命令规则",
-  "approvals.typeAllowlist.hint": "仅在批准卡中明确选择后生成，同时匹配程序和风险原因；删除与高风险复合命令不会提供此选项。",
+  "approvals.typeAllowlist.hint":
+    "仅在批准卡中明确选择后生成，同时匹配程序和风险原因；删除与高风险复合命令不会提供此选项。",
   "approvals.typeAllowlist.empty": "还没有同类命令规则。",
   "approvals.typeAllowlist.dynamic": "动态变量展开",
   "approvals.browser.label": "网页操作授权",
-  "approvals.browser.hint": "仅记录站点来源与操作类别；敏感操作不会被永久放行。可随时移除。",
+  "approvals.browser.hint":
+    "仅记录站点来源与操作类别；敏感操作不会被永久放行。可随时移除。",
   "approvals.browser.empty": "暂无已记忆的网页操作授权。",
   "approvals.browser.stateChanging": "允许更改网页状态",
   "approvals.hardline.label": "永久拦截（hardline）",
-  "approvals.hardline.desc": "mkfs、dd 写块设备、fork 炸弹、rm -rf / 等不可恢复操作——任何模式、任何白名单都无法放行。",
+  "approvals.hardline.desc":
+    "mkfs、dd 写块设备、fork 炸弹、rm -rf / 等不可恢复操作——任何模式、任何白名单都无法放行。",
   "approvals.audit.title": "安全审计",
-  "approvals.audit.sub": "最近的权限决策和沙箱启动记录；不显示命令正文、参数或具体路径。",
+  "approvals.audit.sub":
+    "最近的权限决策和沙箱启动记录；不显示命令正文、参数或具体路径。",
   "approvals.audit.refresh": "刷新",
   "approvals.audit.export": "导出",
   "approvals.audit.exportHint": "导出当前筛选下已加载的安全审计，最多 5000 条",
@@ -532,7 +575,8 @@ export const zh = {
   "approvals.audit.clear": "清除记录",
   "approvals.audit.clearing": "正在清除…",
   "approvals.audit.clearConfirmTitle": "清除全部安全审计？",
-  "approvals.audit.clearConfirmMessage": "这会永久删除审批和沙箱审计的当前日志及轮转归档，无法撤销。",
+  "approvals.audit.clearConfirmMessage":
+    "这会永久删除审批和沙箱审计的当前日志及轮转归档，无法撤销。",
   "approvals.audit.clearConfirmAction": "永久清除",
   "approvals.audit.cleared": "已清除 {files} 个日志文件（{size}）",
   "approvals.audit.clearError": "安全审计清除失败",
@@ -585,7 +629,8 @@ export const zh = {
   "mcpTools.addTitle": "添加 MCP 服务器",
   "mcpTools.tabJson": "粘贴 JSON",
   "mcpTools.tabForm": "填写表单",
-  "mcpTools.jsonPlaceholder": "粘贴 MCP 服务器 JSON 配置…\n例如：{\"mcpServers\":{\"my-server\":{\"command\":\"npx\",\"args\":[\"-y\",\"@my/mcp-server\"]}}}",
+  "mcpTools.jsonPlaceholder":
+    '粘贴 MCP 服务器 JSON 配置…\n例如：{"mcpServers":{"my-server":{"command":"npx","args":["-y","@my/mcp-server"]}}}',
   "mcpTools.jsonError": "JSON 格式有误，请检查后重试",
   "mcpTools.jsonImport": "导入",
   "mcpTools.formName": "名称",
@@ -643,8 +688,10 @@ export const zh = {
   "mcpTools.formNameRequired": "名称不能为空",
   "mcpTools.formCommandRequired": "命令不能为空",
   "mcpTools.formUrlRequired": "URL 不能为空",
-  "mcpTools.formTimeoutRangeError": "启动超时须为 1–120 秒，工具调用超时须为 1–3600 秒",
-  "mcpTools.formEnvVarError": "环境变量名只能包含字母、数字和下划线，且不能以数字开头",
+  "mcpTools.formTimeoutRangeError":
+    "启动超时须为 1–120 秒，工具调用超时须为 1–3600 秒",
+  "mcpTools.formEnvVarError":
+    "环境变量名只能包含字母、数字和下划线，且不能以数字开头",
   "mcpTools.cancel": "取消",
   "mcpTools.remove": "删除",
   "mcpTools.enabled": "已启用",
@@ -660,14 +707,16 @@ export const zh = {
   "mcpTools.approval.hint.auto": "根据 annotations 与当前全局审批设置判断。",
   "mcpTools.approval.hint.prompt": "每次调用都要求用户确认。",
   "mcpTools.approval.hint.writes": "明确标记为只读的工具直接调用，其余询问。",
-  "mcpTools.approval.hint.approve": "跳过 MCP 策略询问，但不会绕过沙箱和基础权限。",
+  "mcpTools.approval.hint.approve":
+    "跳过 MCP 策略询问，但不会绕过沙箱和基础权限。",
   "mcpTools.annotation.readOnly": "只读",
   "mcpTools.annotation.destructive": "可能破坏",
   "mcpTools.annotation.openWorld": "访问外部世界",
   "mcpTools.refresh": "刷新工具",
   "mcpTools.refreshing": "刷新中…",
   "mcpTools.noToolsYet": "尚未发现工具，点击刷新连接服务器",
-  "mcpTools.legacySseError": "不再支持旧版 SSE 传输。请改用服务器提供的 Streamable HTTP /mcp 地址；/sse 地址不能自动转换。",
+  "mcpTools.legacySseError":
+    "不再支持旧版 SSE 传输。请改用服务器提供的 Streamable HTTP /mcp 地址；/sse 地址不能自动转换。",
 
   "agentTools.empty": "没有匹配的工具",
   "agentTools.on": "已启用",
@@ -675,51 +724,71 @@ export const zh = {
   "agentTools.toggleAria": "{name}：{state}",
   "agentTools.params": "工具参数",
   "agentTools.webSearch.title": "网络搜索",
-  "agentTools.webSearch.desc": "搜索网页（web_search）并抓取页面内容（web_fetch，mode=text|raw）",
+  "agentTools.webSearch.desc":
+    "搜索网页（web_search）并抓取页面内容（web_fetch，mode=text|raw）",
   "agentTools.browser.title": "网页预览与操作",
-  "agentTools.browser.desc": "在隔离浏览器中打开、检查和操作网页，并同步悬浮预览",
+  "agentTools.browser.desc":
+    "在隔离浏览器中打开、检查和操作网页，并同步悬浮预览",
   "agentTools.execCommand.title": "命令执行",
-  "agentTools.execCommand.desc": "在工作区执行 Shell 命令（cwd/workdir 指定目录；yield_time_ms 控制等待；输出有长度上限）",
+  "agentTools.execCommand.desc":
+    "在工作区执行 Shell 命令（cwd/workdir 指定目录；yield_time_ms 控制等待；输出有长度上限）",
   "agentTools.applyPatch.title": "文件补丁",
-  "agentTools.applyPatch.desc": "以 diff 补丁格式新增、删除、修改文件（Freeform 工具，支持多文件批量操作）",
+  "agentTools.applyPatch.desc":
+    "以 diff 补丁格式新增、删除、修改文件（Freeform 工具，支持多文件批量操作）",
   "agentTools.codeExec.title": "代码执行",
-  "agentTools.codeExec.desc": "快速计算/数据处理用短片段（python/js）；shell 命令请用 exec_command",
+  "agentTools.codeExec.desc":
+    "快速计算/数据处理用短片段（python/js）；shell 命令请用 exec_command",
   "agentTools.imageAnalyze.title": "图像分析",
-  "agentTools.imageAnalyze.desc": "用 Google Interactions 原生接口看图（描述/检测/分割，支持多图）；OpenAI chat/completions 兜底",
+  "agentTools.imageAnalyze.desc":
+    "用 Google Interactions 原生接口看图（描述/检测/分割，支持多图）；OpenAI chat/completions 兜底",
   "agentTools.audioAnalyze.title": "音频分析",
-  "agentTools.audioAnalyze.desc": "Google Interactions 原生听音/转写（含 YouTube）；OpenAI 分路径 Chat 描述与 Whisper 转写",
+  "agentTools.audioAnalyze.desc":
+    "Google Interactions 原生听音/转写（含 YouTube）；OpenAI 分路径 Chat 描述与 Whisper 转写",
   "agentTools.robotics.title": "机器人",
-  "agentTools.robotics.desc": "用 Google Robotics-ER 原生 generateContent 做空间指点/检测/轨迹与任务规划（非通用视觉，非多 Agent 编排）",
+  "agentTools.robotics.desc":
+    "用 Google Robotics-ER 原生 generateContent 做空间指点/检测/轨迹与任务规划（非通用视觉，非多 Agent 编排）",
   "agentTools.imageGen.title": "图像生成",
-  "agentTools.imageGen.desc": "Gemini Interactions 出图；prompt 须含主体/构图/光影/风格等详细描述；用户要 16:9/2K 等须传 aspect_ratio、image_size；备用 OpenAI",
+  "agentTools.imageGen.desc":
+    "Gemini Interactions 出图；prompt 须含主体/构图/光影/风格等详细描述；用户要 16:9/2K 等须传 aspect_ratio、image_size；备用 OpenAI",
   "agentTools.videoGen.title": "视频生成",
-  "agentTools.videoGen.desc": "Google Veo 原生生成；prompt 须含镜头/动作/场景/风格等详细描述；建议 image_gen 首尾帧，续拍用 extend_video",
+  "agentTools.videoGen.desc":
+    "Google Veo 原生生成；prompt 须含镜头/动作/场景/风格等详细描述；建议 image_gen 首尾帧，续拍用 extend_video",
   "agentTools.videoAnalyze.title": "视频分析",
-  "agentTools.videoAnalyze.desc": "Google Gemini 原生：本地/链接/YouTube 视频问答与时间线（Interactions；支持 MM:SS）",
+  "agentTools.videoAnalyze.desc":
+    "Google Gemini 原生：本地/链接/YouTube 视频问答与时间线（Interactions；支持 MM:SS）",
   "agentTools.speechGen.title": "语音生成",
   "agentTools.speechGen.desc": "文本转语音（优先 Gemini TTS，备用 OpenAI）",
   "agentTools.musicGen.title": "音乐生成",
-  "agentTools.musicGen.desc": "Google Lyria 3 原生生成（Interactions）；clip/pro，可选歌词/参考图；写入 generated/audio",
+  "agentTools.musicGen.desc":
+    "Google Lyria 3 原生生成（Interactions）；clip/pro，可选歌词/参考图；写入 generated/audio",
   "agentTools.skills.title": "技能",
-  "agentTools.skills.desc": "列出、加载、策展建议、创建/patch/更新/删除可复用技能",
+  "agentTools.skills.desc":
+    "列出、加载、策展建议、创建/patch/更新/删除可复用技能",
   "agentTools.memory.title": "记忆",
   "agentTools.memory.desc": "存储并召回持久知识",
   "agentTools.contextSearch.title": "上下文检索",
-  "agentTools.contextSearch.desc": "按需检索会话历史、记忆与知识库（scope=session|memory|knowledge|all）",
+  "agentTools.contextSearch.desc":
+    "按需检索会话历史、记忆与知识库（scope=session|memory|knowledge|all）",
   "agentTools.pinContext.title": "钉住上下文",
-  "agentTools.pinContext.desc": "将关键片段钉入 system prompt 持续生效（action=pin|list|unpin|clear）",
+  "agentTools.pinContext.desc":
+    "将关键片段钉入 system prompt 持续生效（action=pin|list|unpin|clear）",
   "agentTools.askUser.title": "向用户提问 / 确认 / 定位",
-  "agentTools.askUser.desc": "需求不清时提问，敏感操作前请求批准，本地查询前请求定位",
+  "agentTools.askUser.desc":
+    "需求不清时提问，敏感操作前请求批准，本地查询前请求定位",
   "agentTools.sendUserMessageAsync.title": "异步用户消息",
-  "agentTools.sendUserMessageAsync.desc": "在回合继续运行时发送进度更新或阻塞问题",
+  "agentTools.sendUserMessageAsync.desc":
+    "在回合继续运行时发送进度更新或阻塞问题",
   "agentTools.switchMode.title": "请求切换模式",
   "agentTools.switchMode.desc": "在 Agent 与 Plan 之间请求切换，需用户授权确认",
   "agentTools.present.title": "信息卡片",
-  "agentTools.present.desc": "在对话中展示只读信息卡（ui/callout/metrics/result），不打断流程",
+  "agentTools.present.desc":
+    "在对话中展示只读信息卡（ui/callout/metrics/result），不打断流程",
   "agentTools.subagents.title": "Agent Threads",
-  "agentTools.subagents.desc": "创建并列出 Agent Thread，排队消息、触发追问、等待活动或中断当前回合",
+  "agentTools.subagents.desc":
+    "创建并列出 Agent Thread，排队消息、触发追问、等待活动或中断当前回合",
   "agentTools.cron.title": "计划任务",
-  "agentTools.cron.desc": "创建和管理定时任务（cron：add/list/remove/enable/disable）",
+  "agentTools.cron.desc":
+    "创建和管理定时任务（cron：add/list/remove/enable/disable）",
   "subagents.title": "Subagents",
   "subagents.subtitle": "当前会话启动的 Agent Threads",
   "subagents.refresh": "刷新",
@@ -767,7 +836,7 @@ export const zh = {
   "status.unknownError": "未知错误",
   "status.emptyResponse": "模型没有返回内容，请重试或更换模型。",
 
-  "welcome":
+  welcome:
     "你好，我是 Astro Agent。\n在下方输入消息开始对话；左侧可切换记忆与工作区。",
 
   "chat.placeholder": "输入消息，Enter 发送",
@@ -794,7 +863,8 @@ export const zh = {
   "chat.queue.steerFailed": "调整方向失败：{error}",
   "chat.queue.openedInNewTask": "已在新任务中开始执行",
   "chat.queue.closeNeedsEmptyComposer": "请先清空当前输入，再关闭排队",
-  "chat.queue.closeTooManyAttachments": "排队附件超过输入框上限（最多 {max} 个）",
+  "chat.queue.closeTooManyAttachments":
+    "排队附件超过输入框上限（最多 {max} 个）",
   "chat.queue.closed": "排队内容已恢复到输入框",
   "chat.modeSwitch.title": "计划已就绪，是否开始执行？",
   "chat.modeSwitch.execute": "执行计划",
@@ -811,7 +881,8 @@ export const zh = {
   "chat.approval.desc.fullAccess": "移除文件与网络沙箱，不再请求批准",
   "chat.approval.recommended": "推荐",
   "chat.approval.fullAccessConfirmTitle": "启用完全访问？",
-  "chat.approval.fullAccessConfirmMessage": "这将移除文件系统与网络沙箱，后续操作不再请求批准。系统永久拦截规则仍然生效。",
+  "chat.approval.fullAccessConfirmMessage":
+    "这将移除文件系统与网络沙箱，后续操作不再请求批准。系统永久拦截规则仍然生效。",
   "chat.approval.enableFullAccess": "启用完全访问",
   "chat.approval.updateFailed": "审批权限更新失败：{error}",
   "chat.approval.sandboxAvailable": "macOS Seatbelt · 已启用",
@@ -840,7 +911,8 @@ export const zh = {
   "chat.a2ui.approvalRequired": "需要批准",
   "chat.a2ui.approvalCommand": "待执行命令",
   "chat.a2ui.sandboxRetryTitle": "在沙箱外重试",
-  "chat.a2ui.sandboxRetryDescription": "沙箱拒绝了这次工具调用。是否仅对这一次授予完整的本地文件系统访问权限？网络权限保持不变，此授权不会保存。",
+  "chat.a2ui.sandboxRetryDescription":
+    "沙箱拒绝了这次工具调用。是否仅对这一次授予完整的本地文件系统访问权限？网络权限保持不变，此授权不会保存。",
   "chat.a2ui.sandboxRetryDetail": "沙箱拒绝详情",
   "chat.a2ui.approvalOnce": "仅本次批准",
   "chat.a2ui.approvalOnceHint": "只运行这一次",
@@ -1102,10 +1174,13 @@ export const zh = {
   "chat.slashProviders": "打开模型供应商",
   "chat.slashSettings": "打开偏好设置",
   "chat.slashContext": "打开上下文面板",
-  "chat.slashHelpInsert": "可用命令：/new · /clear · /help · /undo · /retry · /stop · /status · /usage · /model · /verbose · /reasoning · /mode · /tools · /skills · /mcp · /memory · /insights · /providers · /settings · /context；也可 /技能名。用 @ 提及 Agent / 技能 / MCP。",
+  "chat.slashHelpInsert":
+    "可用命令：/new · /clear · /help · /undo · /retry · /stop · /status · /usage · /model · /verbose · /reasoning · /mode · /tools · /skills · /mcp · /memory · /insights · /providers · /settings · /context；也可 /技能名。用 @ 提及 Agent / 技能 / MCP。",
   "chat.slashUnknown": "未知命令：/{cmd}。输入 /help 查看列表。",
-  "chat.slashStatusMsg": "会话 {session} · {provider} / {model} · 模式 {mode} · 思考 {thinking} · 详细度 {verbosity} · 上下文约 {ctx}%",
-  "chat.slashUsageMsg": "本轮用量：合计 {total} · 输入 {prompt} · 输出 {completion}",
+  "chat.slashStatusMsg":
+    "会话 {session} · {provider} / {model} · 模式 {mode} · 思考 {thinking} · 详细度 {verbosity} · 上下文约 {ctx}%",
+  "chat.slashUsageMsg":
+    "本轮用量：合计 {total} · 输入 {prompt} · 输出 {completion}",
   "chat.slashUsageEmpty": "尚无 Token 用量数据",
   "chat.slashModelMsg": "当前模型：{provider} / {model}",
   "chat.slashVerboseMsg": "对话详细程度：{level}",
@@ -1121,7 +1196,8 @@ export const zh = {
   "chat.mentionGroupSkills": "Skills",
   "chat.mentionGroupMcp": "MCP",
   "chat.mentionAgentSwitched": "已切换到 Agent「{name}」",
-  "chat.mentionAgentSwitchedLater": "已切换默认 Agent「{name}」。当前会话仍用原 Agent，输入 /new 后生效。",
+  "chat.mentionAgentSwitchedLater":
+    "已切换默认 Agent「{name}」。当前会话仍用原 Agent，输入 /new 后生效。",
   "chat.mentionMcpEnabled": "已启用 MCP：{names}（新会话会刷新工具列表）",
   "chat.skillLoaded": "已加载技能：{names}",
   "chat.paletteEmpty": "无匹配项",
@@ -1160,7 +1236,8 @@ export const zh = {
   "chat.contextSeg.recall": "动态召回",
   "chat.contextSeg.subagent": "子 Agent 返回",
   "chat.contextSeg.conversation": "会话消息",
-  "chat.contextExplorer.blurb": "按提示层估算本轮上下文占用，便于在压缩前查看空间剩余。",
+  "chat.contextExplorer.blurb":
+    "按提示层估算本轮上下文占用，便于在压缩前查看空间剩余。",
   "chat.contextExplorer.expandAll": "展开全部",
   "chat.contextExplorer.collapseAll": "收起全部",
   "chat.contextExplorer.contextSize": "上下文窗口",
@@ -1170,13 +1247,15 @@ export const zh = {
   "chat.contextExplorer.hint.developer": "交互模式等运行时策略。",
   "chat.contextExplorer.hint.userContext": "项目指令、Hook 注入与时间上下文。",
   "chat.contextExplorer.hint.tools": "内置工具定义与 schema。",
-  "chat.contextExplorer.hint.agents": "Agent Thread 生命周期工具与 persona_create 定义。",
+  "chat.contextExplorer.hint.agents":
+    "Agent Thread 生命周期工具与 persona_create 定义。",
   "chat.contextExplorer.hint.mcp": "已启用的 MCP 与动态工具描述。",
   "chat.contextExplorer.hint.memory": "长期记忆、画像与相关注入。",
   "chat.contextExplorer.hint.skills": "本轮可用的 Skill 索引。",
   "chat.contextExplorer.hint.recall": "检索/召回片段。",
   "chat.contextExplorer.hint.subagent": "子 Agent 返回写入会话的结果。",
-  "chat.contextExplorer.hint.conversation": "用户、助手与普通工具结果构成的会话历史。",
+  "chat.contextExplorer.hint.conversation":
+    "用户、助手与普通工具结果构成的会话历史。",
   "chat.reasoningEffort": "推理强度",
   "chat.effortHigh": "High",
   "chat.effortMax": "Max",
@@ -1186,7 +1265,8 @@ export const zh = {
   "modelEdit.title": "模型选项",
   "modelEdit.close": "关闭",
   "modelEdit.auto": "Auto",
-  "modelEdit.autoHint": "按任务自动选择合适模型（含图片、长短文、推理/编码等）。关闭 Auto 可手动指定。",
+  "modelEdit.autoHint":
+    "按任务自动选择合适模型（含图片、长短文、推理/编码等）。关闭 Auto 可手动指定。",
   "modelEdit.maxMode": "MAX Mode",
   "modelEdit.thinking": "Thinking",
   "modelEdit.fast": "Fast",
@@ -1220,7 +1300,8 @@ export const zh = {
   "chat.placeholderWithAttach": "可继续补充说明，Enter 发送",
   "chat.dropFilesHint": "松开以添加附件",
   "chat.attachmentUnsupported": "当前模型不支持此类附件，已跳过 {{n}} 个",
-  "chat.estimateCost": "估费 {{cost}}（按输入约 {{in}} + 输出约 {{out}} token）",
+  "chat.estimateCost":
+    "估费 {{cost}}（按输入约 {{in}} + 输出约 {{out}} token）",
   "chat.estimateCostShort": "估费 {{cost}}",
   "chat.estimateCostTurn": "本轮估费",
   "chat.expand": "展开对话",
@@ -1242,42 +1323,56 @@ export const zh = {
 
   "chat.card.intro.title": "快速了解 Astro",
   "chat.card.intro.desc": "带我全面了解 Astro",
-  "chat.card.intro.prompt": "请结合「我的工作或使用场景」，介绍 Astro 能帮我完成什么，并从「最想了解的能力」开始给出上手步骤。",
+  "chat.card.intro.prompt":
+    "请结合「我的工作或使用场景」，介绍 Astro 能帮我完成什么，并从「最想了解的能力」开始给出上手步骤。",
   "chat.card.skills.title": "Skill 使用",
   "chat.card.skills.desc": "帮我安装个性化 Skill",
-  "chat.card.skills.prompt": "帮我找到并安装一个适合「使用场景」的 Skill，我希望它能「具体目标」。",
+  "chat.card.skills.prompt":
+    "帮我找到并安装一个适合「使用场景」的 Skill，我希望它能「具体目标」。",
   "chat.card.files.title": "文件处理",
   "chat.card.files.desc": "帮我生成工作日报",
-  "chat.card.files.prompt": "请根据「文件或资料」生成一份「文档类型」，重点包含「需要体现的内容」。",
+  "chat.card.files.prompt":
+    "请根据「文件或资料」生成一份「文档类型」，重点包含「需要体现的内容」。",
   "chat.card.data.title": "数据分析",
   "chat.card.data.desc": "帮我分析一份数据",
-  "chat.card.data.prompt": "请分析「数据来源或文件」，重点回答「分析目标」，并以「期望的输出形式」呈现。",
+  "chat.card.data.prompt":
+    "请分析「数据来源或文件」，重点回答「分析目标」，并以「期望的输出形式」呈现。",
   "chat.card.image.title": "图片创作",
   "chat.card.image.desc": "帮我生成一张图片",
-  "chat.card.image.prompt": "请生成一张「画面主体」的图片，视觉风格为「风格」，画幅为「尺寸或比例」。",
+  "chat.card.image.prompt":
+    "请生成一张「画面主体」的图片，视觉风格为「风格」，画幅为「尺寸或比例」。",
   "chat.card.music.title": "音乐创作",
   "chat.card.music.desc": "帮我生成一段音乐",
-  "chat.card.music.prompt": "请创作一段用于「使用场景」的「音乐风格」音乐，情绪为「氛围情绪」，时长约「时长」。",
+  "chat.card.music.prompt":
+    "请创作一段用于「使用场景」的「音乐风格」音乐，情绪为「氛围情绪」，时长约「时长」。",
   "chat.card.video.title": "视频制作",
   "chat.card.video.desc": "帮我生成一段视频",
-  "chat.card.video.prompt": "请生成一段关于「画面内容」的短视频，风格为「视觉风格」，时长约「时长」。",
+  "chat.card.video.prompt":
+    "请生成一段关于「画面内容」的短视频，风格为「视觉风格」，时长约「时长」。",
   "chat.card.web.title": "网页浏览",
   "chat.card.web.desc": "帮我搜索最新资讯",
-  "chat.card.web.prompt": "请浏览和检索「网站或主题」，关注「想了解的问题」，并整理成「输出形式」。",
+  "chat.card.web.prompt":
+    "请浏览和检索「网站或主题」，关注「想了解的问题」，并整理成「输出形式」。",
   "chat.card.code.title": "代码助手",
   "chat.card.code.desc": "帮我写一段代码",
-  "chat.card.code.prompt": "请用「编程语言或框架」实现「需要的功能」，并满足「关键要求或限制」。",
+  "chat.card.code.prompt":
+    "请用「编程语言或框架」实现「需要的功能」，并满足「关键要求或限制」。",
   "chat.card.writing.title": "写作助手",
   "chat.card.writing.desc": "帮我撰写一篇文章",
-  "chat.card.writing.prompt": "请为「目标读者」撰写一篇关于「文章主题」的「文章类型」，语气为「风格语气」。",
+  "chat.card.writing.prompt":
+    "请为「目标读者」撰写一篇关于「文章主题」的「文章类型」，语气为「风格语气」。",
   "chat.card.search.title": "智能搜索",
   "chat.card.search.desc": "帮我深度检索信息",
-  "chat.card.search.prompt": "请深度检索「研究主题」，重点回答「核心问题」，优先参考「时间或来源范围」。",
+  "chat.card.search.prompt":
+    "请深度检索「研究主题」，重点回答「核心问题」，优先参考「时间或来源范围」。",
   "chat.card.translate.title": "翻译助手",
   "chat.card.translate.desc": "帮我翻译一段内容",
-  "chat.card.translate.prompt": "请将「待翻译内容」翻译成「目标语言」，语气为「语气或场景」，并保持专业术语准确。",
-  "chat.welcomeTemplateNeedRequired": "请先填写模板中的高亮空位，Tab 可切换到下一格。",
-  "chat.welcomeTemplateComposerAria": "示例任务模板，点击高亮空位填写，Tab 切换",
+  "chat.card.translate.prompt":
+    "请将「待翻译内容」翻译成「目标语言」，语气为「语气或场景」，并保持专业术语准确。",
+  "chat.welcomeTemplateNeedRequired":
+    "请先填写模板中的高亮空位，Tab 可切换到下一格。",
+  "chat.welcomeTemplateComposerAria":
+    "示例任务模板，点击高亮空位填写，Tab 切换",
 
   "chat.agentGuideEyebrow": "新建 Agent",
   "chat.agentGuideTitle": "开始创建 Agent",
@@ -1290,11 +1385,13 @@ export const zh = {
   "chat.agentGuideCancel": "取消创建",
   "chat.agentGuideSkip": "取消创建，直接聊天",
   "chat.agentGuideComposerAria": "创建 Agent 模板，点击高亮处填空，Tab 切换",
-  "chat.agentCreateNeedRequired": "请先填写「名称」和「做什么」；其余选填，未填不会发给模型。",
+  "chat.agentCreateNeedRequired":
+    "请先填写「名称」和「做什么」；其余选填，未填不会发给模型。",
   "chat.agentCreateHint":
     "请调用 persona_create 工具创建持久 Agent，并根据用户填写的背景、风格、职责与偏好完成配置。",
   "chat.agentIconsTitle": "外观（可选）",
-  "chat.agentIconsSub": "头像用于对话主视觉；Emoji 是小号 Lucide。点右侧入口在抽屉中选择。",
+  "chat.agentIconsSub":
+    "头像用于对话主视觉；Emoji 是小号 Lucide。点右侧入口在抽屉中选择。",
   "chat.agentCoversTitle": "头像",
   "chat.agentCoversSub": "对话与列表优先展示",
   "chat.agentAvatarDrawerTitle": "选择头像",
@@ -1342,7 +1439,8 @@ export const zh = {
   "chat.rightPanel.preview": "预览",
   "chat.rightPanel.branches": "分支",
   "chat.branches.title": "分支管理",
-  "chat.branches.summary": "{branches} 分支 · {sides} Side · {turns} 回合 · {agents} Agent",
+  "chat.branches.summary":
+    "{branches} 分支 · {sides} Side · {turns} 回合 · {agents} Agent",
   "chat.branches.toggleAgents": "显示或隐藏子 Agent",
   "chat.branches.refresh": "刷新分支图",
   "chat.branches.fullscreen": "全屏查看",
@@ -1362,9 +1460,11 @@ export const zh = {
   "chat.branches.openSession": "打开会话",
   "chat.branches.branchHere": "从此回合分支",
   "chat.branches.branchBefore": "在此轮前分支",
-  "chat.branches.branchBeforeHint": "这一轮不进新分支，原输入回填到输入框供改写重发",
+  "chat.branches.branchBeforeHint":
+    "这一轮不进新分支，原输入回填到输入框供改写重发",
   "chat.branches.startSide": "临时 Side",
-  "chat.branches.sideHint": "继承模型上下文，但 UI 从空白边界开始；离开后自动丢弃",
+  "chat.branches.sideHint":
+    "继承模型上下文，但 UI 从空白边界开始；离开后自动丢弃",
   "chat.side.banner": "临时 Side",
   "chat.side.hiddenTurns": "继承的 {count} 个回合已对 UI 隐藏，模型仍可使用",
   "chat.side.exit": "返回主线并丢弃",
@@ -1501,7 +1601,8 @@ export const zh = {
   "chat.compactAlreadyRunning": "压实进行中",
   "chat.recommendCompact": "上下文接近上限，建议执行 /compact 压实会话",
   "chat.sessionCompactedBadge": "已压实",
-  "chat.sessionCompactedReadOnly": "该会话已压实，仅可回看；请在侧栏打开续聊会话继续对话",
+  "chat.sessionCompactedReadOnly":
+    "该会话已压实，仅可回看；请在侧栏打开续聊会话继续对话",
   "chat.sessionEndedReadOnly": "该会话已结束，无法继续发送",
   "chat.activity.kind.tool": "工具",
   "chat.activity.kind.skill": "技能",
@@ -1575,10 +1676,13 @@ export const zh = {
   "memory.view.longterm": "长期记忆",
   "memory.view.pending": "审批",
   "memory.pending.refresh": "刷新",
-  "memory.pending.hint": "开启写入审批后，工具/入梦/回顾写入会先进此队列；批准后才写入 MEMORY/USER。",
+  "memory.pending.hint":
+    "开启写入审批后，工具/入梦/回顾写入会先进此队列；批准后才写入 MEMORY/USER。",
   "memory.pending.emptyTitle": "暂无待审批写入",
-  "memory.pending.emptyHint": "打开上方「写入审批」开关后，相关写入会出现在这里。",
-  "memory.pending.emptyHintOn": "已开启写入审批；当工具、入梦或回顾产生写入时会出现在这里。",
+  "memory.pending.emptyHint":
+    "打开上方「写入审批」开关后，相关写入会出现在这里。",
+  "memory.pending.emptyHintOn":
+    "已开启写入审批；当工具、入梦或回顾产生写入时会出现在这里。",
   "memory.pending.approve": "批准",
   "memory.pending.reject": "拒绝",
   "memory.pending.approved": "已批准并写入",
@@ -1589,13 +1693,15 @@ export const zh = {
   "memory.settings.writeApprovalOn": "已开启写入审批",
   "memory.settings.writeApprovalOff": "已关闭写入审批",
   "memory.settings.backgroundReview": "回合后回顾",
-  "memory.settings.backgroundReviewDesc": "每轮对话结束后用辅助模型整理记忆（可能产生费用）",
+  "memory.settings.backgroundReviewDesc":
+    "每轮对话结束后用辅助模型整理记忆（可能产生费用）",
   "memory.settings.backgroundReviewOn": "已开启回合后回顾",
   "memory.settings.backgroundReviewOff": "已关闭回合后回顾",
   "memory.toast.updated": "记忆已更新",
   "memory.toast.pending": "有待审批的记忆写入",
   "memory.settings.autoRefresh": "自动刷新对话记忆",
-  "memory.settings.autoRefreshDesc": "收到 live 记忆更新后刷新当前会话 frozen snapshot",
+  "memory.settings.autoRefreshDesc":
+    "收到 live 记忆更新后刷新当前会话 frozen snapshot",
   "memory.settings.autoRefreshOn": "已开启自动刷新对话记忆",
   "memory.settings.autoRefreshOff": "已关闭自动刷新对话记忆",
   "memory.refresh.intoChat": "刷新进对话",
@@ -1615,7 +1721,8 @@ export const zh = {
   "memory.pickExpertForDiaryAll": "日历已汇总全部专家的日记",
   "memory.pickExpertForMemory": "请选择一位专家，查看其长期记忆",
   "memory.pickExpertHint": "在顶部选择一位专家后即可开始",
-  "memory.pickExpertHintDiaryAll": "在顶部选择专家，或点击有圆点的日期跳转到对应日记",
+  "memory.pickExpertHintDiaryAll":
+    "在顶部选择专家，或点击有圆点的日期跳转到对应日记",
   "memory.diaryEmpty": "你的专家还没灵感写日记哦～ 去聊两句，给 TA 点灵感吧",
   "memory.diaryEmptyTitle": "你的专家还没灵感写日记哦～",
   "memory.diaryEmptySub": "去聊两句，给 TA 点灵感吧",
@@ -1731,7 +1838,8 @@ export const zh = {
   "filespace.missing": "文件已不存在",
   "filespace.unsupportedHint": "此文件无法在应用内预览，可用系统应用打开。",
   "filespace.saving": "保存中…",
-  "filespace.boardComingSoon": "画板即将推出：可在此浏览生成的图 / 视频 / 音频与 HTML 预览。",
+  "filespace.boardComingSoon":
+    "画板即将推出：可在此浏览生成的图 / 视频 / 音频与 HTML 预览。",
   "media.loadError": "无法预览此媒体",
   "media.fileNotFound": "文件尚未生成或已被删除",
   "media.htmlPreview": "HTML 预览",
@@ -1788,8 +1896,10 @@ export const zh = {
   "filespace.batch.selected": "已选 {n}",
   "filespace.batch.clear": "取消选择",
   "filespace.confirm.trashTitle": "移到废纸篓",
-  "filespace.confirm.trashOne": "确定将「{name}」移到废纸篓？可从系统废纸篓恢复。",
-  "filespace.confirm.trashMany": "确定将 {n} 个文件移到废纸篓？可从系统废纸篓恢复。",
+  "filespace.confirm.trashOne":
+    "确定将「{name}」移到废纸篓？可从系统废纸篓恢复。",
+  "filespace.confirm.trashMany":
+    "确定将 {n} 个文件移到废纸篓？可从系统废纸篓恢复。",
   "filespace.confirm.cancel": "取消",
   "filespace.confirm.ok": "移到废纸篓",
   "filespace.toast.openLimit": "一次最多打开 {n} 个文件",
@@ -1845,12 +1955,14 @@ export const zh = {
   "prefs.colorStyle.unifiedDesc": "全局固定氛围色，可选手动渐变",
   "prefs.colorStyle.dynamic": "灵动",
   "prefs.colorStyle.dynamicDesc": "每个页面独特配色，刷新保持不变",
-  "prefs.colorStyle.dynamicHint": "配色由本机种子决定；换页面会变色，刷新后仍稳定",
+  "prefs.colorStyle.dynamicHint":
+    "配色由本机种子决定；换页面会变色，刷新后仍稳定",
   "prefs.colorStyle.reshuffle": "重新生成配色",
   "prefs.colorStyle.presets": "统一色预设",
   "prefs.colorStyle.custom": "自定义渐变",
   "prefs.colorStyle.editorTitle": "自定义渐变",
-  "prefs.colorStyle.editorSub": "拖动色点调整位置，可用 + / − 增减颜色；光晕大小与透明度由系统按色点数自动调节，确认后保存",
+  "prefs.colorStyle.editorSub":
+    "拖动色点调整位置，可用 + / − 增减颜色；光晕大小与透明度由系统按色点数自动调节，确认后保存",
   "prefs.colorStyle.primaryStop": "主色点",
   "prefs.colorStyle.secondaryStop": "辅色点",
   "prefs.colorStyle.colorStop": "色点 {index}",
@@ -1871,8 +1983,10 @@ export const zh = {
   "prefs.colorStyle.preset.forest": "森林",
 
   "prefs.appIcon.title": "应用图标",
-  "prefs.appIcon.sub": "切换托盘、程序坞与窗口图标，选择保存在本机并在启动时应用",
-  "prefs.appIcon.finderNote": "注：已安装应用在访达 / 任务栏的图标为安装包内置，不随此设置更改；仅影响托盘、macOS 程序坞与 Windows/Linux 窗口图标。",
+  "prefs.appIcon.sub":
+    "切换托盘、程序坞与窗口图标，选择保存在本机并在启动时应用",
+  "prefs.appIcon.finderNote":
+    "注：已安装应用在访达 / 任务栏的图标为安装包内置，不随此设置更改；仅影响托盘、macOS 程序坞与 Windows/Linux 窗口图标。",
   "prefs.appIcon.blue": "蓝色",
   "prefs.appIcon.deepBlue": "深蓝",
   "prefs.appIcon.black": "黑色",
@@ -1896,7 +2010,8 @@ export const zh = {
   "prefs.lang.enDesc": "English interface",
 
   "prefs.chat.title": "聊天面板显示",
-  "prefs.chat.sub": "控制对话区的详细程度，以及工具 / Skills / MCP / Hook 等过程信息",
+  "prefs.chat.sub":
+    "控制对话区的详细程度，以及工具 / Skills / MCP / Hook 等过程信息",
   "prefs.chat.layout.title": "AI 回答布局",
   "prefs.chat.layout.sub": "选择思考、工具与正文的组织方式，切换后立即生效",
   "prefs.chat.layout.timeline": "时间线",
@@ -1927,11 +2042,14 @@ export const zh = {
   "prefs.chat.showTimestampsDesc": "在消息与过程卡片上显示时间",
 
   "prefs.context.title": "上下文与压缩",
-  "prefs.context.sub": "配置 Run 内 Soft/Medium/Hard、mid-run 与建议 /compact 等卫生参数",
-  "prefs.context.viewHint": "占用分层查看在聊天右栏「上下文」；此处只调整触发阈值与预算。",
+  "prefs.context.sub":
+    "配置 Run 内 Soft/Medium/Hard、mid-run 与建议 /compact 等卫生参数",
+  "prefs.context.viewHint":
+    "占用分层查看在聊天右栏「上下文」；此处只调整触发阈值与预算。",
   "prefs.context.loading": "正在加载压缩设置…",
   "prefs.context.enabled": "启用自动上下文维护",
-  "prefs.context.enabledDesc": "关闭后仍可手动 /compact；不再自动 prune / 摘要 / mid-run",
+  "prefs.context.enabledDesc":
+    "关闭后仍可手动 /compact；不再自动 prune / 摘要 / mid-run",
   "prefs.context.stages": "阶段触发比例（相对上下文窗口）",
   "prefs.context.soft": "Soft",
   "prefs.context.softDesc": "轻压；开始 prune 较长 tool 结果",
@@ -1948,7 +2066,8 @@ export const zh = {
   "prefs.context.tailChars": "保留尾部",
   "prefs.context.triggers": "触发与保护",
   "prefs.context.toolResultsLimit": "工具条数兜底",
-  "prefs.context.toolResultsLimitDesc": "未压缩 tool 达此数也触发 Soft 级维护；0 关闭",
+  "prefs.context.toolResultsLimitDesc":
+    "未压缩 tool 达此数也触发 Soft 级维护；0 关闭",
   "prefs.context.midRun": "Mid-run 摘要",
   "prefs.context.midRunDesc": "占用达此比例时折叠中间轮次（不拆会话）",
   "prefs.context.recommend": "建议 /compact",
@@ -2047,13 +2166,15 @@ export const zh = {
   "plugins.scopeSub.global": "当前 Agent 可用 {count} / {total} 个个人 Skill",
   "plugins.scopeSub.builtin": "Astro 随应用提供的 {total} 个只读 Skill",
   "plugins.scopeSub.project": "当前项目包含 {count} / {total} 个 Skill",
-  "plugins.scopeEmpty.global": "暂无个人 Skill，可从在线商店安装或导入本机 Skill",
+  "plugins.scopeEmpty.global":
+    "暂无个人 Skill，可从在线商店安装或导入本机 Skill",
   "plugins.scopeEmpty.builtin": "当前版本没有内置 Skill",
   "plugins.scopeEmpty.project": "当前项目暂无 Skill，可在 .astro/skills 中添加",
   "plugins.mcpEmpty.global.title": "暂无个人 MCP Server",
   "plugins.mcpEmpty.global.hint": "添加后仅当前用户可用，并作用于你的所有项目",
   "plugins.mcpEmpty.builtin.title": "公开 MCP 目录暂时为空",
-  "plugins.mcpEmpty.builtin.hint": "公开目录接入后，可按分类浏览并安装经过整理的 MCP Server",
+  "plugins.mcpEmpty.builtin.hint":
+    "公开目录接入后，可按分类浏览并安装经过整理的 MCP Server",
   "plugins.mcpEmpty.project.title": "暂无项目级 MCP Server",
   "plugins.mcpEmpty.project.hint": "添加后将写入当前项目的 .astro/config.toml",
   "skills.mainTabs": "技能视图",
@@ -2095,7 +2216,8 @@ export const zh = {
   "skills.noOriginHint": "此技能无安装来源记录，无法自动更新",
   "skills.updateOverwriteHint": "更新前会检查本地修改，可选择备份后继续",
   "skills.updateLocalChangesTitle": "检测到本地修改",
-  "skills.updateLocalChangesBody": "此技能在本地有未同步的改动。更新会覆盖本地文件。",
+  "skills.updateLocalChangesBody":
+    "此技能在本地有未同步的改动。更新会覆盖本地文件。",
   "skills.updateBackupAndContinue": "备份并更新",
   "skills.updateOverwriteOnly": "直接覆盖",
   "skills.updateCancel": "取消",
@@ -2106,7 +2228,8 @@ export const zh = {
   "skills.backupOpen": "打开",
   "skills.storeAll": "全部",
   "skills.installedTitle": "已安装",
-  "skills.installedSub": "已启用 {count} / 共 {total} 个技能（~/.astro/skills 与当前 Agent 工作区）",
+  "skills.installedSub":
+    "已启用 {count} / 共 {total} 个技能（~/.astro/skills 与当前 Agent 工作区）",
   "skills.installedEmpty": "暂未发现 Astro 技能，安装后会显示在这里",
   "skills.installedSearchEmpty": "未找到匹配的已安装技能",
   "skills.machineTitle": "本机安装",
@@ -2166,10 +2289,12 @@ export const zh = {
   "skills.installing": "安装中…",
   "skills.installDone": "「{name}」已安装",
   "skills.installDoneTarget": "「{name}」已安装到{target}",
-  "skills.installDoneNeedsKey": "「{name}」已安装到{target}，使用前还需配置 API Key",
+  "skills.installDoneNeedsKey":
+    "「{name}」已安装到{target}，使用前还需配置 API Key",
   "skills.installTargetKicker": "选择安装位置",
   "skills.installTargetHint": "Skill 将直接写入所选作用域的 .astro/skills 目录",
-  "skills.installAgentTargetHint": "Agent 将调用 Astro 内置安装器，不会运行外部 CLI 或写入其它 Skills 目录",
+  "skills.installAgentTargetHint":
+    "Agent 将调用 Astro 内置安装器，不会运行外部 CLI 或写入其它 Skills 目录",
   "skills.installTargetLabel": "安装目标",
   "skills.installTarget.personal": "安装到个人",
   "skills.installTarget.personalDesc": "仅当前用户可用，可在你的所有项目中调用",
@@ -2177,10 +2302,13 @@ export const zh = {
   "skills.installTarget.projectDesc": "随项目配置共享，仅在当前项目中生效",
   "skills.installToTarget": "安装到{target}",
   "skills.installViaAgentToTarget": "让 Agent 安装到{target}",
-  "skills.apiKeyInstallNotice": "此 Skill 可以先安装，但使用前还需配置 API Key；密钥不会写入 Skill 或项目文件。",
+  "skills.apiKeyInstallNotice":
+    "此 Skill 可以先安装，但使用前还需配置 API Key；密钥不会写入 Skill 或项目文件。",
   "skills.apiKeySetupKicker": "已安装 · 待配置",
-  "skills.apiKeySetupBody": "Skill 已安装到{target}。先检查其说明，确认准确的凭据名称和申请方式。",
-  "skills.apiKeySafetyHint": "不要在聊天中粘贴 API Key。Agent 只会检查配置说明，不会读取或保存密钥。",
+  "skills.apiKeySetupBody":
+    "Skill 已安装到{target}。先检查其说明，确认准确的凭据名称和申请方式。",
+  "skills.apiKeySafetyHint":
+    "不要在聊天中粘贴 API Key。Agent 只会检查配置说明，不会读取或保存密钥。",
   "skills.apiKeySetupLater": "稍后配置",
   "skills.apiKeyInspectWithAgent": "让 Agent 检查配置",
   "skills.alreadyInstalled": "已安装",
@@ -2288,7 +2416,8 @@ export const zh = {
   "providers.musicModel": "音乐生成模型",
   "providers.visionModel": "视觉模型",
   "providers.mediaDefaultOption": "最新自动（{model}）",
-  "providers.mediaHint": "留空则自动使用最新模型；保存后对 Agent 媒体工具生效。",
+  "providers.mediaHint":
+    "留空则自动使用最新模型；保存后对 Agent 媒体工具生效。",
   "providers.tabVoice": "语音",
   "providers.voiceHint": "配置语音合成 (TTS) 和语音识别 (ASR) 模型。",
   "providers.asrModel": "语音识别模型 (ASR)",
@@ -2296,9 +2425,11 @@ export const zh = {
   "providers.tabEmbedding": "嵌入",
   "providers.embeddingHint": "配置用于 RAG 和语义搜索的嵌入模型。",
   "providers.embeddingModel": "嵌入模型",
-  "providers.embeddingModelHint": "用于向量化文本的模型，留空则使用供应商默认。",
+  "providers.embeddingModelHint":
+    "用于向量化文本的模型，留空则使用供应商默认。",
   "providers.apiKey": "API Key",
-  "providers.apiKeyHint": "优先读取系统环境变量；也可保存到系统密钥链（不会写入配置文件）",
+  "providers.apiKeyHint":
+    "优先读取系统环境变量；也可保存到系统密钥链（不会写入配置文件）",
   "providers.apiKeyPlaceholder": "输入新的 API Key…",
   "providers.apiKeyConfigured": "已配置密钥（点击可更换）",
   "providers.apiKeySaved": "已保存密钥",
@@ -2352,7 +2483,8 @@ export const zh = {
   "providers.expiration": "下线日期",
   "providers.expiring": "将弃用",
   "providers.expiringConfirmTitle": "选用将弃用的模型？",
-  "providers.expiringConfirmMessage": "该模型已标注下线日期，之后可能不可用。确认继续选用？",
+  "providers.expiringConfirmMessage":
+    "该模型已标注下线日期，之后可能不可用。确认继续选用？",
   "providers.expiringConfirmOk": "仍要选用",
   "providers.pricePerM": "单价（$/百万 token）",
   "providers.created": "收录日期",
@@ -2427,11 +2559,14 @@ export const zh = {
   "cron.quick.title": "从模板开始",
   "cron.quick.hint": "选择后仍可修改内容和频率",
   "cron.quick.followup.title": "跟进监控",
-  "cron.quick.followup.task": "检查我正在跟进的重要事项，如果出现新进展、阻塞或需要我处理的变化，给我一份简短更新。",
+  "cron.quick.followup.task":
+    "检查我正在跟进的重要事项，如果出现新进展、阻塞或需要我处理的变化，给我一份简短更新。",
   "cron.quick.weekly.title": "每周回顾",
-  "cron.quick.weekly.task": "回顾我本周的工作，并起草一份简短的状态更新，分为完成、待收口和风险。",
+  "cron.quick.weekly.task":
+    "回顾我本周的工作，并起草一份简短的状态更新，分为完成、待收口和风险。",
   "cron.quick.brief.title": "每日简报",
-  "cron.quick.brief.task": "给我一份晨间简报，包含我的日程安排、重要未读邮件，以及今天需要我关注的事项。",
+  "cron.quick.brief.task":
+    "给我一份晨间简报，包含我的日程安排、重要未读邮件，以及今天需要我关注的事项。",
   "cron.create": "新建任务",
   "cron.createFromTemplate": "从模板创建",
   "cron.empty": "暂无定时任务",
@@ -2439,34 +2574,44 @@ export const zh = {
   "cron.templates.title": "自动化任务模板",
   "cron.tpl.news.title": "每日 AI 新闻推送",
   "cron.tpl.news.desc": "关注当天 AI 领域的重要动态",
-  "cron.tpl.news.task": "请搜索并汇总今天 AI 领域最重要的 3-5 条新闻，包括大模型发布、重要论文、行业动态等。用简洁的中文摘要呈现，每条附上关键要点。",
+  "cron.tpl.news.task":
+    "请搜索并汇总今天 AI 领域最重要的 3-5 条新闻，包括大模型发布、重要论文、行业动态等。用简洁的中文摘要呈现，每条附上关键要点。",
   "cron.tpl.words.title": "每日 5 个英语单词",
   "cron.tpl.words.desc": "每天推荐 5 个高频实用英语单词",
-  "cron.tpl.words.task": "请推荐 5 个高频实用英语单词，包含音标、中文释义、例句和记忆技巧。难度适中，适合日常和职场使用。",
+  "cron.tpl.words.task":
+    "请推荐 5 个高频实用英语单词，包含音标、中文释义、例句和记忆技巧。难度适中，适合日常和职场使用。",
   "cron.tpl.story.title": "每日儿童睡前故事",
   "cron.tpl.story.desc": "生成 3-5 分钟可读的温和睡前故事",
-  "cron.tpl.story.task": "请为 4-8 岁的孩子生成一个原创睡前故事，约 500 字，主题温馨正面，语言生动易懂，结尾安宁祥和。",
+  "cron.tpl.story.task":
+    "请为 4-8 岁的孩子生成一个原创睡前故事，约 500 字，主题温馨正面，语言生动易懂，结尾安宁祥和。",
   "cron.tpl.weekly.title": "每周工作周报",
   "cron.tpl.weekly.desc": "每周五汇总仓库 PR 与 Issue 进展",
-  "cron.tpl.weekly.task": "请帮我生成本周工作周报模板：列出本周完成的主要工作、遇到的问题、下周计划。用 Markdown 格式输出。",
+  "cron.tpl.weekly.task":
+    "请帮我生成本周工作周报模板：列出本周完成的主要工作、遇到的问题、下周计划。用 Markdown 格式输出。",
   "cron.tpl.movie.title": "经典电影推荐",
   "cron.tpl.movie.desc": "推荐一部高分经典电影",
-  "cron.tpl.movie.task": "请推荐一部经典高分电影，包含：电影名称、年份、导演、豆瓣/IMDb 评分、剧情简介（不剧透）、推荐理由。每次推荐不同的电影。",
+  "cron.tpl.movie.task":
+    "请推荐一部经典高分电影，包含：电影名称、年份、导演、豆瓣/IMDb 评分、剧情简介（不剧透）、推荐理由。每次推荐不同的电影。",
   "cron.tpl.history.title": "历史上的今天",
   "cron.tpl.history.desc": "从科技、文化等领域挑选历史事件",
-  "cron.tpl.history.task": "请介绍今天在历史上发生的 2-3 件有趣或重要的事件，涵盖科技、文化、体育等不同领域。每件事用 2-3 句话简述，附上年份。",
+  "cron.tpl.history.task":
+    "请介绍今天在历史上发生的 2-3 件有趣或重要的事件，涵盖科技、文化、体育等不同领域。每件事用 2-3 句话简述，附上年份。",
   "cron.tpl.family.title": "父母联系提醒",
   "cron.tpl.family.desc": "每周日提醒你给家人打电话",
-  "cron.tpl.family.task": "提醒：今天是周日，记得给爸妈打个电话或发个消息，聊聊近况。可以问问他们身体状况、最近在忙什么、有没有什么需要帮忙的。",
+  "cron.tpl.family.task":
+    "提醒：今天是周日，记得给爸妈打个电话或发个消息，聊聊近况。可以问问他们身体状况、最近在忙什么、有没有什么需要帮忙的。",
   "cron.tpl.health.title": "健康日报",
   "cron.tpl.health.desc": "每天提醒你关注健康与运动",
-  "cron.tpl.health.task": "每日健康提醒：1) 今天喝够 8 杯水了吗？2) 起身活动一下，做 5 分钟拉伸 3) 注意用眼休息，远眺 20 秒 4) 今天有安排运动吗？建议至少 30 分钟有氧运动。",
+  "cron.tpl.health.task":
+    "每日健康提醒：1) 今天喝够 8 杯水了吗？2) 起身活动一下，做 5 分钟拉伸 3) 注意用眼休息，远眺 20 秒 4) 今天有安排运动吗？建议至少 30 分钟有氧运动。",
   "cron.tpl.meeting.title": "会议前准备",
   "cron.tpl.meeting.desc": "工作日每天早上提醒你整理议题",
-  "cron.tpl.meeting.task": "会议准备提醒：你有一个即将开始的会议。请提前准备：1) 回顾会议议程 2) 整理需要汇报的进展 3) 准备需要讨论的问题 4) 确认所需材料已就绪。",
+  "cron.tpl.meeting.task":
+    "会议准备提醒：你有一个即将开始的会议。请提前准备：1) 回顾会议议程 2) 整理需要汇报的进展 3) 准备需要讨论的问题 4) 确认所需材料已就绪。",
   "cron.tpl.interview.title": "面试准备提醒",
   "cron.tpl.interview.desc": "工作日每 2 小时复习大模型面试要点",
-  "cron.tpl.interview.task": "每两小时提醒我复习关于大模型的项目亮点、技术难点、常见问答，并生成 3 个模拟面试问题。",
+  "cron.tpl.interview.task":
+    "每两小时提醒我复习关于大模型的项目亮点、技术难点、常见问答，并生成 3 个模拟面试问题。",
   "cron.error": "加载失败",
   "cron.dialog.title": "新建定时任务",
   "cron.field.nl": "自然语言",
@@ -2481,7 +2626,8 @@ export const zh = {
   "cron.field.model": "执行大模型",
   "cron.field.provider": "模型提供商",
   "cron.field.showInChat": "在聊天中显示",
-  "cron.field.showInChatHint": "开启后，每次执行会创建会话，并在顶部显示任务卡片",
+  "cron.field.showInChatHint":
+    "开启后，每次执行会创建会话，并在顶部显示任务卡片",
   "cron.advanced": "高级设置",
   "cron.tab.jobs": "任务列表",
   "cron.tab.history": "历史任务",
@@ -2518,7 +2664,8 @@ export const zh = {
   "cron.agent.default": "默认 Agent",
   "cron.delete": "删除",
   "cron.remove": "删除任务",
-  "cron.removeConfirm": "确定删除该定时任务？任务定义将移除，已有执行记录仍保留。",
+  "cron.removeConfirm":
+    "确定删除该定时任务？任务定义将移除，已有执行记录仍保留。",
   "cron.more": "更多操作",
   "cron.runNow": "立即执行",
   "cron.edit": "编辑",
@@ -2576,19 +2723,24 @@ export const en: Record<MessageKey, string> = {
   "page.chat.title": "Chat",
   "page.chat.sub": "Talk with Astro Agent — memory recall and tools included",
   "page.memory.title": "Memory",
-  "page.memory.sub": "One workspace per Agent: long-term MEMORY.md, daily diary, agent skills/",
+  "page.memory.sub":
+    "One workspace per Agent: long-term MEMORY.md, daily diary, agent skills/",
   "page.files.title": "Workspace",
-  "page.files.sub": "Browse workspace files, or view conversation artifacts by type",
+  "page.files.sub":
+    "Browse workspace files, or view conversation artifacts by type",
   "page.skills.title": "Plugins",
-  "page.skills.sub": "Manage Skills and MCP across personal, built-in, and project scopes",
+  "page.skills.sub":
+    "Manage Skills and MCP across personal, built-in, and project scopes",
   "page.tools.title": "Tools",
   "page.tools.sub": "Enable or disable tools and MCP per Agent",
   "page.evolution.title": "Evolve",
-  "page.evolution.sub": "GEPA-lite genetic search, skill optimization & curation",
+  "page.evolution.sub":
+    "GEPA-lite genetic search, skill optimization & curation",
   "page.insights.title": "Data Insights",
   "page.insights.sub": "Model usage and tool calls in separate tabs",
   "page.loop.title": "Flows",
-  "page.loop.sub": "Build automated flows with nodes: run manually, on schedule / webhook, or let AI agents invoke directly",
+  "page.loop.sub":
+    "Build automated flows with nodes: run manually, on schedule / webhook, or let AI agents invoke directly",
   "page.cron.title": "Scheduled Tasks",
   "page.cron.sub": "Create and manage scheduled tasks per Agent",
   "insights.period.month": "Month",
@@ -2623,16 +2775,23 @@ export const en: Record<MessageKey, string> = {
   "insights.chart.toolCalls": "Call trend",
   "insights.chart.usageTrend": "Usage trend",
   "insights.chart.empty": "No trend data this period",
-  "insights.chart.sparse": "Usage is low this period; bar heights are scaled for readability",
+  "insights.chart.sparse":
+    "Usage is low this period; bar heights are scaled for readability",
   "insights.chart.periodTotal": "Total {v}",
-  "insights.empty": "Counting starts after this update. New tool calls and chat usage will appear here.",
-  "insights.empty.overview": "No usage yet. Chat and tool calls will show up here.",
-  "insights.empty.models": "No model usage yet. Tokens and cost from chat will appear here.",
-  "insights.empty.modelsHint": "After chatting, tokens, cost, and rankings by provider / model / agent appear here.",
+  "insights.empty":
+    "Counting starts after this update. New tool calls and chat usage will appear here.",
+  "insights.empty.overview":
+    "No usage yet. Chat and tool calls will show up here.",
+  "insights.empty.models":
+    "No model usage yet. Tokens and cost from chat will appear here.",
+  "insights.empty.modelsHint":
+    "After chatting, tokens, cost, and rankings by provider / model / agent appear here.",
   "insights.empty.tools": "No tool or skill call records yet.",
-  "insights.empty.toolsHint": "After tools or skills run in chat, rankings and trends show up here.",
+  "insights.empty.toolsHint":
+    "After tools or skills run in chat, rankings and trends show up here.",
   "insights.unpriced": "Some models are unpriced",
-  "insights.unpriced.hint": "Cost only includes models with prices; tokens and calls are unaffected",
+  "insights.unpriced.hint":
+    "Cost only includes models with prices; tokens and calls are unaffected",
   "insights.view.overview": "Overview",
   "insights.view.usage": "Usage",
   "insights.view.models": "Model usage",
@@ -2643,7 +2802,8 @@ export const en: Record<MessageKey, string> = {
   "insights.trace.chainTitle": "Call chain",
   "insights.trace.listEmpty": "No session traces for this filter",
   "insights.trace.noSelection": "Select a session to view its call chain",
-  "insights.trace.emptyHint": "LLM / tool / skill events from chat are chained by session.",
+  "insights.trace.emptyHint":
+    "LLM / tool / skill events from chat are chained by session.",
   "insights.trace.unnamedSession": "Unnamed session",
   "insights.trace.kpi.traces": "Traces",
   "insights.trace.kpi.events": "Events",
@@ -2667,7 +2827,8 @@ export const en: Record<MessageKey, string> = {
   "insights.trace.detail.noData": "No data recorded",
   "insights.allAgents": "All Agents",
   "skills.agentHint": "Skill enablement is saved per Agent",
-  "tools.agentHint": "Tool toggles are per Agent; MCP is stored in .astro/config.toml",
+  "tools.agentHint":
+    "Tool toggles are per Agent; MCP is stored in .astro/config.toml",
   "cron.agentHint": "Only shows scheduled tasks for the selected Agent",
   "tools.searchPlaceholder": "Search tools…",
   "cron.searchPlaceholder": "Search scheduled tasks…",
@@ -2681,12 +2842,13 @@ export const en: Record<MessageKey, string> = {
   "loop.defaultName": "Untitled Flow",
   "loop.run": "Run once",
   "loop.running": "Running…",
-  "loop.runQueryFailed": "Failed to query run history, please check the database",
+  "loop.runQueryFailed":
+    "Failed to query run history, please check the database",
   "loop.edit": "Edit",
   "loop.export": "Export",
   "loop.delete": "Delete",
   "loop.deleteTitle": "Delete workflow",
-  "loop.deleteConfirm": "Delete \"{name}\"? This cannot be undone.",
+  "loop.deleteConfirm": 'Delete "{name}"? This cannot be undone.',
   "loop.deleted": "Deleted",
   "loop.save": "Save",
   "loop.saving": "Saving…",
@@ -2708,7 +2870,7 @@ export const en: Record<MessageKey, string> = {
   "loop.lastRunNever": "Never",
   "loop.loading": "Loading…",
   "loop.emptyTitle": "No workflows yet",
-  "loop.emptyHint": "Click \"New\" to build your first automation flow",
+  "loop.emptyHint": 'Click "New" to build your first automation flow',
   "loop.emptySearch": "No matching workflows found",
   "loop.runComplete": "Run complete, {count} nodes executed",
   "loop.duplicate": "Duplicate workflow",
@@ -2722,14 +2884,16 @@ export const en: Record<MessageKey, string> = {
   "loop.templateQuickStart": "Quick start — pick a template",
   "loop.imported": "Imported successfully",
   "loop.importConflictTitle": "Import conflict",
-  "loop.importConflictMsg": "A workflow with the same ID already exists. Continuing will overwrite it.",
+  "loop.importConflictMsg":
+    "A workflow with the same ID already exists. Continuing will overwrite it.",
   "loop.importOverwrite": "Overwrite",
   "loop.deleteNode": "Delete node",
-  "loop.deleteNodeConfirm": "Delete \"{name}\"?",
+  "loop.deleteNodeConfirm": 'Delete "{name}"?',
   "loop.nodes": "Nodes",
   "loop.descPlaceholder": "Add workflow description…",
   "loop.variables": "Workflow variables",
-  "loop.variablesHint": "Variables can be referenced in node configs via {{name}}",
+  "loop.variablesHint":
+    "Variables can be referenced in node configs via {{name}}",
   "loop.addVariable": "Add variable",
   "loop.undo": "Undo",
   "loop.redo": "Redo",
@@ -2769,22 +2933,28 @@ export const en: Record<MessageKey, string> = {
   "loop.configTab": "Config",
   "loop.logsTab": "Run logs",
   "loop.aiModelTab": "AI Model",
-  "loop.aiModelIntro": "Fields with the ✨ AI Generate button will use the model selected here to polish or generate content.",
+  "loop.aiModelIntro":
+    "Fields with the ✨ AI Generate button will use the model selected here to polish or generate content.",
   "loop.aiModelCurrent": "Currently using",
   "loop.aiModelDefault": "Default model",
-  "loop.aiModelFallbackHint": "Not configured separately, using the active provider from Model Services",
+  "loop.aiModelFallbackHint":
+    "Not configured separately, using the active provider from Model Services",
   "loop.aiModelReset": "Reset to default",
   "loop.aiModelCustom": "Custom AI model",
   "loop.viewJson": "View JSON",
   "loop.logsEmpty": "No run logs for this node yet",
-  "loop.presetEmpty": "Save any node as a preset, or saved Loops will appear here",
+  "loop.presetEmpty":
+    "Save any node as a preset, or saved Loops will appear here",
   "loop.branchDefault": "Default",
   "page.providers.title": "Providers",
-  "page.providers.sub": "Connect providers and configure chat plus background task routes",
+  "page.providers.sub":
+    "Connect providers and configure chat plus background task routes",
   "page.models.title": "Model Market",
-  "page.models.sub": "Browse 500+ models by capability, pricing, and release date",
+  "page.models.sub":
+    "Browse 500+ models by capability, pricing, and release date",
   "page.auxiliary.title": "Auxiliary Models",
-  "page.auxiliary.sub": "Choose dedicated models for titles, compaction, approvals, and memory maintenance",
+  "page.auxiliary.sub":
+    "Choose dedicated models for titles, compaction, approvals, and memory maintenance",
   "page.settings.title": "Preferences",
   "page.settings.sub": "Theme, language, and local preferences",
 
@@ -2828,9 +2998,11 @@ export const en: Record<MessageKey, string> = {
   "common.close": "Close",
 
   "aux.title": "Auxiliary Models",
-  "aux.subtitle": "Assign cheaper or background-specific models. If one is unavailable, Astro falls back to the current main model.",
+  "aux.subtitle":
+    "Assign cheaper or background-specific models. If one is unavailable, Astro falls back to the current main model.",
   "aux.routesTitle": "Task routes",
-  "aux.routesSub": "Each task follows the main model by default, or can use an enabled provider and model.",
+  "aux.routesSub":
+    "Each task follows the main model by default, or can use an enabled provider and model.",
   "aux.refresh": "Refresh",
   "aux.resetAll": "Reset all to main model",
   "aux.loading": "Loading…",
@@ -2840,8 +3012,10 @@ export const en: Record<MessageKey, string> = {
   "aux.followPrimary": "Follow main model",
   "aux.inherits": "Inherits: {provider} / {model}",
   "aux.inheritsUnknown": "Inherits main model (none selected yet)",
-  "aux.costSameAsPrimary": "Same as the main model — background calls still incur cost",
-  "aux.backgroundReviewHint": "Off by default; when enabled, runs every turn and may add cost (toggle in Memory settings)",
+  "aux.costSameAsPrimary":
+    "Same as the main model — background calls still incur cost",
+  "aux.backgroundReviewHint":
+    "Off by default; when enabled, runs every turn and may add cost (toggle in Memory settings)",
   "aux.usePrimary": "Use main model",
   "aux.change": "Change",
   "aux.cancel": "Cancel",
@@ -2849,21 +3023,29 @@ export const en: Record<MessageKey, string> = {
   "aux.selectModel": "Choose model",
   "aux.unavailable": "Unavailable, will fall back to main model",
   "aux.titleGeneration": "Title generation",
-  "aux.titleGenerationDesc": "Generate a session title asynchronously after the first reply.",
+  "aux.titleGenerationDesc":
+    "Generate a session title asynchronously after the first reply.",
   "aux.compaction": "Context compaction",
-  "aux.compactionDesc": "Used when summarizing a long conversation and continuing in a new session.",
-  "aux.compactionThresholdHint": "Adjust trigger ratios and char budgets in Preferences → Context & compression.",
+  "aux.compactionDesc":
+    "Used when summarizing a long conversation and continuing in a new session.",
+  "aux.compactionThresholdHint":
+    "Adjust trigger ratios and char budgets in Preferences → Context & compression.",
   "aux.smartApproval": "Smart approval",
-  "aux.smartApprovalDesc": "Decide whether risky operations should ask for confirmation.",
+  "aux.smartApprovalDesc":
+    "Decide whether risky operations should ask for confirmation.",
   "aux.dreaming": "Dreaming",
-  "aux.dreamingDesc": "Organize diaries and distill long-term memories in the background.",
+  "aux.dreamingDesc":
+    "Organize diaries and distill long-term memories in the background.",
   "aux.backgroundReview": "Memory review",
-  "aux.backgroundReviewDesc": "Review each turn and suggest MEMORY/USER updates.",
+  "aux.backgroundReviewDesc":
+    "Review each turn and suggest MEMORY/USER updates.",
   "aux.workflowAiPolish": "Workflow AI assist",
-  "aux.workflowAiPolishDesc": "Model used by the ✨ AI generate/polish buttons in workflow config panels.",
+  "aux.workflowAiPolishDesc":
+    "Model used by the ✨ AI generate/polish buttons in workflow config panels.",
 
   "evo.title": "Offline evolution",
-  "evo.subtitle": "Pick reflection and judge models for offline genetic optimization of skills/prompts (separate from online auxiliary models).",
+  "evo.subtitle":
+    "Pick reflection and judge models for offline genetic optimization of skills/prompts (separate from online auxiliary models).",
   "evo.sections": "Offline evolution sections",
   "evo.section.setup": "Setup",
   "evo.section.run": "Run",
@@ -2875,31 +3057,41 @@ export const en: Record<MessageKey, string> = {
   "evo.dspyReady": "Installed",
   "evo.dspyMissing": "Missing",
   "evo.enabled": "Enable offline evolution",
-  "evo.enabledDesc": "Master switch. When on, reflection runs, GEPA-lite search, and pending proposals are available; skills are not written until you approve.",
+  "evo.enabledDesc":
+    "Master switch. When on, reflection runs, GEPA-lite search, and pending proposals are available; skills are not written until you approve.",
   "evo.enable": "Enable",
   "evo.disable": "Disable",
   "evo.on": "On",
   "evo.off": "Off",
   "evo.reflection": "Reflection / mutation",
-  "evo.reflectionDesc": "Reads execution traces to diagnose failures and propose edits; prefer a strong reasoning model.",
+  "evo.reflectionDesc":
+    "Reads execution traces to diagnose failures and propose edits; prefer a strong reasoning model.",
   "evo.judge": "Judge",
-  "evo.judgeDesc": "Scores candidate variants; leave on primary or pick a mid model.",
+  "evo.judgeDesc":
+    "Scores candidate variants; leave on primary or pick a mid model.",
   "evo.gatesTitle": "Gates",
-  "evo.gatesSub": "Every candidate must pass static gates; writing skills always requires human approval.",
+  "evo.gatesSub":
+    "Every candidate must pass static gates; writing skills always requires human approval.",
   "evo.runTests": "Run tests",
-  "evo.runTestsDesc": "After approval, runs scripts/test.*; during genetic search, skills with test scripts are also sandboxed as a Pareto dimension (test↑).",
+  "evo.runTestsDesc":
+    "After approval, runs scripts/test.*; during genetic search, skills with test scripts are also sandboxed as a Pareto dimension (test↑).",
   "evo.requirePr": "Always human review",
   "evo.requirePrLocked": "Locked",
-  "evo.requirePrDesc": "Candidates go to the review queue only; skills are never written until you approve. This cannot be turned off.",
+  "evo.requirePrDesc":
+    "Candidates go to the review queue only; skills are never written until you approve. This cannot be turned off.",
   "evo.maxSkillBytes": "Max skill size (bytes)",
-  "evo.maxSkillBytesDesc": "Candidates over this size are rejected (default 15360 ~ 15KB).",
-  "evo.phaseNote": "Note: Rust-native pipeline (single-pass reflection + GEPA-lite Pareto search + judge/eval scoring + in-app review). Full external DSPy/GEPA is optional; runtime skills are never auto-rewritten.",
+  "evo.maxSkillBytesDesc":
+    "Candidates over this size are rejected (default 15360 ~ 15KB).",
+  "evo.phaseNote":
+    "Note: Rust-native pipeline (single-pass reflection + GEPA-lite Pareto search + judge/eval scoring + in-app review). Full external DSPy/GEPA is optional; runtime skills are never auto-rewritten.",
   "evo.proposalsTitle": "Evolution proposals",
-  "evo.proposalsSub": "Running generates skill candidates via the reflection model, filtered by gates into this review queue. Approved ones are written to skills; never auto-applied.",
+  "evo.proposalsSub":
+    "Running generates skill candidates via the reflection model, filtered by gates into this review queue. Approved ones are written to skills; never auto-applied.",
   "evo.run": "Run evolution",
   "evo.running": "Running...",
   "evo.disabledHint": "Enable offline evolution above first.",
-  "evo.runSummary": "Generated {generated}, gated out {gated}, judge-rejected {judged}, pending {proposals}.",
+  "evo.runSummary":
+    "Generated {generated}, gated out {gated}, judge-rejected {judged}, pending {proposals}.",
   "evo.noProposals": "No pending proposals.",
   "evo.kindNew": "New skill",
   "evo.kindPatch": "Skill patch",
@@ -2912,9 +3104,11 @@ export const en: Record<MessageKey, string> = {
   "evo.approveMerge": "Approve merge",
   "evo.approveToBranch": "Approve to branch",
   "evo.minJudgeScore": "Min judge score (0-1)",
-  "evo.minJudgeScoreDesc": "The judge model scores candidates; below this they are dropped. Set to 0 to disable judging.",
+  "evo.minJudgeScoreDesc":
+    "The judge model scores candidates; below this they are dropped. Set to 0 to disable judging.",
   "evo.searchRun": "Genetic search",
-  "evo.searchRunHint": "Multi-variant + judge scoring + Pareto selection over generations; slower and pricier",
+  "evo.searchRunHint":
+    "Multi-variant + judge scoring + Pareto selection over generations; slower and pricier",
   "evo.focusSkill": "Focus skill",
   "evo.focusSkillDesc": "Blank = auto pick; when set, only evolve that skill",
   "evo.focusSkillAny": "All (auto)",
@@ -2924,16 +3118,22 @@ export const en: Record<MessageKey, string> = {
   "evo.generations": "Generations",
   "evo.variants": "Variants/gen",
   "evo.populationSize": "Population",
-  "evo.populationSizeDesc": "Max individuals kept after Pareto selection each generation (1–8)",
+  "evo.populationSizeDesc":
+    "Max individuals kept after Pareto selection each generation (1–8)",
   "evo.maxEvalExamples": "Eval cap",
-  "evo.maxEvalExamplesDesc": "Max eval examples per candidate for scoring; 0 = unlimited",
+  "evo.maxEvalExamplesDesc":
+    "Max eval examples per candidate for scoring; 0 = unlimited",
   "evo.maxLlmCalls": "LLM budget",
-  "evo.maxLlmCallsDesc": "Hard cap on model calls per genetic search; 0 = unlimited (default 40)",
-  "evo.searchCostHint": "Calls ≈ targets × generations × variants (plus judge); hard-capped by LLM budget",
+  "evo.maxLlmCallsDesc":
+    "Hard cap on model calls per genetic search; 0 = unlimited (default 40)",
+  "evo.searchCostHint":
+    "Calls ≈ targets × generations × variants (plus judge); hard-capped by LLM budget",
   "evo.crossover": "Crossover",
-  "evo.searchSummary": "Genetic search: {gen} gens, {evaluated} variants evaluated, {kept} Pareto-kept, {proposals} pending.",
+  "evo.searchSummary":
+    "Genetic search: {gen} gens, {evaluated} variants evaluated, {kept} Pareto-kept, {proposals} pending.",
   "evo.runningSearch": "Searching...",
-  "evo.runningSearchHint": "Genetic search in progress; may take minutes. Use Cancel to stop early.",
+  "evo.runningSearchHint":
+    "Genetic search in progress; may take minutes. Use Cancel to stop early.",
   "evo.runningReflectHint": "Single-pass reflection running...",
   "evo.cancelSearch": "Cancel search",
   "evo.searchProgress": "Search progress",
@@ -2948,10 +3148,12 @@ export const en: Record<MessageKey, string> = {
   "evo.holdoutUsed": "holdout validated",
   "evo.holdoutOn": "holdout on",
   "evo.holdoutOff": "holdout off",
-  "evo.historySearchLine": "search · {proposals} proposals · LLM {budget}/{limit} · {holdout} · {term}",
+  "evo.historySearchLine":
+    "search · {proposals} proposals · LLM {budget}/{limit} · {holdout} · {term}",
   "evo.evalSkillGeneric": "Generic (any skill)",
   "evo.historyTitle": "Evolution history / observability",
-  "evo.historySub": "Run records, proposal adoption rate, and score trend (accumulated on run/approve/reject/branch).",
+  "evo.historySub":
+    "Run records, proposal adoption rate, and score trend (accumulated on run/approve/reject/branch).",
   "evo.statRuns": "Runs",
   "evo.statProposals": "Proposals",
   "evo.statAdoption": "Adoption",
@@ -2960,7 +3162,8 @@ export const en: Record<MessageKey, string> = {
   "evo.historyEmpty": "No history yet — run evolution once.",
   "evo.trend": "Score trend",
   "evo.evalTitle": "Eval set",
-  "evo.evalSub": "Label task + expectations; evolution scores matching skills with grounded objective grading (falls back to generic judge when none match).",
+  "evo.evalSub":
+    "Label task + expectations; evolution scores matching skills with grounded objective grading (falls back to generic judge when none match).",
   "evo.evalTaskPlaceholder": "Task / user request",
   "evo.evalSkillPlaceholder": "Related skill id (blank = generic)",
   "evo.evalExpectPlaceholder": "Expectations, one per line",
@@ -2968,13 +3171,15 @@ export const en: Record<MessageKey, string> = {
   "evo.evalVerdictPass": "Was passing",
   "evo.evalAdd": "Add to eval set",
   "evo.evalEmpty": "Eval set is empty.",
-  "evo.evalImportHint": "Import from sessions linked in DecisionLog (tool failures / user corrections); verdict is always “was failing”.",
+  "evo.evalImportHint":
+    "Import from sessions linked in DecisionLog (tool failures / user corrections); verdict is always “was failing”.",
   "evo.evalImportScan": "Scan failed sessions",
   "evo.evalImportScanning": "Scanning…",
   "evo.evalImportBtn": "Import",
   "evo.evalImportFailCount": "{n} failure signals",
   "evo.curatorTitle": "Skill curator",
-  "evo.curatorSub": "Scans idle skills, size, evolution outcomes, and eval Fail rates; suggestions only — never auto-disable or delete.",
+  "evo.curatorSub":
+    "Scans idle skills, size, evolution outcomes, and eval Fail rates; suggestions only — never auto-disable or delete.",
   "evo.curatorRun": "Run curator",
   "evo.curatorRunning": "Curating…",
   "evo.curatorEmpty": "No curator report yet.",
@@ -2984,20 +3189,26 @@ export const en: Record<MessageKey, string> = {
   "evo.curatorRewrite": "Suggest rewrite",
   "evo.curatorEvolve": "Evolve",
   "evo.curatorEnqueue": "Enqueue suggestions",
-  "evo.curatorEnqueueDesc": "When running, enqueue Disable/Merge suggestions for review (Rewrite is skipped)",
+  "evo.curatorEnqueueDesc":
+    "When running, enqueue Disable/Merge suggestions for review (Rewrite is skipped)",
   "evo.curatorEnqueueBtn": "Enqueue suggestions",
   "evo.curatorEnqueued": "enqueued {n}",
   "evo.curatorCfgTitle": "Curator settings",
-  "evo.curatorCfgSub": "Interval hints and enqueue caps. Off by default. Enabling never auto-deletes skills or auto-enqueues.",
+  "evo.curatorCfgSub":
+    "Interval hints and enqueue caps. Off by default. Enabling never auto-deletes skills or auto-enqueues.",
   "evo.curatorCfgEnabled": "Enable curator reminders",
-  "evo.curatorCfgEnabledDesc": "Only allows interval-based prompts/reports; enqueue still requires an explicit Lab action.",
+  "evo.curatorCfgEnabledDesc":
+    "Only allows interval-based prompts/reports; enqueue still requires an explicit Lab action.",
   "evo.curatorLlmDiagnose": "LLM diagnose",
-  "evo.curatorLlmDiagnoseDesc": "When running curator, use the judge route for one actionable diagnosis per suggestion (off by default).",
+  "evo.curatorLlmDiagnoseDesc":
+    "When running curator, use the judge route for one actionable diagnosis per suggestion (off by default).",
   "evo.curatorInterval": "Interval (days)",
   "evo.curatorMaxEnqueue": "Enqueue cap",
   "evo.curatorMaxLlm": "Diagnose LLM cap",
-  "evo.curatorCfgHint": "Human review always required; Rewrite is not enqueued — use directed genetic search instead.",
-  "evo.curatorDueBanner": "Curator due: {detail}. Startup/chat-done refreshes the report only (no enqueue); or run manually below.",
+  "evo.curatorCfgHint":
+    "Human review always required; Rewrite is not enqueued — use directed genetic search instead.",
+  "evo.curatorDueBanner":
+    "Curator due: {detail}. Startup/chat-done refreshes the report only (no enqueue); or run manually below.",
   "evo.curatorDueDefault": "Run curator soon",
   "evo.curatorNotDue": "{days}/{interval} days since last curator run",
   "evo.curatorHealthTitle": "Health signals",
@@ -3011,24 +3222,31 @@ export const en: Record<MessageKey, string> = {
   "evo.curatorAutoRefreshed": "Curator report auto-refreshed ({n} suggestions)",
   "evo.dismiss": "Got it",
   "evo.dspyTitle": "DSPy optimize (external engine)",
-  "evo.dspySub": "Call the external Python DSPy+GEPA optimizer on a skill; results enter the review queue. Off by default; requires your own Python deps.",
+  "evo.dspySub":
+    "Call the external Python DSPy+GEPA optimizer on a skill; results enter the review queue. Off by default; requires your own Python deps.",
   "evo.dspyStatus": "Status",
   "evo.dspySkillPlaceholder": "Skill id to optimize",
   "evo.dspySetup": "Install deps (create venv)",
   "evo.dspyRun": "DSPy optimize",
-  "evo.dspyNote": "Set evolution.dspy.enabled=true in config.yaml and install evolution-dspy deps; credentials reuse the reflection route.",
+  "evo.dspyNote":
+    "Set evolution.dspy.enabled=true in config.yaml and install evolution-dspy deps; credentials reuse the reflection route.",
   "evo.dspyMock": "Mock self-test",
-  "evo.dspyMockHint": "Skips real dspy; verifies the export → subprocess → proposal contract end to end",
+  "evo.dspyMockHint":
+    "Skips real dspy; verifies the export → subprocess → proposal contract end to end",
   "evo.autoTitle": "Auto trigger",
-  "evo.autoSub": "After each chat turn, optionally run a single-pass reflection. Off by default; cooldown / daily cap / min new decisions. Proposals only — never auto-applies.",
+  "evo.autoSub":
+    "After each chat turn, optionally run a single-pass reflection. Off by default; cooldown / daily cap / min new decisions. Proposals only — never auto-applies.",
   "evo.autoEnabled": "Enable auto trigger",
-  "evo.autoEnabledDesc": "Requires offline evolution above. Runs cheap single-pass reflect only — not genetic search or DSPy.",
+  "evo.autoEnabledDesc":
+    "Requires offline evolution above. Runs cheap single-pass reflect only — not genetic search or DSPy.",
   "evo.autoNeedMaster": "Turn on “Enable offline evolution” first.",
   "evo.autoCooldown": "Cooldown (sec)",
   "evo.autoMinDecisions": "Min new decisions",
   "evo.autoMaxRuns": "Daily cap",
-  "evo.autoCostHint": "Guards: skip during cooldown, at daily cap, or without enough new decisions. Failures still record cooldown to avoid retry burn.",
-  "evo.autoStatusLine": "Today {runs}/{max} · new decisions {new}/{need} · {gate}",
+  "evo.autoCostHint":
+    "Guards: skip during cooldown, at daily cap, or without enough new decisions. Failures still record cooldown to avoid retry burn.",
+  "evo.autoStatusLine":
+    "Today {runs}/{max} · new decisions {new}/{need} · {gate}",
   "evo.autoWouldRun": "Guards pass — next Chat Done will run",
   "evo.autoSkipped": "Guards blocked",
 
@@ -3038,26 +3256,33 @@ export const en: Record<MessageKey, string> = {
   "approvals.loading": "Loading…",
   "approvals.mode.label": "Approval mode",
   "approvals.allowlist.label": "Command allowlist",
-  "approvals.allowlist.hint": "Matching commands auto-approve. Exact match or glob (* ? [ ]). Clicking “always allow” on an approval prompt also adds it here.",
-  "approvals.allowlist.placeholder": "e.g. git push --force* or rm -rf /tmp/build",
+  "approvals.allowlist.hint":
+    "Matching commands auto-approve. Exact match or glob (* ? [ ]). Clicking “always allow” on an approval prompt also adds it here.",
+  "approvals.allowlist.placeholder":
+    "e.g. git push --force* or rm -rf /tmp/build",
   "approvals.allowlist.add": "Add",
   "approvals.allowlist.empty": "Allowlist is empty.",
   "approvals.allowlist.remove": "Remove",
   "approvals.typeAllowlist.label": "Command-type rules",
-  "approvals.typeAllowlist.hint": "Created only when explicitly chosen on an approval card. Both program and risk reason must match; destructive or compound commands are not eligible.",
+  "approvals.typeAllowlist.hint":
+    "Created only when explicitly chosen on an approval card. Both program and risk reason must match; destructive or compound commands are not eligible.",
   "approvals.typeAllowlist.empty": "No command-type rules yet.",
   "approvals.typeAllowlist.dynamic": "Dynamic variable expansion",
   "approvals.browser.label": "Browser action permissions",
-  "approvals.browser.hint": "Rules remember only the site origin and action class. Sensitive actions are never permanently allowed.",
+  "approvals.browser.hint":
+    "Rules remember only the site origin and action class. Sensitive actions are never permanently allowed.",
   "approvals.browser.empty": "No remembered browser action permissions.",
   "approvals.browser.stateChanging": "Allow state-changing actions",
   "approvals.hardline.label": "Hardline blocklist",
-  "approvals.hardline.desc": "mkfs, dd to block devices, fork bombs, rm -rf / and other unrecoverable ops — never allowed by any mode or allowlist.",
+  "approvals.hardline.desc":
+    "mkfs, dd to block devices, fork bombs, rm -rf / and other unrecoverable ops — never allowed by any mode or allowlist.",
   "approvals.audit.title": "Security audit",
-  "approvals.audit.sub": "Recent permission decisions and sandbox launches. Command text, arguments, and concrete paths are not shown.",
+  "approvals.audit.sub":
+    "Recent permission decisions and sandbox launches. Command text, arguments, and concrete paths are not shown.",
   "approvals.audit.refresh": "Refresh",
   "approvals.audit.export": "Export",
-  "approvals.audit.exportHint": "Export up to 5,000 loaded events in the current filter",
+  "approvals.audit.exportHint":
+    "Export up to 5,000 loaded events in the current filter",
   "approvals.audit.exporting": "Exporting…",
   "approvals.audit.exported": "Exported {n} security audit events",
   "approvals.audit.exportError": "Failed to export security audit events",
@@ -3067,7 +3292,8 @@ export const en: Record<MessageKey, string> = {
   "approvals.audit.clear": "Clear records",
   "approvals.audit.clearing": "Clearing…",
   "approvals.audit.clearConfirmTitle": "Clear all security audit records?",
-  "approvals.audit.clearConfirmMessage": "This permanently deletes the current and rotated approval and sandbox audit logs. It cannot be undone.",
+  "approvals.audit.clearConfirmMessage":
+    "This permanently deletes the current and rotated approval and sandbox audit logs. It cannot be undone.",
   "approvals.audit.clearConfirmAction": "Clear permanently",
   "approvals.audit.cleared": "Cleared {files} log files ({size})",
   "approvals.audit.clearError": "Failed to clear security audit events",
@@ -3090,7 +3316,8 @@ export const en: Record<MessageKey, string> = {
   "approvals.audit.event.permission.applied": "Permission applied",
   "approvals.audit.event.sandbox.spawned": "Sandbox process started",
   "approvals.audit.event.sandbox.denied": "Sandbox start denied",
-  "approvals.audit.event.sandbox.backendUnavailable": "Sandbox backend unavailable",
+  "approvals.audit.event.sandbox.backendUnavailable":
+    "Sandbox backend unavailable",
   "tools.mainTabs": "Tools view",
   "tools.viewMode": "View mode",
   "tools.view.gallery": "Gallery",
@@ -3120,7 +3347,8 @@ export const en: Record<MessageKey, string> = {
   "mcpTools.addTitle": "Add MCP Server",
   "mcpTools.tabJson": "Paste JSON",
   "mcpTools.tabForm": "Fill Form",
-  "mcpTools.jsonPlaceholder": "Paste MCP server JSON config…\ne.g. {\"mcpServers\":{\"my-server\":{\"command\":\"npx\",\"args\":[\"-y\",\"@my/mcp-server\"]}}}",
+  "mcpTools.jsonPlaceholder":
+    'Paste MCP server JSON config…\ne.g. {"mcpServers":{"my-server":{"command":"npx","args":["-y","@my/mcp-server"]}}}',
   "mcpTools.jsonError": "Invalid JSON — please check and try again",
   "mcpTools.jsonImport": "Import",
   "mcpTools.formName": "Name",
@@ -3172,14 +3400,17 @@ export const en: Record<MessageKey, string> = {
   "mcpTools.formHeadersPlaceholder": "X-Region=us-east-1",
   "mcpTools.formBearerTokenEnvVar": "Bearer token environment variable",
   "mcpTools.formBearerTokenEnvVarPlaceholder": "MCP_ACCESS_TOKEN",
-  "mcpTools.formEnvHeaders": "Environment headers (HEADER=ENV_VAR, one per line)",
+  "mcpTools.formEnvHeaders":
+    "Environment headers (HEADER=ENV_VAR, one per line)",
   "mcpTools.formEnvHeadersPlaceholder": "X-API-Key=MCP_API_KEY",
   "mcpTools.formAdd": "Add",
   "mcpTools.formNameRequired": "Name is required",
   "mcpTools.formCommandRequired": "Command is required",
   "mcpTools.formUrlRequired": "URL is required",
-  "mcpTools.formTimeoutRangeError": "Startup timeout must be 1–120s and tool timeout must be 1–3600s",
-  "mcpTools.formEnvVarError": "Environment variable names may contain letters, numbers, and underscores, but cannot start with a number",
+  "mcpTools.formTimeoutRangeError":
+    "Startup timeout must be 1–120s and tool timeout must be 1–3600s",
+  "mcpTools.formEnvVarError":
+    "Environment variable names may contain letters, numbers, and underscores, but cannot start with a number",
   "mcpTools.cancel": "Cancel",
   "mcpTools.remove": "Remove",
   "mcpTools.enabled": "Enabled",
@@ -3192,17 +3423,21 @@ export const en: Record<MessageKey, string> = {
   "mcpTools.approval.prompt": "Always prompt",
   "mcpTools.approval.writes": "Prompt on writes",
   "mcpTools.approval.approve": "Approve",
-  "mcpTools.approval.hint.auto": "Use annotations and the current global approval settings.",
+  "mcpTools.approval.hint.auto":
+    "Use annotations and the current global approval settings.",
   "mcpTools.approval.hint.prompt": "Ask the user before every call.",
-  "mcpTools.approval.hint.writes": "Allow explicitly read-only tools and prompt for the rest.",
-  "mcpTools.approval.hint.approve": "Skip the MCP policy prompt without bypassing sandbox or base permissions.",
+  "mcpTools.approval.hint.writes":
+    "Allow explicitly read-only tools and prompt for the rest.",
+  "mcpTools.approval.hint.approve":
+    "Skip the MCP policy prompt without bypassing sandbox or base permissions.",
   "mcpTools.annotation.readOnly": "Read-only",
   "mcpTools.annotation.destructive": "May be destructive",
   "mcpTools.annotation.openWorld": "Open-world access",
   "mcpTools.refresh": "Refresh tools",
   "mcpTools.refreshing": "Refreshing…",
   "mcpTools.noToolsYet": "No tools discovered yet — click refresh to connect",
-  "mcpTools.legacySseError": "Legacy SSE transport is no longer supported. Use the server's Streamable HTTP /mcp endpoint; an /sse URL cannot be converted automatically.",
+  "mcpTools.legacySseError":
+    "Legacy SSE transport is no longer supported. Use the server's Streamable HTTP /mcp endpoint; an /sse URL cannot be converted automatically.",
 
   "agentTools.empty": "No matching tools",
   "agentTools.on": "On",
@@ -3210,41 +3445,55 @@ export const en: Record<MessageKey, string> = {
   "agentTools.toggleAria": "{name}: {state}",
   "agentTools.params": "Parameters",
   "agentTools.webSearch.title": "Web Search",
-  "agentTools.webSearch.desc": "Search the web (web_search) and fetch page content (web_fetch, mode=text|raw)",
+  "agentTools.webSearch.desc":
+    "Search the web (web_search) and fetch page content (web_fetch, mode=text|raw)",
   "agentTools.browser.title": "Browser Preview & Control",
-  "agentTools.browser.desc": "Open, inspect, and operate pages in an isolated browser with a synchronized floating preview",
+  "agentTools.browser.desc":
+    "Open, inspect, and operate pages in an isolated browser with a synchronized floating preview",
   "agentTools.execCommand.title": "Exec Command",
-  "agentTools.execCommand.desc": "Run a shell command in the workspace (cwd/workdir for directory; yield_time_ms controls wait; output is capped)",
+  "agentTools.execCommand.desc":
+    "Run a shell command in the workspace (cwd/workdir for directory; yield_time_ms controls wait; output is capped)",
   "agentTools.applyPatch.title": "Apply Patch",
-  "agentTools.applyPatch.desc": "Add, delete, or update files using a freeform diff-like patch format (supports multi-file batch edits)",
+  "agentTools.applyPatch.desc":
+    "Add, delete, or update files using a freeform diff-like patch format (supports multi-file batch edits)",
   "agentTools.codeExec.title": "Code Execution",
-  "agentTools.codeExec.desc": "Quick computation/data processing via python/js snippets; for shell commands use exec_command",
+  "agentTools.codeExec.desc":
+    "Quick computation/data processing via python/js snippets; for shell commands use exec_command",
   "agentTools.imageAnalyze.title": "Image Analysis",
   "agentTools.imageAnalyze.desc":
     "Analyze images via Google Interactions API (describe/detect/segment, multi-image); OpenAI chat/completions fallback",
   "agentTools.audioAnalyze.title": "Audio Analysis",
-  "agentTools.audioAnalyze.desc": "Google Interactions for describe/transcribe (YouTube OK); OpenAI Chat describe + Whisper transcribe",
+  "agentTools.audioAnalyze.desc":
+    "Google Interactions for describe/transcribe (YouTube OK); OpenAI Chat describe + Whisper transcribe",
   "agentTools.robotics.title": "Robotics",
-  "agentTools.robotics.desc": "Spatial pointing, boxes, trajectories, and task plans via Google Robotics-ER generateContent (not general vision; not multi-agent orchestration)",
+  "agentTools.robotics.desc":
+    "Spatial pointing, boxes, trajectories, and task plans via Google Robotics-ER generateContent (not general vision; not multi-agent orchestration)",
   "agentTools.imageGen.title": "Image Generation",
-  "agentTools.imageGen.desc": "Gemini Interactions; prompt must be a rich scene/style description; MUST set aspect_ratio/image_size when user asks (e.g. 16:9, 2K); OpenAI fallback",
+  "agentTools.imageGen.desc":
+    "Gemini Interactions; prompt must be a rich scene/style description; MUST set aspect_ratio/image_size when user asks (e.g. 16:9, 2K); OpenAI fallback",
   "agentTools.videoGen.title": "Video Generation",
-  "agentTools.videoGen.desc": "Google Veo native; prompt must be a rich shot description; prefer image_gen frames, extend via extend_video",
+  "agentTools.videoGen.desc":
+    "Google Veo native; prompt must be a rich shot description; prefer image_gen frames, extend via extend_video",
   "agentTools.videoAnalyze.title": "Video Analysis",
-  "agentTools.videoAnalyze.desc": "Google Gemini native: ask about workspace/URL/YouTube videos (Interactions; MM:SS timestamps; modes qa/summarize/timeline)",
+  "agentTools.videoAnalyze.desc":
+    "Google Gemini native: ask about workspace/URL/YouTube videos (Interactions; MM:SS timestamps; modes qa/summarize/timeline)",
   "agentTools.speechGen.title": "Speech Generation",
-  "agentTools.speechGen.desc": "Text-to-speech (Gemini TTS first, OpenAI fallback)",
+  "agentTools.speechGen.desc":
+    "Text-to-speech (Gemini TTS first, OpenAI fallback)",
   "agentTools.musicGen.title": "Music Generation",
-  "agentTools.musicGen.desc": "Google Lyria 3 native (Interactions); clip/pro, optional lyrics/reference images; writes generated/audio",
+  "agentTools.musicGen.desc":
+    "Google Lyria 3 native (Interactions); clip/pro, optional lyrics/reference images; writes generated/audio",
   "agentTools.skills.title": "Skills",
-  "agentTools.skills.desc": "List, load, curate suggestions, create/patch/update/delete reusable skills",
+  "agentTools.skills.desc":
+    "List, load, curate suggestions, create/patch/update/delete reusable skills",
   "agentTools.memory.title": "Memory",
   "agentTools.memory.desc": "Store and recall persistent knowledge",
   "agentTools.contextSearch.title": "Context Search",
   "agentTools.contextSearch.desc":
     "On-demand search across session history, memory, and knowledge (scope=session|memory|knowledge|all)",
   "agentTools.pinContext.title": "Pin Context",
-  "agentTools.pinContext.desc": "Pin key snippets into the system prompt so they persist across turns (action=pin|list|unpin|clear)",
+  "agentTools.pinContext.desc":
+    "Pin key snippets into the system prompt so they persist across turns (action=pin|list|unpin|clear)",
   "agentTools.askUser.title": "Ask / Confirm / Locate",
   "agentTools.askUser.desc":
     "Ask when unclear; request approval before sensitive actions; request location for local weather/nearby",
@@ -3258,16 +3507,20 @@ export const en: Record<MessageKey, string> = {
   "agentTools.present.desc":
     "Show a read-only info card in chat (kind=ui|callout|metrics|result) without pausing",
   "agentTools.subagents.title": "Agent Threads",
-  "agentTools.subagents.desc": "Spawn and list Agent Threads, queue messages, trigger follow-ups, wait for activity, or interrupt active turns",
+  "agentTools.subagents.desc":
+    "Spawn and list Agent Threads, queue messages, trigger follow-ups, wait for activity, or interrupt active turns",
   "agentTools.cron.title": "Scheduled Tasks",
-  "agentTools.cron.desc": "Create and manage cron jobs (action: add/list/remove/enable/disable)",
+  "agentTools.cron.desc":
+    "Create and manage cron jobs (action: add/list/remove/enable/disable)",
   "subagents.title": "Subagents",
   "subagents.subtitle": "Agent threads spawned by this conversation",
   "subagents.refresh": "Refresh",
   "subagents.closePanel": "Close panel",
   "subagents.backToSummary": "Back to summary",
-  "subagents.noSession": "Send the first message to inspect subagent threads here.",
-  "subagents.empty": "No subagent threads have been spawned for this conversation.",
+  "subagents.noSession":
+    "Send the first message to inspect subagent threads here.",
+  "subagents.empty":
+    "No subagent threads have been spawned for this conversation.",
   "subagents.threadList": "Agent thread list",
   "subagents.parent": "Parent agent",
   "subagents.followUp": "Send a follow-up to this agent thread…",
@@ -3276,7 +3529,8 @@ export const en: Record<MessageKey, string> = {
   "subagents.close": "Close",
   "subagents.unread": "Unread activity",
   "subagents.loading": "Loading Agent Thread history…",
-  "subagents.loadFailed": "Agent Thread history is unavailable. Try refreshing.",
+  "subagents.loadFailed":
+    "Agent Thread history is unavailable. Try refreshing.",
   "subagents.noMessages": "This Agent Thread has no messages to display yet.",
   "subagents.tool": "Tool",
   "subagents.archiveReadOnly": "Closed Agent Threads are read-only.",
@@ -3296,9 +3550,11 @@ export const en: Record<MessageKey, string> = {
   "subagents.status.interrupted": "Interrupted",
   "subagents.status.shutdown": "Closed",
   "agentTools.persona.title": "Persona",
-  "agentTools.persona.desc": "Create a durable assistant workspace (not for task splitting)",
+  "agentTools.persona.desc":
+    "Create a durable assistant workspace (not for task splitting)",
   "agentTools.todo.title": "Todo",
-  "agentTools.todo.desc": "Create or update a checklist todo (action=create|update)",
+  "agentTools.todo.desc":
+    "Create or update a checklist todo (action=create|update)",
 
   "status.ready": "Ready",
   "status.connecting": "Connecting",
@@ -3306,15 +3562,17 @@ export const en: Record<MessageKey, string> = {
   "status.error": "Error",
   "status.none": "None",
   "status.unknownError": "Unknown error",
-  "status.emptyResponse": "The model returned no content. Please retry or switch models.",
+  "status.emptyResponse":
+    "The model returned no content. Please retry or switch models.",
 
-  "welcome":
+  welcome:
     "Hi, I'm Astro Agent.\nType below to start chatting; use the sidebar for memory and workspace.",
 
   "chat.placeholder": "Message… Enter to send",
   "chat.placeholderStreaming": "Add a follow-up — it will be queued…",
   "chat.placeholderStreamingBusy": "AI is replying…",
-  "chat.placeholderPlan": "Describe the goal — read-only planning (no file writes)…",
+  "chat.placeholderPlan":
+    "Describe the goal — read-only planning (no file writes)…",
   "chat.queue.title": "{count} Queued",
   "chat.queue.edit": "Edit",
   "chat.queue.steer": "Steer",
@@ -3329,35 +3587,47 @@ export const en: Record<MessageKey, string> = {
   "chat.queue.drainFailed": "Could not send queued message; kept in queue",
   "chat.queue.checkpointDrain":
     "Idle checkpoint: paused the turn to send the queued follow-up",
-  "chat.queue.steerSent": "Sent to the current task; applies before the next model call",
+  "chat.queue.steerSent":
+    "Sent to the current task; applies before the next model call",
   "chat.queue.steering": "Steering…",
-  "chat.queue.steerPending": "Wait for the steering update to commit before closing the queue",
-  "chat.queue.steerUnavailable": "The task has passed the steering boundary; message kept in queue",
+  "chat.queue.steerPending":
+    "Wait for the steering update to commit before closing the queue",
+  "chat.queue.steerUnavailable":
+    "The task has passed the steering boundary; message kept in queue",
   "chat.queue.steerFailed": "Could not steer task: {error}",
   "chat.queue.openedInNewTask": "Started in a new task",
-  "chat.queue.closeNeedsEmptyComposer": "Clear the composer before closing the queue",
-  "chat.queue.closeTooManyAttachments": "Queued attachments exceed the composer limit ({max})",
+  "chat.queue.closeNeedsEmptyComposer":
+    "Clear the composer before closing the queue",
+  "chat.queue.closeTooManyAttachments":
+    "Queued attachments exceed the composer limit ({max})",
   "chat.queue.closed": "Queued content restored to the composer",
   "chat.modeSwitch.title": "The plan is ready. Start execution?",
   "chat.modeSwitch.execute": "Execute plan",
   "chat.modeSwitch.keepPlanning": "Keep planning",
-  "chat.modeSwitch.declined": "Execution paused; asking the Agent to refine the plan",
+  "chat.modeSwitch.declined":
+    "Execution paused; asking the Agent to refine the plan",
   "chat.mode.desc.agent": "Automatically answer, track TODOs, or enter Plan",
   "chat.mode.desc.plan": "Plan in detail, then execute after review",
   "chat.approval.menu": "Approval permissions",
   "chat.approval.askForApproval": "Ask for approval",
   "chat.approval.approveForMe": "Approve for me",
   "chat.approval.fullAccess": "Full access",
-  "chat.approval.desc.askForApproval": "Work inside the project and ask before crossing its boundary",
-  "chat.approval.desc.approveForMe": "Keep the same boundary and route eligible requests to an independent reviewer",
-  "chat.approval.desc.fullAccess": "Remove filesystem and network sandboxing and stop asking",
+  "chat.approval.desc.askForApproval":
+    "Work inside the project and ask before crossing its boundary",
+  "chat.approval.desc.approveForMe":
+    "Keep the same boundary and route eligible requests to an independent reviewer",
+  "chat.approval.desc.fullAccess":
+    "Remove filesystem and network sandboxing and stop asking",
   "chat.approval.recommended": "Recommended",
   "chat.approval.fullAccessConfirmTitle": "Enable full access?",
-  "chat.approval.fullAccessConfirmMessage": "This removes filesystem and network sandboxing. Later actions will not ask for approval. Permanent system blocks still apply.",
+  "chat.approval.fullAccessConfirmMessage":
+    "This removes filesystem and network sandboxing. Later actions will not ask for approval. Permanent system blocks still apply.",
   "chat.approval.enableFullAccess": "Enable full access",
-  "chat.approval.updateFailed": "Failed to update approval permissions: {error}",
+  "chat.approval.updateFailed":
+    "Failed to update approval permissions: {error}",
   "chat.approval.sandboxAvailable": "macOS Seatbelt · Enabled",
-  "chat.approval.sandboxUnavailable": "System sandbox unavailable · Execution will be blocked",
+  "chat.approval.sandboxUnavailable":
+    "System sandbox unavailable · Execution will be blocked",
   "chat.task.title": "{running}/{total} independent tasks",
   "chat.task.cancel": "Stop this task",
   "chat.task.cancelled": "(stopped)",
@@ -3369,7 +3639,8 @@ export const en: Record<MessageKey, string> = {
   "chat.task.status.done": "Done",
   "chat.task.status.error": "Failed",
   "chat.task.status.cancelled": "Stopped",
-  "chat.task.summaryCounts": "{done} done · {error} failed · {cancelled} stopped",
+  "chat.task.summaryCounts":
+    "{done} done · {error} failed · {cancelled} stopped",
   "chat.task.writeSummary": "Write to chat",
   "chat.task.clearSettled": "Clear finished",
   "chat.task.summaryWritten": "Independent task summary written",
@@ -3383,7 +3654,8 @@ export const en: Record<MessageKey, string> = {
   "chat.a2ui.approvalRequired": "Approval required",
   "chat.a2ui.approvalCommand": "Command to run",
   "chat.a2ui.sandboxRetryTitle": "Retry outside sandbox",
-  "chat.a2ui.sandboxRetryDescription": "The sandbox denied this tool attempt. Grant full local filesystem access for this call only? Network permissions remain unchanged, and this grant will not persist.",
+  "chat.a2ui.sandboxRetryDescription":
+    "The sandbox denied this tool attempt. Grant full local filesystem access for this call only? Network permissions remain unchanged, and this grant will not persist.",
   "chat.a2ui.sandboxRetryDetail": "Sandbox denial details",
   "chat.a2ui.approvalOnce": "Approve once",
   "chat.a2ui.approvalOnceHint": "Run only this time",
@@ -3395,7 +3667,8 @@ export const en: Record<MessageKey, string> = {
   "chat.a2ui.approvalTypeHint": "Only the same program and low-risk reason",
   "chat.a2ui.approvalApproved": "Approved for this operation",
   "chat.a2ui.approvalAlwaysApproved": "Approved and saved the permission rule",
-  "chat.a2ui.approvalTypeApproved": "Approved and saved the {type} command rule",
+  "chat.a2ui.approvalTypeApproved":
+    "Approved and saved the {type} command rule",
   "chat.a2ui.approvalDenied": "Operation denied",
   "chat.a2ui.clarifyTabs": "Clarifying steps",
   "chat.a2ui.clarifyProgress": "Question {current} / {total}",
@@ -3404,12 +3677,15 @@ export const en: Record<MessageKey, string> = {
   "chat.a2ui.clarifySubmit": "Submit",
   "chat.a2ui.clarifyCustom": "Add another answer",
   "chat.a2ui.clarifyCustomPlaceholder": "Type your answer…",
-  "chat.interrupt.pending": "Please finish the confirmation or clarification above",
-  "chat.location.geoUnavailable": "Location is unavailable here — enter a city instead",
+  "chat.interrupt.pending":
+    "Please finish the confirmation or clarification above",
+  "chat.location.geoUnavailable":
+    "Location is unavailable here — enter a city instead",
   "chat.location.geoFailed": "Could not get location — retry or enter a city",
   "chat.location.cityRequired": "Please enter a city name",
   "chat.location.ipLoading": "Detecting your city from your IP…",
-  "chat.location.ipSuggested": "City suggested from your IP — confirm or edit it",
+  "chat.location.ipSuggested":
+    "City suggested from your IP — confirm or edit it",
   "chat.location.ipFailed": "Could not detect your city — enter it manually",
   "chat.thinking": "Thinking",
   "chat.thinkingWithTime": "Thinking · {s}",
@@ -3428,7 +3704,8 @@ export const en: Record<MessageKey, string> = {
   "chat.activityGroup.count": "{count} items",
   "chat.activityGroup.progress": "{completed}/{total} complete",
   "chat.activityGroup.completed": "{count} complete",
-  "chat.activityGroup.partial": "Partially complete · {completed}/{total} succeeded",
+  "chat.activityGroup.partial":
+    "Partially complete · {completed}/{total} succeeded",
   "chat.activityGroup.failed": "{count} failed",
   "chat.activityGroup.waiting": "{count} waiting",
   "chat.activityGroup.retrying": "{count} retrying",
@@ -3501,7 +3778,8 @@ export const en: Record<MessageKey, string> = {
   "chat.activity.action.partial.image": "Image generation partially completed",
   "chat.activity.action.partial.video": "Video generation partially completed",
   "chat.activity.action.partial.music": "Music generation partially completed",
-  "chat.activity.action.partial.speech": "Speech generation partially completed",
+  "chat.activity.action.partial.speech":
+    "Speech generation partially completed",
   "chat.activity.action.error.read": "Read failed",
   "chat.activity.action.error.search": "Search failed",
   "chat.activity.action.error.run": "Run failed",
@@ -3605,7 +3883,8 @@ export const en: Record<MessageKey, string> = {
   "chat.plusMenuFiles": "Files and media",
   "chat.plusMenuFilesHint": "Add images, audio, video, or documents",
   "chat.plusMenuFolder": "Folder",
-  "chat.plusMenuFolderHint": "Let the agent inspect a selected folder as needed",
+  "chat.plusMenuFolderHint":
+    "Let the agent inspect a selected folder as needed",
   "chat.plusMenuSearch": "Search Skills or MCP…",
   "chat.plusMenuPlugins": "Plugins",
   "chat.plusMenuEmpty": "No matching Skills or MCP servers",
@@ -3645,10 +3924,13 @@ export const en: Record<MessageKey, string> = {
   "chat.slashProviders": "Open Providers panel",
   "chat.slashSettings": "Open Preferences",
   "chat.slashContext": "Open context panel",
-  "chat.slashHelpInsert": "Commands: /new · /clear · /help · /undo · /retry · /stop · /status · /usage · /model · /verbose · /reasoning · /mode · /tools · /skills · /mcp · /memory · /insights · /providers · /settings · /context; or /skill-name. Use @ for Agent / Skill / MCP.",
+  "chat.slashHelpInsert":
+    "Commands: /new · /clear · /help · /undo · /retry · /stop · /status · /usage · /model · /verbose · /reasoning · /mode · /tools · /skills · /mcp · /memory · /insights · /providers · /settings · /context; or /skill-name. Use @ for Agent / Skill / MCP.",
   "chat.slashUnknown": "Unknown command: /{cmd}. Type /help for the list.",
-  "chat.slashStatusMsg": "Session {session} · {provider} / {model} · mode {mode} · thinking {thinking} · verbosity {verbosity} · context ~{ctx}%",
-  "chat.slashUsageMsg": "Usage: total {total} · prompt {prompt} · completion {completion}",
+  "chat.slashStatusMsg":
+    "Session {session} · {provider} / {model} · mode {mode} · thinking {thinking} · verbosity {verbosity} · context ~{ctx}%",
+  "chat.slashUsageMsg":
+    "Usage: total {total} · prompt {prompt} · completion {completion}",
   "chat.slashUsageEmpty": "No token usage yet",
   "chat.slashModelMsg": "Current model: {provider} / {model}",
   "chat.slashVerboseMsg": "Chat verbosity: {level}",
@@ -3663,9 +3945,11 @@ export const en: Record<MessageKey, string> = {
   "chat.mentionGroupAgents": "Agents",
   "chat.mentionGroupSkills": "Skills",
   "chat.mentionGroupMcp": "MCP",
-  "chat.mentionAgentSwitched": "Switched to Agent \"{name}\"",
-  "chat.mentionAgentSwitchedLater": "Default Agent set to \"{name}\". Current session keeps the old Agent until /new.",
-  "chat.mentionMcpEnabled": "Enabled MCP: {names} (tool list refreshes on new sessions)",
+  "chat.mentionAgentSwitched": 'Switched to Agent "{name}"',
+  "chat.mentionAgentSwitchedLater":
+    'Default Agent set to "{name}". Current session keeps the old Agent until /new.',
+  "chat.mentionMcpEnabled":
+    "Enabled MCP: {names} (tool list refreshes on new sessions)",
   "chat.skillLoaded": "Loaded skill: {names}",
   "chat.paletteEmpty": "No matches",
   "chat.paletteEsc": "Close",
@@ -3684,7 +3968,8 @@ export const en: Record<MessageKey, string> = {
   "chat.contextUsageEmpty": "Send a message to see layered usage",
   "chat.contextUsageFull": "{pct}% full",
   "chat.contextUsageSource.provider_reported": "Provider reported",
-  "chat.contextUsageSource.provider_recomputed": "Recomputed from provider fields",
+  "chat.contextUsageSource.provider_recomputed":
+    "Recomputed from provider fields",
   "chat.contextUsageSource.local_estimate": "Local estimate",
   "chat.contextUsageInput": "Input",
   "chat.contextUsageCacheRead": "Cache hit",
@@ -3703,23 +3988,29 @@ export const en: Record<MessageKey, string> = {
   "chat.contextSeg.recall": "Dynamic recall",
   "chat.contextSeg.subagent": "Sub-agent returns",
   "chat.contextSeg.conversation": "Conversation",
-  "chat.contextExplorer.blurb": "Estimated layered context usage for this turn, so you can see remaining room before compacting.",
+  "chat.contextExplorer.blurb":
+    "Estimated layered context usage for this turn, so you can see remaining room before compacting.",
   "chat.contextExplorer.expandAll": "Expand all",
   "chat.contextExplorer.collapseAll": "Collapse all",
   "chat.contextExplorer.contextSize": "Context window",
   "chat.contextExplorer.tokensUsed": "Tokens used",
   "chat.contextExplorer.breakdown": "Breakdown",
   "chat.contextExplorer.hint.system": "SOUL, identity, and fixed tool rules.",
-  "chat.contextExplorer.hint.developer": "Interaction mode and other runtime policy.",
-  "chat.contextExplorer.hint.userContext": "Project instructions, hook injection, and current time.",
+  "chat.contextExplorer.hint.developer":
+    "Interaction mode and other runtime policy.",
+  "chat.contextExplorer.hint.userContext":
+    "Project instructions, hook injection, and current time.",
   "chat.contextExplorer.hint.tools": "Built-in tool definitions and schemas.",
-  "chat.contextExplorer.hint.agents": "Agent Thread lifecycle tools and persona_create definitions.",
+  "chat.contextExplorer.hint.agents":
+    "Agent Thread lifecycle tools and persona_create definitions.",
   "chat.contextExplorer.hint.mcp": "Enabled MCP and dynamic tool descriptions.",
-  "chat.contextExplorer.hint.memory": "Long-term memory, profile, and related injections.",
+  "chat.contextExplorer.hint.memory":
+    "Long-term memory, profile, and related injections.",
   "chat.contextExplorer.hint.skills": "Skill content loaded for this turn.",
   "chat.contextExplorer.hint.recall": "Retrieved recall snippets.",
   "chat.contextExplorer.hint.subagent": "Results returned by sub-agents.",
-  "chat.contextExplorer.hint.conversation": "User and assistant conversation history.",
+  "chat.contextExplorer.hint.conversation":
+    "User and assistant conversation history.",
   "chat.reasoningEffort": "Reasoning effort",
   "chat.effortHigh": "High",
   "chat.effortMax": "Max",
@@ -3729,7 +4020,8 @@ export const en: Record<MessageKey, string> = {
   "modelEdit.title": "Model options",
   "modelEdit.close": "Close",
   "modelEdit.auto": "Auto",
-  "modelEdit.autoHint": "Automatically picks a model for the task (images, length, reasoning/coding). Turn Auto off to choose manually.",
+  "modelEdit.autoHint":
+    "Automatically picks a model for the task (images, length, reasoning/coding). Turn Auto off to choose manually.",
   "modelEdit.maxMode": "MAX Mode",
   "modelEdit.thinking": "Thinking",
   "modelEdit.fast": "Fast",
@@ -3762,7 +4054,8 @@ export const en: Record<MessageKey, string> = {
   "chat.removeAttachment": "Remove attachment",
   "chat.placeholderWithAttach": "Add a note, then Enter to send",
   "chat.dropFilesHint": "Drop to attach",
-  "chat.attachmentUnsupported": "This model does not support these attachments; skipped {{n}}",
+  "chat.attachmentUnsupported":
+    "This model does not support these attachments; skipped {{n}}",
   "chat.estimateCost": "Est. {{cost}} (~{{in}} in + ~{{out}} out tokens)",
   "chat.estimateCostShort": "Est. {{cost}}",
   "chat.estimateCostTurn": "Est. turn cost",
@@ -3771,7 +4064,8 @@ export const en: Record<MessageKey, string> = {
   "chat.newSession": "New session",
   "chat.newChat": "New session",
   "chat.newAgent": "New Agent",
-  "chat.newSessionStreamingConfirm": "A reply is still generating. Start a new session anyway?",
+  "chat.newSessionStreamingConfirm":
+    "A reply is still generating. Start a new session anyway?",
 
   "chat.welcomeTitle": "Hi, I'm Astro",
   "chat.welcomeGreeting": "Hi, I'm",
@@ -3784,42 +4078,56 @@ export const en: Record<MessageKey, string> = {
   "chat.welcomeHint.5": "Walk me through what Astro can do",
   "chat.card.intro.title": "Meet Astro",
   "chat.card.intro.desc": "Show me what Astro can do",
-  "chat.card.intro.prompt": "Based on 「my work or use case」, explain what Astro can help me accomplish, starting with 「the capability I want to explore first」.",
+  "chat.card.intro.prompt":
+    "Based on 「my work or use case」, explain what Astro can help me accomplish, starting with 「the capability I want to explore first」.",
   "chat.card.skills.title": "Skills",
   "chat.card.skills.desc": "Help me install a Skill",
-  "chat.card.skills.prompt": "Find and install a Skill for 「my use case」 that can 「my specific goal」.",
+  "chat.card.skills.prompt":
+    "Find and install a Skill for 「my use case」 that can 「my specific goal」.",
   "chat.card.files.title": "Files",
   "chat.card.files.desc": "Draft a daily work report",
-  "chat.card.files.prompt": "Use 「the file or source material」 to create a 「document type」 that emphasizes 「the content to include」.",
+  "chat.card.files.prompt":
+    "Use 「the file or source material」 to create a 「document type」 that emphasizes 「the content to include」.",
   "chat.card.data.title": "Data",
   "chat.card.data.desc": "Help me analyze data",
-  "chat.card.data.prompt": "Analyze 「the data source or file」 to answer 「the analysis goal」 and present it as 「the desired output format」.",
+  "chat.card.data.prompt":
+    "Analyze 「the data source or file」 to answer 「the analysis goal」 and present it as 「the desired output format」.",
   "chat.card.image.title": "Image Creation",
   "chat.card.image.desc": "Generate an image for me",
-  "chat.card.image.prompt": "Generate an image of 「the main subject」 in 「the visual style」, sized 「the dimensions or aspect ratio」.",
+  "chat.card.image.prompt":
+    "Generate an image of 「the main subject」 in 「the visual style」, sized 「the dimensions or aspect ratio」.",
   "chat.card.music.title": "Music Creation",
   "chat.card.music.desc": "Compose a music piece",
-  "chat.card.music.prompt": "Create 「a music style」 music for 「the use case」 with a 「mood」 feeling, about 「duration」 long.",
+  "chat.card.music.prompt":
+    "Create 「a music style」 music for 「the use case」 with a 「mood」 feeling, about 「duration」 long.",
   "chat.card.video.title": "Video Production",
   "chat.card.video.desc": "Generate a short video",
-  "chat.card.video.prompt": "Generate a short video about 「the scene or subject」 in 「the visual style」, about 「duration」 long.",
+  "chat.card.video.prompt":
+    "Generate a short video about 「the scene or subject」 in 「the visual style」, about 「duration」 long.",
   "chat.card.web.title": "Web Browsing",
   "chat.card.web.desc": "Search for latest news",
-  "chat.card.web.prompt": "Browse and research 「the website or topic」, focusing on 「the question to answer」, and organize it as 「the output format」.",
+  "chat.card.web.prompt":
+    "Browse and research 「the website or topic」, focusing on 「the question to answer」, and organize it as 「the output format」.",
   "chat.card.code.title": "Code Assistant",
   "chat.card.code.desc": "Write some code for me",
-  "chat.card.code.prompt": "Use 「the language or framework」 to implement 「the feature」 while meeting 「the key requirements or constraints」.",
+  "chat.card.code.prompt":
+    "Use 「the language or framework」 to implement 「the feature」 while meeting 「the key requirements or constraints」.",
   "chat.card.writing.title": "Writing Assistant",
   "chat.card.writing.desc": "Draft an article for me",
-  "chat.card.writing.prompt": "Write a 「content type」 about 「the topic」 for 「the target audience」 in a 「tone or style」 voice.",
+  "chat.card.writing.prompt":
+    "Write a 「content type」 about 「the topic」 for 「the target audience」 in a 「tone or style」 voice.",
   "chat.card.search.title": "Smart Search",
   "chat.card.search.desc": "Deep research a topic",
-  "chat.card.search.prompt": "Research 「the topic」 in depth, answer 「the core question」, and prioritize 「the time range or source scope」.",
+  "chat.card.search.prompt":
+    "Research 「the topic」 in depth, answer 「the core question」, and prioritize 「the time range or source scope」.",
   "chat.card.translate.title": "Translator",
   "chat.card.translate.desc": "Translate content for me",
-  "chat.card.translate.prompt": "Translate 「the content」 into 「the target language」 in a 「tone or context」 voice, keeping technical terms accurate.",
-  "chat.welcomeTemplateNeedRequired": "Fill in the highlighted template slots first. Press Tab to move to the next slot.",
-  "chat.welcomeTemplateComposerAria": "Example task template — fill highlighted slots and press Tab to move",
+  "chat.card.translate.prompt":
+    "Translate 「the content」 into 「the target language」 in a 「tone or context」 voice, keeping technical terms accurate.",
+  "chat.welcomeTemplateNeedRequired":
+    "Fill in the highlighted template slots first. Press Tab to move to the next slot.",
+  "chat.welcomeTemplateComposerAria":
+    "Example task template — fill highlighted slots and press Tab to move",
   "chat.agentGuideEyebrow": "New Agent",
   "chat.agentGuideTitle": "Create an Agent",
   "chat.agentGuideBody":
@@ -3830,7 +4138,8 @@ export const en: Record<MessageKey, string> = {
   "chat.agentGuideStep3": "Send to create",
   "chat.agentGuideCancel": "Cancel",
   "chat.agentGuideSkip": "Cancel and just chat",
-  "chat.agentGuideComposerAria": "Agent create template — click highlighted slots, Tab to move",
+  "chat.agentGuideComposerAria":
+    "Agent create template — click highlighted slots, Tab to move",
   "chat.agentCreateNeedRequired":
     "Fill in 「name」 and 「help with」 first; other slots are optional and omitted if empty.",
   "chat.agentCreateHint":
@@ -3841,17 +4150,20 @@ export const en: Record<MessageKey, string> = {
   "chat.agentCoversTitle": "Avatar",
   "chat.agentCoversSub": "Preferred in chat and lists",
   "chat.agentAvatarDrawerTitle": "Choose avatar",
-  "chat.agentAvatarDrawerSub": "Pick a built-in illustration or upload; saved as assets/avatar",
+  "chat.agentAvatarDrawerSub":
+    "Pick a built-in illustration or upload; saved as assets/avatar",
   "chat.agentAvatarDrawerUpload": "Upload custom image",
   "chat.agentAvatarDrawerUploadHint": "Overrides the illustration preset",
   "chat.agentAvatarCustom": "Or upload your own",
-  "chat.agentAvatarCustomHint": "Upload overrides the illustration above; preferred in chat",
+  "chat.agentAvatarCustomHint":
+    "Upload overrides the illustration above; preferred in chat",
   "chat.agentIconPick": "Choose",
   "chat.agentIconChange": "Change",
   "chat.agentIconEmoji": "Emoji icon",
   "chat.agentIconEmojiHint": "Small mark for sidebars and lists",
   "chat.agentIconAvatar": "Avatar",
-  "chat.agentIconAvatarHint": "Preferred in chat; upload overrides the illustration preset",
+  "chat.agentIconAvatarHint":
+    "Preferred in chat; upload overrides the illustration preset",
   "chat.agentIconUpload": "Upload",
   "chat.agentIconLucidePick": "Lucide",
   "chat.agentIconLucideChange": "Change icon",
@@ -3885,7 +4197,8 @@ export const en: Record<MessageKey, string> = {
   "chat.rightPanel.preview": "Preview",
   "chat.rightPanel.branches": "Branches",
   "chat.branches.title": "Branch management",
-  "chat.branches.summary": "{branches} branches · {sides} sides · {turns} turns · {agents} agents",
+  "chat.branches.summary":
+    "{branches} branches · {sides} sides · {turns} turns · {agents} agents",
   "chat.branches.toggleAgents": "Show or hide subagents",
   "chat.branches.refresh": "Refresh branch graph",
   "chat.branches.fullscreen": "View fullscreen",
@@ -3900,8 +4213,10 @@ export const en: Record<MessageKey, string> = {
   "chat.branches.noSession": "Start a conversation to manage branches",
   "chat.branches.empty": "This session has no turns to display",
   "chat.branches.branchReady": "This branch is ready for its next turn",
-  "chat.branches.sideReady": "Inherited history is hidden; leaving discards this side",
-  "chat.branches.legacyBoundary": "Legacy branch with an inferred fork boundary",
+  "chat.branches.sideReady":
+    "Inherited history is hidden; leaving discards this side",
+  "chat.branches.legacyBoundary":
+    "Legacy branch with an inferred fork boundary",
   "chat.branches.openSession": "Open session",
   "chat.branches.branchHere": "Branch from this turn",
   "chat.branches.branchBefore": "Branch before this turn",
@@ -3911,7 +4226,8 @@ export const en: Record<MessageKey, string> = {
   "chat.branches.sideHint":
     "Keeps model context while the UI starts empty; leaving discards the side",
   "chat.side.banner": "Ephemeral side",
-  "chat.side.hiddenTurns": "{count} inherited turns are hidden from the UI but remain available to the model",
+  "chat.side.hiddenTurns":
+    "{count} inherited turns are hidden from the UI but remain available to the model",
   "chat.side.exit": "Return to main thread and discard",
   "chat.side.open": "Open side chat",
   "chat.side.close": "Close and discard side chat",
@@ -3919,7 +4235,8 @@ export const en: Record<MessageKey, string> = {
   "chat.side.title": "Side chat",
   "chat.side.subtitle": "Uses current context and disappears when closed",
   "chat.side.emptyTitle": "Ask about the current task",
-  "chat.side.emptyHint": "This conversation will not interrupt or alter the main task on the left.",
+  "chat.side.emptyHint":
+    "This conversation will not interrupt or alter the main task on the left.",
   "chat.side.placeholder": "Ask about the current task…",
   "chat.side.reasoning": "Reasoning",
   "chat.side.stop": "Stop generating",
@@ -3944,7 +4261,8 @@ export const en: Record<MessageKey, string> = {
   "chat.browserPreview.error": "Preview failed",
   "chat.browserPreview.openExternal": "Open in browser",
   "chat.browserPreview.close": "Close preview",
-  "chat.browserPreview.restoreHint": "Ask the agent to open this page again to restore automation",
+  "chat.browserPreview.restoreHint":
+    "Ask the agent to open this page again to restore automation",
   "chat.rightPanel.searchSessions": "Search sessions…",
   "chat.rightPanel.noSessions": "No sessions yet",
   "chat.rightPanel.untitledSession": "Untitled session",
@@ -3979,11 +4297,13 @@ export const en: Record<MessageKey, string> = {
   "sessions.branchEmpty": "No messages to branch from",
   "sessions.moveToProject": "Move to project",
   "sessions.moveLoading": "Loading projects…",
-  "sessions.moveRunningDisabled": "Wait for the session to finish before moving it",
+  "sessions.moveRunningDisabled":
+    "Wait for the session to finish before moving it",
   "sessions.noOtherProjects": "No other projects",
   "sessions.moveDone": "Moved to “{project}”",
   "sessions.deletePermanently": "Delete permanently",
-  "sessions.deleteConfirm": "This permanently deletes the session and all of its messages. This cannot be undone.",
+  "sessions.deleteConfirm":
+    "This permanently deletes the session and all of its messages. This cannot be undone.",
   "sessions.deleteIrreversible": "Cannot be undone",
   "sessions.actionFailed": "Session action failed: {error}",
   "time.justNow": "Just now",
@@ -4037,17 +4357,22 @@ export const en: Record<MessageKey, string> = {
   "chat.branchDone": "Branched to a new session",
   "chat.branchFailed": "Branch failed: {error}",
   "chat.compactDone": "Compacted — switched to new session",
-  "chat.compactDegraded": "Summary degraded to clipped text; switched to new session",
+  "chat.compactDegraded":
+    "Summary degraded to clipped text; switched to new session",
   "chat.compactFailed": "Compact failed: {error}",
-  "chat.compactHistoryFailed": "Switched to new session, but history failed to load: {error}",
+  "chat.compactHistoryFailed":
+    "Switched to new session, but history failed to load: {error}",
   "chat.compactBlockedStreaming": "Cannot compact while generating",
   "chat.compactBlockedInterrupt": "Resolve pending confirmation first",
   "chat.compactInProgress": "Compacting session — wait before sending",
   "chat.compactAlreadyRunning": "Compaction already in progress",
-  "chat.recommendCompact": "Context nearly full — run /compact to compact this session",
+  "chat.recommendCompact":
+    "Context nearly full — run /compact to compact this session",
   "chat.sessionCompactedBadge": "Compacted",
-  "chat.sessionCompactedReadOnly": "This session is compacted (read-only). Open the continued session from the sidebar to chat.",
-  "chat.sessionEndedReadOnly": "This session has ended and cannot accept messages",
+  "chat.sessionCompactedReadOnly":
+    "This session is compacted (read-only). Open the continued session from the sidebar to chat.",
+  "chat.sessionEndedReadOnly":
+    "This session has ended and cannot accept messages",
   "chat.activity.kind.tool": "Tool",
   "chat.activity.kind.skill": "Skill",
   "chat.activity.kind.mcp": "MCP",
@@ -4112,7 +4437,8 @@ export const en: Record<MessageKey, string> = {
   "memory.newAgentPlaceholder": "New agent name…",
   "memory.daily": "Daily",
   "memory.dailyDate": "Date",
-  "memory.dailyEmptyHint": "Log today's notes; put distilled facts in MEMORY.md…",
+  "memory.dailyEmptyHint":
+    "Log today's notes; put distilled facts in MEMORY.md…",
   "memory.loading": "Loading…",
   "memory.views": "Memory views",
   "memory.view.diary": "Diary",
@@ -4120,27 +4446,33 @@ export const en: Record<MessageKey, string> = {
   "memory.view.longterm": "Long-term",
   "memory.view.pending": "Pending",
   "memory.pending.refresh": "Refresh",
-  "memory.pending.hint": "With write approval on, tool/dreaming/review writes land here first; approve to update MEMORY/USER.",
+  "memory.pending.hint":
+    "With write approval on, tool/dreaming/review writes land here first; approve to update MEMORY/USER.",
   "memory.pending.emptyTitle": "No pending writes",
-  "memory.pending.emptyHint": "Turn on “Write approval” above to queue MEMORY/USER writes here.",
-  "memory.pending.emptyHintOn": "Write approval is on; tool, dreaming, or review writes will appear here.",
+  "memory.pending.emptyHint":
+    "Turn on “Write approval” above to queue MEMORY/USER writes here.",
+  "memory.pending.emptyHintOn":
+    "Write approval is on; tool, dreaming, or review writes will appear here.",
   "memory.pending.approve": "Approve",
   "memory.pending.reject": "Reject",
   "memory.pending.approved": "Approved and written",
   "memory.pending.rejected": "Rejected",
   "memory.settings.title": "Memory settings",
   "memory.settings.writeApproval": "Write approval",
-  "memory.settings.writeApprovalDesc": "Queue MEMORY/USER changes until you approve",
+  "memory.settings.writeApprovalDesc":
+    "Queue MEMORY/USER changes until you approve",
   "memory.settings.writeApprovalOn": "Write approval enabled",
   "memory.settings.writeApprovalOff": "Write approval disabled",
   "memory.settings.backgroundReview": "Post-turn review",
-  "memory.settings.backgroundReviewDesc": "After each chat turn, use the auxiliary model to refine memory (may incur cost)",
+  "memory.settings.backgroundReviewDesc":
+    "After each chat turn, use the auxiliary model to refine memory (may incur cost)",
   "memory.settings.backgroundReviewOn": "Post-turn review enabled",
   "memory.settings.backgroundReviewOff": "Post-turn review disabled",
   "memory.toast.updated": "Memory updated",
   "memory.toast.pending": "Pending memory write awaiting approval",
   "memory.settings.autoRefresh": "Auto-refresh chat memory",
-  "memory.settings.autoRefreshDesc": "Refresh the live session frozen snapshot after live memory writes",
+  "memory.settings.autoRefreshDesc":
+    "Refresh the live session frozen snapshot after live memory writes",
   "memory.settings.autoRefreshOn": "Auto-refresh chat memory enabled",
   "memory.settings.autoRefreshOff": "Auto-refresh chat memory disabled",
   "memory.refresh.intoChat": "Refresh into chat",
@@ -4157,11 +4489,14 @@ export const en: Record<MessageKey, string> = {
   "memory.expertCategories": "Experts",
   "memory.allExperts": "All experts",
   "memory.pickExpertForDiary": "Pick an expert to view or write a diary",
-  "memory.pickExpertForDiaryAll": "Diary days across all experts are marked on the calendar",
+  "memory.pickExpertForDiaryAll":
+    "Diary days across all experts are marked on the calendar",
   "memory.pickExpertForMemory": "Pick an expert to view long-term memory",
   "memory.pickExpertHint": "Choose an expert at the top to get started",
-  "memory.pickExpertHintDiaryAll": "Pick an expert at the top, or tap a dotted day to open that diary",
-  "memory.diaryEmpty": "This expert has no diary yet — chat a bit to give them inspiration",
+  "memory.pickExpertHintDiaryAll":
+    "Pick an expert at the top, or tap a dotted day to open that diary",
+  "memory.diaryEmpty":
+    "This expert has no diary yet — chat a bit to give them inspiration",
   "memory.diaryEmptyTitle": "Your expert hasn't written a diary yet~",
   "memory.diaryEmptySub": "Go chat a bit and give them some inspiration",
   "memory.diaryNoAgentOnDate": "No expert has a diary on this day yet",
@@ -4171,13 +4506,17 @@ export const en: Record<MessageKey, string> = {
   "memory.moreArchives": "More files",
   "memory.backToMemory": "Back to MEMORY.md",
   "memory.longtermEmptyHint": "Distilled long-term memory goes here…",
-  "memory.dream.enableTitle": "Enable dreaming to strengthen memory distillation",
-  "memory.dream.enableSub": "Dreaming deeply refines diaries into long-term memory",
+  "memory.dream.enableTitle":
+    "Enable dreaming to strengthen memory distillation",
+  "memory.dream.enableSub":
+    "Dreaming deeply refines diaries into long-term memory",
   "memory.dream.enable": "Enable dreaming",
-  "memory.dream.enabledHint": "Dreaming is on. Tap “Dream now” when you have new diaries to distill.",
+  "memory.dream.enabledHint":
+    "Dreaming is on. Tap “Dream now” when you have new diaries to distill.",
   "memory.dream.disable": "Turn off dreaming",
   "memory.dream.running": "Organizing memories for you…",
-  "memory.dream.runningSub": "Dreaming through diaries to distill expert memory",
+  "memory.dream.runningSub":
+    "Dreaming through diaries to distill expert memory",
   "memory.dream.points": "Points used",
   "memory.dream.summaries": "Summaries",
   "memory.dream.newMemories": "New memories",
@@ -4230,7 +4569,8 @@ export const en: Record<MessageKey, string> = {
   "workspace.mediaLoadError": "Unable to preview this media file",
   "workspace.openExternally": "Open with system app",
   "workspace.backToSourceSession": "Back to source session",
-  "workspace.openExternallyFailed": "Could not open this file with a system app",
+  "workspace.openExternallyFailed":
+    "Could not open this file with a system app",
   "workspace.previewMode": "Preview",
   "workspace.previewSource": "Source",
   "workspace.menu.open": "Open",
@@ -4267,16 +4607,19 @@ export const en: Record<MessageKey, string> = {
   "filespace.search": "Search by file name",
   "filespace.recent": "Recent",
   "filespace.all": "All",
-  "filespace.empty": "Files uploaded in chat or generated by the Agent will appear here",
+  "filespace.empty":
+    "Files uploaded in chat or generated by the Agent will appear here",
   "filespace.continue": "Continue session",
   "filespace.locate": "Locate message",
   "filespace.preview": "Preview",
   "filespace.previewEmpty": "Select a file to preview",
   "filespace.previewEmptyHint": "Choose a file from the list on the left",
   "filespace.missing": "File no longer exists",
-  "filespace.unsupportedHint": "This file can’t be previewed here. Open it with a system app.",
+  "filespace.unsupportedHint":
+    "This file can’t be previewed here. Open it with a system app.",
   "filespace.saving": "Saving…",
-  "filespace.boardComingSoon": "Boards coming soon — browse generated images, video, audio, and HTML previews here.",
+  "filespace.boardComingSoon":
+    "Boards coming soon — browse generated images, video, audio, and HTML previews here.",
   "media.loadError": "Unable to preview this media",
   "media.fileNotFound": "File not yet generated or has been deleted",
   "media.htmlPreview": "HTML preview",
@@ -4333,13 +4676,16 @@ export const en: Record<MessageKey, string> = {
   "filespace.batch.selected": "{n} selected",
   "filespace.batch.clear": "Clear selection",
   "filespace.confirm.trashTitle": "Move to Trash",
-  "filespace.confirm.trashOne": "Move “{name}” to Trash? You can restore it from the system Trash.",
-  "filespace.confirm.trashMany": "Move {n} files to Trash? You can restore them from the system Trash.",
+  "filespace.confirm.trashOne":
+    "Move “{name}” to Trash? You can restore it from the system Trash.",
+  "filespace.confirm.trashMany":
+    "Move {n} files to Trash? You can restore them from the system Trash.",
   "filespace.confirm.cancel": "Cancel",
   "filespace.confirm.ok": "Move to Trash",
   "filespace.toast.openLimit": "Can open at most {n} files at once",
   "filespace.toast.revealSingleOnly": "Reveal works for a single file only",
-  "filespace.toast.attachTruncated": "Attachment limit is {max}; only the first {n} were added",
+  "filespace.toast.attachTruncated":
+    "Attachment limit is {max}; only the first {n} were added",
   "filespace.toast.partialFail": "{ok} succeeded, {fail} failed: {detail}",
   "filespace.toast.copiedPath": "Path copied",
   "filespace.toast.copiedFile": "File copied",
@@ -4358,7 +4704,8 @@ export const en: Record<MessageKey, string> = {
   "prefs.glass.liquid": "Liquid Glass",
   "prefs.glass.liquidDesc": "Sheer tint, saturated see-through, specular edges",
   "prefs.glass.liquidSoft": "Liquid Glass (soft)",
-  "prefs.glass.liquidSoftDesc": "Same specular edges, denser tint for long text",
+  "prefs.glass.liquidSoftDesc":
+    "Same specular edges, denser tint for long text",
   "prefs.glass.rich": "Rich",
   "prefs.glass.richDesc": "Full blur + multi-layer shadows",
   "prefs.glass.normal": "Standard",
@@ -4366,7 +4713,8 @@ export const en: Record<MessageKey, string> = {
   "prefs.glass.minimal": "Minimal",
   "prefs.glass.minimalDesc": "No blur, no shadows, lightest",
   "prefs.morphicons.title": "Icon animation",
-  "prefs.morphicons.sub": "Control the spring feel and stroke weight of state icon morphs",
+  "prefs.morphicons.sub":
+    "Control the spring feel and stroke weight of state icon morphs",
   "prefs.morphicons.spring": "Spring",
   "prefs.morphicons.spring.smooth": "Smooth",
   "prefs.morphicons.spring.snappy": "Snappy",
@@ -4383,14 +4731,19 @@ export const en: Record<MessageKey, string> = {
   "prefs.theme.autoDesc": "Follow system appearance",
 
   "prefs.colorStyle.title": "Color style",
-  "prefs.colorStyle.sub": "Colorful per page, one unified tint, or dynamic accents",
+  "prefs.colorStyle.sub":
+    "Colorful per page, one unified tint, or dynamic accents",
   "prefs.colorStyle.colorful": "Colorful",
-  "prefs.colorStyle.colorfulDesc": "Each page has its own tint; the background follows as you switch",
+  "prefs.colorStyle.colorfulDesc":
+    "Each page has its own tint; the background follows as you switch",
   "prefs.colorStyle.unified": "Unified",
-  "prefs.colorStyle.unifiedDesc": "One ambient tint, with optional custom gradient",
+  "prefs.colorStyle.unifiedDesc":
+    "One ambient tint, with optional custom gradient",
   "prefs.colorStyle.dynamic": "Dynamic",
-  "prefs.colorStyle.dynamicDesc": "A unique palette per page that stays stable across reloads",
-  "prefs.colorStyle.dynamicHint": "Colors come from a local seed; they change by page and stay put after refresh",
+  "prefs.colorStyle.dynamicDesc":
+    "A unique palette per page that stays stable across reloads",
+  "prefs.colorStyle.dynamicHint":
+    "Colors come from a local seed; they change by page and stay put after refresh",
   "prefs.colorStyle.reshuffle": "Regenerate colors",
   "prefs.colorStyle.presets": "Unified color presets",
   "prefs.colorStyle.custom": "Custom gradient",
@@ -4417,8 +4770,10 @@ export const en: Record<MessageKey, string> = {
   "prefs.colorStyle.preset.forest": "Forest",
 
   "prefs.appIcon.title": "App icon",
-  "prefs.appIcon.sub": "Switch the tray, dock, and window icon. Saved locally and applied on launch.",
-  "prefs.appIcon.finderNote": "Note: the installed app icon in Finder / taskbar is baked into the bundle and does not change here; this only affects the tray, macOS dock, and Windows/Linux window icon.",
+  "prefs.appIcon.sub":
+    "Switch the tray, dock, and window icon. Saved locally and applied on launch.",
+  "prefs.appIcon.finderNote":
+    "Note: the installed app icon in Finder / taskbar is baked into the bundle and does not change here; this only affects the tray, macOS dock, and Windows/Linux window icon.",
   "prefs.appIcon.blue": "Blue",
   "prefs.appIcon.deepBlue": "Deep blue",
   "prefs.appIcon.black": "Black",
@@ -4432,7 +4787,8 @@ export const en: Record<MessageKey, string> = {
   "prefs.system.title": "System",
   "prefs.system.sub": "Startup and system integration",
   "prefs.system.autostart": "Launch at login",
-  "prefs.system.autostartDesc": "Automatically start Astro Agent when you log in",
+  "prefs.system.autostartDesc":
+    "Automatically start Astro Agent when you log in",
 
   "prefs.lang.title": "Language",
   "prefs.lang.sub": "Switch Chinese / English — saved locally",
@@ -4442,13 +4798,17 @@ export const en: Record<MessageKey, string> = {
   "prefs.lang.enDesc": "English interface",
 
   "prefs.chat.title": "Chat panel display",
-  "prefs.chat.sub": "Control chat verbosity and tool / Skills / MCP / Hook process cards",
+  "prefs.chat.sub":
+    "Control chat verbosity and tool / Skills / MCP / Hook process cards",
   "prefs.chat.layout.title": "AI answer layout",
-  "prefs.chat.layout.sub": "Choose how reasoning, tools, and answer text are organized; changes apply immediately",
+  "prefs.chat.layout.sub":
+    "Choose how reasoning, tools, and answer text are organized; changes apply immediately",
   "prefs.chat.layout.timeline": "Timeline",
-  "prefs.chat.layout.timelineDesc": "Keep reasoning, tools, and answer fragments in their original order",
+  "prefs.chat.layout.timelineDesc":
+    "Keep reasoning, tools, and answer fragments in their original order",
   "prefs.chat.layout.grouped": "Grouped view",
-  "prefs.chat.layout.groupedDesc": "Merge reasoning, collect tools, and combine text into one answer",
+  "prefs.chat.layout.groupedDesc":
+    "Merge reasoning, collect tools, and combine text into one answer",
   "prefs.chat.verbosity": "Verbosity",
   "prefs.chat.compact": "Compact",
   "prefs.chat.compactDesc": "Messages only — hide process cards",
@@ -4473,18 +4833,22 @@ export const en: Record<MessageKey, string> = {
   "prefs.chat.showTimestampsDesc": "Show time on messages and process cards",
 
   "prefs.context.title": "Context & compression",
-  "prefs.context.sub": "Configure Soft/Medium/Hard, mid-run, and /compact recommend thresholds",
-  "prefs.context.viewHint": "Layered usage lives in the chat Context panel; this card only tunes triggers and budgets.",
+  "prefs.context.sub":
+    "Configure Soft/Medium/Hard, mid-run, and /compact recommend thresholds",
+  "prefs.context.viewHint":
+    "Layered usage lives in the chat Context panel; this card only tunes triggers and budgets.",
   "prefs.context.loading": "Loading compression settings…",
   "prefs.context.enabled": "Enable automatic context maintenance",
-  "prefs.context.enabledDesc": "When off, manual /compact still works; auto prune / summarize / mid-run stop",
+  "prefs.context.enabledDesc":
+    "When off, manual /compact still works; auto prune / summarize / mid-run stop",
   "prefs.context.stages": "Stage trigger ratios (of context window)",
   "prefs.context.soft": "Soft",
   "prefs.context.softDesc": "Light pressure; start pruning longer tool results",
   "prefs.context.medium": "Medium",
   "prefs.context.mediumDesc": "Standard head/tail truncation",
   "prefs.context.hard": "Hard",
-  "prefs.context.hardDesc": "Strong pressure; prune all tools outside the protected tail",
+  "prefs.context.hardDesc":
+    "Strong pressure; prune all tools outside the protected tail",
   "prefs.context.budgets": "Stage character budgets (provider view)",
   "prefs.context.budgetSoft": "Soft budget",
   "prefs.context.budgetMedium": "Medium budget",
@@ -4494,21 +4858,27 @@ export const en: Record<MessageKey, string> = {
   "prefs.context.tailChars": "Keep tail",
   "prefs.context.triggers": "Triggers & protection",
   "prefs.context.toolResultsLimit": "Tool-count fallback",
-  "prefs.context.toolResultsLimitDesc": "Also maintain at Soft when uncompressed tools reach this; 0 disables",
+  "prefs.context.toolResultsLimitDesc":
+    "Also maintain at Soft when uncompressed tools reach this; 0 disables",
   "prefs.context.midRun": "Mid-run summary",
-  "prefs.context.midRunDesc": "Collapse middle turns at this occupancy (no session split)",
+  "prefs.context.midRunDesc":
+    "Collapse middle turns at this occupancy (no session split)",
   "prefs.context.recommend": "Recommend /compact",
   "prefs.context.recommendDesc": "Gateway pre-maintain and toast threshold",
   "prefs.context.protectLast": "Protected tail messages",
   "prefs.context.protectLastDesc": "Do not prune the last N messages",
   "prefs.context.protectFirst": "Protected head messages",
-  "prefs.context.protectFirstDesc": "Messages kept at the start when mid-run folds history",
+  "prefs.context.protectFirstDesc":
+    "Messages kept at the start when mid-run folds history",
   "prefs.context.thrashingGain": "Thrashing min gain",
-  "prefs.context.thrashingGainDesc": "Occupancy drop below this counts as low gain",
+  "prefs.context.thrashingGainDesc":
+    "Occupancy drop below this counts as low gain",
   "prefs.context.thrashingMax": "Low-gain streak",
-  "prefs.context.thrashingMaxDesc": "Disable auto maintenance for the turn after this many lows",
+  "prefs.context.thrashingMaxDesc":
+    "Disable auto maintenance for the turn after this many lows",
   "prefs.context.keepTail": "Compact keep-tail bubbles",
-  "prefs.context.keepTailDesc": "Recent bubble rounds kept in the new session after /compact",
+  "prefs.context.keepTailDesc":
+    "Recent bubble rounds kept in the new session after /compact",
   "prefs.context.refresh": "Refresh",
   "prefs.context.reset": "Reset defaults",
   "prefs.context.invalidOrder": "Require Soft < Medium < Hard",
@@ -4574,7 +4944,8 @@ export const en: Record<MessageKey, string> = {
   "plugins.mcpPublic.category.design": "Design",
   "plugins.mcpPublic.category.memory": "Memory",
   "plugins.mcpPublic.category.other": "Other",
-  "plugins.mcpPublic.categoryEmpty": "No public MCP is available in this category yet",
+  "plugins.mcpPublic.categoryEmpty":
+    "No public MCP is available in this category yet",
   "plugins.mcpPublic.discoveryOnly": "Browse only",
   "plugins.mcpPublic.officialClaim": "Source-marked official",
   "plugins.mcpPublic.sponsored": "Sponsored",
@@ -4586,22 +4957,30 @@ export const en: Record<MessageKey, string> = {
   "plugins.action.updates": "Updates",
   "plugins.action.store": "Online Skill store",
   "plugins.readonly": "Built-in, read-only",
-  "plugins.publicReadonly": "Public MCPs are installed from the directory and cannot be created here",
+  "plugins.publicReadonly":
+    "Public MCPs are installed from the directory and cannot be created here",
   "plugins.scopeTitle.global": "Personal Skills",
   "plugins.scopeTitle.builtin": "Built-in Skills",
   "plugins.scopeTitle.project": "Current project Skills",
-  "plugins.scopeSub.global": "{count} of {total} personal Skills are available to this Agent",
+  "plugins.scopeSub.global":
+    "{count} of {total} personal Skills are available to this Agent",
   "plugins.scopeSub.builtin": "{total} read-only Skills bundled with Astro",
-  "plugins.scopeSub.project": "{count} of {total} Skills belong to the current project",
-  "plugins.scopeEmpty.global": "No personal Skills yet. Install from the store or import a local Skill.",
+  "plugins.scopeSub.project":
+    "{count} of {total} Skills belong to the current project",
+  "plugins.scopeEmpty.global":
+    "No personal Skills yet. Install from the store or import a local Skill.",
   "plugins.scopeEmpty.builtin": "This Astro build has no built-in Skills",
-  "plugins.scopeEmpty.project": "No project Skills yet. Add one under .astro/skills.",
+  "plugins.scopeEmpty.project":
+    "No project Skills yet. Add one under .astro/skills.",
   "plugins.mcpEmpty.global.title": "No personal MCP servers",
-  "plugins.mcpEmpty.global.hint": "Added servers belong to this user and apply across your projects",
+  "plugins.mcpEmpty.global.hint":
+    "Added servers belong to this user and apply across your projects",
   "plugins.mcpEmpty.builtin.title": "The public MCP directory is empty",
-  "plugins.mcpEmpty.builtin.hint": "Once connected, browse and install curated MCP servers by category",
+  "plugins.mcpEmpty.builtin.hint":
+    "Once connected, browse and install curated MCP servers by category",
   "plugins.mcpEmpty.project.title": "No project MCP servers",
-  "plugins.mcpEmpty.project.hint": "New servers are written to .astro/config.toml in this project",
+  "plugins.mcpEmpty.project.hint":
+    "New servers are written to .astro/config.toml in this project",
   "skills.mainTabs": "Skills view",
   "skills.viewMode": "View mode",
   "skills.view.gallery": "Gallery",
@@ -4612,7 +4991,8 @@ export const en: Record<MessageKey, string> = {
   "skills.tab.updates": "Updates",
   "skills.tab.online": "Install online",
   "skills.updatesTitle": "Update skills",
-  "skills.updatesSub": "Reinstall from the original source to sync the latest version",
+  "skills.updatesSub":
+    "Reinstall from the original source to sync the latest version",
   "skills.updatesFilter.updatable": "Updatable",
   "skills.updatesFilter.withOrigin": "Has origin",
   "skills.updatesFilter.noOrigin": "No origin",
@@ -4624,7 +5004,8 @@ export const en: Record<MessageKey, string> = {
   "skills.checkUpdates": "Check updates",
   "skills.checkingUpdates": "Checking…",
   "skills.checkUpdatesDone": "{count} update(s) available",
-  "skills.updatesNeedCheck": "Click “Check updates” first to see updatable skills",
+  "skills.updatesNeedCheck":
+    "Click “Check updates” first to see updatable skills",
   "skills.upToDate": "Up to date",
   "skills.outdatedBadge": "Update available",
   "skills.updateStatusUnknown": "Could not determine update status",
@@ -4638,7 +5019,8 @@ export const en: Record<MessageKey, string> = {
   "skills.neverChecked": "Remote versions have not been checked",
   "skills.updateDone": "「{name}」 updated",
   "skills.updateAllDone": "{ok} succeeded, {fail} failed",
-  "skills.noOriginHint": "No install origin recorded; cannot update automatically",
+  "skills.noOriginHint":
+    "No install origin recorded; cannot update automatically",
   "skills.updateOverwriteHint":
     "Local changes are checked first, with an option to back up before updating",
   "skills.updateLocalChangesTitle": "Local changes detected",
@@ -4655,8 +5037,10 @@ export const en: Record<MessageKey, string> = {
   "skills.backupOpen": "Open",
   "skills.storeAll": "All",
   "skills.installedTitle": "Installed",
-  "skills.installedSub": "{count} enabled / {total} total (~/.astro/skills + current Agent workspace)",
-  "skills.installedEmpty": "No Astro skills yet — install skills to see them here",
+  "skills.installedSub":
+    "{count} enabled / {total} total (~/.astro/skills + current Agent workspace)",
+  "skills.installedEmpty":
+    "No Astro skills yet — install skills to see them here",
   "skills.installedSearchEmpty": "No matching installed skills",
   "skills.machineTitle": "On this Mac",
   "skills.machineSub": "From Astro / Claude / Cursor and similar folders",
@@ -4715,21 +5099,29 @@ export const en: Record<MessageKey, string> = {
   "skills.installing": "Installing…",
   "skills.installDone": "“{name}” installed",
   "skills.installDoneTarget": "“{name}” installed to {target}",
-  "skills.installDoneNeedsKey": "“{name}” installed to {target}; API Key setup is still required",
+  "skills.installDoneNeedsKey":
+    "“{name}” installed to {target}; API Key setup is still required",
   "skills.installTargetKicker": "Choose install location",
-  "skills.installTargetHint": "The Skill is written directly to the selected .astro/skills scope",
-  "skills.installAgentTargetHint": "The Agent will use Astro's native installer without running an external CLI or writing to other Skills folders",
+  "skills.installTargetHint":
+    "The Skill is written directly to the selected .astro/skills scope",
+  "skills.installAgentTargetHint":
+    "The Agent will use Astro's native installer without running an external CLI or writing to other Skills folders",
   "skills.installTargetLabel": "Install target",
   "skills.installTarget.personal": "Install for me",
-  "skills.installTarget.personalDesc": "Available only to this user across your projects",
+  "skills.installTarget.personalDesc":
+    "Available only to this user across your projects",
   "skills.installTarget.project": "Install in current project",
-  "skills.installTarget.projectDesc": "Shared with project configuration and active only here",
+  "skills.installTarget.projectDesc":
+    "Shared with project configuration and active only here",
   "skills.installToTarget": "Install to {target}",
   "skills.installViaAgentToTarget": "Ask Agent to install to {target}",
-  "skills.apiKeyInstallNotice": "This Skill can be installed now, but it still needs an API Key before use. The key will not be written to the Skill or project files.",
+  "skills.apiKeyInstallNotice":
+    "This Skill can be installed now, but it still needs an API Key before use. The key will not be written to the Skill or project files.",
   "skills.apiKeySetupKicker": "Installed · Setup required",
-  "skills.apiKeySetupBody": "The Skill was installed to {target}. Check its instructions first to identify the exact credential names and signup steps.",
-  "skills.apiKeySafetyHint": "Do not paste API Keys into chat. The Agent will only inspect setup instructions and will not read or store the secret.",
+  "skills.apiKeySetupBody":
+    "The Skill was installed to {target}. Check its instructions first to identify the exact credential names and signup steps.",
+  "skills.apiKeySafetyHint":
+    "Do not paste API Keys into chat. The Agent will only inspect setup instructions and will not read or store the secret.",
   "skills.apiKeySetupLater": "Set up later",
   "skills.apiKeyInspectWithAgent": "Ask Agent to inspect setup",
   "skills.alreadyInstalled": "Installed",
@@ -4758,7 +5150,8 @@ export const en: Record<MessageKey, string> = {
   "skills.detailInstalls": "Installs",
   "skills.detailStars": "Stars",
   "skills.detailUpdated": "Updated",
-  "skills.noDescription": "No description yet. Use Open in browser for the official page.",
+  "skills.noDescription":
+    "No description yet. Use Open in browser for the official page.",
   "skills.detailBreadcrumb": "Skill detail navigation",
   "skills.detailCrumbSkills": "Skills",
   "skills.detailTabOverview": "Overview",
@@ -4770,7 +5163,8 @@ export const en: Record<MessageKey, string> = {
   "skills.detailFavorites": "favorites",
   "skills.detailDownloads": "Downloads",
   "skills.detailAuthor": "Author",
-  "skills.detailInstallCardTitle": "Send this prompt to your AI to install the skill",
+  "skills.detailInstallCardTitle":
+    "Send this prompt to your AI to install the skill",
   "skills.detailUpdatedToday": "Updated today",
   "skills.detailUpdatedDays": "Updated {days} days ago",
   "skills.detailUpdatedMonths": "Updated {months} months ago",
@@ -4784,9 +5178,11 @@ export const en: Record<MessageKey, string> = {
   "skills.previewTab.assets": "Assets",
   "skills.previewTab.other": "Other",
   "skills.previewLoading": "Loading file…",
-  "skills.previewBinary": "Binary or unsupported for preview. Open externally instead.",
+  "skills.previewBinary":
+    "Binary or unsupported for preview. Open externally instead.",
   "skills.previewOpenExternal": "Open externally",
-  "skills.previewTooLarge": "File is too large to preview here. Open it externally.",
+  "skills.previewTooLarge":
+    "File is too large to preview here. Open it externally.",
   "skills.previewMode": "Preview",
   "skills.previewSource": "Source",
   "skills.copyContent": "Copy",
@@ -4836,17 +5232,23 @@ export const en: Record<MessageKey, string> = {
   "providers.musicModel": "Music generation model",
   "providers.visionModel": "Vision model",
   "providers.mediaDefaultOption": "Latest auto ({model})",
-  "providers.mediaHint": "Leave blank to auto-select the latest model. Changes apply to agent media tools after save.",
+  "providers.mediaHint":
+    "Leave blank to auto-select the latest model. Changes apply to agent media tools after save.",
   "providers.tabVoice": "Voice",
-  "providers.voiceHint": "Configure Text-to-Speech (TTS) and Automatic Speech Recognition (ASR) models.",
+  "providers.voiceHint":
+    "Configure Text-to-Speech (TTS) and Automatic Speech Recognition (ASR) models.",
   "providers.asrModel": "Speech Recognition (ASR)",
-  "providers.asrModelHint": "Preset by provider profile; custom ASR models not yet supported.",
+  "providers.asrModelHint":
+    "Preset by provider profile; custom ASR models not yet supported.",
   "providers.tabEmbedding": "Embedding",
-  "providers.embeddingHint": "Configure embedding models for RAG and semantic search.",
+  "providers.embeddingHint":
+    "Configure embedding models for RAG and semantic search.",
   "providers.embeddingModel": "Embedding model",
-  "providers.embeddingModelHint": "Model for text vectorization. Leave blank for provider default.",
+  "providers.embeddingModelHint":
+    "Model for text vectorization. Leave blank for provider default.",
   "providers.apiKey": "API Key",
-  "providers.apiKeyHint": "Reads system env vars first; you can also save to the keychain (not written to config files)",
+  "providers.apiKeyHint":
+    "Reads system env vars first; you can also save to the keychain (not written to config files)",
   "providers.apiKeyPlaceholder": "Enter a new API key…",
   "providers.apiKeyConfigured": "Key configured (click to replace)",
   "providers.apiKeySaved": "Key saved",
@@ -4900,7 +5302,8 @@ export const en: Record<MessageKey, string> = {
   "providers.expiration": "Expiration",
   "providers.expiring": "Expiring",
   "providers.expiringConfirmTitle": "Use an expiring model?",
-  "providers.expiringConfirmMessage": "This model has an expiration date and may stop working later. Continue anyway?",
+  "providers.expiringConfirmMessage":
+    "This model has an expiration date and may stop working later. Continue anyway?",
   "providers.expiringConfirmOk": "Use anyway",
   "providers.pricePerM": "Price ($/M tokens)",
   "providers.created": "Listed",
@@ -4923,7 +5326,8 @@ export const en: Record<MessageKey, string> = {
   "providers.kind.minimax": "MiniMax",
   "providers.kind.hunyuan": "Tencent Hunyuan",
   "providers.kind.custom": "Custom",
-  "providers.volcengineModelHint": "Model may be an Ark endpoint ID (e.g. ep-…)",
+  "providers.volcengineModelHint":
+    "Model may be an Ark endpoint ID (e.g. ep-…)",
   "providers.googleOpenaiCompatDeprecated": "Deprecated · OpenAI compat",
   "providers.fallback.addAriaLabel": "Add fallback provider",
   "providers.fallback.noneAvailable": "No providers available",
@@ -4975,61 +5379,78 @@ export const en: Record<MessageKey, string> = {
   "cron.quick.title": "Start from a template",
   "cron.quick.hint": "You can edit the content and frequency afterwards",
   "cron.quick.followup.title": "Follow-up monitor",
-  "cron.quick.followup.task": "Check the important items I am following and send me a short update when there is new progress, a blocker, or something that needs my attention.",
+  "cron.quick.followup.task":
+    "Check the important items I am following and send me a short update when there is new progress, a blocker, or something that needs my attention.",
   "cron.quick.weekly.title": "Weekly review",
-  "cron.quick.weekly.task": "Review my work this week and draft a short status update organized into completed, still to close, and risks.",
+  "cron.quick.weekly.task":
+    "Review my work this week and draft a short status update organized into completed, still to close, and risks.",
   "cron.quick.brief.title": "Daily brief",
-  "cron.quick.brief.task": "Give me a morning brief with my schedule, important unread email, and anything that needs my attention today.",
+  "cron.quick.brief.task":
+    "Give me a morning brief with my schedule, important unread email, and anything that needs my attention today.",
   "cron.create": "New task",
   "cron.createFromTemplate": "Create from template",
   "cron.empty": "No scheduled tasks",
-  "cron.emptyHint": "Create a scheduled task and the Agent will run it automatically",
+  "cron.emptyHint":
+    "Create a scheduled task and the Agent will run it automatically",
   "cron.templates.title": "Automation templates",
   "cron.tpl.news.title": "Daily AI news briefing",
   "cron.tpl.news.desc": "Catch the day's most important AI stories",
-  "cron.tpl.news.task": "Search and summarize the 3–5 most important AI stories from today — model releases, notable papers, and industry news. Write a concise English brief for each item with key takeaways.",
+  "cron.tpl.news.task":
+    "Search and summarize the 3–5 most important AI stories from today — model releases, notable papers, and industry news. Write a concise English brief for each item with key takeaways.",
   "cron.tpl.words.title": "Five English words a day",
   "cron.tpl.words.desc": "Daily high-frequency, practical vocabulary",
-  "cron.tpl.words.task": "Recommend 5 high-frequency practical English words, including IPA, a Chinese gloss, an example sentence, and a memory tip. Keep the difficulty moderate for everyday and workplace use.",
+  "cron.tpl.words.task":
+    "Recommend 5 high-frequency practical English words, including IPA, a Chinese gloss, an example sentence, and a memory tip. Keep the difficulty moderate for everyday and workplace use.",
   "cron.tpl.story.title": "Bedtime story for kids",
   "cron.tpl.story.desc": "A gentle 3–5 minute story to read aloud",
-  "cron.tpl.story.task": "Write an original bedtime story for ages 4–8, about 500 words. Keep the theme warm and positive, the language vivid and easy, and the ending calm.",
+  "cron.tpl.story.task":
+    "Write an original bedtime story for ages 4–8, about 500 words. Keep the theme warm and positive, the language vivid and easy, and the ending calm.",
   "cron.tpl.weekly.title": "Weekly work recap",
   "cron.tpl.weekly.desc": "Friday recap of PRs, issues, and plans",
-  "cron.tpl.weekly.task": "Draft this week's work recap in Markdown: what got done, problems encountered, and next week's plan.",
+  "cron.tpl.weekly.task":
+    "Draft this week's work recap in Markdown: what got done, problems encountered, and next week's plan.",
   "cron.tpl.movie.title": "Classic movie pick",
   "cron.tpl.movie.desc": "Recommend one highly rated classic",
-  "cron.tpl.movie.task": "Recommend one highly rated classic film: title, year, director, Douban/IMDb rating, a spoiler-free plot summary, and why it's worth watching. Pick a different film each time.",
+  "cron.tpl.movie.task":
+    "Recommend one highly rated classic film: title, year, director, Douban/IMDb rating, a spoiler-free plot summary, and why it's worth watching. Pick a different film each time.",
   "cron.tpl.history.title": "On this day in history",
   "cron.tpl.history.desc": "Notable events across science and culture",
-  "cron.tpl.history.task": "Share 2–3 interesting or important events that happened on this day in history, spanning science, culture, and sports. Summarize each in 2–3 sentences and include the year.",
+  "cron.tpl.history.task":
+    "Share 2–3 interesting or important events that happened on this day in history, spanning science, culture, and sports. Summarize each in 2–3 sentences and include the year.",
   "cron.tpl.family.title": "Call your parents",
   "cron.tpl.family.desc": "Sunday reminder to check in with family",
-  "cron.tpl.family.task": "Reminder: it's Sunday — call or message your parents. Ask how they're doing, what they've been up to, and whether they need any help.",
+  "cron.tpl.family.task":
+    "Reminder: it's Sunday — call or message your parents. Ask how they're doing, what they've been up to, and whether they need any help.",
   "cron.tpl.health.title": "Daily health check-in",
   "cron.tpl.health.desc": "A daily nudge for hydration and movement",
-  "cron.tpl.health.task": "Daily health check-in: 1) Have you had 8 glasses of water? 2) Stand up and stretch for 5 minutes. 3) Rest your eyes — look into the distance for 20 seconds. 4) Any exercise planned today? Aim for at least 30 minutes of cardio.",
+  "cron.tpl.health.task":
+    "Daily health check-in: 1) Have you had 8 glasses of water? 2) Stand up and stretch for 5 minutes. 3) Rest your eyes — look into the distance for 20 seconds. 4) Any exercise planned today? Aim for at least 30 minutes of cardio.",
   "cron.tpl.meeting.title": "Meeting prep",
   "cron.tpl.meeting.desc": "Weekday morning reminder to gather topics",
-  "cron.tpl.meeting.task": "Meeting prep reminder: you have an upcoming meeting. Get ready: 1) review the agenda, 2) collect progress to report, 3) list questions to discuss, 4) confirm materials are ready.",
+  "cron.tpl.meeting.task":
+    "Meeting prep reminder: you have an upcoming meeting. Get ready: 1) review the agenda, 2) collect progress to report, 3) list questions to discuss, 4) confirm materials are ready.",
   "cron.tpl.interview.title": "Interview drill",
   "cron.tpl.interview.desc": "Weekday LLM interview refresh every 2 hours",
-  "cron.tpl.interview.task": "Every two hours, quiz me on LLM project highlights, technical challenges, and common Q&A. Generate 3 mock interview questions.",
+  "cron.tpl.interview.task":
+    "Every two hours, quiz me on LLM project highlights, technical challenges, and common Q&A. Generate 3 mock interview questions.",
   "cron.error": "Failed to load",
   "cron.dialog.title": "New scheduled task",
   "cron.field.nl": "Natural language",
   "cron.field.nlPlaceholder": "e.g. Remind me to drink water every day at 9am",
   "cron.nl.fill": "Auto-fill",
   "cron.nl.filling": "Parsing…",
-  "cron.nl.hint": "Describe the job in one sentence to fill name, instructions, and schedule",
-  "cron.nl.decodeError": "Extracted the job, but the schedule could not map to the editor — adjust manually",
+  "cron.nl.hint":
+    "Describe the job in one sentence to fill name, instructions, and schedule",
+  "cron.nl.decodeError":
+    "Extracted the job, but the schedule could not map to the editor — adjust manually",
   "cron.field.name": "Task name",
   "cron.field.agent": "Agent",
   "cron.field.task": "Instructions",
   "cron.field.model": "Model",
   "cron.field.provider": "Provider",
   "cron.field.showInChat": "Show in chat",
-  "cron.field.showInChatHint": "When on, each run creates a chat and shows its task card at the top",
+  "cron.field.showInChatHint":
+    "When on, each run creates a chat and shows its task card at the top",
   "cron.advanced": "Advanced",
   "cron.tab.jobs": "Tasks",
   "cron.tab.history": "History",
@@ -5037,7 +5458,8 @@ export const en: Record<MessageKey, string> = {
   "cron.view.list": "List",
   "cron.view.detail": "Detail",
   "cron.history.empty": "No run history yet",
-  "cron.history.emptyHint": "When jobs fire in the background, results appear here",
+  "cron.history.emptyHint":
+    "When jobs fire in the background, results appear here",
   "cron.history.runningWait": "Running — fetching steps…",
   "cron.history.loadingTrace": "Loading steps…",
   "cron.history.traceTitle": "Steps",
@@ -5049,8 +5471,10 @@ export const en: Record<MessageKey, string> = {
   "cron.history.clearDate": "Clear date",
   "cron.history.viewLog": "View run log",
   "cron.history.deleteRun": "Delete run",
-  "cron.history.deleteRunConfirm": "Delete this run record? This cannot be undone.",
-  "cron.history.deleteRunRunning": "This run is still in progress — delete it after it finishes",
+  "cron.history.deleteRunConfirm":
+    "Delete this run record? This cannot be undone.",
+  "cron.history.deleteRunRunning":
+    "This run is still in progress — delete it after it finishes",
   "cron.history.openSession": "Open session",
   "cron.history.logTitle": "Run log",
   "cron.run.statusSuccess": "Success",

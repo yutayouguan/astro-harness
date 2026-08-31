@@ -57,17 +57,12 @@ interface ModelCatalogEntry {
 
 type SortKey = "price" | "context" | "newest" | "name";
 type FilterKey =
-  | "all"
-  | "tools"
-  | "reasoning"
-  | "vision"
-  | "audio"
-  | "image"
-  | "free";
+  "all" | "tools" | "reasoning" | "vision" | "audio" | "image" | "free";
 
 function formatCtx(n: number | null): string {
   if (!n) return "—";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 1_000_000)
+    return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return String(n);
 }
@@ -102,7 +97,10 @@ function stripProviderPrefix(name: string, provider: string): string {
   const colonIdx = name.indexOf(": ");
   if (colonIdx > 0 && colonIdx < 20) {
     const before = name.slice(0, colonIdx).toLowerCase();
-    if (provider.toLowerCase().includes(before) || before.includes(provider.toLowerCase())) {
+    if (
+      provider.toLowerCase().includes(before) ||
+      before.includes(provider.toLowerCase())
+    ) {
       return name.slice(colonIdx + 2);
     }
   }
@@ -134,22 +132,34 @@ function CapabilityBadges({ m }: { m: ModelCatalogEntry }) {
   return (
     <div className="model-market-card-caps">
       {m.supports_function_calling && (
-        <span className="model-market-cap" title="Tools"><Wrench size={11} /></span>
+        <span className="model-market-cap" title="Tools">
+          <Wrench size={11} />
+        </span>
       )}
       {m.supports_reasoning && (
-        <span className="model-market-cap" title="Reasoning"><Brain size={11} /></span>
+        <span className="model-market-cap" title="Reasoning">
+          <Brain size={11} />
+        </span>
       )}
       {m.supports_vision && (
-        <span className="model-market-cap" title="Vision"><Eye size={11} /></span>
+        <span className="model-market-cap" title="Vision">
+          <Eye size={11} />
+        </span>
       )}
       {m.supports_audio_input && (
-        <span className="model-market-cap" title="Audio Input"><Headphones size={11} /></span>
+        <span className="model-market-cap" title="Audio Input">
+          <Headphones size={11} />
+        </span>
       )}
       {m.supports_image_generation && (
-        <span className="model-market-cap" title="Image Gen"><Image size={11} /></span>
+        <span className="model-market-cap" title="Image Gen">
+          <Image size={11} />
+        </span>
       )}
       {m.supports_web_search && (
-        <span className="model-market-cap" title="Web Search"><Globe size={11} /></span>
+        <span className="model-market-cap" title="Web Search">
+          <Globe size={11} />
+        </span>
       )}
     </div>
   );
@@ -159,13 +169,48 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
   const { t } = useI18n();
   const provider = providerFromId(model.id);
   const name = stripProviderPrefix(model.name ?? modelSlug(model.id), provider);
-  const caps: { key: string; label: string; Icon: typeof Brain; has: boolean }[] = [
-    { key: "tools", label: t("modelMarket.filter.tools" as never), Icon: Wrench, has: model.supports_function_calling },
-    { key: "reasoning", label: t("modelMarket.filter.reasoning" as never), Icon: Brain, has: model.supports_reasoning },
-    { key: "vision", label: t("modelMarket.filter.vision" as never), Icon: Eye, has: model.supports_vision },
-    { key: "audio", label: t("modelMarket.filter.audio" as never), Icon: Headphones, has: model.supports_audio_input || model.supports_audio_output },
-    { key: "image", label: t("modelMarket.filter.image" as never), Icon: Image, has: model.supports_image_generation },
-    { key: "web", label: t("modelMarket.filter.all" as never), Icon: Globe, has: model.supports_web_search },
+  const caps: {
+    key: string;
+    label: string;
+    Icon: typeof Brain;
+    has: boolean;
+  }[] = [
+    {
+      key: "tools",
+      label: t("modelMarket.filter.tools" as never),
+      Icon: Wrench,
+      has: model.supports_function_calling,
+    },
+    {
+      key: "reasoning",
+      label: t("modelMarket.filter.reasoning" as never),
+      Icon: Brain,
+      has: model.supports_reasoning,
+    },
+    {
+      key: "vision",
+      label: t("modelMarket.filter.vision" as never),
+      Icon: Eye,
+      has: model.supports_vision,
+    },
+    {
+      key: "audio",
+      label: t("modelMarket.filter.audio" as never),
+      Icon: Headphones,
+      has: model.supports_audio_input || model.supports_audio_output,
+    },
+    {
+      key: "image",
+      label: t("modelMarket.filter.image" as never),
+      Icon: Image,
+      has: model.supports_image_generation,
+    },
+    {
+      key: "web",
+      label: t("modelMarket.filter.all" as never),
+      Icon: Globe,
+      has: model.supports_web_search,
+    },
   ];
   const activeCaps = caps.filter((c) => c.has);
 
@@ -186,58 +231,103 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
 
       {model.description && (
         <div className="mm-detail-section">
-          <span className="mm-detail-label"><FileText size={13} /> {t("modelMarket.detail.description" as never)}</span>
+          <span className="mm-detail-label">
+            <FileText size={13} />{" "}
+            {t("modelMarket.detail.description" as never)}
+          </span>
           <div className="mm-detail-body">{model.description}</div>
         </div>
       )}
 
       <div className="mm-detail-section">
-        <span className="mm-detail-label"><Coins size={13} /> {t("modelMarket.detail.specs" as never)}</span>
+        <span className="mm-detail-label">
+          <Coins size={13} /> {t("modelMarket.detail.specs" as never)}
+        </span>
         <div className="mm-detail-meta-grid">
           <div className="mm-detail-meta-item">
-            <span className="mm-detail-meta-key"><BookOpen size={12} /> {t("modelMarket.context")}</span>
-            <span className="mm-detail-meta-val">{formatCtx(model.context_length)}</span>
+            <span className="mm-detail-meta-key">
+              <BookOpen size={12} /> {t("modelMarket.context")}
+            </span>
+            <span className="mm-detail-meta-val">
+              {formatCtx(model.context_length)}
+            </span>
           </div>
           {model.pricing && (
             <>
               <div className="mm-detail-meta-item">
-                <span className="mm-detail-meta-key"><Coins size={12} /> {t("modelMarket.detail.promptPrice" as never)}</span>
-                <span className="mm-detail-meta-val price">{formatPrice(model.pricing.prompt_per_million)}/M</span>
+                <span className="mm-detail-meta-key">
+                  <Coins size={12} />{" "}
+                  {t("modelMarket.detail.promptPrice" as never)}
+                </span>
+                <span className="mm-detail-meta-val price">
+                  {formatPrice(model.pricing.prompt_per_million)}/M
+                </span>
               </div>
               <div className="mm-detail-meta-item">
-                <span className="mm-detail-meta-key"><Coins size={12} /> {t("modelMarket.detail.completionPrice" as never)}</span>
-                <span className="mm-detail-meta-val price">{formatPrice(model.pricing.completion_per_million)}/M</span>
+                <span className="mm-detail-meta-key">
+                  <Coins size={12} />{" "}
+                  {t("modelMarket.detail.completionPrice" as never)}
+                </span>
+                <span className="mm-detail-meta-val price">
+                  {formatPrice(model.pricing.completion_per_million)}/M
+                </span>
               </div>
-              {model.pricing.cache_read_per_million != null && model.pricing.cache_read_per_million > 0 && (
-                <div className="mm-detail-meta-item">
-                  <span className="mm-detail-meta-key"><Coins size={12} /> {t("modelMarket.detail.cacheRead" as never)}</span>
-                  <span className="mm-detail-meta-val">{formatPrice(model.pricing.cache_read_per_million)}/M</span>
-                </div>
-              )}
-              {model.pricing.cache_write_per_million != null && model.pricing.cache_write_per_million > 0 && (
-                <div className="mm-detail-meta-item">
-                  <span className="mm-detail-meta-key"><Coins size={12} /> {t("modelMarket.detail.cacheWrite" as never)}</span>
-                  <span className="mm-detail-meta-val">{formatPrice(model.pricing.cache_write_per_million)}/M</span>
-                </div>
-              )}
+              {model.pricing.cache_read_per_million != null &&
+                model.pricing.cache_read_per_million > 0 && (
+                  <div className="mm-detail-meta-item">
+                    <span className="mm-detail-meta-key">
+                      <Coins size={12} />{" "}
+                      {t("modelMarket.detail.cacheRead" as never)}
+                    </span>
+                    <span className="mm-detail-meta-val">
+                      {formatPrice(model.pricing.cache_read_per_million)}/M
+                    </span>
+                  </div>
+                )}
+              {model.pricing.cache_write_per_million != null &&
+                model.pricing.cache_write_per_million > 0 && (
+                  <div className="mm-detail-meta-item">
+                    <span className="mm-detail-meta-key">
+                      <Coins size={12} />{" "}
+                      {t("modelMarket.detail.cacheWrite" as never)}
+                    </span>
+                    <span className="mm-detail-meta-val">
+                      {formatPrice(model.pricing.cache_write_per_million)}/M
+                    </span>
+                  </div>
+                )}
             </>
           )}
           {model.knowledge_cutoff && (
             <div className="mm-detail-meta-item">
-              <span className="mm-detail-meta-key"><Calendar size={12} /> {t("modelMarket.detail.cutoff" as never)}</span>
-              <span className="mm-detail-meta-val">{model.knowledge_cutoff}</span>
+              <span className="mm-detail-meta-key">
+                <Calendar size={12} /> {t("modelMarket.detail.cutoff" as never)}
+              </span>
+              <span className="mm-detail-meta-val">
+                {model.knowledge_cutoff}
+              </span>
             </div>
           )}
           {model.created && (
             <div className="mm-detail-meta-item">
-              <span className="mm-detail-meta-key"><Calendar size={12} /> {t("modelMarket.detail.created" as never)}</span>
-              <span className="mm-detail-meta-val">{new Date(model.created * 1000).toLocaleDateString()}</span>
+              <span className="mm-detail-meta-key">
+                <Calendar size={12} />{" "}
+                {t("modelMarket.detail.created" as never)}
+              </span>
+              <span className="mm-detail-meta-val">
+                {new Date(model.created * 1000).toLocaleDateString()}
+              </span>
             </div>
           )}
           {model.expiration_date && (
             <div className="mm-detail-meta-item">
-              <span className="mm-detail-meta-key"><Shield size={12} /> {t("modelMarket.detail.expiration" as never)}</span>
-              <span className="mm-detail-meta-val">{model.expiration_date}</span>
+              <span className="mm-detail-meta-key">
+                <Shield size={12} />{" "}
+                {t("modelMarket.detail.expiration" as never)}
+              </span>
+              <span className="mm-detail-meta-val">
+                {model.expiration_date}
+              </span>
             </div>
           )}
         </div>
@@ -245,7 +335,9 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
 
       {activeCaps.length > 0 && (
         <div className="mm-detail-section">
-          <span className="mm-detail-label"><Zap size={13} /> {t("modelMarket.detail.capabilities" as never)}</span>
+          <span className="mm-detail-label">
+            <Zap size={13} /> {t("modelMarket.detail.capabilities" as never)}
+          </span>
           <div className="mm-detail-caps">
             {activeCaps.map((c) => (
               <span key={c.key} className="mm-detail-cap">
@@ -257,20 +349,27 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
         </div>
       )}
 
-      {(model.input_modalities.length > 0 || model.output_modalities.length > 0) && (
+      {(model.input_modalities.length > 0 ||
+        model.output_modalities.length > 0) && (
         <div className="mm-detail-section">
-          <span className="mm-detail-label"><Layers size={13} /> {t("modelMarket.detail.modalities" as never)}</span>
+          <span className="mm-detail-label">
+            <Layers size={13} /> {t("modelMarket.detail.modalities" as never)}
+          </span>
           <div className="mm-detail-meta-grid">
             {model.input_modalities.length > 0 && (
               <div className="mm-detail-meta-item">
                 <span className="mm-detail-meta-key">Input</span>
-                <span className="mm-detail-meta-val">{model.input_modalities.join(", ")}</span>
+                <span className="mm-detail-meta-val">
+                  {model.input_modalities.join(", ")}
+                </span>
               </div>
             )}
             {model.output_modalities.length > 0 && (
               <div className="mm-detail-meta-item">
                 <span className="mm-detail-meta-key">Output</span>
-                <span className="mm-detail-meta-val">{model.output_modalities.join(", ")}</span>
+                <span className="mm-detail-meta-val">
+                  {model.output_modalities.join(", ")}
+                </span>
               </div>
             )}
           </div>
@@ -288,7 +387,9 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   const [sort, setSort] = useState<SortKey>("newest");
   const [sortAsc, setSortAsc] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [viewMode, setViewMode] = useState<"gallery" | "list" | "detail">("gallery");
+  const [viewMode, setViewMode] = useState<"gallery" | "list" | "detail">(
+    "gallery",
+  );
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
 
   const load = useCallback(async (force: boolean) => {
@@ -317,11 +418,16 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
     if (filter !== "all") {
       list = list.filter((m) => {
         switch (filter) {
-          case "tools": return m.supports_function_calling;
-          case "reasoning": return m.supports_reasoning;
-          case "vision": return m.supports_vision;
-          case "audio": return m.supports_audio_input || m.supports_audio_output;
-          case "image": return m.supports_image_generation;
+          case "tools":
+            return m.supports_function_calling;
+          case "reasoning":
+            return m.supports_reasoning;
+          case "vision":
+            return m.supports_vision;
+          case "audio":
+            return m.supports_audio_input || m.supports_audio_output;
+          case "image":
+            return m.supports_image_generation;
           case "free":
             return (
               m.pricing?.prompt_per_million === 0 &&
@@ -411,13 +517,15 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
 
   useEffect(() => {
     if (viewMode !== "detail") return;
-    if (selectedModelId && filtered.some((m) => m.id === selectedModelId)) return;
+    if (selectedModelId && filtered.some((m) => m.id === selectedModelId))
+      return;
     setSelectedModelId(filtered[0]?.id ?? null);
   }, [viewMode, filtered, selectedModelId]);
 
-  const selectedModel = viewMode === "detail"
-    ? filtered.find((m) => m.id === selectedModelId) ?? null
-    : null;
+  const selectedModel =
+    viewMode === "detail"
+      ? (filtered.find((m) => m.id === selectedModelId) ?? null)
+      : null;
 
   if (!active) return null;
 
@@ -468,11 +576,15 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                 }}
               >
                 {t(labelKey as never)}
-                {sort === key && (
-                  sortAsc
-                    ? <ArrowUpAZ size={13} className="model-market-sort-arrow" />
-                    : <ArrowDownAZ size={13} className="model-market-sort-arrow" />
-                )}
+                {sort === key &&
+                  (sortAsc ? (
+                    <ArrowUpAZ size={13} className="model-market-sort-arrow" />
+                  ) : (
+                    <ArrowDownAZ
+                      size={13}
+                      className="model-market-sort-arrow"
+                    />
+                  ))}
               </button>
             ))}
           </div>
@@ -539,7 +651,9 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
             <div className="mm-detail-list" ref={listRef} role="list">
               {filtered.length === 0 && !loading && (
                 <p className="model-market-empty">
-                  {models.length === 0 ? t("modelMarket.empty") : t("modelMarket.noResults")}
+                  {models.length === 0
+                    ? t("modelMarket.empty")
+                    : t("modelMarket.noResults")}
                 </p>
               )}
               {visible.map((m) => {
@@ -557,12 +671,19 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                       <ModelBrandIcon modelId={m.id} width={18} height={18} />
                     </span>
                     <div className="mm-detail-item-titles">
-                      <span className="mm-detail-item-provider">{provider}</span>
+                      <span className="mm-detail-item-provider">
+                        {provider}
+                      </span>
                       <span className="mm-detail-item-name">
-                        {stripProviderPrefix(m.name ?? modelSlug(m.id), provider)}
+                        {stripProviderPrefix(
+                          m.name ?? modelSlug(m.id),
+                          provider,
+                        )}
                       </span>
                     </div>
-                    <span className="mm-detail-item-ctx">{formatCtx(m.context_length)}</span>
+                    <span className="mm-detail-item-ctx">
+                      {formatCtx(m.context_length)}
+                    </span>
                   </button>
                 );
               })}
@@ -579,7 +700,9 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
           <div ref={listRef} className={`model-market-list view-${viewMode}`}>
             {filtered.length === 0 && !loading && (
               <p className="model-market-empty">
-                {models.length === 0 ? t("modelMarket.empty") : t("modelMarket.noResults")}
+                {models.length === 0
+                  ? t("modelMarket.empty")
+                  : t("modelMarket.noResults")}
               </p>
             )}
             {visible.map((m) => (
@@ -590,25 +713,45 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
               >
                 <div className="model-market-card-head">
                   <span className="model-market-card-logo">
-                    <ModelBrandIcon modelId={m.id} width={viewMode === "list" ? 16 : 20} height={viewMode === "list" ? 16 : 20} />
+                    <ModelBrandIcon
+                      modelId={m.id}
+                      width={viewMode === "list" ? 16 : 20}
+                      height={viewMode === "list" ? 16 : 20}
+                    />
                   </span>
                   <div className="model-market-card-titles">
-                    <span className="model-market-card-provider">{providerFromId(m.id)}</span>
+                    <span className="model-market-card-provider">
+                      {providerFromId(m.id)}
+                    </span>
                     <span className="model-market-card-name">
-                      {stripProviderPrefix(m.name ?? modelSlug(m.id), providerFromId(m.id))}
+                      {stripProviderPrefix(
+                        m.name ?? modelSlug(m.id),
+                        providerFromId(m.id),
+                      )}
                     </span>
                   </div>
                   {m.created && (
-                    <span className="model-market-card-age">{timeSince(m.created)}</span>
+                    <span className="model-market-card-age">
+                      {timeSince(m.created)}
+                    </span>
                   )}
                 </div>
                 <div className="model-market-card-meta">
-                  <span className="model-market-chip" title={t("modelMarket.context")}>{formatCtx(m.context_length)}</span>
+                  <span
+                    className="model-market-chip"
+                    title={t("modelMarket.context")}
+                  >
+                    {formatCtx(m.context_length)}
+                  </span>
                   {m.pricing && (
                     <>
-                      <span className="model-market-chip price">{formatPrice(m.pricing.prompt_per_million)}</span>
+                      <span className="model-market-chip price">
+                        {formatPrice(m.pricing.prompt_per_million)}
+                      </span>
                       <span className="model-market-chip-sep">/</span>
-                      <span className="model-market-chip price">{formatPrice(m.pricing.completion_per_million)}</span>
+                      <span className="model-market-chip price">
+                        {formatPrice(m.pricing.completion_per_million)}
+                      </span>
                     </>
                   )}
                   <CapabilityBadges m={m} />

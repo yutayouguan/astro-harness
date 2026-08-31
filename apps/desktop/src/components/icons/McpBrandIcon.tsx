@@ -35,7 +35,10 @@ export default function McpBrandIcon({
       style={style}
     >
       {loadedIcon !== resolvedIcon ? (
-        <McpIcon className="mcp-brand-icon-placeholder" size={Math.max(12, size - 6)} />
+        <McpIcon
+          className="mcp-brand-icon-placeholder"
+          size={Math.max(12, size - 6)}
+        />
       ) : null}
       <img
         alt=""

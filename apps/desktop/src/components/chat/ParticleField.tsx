@@ -4,25 +4,25 @@ const PARTICLE_COUNT = 26;
 const SPEED = 0.12;
 
 const PALETTE_DARK = [
-  [139, 92, 246],   // purple
-  [99, 102, 241],   // indigo
-  [59, 130, 246],   // blue
-  [14, 165, 233],   // sky
-  [236, 72, 153],   // pink
-  [168, 85, 247],   // violet
-  [34, 211, 238],   // cyan
-  [251, 191, 36],   // amber
+  [139, 92, 246], // purple
+  [99, 102, 241], // indigo
+  [59, 130, 246], // blue
+  [14, 165, 233], // sky
+  [236, 72, 153], // pink
+  [168, 85, 247], // violet
+  [34, 211, 238], // cyan
+  [251, 191, 36], // amber
 ];
 
 const PALETTE_LIGHT = [
-  [124, 58, 237],   // purple
-  [79, 70, 229],    // indigo
-  [37, 99, 235],    // blue
-  [2, 132, 199],    // sky
-  [219, 39, 119],   // pink
-  [139, 92, 246],   // violet
-  [8, 145, 178],    // cyan
-  [217, 119, 6],    // amber
+  [124, 58, 237], // purple
+  [79, 70, 229], // indigo
+  [37, 99, 235], // blue
+  [2, 132, 199], // sky
+  [219, 39, 119], // pink
+  [139, 92, 246], // violet
+  [8, 145, 178], // cyan
+  [217, 119, 6], // amber
 ];
 
 type Particle = {
@@ -110,8 +110,14 @@ export default function ParticleField() {
 
         if (p.glow) {
           const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
-          grad.addColorStop(0, `rgba(${cr},${cg},${cb},${(a * 0.6).toFixed(3)})`);
-          grad.addColorStop(0.4, `rgba(${cr},${cg},${cb},${(a * 0.2).toFixed(3)})`);
+          grad.addColorStop(
+            0,
+            `rgba(${cr},${cg},${cb},${(a * 0.6).toFixed(3)})`,
+          );
+          grad.addColorStop(
+            0.4,
+            `rgba(${cr},${cg},${cb},${(a * 0.2).toFixed(3)})`,
+          );
           grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
@@ -137,10 +143,6 @@ export default function ParticleField() {
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="chat-welcome-particles"
-      aria-hidden
-    />
+    <canvas ref={canvasRef} className="chat-welcome-particles" aria-hidden />
   );
 }

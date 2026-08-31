@@ -69,17 +69,31 @@ function SessionRow({
         <SessionStatusIcon
           status={status}
           unread={unread}
-          label={status === "running" ? "生成中" : unread ? "已完成，未读" : "已完成"}
+          label={
+            status === "running" ? "生成中" : unread ? "已完成，未读" : "已完成"
+          }
         />
       </button>
       <div className="sidebar-session-actions">
-        <button type="button" className="sidebar-session-action-btn" title="置顶">
+        <button
+          type="button"
+          className="sidebar-session-action-btn"
+          title="置顶"
+        >
           <Pin size={13} aria-hidden />
         </button>
-        <button type="button" className="sidebar-session-action-btn" title="归档">
+        <button
+          type="button"
+          className="sidebar-session-action-btn"
+          title="归档"
+        >
           <Archive size={13} aria-hidden />
         </button>
-        <button type="button" className="sidebar-session-action-btn" title="更多操作">
+        <button
+          type="button"
+          className="sidebar-session-action-btn"
+          title="更多操作"
+        >
           <MoreVertical size={13} aria-hidden />
         </button>
       </div>
@@ -109,7 +123,9 @@ function SidebarSessionStates() {
             <button type="button" className="sidebar-new-chat">
               <IconNewChat width={18} height={18} strokeWidth={1.8} />
               <span className="sidebar-item-label">新对话</span>
-              <kbd className="sidebar-new-chat-shortcut" aria-hidden>⌘N</kbd>
+              <kbd className="sidebar-new-chat-shortcut" aria-hidden>
+                ⌘N
+              </kbd>
             </button>
             <ExpandableSearch
               value={query}
@@ -133,9 +149,17 @@ function SidebarSessionStates() {
           </nav>
           <div className="sidebar-projects">
             <div className="sidebar-collapsible-section">
-              <button type="button" className="sidebar-section-toggle" aria-expanded>
+              <button
+                type="button"
+                className="sidebar-section-toggle"
+                aria-expanded
+              >
                 <span className="sidebar-section-title">项目</span>
-                <ChevronRight className="sidebar-section-chevron is-expanded" size={12} aria-hidden />
+                <ChevronRight
+                  className="sidebar-section-chevron is-expanded"
+                  size={12}
+                  aria-hidden
+                />
               </button>
               <div className="sidebar-section-actions">
                 <button type="button" className="sidebar-add-btn" title="新建">
@@ -149,7 +173,9 @@ function SidebarSessionStates() {
                   type="button"
                   className="sidebar-project-name"
                   aria-expanded={mainProjectExpanded}
-                  onClick={() => setMainProjectExpanded((expanded) => !expanded)}
+                  onClick={() =>
+                    setMainProjectExpanded((expanded) => !expanded)
+                  }
                 >
                   <ProjectFolderIcon
                     iconId="astro-space"
@@ -179,9 +205,17 @@ function SidebarSessionStates() {
               </div>
             </div>
             <div className="sidebar-collapsible-section">
-              <button type="button" className="sidebar-section-toggle" aria-expanded>
+              <button
+                type="button"
+                className="sidebar-section-toggle"
+                aria-expanded
+              >
                 <span className="sidebar-section-title">最近</span>
-                <ChevronRight className="sidebar-section-chevron is-expanded" size={12} aria-hidden />
+                <ChevronRight
+                  className="sidebar-section-chevron is-expanded"
+                  size={12}
+                  aria-hidden
+                />
               </button>
               <div className="sidebar-section-actions">
                 <button
@@ -197,7 +231,11 @@ function SidebarSessionStates() {
             <div className="sidebar-sessions is-global">
               <SessionRow title="统一聊天 AI 卡片样式" status="running" />
               <SessionRow title="美化 AI 回答面板" status="running" />
-              <SessionRow title="输入框的上下文量显示按钮呢" status="idle" unread />
+              <SessionRow
+                title="输入框的上下文量显示按钮呢"
+                status="idle"
+                unread
+              />
               <SessionRow title="已读的历史任务" status="idle" time="2 天前" />
             </div>
           </div>
@@ -248,7 +286,11 @@ function SettingsMenu() {
 
 function SessionMenuNearBottom() {
   return (
-    <main className="app-shell" data-tone="blue" style={{ width: 620, height: 540 }}>
+    <main
+      className="app-shell"
+      data-tone="blue"
+      style={{ width: 620, height: 540 }}
+    >
       <div className="body-row">
         <aside
           className="sidebar is-open is-pinned is-labels"

@@ -21,7 +21,9 @@ export function useEvolutionAuto(active = true): UseEvolutionAuto {
     if (!active) return;
     setError(null);
     try {
-      const next = await invoke<EvolutionAutoStatusDto>("evolution_auto_status");
+      const next = await invoke<EvolutionAutoStatusDto>(
+        "evolution_auto_status",
+      );
       setStatus(next);
     } catch (err) {
       setError(errorMessage(err));

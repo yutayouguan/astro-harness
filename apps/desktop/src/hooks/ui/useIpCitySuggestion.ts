@@ -14,7 +14,9 @@ export type IpCitySuggestionState =
 
 export function useIpCitySuggestion(enabled: boolean): IpCitySuggestionState {
   const [state, setState] = useState<IpCitySuggestionState>(
-    enabled ? { status: "loading", city: null } : { status: "failed", city: null },
+    enabled
+      ? { status: "loading", city: null }
+      : { status: "failed", city: null },
   );
 
   useEffect(() => {

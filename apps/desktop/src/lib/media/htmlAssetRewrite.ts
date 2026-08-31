@@ -25,9 +25,7 @@ function isRewritableRelative(url: string): boolean {
 /** 目录是否为绝对本地路径（无绝对目录则无法拼出正确 asset URL） */
 export function isAbsoluteDir(dir: string): boolean {
   return (
-    dir.startsWith("/") ||
-    /^[A-Za-z]:[\\/]/.test(dir) ||
-    dir.startsWith("\\\\")
+    dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir) || dir.startsWith("\\\\")
   );
 }
 

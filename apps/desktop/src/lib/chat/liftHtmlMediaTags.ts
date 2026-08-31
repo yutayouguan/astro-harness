@@ -3,8 +3,7 @@
  * 供 ChatMarkdown 渲染成 GeneratedMediaCard（不碰代码块内文本）。
  */
 
-const FENCE_OR_INLINE =
-  /(```[\s\S]*?```|`[^`\n]+`)/g;
+const FENCE_OR_INLINE = /(```[\s\S]*?```|`[^`\n]+`)/g;
 
 /** `<audio src="...">` / `<video src="...">`（含自闭合与成对标签） */
 const MEDIA_TAG_SRC =

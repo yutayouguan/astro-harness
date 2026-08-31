@@ -161,8 +161,12 @@
 }
 
 @keyframes shell-tone-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -179,262 +183,610 @@
 /* Tab 主题色驱动背景渐变（暗色） */
 html[data-theme="dark"] .app-shell[data-tone="blue"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(59, 130, 246, 0.32), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(96, 165, 250, 0.14), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(37, 99, 235, 0.1), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(59, 130, 246, 0.32),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(96, 165, 250, 0.14),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(37, 99, 235, 0.1),
+      transparent 55%
+    ),
     linear-gradient(160deg, #0a1018 0%, #122033 45%, #080e16 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="green"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(34, 197, 94, 0.26), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(52, 211, 153, 0.12), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(16, 185, 129, 0.08), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(34, 197, 94, 0.26),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(52, 211, 153, 0.12),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(16, 185, 129, 0.08),
+      transparent 55%
+    ),
     linear-gradient(160deg, #07140f 0%, #0f2a1c 45%, #060f0a 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="purple"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(139, 92, 246, 0.3), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(167, 139, 250, 0.14), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(192, 132, 252, 0.1), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(139, 92, 246, 0.3),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(167, 139, 250, 0.14),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(192, 132, 252, 0.1),
+      transparent 55%
+    ),
     linear-gradient(160deg, #100816 0%, #1a1028 45%, #0e0a18 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="orange"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(245, 158, 11, 0.2), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(251, 146, 60, 0.1), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(234, 88, 12, 0.08), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(245, 158, 11, 0.2),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(251, 146, 60, 0.1),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(234, 88, 12, 0.08),
+      transparent 55%
+    ),
     linear-gradient(160deg, #100e0a 0%, #241810 45%, #0c0a08 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="pink"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(236, 72, 153, 0.22), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(244, 114, 182, 0.12), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(219, 39, 119, 0.08), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(236, 72, 153, 0.22),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(244, 114, 182, 0.12),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(219, 39, 119, 0.08),
+      transparent 55%
+    ),
     linear-gradient(160deg, #120810 0%, #2a1420 45%, #0e060c 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="cyan"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(6, 182, 212, 0.22), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(34, 211, 238, 0.12), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(8, 145, 178, 0.08), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(6, 182, 212, 0.22),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(34, 211, 238, 0.12),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(8, 145, 178, 0.08),
+      transparent 55%
+    ),
     linear-gradient(160deg, #071012 0%, #0e2a32 45%, #060c0e 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="indigo"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(99, 102, 241, 0.28), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(129, 140, 248, 0.14), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(79, 70, 229, 0.1), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(99, 102, 241, 0.28),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(129, 140, 248, 0.14),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(79, 70, 229, 0.1),
+      transparent 55%
+    ),
     linear-gradient(160deg, #0c0c1a 0%, #1c1a42 45%, #0a0a16 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="amber"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(245, 158, 11, 0.38), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(251, 191, 36, 0.22), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(217, 119, 6, 0.14), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(245, 158, 11, 0.38),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(251, 191, 36, 0.22),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(217, 119, 6, 0.14),
+      transparent 55%
+    ),
     linear-gradient(160deg, #1a1408 0%, #78350f 45%, #120e08 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="teal"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(45, 212, 191, 0.4), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(94, 234, 212, 0.22), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(13, 148, 136, 0.16), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(45, 212, 191, 0.4),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(94, 234, 212, 0.22),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(13, 148, 136, 0.16),
+      transparent 55%
+    ),
     linear-gradient(160deg, #0a1a18 0%, #134e4a 45%, #071412 100%);
 }
 
 /* 极光：青→靛 双色 */
 html[data-theme="dark"] .app-shell[data-tone="aurora"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 14% 0%, rgba(34, 211, 238, 0.42), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 90% 20%, rgba(129, 140, 248, 0.28), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(6, 182, 212, 0.14), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 14% 0%,
+      rgba(34, 211, 238, 0.42),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 90% 20%,
+      rgba(129, 140, 248, 0.28),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(6, 182, 212, 0.14),
+      transparent 55%
+    ),
     linear-gradient(160deg, #07141a 0%, #13243a 42%, #100e22 100%);
 }
 
 /* 暮光：紫→玫粉 双色 */
 html[data-theme="dark"] .app-shell[data-tone="twilight"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 14% 0%, rgba(167, 139, 250, 0.4), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 90% 20%, rgba(244, 114, 182, 0.26), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(192, 132, 252, 0.14), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 14% 0%,
+      rgba(167, 139, 250, 0.4),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 90% 20%,
+      rgba(244, 114, 182, 0.26),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(192, 132, 252, 0.14),
+      transparent 55%
+    ),
     linear-gradient(160deg, #140818 0%, #241430 42%, #180c16 100%);
 }
 
 /* Tab 主题色驱动背景渐变（亮色） */
 html[data-theme="light"] .app-shell[data-tone="blue"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(96, 165, 250, 0.65), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(147, 197, 253, 0.45), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(191, 219, 254, 0.4), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(96, 165, 250, 0.65),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(147, 197, 253, 0.45),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(191, 219, 254, 0.4),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f0f7ff 0%, #dbeafe 48%, #e8f1fc 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="green"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(74, 222, 128, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(110, 231, 183, 0.4), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(167, 243, 208, 0.38), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(74, 222, 128, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(110, 231, 183, 0.4),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(167, 243, 208, 0.38),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f0fdf6 0%, #dcfce7 48%, #e8f8ef 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="purple"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(167, 139, 250, 0.55), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(196, 181, 253, 0.45), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(221, 214, 254, 0.4), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(167, 139, 250, 0.55),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(196, 181, 253, 0.45),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(221, 214, 254, 0.4),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f5f3ff 0%, #ede9fe 48%, #f0ecff 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="orange"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(251, 146, 60, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(253, 186, 116, 0.42), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(254, 215, 170, 0.38), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(251, 146, 60, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(253, 186, 116, 0.42),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(254, 215, 170, 0.38),
+      transparent 55%
+    ),
     linear-gradient(165deg, #fff7ed 0%, #ffedd5 48%, #fff4e8 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="pink"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(244, 114, 182, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(249, 168, 212, 0.42), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(251, 207, 232, 0.4), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(244, 114, 182, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(249, 168, 212, 0.42),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(251, 207, 232, 0.4),
+      transparent 55%
+    ),
     linear-gradient(165deg, #fdf2f8 0%, #fce7f3 48%, #fdf0f7 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="cyan"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(34, 211, 238, 0.48), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(103, 232, 249, 0.38), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(165, 243, 252, 0.36), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(34, 211, 238, 0.48),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(103, 232, 249, 0.38),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(165, 243, 252, 0.36),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f0fdff 0%, #cffafe 48%, #e8fafc 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="indigo"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(129, 140, 248, 0.55), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(165, 180, 252, 0.42), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(199, 210, 254, 0.4), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(129, 140, 248, 0.55),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(165, 180, 252, 0.42),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(199, 210, 254, 0.4),
+      transparent 55%
+    ),
     linear-gradient(165deg, #eef2ff 0%, #e0e7ff 48%, #eef0ff 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="amber"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(251, 191, 36, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(252, 211, 77, 0.4), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(253, 230, 138, 0.38), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(251, 191, 36, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(252, 211, 77, 0.4),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(253, 230, 138, 0.38),
+      transparent 55%
+    ),
     linear-gradient(165deg, #fffbeb 0%, #fef3c7 48%, #fff8e8 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="teal"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(45, 212, 191, 0.48), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(94, 234, 212, 0.38), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(153, 246, 228, 0.36), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(45, 212, 191, 0.48),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(94, 234, 212, 0.38),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(153, 246, 228, 0.36),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f0fdfa 0%, #ccfbf1 48%, #e8faf6 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="aurora"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(34, 211, 238, 0.52), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(129, 140, 248, 0.42), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(165, 243, 252, 0.34), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(34, 211, 238, 0.52),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(129, 140, 248, 0.42),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(165, 243, 252, 0.34),
+      transparent 55%
+    ),
     linear-gradient(165deg, #ecfeff 0%, #e0e7ff 48%, #f0f9ff 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="twilight"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(167, 139, 250, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(244, 114, 182, 0.4), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(251, 207, 232, 0.36), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(167, 139, 250, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(244, 114, 182, 0.4),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(251, 207, 232, 0.36),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f5f3ff 0%, #fce7f3 48%, #faf5ff 100%);
 }
 
 /* 统一模式自定义渐变：位置/RGB 由 JS 写入；强度/扩散按色点数与主题自动算（无用户滑块） */
-html[data-theme="dark"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell {
+html[data-theme="dark"]:is(
+    [data-color-style="unified"],
+    [data-color-style="dynamic"]
+  )
+  .app-shell {
   --shell-bg:
     radial-gradient(
       circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
-      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.2 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e1r, 0),
+        var(--shell-grad-e1g, 0),
+        var(--shell-grad-e1b, 0),
+        calc(var(--shell-grad-e1a, 0) * 0.2 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(48% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e2x, 50%) var(--shell-grad-e2y, 50%),
-      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.18 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e2r, 0),
+        var(--shell-grad-e2g, 0),
+        var(--shell-grad-e2b, 0),
+        calc(var(--shell-grad-e2a, 0) * 0.18 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(46% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e3x, 50%) var(--shell-grad-e3y, 50%),
-      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.16 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e3r, 0),
+        var(--shell-grad-e3g, 0),
+        var(--shell-grad-e3b, 0),
+        calc(var(--shell-grad-e3a, 0) * 0.16 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(44% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(85% * var(--shell-grad-spread, 1)) calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.34 * var(--shell-grad-strength, 1))),
+      ellipse calc(85% * var(--shell-grad-spread, 1))
+        calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%)
+        var(--shell-grad-py, 8%),
+      rgba(
+        var(--shell-grad-pr, 37),
+        var(--shell-grad-pg, 99),
+        var(--shell-grad-pb, 235),
+        calc(0.34 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(70% * var(--shell-grad-spread, 1)) calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
-      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), calc(0.16 * var(--shell-grad-strength, 1))),
+      ellipse calc(70% * var(--shell-grad-spread, 1))
+        calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%)
+        var(--shell-grad-sy, 22%),
+      rgba(
+        var(--shell-grad-sr, 6),
+        var(--shell-grad-sg, 182),
+        var(--shell-grad-sb, 212),
+        calc(0.16 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(50% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(55% * var(--shell-grad-spread, 1)) calc(45% * var(--shell-grad-spread, 1)) at 50% 100%,
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.1 * var(--shell-grad-strength, 1))),
+      ellipse calc(55% * var(--shell-grad-spread, 1))
+        calc(45% * var(--shell-grad-spread, 1)) at 50% 100%,
+      rgba(
+        var(--shell-grad-pr, 37),
+        var(--shell-grad-pg, 99),
+        var(--shell-grad-pb, 235),
+        calc(0.1 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     linear-gradient(160deg, #0a1018 0%, #122033 45%, #080e16 100%);
 }
 
-html[data-theme="light"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell {
+html[data-theme="light"]:is(
+    [data-color-style="unified"],
+    [data-color-style="dynamic"]
+  )
+  .app-shell {
   --shell-bg:
     radial-gradient(
       circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
-      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.38 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e1r, 0),
+        var(--shell-grad-e1g, 0),
+        var(--shell-grad-e1b, 0),
+        calc(var(--shell-grad-e1a, 0) * 0.38 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(48% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e2x, 50%) var(--shell-grad-e2y, 50%),
-      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.34 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e2r, 0),
+        var(--shell-grad-e2g, 0),
+        var(--shell-grad-e2b, 0),
+        calc(var(--shell-grad-e2a, 0) * 0.34 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(46% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e3x, 50%) var(--shell-grad-e3y, 50%),
-      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.3 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e3r, 0),
+        var(--shell-grad-e3g, 0),
+        var(--shell-grad-e3b, 0),
+        calc(var(--shell-grad-e3a, 0) * 0.3 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(44% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(90% * var(--shell-grad-spread, 1)) calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.58 * var(--shell-grad-strength, 1))),
+      ellipse calc(90% * var(--shell-grad-spread, 1))
+        calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%)
+        var(--shell-grad-py, 8%),
+      rgba(
+        var(--shell-grad-pr, 37),
+        var(--shell-grad-pg, 99),
+        var(--shell-grad-pb, 235),
+        calc(0.58 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(70% * var(--shell-grad-spread, 1)) calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
-      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), calc(0.42 * var(--shell-grad-strength, 1))),
+      ellipse calc(70% * var(--shell-grad-spread, 1))
+        calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%)
+        var(--shell-grad-sy, 22%),
+      rgba(
+        var(--shell-grad-sr, 6),
+        var(--shell-grad-sg, 182),
+        var(--shell-grad-sb, 212),
+        calc(0.42 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(50% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(60% * var(--shell-grad-spread, 1)) calc(50% * var(--shell-grad-spread, 1)) at 50% 100%,
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.28 * var(--shell-grad-strength, 1))),
+      ellipse calc(60% * var(--shell-grad-spread, 1))
+        calc(50% * var(--shell-grad-spread, 1)) at 50% 100%,
+      rgba(
+        var(--shell-grad-pr, 37),
+        var(--shell-grad-pg, 99),
+        var(--shell-grad-pb, 235),
+        calc(0.28 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     linear-gradient(165deg, #f0f7ff 0%, #e8eef8 48%, #f4f7fb 100%);
 }
 
 /* 统一色选白：压低渐变强度，保留可读玻璃描边（强调色由 JS 回退 slate） */
-html[data-theme="light"][data-unified-surface="light-neutral"]:is([data-color-style="unified"], [data-color-style="dynamic"]) {
+html[data-theme="light"][data-unified-surface="light-neutral"]:is(
+    [data-color-style="unified"],
+    [data-color-style="dynamic"]
+  ) {
   --glass-edge: color-mix(in srgb, #64748b 16%, rgba(15, 23, 42, 0.1));
   --glass-border: color-mix(in srgb, #64748b 12%, rgba(15, 23, 42, 0.08));
   --header-chip-border: color-mix(in srgb, #64748b 20%, rgba(15, 23, 42, 0.12));
 }
 
-html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-style="unified"], [data-color-style="dynamic"]) {
+html[data-theme="dark"][data-unified-surface="dark-neutral"]:is(
+    [data-color-style="unified"],
+    [data-color-style="dynamic"]
+  ) {
   --glass-edge: rgba(255, 255, 255, 0.14);
   --glass-border: rgba(255, 255, 255, 0.11);
   --header-chip-border: rgba(255, 255, 255, 0.16);
@@ -473,8 +825,14 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
   background: var(--sidebar-bg);
   border: none;
   border-right: 1px solid var(--glass-edge);
-  backdrop-filter: blur(calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+  backdrop-filter: blur(
+      calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))
+    )
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(
+      calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))
+    )
+    saturate(var(--glass-saturate, 1.25));
   position: absolute;
   left: 0;
   top: 0;
@@ -505,9 +863,11 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background: radial-gradient(ellipse 120% 80% at 0% 0%,
-      var(--tone-soft, transparent) 0%,
-      transparent 70%);
+  background: radial-gradient(
+    ellipse 120% 80% at 0% 0%,
+    var(--tone-soft, transparent) 0%,
+    transparent 70%
+  );
   opacity: 0.85;
 }
 
@@ -679,7 +1039,7 @@ html[data-tone="twilight"] {
   --tone-glow: var(--tone-twilight-glow);
 }
 
-.sidebar>* {
+.sidebar > * {
   position: relative;
   z-index: 1;
 }
@@ -712,7 +1072,10 @@ html[data-tone="twilight"] {
   background: color-mix(in srgb, var(--tone, #2563eb) 42%, transparent);
   opacity: 0;
   transform: scaleY(0.72);
-  transition: opacity 0.14s ease, transform 0.18s ease, background 0.14s ease;
+  transition:
+    opacity 0.14s ease,
+    transform 0.18s ease,
+    background 0.14s ease;
 }
 
 .sidebar-resizer:hover::before,
@@ -802,7 +1165,10 @@ html[data-tone="twilight"] {
   color: var(--tone, var(--ink-soft));
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .sidebar-pin-btn[data-tone="blue"] {

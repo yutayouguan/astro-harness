@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export type BrowserPreviewStatus =
-  | "connecting"
-  | "connected"
-  | "disconnected"
-  | "closed"
-  | "error";
+  "connecting" | "connected" | "disconnected" | "closed" | "error";
 
 export type BrowserPreview = {
   sessionId: string;
@@ -44,7 +40,10 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-function status(value: unknown, fallback: BrowserPreviewStatus): BrowserPreviewStatus {
+function status(
+  value: unknown,
+  fallback: BrowserPreviewStatus,
+): BrowserPreviewStatus {
   return value === "connecting" ||
     value === "connected" ||
     value === "disconnected" ||
@@ -57,7 +56,9 @@ function status(value: unknown, fallback: BrowserPreviewStatus): BrowserPreviewS
 function loadStored(sessionId: string | null): BrowserPreview | null {
   if (!sessionId) return null;
   try {
-    const value = parseRecord(localStorage.getItem(`${STORAGE_PREFIX}${sessionId}`) ?? undefined);
+    const value = parseRecord(
+      localStorage.getItem(`${STORAGE_PREFIX}${sessionId}`) ?? undefined,
+    );
     if (!value) return null;
     const storedStatus = status(value.status, "disconnected");
     if (storedStatus === "closed") return null;
@@ -79,7 +80,9 @@ function loadStored(sessionId: string | null): BrowserPreview | null {
 }
 
 export function useBrowserPreview(sessionId: string | null) {
-  const [preview, setPreview] = useState<BrowserPreview | null>(() => loadStored(sessionId));
+  const [preview, setPreview] = useState<BrowserPreview | null>(() =>
+    loadStored(sessionId),
+  );
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -90,7 +93,10 @@ export function useBrowserPreview(sessionId: string | null) {
   useEffect(() => {
     if (!sessionId || !preview) return;
     try {
-      localStorage.setItem(`${STORAGE_PREFIX}${sessionId}`, JSON.stringify(preview));
+      localStorage.setItem(
+        `${STORAGE_PREFIX}${sessionId}`,
+        JSON.stringify(preview),
+      );
     } catch {
       // Persistence is best-effort; live preview remains available.
     }
@@ -154,7 +160,12 @@ export function useBrowserPreview(sessionId: string | null) {
       } else if (call.result && call.phase === "completed") {
         setPreview((current) =>
           current
-            ? { ...current, status: "error", action: name.replace(/^browser_/, ""), updatedAt: now }
+            ? {
+                ...current,
+                status: "error",
+                action: name.replace(/^browser_/, ""),
+                updatedAt: now,
+              }
             : current,
         );
       }

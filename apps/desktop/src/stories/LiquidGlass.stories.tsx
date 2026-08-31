@@ -64,7 +64,10 @@ function GlassStack() {
     >
       <div className="msg-activity" data-kind="tool" style={{ margin: 0 }}>
         <div className="msg-activity-body">
-          <div className="msg-activity-summary" style={{ padding: "10px 12px" }}>
+          <div
+            className="msg-activity-summary"
+            style={{ padding: "10px 12px" }}
+          >
             <span className="msg-activity-title">terminal</span>
             <span className="msg-activity-duration">1.2s</span>
           </div>

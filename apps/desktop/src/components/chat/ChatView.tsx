@@ -79,7 +79,11 @@ import {
 } from "../../lib/chat/promptTemplate";
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
 import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
-import { countRunningParallel, countSettledByStatus, isParallelTaskActive } from "../../lib/chat/parallelTasks";
+import {
+  countRunningParallel,
+  countSettledByStatus,
+  isParallelTaskActive,
+} from "../../lib/chat/parallelTasks";
 import { projectCanonicalTimelineSegments } from "../../lib/chat/chatTimeline";
 import { isLiveActivityStatus } from "../../lib/chat/toolActivityStatus";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
@@ -94,7 +98,10 @@ import {
   pathsToAttachments,
 } from "../../lib/chat/chatPaste";
 import type { MediaActionKind } from "../../lib/media/mediaActions";
-import type { ChatThinkingPrefs, ThinkingLevel } from "../../lib/chat/thinkingPrefs";
+import type {
+  ChatThinkingPrefs,
+  ThinkingLevel,
+} from "../../lib/chat/thinkingPrefs";
 import { groupAssistantAnswer } from "../../lib/chat/groupAssistantAnswer";
 import {
   assistantAnswerPlainText,
@@ -143,7 +150,11 @@ import MsgActivityGroup from "./MsgActivityGroup";
 import MsgCitations from "./MsgCitations";
 import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
-import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimeline";
+import {
+  MsgTimeline,
+  MsgTimelineStep,
+  type MsgTimelineKind,
+} from "./MsgTimeline";
 import AssistantMessageContextMenu, {
   type AssistantMessageMenuAction,
 } from "./AssistantMessageContextMenu";
@@ -184,10 +195,7 @@ import {
   findComposerClarifySurface,
   isClarifySurface,
 } from "../../lib/chat/composerClarify";
-import {
-  isAgentIconSrc,
-  type AgentIconInfo,
-} from "../../lib/agent/agentIcons";
+import { isAgentIconSrc, type AgentIconInfo } from "../../lib/agent/agentIcons";
 import {
   buildMentionCandidates,
   buildSlashPaletteEntries,
@@ -225,7 +233,7 @@ function MessageTokenStats({
   const { t } = useI18n();
   const hasUsage = Boolean(
     usage &&
-      (usage.totalTokens || usage.promptTokens || usage.completionTokens),
+    (usage.totalTokens || usage.promptTokens || usage.completionTokens),
   );
   const hasDuration = generationDurationSec != null;
   if (!hasUsage && !hasDuration) return null;
@@ -248,7 +256,10 @@ function MessageTokenStats({
     : null;
   const cacheHit =
     usage?.cacheReadReported && usage.promptTokens > 0
-      ? Math.min(100, Math.round((usage.cacheReadTokens / usage.promptTokens) * 100))
+      ? Math.min(
+          100,
+          Math.round((usage.cacheReadTokens / usage.promptTokens) * 100),
+        )
       : null;
   const aria = t("chat.tokenStatsAria", {
     total: String(usage?.totalTokens ?? 0),
@@ -471,7 +482,9 @@ function kindFromMime(mime: string, name: string): ChatAttachmentKind {
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext)) {
+  if (
+    ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext)
+  ) {
     return "image";
   }
   if (["mp4", "webm", "mov", "mkv", "avi"].includes(ext)) return "video";
@@ -555,8 +568,13 @@ function AttachmentGlyph({ kind }: { kind: ChatAttachmentKind }) {
   return <File size={16} strokeWidth={2} aria-hidden />;
 }
 
-function ComposerContextGlyph({ kind }: { kind: ComposerContextToken["kind"] }) {
-  if (kind === "skill") return <Sparkles size={15} strokeWidth={2} aria-hidden />;
+function ComposerContextGlyph({
+  kind,
+}: {
+  kind: ComposerContextToken["kind"];
+}) {
+  if (kind === "skill")
+    return <Sparkles size={15} strokeWidth={2} aria-hidden />;
   if (kind === "mcp") return <McpIcon size={15} />;
   if (kind === "file") return <File size={15} strokeWidth={2} aria-hidden />;
   return <Bot size={15} strokeWidth={2} aria-hidden />;
@@ -571,9 +589,17 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
       {items.map((att) => (
         <div key={att.id} className="msg-attachment" data-kind={att.kind}>
           {att.kind === "image" && att.previewUrl ? (
-            <img src={att.previewUrl} alt={att.name} className="msg-attachment-thumb" />
+            <img
+              src={att.previewUrl}
+              alt={att.name}
+              className="msg-attachment-thumb"
+            />
           ) : att.kind === "video" && att.previewUrl ? (
-            <video src={att.previewUrl} className="msg-attachment-thumb" muted />
+            <video
+              src={att.previewUrl}
+              className="msg-attachment-thumb"
+              muted
+            />
           ) : (
             <span className="msg-attachment-icon" data-kind={att.kind}>
               <AttachmentGlyph kind={att.kind} />
@@ -582,7 +608,9 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
           <div className="msg-attachment-meta">
             <span className="msg-attachment-name">{att.name}</span>
             <span className="msg-attachment-size">
-              {att.kind === "folder" ? t("chat.plusMenuFolder") : formatSize(att.size)}
+              {att.kind === "folder"
+                ? t("chat.plusMenuFolder")
+                : formatSize(att.size)}
             </span>
           </div>
         </div>
@@ -626,7 +654,11 @@ export function MessageActions({
   };
 
   return (
-    <div className="msg-actions" role="toolbar" aria-label={t("chat.messageActions")}>
+    <div
+      className="msg-actions"
+      role="toolbar"
+      aria-label={t("chat.messageActions")}
+    >
       <button
         type="button"
         className={`msg-action-btn ${copied ? "is-copied" : ""}`}
@@ -712,7 +744,9 @@ function InlineUserMessageEditor({
   const { t } = useI18n();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const canSubmit =
-    !disabled && value.trim().length > 0 && value.trim() !== originalValue.trim();
+    !disabled &&
+    value.trim().length > 0 &&
+    value.trim() !== originalValue.trim();
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -844,7 +878,9 @@ export default function ChatView({
     () => findLastUserMessageId(messages),
     [messages],
   );
-  const [editingUserMessageId, setEditingUserMessageId] = useState<string | null>(null);
+  const [editingUserMessageId, setEditingUserMessageId] = useState<
+    string | null
+  >(null);
   const [editingUserDraft, setEditingUserDraft] = useState("");
   const [submittingUserEdit, setSubmittingUserEdit] = useState(false);
   const [assistantMenu, setAssistantMenu] = useState<{
@@ -878,8 +914,9 @@ export default function ChatView({
   const [isScrolledFromBottom, setIsScrolledFromBottom] = useState(false);
   const [approvalMode, setApprovalMode] =
     useState<PermissionPreset>("ask_for_approval");
-  const [sandboxHealth, setSandboxHealth] =
-    useState<PermissionSettings["sandboxHealth"] | null>(null);
+  const [sandboxHealth, setSandboxHealth] = useState<
+    PermissionSettings["sandboxHealth"] | null
+  >(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
@@ -906,9 +943,14 @@ export default function ChatView({
   const [cronTaskOpen, setCronTaskOpen] = useState(false);
   const [cronEditOpen, setCronEditOpen] = useState(false);
   const [cronBusy, setCronBusy] = useState(false);
-  const [selectedCronRun, setSelectedCronRun] = useState<CronRunDto | null>(null);
-  const [selectedCronMessages, setSelectedCronMessages] = useState<ChatMessage[]>([]);
-  const [selectedCronTraceLoading, setSelectedCronTraceLoading] = useState(false);
+  const [selectedCronRun, setSelectedCronRun] = useState<CronRunDto | null>(
+    null,
+  );
+  const [selectedCronMessages, setSelectedCronMessages] = useState<
+    ChatMessage[]
+  >([]);
+  const [selectedCronTraceLoading, setSelectedCronTraceLoading] =
+    useState(false);
   /** 创建 Agent：发送校验失败时高亮的必填槽 index */
   const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
   /** 欢迎页示例：当前模板的未填占位文案。 */
@@ -959,23 +1001,26 @@ export default function ChatView({
     window.requestAnimationFrame(() => textareaRef.current?.focus());
   }, [composerContextPrefill, onComposerContextPrefillConsumed]);
 
-  const loadCronTask = useCallback(async (jobId: string) => {
-    setCronJobRunsLoading(true);
-    try {
-      const [jobs, runs] = await Promise.all([
-        invoke<CronJobDto[]>("list_cron_jobs"),
-        invoke<CronRunDto[]>("list_cron_job_runs", { id: jobId }),
-      ]);
-      setCronJob(jobs.find((job) => job.id === jobId) ?? null);
-      setCronJobRuns(runs);
-    } catch (error) {
-      setCronJob(null);
-      setCronJobRuns([]);
-      showToast(String(error));
-    } finally {
-      setCronJobRunsLoading(false);
-    }
-  }, [showToast]);
+  const loadCronTask = useCallback(
+    async (jobId: string) => {
+      setCronJobRunsLoading(true);
+      try {
+        const [jobs, runs] = await Promise.all([
+          invoke<CronJobDto[]>("list_cron_jobs"),
+          invoke<CronRunDto[]>("list_cron_job_runs", { id: jobId }),
+        ]);
+        setCronJob(jobs.find((job) => job.id === jobId) ?? null);
+        setCronJobRuns(runs);
+      } catch (error) {
+        setCronJob(null);
+        setCronJobRuns([]);
+        showToast(String(error));
+      } finally {
+        setCronJobRunsLoading(false);
+      }
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -1230,7 +1275,7 @@ export default function ChatView({
 
   const assistantHasCustomAvatar = Boolean(
     activeAgent &&
-      (isAgentIconSrc(activeAgent.avatar) || isAgentIconSrc(activeAgent.emoji)),
+    (isAgentIconSrc(activeAgent.avatar) || isAgentIconSrc(activeAgent.emoji)),
   );
 
   useEffect(() => {
@@ -1240,7 +1285,9 @@ export default function ChatView({
   const refreshApprovalMode = useCallback(async () => {
     const requestId = ++approvalRequestIdRef.current;
     try {
-      const settings = await invoke<PermissionSettings>("get_permission_settings");
+      const settings = await invoke<PermissionSettings>(
+        "get_permission_settings",
+      );
       if (requestId === approvalRequestIdRef.current) {
         setApprovalMode(normalizePermissionPreset(settings.preset));
         setSandboxHealth(settings.sandboxHealth);
@@ -1608,7 +1655,8 @@ export default function ChatView({
     (text: string, caret: number) => {
       const hit = detectTrigger(text, caret);
       if (!hit) {
-        if (paletteKind === "slash" || paletteKind === "mention") closePalette();
+        if (paletteKind === "slash" || paletteKind === "mention")
+          closePalette();
         return;
       }
       setPaletteKind(hit.kind);
@@ -1629,13 +1677,16 @@ export default function ChatView({
       if (e.key === "ArrowUp") {
         e.preventDefault();
         setPaletteIndex(
-          (i) => (i - 1 + filteredPaletteItems.length) % filteredPaletteItems.length,
+          (i) =>
+            (i - 1 + filteredPaletteItems.length) % filteredPaletteItems.length,
         );
         return;
       }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        applyPaletteItem(filteredPaletteItems[paletteIndex] ?? filteredPaletteItems[0]);
+        applyPaletteItem(
+          filteredPaletteItems[paletteIndex] ?? filteredPaletteItems[0],
+        );
         return;
       }
       if (e.key === "Escape") {
@@ -1645,7 +1696,9 @@ export default function ChatView({
       }
       if (e.key === "Tab") {
         e.preventDefault();
-        applyPaletteItem(filteredPaletteItems[paletteIndex] ?? filteredPaletteItems[0]);
+        applyPaletteItem(
+          filteredPaletteItems[paletteIndex] ?? filteredPaletteItems[0],
+        );
         return;
       }
     }
@@ -1658,8 +1711,16 @@ export default function ChatView({
       const caret = el.selectionStart ?? 0;
       const slot = welcomeTemplateActive
         ? e.shiftKey
-          ? prevEmptyPromptTemplateSlot(input, caret, welcomeTemplateHints ?? [])
-          : nextEmptyPromptTemplateSlot(input, caret, welcomeTemplateHints ?? [])
+          ? prevEmptyPromptTemplateSlot(
+              input,
+              caret,
+              welcomeTemplateHints ?? [],
+            )
+          : nextEmptyPromptTemplateSlot(
+              input,
+              caret,
+              welcomeTemplateHints ?? [],
+            )
         : e.shiftKey
           ? prevEmptySlot(input, caret)
           : nextEmptySlot(input, caret);
@@ -1720,7 +1781,10 @@ export default function ChatView({
     const focusEl = (el: HTMLElement) => {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       el.classList.add("is-focus-flash");
-      timer = window.setTimeout(() => el.classList.remove("is-focus-flash"), 1600);
+      timer = window.setTimeout(
+        () => el.classList.remove("is-focus-flash"),
+        1600,
+      );
       onFocusConsumed?.();
     };
 
@@ -1818,7 +1882,9 @@ export default function ChatView({
       const room = MAX_ATTACHMENTS - attachments.length;
       if (room <= 0) return;
       const nextBatch = list.slice(0, room);
-      const created = await Promise.all(nextBatch.map((f) => fileToAttachment(f)));
+      const created = await Promise.all(
+        nextBatch.map((f) => fileToAttachment(f)),
+      );
       const allowed = created.filter((a) =>
         attachmentKindAllowed(a.kind, modelCapabilities),
       );
@@ -1917,7 +1983,11 @@ export default function ChatView({
         addComposerContext(createFileComposerContextToken(path, description));
         if (!input.trim()) {
           onInputChange(
-            t(kind === "code" ? "media.quoteCodePrompt" : "media.quoteFilePrompt"),
+            t(
+              kind === "code"
+                ? "media.quoteCodePrompt"
+                : "media.quoteFilePrompt",
+            ),
           );
         }
         window.requestAnimationFrame(() => {
@@ -1955,7 +2025,7 @@ export default function ChatView({
     void import("@tauri-apps/api/webview")
       .then(({ getCurrentWebview }) =>
         getCurrentWebview().onDragDropEvent((event) => {
-                    const kind = event.payload.type;
+          const kind = event.payload.type;
           if (kind === "enter" || kind === "over") {
             setFileDragOver(true);
             return;
@@ -2004,7 +2074,7 @@ export default function ChatView({
   const onDragEnter = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-        dragDepthRef.current += 1;
+    dragDepthRef.current += 1;
     if (e.dataTransfer?.types?.includes("Files")) {
       setFileDragOver(true);
     }
@@ -2022,7 +2092,7 @@ export default function ChatView({
     e.stopPropagation();
     dragDepthRef.current = 0;
     setFileDragOver(false);
-        // Tauri 原生 drop 已处理时跳过，避免重复添加
+    // Tauri 原生 drop 已处理时跳过，避免重复添加
     if (Date.now() - tauriDropAtRef.current < 500) return;
     if (e.dataTransfer.files?.length) {
       await addFiles(e.dataTransfer.files);
@@ -2036,7 +2106,7 @@ export default function ChatView({
     clipboardData: DataTransfer | null;
     preventDefault: () => void;
   }) => {
-        const list = e.clipboardData?.files;
+    const list = e.clipboardData?.files;
     if (list && list.length > 0) {
       e.preventDefault();
       await addFiles(list);
@@ -2103,8 +2173,7 @@ export default function ChatView({
     () => findComposerClarifySurface(messages, pendingInterrupts),
     [messages, pendingInterrupts],
   );
-  const canQueueWhileBusy =
-    streaming || turnInFlight || interruptBlocked;
+  const canQueueWhileBusy = streaming || turnInFlight || interruptBlocked;
   const canSend =
     !sendBlocked &&
     (input.trim().length > 0 ||
@@ -2177,7 +2246,9 @@ export default function ChatView({
       if (emptyMode !== "agent" || prev.length === 0) {
         return prev.length === 0 ? prev : [];
       }
-      const still = prepareAgentCreateSend(input).missingRequired.map((s) => s.index);
+      const still = prepareAgentCreateSend(input).missingRequired.map(
+        (s) => s.index,
+      );
       if (
         still.length === prev.length &&
         still.every((idx, n) => idx === prev[n])
@@ -2236,7 +2307,9 @@ export default function ChatView({
         return;
       }
       setAgentCreateMissing([]);
-      onSend({ text: serializeComposerContext(composerContexts, prep.sanitized) });
+      onSend({
+        text: serializeComposerContext(composerContexts, prep.sanitized),
+      });
       onInputChange("");
       setComposerContexts([]);
       setPreviewTarget(null);
@@ -2258,7 +2331,9 @@ export default function ChatView({
       }
       setWelcomeTemplateHints(null);
       setWelcomeTemplateMissing([]);
-      onSend({ text: serializeComposerContext(composerContexts, prep.sanitized) });
+      onSend({
+        text: serializeComposerContext(composerContexts, prep.sanitized),
+      });
       onInputChange("");
       setComposerContexts([]);
       setPreviewTarget(null);
@@ -2326,12 +2401,12 @@ export default function ChatView({
       : sendBlocked && sendBlockedReason
         ? sendBlockedReason
         : emptyMode === "chat"
-            ? ""
-            : attachments.length
-              ? t("chat.placeholderWithAttach")
-              : chatMode === "plan"
-                ? t("chat.placeholderPlan")
-                : t("chat.placeholder");
+          ? ""
+          : attachments.length
+            ? t("chat.placeholderWithAttach")
+            : chatMode === "plan"
+              ? t("chat.placeholderPlan")
+              : t("chat.placeholder");
 
   useEffect(() => {
     if (
@@ -2358,7 +2433,13 @@ export default function ChatView({
       setEditingUserMessageId(message.id);
       setEditingUserDraft(message.content);
     },
-    [lastUserMessageId, onEditUserMessage, sendBlocked, streaming, turnInFlight],
+    [
+      lastUserMessageId,
+      onEditUserMessage,
+      sendBlocked,
+      streaming,
+      turnInFlight,
+    ],
   );
 
   const cancelUserMessageEdit = useCallback(() => {
@@ -2370,7 +2451,8 @@ export default function ChatView({
   const submitUserMessageEdit = useCallback(async () => {
     const messageId = editingUserMessageId;
     const content = editingUserDraft.trim();
-    if (!messageId || !content || !onEditUserMessage || submittingUserEdit) return;
+    if (!messageId || !content || !onEditUserMessage || submittingUserEdit)
+      return;
     setSubmittingUserEdit(true);
     try {
       const accepted = await onEditUserMessage(messageId, content);
@@ -2380,12 +2462,19 @@ export default function ChatView({
     } finally {
       setSubmittingUserEdit(false);
     }
-  }, [editingUserDraft, editingUserMessageId, onEditUserMessage, submittingUserEdit]);
+  }, [
+    editingUserDraft,
+    editingUserMessageId,
+    onEditUserMessage,
+    submittingUserEdit,
+  ]);
 
   const contextMenuMessage = useMemo(
-    () => assistantMenu
-      ? messages.find((message) => message.id === assistantMenu.messageId) ?? null
-      : null,
+    () =>
+      assistantMenu
+        ? (messages.find((message) => message.id === assistantMenu.messageId) ??
+          null)
+        : null,
     [assistantMenu, messages],
   );
 
@@ -2399,7 +2488,11 @@ export default function ChatView({
     ) => {
       if (respectTextSelection) {
         const selection = window.getSelection();
-        if (selection && !selection.isCollapsed && selection.toString().trim()) {
+        if (
+          selection &&
+          !selection.isCollapsed &&
+          selection.toString().trim()
+        ) {
           return false;
         }
       }
@@ -2428,23 +2521,28 @@ export default function ChatView({
     }
   }, [assistantMenu, closeAssistantMessageMenu, messages]);
 
-  const copyAssistantMessageText = useCallback(async (text: string) => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast(t("chat.copied"));
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : String(error), {
-        tone: "error",
-      });
-    }
-  }, [showToast, t]);
+  const copyAssistantMessageText = useCallback(
+    async (text: string) => {
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast(t("chat.copied"));
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : String(error), {
+          tone: "error",
+        });
+      }
+    },
+    [showToast, t],
+  );
 
   const handleAssistantMessageMenuAction = useCallback(
     (action: AssistantMessageMenuAction) => {
       const menu = assistantMenu;
       if (!menu) return;
-      const message = messages.find((candidate) => candidate.id === menu.messageId);
+      const message = messages.find(
+        (candidate) => candidate.id === menu.messageId,
+      );
       if (!message || message.role !== "assistant") return;
 
       if (action === "layout-default") {
@@ -2457,7 +2555,10 @@ export default function ChatView({
       }
       if (action === "layout-timeline" || action === "layout-grouped") {
         const layout = action === "layout-grouped" ? "grouped" : "timeline";
-        setMessageLayoutOverrides((current) => ({ ...current, [message.id]: layout }));
+        setMessageLayoutOverrides((current) => ({
+          ...current,
+          [message.id]: layout,
+        }));
         return;
       }
       if (action === "set-layout-default") {
@@ -2479,7 +2580,9 @@ export default function ChatView({
         return;
       }
       if (action === "copy-answer") {
-        void copyAssistantMessageText(assistantAnswerPlainText(message.content));
+        void copyAssistantMessageText(
+          assistantAnswerPlainText(message.content),
+        );
         return;
       }
       if (action === "copy-markdown") {
@@ -2509,655 +2612,734 @@ export default function ChatView({
 
   return (
     <ChatMediaAttachProvider value={mediaAttachApi}>
-    <section
-      ref={chatPaneRef}
-      className={`chat-pane ${workspaceContent ? "has-project-file" : ""} ${
-        fileDragOver ? "is-file-dragover" : ""
-      } ${cronRun && !workspaceContent ? "has-cron-run" : ""}`.trim()}
-      onDragEnter={onDragEnter}
-      onDragLeave={onDragLeave}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-      onDrop={(e) => void onDrop(e)}
-    >
-      {toastHost}
-      <TaskCompletionCelebration trigger={completionCelebrationId} />
-      {assistantMenu && contextMenuMessage?.role === "assistant" ? (
-        <AssistantMessageContextMenu
-          x={assistantMenu.x}
-          y={assistantMenu.y}
-          defaultLayout={displayPrefs.answerLayout}
-          layoutOverride={messageLayoutOverrides[contextMenuMessage.id]}
-          processExpanded={Boolean(messageProcessExpanded[contextMenuMessage.id])}
-          hasAnswer={Boolean(contextMenuMessage.content.trim())}
-          hasProcess={Boolean(
-            contextMenuMessage.reasoning?.trim() || contextMenuMessage.activities?.length,
-          )}
-          canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
-          canRegenerate={!streaming && Boolean(onRegenerateMessage)}
-          canBranch={!streaming && Boolean(onBranchMessage)}
-          onAction={handleAssistantMessageMenuAction}
-          onClose={closeAssistantMessageMenu}
-        />
-      ) : null}
-      {cronRun && !workspaceContent ? (
-        <aside className="chat-cron-run-float">
-          <CronRunFloatingCard
-            run={cronRun}
-            onOpen={() => setCronTaskOpen(true)}
+      <section
+        ref={chatPaneRef}
+        className={`chat-pane ${workspaceContent ? "has-project-file" : ""} ${
+          fileDragOver ? "is-file-dragover" : ""
+        } ${cronRun && !workspaceContent ? "has-cron-run" : ""}`.trim()}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => void onDrop(e)}
+      >
+        {toastHost}
+        <TaskCompletionCelebration trigger={completionCelebrationId} />
+        {assistantMenu && contextMenuMessage?.role === "assistant" ? (
+          <AssistantMessageContextMenu
+            x={assistantMenu.x}
+            y={assistantMenu.y}
+            defaultLayout={displayPrefs.answerLayout}
+            layoutOverride={messageLayoutOverrides[contextMenuMessage.id]}
+            processExpanded={Boolean(
+              messageProcessExpanded[contextMenuMessage.id],
+            )}
+            hasAnswer={Boolean(contextMenuMessage.content.trim())}
+            hasProcess={Boolean(
+              contextMenuMessage.reasoning?.trim() ||
+              contextMenuMessage.activities?.length,
+            )}
+            canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
+            canRegenerate={!streaming && Boolean(onRegenerateMessage)}
+            canBranch={!streaming && Boolean(onBranchMessage)}
+            onAction={handleAssistantMessageMenuAction}
+            onClose={closeAssistantMessageMenu}
           />
-        </aside>
-      ) : null}
-      {browserPreview && !workspaceContent ? (
-        <BrowserPreviewFloat
-          preview={browserPreview}
-          onClose={() => onCloseBrowserPreview?.()}
-        />
-      ) : null}
-      {workspaceContent ? (
-        workspaceContent
-      ) : emptyMode === "chat" || emptyMode === "agent" ? (
-        <ChatWelcome
-          onPickCard={pickWelcomePrompt}
-          onActivate={() => textareaRef.current?.focus()}
-        />
-      ) : (
-        <div className="message-list-wrap">
-          <div
-            className="message-list"
-            ref={messageListRef}
-            onScroll={updateConversationScrollState}
-          >
-            {messages.map((m, index) => {
-              const isStreamingBubble =
-                m.role === "assistant" &&
-                !m.error &&
-                (parallelRunningIds.has(m.id) ||
-                  (streaming && index === messages.length - 1));
-              const reasoningActive = Boolean(
-                isStreamingBubble && m.reasoning && !m.content,
-              );
-              const answerLayout =
-                messageLayoutOverrides[m.id] ?? displayPrefs.answerLayout;
-              const forcedProcessOpen = messageProcessExpanded[m.id];
-              const isEditingUserMessage = editingUserMessageId === m.id;
-              const canEditUserMessage =
-                m.role === "user" &&
-                m.id === lastUserMessageId &&
-                !streaming &&
-                !turnInFlight &&
-                !sendBlocked &&
-                Boolean(onEditUserMessage);
-              if (isTodoOnlyActivityMessage(m)) return null;
-              return (
-                <div
-                  key={m.id}
-                  id={`msg-${m.id}`}
-                  data-msg-id={m.id}
-                  className={`msg-row ${m.role === "user" ? "user" : "assistant"}`}
-                >
-                  {m.role === "assistant" && (
-                    <div
-                      className={`avatar ${m.error ? "error" : ""}${
-                        !m.error && !assistantHasCustomAvatar && modelId
-                          ? " is-model"
-                          : ""
-                      }`}
-                    >
-                      {m.error ? (
-                        "!"
-                      ) : assistantHasCustomAvatar && activeAgent ? (
-                        <AgentAvatar agent={activeAgent} size={20} />
-                      ) : modelId ? (
-                        <ModelBrandIcon modelId={modelId} size={16} />
-                      ) : (
-                        "AI"
-                      )}
-                    </div>
-                  )}
-                  <div className="msg-stack">
-                    <div
-                      className={`bubble ${m.role} ${m.error ? "error" : ""} ${
-                        !m.content &&
-                        !m.reasoning &&
-                        !m.attachments?.length &&
-                        !m.activities?.length &&
-                        !m.uiSurfaces?.length &&
-                        streaming
-                          ? "typing"
-                          : ""
-                      } ${isStreamingBubble && (m.content || m.reasoning) ? "is-streaming" : ""}${
-                        isEditingUserMessage ? " is-editing" : ""
-                      }`}
-                      data-allow-context-menu={m.role === "assistant" ? "true" : undefined}
-                      onContextMenu={(event) => {
-                        if (m.role !== "assistant" || isStreamingBubble) return;
-                        const opened = openAssistantMessageMenu(
-                          m.id,
-                          event.clientX,
-                          event.clientY,
-                        );
-                        if (!opened) return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
-                    >
-                      {m.attachments && m.attachments.length > 0 && (
-                        <MessageAttachments items={m.attachments} />
-                      )}
-                      {isEditingUserMessage ? (
-                        <InlineUserMessageEditor
-                          value={editingUserDraft}
-                          originalValue={m.content}
-                          disabled={submittingUserEdit}
-                          onChange={setEditingUserDraft}
-                          onCancel={cancelUserMessageEdit}
-                          onSubmit={() => void submitUserMessageEdit()}
-                        />
-                      ) : (() => {
-                        type Step = {
-                          key: string;
-                          kind: MsgTimelineKind;
-                          active?: boolean;
-                          activity?: ChatActivity;
-                          node: ReactNode;
-                        };
-                        const steps: Step[] = [];
-                        const pushActivity = (act: ChatActivity) => {
-                          if (isTodoActivity(act)) return;
-                          if (!isActivityVisible(act.kind, displayPrefs)) return;
-                          steps.push({
-                            key: `act-${act.id}`,
-                            kind: act.kind,
-                            active: isLiveActivityStatus(act.status),
-                            activity: act,
-                            node: (
-                              <MsgActivity
-                                activity={act}
-                                defaultOpen={forcedProcessOpen ?? false}
-                                showTimestamp={displayPrefs.showTimestamps}
-                                mediaBaseDir={mediaBaseDir}
-                              />
-                            ),
-                          });
-                        };
-                        const pushSurface = (
-                          surface: NonNullable<ChatMessage["uiSurfaces"]>[number],
-                        ) => {
-                          // Clarify is an input interaction: it belongs in the composer,
-                          // never inside the assistant answer timeline.
-                          if (isClarifySurface(surface)) return;
-                          steps.push({
-                            key: `surf-${surface.messageId}`,
-                            kind: "surface",
-                            active: surface.status === "active",
-                            node: isLocationRequiredSurface(surface) ? (
-                              <LocationA2UISurface
-                                operations={surface.operations}
-                                disabled={surface.status !== "active"}
-                                mediaBaseDir={mediaBaseDir}
-                                onAction={(name, context) =>
-                                  onUiAction?.(m.id, name, context)
-                                }
-                              />
-                            ) : (
-                              <A2UISurfaceCard
-                                surface={surface}
-                                mediaBaseDir={mediaBaseDir}
-                                onAction={(name, context) =>
-                                  onUiAction?.(m.id, name, context)
-                                }
-                              />
-                            ),
-                          });
-                        };
-                        let hasTimelineText = false;
-                        const timelineSegments =
-                          answerLayout === "timeline"
-                            ? projectCanonicalTimelineSegments(m)
-                            : m.segments;
-                        const reasoningOutcome: "done" | "error" | "interrupted" =
-                          m.turnStatus === "error" || m.error
-                            ? "error"
-                            : m.turnStatus === "interrupted"
-                              ? "interrupted"
-                              : "done";
-                        const lastReasoningSegmentId = timelineSegments
-                          ? [...timelineSegments]
-                              .reverse()
-                              .find((segment) => segment.type === "reasoning")?.id
-                          : undefined;
-
-                        if (timelineSegments && timelineSegments.length > 0) {
-                          for (const [segmentIndex, seg] of timelineSegments.entries()) {
-                            if (seg.type === "reasoning") {
-                              const openReasoning =
-                                seg.durationSec == null || seg.durationSec <= 0;
-                              const active = Boolean(
-                                isStreamingBubble && openReasoning,
-                              );
+        ) : null}
+        {cronRun && !workspaceContent ? (
+          <aside className="chat-cron-run-float">
+            <CronRunFloatingCard
+              run={cronRun}
+              onOpen={() => setCronTaskOpen(true)}
+            />
+          </aside>
+        ) : null}
+        {browserPreview && !workspaceContent ? (
+          <BrowserPreviewFloat
+            preview={browserPreview}
+            onClose={() => onCloseBrowserPreview?.()}
+          />
+        ) : null}
+        {workspaceContent ? (
+          workspaceContent
+        ) : emptyMode === "chat" || emptyMode === "agent" ? (
+          <ChatWelcome
+            onPickCard={pickWelcomePrompt}
+            onActivate={() => textareaRef.current?.focus()}
+          />
+        ) : (
+          <div className="message-list-wrap">
+            <div
+              className="message-list"
+              ref={messageListRef}
+              onScroll={updateConversationScrollState}
+            >
+              {messages.map((m, index) => {
+                const isStreamingBubble =
+                  m.role === "assistant" &&
+                  !m.error &&
+                  (parallelRunningIds.has(m.id) ||
+                    (streaming && index === messages.length - 1));
+                const reasoningActive = Boolean(
+                  isStreamingBubble && m.reasoning && !m.content,
+                );
+                const answerLayout =
+                  messageLayoutOverrides[m.id] ?? displayPrefs.answerLayout;
+                const forcedProcessOpen = messageProcessExpanded[m.id];
+                const isEditingUserMessage = editingUserMessageId === m.id;
+                const canEditUserMessage =
+                  m.role === "user" &&
+                  m.id === lastUserMessageId &&
+                  !streaming &&
+                  !turnInFlight &&
+                  !sendBlocked &&
+                  Boolean(onEditUserMessage);
+                if (isTodoOnlyActivityMessage(m)) return null;
+                return (
+                  <div
+                    key={m.id}
+                    id={`msg-${m.id}`}
+                    data-msg-id={m.id}
+                    className={`msg-row ${m.role === "user" ? "user" : "assistant"}`}
+                  >
+                    {m.role === "assistant" && (
+                      <div
+                        className={`avatar ${m.error ? "error" : ""}${
+                          !m.error && !assistantHasCustomAvatar && modelId
+                            ? " is-model"
+                            : ""
+                        }`}
+                      >
+                        {m.error ? (
+                          "!"
+                        ) : assistantHasCustomAvatar && activeAgent ? (
+                          <AgentAvatar agent={activeAgent} size={20} />
+                        ) : modelId ? (
+                          <ModelBrandIcon modelId={modelId} size={16} />
+                        ) : (
+                          "AI"
+                        )}
+                      </div>
+                    )}
+                    <div className="msg-stack">
+                      <div
+                        className={`bubble ${m.role} ${m.error ? "error" : ""} ${
+                          !m.content &&
+                          !m.reasoning &&
+                          !m.attachments?.length &&
+                          !m.activities?.length &&
+                          !m.uiSurfaces?.length &&
+                          streaming
+                            ? "typing"
+                            : ""
+                        } ${isStreamingBubble && (m.content || m.reasoning) ? "is-streaming" : ""}${
+                          isEditingUserMessage ? " is-editing" : ""
+                        }`}
+                        data-allow-context-menu={
+                          m.role === "assistant" ? "true" : undefined
+                        }
+                        onContextMenu={(event) => {
+                          if (m.role !== "assistant" || isStreamingBubble)
+                            return;
+                          const opened = openAssistantMessageMenu(
+                            m.id,
+                            event.clientX,
+                            event.clientY,
+                          );
+                          if (!opened) return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                      >
+                        {m.attachments && m.attachments.length > 0 && (
+                          <MessageAttachments items={m.attachments} />
+                        )}
+                        {isEditingUserMessage ? (
+                          <InlineUserMessageEditor
+                            value={editingUserDraft}
+                            originalValue={m.content}
+                            disabled={submittingUserEdit}
+                            onChange={setEditingUserDraft}
+                            onCancel={cancelUserMessageEdit}
+                            onSubmit={() => void submitUserMessageEdit()}
+                          />
+                        ) : (
+                          (() => {
+                            type Step = {
+                              key: string;
+                              kind: MsgTimelineKind;
+                              active?: boolean;
+                              activity?: ChatActivity;
+                              node: ReactNode;
+                            };
+                            const steps: Step[] = [];
+                            const pushActivity = (act: ChatActivity) => {
+                              if (isTodoActivity(act)) return;
+                              if (!isActivityVisible(act.kind, displayPrefs))
+                                return;
                               steps.push({
-                                key: seg.id,
-                                kind: "reasoning",
-                                active,
+                                key: `act-${act.id}`,
+                                kind: act.kind,
+                                active: isLiveActivityStatus(act.status),
+                                activity: act,
                                 node: (
-                                  <MsgReasoning
-                                    reasoning={seg.text}
-                                    active={active}
-                                    outcome={
-                                      !active && seg.id === lastReasoningSegmentId
-                                        ? reasoningOutcome
-                                        : "done"
-                                    }
-                                    durationSec={seg.durationSec}
-                                    startedAtMs={active ? seg.at : undefined}
-                                    forcedOpen={forcedProcessOpen}
+                                  <MsgActivity
+                                    activity={act}
+                                    defaultOpen={forcedProcessOpen ?? false}
+                                    showTimestamp={displayPrefs.showTimestamps}
+                                    mediaBaseDir={mediaBaseDir}
                                   />
                                 ),
                               });
-                              continue;
-                            }
-                            if (seg.type === "text") {
-                              hasTimelineText = true;
-                              const active = Boolean(
-                                isStreamingBubble &&
-                                  segmentIndex === timelineSegments.length - 1,
-                              );
+                            };
+                            const pushSurface = (
+                              surface: NonNullable<
+                                ChatMessage["uiSurfaces"]
+                              >[number],
+                            ) => {
+                              // Clarify is an input interaction: it belongs in the composer,
+                              // never inside the assistant answer timeline.
+                              if (isClarifySurface(surface)) return;
                               steps.push({
-                                key: seg.id,
+                                key: `surf-${surface.messageId}`,
+                                kind: "surface",
+                                active: surface.status === "active",
+                                node: isLocationRequiredSurface(surface) ? (
+                                  <LocationA2UISurface
+                                    operations={surface.operations}
+                                    disabled={surface.status !== "active"}
+                                    mediaBaseDir={mediaBaseDir}
+                                    onAction={(name, context) =>
+                                      onUiAction?.(m.id, name, context)
+                                    }
+                                  />
+                                ) : (
+                                  <A2UISurfaceCard
+                                    surface={surface}
+                                    mediaBaseDir={mediaBaseDir}
+                                    onAction={(name, context) =>
+                                      onUiAction?.(m.id, name, context)
+                                    }
+                                  />
+                                ),
+                              });
+                            };
+                            let hasTimelineText = false;
+                            const timelineSegments =
+                              answerLayout === "timeline"
+                                ? projectCanonicalTimelineSegments(m)
+                                : m.segments;
+                            const reasoningOutcome:
+                              "done" | "error" | "interrupted" =
+                              m.turnStatus === "error" || m.error
+                                ? "error"
+                                : m.turnStatus === "interrupted"
+                                  ? "interrupted"
+                                  : "done";
+                            const lastReasoningSegmentId = timelineSegments
+                              ? [...timelineSegments]
+                                  .reverse()
+                                  .find(
+                                    (segment) => segment.type === "reasoning",
+                                  )?.id
+                              : undefined;
+
+                            if (
+                              timelineSegments &&
+                              timelineSegments.length > 0
+                            ) {
+                              for (const [
+                                segmentIndex,
+                                seg,
+                              ] of timelineSegments.entries()) {
+                                if (seg.type === "reasoning") {
+                                  const openReasoning =
+                                    seg.durationSec == null ||
+                                    seg.durationSec <= 0;
+                                  const active = Boolean(
+                                    isStreamingBubble && openReasoning,
+                                  );
+                                  steps.push({
+                                    key: seg.id,
+                                    kind: "reasoning",
+                                    active,
+                                    node: (
+                                      <MsgReasoning
+                                        reasoning={seg.text}
+                                        active={active}
+                                        outcome={
+                                          !active &&
+                                          seg.id === lastReasoningSegmentId
+                                            ? reasoningOutcome
+                                            : "done"
+                                        }
+                                        durationSec={seg.durationSec}
+                                        startedAtMs={
+                                          active ? seg.at : undefined
+                                        }
+                                        forcedOpen={forcedProcessOpen}
+                                      />
+                                    ),
+                                  });
+                                  continue;
+                                }
+                                if (seg.type === "text") {
+                                  hasTimelineText = true;
+                                  const active = Boolean(
+                                    isStreamingBubble &&
+                                    segmentIndex ===
+                                      timelineSegments.length - 1,
+                                  );
+                                  steps.push({
+                                    key: seg.id,
+                                    kind: "reply",
+                                    active,
+                                    node: (
+                                      <>
+                                        <ChatMarkdown
+                                          content={seg.text}
+                                          streaming={active}
+                                          compact={
+                                            displayPrefs.verbosity === "compact"
+                                          }
+                                          plain={Boolean(m.error)}
+                                          caret={false}
+                                          mediaBaseDir={mediaBaseDir}
+                                        />
+                                        <MsgStreamLoader visible={active} />
+                                      </>
+                                    ),
+                                  });
+                                  continue;
+                                }
+                                if (seg.type === "activity") {
+                                  const act = m.activities?.find(
+                                    (a) => a.id === seg.id,
+                                  );
+                                  if (act) pushActivity(act);
+                                  continue;
+                                }
+                                const surface = m.uiSurfaces?.find(
+                                  (s) => s.messageId === seg.id,
+                                );
+                                if (surface) pushSurface(surface);
+                              }
+                            } else {
+                              if (m.reasoning) {
+                                steps.push({
+                                  key: `r-${m.id}`,
+                                  kind: "reasoning",
+                                  active: reasoningActive,
+                                  node: (
+                                    <MsgReasoning
+                                      reasoning={m.reasoning}
+                                      active={reasoningActive}
+                                      outcome={reasoningOutcome}
+                                      durationSec={m.reasoningDurationSec}
+                                      forcedOpen={forcedProcessOpen}
+                                    />
+                                  ),
+                                });
+                              }
+                              for (const act of m.activities ?? []) {
+                                pushActivity(act);
+                              }
+                              for (const surface of m.uiSurfaces ?? []) {
+                                pushSurface(surface);
+                              }
+                              if (m.citations?.length) {
+                                steps.push({
+                                  key: `cite-${m.id}`,
+                                  kind: "reasoning" as MsgTimelineKind,
+                                  active: false,
+                                  node: (
+                                    <MsgCitations citations={m.citations} />
+                                  ),
+                                });
+                              }
+                            }
+
+                            if (answerLayout === "grouped") {
+                              const groupedAnswer = groupAssistantAnswer(m);
+                              const groupedViewSteps: Step[] = [];
+                              const lastSegment =
+                                m.segments?.[m.segments.length - 1];
+                              const groupedReasoningActive = Boolean(
+                                isStreamingBubble &&
+                                (lastSegment
+                                  ? lastSegment.type === "reasoning"
+                                  : reasoningActive),
+                              );
+
+                              if (groupedAnswer.reasoning) {
+                                groupedViewSteps.push({
+                                  key: `grouped-reasoning-${m.id}`,
+                                  kind: "reasoning",
+                                  active: groupedReasoningActive,
+                                  node: (
+                                    <MsgReasoning
+                                      reasoning={groupedAnswer.reasoning}
+                                      active={groupedReasoningActive}
+                                      outcome={reasoningOutcome}
+                                      durationSec={
+                                        groupedAnswer.reasoningDurationSec
+                                      }
+                                      forcedOpen={forcedProcessOpen}
+                                    />
+                                  ),
+                                });
+                              }
+
+                              const visibleActivities = (
+                                m.activities ?? []
+                              ).filter(
+                                (activity) =>
+                                  !isTodoActivity(activity) &&
+                                  isActivityVisible(
+                                    activity.kind,
+                                    displayPrefs,
+                                  ),
+                              );
+                              if (visibleActivities.length > 0) {
+                                groupedViewSteps.push({
+                                  key: `grouped-activities-${m.id}`,
+                                  kind: visibleActivities[0]?.kind ?? "tool",
+                                  active: visibleActivities.some((activity) =>
+                                    isLiveActivityStatus(activity.status),
+                                  ),
+                                  node: (
+                                    <MsgActivityGroup
+                                      activities={visibleActivities}
+                                      forcedOpen={forcedProcessOpen}
+                                      showTimestamp={
+                                        displayPrefs.showTimestamps
+                                      }
+                                      mediaBaseDir={mediaBaseDir}
+                                    />
+                                  ),
+                                });
+                              }
+
+                              groupedViewSteps.push(
+                                ...steps.filter(
+                                  (step) => step.kind === "surface",
+                                ),
+                              );
+
+                              if (groupedAnswer.text) {
+                                groupedViewSteps.push({
+                                  key: `grouped-reply-${m.id}`,
+                                  kind: "reply",
+                                  active: isStreamingBubble,
+                                  node: (
+                                    <>
+                                      <ChatMarkdown
+                                        content={groupedAnswer.text}
+                                        streaming={isStreamingBubble}
+                                        compact={
+                                          displayPrefs.verbosity === "compact"
+                                        }
+                                        plain={Boolean(m.error)}
+                                        caret={false}
+                                        mediaBaseDir={mediaBaseDir}
+                                      />
+                                      <MsgStreamLoader
+                                        visible={isStreamingBubble}
+                                      />
+                                    </>
+                                  ),
+                                });
+                              }
+
+                              if (m.citations?.length) {
+                                groupedViewSteps.push({
+                                  key: `grouped-citations-${m.id}`,
+                                  kind: "reasoning",
+                                  active: false,
+                                  node: (
+                                    <MsgCitations citations={m.citations} />
+                                  ),
+                                });
+                              }
+
+                              steps.splice(
+                                0,
+                                steps.length,
+                                ...groupedViewSteps,
+                              );
+                              hasTimelineText = Boolean(groupedAnswer.text);
+                            }
+
+                            const showLoaderAlone =
+                              isStreamingBubble &&
+                              !m.content &&
+                              !m.reasoning &&
+                              !m.attachments?.length &&
+                              !m.uiSurfaces?.length &&
+                              !(
+                                m.activities?.length &&
+                                displayPrefs.verbosity !== "compact"
+                              );
+                            if (m.content && !hasTimelineText) {
+                              steps.push({
+                                key: `reply-${m.id}`,
                                 kind: "reply",
-                                active,
                                 node: (
                                   <>
                                     <ChatMarkdown
-                                      content={seg.text}
-                                      streaming={active}
-                                      compact={displayPrefs.verbosity === "compact"}
+                                      content={m.content}
+                                      streaming={isStreamingBubble}
+                                      compact={
+                                        displayPrefs.verbosity === "compact"
+                                      }
                                       plain={Boolean(m.error)}
                                       caret={false}
                                       mediaBaseDir={mediaBaseDir}
                                     />
-                                    <MsgStreamLoader visible={active} />
+                                    <MsgStreamLoader
+                                      visible={isStreamingBubble}
+                                    />
                                   </>
                                 ),
                               });
-                              continue;
                             }
-                            if (seg.type === "activity") {
-                              const act = m.activities?.find(
-                                (a) => a.id === seg.id,
-                              );
-                              if (act) pushActivity(act);
-                              continue;
-                            }
-                            const surface = m.uiSurfaces?.find(
-                              (s) => s.messageId === seg.id,
+
+                            const hasProcess = steps.some(
+                              (step) => step.kind !== "reply",
                             );
-                            if (surface) pushSurface(surface);
-                          }
-                        } else {
-                          if (m.reasoning) {
-                            steps.push({
-                              key: `r-${m.id}`,
-                              kind: "reasoning",
-                              active: reasoningActive,
-                              node: (
-                                <MsgReasoning
-                                  reasoning={m.reasoning}
-                                  active={reasoningActive}
-                                  outcome={reasoningOutcome}
-                                  durationSec={m.reasoningDurationSec}
-                                  forcedOpen={forcedProcessOpen}
-                                />
-                              ),
-                            });
-                          }
-                          for (const act of m.activities ?? []) {
-                            pushActivity(act);
-                          }
-                          for (const surface of m.uiSurfaces ?? []) {
-                            pushSurface(surface);
-                          }
-                          if (m.citations?.length) {
-                            steps.push({
-                              key: `cite-${m.id}`,
-                              kind: "reasoning" as MsgTimelineKind,
-                              active: false,
-                              node: <MsgCitations citations={m.citations} />,
-                            });
-                          }
-                        }
 
-                        if (answerLayout === "grouped") {
-                          const groupedAnswer = groupAssistantAnswer(m);
-                          const groupedViewSteps: Step[] = [];
-                          const lastSegment = m.segments?.[m.segments.length - 1];
-                          const groupedReasoningActive = Boolean(
-                            isStreamingBubble &&
-                              (lastSegment
-                                ? lastSegment.type === "reasoning"
-                                : reasoningActive),
-                          );
+                            if (!m.content && isStreamingBubble && hasProcess) {
+                              steps.push({
+                                key: `gen-${m.id}`,
+                                kind: "generating",
+                                active: true,
+                                node: <MsgStreamLoader />,
+                              });
+                            } else if (!m.content && showLoaderAlone) {
+                              steps.push({
+                                key: `gen-${m.id}`,
+                                kind: "generating",
+                                active: true,
+                                node: <MsgStreamLoader alone />,
+                              });
+                            } else if (
+                              !m.content &&
+                              isStreamingBubble &&
+                              !hasProcess
+                            ) {
+                              steps.push({
+                                key: `gen-${m.id}`,
+                                kind: "generating",
+                                active: true,
+                                node: <MsgStreamLoader />,
+                              });
+                            }
 
-                          if (groupedAnswer.reasoning) {
-                            groupedViewSteps.push({
-                              key: `grouped-reasoning-${m.id}`,
-                              kind: "reasoning",
-                              active: groupedReasoningActive,
-                              node: (
-                                <MsgReasoning
-                                  reasoning={groupedAnswer.reasoning}
-                                  active={groupedReasoningActive}
-                                  outcome={reasoningOutcome}
-                                  durationSec={groupedAnswer.reasoningDurationSec}
-                                  forcedOpen={forcedProcessOpen}
-                                />
-                              ),
-                            });
-                          }
+                            if (steps.length === 0) return null;
 
-                          const visibleActivities = (m.activities ?? []).filter(
-                            (activity) =>
-                              !isTodoActivity(activity) &&
-                              isActivityVisible(activity.kind, displayPrefs),
-                          );
-                          if (visibleActivities.length > 0) {
-                            groupedViewSteps.push({
-                              key: `grouped-activities-${m.id}`,
-                              kind: visibleActivities[0]?.kind ?? "tool",
-                              active: visibleActivities.some(
-                                (activity) => isLiveActivityStatus(activity.status),
-                              ),
-                              node: (
-                                <MsgActivityGroup
-                                  activities={visibleActivities}
-                                  forcedOpen={forcedProcessOpen}
-                                  showTimestamp={displayPrefs.showTimestamps}
-                                  mediaBaseDir={mediaBaseDir}
-                                />
-                              ),
-                            });
-                          }
+                            const groupedSteps =
+                              groupConsecutiveActivities(steps);
 
-                          groupedViewSteps.push(
-                            ...steps.filter((step) => step.kind === "surface"),
-                          );
-
-                          if (groupedAnswer.text) {
-                            groupedViewSteps.push({
-                              key: `grouped-reply-${m.id}`,
-                              kind: "reply",
-                              active: isStreamingBubble,
-                              node: (
-                                <>
-                                  <ChatMarkdown
-                                    content={groupedAnswer.text}
-                                    streaming={isStreamingBubble}
-                                    compact={displayPrefs.verbosity === "compact"}
-                                    plain={Boolean(m.error)}
-                                    caret={false}
-                                    mediaBaseDir={mediaBaseDir}
-                                  />
-                                  <MsgStreamLoader visible={isStreamingBubble} />
-                                </>
-                              ),
-                            });
-                          }
-
-                          if (m.citations?.length) {
-                            groupedViewSteps.push({
-                              key: `grouped-citations-${m.id}`,
-                              kind: "reasoning",
-                              active: false,
-                              node: <MsgCitations citations={m.citations} />,
-                            });
-                          }
-
-                          steps.splice(0, steps.length, ...groupedViewSteps);
-                          hasTimelineText = Boolean(groupedAnswer.text);
-                        }
-
-                        const showLoaderAlone =
-                          isStreamingBubble &&
-                          !m.content &&
-                          !m.reasoning &&
-                          !m.attachments?.length &&
-                          !m.uiSurfaces?.length &&
-                          !(
-                            m.activities?.length &&
-                            displayPrefs.verbosity !== "compact"
-                          );
-                        if (m.content && !hasTimelineText) {
-                          steps.push({
-                            key: `reply-${m.id}`,
-                            kind: "reply",
-                            node: (
-                              <>
-                                <ChatMarkdown
-                                  content={m.content}
-                                  streaming={isStreamingBubble}
-                                  compact={displayPrefs.verbosity === "compact"}
-                                  plain={Boolean(m.error)}
-                                  caret={false}
-                                  mediaBaseDir={mediaBaseDir}
-                                />
-                                <MsgStreamLoader visible={isStreamingBubble} />
-                              </>
-                            ),
-                          });
-                        }
-
-                        const hasProcess = steps.some(
-                          (step) => step.kind !== "reply",
-                        );
-
-                        if (!m.content && isStreamingBubble && hasProcess) {
-                          steps.push({
-                            key: `gen-${m.id}`,
-                            kind: "generating",
-                            active: true,
-                            node: <MsgStreamLoader />,
-                          });
-                        } else if (!m.content && showLoaderAlone) {
-                          steps.push({
-                            key: `gen-${m.id}`,
-                            kind: "generating",
-                            active: true,
-                            node: <MsgStreamLoader alone />,
-                          });
-                        } else if (!m.content && isStreamingBubble && !hasProcess) {
-                          steps.push({
-                            key: `gen-${m.id}`,
-                            kind: "generating",
-                            active: true,
-                            node: <MsgStreamLoader />,
-                          });
-                        }
-
-                        if (steps.length === 0) return null;
-
-                        const groupedSteps = groupConsecutiveActivities(steps);
-
-                        if (!hasProcess) {
-                          return <>{steps.map((step) => (
-                            <div key={step.key}>{step.node}</div>
-                          ))}</>;
-                        }
-
-                        return (
-                          <MsgTimeline>
-                            {groupedSteps.map((step, i) => {
-                              const isLast = i === groupedSteps.length - 1;
-                              if (isConsecutiveActivityGroup(step)) {
-                                const activities = step.items.flatMap((item) =>
-                                  item.activity ? [item.activity] : [],
-                                );
-                                return (
-                                  <MsgTimelineStep
-                                    key={step.key}
-                                    kind={step.items[0]?.kind ?? "tool"}
-                                    active={activities.some(
-                                      (activity) => activity.status === "running",
-                                    )}
-                                    isLast={isLast}
-                                  >
-                                    <MsgActivityGroup
-                                      activities={activities}
-                                      forcedOpen={forcedProcessOpen}
-                                      showTimestamp={displayPrefs.showTimestamps}
-                                      mediaBaseDir={mediaBaseDir}
-                                    />
-                                  </MsgTimelineStep>
-                                );
-                              }
+                            if (!hasProcess) {
                               return (
-                                <MsgTimelineStep
-                                  key={step.key}
-                                  kind={step.kind}
-                                  active={step.active}
-                                  isLast={isLast}
-                                >
-                                  {step.node}
-                                </MsgTimelineStep>
+                                <>
+                                  {steps.map((step) => (
+                                    <div key={step.key}>{step.node}</div>
+                                  ))}
+                                </>
                               );
-                            })}
-                          </MsgTimeline>
-                        );
-                      })()}
-                      {displayPrefs.showTimestamps && m.createdAt ? (
-                        <div className="msg-timestamp">
-                          {new Date(m.createdAt).toLocaleTimeString()}
-                        </div>
-                      ) : null}
-                      {m.role === "assistant" &&
-                      !isStreamingBubble &&
-                      (m.usage || m.generationDurationSec) ? (
-                        <MessageTokenStats
-                          usage={m.usage}
-                          tokensPerSec={m.tokensPerSec}
-                          generationDurationSec={m.generationDurationSec}
+                            }
+
+                            return (
+                              <MsgTimeline>
+                                {groupedSteps.map((step, i) => {
+                                  const isLast = i === groupedSteps.length - 1;
+                                  if (isConsecutiveActivityGroup(step)) {
+                                    const activities = step.items.flatMap(
+                                      (item) =>
+                                        item.activity ? [item.activity] : [],
+                                    );
+                                    return (
+                                      <MsgTimelineStep
+                                        key={step.key}
+                                        kind={step.items[0]?.kind ?? "tool"}
+                                        active={activities.some(
+                                          (activity) =>
+                                            activity.status === "running",
+                                        )}
+                                        isLast={isLast}
+                                      >
+                                        <MsgActivityGroup
+                                          activities={activities}
+                                          forcedOpen={forcedProcessOpen}
+                                          showTimestamp={
+                                            displayPrefs.showTimestamps
+                                          }
+                                          mediaBaseDir={mediaBaseDir}
+                                        />
+                                      </MsgTimelineStep>
+                                    );
+                                  }
+                                  return (
+                                    <MsgTimelineStep
+                                      key={step.key}
+                                      kind={step.kind}
+                                      active={step.active}
+                                      isLast={isLast}
+                                    >
+                                      {step.node}
+                                    </MsgTimelineStep>
+                                  );
+                                })}
+                              </MsgTimeline>
+                            );
+                          })()
+                        )}
+                        {displayPrefs.showTimestamps && m.createdAt ? (
+                          <div className="msg-timestamp">
+                            {new Date(m.createdAt).toLocaleTimeString()}
+                          </div>
+                        ) : null}
+                        {m.role === "assistant" &&
+                        !isStreamingBubble &&
+                        (m.usage || m.generationDurationSec) ? (
+                          <MessageTokenStats
+                            usage={m.usage}
+                            tokensPerSec={m.tokensPerSec}
+                            generationDurationSec={m.generationDurationSec}
+                          />
+                        ) : null}
+                      </div>
+                      {!isStreamingBubble &&
+                      m.id !== "welcome" &&
+                      (m.role === "assistant" ||
+                        (canEditUserMessage && !isEditingUserMessage)) ? (
+                        <MessageActions
+                          messageId={m.id}
+                          content={m.content}
+                          role={m.role}
+                          disabled={streaming}
+                          onRegenerate={
+                            m.role === "assistant"
+                              ? onRegenerateMessage
+                              : undefined
+                          }
+                          onEdit={
+                            m.role === "user"
+                              ? () => beginUserMessageEdit(m)
+                              : undefined
+                          }
+                          onBranch={
+                            m.role === "assistant" ? onBranchMessage : undefined
+                          }
+                          onOpenMenu={
+                            m.role === "assistant"
+                              ? (anchor) => {
+                                  const rect = anchor.getBoundingClientRect();
+                                  openAssistantMessageMenu(
+                                    m.id,
+                                    rect.right,
+                                    rect.bottom + 4,
+                                    false,
+                                    anchor,
+                                  );
+                                }
+                              : undefined
+                          }
                         />
                       ) : null}
                     </div>
-                    {!isStreamingBubble &&
-                    m.id !== "welcome" &&
-                    (m.role === "assistant" ||
-                      (canEditUserMessage && !isEditingUserMessage)) ? (
-                      <MessageActions
-                        messageId={m.id}
-                        content={m.content}
-                        role={m.role}
-                        disabled={streaming}
-                        onRegenerate={
-                          m.role === "assistant" ? onRegenerateMessage : undefined
-                        }
-                        onEdit={
-                          m.role === "user"
-                            ? () => beginUserMessageEdit(m)
-                            : undefined
-                        }
-                        onBranch={
-                          m.role === "assistant" ? onBranchMessage : undefined
-                        }
-                        onOpenMenu={m.role === "assistant" ? (anchor) => {
-                          const rect = anchor.getBoundingClientRect();
-                          openAssistantMessageMenu(
-                            m.id,
-                            rect.right,
-                            rect.bottom + 4,
-                            false,
-                            anchor,
-                          );
-                        } : undefined}
-                      />
-                    ) : null}
                   </div>
-                </div>
-              );
-            })}
-            <div ref={bottomRef} />
-          </div>
-          <ChatMessageNav
-            messages={messages}
-            listRef={messageListRef}
-            bottomRef={bottomRef}
-          />
-        </div>
-      )}
-
-      <form
-        ref={composerShellRef}
-        className="composer-shell"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (composerContexts.length === 0 && tryHandleSlashSubmit()) return;
-          trySubmitComposer();
-        }}
-      >
-        {isScrolledFromBottom ? (
-          <button
-            type="button"
-            className={`chat-scroll-latest ${showStopControl ? "is-active" : ""}`.trim()}
-            title={t("chat.navScrollBottom")}
-            aria-label={t("chat.navScrollBottom")}
-            onClick={scrollConversationToBottom}
-          >
-            {showStopControl ? (
-              <span className="chat-scroll-latest-dots" aria-hidden>
-                <span />
-                <span />
-                <span />
-              </span>
-            ) : (
-              <ArrowDown size={18} strokeWidth={2} aria-hidden />
-            )}
-          </button>
-        ) : null}
-        <TodoProgress messages={messages} onOpenFileReview={onOpenFileReview} />
-        {modeSwitchPrompt?.to === "agent" && (
-          <div
-            className="composer-queue composer-mode-switch"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="composer-mode-switch-body">
-              <span className="composer-mode-switch-title">
-                {t("chat.modeSwitch.title")}
-              </span>
-              <span className="composer-mode-switch-reason">
-                {modeSwitchPrompt.reason}
-              </span>
-              {modeSwitchPrompt.summary ? (
-                <span className="composer-mode-switch-summary">
-                  {modeSwitchPrompt.summary}
-                </span>
-              ) : null}
+                );
+              })}
+              <div ref={bottomRef} />
             </div>
-            <span className="composer-queue-actions">
-              <button
-                type="button"
-                className="composer-queue-btn"
-                onClick={() => onApproveModeSwitch?.()}
-              >
-                {t("chat.modeSwitch.execute")}
-              </button>
-              <button
-                type="button"
-                className="composer-queue-btn"
-                onClick={() => onDismissModeSwitch?.()}
-              >
-                {t("chat.modeSwitch.keepPlanning")}
-              </button>
-            </span>
+            <ChatMessageNav
+              messages={messages}
+              listRef={messageListRef}
+              bottomRef={bottomRef}
+            />
           </div>
         )}
-        {queuedFollowUps.length > 0 && (
-          <div
-            className={`composer-queue ${queueMenuId ? "has-open-menu" : ""}`.trim()}
-            aria-label={t("chat.queue.title", { count: String(queuedFollowUps.length) })}
-          >
+
+        <form
+          ref={composerShellRef}
+          className="composer-shell"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (composerContexts.length === 0 && tryHandleSlashSubmit()) return;
+            trySubmitComposer();
+          }}
+        >
+          {isScrolledFromBottom ? (
+            <button
+              type="button"
+              className={`chat-scroll-latest ${showStopControl ? "is-active" : ""}`.trim()}
+              title={t("chat.navScrollBottom")}
+              aria-label={t("chat.navScrollBottom")}
+              onClick={scrollConversationToBottom}
+            >
+              {showStopControl ? (
+                <span className="chat-scroll-latest-dots" aria-hidden>
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              ) : (
+                <ArrowDown size={18} strokeWidth={2} aria-hidden />
+              )}
+            </button>
+          ) : null}
+          <TodoProgress
+            messages={messages}
+            onOpenFileReview={onOpenFileReview}
+          />
+          {modeSwitchPrompt?.to === "agent" && (
+            <div
+              className="composer-queue composer-mode-switch"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="composer-mode-switch-body">
+                <span className="composer-mode-switch-title">
+                  {t("chat.modeSwitch.title")}
+                </span>
+                <span className="composer-mode-switch-reason">
+                  {modeSwitchPrompt.reason}
+                </span>
+                {modeSwitchPrompt.summary ? (
+                  <span className="composer-mode-switch-summary">
+                    {modeSwitchPrompt.summary}
+                  </span>
+                ) : null}
+              </div>
+              <span className="composer-queue-actions">
+                <button
+                  type="button"
+                  className="composer-queue-btn"
+                  onClick={() => onApproveModeSwitch?.()}
+                >
+                  {t("chat.modeSwitch.execute")}
+                </button>
+                <button
+                  type="button"
+                  className="composer-queue-btn"
+                  onClick={() => onDismissModeSwitch?.()}
+                >
+                  {t("chat.modeSwitch.keepPlanning")}
+                </button>
+              </span>
+            </div>
+          )}
+          {queuedFollowUps.length > 0 && (
+            <div
+              className={`composer-queue ${queueMenuId ? "has-open-menu" : ""}`.trim()}
+              aria-label={t("chat.queue.title", {
+                count: String(queuedFollowUps.length),
+              })}
+            >
               {queuedFollowUps.map((item, index) => {
                 const isSteering = item.delivery === "steering";
                 return (
@@ -3207,7 +3389,9 @@ export default function ChatView({
                       >
                         <CornerDownRight size={13} strokeWidth={2.1} />
                         <span>
-                          {isSteering ? t("chat.queue.steering") : t("chat.queue.steer")}
+                          {isSteering
+                            ? t("chat.queue.steering")
+                            : t("chat.queue.steer")}
                         </span>
                       </button>
                       <button
@@ -3228,7 +3412,11 @@ export default function ChatView({
                         aria-haspopup="menu"
                         aria-expanded={queueMenuId === item.id}
                         disabled={isSteering}
-                        onClick={() => setQueueMenuId((current) => current === item.id ? null : item.id)}
+                        onClick={() =>
+                          setQueueMenuId((current) =>
+                            current === item.id ? null : item.id,
+                          )
+                        }
                       >
                         <MoreHorizontal size={14} strokeWidth={2} />
                       </button>
@@ -3285,12 +3473,16 @@ export default function ChatView({
                             <ArrowDown size={14} strokeWidth={2} />
                             <span>{t("chat.queue.moveDown")}</span>
                           </button>
-                          <span className="composer-queue-menu-separator" role="separator" />
+                          <span
+                            className="composer-queue-menu-separator"
+                            role="separator"
+                          />
                           <button
                             type="button"
                             role="menuitem"
                             onClick={() => {
-                              if (onCloseQueuedFollowUps?.()) setQueueMenuId(null);
+                              if (onCloseQueuedFollowUps?.())
+                                setQueueMenuId(null);
                             }}
                           >
                             <ListX size={14} strokeWidth={2} />
@@ -3302,636 +3494,689 @@ export default function ChatView({
                   </div>
                 );
               })}
-          </div>
-        )}
-
-        {parallelTasks.length > 0 && (
-          <div
-            className="composer-queue composer-tasks"
-            aria-label={t("chat.task.title", {
-              running: String(parallelRunningCount),
-              total: String(parallelTasks.length),
-            })}
-          >
-            <button
-              type="button"
-              className="composer-queue-toggle"
-              aria-expanded={tasksOpen}
-              onClick={() => setTasksOpen((o) => !o)}
-            >
-              <MorphToggleIcon
-                active={tasksOpen}
-                activeIcon={ChevronUpData}
-                inactiveIcon={ChevronDownData}
-                size={14}
-                strokeWidth={2.2}
-                aria-hidden
-              />
-              <span>
-                {t("chat.task.title", {
-                  running: String(parallelRunningCount),
-                  total: String(parallelTasks.length),
-                })}
-              </span>
-            </button>
-            {tasksOpen && (
-              <ul className="composer-queue-list">
-                {parallelTasks.map((task) => (
-                  <li
-                    key={task.id}
-                    className={`composer-queue-item is-task is-${task.status}`}
-                  >
-                    <span
-                      className={`composer-queue-dot is-${task.status}`}
-                      aria-hidden
-                    />
-                    <span className="composer-queue-text">
-                      <span className="composer-task-status">
-                        {task.status === "running"
-                          ? t("chat.task.status.running")
-                          : task.status === "waiting"
-                            ? t("chat.task.status.waiting")
-                            : task.status === "done"
-                              ? t("chat.task.status.done")
-                              : task.status === "error"
-                                ? t("chat.task.status.error")
-                                : t("chat.task.status.cancelled")}
-                      </span>
-                      {task.prompt.trim() || t("chat.queue.emptyText")}
-                      {task.worktree?.path ? (
-                        <span className="composer-task-worktree" title={task.worktree.path}>
-                          {task.worktree.path.split(/[/\\]/).slice(-2).join("/")}
-                        </span>
-                      ) : null}
-                    </span>
-                    {isParallelTaskActive(task.status) && (
-                      <span className="composer-queue-actions">
-                        <button
-                          type="button"
-                          className="composer-queue-btn"
-                          title={t("chat.task.cancel")}
-                          aria-label={t("chat.task.cancel")}
-                          onClick={() => onCancelParallelTask?.(task.id)}
-                        >
-                          <Square size={12} strokeWidth={2.4} />
-                        </button>
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {countRunningParallel(parallelTasks) === 0 &&
-              parallelTasks.length > 0 && (
-                <div className="composer-task-summary">
-                  {(() => {
-                    const s = countSettledByStatus(parallelTasks);
-                    return (
-                      <span className="composer-task-summary-text">
-                        {t("chat.task.summaryCounts", {
-                          done: String(s.done),
-                          error: String(s.error),
-                          cancelled: String(s.cancelled),
-                        })}
-                      </span>
-                    );
-                  })()}
-                  <span className="composer-queue-actions">
-                    <button
-                      type="button"
-                      className="composer-queue-btn"
-                      onClick={() => onWriteParallelSummary?.()}
-                    >
-                      {t("chat.task.writeSummary")}
-                    </button>
-                    <button
-                      type="button"
-                      className="composer-queue-btn"
-                      onClick={() => onClearSettledParallel?.()}
-                    >
-                      {t("chat.task.clearSettled")}
-                    </button>
-                  </span>
-                </div>
-              )}
-          </div>
-        )}
-
-        {paletteKind ? (
-          <ComposerPalette
-            kind={paletteKind}
-            items={activePaletteItems}
-            query={paletteQuery}
-            activeIndex={paletteIndex}
-            onHover={setPaletteIndex}
-            onSelect={applyPaletteItem}
-            onClose={closePalette}
-          />
-        ) : null}
-
-        <div
-          className={`composer composer--stacked ${composerClarify ? "has-clarify" : ""} ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="composer-file-input"
-            multiple
-            accept={fileAccept || undefined}
-            onChange={(e) => void onFileChange(e)}
-            disabled={
-              attachments.length >= MAX_ATTACHMENTS || fileAccept === ""
-            }
-          />
-          {fileDragOver ? (
-            <div className="composer-drop-hint" aria-live="polite">
-              {t("chat.dropFilesHint")}
             </div>
-          ) : null}
-          {attachments.length > 0 || composerContexts.length > 0 ? (
+          )}
+
+          {parallelTasks.length > 0 && (
             <div
-              className="composer-previews composer-context-strip"
-              aria-label={t("chat.contextStripLabel")}
+              className="composer-queue composer-tasks"
+              aria-label={t("chat.task.title", {
+                running: String(parallelRunningCount),
+                total: String(parallelTasks.length),
+              })}
             >
-              {attachments.map((att) => (
-                <div key={att.id} className="composer-preview" data-kind={att.kind}>
-                  <button
-                    type="button"
-                    className="composer-preview-open"
-                    onClick={() =>
-                      setPreviewTarget({ type: "attachment", item: att })
-                    }
-                    aria-label={t("chat.previewContext", { name: att.name })}
-                    title={t("chat.previewContext", { name: att.name })}
-                  >
-                    {att.kind === "image" && att.previewUrl ? (
-                      <img src={att.previewUrl} alt="" />
-                    ) : att.kind === "video" && att.previewUrl ? (
-                      <video src={att.previewUrl} muted />
-                    ) : (
-                      <span className="composer-preview-icon" data-kind={att.kind}>
-                        <AttachmentGlyph kind={att.kind} />
+              <button
+                type="button"
+                className="composer-queue-toggle"
+                aria-expanded={tasksOpen}
+                onClick={() => setTasksOpen((o) => !o)}
+              >
+                <MorphToggleIcon
+                  active={tasksOpen}
+                  activeIcon={ChevronUpData}
+                  inactiveIcon={ChevronDownData}
+                  size={14}
+                  strokeWidth={2.2}
+                  aria-hidden
+                />
+                <span>
+                  {t("chat.task.title", {
+                    running: String(parallelRunningCount),
+                    total: String(parallelTasks.length),
+                  })}
+                </span>
+              </button>
+              {tasksOpen && (
+                <ul className="composer-queue-list">
+                  {parallelTasks.map((task) => (
+                    <li
+                      key={task.id}
+                      className={`composer-queue-item is-task is-${task.status}`}
+                    >
+                      <span
+                        className={`composer-queue-dot is-${task.status}`}
+                        aria-hidden
+                      />
+                      <span className="composer-queue-text">
+                        <span className="composer-task-status">
+                          {task.status === "running"
+                            ? t("chat.task.status.running")
+                            : task.status === "waiting"
+                              ? t("chat.task.status.waiting")
+                              : task.status === "done"
+                                ? t("chat.task.status.done")
+                                : task.status === "error"
+                                  ? t("chat.task.status.error")
+                                  : t("chat.task.status.cancelled")}
+                        </span>
+                        {task.prompt.trim() || t("chat.queue.emptyText")}
+                        {task.worktree?.path ? (
+                          <span
+                            className="composer-task-worktree"
+                            title={task.worktree.path}
+                          >
+                            {task.worktree.path
+                              .split(/[/\\]/)
+                              .slice(-2)
+                              .join("/")}
+                          </span>
+                        ) : null}
                       </span>
-                    )}
-                    <span className="composer-preview-meta">
-                      <span className="composer-preview-name">{att.name}</span>
-                      <span className="composer-preview-size">
-                        {att.kind === "folder"
-                          ? t("chat.plusMenuFolder")
-                          : formatSize(att.size)}
-                      </span>
+                      {isParallelTaskActive(task.status) && (
+                        <span className="composer-queue-actions">
+                          <button
+                            type="button"
+                            className="composer-queue-btn"
+                            title={t("chat.task.cancel")}
+                            aria-label={t("chat.task.cancel")}
+                            onClick={() => onCancelParallelTask?.(task.id)}
+                          >
+                            <Square size={12} strokeWidth={2.4} />
+                          </button>
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {countRunningParallel(parallelTasks) === 0 &&
+                parallelTasks.length > 0 && (
+                  <div className="composer-task-summary">
+                    {(() => {
+                      const s = countSettledByStatus(parallelTasks);
+                      return (
+                        <span className="composer-task-summary-text">
+                          {t("chat.task.summaryCounts", {
+                            done: String(s.done),
+                            error: String(s.error),
+                            cancelled: String(s.cancelled),
+                          })}
+                        </span>
+                      );
+                    })()}
+                    <span className="composer-queue-actions">
+                      <button
+                        type="button"
+                        className="composer-queue-btn"
+                        onClick={() => onWriteParallelSummary?.()}
+                      >
+                        {t("chat.task.writeSummary")}
+                      </button>
+                      <button
+                        type="button"
+                        className="composer-queue-btn"
+                        onClick={() => onClearSettledParallel?.()}
+                      >
+                        {t("chat.task.clearSettled")}
+                      </button>
                     </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="composer-preview-remove"
-                    onClick={() => removeAttachment(att.id)}
-                    aria-label={t("chat.removeAttachment")}
-                    title={t("chat.removeAttachment")}
-                    disabled={streaming}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              {composerContexts.map((token) => {
-                const kindLabel = {
-                  agent: t("chat.contextToken.agent"),
-                  skill: t("chat.contextToken.skill"),
-                  mcp: t("chat.contextToken.mcp"),
-                  file: t("chat.contextToken.file"),
-                }[token.kind];
-                return (
+                  </div>
+                )}
+            </div>
+          )}
+
+          {paletteKind ? (
+            <ComposerPalette
+              kind={paletteKind}
+              items={activePaletteItems}
+              query={paletteQuery}
+              activeIndex={paletteIndex}
+              onHover={setPaletteIndex}
+              onSelect={applyPaletteItem}
+              onClose={closePalette}
+            />
+          ) : null}
+
+          <div
+            className={`composer composer--stacked ${composerClarify ? "has-clarify" : ""} ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="composer-file-input"
+              multiple
+              accept={fileAccept || undefined}
+              onChange={(e) => void onFileChange(e)}
+              disabled={
+                attachments.length >= MAX_ATTACHMENTS || fileAccept === ""
+              }
+            />
+            {fileDragOver ? (
+              <div className="composer-drop-hint" aria-live="polite">
+                {t("chat.dropFilesHint")}
+              </div>
+            ) : null}
+            {attachments.length > 0 || composerContexts.length > 0 ? (
+              <div
+                className="composer-previews composer-context-strip"
+                aria-label={t("chat.contextStripLabel")}
+              >
+                {attachments.map((att) => (
                   <div
-                    key={`${token.kind}:${token.id}`}
-                    className="composer-context-token"
-                    data-kind={token.kind}
+                    key={att.id}
+                    className="composer-preview"
+                    data-kind={att.kind}
                   >
                     <button
                       type="button"
-                      className="composer-context-token-open"
+                      className="composer-preview-open"
                       onClick={() =>
-                        setPreviewTarget({ type: "context", item: token })
+                        setPreviewTarget({ type: "attachment", item: att })
                       }
-                      aria-label={t("chat.previewContext", { name: token.name })}
-                      title={t("chat.previewContext", { name: token.name })}
+                      aria-label={t("chat.previewContext", { name: att.name })}
+                      title={t("chat.previewContext", { name: att.name })}
                     >
-                      <span className="composer-context-token-icon">
-                        <ComposerContextGlyph kind={token.kind} />
-                      </span>
-                      <span className="composer-context-token-meta">
-                        <span className="composer-context-token-kind">
-                          {kindLabel}
+                      {att.kind === "image" && att.previewUrl ? (
+                        <img src={att.previewUrl} alt="" />
+                      ) : att.kind === "video" && att.previewUrl ? (
+                        <video src={att.previewUrl} muted />
+                      ) : (
+                        <span
+                          className="composer-preview-icon"
+                          data-kind={att.kind}
+                        >
+                          <AttachmentGlyph kind={att.kind} />
                         </span>
-                        <span className="composer-context-token-name">
-                          {token.name}
+                      )}
+                      <span className="composer-preview-meta">
+                        <span className="composer-preview-name">
+                          {att.name}
+                        </span>
+                        <span className="composer-preview-size">
+                          {att.kind === "folder"
+                            ? t("chat.plusMenuFolder")
+                            : formatSize(att.size)}
                         </span>
                       </span>
                     </button>
                     <button
                       type="button"
                       className="composer-preview-remove"
-                      onClick={() => removeComposerContext(token)}
-                      aria-label={t("chat.removeContext", { name: token.name })}
-                      title={t("chat.removeContext", { name: token.name })}
+                      onClick={() => removeAttachment(att.id)}
+                      aria-label={t("chat.removeAttachment")}
+                      title={t("chat.removeAttachment")}
                       disabled={streaming}
                     >
                       ×
                     </button>
                   </div>
-                );
-              })}
-            </div>
-          ) : null}
-          {!composerClarify && emptyMode === "agent" && agentCreateMissing.length > 0 ? (
-            <p className="composer-agent-validate-hint" role="alert">
-              {t("chat.agentCreateNeedRequired")}
-            </p>
-          ) : !composerClarify &&
-            welcomeTemplateActive &&
-            welcomeTemplateMissing.length > 0 ? (
-            <p className="composer-agent-validate-hint" role="alert">
-              {t("chat.welcomeTemplateNeedRequired")}
-            </p>
-          ) : null}
-          {composerClarify ? (
-            <ComposerClarifySurface
-              surface={composerClarify.surface}
-              mediaBaseDir={mediaBaseDir}
-              onAction={(name, context) =>
-                onUiAction?.(composerClarify.messageId, name, context)
-              }
-            />
-          ) : (
-          <div
-            className={`composer-input-wrap ${slotTemplateActive ? "is-slot-template" : ""}`.trim()}
-          >
-            <div
-              className="composer-typed-hint"
-              hidden={!typingPlaceholderEnabled}
-              aria-hidden
-            >
-              <span ref={typedHintRef} className="composer-typed-text" />
-              <span className="composer-typed-caret" />
-            </div>
-            {slotTemplateActive ? (
-              <div ref={slotMirrorRef} className="composer-slot-mirror" aria-hidden>
-                {templateSegments.map((seg, i) =>
-                  seg.type === "text" ? (
-                    <span key={`t-${i}`}>{seg.value}</span>
-                  ) : (
-                    <span
-                      key={`s-${i}`}
-                      className={[
-                        "composer-slot-chip",
-                        seg.empty ? "is-empty" : "is-filled",
-                        templateMissingSet.has(seg.index) ? "is-invalid" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
+                ))}
+                {composerContexts.map((token) => {
+                  const kindLabel = {
+                    agent: t("chat.contextToken.agent"),
+                    skill: t("chat.contextToken.skill"),
+                    mcp: t("chat.contextToken.mcp"),
+                    file: t("chat.contextToken.file"),
+                  }[token.kind];
+                  return (
+                    <div
+                      key={`${token.kind}:${token.id}`}
+                      className="composer-context-token"
+                      data-kind={token.kind}
                     >
-                      {seg.open}
-                      {seg.value || "\u00a0"}
-                      {seg.close}
-                    </span>
-                  ),
-                )}
+                      <button
+                        type="button"
+                        className="composer-context-token-open"
+                        onClick={() =>
+                          setPreviewTarget({ type: "context", item: token })
+                        }
+                        aria-label={t("chat.previewContext", {
+                          name: token.name,
+                        })}
+                        title={t("chat.previewContext", { name: token.name })}
+                      >
+                        <span className="composer-context-token-icon">
+                          <ComposerContextGlyph kind={token.kind} />
+                        </span>
+                        <span className="composer-context-token-meta">
+                          <span className="composer-context-token-kind">
+                            {kindLabel}
+                          </span>
+                          <span className="composer-context-token-name">
+                            {token.name}
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="composer-preview-remove"
+                        onClick={() => removeComposerContext(token)}
+                        aria-label={t("chat.removeContext", {
+                          name: token.name,
+                        })}
+                        title={t("chat.removeContext", { name: token.name })}
+                        disabled={streaming}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             ) : null}
-            <textarea
-              ref={textareaRef}
-              className={`composer-input ${slotTemplateActive ? "is-slot-highlight" : ""}`.trim()}
-              value={input}
-              rows={2}
-              onChange={(e) => {
-                const v = e.target.value;
-                onInputChange(v);
-                syncTriggerFromCaret(v, e.target.selectionStart ?? v.length);
-              }}
-              onScroll={syncSlotMirrorScroll}
-              onSelect={(e) => {
-                const el = e.currentTarget;
-                syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
-              }}
-              onPaste={(e) => void onPaste(e)}
-              onClick={() => {
-                const el = textareaRef.current;
-                if (!el) return;
-                if (slotTemplateActive) {
-                  const caret = el.selectionStart ?? 0;
-                  const slot = welcomeTemplateActive
-                    ? findPromptTemplateSlotAt(
-                        input,
-                        caret,
-                        welcomeTemplateHints ?? [],
-                      )
-                    : findSlotAt(input, caret);
-                  if (slot) {
-                    el.setSelectionRange(slot.innerStart, slot.innerEnd);
-                    return;
-                  }
+            {!composerClarify &&
+            emptyMode === "agent" &&
+            agentCreateMissing.length > 0 ? (
+              <p className="composer-agent-validate-hint" role="alert">
+                {t("chat.agentCreateNeedRequired")}
+              </p>
+            ) : !composerClarify &&
+              welcomeTemplateActive &&
+              welcomeTemplateMissing.length > 0 ? (
+              <p className="composer-agent-validate-hint" role="alert">
+                {t("chat.welcomeTemplateNeedRequired")}
+              </p>
+            ) : null}
+            {composerClarify ? (
+              <ComposerClarifySurface
+                surface={composerClarify.surface}
+                mediaBaseDir={mediaBaseDir}
+                onAction={(name, context) =>
+                  onUiAction?.(composerClarify.messageId, name, context)
                 }
-                syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
-              }}
-              onKeyDown={onComposerKeyDown}
-              placeholder={composerPlaceholder}
-              aria-label={
-                emptyMode === "agent"
-                  ? t("chat.agentGuideComposerAria")
-                  : welcomeTemplateActive
-                    ? t("chat.welcomeTemplateComposerAria")
-                  : emptyMode === "chat"
-                    ? t("chat.welcomePlaceholder")
-                    : composerPlaceholder || t("chat.placeholder")
-              }
-              disabled={sendBlocked}
-              autoFocus
-            />
-          </div>
-          )}
-          <div className="composer-bar">
-            <div className="composer-bar-left">
-              <div className="composer-mode" ref={modeMenuRef}>
-                <button
-                  type="button"
-                  className={`composer-mode-pill composer-policy-pill ${modeMenuOpen ? "is-open" : ""} ${approvalMode === "full_access" ? "is-full-access" : ""}`.trim()}
-                  disabled={approvalBusy}
-                  aria-haspopup="menu"
-                  aria-expanded={modeMenuOpen}
-                  aria-label={`${t("chat.modeMenu")} · ${t("chat.approval.menu")}`}
-                  title={`${modeMeta[chatMode].label} · ${approvalMeta[approvalMode].label}`}
-                  onClick={() => {
-                    setPlusOpen(false);
-                    setContextPopoverOpen(false);
-                    setPaletteKind(null);
-                    setModeMenuOpen((o) => !o);
-                  }}
-                >
-                  {(() => {
-                    const Meta = modeMeta[chatMode];
-                    const Icon = Meta.Icon;
-                    return (
-                      <>
-                        <Icon size={15} strokeWidth={2.2} />
-                        <span>{Meta.label}</span>
-                        <span className="composer-policy-separator" aria-hidden>·</span>
-                        <span className="composer-policy-approval">
-                          {approvalMeta[approvalMode].label}
-                        </span>
-                        <ChevronDown size={14} strokeWidth={2} />
-                      </>
-                    );
-                  })()}
-                </button>
-                {modeMenuOpen && typeof document !== "undefined"
-                  ? createPortal(
-                      <div
-                        ref={modeMenuPanelRef}
-                        className="composer-mode-menu composer-policy-menu"
-                        role="menu"
-                        style={modeMenuStyle ?? { visibility: "hidden" }}
-                      >
-                        <div className="composer-policy-section-label">
-                          {t("chat.modeMenu")}
-                        </div>
-                        {CHAT_MODES.map((mode) => {
-                          const Meta = modeMeta[mode];
-                          const Icon = Meta.Icon;
-                          const selected = mode === chatMode;
-                          return (
-                            <button
-                              key={mode}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={selected}
-                              disabled={modeSwitchLocked}
-                              className={`composer-mode-item ${selected ? "is-selected" : ""}`}
-                              onClick={() => {
-                                onChatModeChange(mode);
-                                setModeMenuOpen(false);
-                              }}
-                            >
-                              <Icon size={16} strokeWidth={2} />
-                              <span className="composer-mode-item-text">
-                                <span className="composer-mode-item-label">{Meta.label}</span>
-                                <span className="composer-mode-item-desc">{Meta.desc}</span>
-                              </span>
-                              {selected ? (
-                                <Check size={14} strokeWidth={2.4} />
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                        <div className="composer-policy-divider" />
-                        <div className="composer-policy-section-label">
-                          {t("chat.approval.menu")}
-                        </div>
-                        {PERMISSION_PRESETS.map((mode) => {
-                          const Meta = approvalMeta[mode];
-                          const Icon = Meta.Icon;
-                          const selected = mode === approvalMode;
-                          return (
-                            <button
-                              key={mode}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={selected}
-                              data-approval-mode={mode}
-                              className={`composer-mode-item composer-approval-item ${selected ? "is-selected" : ""}`}
-                              onClick={() => void changeApprovalMode(mode)}
-                            >
-                              <Icon size={16} strokeWidth={2} />
-                              <span className="composer-mode-item-text">
-                                <span className="composer-mode-item-label">
-                                  {Meta.label}
-                                  {mode === "ask_for_approval" ? (
-                                    <span className="composer-approval-recommended">
-                                      {t("chat.approval.recommended")}
-                                    </span>
-                                  ) : null}
-                                </span>
-                                <span className="composer-mode-item-desc">{Meta.desc}</span>
-                              </span>
-                              {selected ? <Check size={14} strokeWidth={2.4} /> : null}
-                            </button>
-                          );
-                        })}
-                        <div
-                          className="composer-approval-health"
-                          data-status={sandboxHealth?.status ?? "unknown"}
-                        >
-                          <span className="composer-approval-health-dot" aria-hidden />
-                          <span>
-                            {sandboxHealth?.status === "available"
-                              ? t("chat.approval.sandboxAvailable")
-                              : t("chat.approval.sandboxUnavailable")}
-                          </span>
-                        </div>
-                      </div>,
-                      document.body,
-                    )
-                  : null}
-              </div>
-
-              <div className="composer-mcp-wrap" ref={plusWrapRef}>
-                <button
-                  type="button"
-                  className={`composer-icon-btn composer-plus-btn ${plusOpen ? "is-open" : ""} ${
-                    mcpHasEnabled ? "has-dot" : ""
-                  }`}
-                  disabled={streaming}
-                  title={t("chat.plusMenu")}
-                  aria-label={t("chat.plusMenu")}
-                  aria-haspopup="dialog"
-                  aria-expanded={plusOpen}
-                  onClick={() => {
-                    setModeMenuOpen(false);
-                    setPaletteKind(null);
-                    setContextPopoverOpen(false);
-                    setPlusOpen((value) => !value);
-                  }}
-                >
-                  <Plus size={17} strokeWidth={2.2} />
-                </button>
-                <ComposerPlusMenu
-                  open={plusOpen}
-                  anchorRef={plusWrapRef}
-                  agentId={agentId}
-                  skills={skills}
-                  canAttach={
-                    attachments.length < MAX_ATTACHMENTS && fileAccept !== ""
-                  }
-                  canAttachFolder={attachments.length < MAX_ATTACHMENTS}
-                  onAttach={() => fileInputRef.current?.click()}
-                  onAttachFolder={() => void addFolder()}
-                  onSelectSkill={(skill) =>
-                    addComposerContext({
-                      id: skill.id,
-                      kind: "skill",
-                      name: skill.name,
-                      description: skill.description,
-                      path: skill.path,
-                    })
-                  }
-                  onSelectMcp={(server) =>
-                    addComposerContext({
-                      id: server.id,
-                      kind: "mcp",
-                      name: server.name,
-                      description: server.description,
-                    })
-                  }
-                  onClose={() => setPlusOpen(false)}
-                  onOpenSettings={() => onOpenMcpSettings?.()}
-                />
-              </div>
-
-            </div>
-
-            <div className="composer-bar-right">
+              />
+            ) : (
               <div
-                className="composer-context-wrap"
-                ref={contextWrapRef}
-                onPointerEnter={openContextPopover}
-                onPointerLeave={scheduleContextPopoverClose}
+                className={`composer-input-wrap ${slotTemplateActive ? "is-slot-template" : ""}`.trim()}
               >
-                <button
-                  type="button"
-                  className={`composer-icon-btn composer-context-btn ${contextProgressTone} ${
-                    contextPopoverOpen ? "is-open" : ""
-                  }`}
-                  disabled={streaming}
-                  title={contextUsageLabel}
-                  aria-label={contextUsageLabel}
-                  aria-expanded={contextPopoverOpen}
-                  onFocus={openContextPopover}
-                  onClick={openContextPopover}
+                <div
+                  className="composer-typed-hint"
+                  hidden={!typingPlaceholderEnabled}
+                  aria-hidden
                 >
-                  <svg
-                    className="composer-context-ring"
-                    viewBox="0 0 24 24"
+                  <span ref={typedHintRef} className="composer-typed-text" />
+                  <span className="composer-typed-caret" />
+                </div>
+                {slotTemplateActive ? (
+                  <div
+                    ref={slotMirrorRef}
+                    className="composer-slot-mirror"
                     aria-hidden
                   >
-                    <circle
-                      className="composer-context-ring-track"
-                      cx="12"
-                      cy="12"
-                      r="9"
-                      pathLength="100"
-                    />
-                    {contextProgress != null ? (
+                    {templateSegments.map((seg, i) =>
+                      seg.type === "text" ? (
+                        <span key={`t-${i}`}>{seg.value}</span>
+                      ) : (
+                        <span
+                          key={`s-${i}`}
+                          className={[
+                            "composer-slot-chip",
+                            seg.empty ? "is-empty" : "is-filled",
+                            templateMissingSet.has(seg.index)
+                              ? "is-invalid"
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                        >
+                          {seg.open}
+                          {seg.value || "\u00a0"}
+                          {seg.close}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : null}
+                <textarea
+                  ref={textareaRef}
+                  className={`composer-input ${slotTemplateActive ? "is-slot-highlight" : ""}`.trim()}
+                  value={input}
+                  rows={2}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    onInputChange(v);
+                    syncTriggerFromCaret(
+                      v,
+                      e.target.selectionStart ?? v.length,
+                    );
+                  }}
+                  onScroll={syncSlotMirrorScroll}
+                  onSelect={(e) => {
+                    const el = e.currentTarget;
+                    syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
+                  }}
+                  onPaste={(e) => void onPaste(e)}
+                  onClick={() => {
+                    const el = textareaRef.current;
+                    if (!el) return;
+                    if (slotTemplateActive) {
+                      const caret = el.selectionStart ?? 0;
+                      const slot = welcomeTemplateActive
+                        ? findPromptTemplateSlotAt(
+                            input,
+                            caret,
+                            welcomeTemplateHints ?? [],
+                          )
+                        : findSlotAt(input, caret);
+                      if (slot) {
+                        el.setSelectionRange(slot.innerStart, slot.innerEnd);
+                        return;
+                      }
+                    }
+                    syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
+                  }}
+                  onKeyDown={onComposerKeyDown}
+                  placeholder={composerPlaceholder}
+                  aria-label={
+                    emptyMode === "agent"
+                      ? t("chat.agentGuideComposerAria")
+                      : welcomeTemplateActive
+                        ? t("chat.welcomeTemplateComposerAria")
+                        : emptyMode === "chat"
+                          ? t("chat.welcomePlaceholder")
+                          : composerPlaceholder || t("chat.placeholder")
+                  }
+                  disabled={sendBlocked}
+                  autoFocus
+                />
+              </div>
+            )}
+            <div className="composer-bar">
+              <div className="composer-bar-left">
+                <div className="composer-mode" ref={modeMenuRef}>
+                  <button
+                    type="button"
+                    className={`composer-mode-pill composer-policy-pill ${modeMenuOpen ? "is-open" : ""} ${approvalMode === "full_access" ? "is-full-access" : ""}`.trim()}
+                    disabled={approvalBusy}
+                    aria-haspopup="menu"
+                    aria-expanded={modeMenuOpen}
+                    aria-label={`${t("chat.modeMenu")} · ${t("chat.approval.menu")}`}
+                    title={`${modeMeta[chatMode].label} · ${approvalMeta[approvalMode].label}`}
+                    onClick={() => {
+                      setPlusOpen(false);
+                      setContextPopoverOpen(false);
+                      setPaletteKind(null);
+                      setModeMenuOpen((o) => !o);
+                    }}
+                  >
+                    {(() => {
+                      const Meta = modeMeta[chatMode];
+                      const Icon = Meta.Icon;
+                      return (
+                        <>
+                          <Icon size={15} strokeWidth={2.2} />
+                          <span>{Meta.label}</span>
+                          <span
+                            className="composer-policy-separator"
+                            aria-hidden
+                          >
+                            ·
+                          </span>
+                          <span className="composer-policy-approval">
+                            {approvalMeta[approvalMode].label}
+                          </span>
+                          <ChevronDown size={14} strokeWidth={2} />
+                        </>
+                      );
+                    })()}
+                  </button>
+                  {modeMenuOpen && typeof document !== "undefined"
+                    ? createPortal(
+                        <div
+                          ref={modeMenuPanelRef}
+                          className="composer-mode-menu composer-policy-menu"
+                          role="menu"
+                          style={modeMenuStyle ?? { visibility: "hidden" }}
+                        >
+                          <div className="composer-policy-section-label">
+                            {t("chat.modeMenu")}
+                          </div>
+                          {CHAT_MODES.map((mode) => {
+                            const Meta = modeMeta[mode];
+                            const Icon = Meta.Icon;
+                            const selected = mode === chatMode;
+                            return (
+                              <button
+                                key={mode}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={selected}
+                                disabled={modeSwitchLocked}
+                                className={`composer-mode-item ${selected ? "is-selected" : ""}`}
+                                onClick={() => {
+                                  onChatModeChange(mode);
+                                  setModeMenuOpen(false);
+                                }}
+                              >
+                                <Icon size={16} strokeWidth={2} />
+                                <span className="composer-mode-item-text">
+                                  <span className="composer-mode-item-label">
+                                    {Meta.label}
+                                  </span>
+                                  <span className="composer-mode-item-desc">
+                                    {Meta.desc}
+                                  </span>
+                                </span>
+                                {selected ? (
+                                  <Check size={14} strokeWidth={2.4} />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                          <div className="composer-policy-divider" />
+                          <div className="composer-policy-section-label">
+                            {t("chat.approval.menu")}
+                          </div>
+                          {PERMISSION_PRESETS.map((mode) => {
+                            const Meta = approvalMeta[mode];
+                            const Icon = Meta.Icon;
+                            const selected = mode === approvalMode;
+                            return (
+                              <button
+                                key={mode}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={selected}
+                                data-approval-mode={mode}
+                                className={`composer-mode-item composer-approval-item ${selected ? "is-selected" : ""}`}
+                                onClick={() => void changeApprovalMode(mode)}
+                              >
+                                <Icon size={16} strokeWidth={2} />
+                                <span className="composer-mode-item-text">
+                                  <span className="composer-mode-item-label">
+                                    {Meta.label}
+                                    {mode === "ask_for_approval" ? (
+                                      <span className="composer-approval-recommended">
+                                        {t("chat.approval.recommended")}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                  <span className="composer-mode-item-desc">
+                                    {Meta.desc}
+                                  </span>
+                                </span>
+                                {selected ? (
+                                  <Check size={14} strokeWidth={2.4} />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                          <div
+                            className="composer-approval-health"
+                            data-status={sandboxHealth?.status ?? "unknown"}
+                          >
+                            <span
+                              className="composer-approval-health-dot"
+                              aria-hidden
+                            />
+                            <span>
+                              {sandboxHealth?.status === "available"
+                                ? t("chat.approval.sandboxAvailable")
+                                : t("chat.approval.sandboxUnavailable")}
+                            </span>
+                          </div>
+                        </div>,
+                        document.body,
+                      )
+                    : null}
+                </div>
+
+                <div className="composer-mcp-wrap" ref={plusWrapRef}>
+                  <button
+                    type="button"
+                    className={`composer-icon-btn composer-plus-btn ${plusOpen ? "is-open" : ""} ${
+                      mcpHasEnabled ? "has-dot" : ""
+                    }`}
+                    disabled={streaming}
+                    title={t("chat.plusMenu")}
+                    aria-label={t("chat.plusMenu")}
+                    aria-haspopup="dialog"
+                    aria-expanded={plusOpen}
+                    onClick={() => {
+                      setModeMenuOpen(false);
+                      setPaletteKind(null);
+                      setContextPopoverOpen(false);
+                      setPlusOpen((value) => !value);
+                    }}
+                  >
+                    <Plus size={17} strokeWidth={2.2} />
+                  </button>
+                  <ComposerPlusMenu
+                    open={plusOpen}
+                    anchorRef={plusWrapRef}
+                    agentId={agentId}
+                    skills={skills}
+                    canAttach={
+                      attachments.length < MAX_ATTACHMENTS && fileAccept !== ""
+                    }
+                    canAttachFolder={attachments.length < MAX_ATTACHMENTS}
+                    onAttach={() => fileInputRef.current?.click()}
+                    onAttachFolder={() => void addFolder()}
+                    onSelectSkill={(skill) =>
+                      addComposerContext({
+                        id: skill.id,
+                        kind: "skill",
+                        name: skill.name,
+                        description: skill.description,
+                        path: skill.path,
+                      })
+                    }
+                    onSelectMcp={(server) =>
+                      addComposerContext({
+                        id: server.id,
+                        kind: "mcp",
+                        name: server.name,
+                        description: server.description,
+                      })
+                    }
+                    onClose={() => setPlusOpen(false)}
+                    onOpenSettings={() => onOpenMcpSettings?.()}
+                  />
+                </div>
+              </div>
+
+              <div className="composer-bar-right">
+                <div
+                  className="composer-context-wrap"
+                  ref={contextWrapRef}
+                  onPointerEnter={openContextPopover}
+                  onPointerLeave={scheduleContextPopoverClose}
+                >
+                  <button
+                    type="button"
+                    className={`composer-icon-btn composer-context-btn ${contextProgressTone} ${
+                      contextPopoverOpen ? "is-open" : ""
+                    }`}
+                    disabled={streaming}
+                    title={contextUsageLabel}
+                    aria-label={contextUsageLabel}
+                    aria-expanded={contextPopoverOpen}
+                    onFocus={openContextPopover}
+                    onClick={openContextPopover}
+                  >
+                    <svg
+                      className="composer-context-ring"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
                       <circle
-                        className="composer-context-ring-value"
+                        className="composer-context-ring-track"
                         cx="12"
                         cy="12"
                         r="9"
                         pathLength="100"
-                        strokeDasharray={`${contextProgress} 100`}
                       />
+                      {contextProgress != null ? (
+                        <circle
+                          className="composer-context-ring-value"
+                          cx="12"
+                          cy="12"
+                          r="9"
+                          pathLength="100"
+                          strokeDasharray={`${contextProgress} 100`}
+                        />
+                      ) : null}
+                    </svg>
+                  </button>
+                  <ContextUsagePopover
+                    open={contextPopoverOpen}
+                    snapshot={contextUsage}
+                    windowTokens={contextWindow}
+                    estimateCost={estimateCostLabel}
+                    containRef={contextWrapRef}
+                    onPointerEnter={cancelContextPopoverClose}
+                    onPointerLeave={scheduleContextPopoverClose}
+                    onClose={closeContextPopover}
+                    onViewDetails={() => {
+                      onOpenContext();
+                    }}
+                  />
+                </div>
+                {showStopControl ? (
+                  <>
+                    {showPauseResume ? (
+                      <button
+                        type="button"
+                        className="composer-icon-btn"
+                        onClick={() =>
+                          streamPaused ? onResumeStream?.() : onPauseStream?.()
+                        }
+                        title={t(
+                          streamPaused
+                            ? "chat.streamResume"
+                            : "chat.streamPause",
+                        )}
+                        aria-label={t(
+                          streamPaused
+                            ? "chat.streamResume"
+                            : "chat.streamPause",
+                        )}
+                      >
+                        <MorphToggleIcon
+                          active={streamPaused}
+                          activeIcon={PLAY_ICON}
+                          inactiveIcon={PAUSE_ICON}
+                          size={17}
+                          strokeWidth={2.2}
+                        />
+                      </button>
                     ) : null}
-                  </svg>
-                </button>
-                <ContextUsagePopover
-                  open={contextPopoverOpen}
-                  snapshot={contextUsage}
-                  windowTokens={contextWindow}
-                  estimateCost={estimateCostLabel}
-                  containRef={contextWrapRef}
-                  onPointerEnter={cancelContextPopoverClose}
-                  onPointerLeave={scheduleContextPopoverClose}
-                  onClose={closeContextPopover}
-                  onViewDetails={() => {
-                    onOpenContext();
-                  }}
-                />
-              </div>
-              {showStopControl ? (
-                <>
-                  {showPauseResume ? (
                     <button
                       type="button"
-                      className="composer-icon-btn"
-                      onClick={() =>
-                        streamPaused ? onResumeStream?.() : onPauseStream?.()
-                      }
-                      title={t(streamPaused ? "chat.streamResume" : "chat.streamPause")}
-                      aria-label={t(streamPaused ? "chat.streamResume" : "chat.streamPause")}
+                      className="send-btn send-btn--round send-btn--stop"
+                      onClick={() => onStopStream?.()}
+                      aria-label={t("chat.streamStop")}
+                      title={t("chat.streamStop")}
                     >
-                      <MorphToggleIcon
-                        active={streamPaused}
-                        activeIcon={PLAY_ICON}
-                        inactiveIcon={PAUSE_ICON}
-                        size={17}
-                        strokeWidth={2.2}
-                      />
+                      <Square size={14} strokeWidth={2.4} fill="currentColor" />
                     </button>
-                  ) : null}
+                  </>
+                ) : null}
+                {showSendButton ? (
                   <button
-                    type="button"
-                    className="send-btn send-btn--round send-btn--stop"
-                    onClick={() => onStopStream?.()}
-                    aria-label={t("chat.streamStop")}
-                    title={t("chat.streamStop")}
+                    className="send-btn send-btn--round"
+                    type="submit"
+                    disabled={!canSend}
+                    aria-label={t("chat.send")}
+                    title={t("chat.send")}
                   >
-                    <Square size={14} strokeWidth={2.4} fill="currentColor" />
+                    <SendHorizontal size={17} strokeWidth={2.2} />
                   </button>
-                </>
-              ) : null}
-              {showSendButton ? (
-                <button
-                  className="send-btn send-btn--round"
-                  type="submit"
-                  disabled={!canSend}
-                  aria-label={t("chat.send")}
-                  title={t("chat.send")}
-                >
-                  <SendHorizontal size={17} strokeWidth={2.2} />
-                </button>
-              ) : null}
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
-      </form>
+        </form>
         <ComposerContextPreview
           target={previewTarget}
           onClose={() => setPreviewTarget(null)}

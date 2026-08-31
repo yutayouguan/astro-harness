@@ -10,10 +10,10 @@ describe("parseClipboardLocalPaths", () => {
   });
 
   it("accepts multiple path lines", () => {
-    assert.deepEqual(
-      parseClipboardLocalPaths("/tmp/a.png\n/tmp/b.jpg"),
-      ["/tmp/a.png", "/tmp/b.jpg"],
-    );
+    assert.deepEqual(parseClipboardLocalPaths("/tmp/a.png\n/tmp/b.jpg"), [
+      "/tmp/a.png",
+      "/tmp/b.jpg",
+    ]);
   });
 
   it("rejects mixed prose", () => {

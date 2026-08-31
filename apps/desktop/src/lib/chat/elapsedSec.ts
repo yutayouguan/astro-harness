@@ -12,7 +12,10 @@ export function formatElapsedSec(sec: number): string {
 }
 
 /** startedAt(ms) → 秒数，精度到毫秒，无人为下限 */
-export function elapsedSecSince(startedAtMs: number, endedAtMs = Date.now()): number {
+export function elapsedSecSince(
+  startedAtMs: number,
+  endedAtMs = Date.now(),
+): number {
   const ms = Math.max(0, endedAtMs - startedAtMs);
   return Math.round(ms) / 1000;
 }

@@ -14,7 +14,9 @@ import { AnimatePresence } from "framer-motion";
 
 import AboutDialog from "./components/ui/AboutDialog";
 import DynamicPaletteButton from "./components/ui/DynamicPaletteButton";
-import ChatRightPanel, { type ChatRightTab } from "./components/chat/ChatRightPanel";
+import ChatRightPanel, {
+  type ChatRightTab,
+} from "./components/chat/ChatRightPanel";
 import ChatReviewPanel from "./components/chat/ChatReviewPanel";
 import SideChatPanel from "./components/chat/SideChatPanel";
 import ConversationTitle from "./components/chat/ConversationTitle";
@@ -97,15 +99,8 @@ import type { ComposerContextToken } from "./lib/chat/composerContext";
 import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import { dispatchSessionsChanged } from "./lib/chat/sessionManagement";
-import {
-  resolveContextWindow,
-  usagePercent,
-} from "./lib/chat/contextUsage";
-import {
-  NAV,
-  type NavId,
-  type SettingsTabId,
-} from "./lib/ui/navConfig";
+import { resolveContextWindow, usagePercent } from "./lib/chat/contextUsage";
+import { NAV, type NavId, type SettingsTabId } from "./lib/ui/navConfig";
 import { SETTINGS_TAB_GROUPS, settingsTabMeta } from "./lib/ui/settingsTabs";
 import { resolveChatRightDock } from "./lib/ui/chatRightDock";
 import {
@@ -196,8 +191,12 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState(
     () => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? "default",
   );
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
+    new Set(),
+  );
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    new Set(),
+  );
   const [pinnedCount, setPinnedCount] = useState(0);
   const [automationSessionCount, setAutomationSessionCount] = useState(0);
   const toggleSection = useCallback((section: string) => {
@@ -208,7 +207,12 @@ export default function App() {
       return next;
     });
   }, []);
-  const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
+  const [projectMenu, setProjectMenu] = useState<{
+    id: string;
+    name: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [projectDialog, setProjectDialog] = useState<
     { mode: "create" } | { mode: "edit"; project: ProjectDto } | null
   >(null);
@@ -218,7 +222,8 @@ export default function App() {
   } | null>(null);
   // 侧栏会话检索：搜索与归档视图跨全部项目生效
   const [sessionQuery, setSessionQuery] = useState("");
-  const [sessionListKind, setSessionListKind] = useState<SessionListKind>("active");
+  const [sessionListKind, setSessionListKind] =
+    useState<SessionListKind>("active");
   const searchingSessions = sessionQuery.trim().length > 0;
   // 启动时确保默认项目存在于 DB，然后加载全部项目
   useEffect(() => {
@@ -243,12 +248,16 @@ export default function App() {
     setSettingsTab(tab);
     setNav("settings");
   }, []);
-  const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | null>(null);
+  const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | null>(
+    null,
+  );
   const [skillsInitialTab, setSkillsInitialTab] = useState<"mcp" | null>(null);
   const [composerContextPrefill, setComposerContextPrefill] =
     useState<ComposerContextToken | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [modelContextWindow, setModelContextWindow] = useState<number | null>(null);
+  const [modelContextWindow, setModelContextWindow] = useState<number | null>(
+    null,
+  );
   const [activeModelCapabilities, setActiveModelCapabilities] =
     useState<ModelCapabilities | null>(null);
   const [activeModelReasoning, setActiveModelReasoning] =
@@ -282,7 +291,8 @@ export default function App() {
     () =>
       subagents.threads.filter(
         (thread) =>
-          thread.status.kind === "pending_init" || thread.status.kind === "running",
+          thread.status.kind === "pending_init" ||
+          thread.status.kind === "running",
       ).length,
     [subagents.threads],
   );
@@ -294,11 +304,14 @@ export default function App() {
       ),
     [subagents.error, subagents.state.byPath],
   );
-  const summaryButtonLabel = runningSubagentCount > 0
-    ? t("chat.rightPanel.summaryRunning", { count: String(runningSubagentCount) })
-    : hasSubagentAttention
-      ? t("chat.rightPanel.summaryAttention")
-      : t("chat.rightPanel.summary");
+  const summaryButtonLabel =
+    runningSubagentCount > 0
+      ? t("chat.rightPanel.summaryRunning", {
+          count: String(runningSubagentCount),
+        })
+      : hasSubagentAttention
+        ? t("chat.rightPanel.summaryAttention")
+        : t("chat.rightPanel.summary");
   const sessionStatuses = useSessionStatusMap();
   const {
     send,
@@ -326,10 +339,15 @@ export default function App() {
     () => projects.find((project) => project.id === activeProjectId) ?? null,
     [activeProjectId, projects],
   );
-  const projectFiles = useProjectFileWorkbench(activeProject, chat.generatingPreview);
+  const projectFiles = useProjectFileWorkbench(
+    activeProject,
+    chat.generatingPreview,
+  );
   const [projectFilesWidth, setProjectFilesWidth] = useState(264);
   const [sideSessionId, setSideSessionId] = useState<string | null>(null);
-  const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(null);
+  const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(
+    null,
+  );
   const [reviewState, setReviewState] = useState<{
     files: FileChangeItem[];
     selectedPath: string;
@@ -340,9 +358,11 @@ export default function App() {
     setSideSessionId(null);
     setSideHostSessionId(null);
     if (!sideId) return;
-    await invoke("discard_side_session", { sessionId: sideId }).catch((error) => {
-      console.warn("discard_side_session failed", error);
-    });
+    await invoke("discard_side_session", { sessionId: sideId }).catch(
+      (error) => {
+        console.warn("discard_side_session failed", error);
+      },
+    );
   }, [sideSessionId]);
 
   const openChatRightDock = useCallback(
@@ -368,7 +388,12 @@ export default function App() {
       return;
     }
     openChatRightDock("summary");
-  }, [chat.chatRightOpen, chat.chatRightTab, openChatRightDock, setChatRightOpen]);
+  }, [
+    chat.chatRightOpen,
+    chat.chatRightTab,
+    openChatRightDock,
+    setChatRightOpen,
+  ]);
 
   const toggleProjectFilesDock = useCallback(() => {
     if (projectFiles.panelOpen) {
@@ -388,7 +413,8 @@ export default function App() {
   ]);
 
   const startSideChat = useCallback(async () => {
-    if (!chat.sessionId || !activeProvider || chat.streaming || sideSessionId) return;
+    if (!chat.sessionId || !activeProvider || chat.streaming || sideSessionId)
+      return;
     const keepChatBubbles = chat.messages.filter(
       (message) => message.id !== "welcome",
     ).length;
@@ -438,7 +464,8 @@ export default function App() {
 
   const projectPanelWasOpenRef = useRef(false);
   useEffect(() => {
-    const justOpened = projectFiles.panelOpen && !projectPanelWasOpenRef.current;
+    const justOpened =
+      projectFiles.panelOpen && !projectPanelWasOpenRef.current;
     projectPanelWasOpenRef.current = projectFiles.panelOpen;
     if (!justOpened) return;
     setChatRightOpen(false);
@@ -446,7 +473,11 @@ export default function App() {
   }, [closeSideChat, projectFiles.panelOpen, setChatRightOpen, sideSessionId]);
 
   useEffect(() => {
-    if (sideSessionId && sideHostSessionId && chat.sessionId !== sideHostSessionId) {
+    if (
+      sideSessionId &&
+      sideHostSessionId &&
+      chat.sessionId !== sideHostSessionId
+    ) {
       void closeSideChat();
     }
   }, [chat.sessionId, closeSideChat, sideHostSessionId, sideSessionId]);
@@ -458,7 +489,9 @@ export default function App() {
       );
       if (
         hasDirtyFile &&
-        !window.confirm("当前项目还有未保存文件，切换项目会丢弃这些修改。仍要继续吗？")
+        !window.confirm(
+          "当前项目还有未保存文件，切换项目会丢弃这些修改。仍要继续吗？",
+        )
       ) {
         return false;
       }
@@ -525,7 +558,9 @@ export default function App() {
         }
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeProvider?.id, activeProvider?.model, syncComposerFromModelPrefs]);
 
   // ── ⌘/Ctrl+N：聊天页新建会话 ─────────────────────────────────────────────
@@ -544,7 +579,8 @@ export default function App() {
 
   // ── macOS open-preferences / open-about listener ─────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let unlistenPrefs: (() => void) | undefined;
     let unlistenAbout: (() => void) | undefined;
     void listen("open-preferences", () => {
@@ -570,7 +606,8 @@ export default function App() {
   // ── Nav tone + underlay ───────────────────────────────────────────────────
   const activeTone = NAV.find((n) => n.id === nav)?.tone ?? "blue";
   /** 统一/灵动用 custom gradient；多彩跟随当前 tab 的 tone token */
-  const usesShellGradient = colorStyle === "unified" || colorStyle === "dynamic";
+  const usesShellGradient =
+    colorStyle === "unified" || colorStyle === "dynamic";
   const shellTone = usesShellGradient ? "blue" : activeTone;
   const activeShellGradient = useMemo(() => {
     if (colorStyle === "unified") return gradient;
@@ -614,7 +651,14 @@ export default function App() {
       clearShellGradientVars(root);
     }
     reassert();
-  }, [shellTone, colorStyle, dynamicSeed, activeShellGradient, resolved, reassert]);
+  }, [
+    shellTone,
+    colorStyle,
+    dynamicSeed,
+    activeShellGradient,
+    resolved,
+    reassert,
+  ]);
   useEffect(() => {
     void syncWindowUnderlay(resolved, shellTone, activeShellGradient);
   }, [resolved, shellTone, activeShellGradient]);
@@ -628,14 +672,19 @@ export default function App() {
     capabilities: activeModelCapabilities,
     backendId: activeProvider?.backend_id,
   });
-  const statusText = chat.statusDetail ?? t(`status.${chat.statusPhase}` as MessageKey);
+  const statusText =
+    chat.statusDetail ?? t(`status.${chat.statusPhase}` as MessageKey);
   // ── Thinking callbacks ────────────────────────────────────────────────────
   const onThinkingLevelChange = useCallback(
     (level: ThinkingLevel) => {
       setThinkingLevel(level);
       syncMaxModeWithThinkingLevel(level);
       if (!activeProvider) return;
-      upsertModelPrefs(activeProvider.id, activeProvider.model, thinkingLevelToModelPatch(level));
+      upsertModelPrefs(
+        activeProvider.id,
+        activeProvider.model,
+        thinkingLevelToModelPatch(level),
+      );
     },
     [activeProvider, setThinkingLevel],
   );
@@ -745,9 +794,9 @@ export default function App() {
         case "memory_list": {
           void (async () => {
             try {
-              const rows = await invoke<{ id: string; action: string; target: string; source: string }[]>(
-                "list_pending_memory_writes",
-              );
+              const rows = await invoke<
+                { id: string; action: string; target: string; source: string }[]
+              >("list_pending_memory_writes");
               if (!rows?.length) {
                 showTransientToast(t("memory.pending.emptyTitle"));
                 setMemoryPendingCount(0);
@@ -756,7 +805,10 @@ export default function App() {
               setMemoryPendingCount(rows.length);
               const lines = rows
                 .slice(0, 5)
-                .map((r) => `${r.id.slice(0, 8)} ${r.action}/${r.target} (${r.source})`);
+                .map(
+                  (r) =>
+                    `${r.id.slice(0, 8)} ${r.action}/${r.target} (${r.source})`,
+                );
               const more = rows.length > 5 ? ` …+${rows.length - 5}` : "";
               showTransientToast(`${lines.join(" · ")}${more}`);
             } catch (e) {
@@ -772,13 +824,20 @@ export default function App() {
               const msg =
                 !id || id === "all"
                   ? await invoke<string>("approve_all_pending_memory_writes")
-                  : await invoke<string>("approve_pending_memory_write", { id });
+                  : await invoke<string>("approve_pending_memory_write", {
+                      id,
+                    });
               showTransientToast(msg || t("memory.pending.approved"));
               if (chat.sessionId) {
                 try {
-                  const settings = await invoke<{ autoRefreshOnUpdate: boolean }>("get_memory_settings");
+                  const settings = await invoke<{
+                    autoRefreshOnUpdate: boolean;
+                  }>("get_memory_settings");
                   if (settings.autoRefreshOnUpdate !== false) {
-                    await invoke("refresh_memory", { agentId: null, sessionId: chat.sessionId });
+                    await invoke("refresh_memory", {
+                      agentId: null,
+                      sessionId: chat.sessionId,
+                    });
                   }
                 } catch {
                   // ignore refresh errors
@@ -795,7 +854,9 @@ export default function App() {
             try {
               const id = (_args ?? "").trim();
               if (!id || id === "all") {
-                const msg = await invoke<string>("reject_all_pending_memory_writes");
+                const msg = await invoke<string>(
+                  "reject_all_pending_memory_writes",
+                );
                 showTransientToast(msg);
               } else {
                 await invoke("reject_pending_memory_write", { id });
@@ -810,7 +871,10 @@ export default function App() {
         case "memory_refresh": {
           void (async () => {
             try {
-              await invoke("refresh_memory", { agentId: null, sessionId: chat.sessionId ?? null });
+              await invoke("refresh_memory", {
+                agentId: null,
+                sessionId: chat.sessionId ?? null,
+              });
               showTransientToast(t("memory.refresh.done"), { tone: "success" });
             } catch (e) {
               showTransientToast(String(e), { tone: "error" });
@@ -894,8 +958,15 @@ export default function App() {
         { tone: "error" },
       );
     }
-  }, [chat.sessionId, conversationTitle, promptForTitle, showTransientToast, t]);
-  const { label: settingsTitle, Icon: SettingsIcon } = settingsTabMeta(settingsTab);
+  }, [
+    chat.sessionId,
+    conversationTitle,
+    promptForTitle,
+    showTransientToast,
+    t,
+  ]);
+  const { label: settingsTitle, Icon: SettingsIcon } =
+    settingsTabMeta(settingsTab);
   const activeChatRightDock = resolveChatRightDock({
     projectFilesOpen: projectFiles.panelOpen,
     sideSessionOpen: Boolean(sideSessionId),
@@ -940,7 +1011,11 @@ export default function App() {
           data-tone={shellTone}
           onClick={sidebar.toggleSidebar}
           title={sidebar.sidebarPinned ? t("sidebar.unpin") : t("sidebar.pin")}
-          aria-label={sidebar.sidebarPinned ? t("sidebar.unpinAria") : t("sidebar.pinAria")}
+          aria-label={
+            sidebar.sidebarPinned
+              ? t("sidebar.unpinAria")
+              : t("sidebar.pinAria")
+          }
           aria-pressed={sidebar.sidebarPinned}
         >
           {sidebar.sidebarPinned ? (
@@ -961,7 +1036,9 @@ export default function App() {
 
       <div
         className="body-row"
-        style={{ "--sidebar-w-wide": `${sidebar.sidebarWidth}px` } as CSSProperties}
+        style={
+          { "--sidebar-w-wide": `${sidebar.sidebarWidth}px` } as CSSProperties
+        }
       >
         <aside
           ref={sidebar.sidebarRef}
@@ -993,13 +1070,17 @@ export default function App() {
               <nav className="sidebar-settings-nav" aria-label="设置分类">
                 {visibleSettingsGroups.map((group) => (
                   <div className="sidebar-settings-group" key={group.id}>
-                    <div className="sidebar-settings-group-label">{group.label}</div>
+                    <div className="sidebar-settings-group-label">
+                      {group.label}
+                    </div>
                     {group.items.map((item) => (
                       <button
                         key={item.id}
                         type="button"
                         className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                        aria-current={settingsTab === item.id ? "page" : undefined}
+                        aria-current={
+                          settingsTab === item.id ? "page" : undefined
+                        }
                         onClick={() => setSettingsTab(item.id)}
                       >
                         <span className="settings-sidebar-icon" aria-hidden>
@@ -1036,8 +1117,12 @@ export default function App() {
                   aria-keyshortcuts="Meta+N Control+N"
                 >
                   <IconNewChat width={18} height={18} strokeWidth={1.8} />
-                  <span className="sidebar-item-label">{t("sidebar.newChat")}</span>
-                  <kbd className="sidebar-new-chat-shortcut" aria-hidden>⌘N</kbd>
+                  <span className="sidebar-item-label">
+                    {t("sidebar.newChat")}
+                  </span>
+                  <kbd className="sidebar-new-chat-shortcut" aria-hidden>
+                    ⌘N
+                  </kbd>
                 </button>
                 <ExpandableSearch
                   value={sessionQuery}
@@ -1046,13 +1131,24 @@ export default function App() {
                   className="sidebar-session-search sidebar-global-search"
                 />
               </div>
-              <div className="sidebar-group-label">{t("sidebar.workspace")}</div>
-              <nav className="sidebar-feature-tabs" aria-label={t("sidebar.features")}>
-                {([
-                  { id: "cron", label: t("nav.cron"), Icon: IconCron },
-                  { id: "loop", label: t("nav.loop"), Icon: IconLoop },
-                  { id: "skills", label: t("sidebar.plugins"), Icon: IconPlugin },
-                ] as const).map(({ id, label, Icon }) => (
+              <div className="sidebar-group-label">
+                {t("sidebar.workspace")}
+              </div>
+              <nav
+                className="sidebar-feature-tabs"
+                aria-label={t("sidebar.features")}
+              >
+                {(
+                  [
+                    { id: "cron", label: t("nav.cron"), Icon: IconCron },
+                    { id: "loop", label: t("nav.loop"), Icon: IconLoop },
+                    {
+                      id: "skills",
+                      label: t("sidebar.plugins"),
+                      Icon: IconPlugin,
+                    },
+                  ] as const
+                ).map(({ id, label, Icon }) => (
                   <button
                     key={id}
                     type="button"
@@ -1080,8 +1176,12 @@ export default function App() {
                       projectId={null}
                       query={sessionQuery}
                       listKind={sessionListKind}
-                      onOpenSession={(sid) => void openSessionFromFilespace(sid)}
-                      onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
+                      onOpenSession={(sid) =>
+                        void openSessionFromFilespace(sid)
+                      }
+                      onPrepareDeleteCurrentSession={
+                        prepareDeleteCurrentSession
+                      }
                       onClearDeletedCurrentSession={clearDeletedCurrentSession}
                     />
                   </>
@@ -1096,7 +1196,9 @@ export default function App() {
                           onClick={() => toggleSection("pinned")}
                           aria-expanded={!collapsedSections.has("pinned")}
                         >
-                          <span className="sidebar-section-title">{t("sessions.pin")}</span>
+                          <span className="sidebar-section-title">
+                            {t("sessions.pin")}
+                          </span>
                           <ChevronRight
                             size={12}
                             strokeWidth={2}
@@ -1106,7 +1208,13 @@ export default function App() {
                         </button>
                       </div>
                     )}
-                    <div style={pinnedCount > 0 && !collapsedSections.has("pinned") ? undefined : { display: "none" }}>
+                    <div
+                      style={
+                        pinnedCount > 0 && !collapsedSections.has("pinned")
+                          ? undefined
+                          : { display: "none" }
+                      }
+                    >
                       <SidebarSessionList
                         activeSessionId={chat.sessionId}
                         sessionStatuses={sessionStatuses}
@@ -1115,9 +1223,15 @@ export default function App() {
                         listKind={sessionListKind}
                         placement="pinned"
                         onCountChange={setPinnedCount}
-                        onOpenSession={(sid) => void openSessionFromFilespace(sid)}
-                        onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
-                        onClearDeletedCurrentSession={clearDeletedCurrentSession}
+                        onOpenSession={(sid) =>
+                          void openSessionFromFilespace(sid)
+                        }
+                        onPrepareDeleteCurrentSession={
+                          prepareDeleteCurrentSession
+                        }
+                        onClearDeletedCurrentSession={
+                          clearDeletedCurrentSession
+                        }
                       />
                     </div>
 
@@ -1147,91 +1261,126 @@ export default function App() {
                           title="+ 新建项目"
                           aria-label="新建项目"
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                            <path d="M12 5v14" /><path d="M5 12h14" />
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                          >
+                            <path d="M12 5v14" />
+                            <path d="M5 12h14" />
                           </svg>
                         </button>
                       </div>
                     </div>
-                    {!collapsedSections.has("projects") && projects.map((proj) => (
-                      <div
-                        key={proj.id}
-                        className="sidebar-project"
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setProjectMenu({ ...proj, x: e.clientX, y: e.clientY });
-                        }}
-                      >
-                        <div className="sidebar-project-header">
-                          <button
-                            type="button"
-                            className="sidebar-project-name"
-                            title={proj.name}
-                            aria-expanded={!collapsedProjects.has(proj.id)}
-                            onClick={() => {
-                              setCollapsedProjects((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(proj.id)) next.delete(proj.id);
-                                else next.add(proj.id);
-                                return next;
-                              });
-                            }}
-                          >
-                            <ProjectFolderIcon
-                              iconId={proj.icon}
-                              expanded={!collapsedProjects.has(proj.id)}
-                              size={18}
+                    {!collapsedSections.has("projects") &&
+                      projects.map((proj) => (
+                        <div
+                          key={proj.id}
+                          className="sidebar-project"
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setProjectMenu({
+                              ...proj,
+                              x: e.clientX,
+                              y: e.clientY,
+                            });
+                          }}
+                        >
+                          <div className="sidebar-project-header">
+                            <button
+                              type="button"
+                              className="sidebar-project-name"
+                              title={proj.name}
+                              aria-expanded={!collapsedProjects.has(proj.id)}
+                              onClick={() => {
+                                setCollapsedProjects((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(proj.id)) next.delete(proj.id);
+                                  else next.add(proj.id);
+                                  return next;
+                                });
+                              }}
+                            >
+                              <ProjectFolderIcon
+                                iconId={proj.icon}
+                                expanded={!collapsedProjects.has(proj.id)}
+                                size={18}
+                              />
+                              <span className="sidebar-item-label">
+                                {proj.name}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="sidebar-project-more"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const rect =
+                                  e.currentTarget.getBoundingClientRect();
+                                setProjectMenu({
+                                  ...proj,
+                                  x: rect.right + 4,
+                                  y: rect.top,
+                                });
+                              }}
+                              title="更多"
+                              aria-label="更多"
+                            >
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                aria-hidden
+                              >
+                                <circle cx="12" cy="5" r="1.5" />
+                                <circle cx="12" cy="12" r="1.5" />
+                                <circle cx="12" cy="19" r="1.5" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              className="sidebar-project-action"
+                              onClick={() => {
+                                if (!switchActiveProject(proj.id)) return;
+                                setNav("chat");
+                                startNewChat();
+                              }}
+                              title={t("sidebar.newChat")}
+                              aria-label={t("sidebar.newChat")}
+                            >
+                              <IconNewChat width={14} height={14} />
+                            </button>
+                          </div>
+                          {!collapsedProjects.has(proj.id) && (
+                            <SidebarSessionList
+                              activeSessionId={chat.sessionId}
+                              sessionStatuses={sessionStatuses}
+                              projectId={proj.id}
+                              query=""
+                              listKind={sessionListKind}
+                              placement="project"
+                              onOpenSession={(sid) => {
+                                if (!switchActiveProject(proj.id)) return;
+                                void openSessionFromFilespace(sid);
+                              }}
+                              onPrepareDeleteCurrentSession={
+                                prepareDeleteCurrentSession
+                              }
+                              onClearDeletedCurrentSession={
+                                clearDeletedCurrentSession
+                              }
                             />
-                            <span className="sidebar-item-label">{proj.name}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="sidebar-project-more"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setProjectMenu({ ...proj, x: rect.right + 4, y: rect.top });
-                            }}
-                            title="更多"
-                            aria-label="更多"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                              <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            className="sidebar-project-action"
-                            onClick={() => {
-                              if (!switchActiveProject(proj.id)) return;
-                              setNav("chat");
-                              startNewChat();
-                            }}
-                            title={t("sidebar.newChat")}
-                            aria-label={t("sidebar.newChat")}
-                          >
-                            <IconNewChat width={14} height={14} />
-                          </button>
+                          )}
                         </div>
-                        {!collapsedProjects.has(proj.id) && (
-                          <SidebarSessionList
-                            activeSessionId={chat.sessionId}
-                            sessionStatuses={sessionStatuses}
-                            projectId={proj.id}
-                            query=""
-                            listKind={sessionListKind}
-                            placement="project"
-                            onOpenSession={(sid) => {
-                              if (!switchActiveProject(proj.id)) return;
-                              void openSessionFromFilespace(sid);
-                            }}
-                            onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
-                            onClearDeletedCurrentSession={clearDeletedCurrentSession}
-                          />
-                        )}
-                      </div>
-                    ))}
+                      ))}
 
                     {/* ── 自动化运行（Cron 会话保留项目上下文，但在展示上独立分组） ── */}
                     {automationSessionCount > 0 && (
@@ -1270,9 +1419,15 @@ export default function App() {
                         listKind={sessionListKind}
                         placement="automation"
                         onCountChange={setAutomationSessionCount}
-                        onOpenSession={(sid) => void openSessionFromFilespace(sid)}
-                        onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
-                        onClearDeletedCurrentSession={clearDeletedCurrentSession}
+                        onOpenSession={(sid) =>
+                          void openSessionFromFilespace(sid)
+                        }
+                        onPrepareDeleteCurrentSession={
+                          prepareDeleteCurrentSession
+                        }
+                        onClearDeletedCurrentSession={
+                          clearDeletedCurrentSession
+                        }
                       />
                     </div>
 
@@ -1285,7 +1440,9 @@ export default function App() {
                         aria-expanded={!collapsedSections.has("recent")}
                       >
                         <span className="sidebar-section-title">
-                          {sessionListKind === "archived" ? t("sessions.archived") : t("sidebar.recent")}
+                          {sessionListKind === "archived"
+                            ? t("sessions.archived")
+                            : t("sidebar.recent")}
                         </span>
                         <ChevronRight
                           size={12}
@@ -1298,11 +1455,21 @@ export default function App() {
                         <button
                           type="button"
                           className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
-                          title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
-                          aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                          title={
+                            sessionListKind === "archived"
+                              ? t("sessions.active")
+                              : t("sessions.archived")
+                          }
+                          aria-label={
+                            sessionListKind === "archived"
+                              ? t("sessions.active")
+                              : t("sessions.archived")
+                          }
                           aria-pressed={sessionListKind === "archived"}
                           onClick={() =>
-                            setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
+                            setSessionListKind((kind) =>
+                              kind === "archived" ? "active" : "archived",
+                            )
                           }
                         >
                           <Archive size={14} strokeWidth={1.8} aria-hidden />
@@ -1317,9 +1484,15 @@ export default function App() {
                         query=""
                         listKind={sessionListKind}
                         placement="recent"
-                        onOpenSession={(sid) => void openSessionFromFilespace(sid)}
-                        onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
-                        onClearDeletedCurrentSession={clearDeletedCurrentSession}
+                        onOpenSession={(sid) =>
+                          void openSessionFromFilespace(sid)
+                        }
+                        onPrepareDeleteCurrentSession={
+                          prepareDeleteCurrentSession
+                        }
+                        onClearDeletedCurrentSession={
+                          clearDeletedCurrentSession
+                        }
                       />
                     )}
                   </>
@@ -1333,10 +1506,14 @@ export default function App() {
                   title={t("nav.settings")}
                 >
                   <IconSettings width={17} height={17} strokeWidth={1.8} />
-                  <span className="sidebar-item-label">{t("nav.settings")}</span>
+                  <span className="sidebar-item-label">
+                    {t("nav.settings")}
+                  </span>
                   {chat.memoryPendingCount > 0 && (
                     <span className="nav-badge">
-                      {chat.memoryPendingCount > 99 ? "99+" : String(chat.memoryPendingCount)}
+                      {chat.memoryPendingCount > 99
+                        ? "99+"
+                        : String(chat.memoryPendingCount)}
                     </span>
                   )}
                 </button>
@@ -1362,8 +1539,12 @@ export default function App() {
             onPointerDown={sidebar.onSidebarResizePointerDown}
             onPointerMove={sidebar.onSidebarResizePointerMove}
             onPointerUp={sidebar.onSidebarResizePointerUp}
-            onPointerCancel={(event) => sidebar.finishSidebarResize(event.pointerId)}
-            onLostPointerCapture={(event) => sidebar.finishSidebarResize(event.pointerId)}
+            onPointerCancel={(event) =>
+              sidebar.finishSidebarResize(event.pointerId)
+            }
+            onLostPointerCapture={(event) =>
+              sidebar.finishSidebarResize(event.pointerId)
+            }
           />
         ) : null}
         {sidebar.sidebarCtx ? (
@@ -1385,12 +1566,18 @@ export default function App() {
               <div className="content-header">
                 <div className="content-heading">
                   <div className="page-title-block">
-                    <div className="page-title-icon" data-tone="twilight" aria-hidden>
+                    <div
+                      className="page-title-icon"
+                      data-tone="twilight"
+                      aria-hidden
+                    >
                       <SettingsIcon width={15} height={15} strokeWidth={1.6} />
                     </div>
                     <div className="page-title-text">
                       <h1 className="content-title" data-tone="twilight">
-                        <span className="content-title-main">{settingsTitle}</span>
+                        <span className="content-title-main">
+                          {settingsTitle}
+                        </span>
                       </h1>
                     </div>
                   </div>
@@ -1400,7 +1587,13 @@ export default function App() {
                 <div className="settings-content-inline">
                   {settingsTab.startsWith("preferences") && (
                     <PreferencesPanel
-                      section={settingsTab === "preferences" ? "general" : settingsTab.split(":")[1] as import("./components/settings/PreferencesPanel").PreferenceCategory}
+                      section={
+                        settingsTab === "preferences"
+                          ? "general"
+                          : (settingsTab.split(
+                              ":",
+                            )[1] as import("./components/settings/PreferencesPanel").PreferenceCategory)
+                      }
                       mode={mode}
                       onChange={setMode}
                       colorStyle={colorStyle}
@@ -1428,7 +1621,10 @@ export default function App() {
                     />
                   )}
                   {settingsTab === "evolution" && (
-                    <EvolutionModelsPanel active={nav === "settings"} tone={shellTone} />
+                    <EvolutionModelsPanel
+                      active={nav === "settings"}
+                      tone={shellTone}
+                    />
                   )}
                   {settingsTab === "insights" && (
                     <InsightsPanel active={nav === "settings"} />
@@ -1507,7 +1703,11 @@ export default function App() {
                   {conversationTitle && (
                     <>
                       <div className="page-title-block">
-                        <div className="page-title-icon" data-tone={shellTone} aria-hidden>
+                        <div
+                          className="page-title-icon"
+                          data-tone={shellTone}
+                          aria-hidden
+                        >
                           <ProjectFolderIcon
                             iconId={activeProject?.icon}
                             expanded={false}
@@ -1516,7 +1716,10 @@ export default function App() {
                           />
                         </div>
                         <div className="page-title-text">
-                          <h1 className="content-title conversation-title" data-tone={shellTone}>
+                          <h1
+                            className="content-title conversation-title"
+                            data-tone={shellTone}
+                          >
                             <ConversationTitle
                               title={conversationTitle}
                               renameLabel={t("sessions.rename")}
@@ -1537,7 +1740,8 @@ export default function App() {
                               setConversationMenuAnchor(null);
                               return;
                             }
-                            const rect = event.currentTarget.getBoundingClientRect();
+                            const rect =
+                              event.currentTarget.getBoundingClientRect();
                             setConversationMenuAnchor({
                               x: rect.left,
                               y: rect.bottom + 6,
@@ -1590,13 +1794,26 @@ export default function App() {
                     <button
                       type="button"
                       className="header-icon-btn"
-                      onClick={() => { setNav("chat"); startNewChat(); }}
+                      onClick={() => {
+                        setNav("chat");
+                        startNewChat();
+                      }}
                       data-tip={t("sidebar.newChat")}
                       aria-label={t("sidebar.newChat")}
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-                        <path d="M12 8v8" /><path d="M8 12h8" />
+                        <path d="M12 8v8" />
+                        <path d="M8 12h8" />
                       </svg>
                     </button>
                     <button
@@ -1615,10 +1832,20 @@ export default function App() {
                       onClick={() =>
                         void (sideSessionId ? closeSideChat() : startSideChat())
                       }
-                      title={sideSessionId ? t("chat.side.close") : t("chat.side.open")}
-                      aria-label={sideSessionId ? t("chat.side.close") : t("chat.side.open")}
+                      title={
+                        sideSessionId
+                          ? t("chat.side.close")
+                          : t("chat.side.open")
+                      }
+                      aria-label={
+                        sideSessionId
+                          ? t("chat.side.close")
+                          : t("chat.side.open")
+                      }
                       aria-pressed={activeChatRightDock === "side-chat"}
-                      disabled={!sideSessionId && (!chat.sessionId || chat.streaming)}
+                      disabled={
+                        !sideSessionId && (!chat.sessionId || chat.streaming)
+                      }
                     >
                       <MessageSquare width={16} height={16} />
                     </button>
@@ -1628,12 +1855,17 @@ export default function App() {
                       onClick={toggleChatSummaryDock}
                       title={summaryButtonLabel}
                       aria-label={summaryButtonLabel}
-                      aria-pressed={activeChatRightDock === "inspector" && chat.chatRightTab === "summary"}
+                      aria-pressed={
+                        activeChatRightDock === "inspector" &&
+                        chat.chatRightTab === "summary"
+                      }
                     >
                       <Activity width={16} height={16} />
                       {runningSubagentCount > 0 ? (
                         <span className="header-summary-badge" aria-hidden>
-                          {runningSubagentCount > 9 ? "9+" : runningSubagentCount}
+                          {runningSubagentCount > 9
+                            ? "9+"
+                            : runningSubagentCount}
                         </span>
                       ) : hasSubagentAttention ? (
                         <span className="header-summary-dot" aria-hidden />
@@ -1645,9 +1877,11 @@ export default function App() {
               <div className="page-body page-body--chat">
                 <div
                   className={`chat-layout-with-right${activeChatRightDock === "project-files" ? " has-project-files" : ""}${activeChatRightDock === "side-chat" ? " has-side-chat" : ""}${activeChatRightDock === "inspector" ? " has-chat-right" : ""}${activeChatRightDock === "review" ? " has-review" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
-                  style={{
-                    "--project-files-current-width": `${projectFilesWidth}px`,
-                  } as CSSProperties}
+                  style={
+                    {
+                      "--project-files-current-width": `${projectFilesWidth}px`,
+                    } as CSSProperties
+                  }
                 >
                   <div
                     className={`chat-main${colorStyle === "dynamic" ? " has-dynamic-palette" : ""}`}
@@ -1669,7 +1903,9 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() =>
-                              void openSessionFromFilespace(chat.sideParentSessionId!)
+                              void openSessionFromFilespace(
+                                chat.sideParentSessionId!,
+                              )
                             }
                           >
                             <ArrowLeft size={13} aria-hidden />
@@ -1683,7 +1919,10 @@ export default function App() {
                       messages={chat.messages}
                       workspaceContent={
                         projectFiles.tabs.length > 0 ? (
-                          <ProjectFileEditor workbench={projectFiles} theme={resolved} />
+                          <ProjectFileEditor
+                            workbench={projectFiles}
+                            theme={resolved}
+                          />
                         ) : null
                       }
                       input={chat.input}
@@ -1701,7 +1940,8 @@ export default function App() {
                         chat.isCompacting
                           ? t("chat.compactInProgress")
                           : chat.sessionReadOnly
-                            ? chat.sessionEndReason === "compacted" || !chat.sessionEndReason
+                            ? chat.sessionEndReason === "compacted" ||
+                              !chat.sessionEndReason
                               ? t("chat.sessionCompactedReadOnly")
                               : t("chat.sessionEndedReadOnly")
                             : undefined
@@ -1719,7 +1959,9 @@ export default function App() {
                       onUpdateQueuedFollowUpText={chat.updateQueuedFollowUpText}
                       onMoveQueuedFollowUp={chat.moveQueuedFollowUp}
                       onSteerQueuedFollowUp={chat.steerQueuedFollowUp}
-                      onOpenQueuedFollowUpInNewTask={chat.openQueuedFollowUpInNewTask}
+                      onOpenQueuedFollowUpInNewTask={
+                        chat.openQueuedFollowUpInNewTask
+                      }
                       onCloseQueuedFollowUps={chat.closeQueuedFollowUps}
                       modeSwitchPrompt={chat.modeSwitchPrompt}
                       onApproveModeSwitch={chat.approveModeSwitch}
@@ -1770,7 +2012,10 @@ export default function App() {
                       modelPricing={activeModelPricing}
                       contextUsagePercent={
                         chat.contextUsage && contextWindow > 0
-                          ? usagePercent(chat.contextUsage.totalTokens, contextWindow)
+                          ? usagePercent(
+                              chat.contextUsage.totalTokens,
+                              contextWindow,
+                            )
                           : null
                       }
                     />
@@ -1791,34 +2036,36 @@ export default function App() {
                     aria-hidden={activeChatRightDock !== "side-chat"}
                   >
                     <AnimatePresence initial={false}>
-                      {activeChatRightDock === "side-chat" && sideSessionId && activeProvider && (
-                        <SideChatPanel
-                          key={`side-chat-${sideSessionId}`}
-                          sessionId={sideSessionId}
-                          parentSessionId={sideHostSessionId}
-                          activeProjectId={activeProjectId}
-                          provider={activeProvider}
-                          providers={providers}
-                          displayPrefs={chatDisplayPrefs}
-                          onDefaultAnswerLayoutChange={setAnswerLayout}
-                          interactionMode={chatMode}
-                          thinkingPrefs={thinkingPrefs}
-                          showThinkingControls={showThinking}
-                          reasoningMeta={activeModelReasoning}
-                          modelCapabilities={activeModelCapabilities}
-                          modelPricing={activeModelPricing}
-                          contextWindow={contextWindow}
-                          onThinkingLevelChange={onThinkingLevelChange}
-                          onToggleThinking={onToggleThinking}
-                          onOpenMcpSettings={() => {
-                            setSkillsInitialTab("mcp");
-                            setNav("skills");
-                          }}
-                          onOpenContext={() => openChatRightDock("context")}
-                          onOpenFileReview={openFileReview}
-                          onClose={closeSideChat}
-                        />
-                      )}
+                      {activeChatRightDock === "side-chat" &&
+                        sideSessionId &&
+                        activeProvider && (
+                          <SideChatPanel
+                            key={`side-chat-${sideSessionId}`}
+                            sessionId={sideSessionId}
+                            parentSessionId={sideHostSessionId}
+                            activeProjectId={activeProjectId}
+                            provider={activeProvider}
+                            providers={providers}
+                            displayPrefs={chatDisplayPrefs}
+                            onDefaultAnswerLayoutChange={setAnswerLayout}
+                            interactionMode={chatMode}
+                            thinkingPrefs={thinkingPrefs}
+                            showThinkingControls={showThinking}
+                            reasoningMeta={activeModelReasoning}
+                            modelCapabilities={activeModelCapabilities}
+                            modelPricing={activeModelPricing}
+                            contextWindow={contextWindow}
+                            onThinkingLevelChange={onThinkingLevelChange}
+                            onToggleThinking={onToggleThinking}
+                            onOpenMcpSettings={() => {
+                              setSkillsInitialTab("mcp");
+                              setNav("skills");
+                            }}
+                            onOpenContext={() => openChatRightDock("context")}
+                            onOpenFileReview={openFileReview}
+                            onClose={closeSideChat}
+                          />
+                        )}
                     </AnimatePresence>
                   </div>
                   <AnimatePresence initial={false}>
@@ -1842,7 +2089,9 @@ export default function App() {
                         subagentsInitialized={subagents.initialized}
                         onRefreshSubagents={subagents.refresh}
                         onMarkSubagentRead={subagents.markRead}
-                        onOpenSession={(sessionId) => openSessionFromFilespace(sessionId)}
+                        onOpenSession={(sessionId) =>
+                          openSessionFromFilespace(sessionId)
+                        }
                         onOpenSideSession={(sessionId) => {
                           projectFiles.setPanelOpen(false);
                           setSideSessionId(sessionId);
@@ -1881,46 +2130,65 @@ export default function App() {
           x={projectMenu.x}
           y={projectMenu.y}
           projectName={projectMenu.name}
-          projectPath={projects.find((p) => p.id === projectMenu.id)?.roots[0] ?? ""}
+          projectPath={
+            projects.find((p) => p.id === projectMenu.id)?.roots[0] ?? ""
+          }
           canRemove={projectMenu.id !== "default"}
           onAction={(action) => {
             if (action === "remove") {
               if (projectMenu.id === "default") return;
-              void invoke("delete_project", { projectId: projectMenu.id }).catch(() => {});
-              setProjects((prev) => prev.filter((p) => p.id !== projectMenu.id));
+              void invoke("delete_project", {
+                projectId: projectMenu.id,
+              }).catch(() => {});
+              setProjects((prev) =>
+                prev.filter((p) => p.id !== projectMenu.id),
+              );
               if (activeProjectId === projectMenu.id) {
                 setActiveProjectId(projects[0]?.id ?? "default");
               }
             } else if (action === "reveal") {
-              const root = projects.find((p) => p.id === projectMenu.id)?.roots[0];
+              const root = projects.find((p) => p.id === projectMenu.id)
+                ?.roots[0];
               if (root) {
-                void import("@tauri-apps/plugin-opener").then((mod) =>
-                  mod.revealItemInDir(root)
-                ).catch(() => {});
+                void import("@tauri-apps/plugin-opener")
+                  .then((mod) => mod.revealItemInDir(root))
+                  .catch(() => {});
               }
             } else if (action === "pin") {
-              void invoke("move_project", { projectId: projectMenu.id, beforeProjectId: null }).then(() =>
-                invoke<ProjectDto[]>("list_projects").then((list) => {
-                  if (list) setProjects(list);
-                }),
-              ).catch(() => {});
+              void invoke("move_project", {
+                projectId: projectMenu.id,
+                beforeProjectId: null,
+              })
+                .then(() =>
+                  invoke<ProjectDto[]>("list_projects").then((list) => {
+                    if (list) setProjects(list);
+                  }),
+                )
+                .catch(() => {});
             } else if (action === "edit") {
               const proj = projects.find((p) => p.id === projectMenu.id);
               if (proj) setProjectDialog({ mode: "edit", project: proj });
             } else if (action === "worktree") {
               window.alert("功能开发中");
             } else if (action === "archive") {
-              void invoke<import("./types").RecentSessionDto[]>("list_sessions", {
-                filter: "active",
-                limit: 200,
-                projectId: projectMenu.id,
-              }).then((sessions) => {
-                if (sessions) {
-                  for (const s of sessions) {
-                    void invoke("archive_session", { sessionId: s.sessionId }).catch(() => {});
+              void invoke<import("./types").RecentSessionDto[]>(
+                "list_sessions",
+                {
+                  filter: "active",
+                  limit: 200,
+                  projectId: projectMenu.id,
+                },
+              )
+                .then((sessions) => {
+                  if (sessions) {
+                    for (const s of sessions) {
+                      void invoke("archive_session", {
+                        sessionId: s.sessionId,
+                      }).catch(() => {});
+                    }
                   }
-                }
-              }).catch(() => {});
+                })
+                .catch(() => {});
             }
           }}
           onClose={() => setProjectMenu(null)}
@@ -1937,7 +2205,9 @@ export default function App() {
           switchActiveProject(created.id);
         }}
         onUpdated={(updated) => {
-          setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+          setProjects((prev) =>
+            prev.map((p) => (p.id === updated.id ? updated : p)),
+          );
         }}
         onRemoved={(id) => {
           setProjects((prev) => prev.filter((p) => p.id !== id));

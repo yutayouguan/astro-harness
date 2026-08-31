@@ -32,7 +32,13 @@ export function useChatStreamBuffers(
   const toolDeltaPendingRef = useRef<
     Map<
       string,
-      { messageId: string; index: number; id: string; name: string; args: string }
+      {
+        messageId: string;
+        index: number;
+        id: string;
+        name: string;
+        args: string;
+      }
     >
   >(new Map());
   const toolDeltaRafRef = useRef<number | null>(null);
@@ -94,9 +100,7 @@ export function useChatStreamBuffers(
           const mapKey = `${m.id}:${d.index}`;
           let actId = toolDeltaIdsRef.current.get(mapKey);
           const activities = next.activities ?? [];
-          let idx = actId
-            ? activities.findIndex((a) => a.id === actId)
-            : -1;
+          let idx = actId ? activities.findIndex((a) => a.id === actId) : -1;
           if (idx < 0 && d.id) {
             idx = activities.findIndex((a) => a.id === d.id);
           }
@@ -118,7 +122,9 @@ export function useChatStreamBuffers(
             if (d.id) toolDeltaIdsRef.current.set(mapKey, d.id);
             const argsSoFar =
               cur.status === "running" ? (cur.input ?? cur.detail ?? "") : "";
-            const nextArgs = d.args ? argsSoFar + d.args : cur.input ?? cur.detail;
+            const nextArgs = d.args
+              ? argsSoFar + d.args
+              : (cur.input ?? cur.detail);
             activity = {
               ...cur,
               id: d.id || cur.id,

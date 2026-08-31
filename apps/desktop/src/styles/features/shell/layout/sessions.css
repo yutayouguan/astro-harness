@@ -20,7 +20,8 @@
   height: 6px;
   border-radius: 50%;
   background: var(--tone, var(--tone-blue));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
 }
 
 .session-status-icon-awaiting {
@@ -84,7 +85,11 @@
 }
 
 .sidebar-session-item.is-active {
-  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 12%,
+    transparent
+  );
 }
 
 .sidebar-session-main {
@@ -137,9 +142,18 @@
 
 /* 起始停顿保持在 0.6s 内：延迟 + 首段 hold 就是用户等待的时间 */
 @keyframes sidebar-title-scroll {
-  0%, 8% { transform: translateX(0); }
-  42%, 58% { transform: translateX(var(--scroll-distance, -40px)); }
-  92%, 100% { transform: translateX(0); }
+  0%,
+  8% {
+    transform: translateX(0);
+  }
+  42%,
+  58% {
+    transform: translateX(var(--scroll-distance, -40px));
+  }
+  92%,
+  100% {
+    transform: translateX(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -225,7 +239,9 @@
   background: transparent;
   color: var(--ink-mute);
   cursor: pointer;
-  transition: background 0.08s, color 0.08s;
+  transition:
+    background 0.08s,
+    color 0.08s;
 }
 
 .sidebar-session-action-btn:hover {

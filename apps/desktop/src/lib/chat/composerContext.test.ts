@@ -17,7 +17,11 @@ const skill: ComposerContextToken = {
 test("composer context tokens are deduplicated by kind and id", () => {
   assert.deepEqual(addComposerContextToken([skill], skill), [skill]);
   assert.equal(
-    addComposerContextToken([skill], { id: "mcp-pdf", kind: "mcp", name: "pdf" }).length,
+    addComposerContextToken([skill], {
+      id: "mcp-pdf",
+      kind: "mcp",
+      name: "pdf",
+    }).length,
     2,
   );
 });

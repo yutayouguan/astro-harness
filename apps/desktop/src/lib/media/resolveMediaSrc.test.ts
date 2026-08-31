@@ -43,7 +43,10 @@ test("resolveMediaSrc passthrough for http/data/blob", () => {
     resolveMediaSrc("data:image/png;base64,abc"),
     "data:image/png;base64,abc",
   );
-  assert.equal(resolveMediaSrc("blob:http://localhost/1"), "blob:http://localhost/1");
+  assert.equal(
+    resolveMediaSrc("blob:http://localhost/1"),
+    "blob:http://localhost/1",
+  );
   assert.equal(resolveMediaSrc(""), null);
   assert.equal(resolveMediaSrc(null), null);
 });
@@ -85,10 +88,7 @@ test("absolutizeMediaPath joins relative under workspace baseDir", () => {
     absolutizeMediaPath("./plans/x.html", "/Users/a/.astro/workspace/"),
     "/Users/a/.astro/workspace/plans/x.html",
   );
-  assert.equal(
-    absolutizeMediaPath("generated/a.png", null),
-    null,
-  );
+  assert.equal(absolutizeMediaPath("generated/a.png", null), null);
   assert.equal(
     absolutizeMediaPath("/Users/a/.astro/workspace/generated/a.png", "/other"),
     "/Users/a/.astro/workspace/generated/a.png",
@@ -134,7 +134,10 @@ test("resolveMediaPreviewPath makes generated media absolute for preview and act
     "/Users/a/.astro/workspace/generated/images/img-20260716-110609-5fb9089c.jpg",
   );
   assert.equal(
-    resolveMediaPreviewPath("https://ex.com/a.png", "/Users/a/.astro/workspace"),
+    resolveMediaPreviewPath(
+      "https://ex.com/a.png",
+      "/Users/a/.astro/workspace",
+    ),
     "https://ex.com/a.png",
   );
 });

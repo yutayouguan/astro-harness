@@ -21,9 +21,7 @@ export function parseClarifySteps(raw: unknown): ClarifyWizardStep[] {
       const question = typeof o.question === "string" ? o.question.trim() : "";
       if (!question) return null;
       const id =
-        typeof o.id === "string" && o.id.trim()
-          ? o.id.trim()
-          : `q${i}`;
+        typeof o.id === "string" && o.id.trim() ? o.id.trim() : `q${i}`;
       const optionsRaw = Array.isArray(o.options) ? o.options : [];
       const options = optionsRaw
         .map((opt) => {
@@ -44,12 +42,18 @@ export function parseClarifySteps(raw: unknown): ClarifyWizardStep[] {
     .filter((s): s is ClarifyWizardStep => s != null);
 }
 
-export function isPresetAnswer(step: ClarifyWizardStep, value: string | undefined): boolean {
+export function isPresetAnswer(
+  step: ClarifyWizardStep,
+  value: string | undefined,
+): boolean {
   if (!value) return false;
   return step.options.includes(value);
 }
 
-export function shouldSubmitClarifyInput(key: string, isComposing: boolean): boolean {
+export function shouldSubmitClarifyInput(
+  key: string,
+  isComposing: boolean,
+): boolean {
   return key === "Enter" && !isComposing;
 }
 
@@ -64,9 +68,10 @@ export function parseApprovalContent(body: string): ApprovalContent {
   if (!fence) {
     return { description: body.trim(), command: null };
   }
-  const description = `${body.slice(0, fence.index)}${body.slice(fence.index + fence[0].length)}`
-    .trim()
-    .replace(/\n{3,}/g, "\n\n");
+  const description =
+    `${body.slice(0, fence.index)}${body.slice(fence.index + fence[0].length)}`
+      .trim()
+      .replace(/\n{3,}/g, "\n\n");
   return {
     description,
     command: fence[1].trim() || null,

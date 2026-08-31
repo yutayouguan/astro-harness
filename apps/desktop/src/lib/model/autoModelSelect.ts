@@ -115,11 +115,7 @@ export function classifyTask(input: {
   ) {
     return "coding";
   }
-  if (
-    text.length < 48 &&
-    !/[`{}\n]/.test(text) &&
-    text.length < 32
-  ) {
+  if (text.length < 48 && !/[`{}\n]/.test(text) && text.length < 32) {
     return "simple";
   }
   return "coding";
@@ -176,12 +172,7 @@ export function selectAutoModel(
   let bestScore = -Infinity;
 
   for (const c of chatCandidates) {
-    const s = scoreCandidate(
-      c,
-      task,
-      input.maxMode,
-      input.preferProviderId,
-    );
+    const s = scoreCandidate(c, task, input.maxMode, input.preferProviderId);
     if (s > bestScore) {
       bestScore = s;
       best = c;
@@ -197,7 +188,10 @@ export function selectAutoModel(
 }
 
 /** 确保默认模型出现在列表中 */
-function ensureDefaultModel(models: ModelInfo[], defaultId: string): ModelInfo[] {
+function ensureDefaultModel(
+  models: ModelInfo[],
+  defaultId: string,
+): ModelInfo[] {
   const id = defaultId.trim();
   if (!id) return models;
   if (models.some((m) => m.id === id)) return models;
@@ -237,8 +231,7 @@ export async function loadModelCandidates(
           providerKind: p.kind,
           backendId: p.backend_id,
           modelId: m.id,
-          capabilities:
-            m.capabilities ?? inferModelCapabilities(m.id, p.kind),
+          capabilities: m.capabilities ?? inferModelCapabilities(m.id, p.kind),
         }));
     }),
   );

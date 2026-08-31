@@ -95,10 +95,7 @@ function MarkdownMedia({
     return src?.trim() ?? "";
   }, [src, baseDir]);
 
-  const resolved = useMemo(
-    () => resolveMediaSrc(src, baseDir),
-    [src, baseDir],
-  );
+  const resolved = useMemo(() => resolveMediaSrc(src, baseDir), [src, baseDir]);
 
   if (!resolved || !pathForActions) {
     return <BrokenMedia path={src} />;
@@ -162,7 +159,11 @@ function CodeCopyButton({
       title={label}
       style={style}
     >
-      <span className="msg-md-code-copy-feedback" role="status" aria-live="polite">
+      <span
+        className="msg-md-code-copy-feedback"
+        role="status"
+        aria-live="polite"
+      >
         {copied ? t("chat.codeCopied") : ""}
       </span>
       <CopyMorphIcon copied={copied} size={15} aria-hidden />
@@ -330,7 +331,8 @@ function ChatMarkdownImpl({
           Boolean(className?.includes("language-")) || text.includes("\n");
         if (isBlock) {
           const lang =
-            /language-([\w+-]+)/.exec(className ?? "")?.[1]?.toLowerCase() ?? "";
+            /language-([\w+-]+)/.exec(className ?? "")?.[1]?.toLowerCase() ??
+            "";
           if (lang === "html" || lang === "htm") {
             return (
               <HtmlCodeBlock className={className}>{children}</HtmlCodeBlock>

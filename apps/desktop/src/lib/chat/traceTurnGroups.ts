@@ -10,7 +10,9 @@ export type TraceEventForTurnGroup = {
   output?: string | null;
 };
 
-export type TurnGroup<T extends TraceEventForTurnGroup = TraceEventForTurnGroup> = {
+export type TurnGroup<
+  T extends TraceEventForTurnGroup = TraceEventForTurnGroup,
+> = {
   /** 分组键；无 turn_id 时为 `__user_N` / `__none__` */
   turnKey: string;
   turn_id: string | null;

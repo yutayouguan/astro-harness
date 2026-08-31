@@ -1,8 +1,4 @@
-import {
-  forwardRef,
-  type ButtonHTMLAttributes,
-  type ReactNode,
-} from "react";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
@@ -51,7 +47,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         aria-busy={busy || undefined}
         aria-pressed={ariaPressed ?? (active ? true : undefined)}
       >
-        {busy ? <span className="ui-button__spinner" aria-hidden="true" /> : null}
+        {busy ? (
+          <span className="ui-button__spinner" aria-hidden="true" />
+        ) : null}
         <span className="ui-button__content">{children}</span>
         {busy ? <span className="ui-visually-hidden">{busyLabel}</span> : null}
       </button>

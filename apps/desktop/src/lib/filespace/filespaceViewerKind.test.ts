@@ -15,7 +15,10 @@ test("filespaceViewerKind maps common names", () => {
 });
 
 test("filespaceViewerKind respects missing and mime/category fallbacks", () => {
-  assert.equal(filespaceViewerKind({ name: "gone.bin", missing: true }), "missing");
+  assert.equal(
+    filespaceViewerKind({ name: "gone.bin", missing: true }),
+    "missing",
+  );
   assert.equal(
     filespaceViewerKind({ name: "noext", mime: "text/plain" }),
     "text",

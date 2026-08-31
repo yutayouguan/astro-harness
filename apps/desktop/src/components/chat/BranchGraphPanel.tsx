@@ -25,7 +25,10 @@ import {
   X,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import { buildBranchFlow, type BranchFlowNode } from "../../lib/chat/branchGraph";
+import {
+  buildBranchFlow,
+  type BranchFlowNode,
+} from "../../lib/chat/branchGraph";
 import {
   dispatchSessionsChanged,
   subscribeSessionsChanged,
@@ -47,13 +50,15 @@ type ForkOperation = ForkBoundary | "side";
 function BranchNode({ data, selected }: NodeProps<BranchFlowNode>) {
   const { t } = useI18n();
   const node = data.node;
-  const preview = node.preview || (node.kind === "branchHead"
-    ? node.isEphemeral
-      ? t("chat.branches.sideReady")
-      : node.status === "legacy"
-      ? t("chat.branches.legacyBoundary")
-      : t("chat.branches.branchReady")
-    : "");
+  const preview =
+    node.preview ||
+    (node.kind === "branchHead"
+      ? node.isEphemeral
+        ? t("chat.branches.sideReady")
+        : node.status === "legacy"
+          ? t("chat.branches.legacyBoundary")
+          : t("chat.branches.branchReady")
+      : "");
   return (
     <article
       className={[
@@ -62,27 +67,46 @@ function BranchNode({ data, selected }: NodeProps<BranchFlowNode>) {
         node.isEphemeral ? "is-ephemeral" : "",
         node.isCurrent ? "is-current" : "",
         selected ? "is-selected" : "",
-      ].filter(Boolean).join(" ")}
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <Handle type="target" position={Position.Top} />
       <div className="branch-node-heading">
         <span className="branch-node-kind" aria-hidden>
-          {node.kind === "agent"
-            ? <Bot size={12} />
-            : node.isEphemeral
-              ? <MessageSquare size={12} />
-              : node.kind === "branchHead"
-                ? <GitBranch size={12} />
-                : <Route size={12} />}
+          {node.kind === "agent" ? (
+            <Bot size={12} />
+          ) : node.isEphemeral ? (
+            <MessageSquare size={12} />
+          ) : node.kind === "branchHead" ? (
+            <GitBranch size={12} />
+          ) : (
+            <Route size={12} />
+          )}
         </span>
         <strong>{node.title}</strong>
-        {node.isCurrent && <span className="branch-node-current">{t("chat.branches.current")}</span>}
+        {node.isCurrent && (
+          <span className="branch-node-current">
+            {t("chat.branches.current")}
+          </span>
+        )}
       </div>
       {preview && <p>{preview}</p>}
       <div className="branch-node-meta">
-        <span className={`branch-node-status is-${node.status}`}>{node.status}</span>
+        <span className={`branch-node-status is-${node.status}`}>
+          {node.status}
+        </span>
         {node.model && <span title={node.model}>{node.model}</span>}
-        {node.createdAt && <time>{new Date(node.createdAt).toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</time>}
+        {node.createdAt && (
+          <time>
+            {new Date(node.createdAt).toLocaleString([], {
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </time>
+        )}
       </div>
       <Handle type="source" position={Position.Bottom} />
     </article>
@@ -116,10 +140,14 @@ export default function BranchGraphPanel({
     setLoading(true);
     setError(null);
     try {
-      const next = await invoke<BranchGraphDto>("get_chat_branch_graph", { sessionId });
+      const next = await invoke<BranchGraphDto>("get_chat_branch_graph", {
+        sessionId,
+      });
       setGraph(next);
       setSelected((current) =>
-        current ? next.nodes.find((node) => node.id === current.id) ?? null : null,
+        current
+          ? (next.nodes.find((node) => node.id === current.id) ?? null)
+          : null,
       );
     } catch (reason) {
       setError(String(reason));
@@ -133,7 +161,13 @@ export default function BranchGraphPanel({
     void load();
   }, [load]);
 
-  useEffect(() => subscribeSessionsChanged(() => { void load(); }), [load]);
+  useEffect(
+    () =>
+      subscribeSessionsChanged(() => {
+        void load();
+      }),
+    [load],
+  );
 
   useEffect(() => {
     if (!fullscreen) return;
@@ -146,10 +180,14 @@ export default function BranchGraphPanel({
 
   const visibleGraph = useMemo<BranchGraphDto | null>(() => {
     if (!graph || showAgents) return graph;
-    return { ...graph, nodes: graph.nodes.filter((node) => node.kind !== "agent") };
+    return {
+      ...graph,
+      nodes: graph.nodes.filter((node) => node.kind !== "agent"),
+    };
   }, [graph, showAgents]);
   const flow = useMemo(
-    () => visibleGraph ? buildBranchFlow(visibleGraph) : { nodes: [], edges: [] },
+    () =>
+      visibleGraph ? buildBranchFlow(visibleGraph) : { nodes: [], edges: [] },
     [visibleGraph],
   );
 
@@ -191,7 +229,9 @@ export default function BranchGraphPanel({
   );
 
   const canvas = (
-    <section className={`branch-graph-panel${fullscreen ? " is-fullscreen" : ""}`}>
+    <section
+      className={`branch-graph-panel${fullscreen ? " is-fullscreen" : ""}`}
+    >
       <header className="branch-graph-toolbar">
         <div>
           <strong>{t("chat.branches.title")}</strong>
@@ -214,40 +254,83 @@ export default function BranchGraphPanel({
           >
             <Bot size={14} aria-hidden />
           </button>
-          <button type="button" onClick={() => void load()} title={t("chat.branches.refresh")}>
+          <button
+            type="button"
+            onClick={() => void load()}
+            title={t("chat.branches.refresh")}
+          >
             <RefreshCw size={14} aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => setFullscreen((value) => !value)}
-            title={fullscreen ? t("chat.branches.exitFullscreen") : t("chat.branches.fullscreen")}
+            title={
+              fullscreen
+                ? t("chat.branches.exitFullscreen")
+                : t("chat.branches.fullscreen")
+            }
           >
-            {fullscreen ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
+            {fullscreen ? (
+              <Minimize2 size={14} aria-hidden />
+            ) : (
+              <Maximize2 size={14} aria-hidden />
+            )}
           </button>
           {fullscreen && (
-            <button type="button" onClick={() => setFullscreen(false)} title={t("chat.branches.close")}>
+            <button
+              type="button"
+              onClick={() => setFullscreen(false)}
+              title={t("chat.branches.close")}
+            >
               <X size={14} aria-hidden />
             </button>
           )}
         </div>
       </header>
 
-      <div className="branch-graph-legend" aria-label={t("chat.branches.legend")}>
-        <span><i className="is-current" />{t("chat.branches.current")}</span>
-        <span><i className="is-fork" />{t("chat.branches.fork")}</span>
-        <span><i className="is-side" />{t("chat.branches.side")}</span>
-        <span><i className="is-agent" />{t("chat.branches.agent")}</span>
+      <div
+        className="branch-graph-legend"
+        aria-label={t("chat.branches.legend")}
+      >
+        <span>
+          <i className="is-current" />
+          {t("chat.branches.current")}
+        </span>
+        <span>
+          <i className="is-fork" />
+          {t("chat.branches.fork")}
+        </span>
+        <span>
+          <i className="is-side" />
+          {t("chat.branches.side")}
+        </span>
+        <span>
+          <i className="is-agent" />
+          {t("chat.branches.agent")}
+        </span>
       </div>
 
       <div className="branch-graph-canvas">
         {loading ? (
-          <div className="branch-graph-state"><Loader2 className="is-spinning" aria-hidden />{t("chat.branches.loading")}</div>
+          <div className="branch-graph-state">
+            <Loader2 className="is-spinning" aria-hidden />
+            {t("chat.branches.loading")}
+          </div>
         ) : !sessionId ? (
-          <div className="branch-graph-state"><GitBranch aria-hidden />{t("chat.branches.noSession")}</div>
+          <div className="branch-graph-state">
+            <GitBranch aria-hidden />
+            {t("chat.branches.noSession")}
+          </div>
         ) : error && !graph ? (
-          <div className="branch-graph-state is-error"><X aria-hidden />{error}</div>
+          <div className="branch-graph-state is-error">
+            <X aria-hidden />
+            {error}
+          </div>
         ) : flow.nodes.length === 0 ? (
-          <div className="branch-graph-state"><Sparkles aria-hidden />{t("chat.branches.empty")}</div>
+          <div className="branch-graph-state">
+            <Sparkles aria-hidden />
+            {t("chat.branches.empty")}
+          </div>
         ) : (
           <ReactFlow
             nodes={flow.nodes}
@@ -271,19 +354,22 @@ export default function BranchGraphPanel({
         <footer className="branch-graph-inspector">
           <div>
             <strong>{selected.title}</strong>
-            <span>{selected.preview || selected.agentPath || selected.sessionId}</span>
+            <span>
+              {selected.preview || selected.agentPath || selected.sessionId}
+            </span>
           </div>
           <div>
             {selected.kind !== "agent" && selected.sessionId !== sessionId && (
               <button
                 type="button"
-                onClick={() => void (
-                  selected.isEphemeral
+                onClick={() =>
+                  void (selected.isEphemeral
                     ? onOpenSideSession(selected.sessionId)
-                    : onOpenSession(selected.sessionId)
-                )}
+                    : onOpenSession(selected.sessionId))
+                }
               >
-                <ExternalLink size={13} aria-hidden />{t("chat.branches.openSession")}
+                <ExternalLink size={13} aria-hidden />
+                {t("chat.branches.openSession")}
               </button>
             )}
             {selected.kind === "turn" && (
@@ -294,9 +380,11 @@ export default function BranchGraphPanel({
                   title={t("chat.branches.branchBeforeHint")}
                   onClick={() => void forkSelected("before_turn")}
                 >
-                  {forking === "before_turn"
-                    ? <Loader2 size={13} className="is-spinning" aria-hidden />
-                    : <Pencil size={13} aria-hidden />}
+                  {forking === "before_turn" ? (
+                    <Loader2 size={13} className="is-spinning" aria-hidden />
+                  ) : (
+                    <Pencil size={13} aria-hidden />
+                  )}
                   {t("chat.branches.branchBefore")}
                 </button>
                 <button
@@ -306,9 +394,11 @@ export default function BranchGraphPanel({
                   title={t("chat.branches.sideHint")}
                   onClick={() => void forkSelected("side")}
                 >
-                  {forking === "side"
-                    ? <Loader2 size={13} className="is-spinning" aria-hidden />
-                    : <MessageSquare size={13} aria-hidden />}
+                  {forking === "side" ? (
+                    <Loader2 size={13} className="is-spinning" aria-hidden />
+                  ) : (
+                    <MessageSquare size={13} aria-hidden />
+                  )}
                   {t("chat.branches.startSide")}
                 </button>
                 <button
@@ -317,9 +407,11 @@ export default function BranchGraphPanel({
                   disabled={!selected.canFork || streaming || forking !== null}
                   onClick={() => void forkSelected("through_turn")}
                 >
-                  {forking === "through_turn"
-                    ? <Loader2 size={13} className="is-spinning" aria-hidden />
-                    : <GitBranch size={13} aria-hidden />}
+                  {forking === "through_turn" ? (
+                    <Loader2 size={13} className="is-spinning" aria-hidden />
+                  ) : (
+                    <GitBranch size={13} aria-hidden />
+                  )}
                   {t("chat.branches.branchHere")}
                 </button>
               </>
@@ -327,7 +419,9 @@ export default function BranchGraphPanel({
           </div>
         </footer>
       )}
-      {error && graph && <div className="branch-graph-inline-error">{error}</div>}
+      {error && graph && (
+        <div className="branch-graph-inline-error">{error}</div>
+      )}
     </section>
   );
 

@@ -11,7 +11,13 @@ interface ConfigProps {
   aiModel?: string;
 }
 
-export default function ParameterExtractionConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function ParameterExtractionConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

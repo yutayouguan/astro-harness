@@ -31,7 +31,10 @@ test("RunFinished metadata creates a clickable surface linked to pending interru
   assert.deepEqual(result.surface?.operations, [
     { op: "surfaceUpdate", path: "/approved" },
   ]);
-  assert.deepEqual(result.surface?.interrupts?.map((item) => item.id), ["request-1"]);
+  assert.deepEqual(
+    result.surface?.interrupts?.map((item) => item.id),
+    ["request-1"],
+  );
 });
 
 test("malformed metadata keeps pending interrupt without inventing a surface", () => {

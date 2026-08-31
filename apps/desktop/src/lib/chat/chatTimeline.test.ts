@@ -179,11 +179,10 @@ test("text reconciliation preserves prior interleaving when only the tail change
   m = applyTextDelta(m, "draft", 300);
 
   const reconciled = reconcileText(m, "beforefinal", 400);
-  assert.deepEqual(reconciled.segments?.map((segment) => segment.type), [
-    "text",
-    "activity",
-    "text",
-  ]);
+  assert.deepEqual(
+    reconciled.segments?.map((segment) => segment.type),
+    ["text", "activity", "text"],
+  );
   assert.equal(reconciled.segments?.[2]?.type, "text");
   if (reconciled.segments?.[2]?.type === "text") {
     assert.equal(reconciled.segments[2].text, "final");
@@ -212,14 +211,10 @@ test("timeline projection restores a missing canonical answer tail without reord
 
   const projected = projectCanonicalTimelineSegments(original);
 
-  assert.deepEqual(projected.map((segment) => segment.type), [
-    "reasoning",
-    "activity",
-    "text",
-    "reasoning",
-    "activity",
-    "text",
-  ]);
+  assert.deepEqual(
+    projected.map((segment) => segment.type),
+    ["reasoning", "activity", "text", "reasoning", "activity", "text"],
+  );
   assert.equal(
     projected
       .filter((segment) => segment.type === "text")
@@ -250,12 +245,14 @@ test("timeline projection appends a missing final answer after a trailing tool",
     ],
   });
 
-  assert.deepEqual(projected.map((segment) => segment.type), [
-    "text",
-    "activity",
-    "text",
-  ]);
-  assert.equal(projected[2]?.type === "text" ? projected[2].text : "", "最终答案。");
+  assert.deepEqual(
+    projected.map((segment) => segment.type),
+    ["text", "activity", "text"],
+  );
+  assert.equal(
+    projected[2]?.type === "text" ? projected[2].text : "",
+    "最终答案。",
+  );
 });
 
 test("timeline projection never collapses interleaved events on divergent text", () => {
@@ -297,10 +294,13 @@ test("canonical reasoning reconciliation replaces divergent text and keeps activ
       .join(""),
     "hello world",
   );
-  assert.deepEqual(reconciled.segments?.map((segment) => segment.type), [
-    "reasoning",
-    "activity",
-    "reasoning",
-  ]);
-  assert.equal(reconciled.segments?.filter((segment) => segment.type === "activity").length, 1);
+  assert.deepEqual(
+    reconciled.segments?.map((segment) => segment.type),
+    ["reasoning", "activity", "reasoning"],
+  );
+  assert.equal(
+    reconciled.segments?.filter((segment) => segment.type === "activity")
+      .length,
+    1,
+  );
 });

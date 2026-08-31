@@ -1,11 +1,6 @@
 /** 媒体悬停工具条：引用 / 放大 / 下载 / 复制 */
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
-import {
-  Download,
-  ExternalLink,
-  Maximize2,
-  Quote,
-} from "lucide-react";
+import { Download, ExternalLink, Maximize2, Quote } from "lucide-react";
 import { CopyMorphIcon } from "../icons/MorphIcon";
 import { invoke } from "@tauri-apps/api/core";
 import { useChatMediaAttach } from "../../contexts/ChatMediaAttachContext";

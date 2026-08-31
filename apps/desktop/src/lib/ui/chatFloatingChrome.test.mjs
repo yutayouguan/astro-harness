@@ -101,7 +101,7 @@ test("chat header shares composer glass while messages scroll underneath", () =>
   assert.match(header, /box-shadow:[\s\S]*var\(--glass-rim\)/);
   assert.match(
     header,
-    /backdrop-filter:\s*blur\(calc\(var\(--blur-glass, 20px\)/,
+    /backdrop-filter:\s*blur\(calc\(\s*var\(--blur-glass, 20px\)/,
   );
   assert.match(header, /pointer-events:\s*none;/);
   assert.match(
@@ -139,11 +139,17 @@ test("conversation title keeps a compact optical type scale", () => {
 });
 
 test("right-side chat surfaces share one flush square glass material", () => {
-  const layout = rule(rightPanelStyles, ".chat-layout-with-right.has-right-dock");
+  const layout = rule(
+    rightPanelStyles,
+    ".chat-layout-with-right.has-right-dock",
+  );
   const layoutBase = rule(rightPanelStyles, ".chat-layout-with-right");
   const runtimePanel = rule(rightPanelStyles, ".chat-right-panel");
   const projectPanel = rule(projectFilesStyles, ".project-files-panel");
-  const openProjectPanel = rule(projectFilesStyles, ".project-files-panel.is-open");
+  const openProjectPanel = rule(
+    projectFilesStyles,
+    ".project-files-panel.is-open",
+  );
   const projectWorkbench = rule(projectFilesStyles, ".project-file-workbench");
   const sidePanel = rule(sideChatStyles, ".side-chat-panel");
   const reviewPanel = rule(reviewPanelStyles, ".chat-review-panel");
@@ -161,8 +167,14 @@ test("right-side chat surfaces share one flush square glass material", () => {
   assert.ok(runtimePanel, "missing runtime panel rule");
   assert.match(runtimePanel, /right:\s*var\(--chat-dock-inset\);/);
   assert.match(runtimePanel, /bottom:\s*var\(--chat-dock-inset\);/);
-  assert.match(runtimePanel, /backdrop-filter:\s*var\(--chat-dock-surface-filter\);/);
-  assert.match(runtimePanel, /-webkit-backdrop-filter:\s*var\(--chat-dock-surface-filter\);/);
+  assert.match(
+    runtimePanel,
+    /backdrop-filter:\s*var\(--chat-dock-surface-filter\);/,
+  );
+  assert.match(
+    runtimePanel,
+    /-webkit-backdrop-filter:\s*var\(--chat-dock-surface-filter\);/,
+  );
   assert.ok(projectPanel, "missing project files panel rule");
   assert.ok(openProjectPanel, "missing open project files panel rule");
   assert.ok(projectWorkbench, "missing project file workbench rule");
@@ -174,19 +186,31 @@ test("right-side chat surfaces share one flush square glass material", () => {
     assert.match(panel, /border-radius:\s*var\(--chat-dock-radius\);/);
     assert.match(panel, /background:\s*var\(--chat-dock-surface-background\);/);
     assert.match(panel, /box-shadow:\s*var\(--chat-dock-surface-shadow\);/);
-    assert.match(panel, /padding-top:\s*var\(--chat-header-overlay-height, 50px\);/);
+    assert.match(
+      panel,
+      /padding-top:\s*var\(--chat-header-overlay-height, 50px\);/,
+    );
   }
   for (const panel of [runtimePanel, projectPanel, sidePanel, reviewPanel]) {
-    assert.match(panel, /backdrop-filter:\s*var\(--chat-dock-surface-filter\);/);
+    assert.match(
+      panel,
+      /backdrop-filter:\s*var\(--chat-dock-surface-filter\);/,
+    );
   }
-  assert.match(projectWorkbench, /border-radius:\s*var\(--chat-workbench-radius, 18px\);/);
+  assert.match(
+    projectWorkbench,
+    /border-radius:\s*var\(--chat-workbench-radius, 18px\);/,
+  );
   assert.match(
     projectWorkbench,
     /margin:[\s\S]*calc\(var\(--pf-gutter, 6px\) \+ var\(--chat-header-overlay-height, 50px\)\)/,
   );
   assert.match(openProjectPanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
-  assert.match(rightPanelStyles, /@media \(prefers-reduced-transparency: reduce\)/);
+  assert.match(
+    rightPanelStyles,
+    /@media \(prefers-reduced-transparency: reduce\)/,
+  );
   assert.match(rightPanelStyles, /@media \(prefers-contrast: more\)/);
 });
 
@@ -199,10 +223,16 @@ test("project files dock animates layout in both directions", () => {
   assert.match(panel, /width:\s*0;/);
   assert.match(panel, /border-width:\s*0;/);
   assert.match(panel, /visibility:\s*hidden;/);
-  assert.match(panel, /transition:[\s\S]*flex-basis 300ms[\s\S]*width 300ms[\s\S]*transform 300ms/);
+  assert.match(
+    panel,
+    /transition:[\s\S]*flex-basis 300ms[\s\S]*width 300ms[\s\S]*transform 300ms/,
+  );
 
   assert.ok(openPanel, "missing expanded project files panel rule");
-  assert.match(openPanel, /flex-basis:\s*min\(var\(--project-files-width, 264px\), 42%\);/);
+  assert.match(
+    openPanel,
+    /flex-basis:\s*min\(var\(--project-files-width, 264px\), 42%\);/,
+  );
   assert.match(openPanel, /border-width:\s*0\.5px;/);
   assert.match(openPanel, /visibility:\s*visible;/);
   assert.match(openPanel, /pointer-events:\s*auto;/);
@@ -219,11 +249,20 @@ test("side chat uses the same layout motion contract as project files", () => {
   assert.match(slot, /flex:\s*0 0 0;/);
   assert.match(slot, /width:\s*0;/);
   assert.match(slot, /visibility:\s*hidden;/);
-  assert.match(slot, /transition:[\s\S]*flex-basis 300ms[\s\S]*width 300ms[\s\S]*margin 300ms/);
+  assert.match(
+    slot,
+    /transition:[\s\S]*flex-basis 300ms[\s\S]*width 300ms[\s\S]*margin 300ms/,
+  );
 
   assert.ok(openSlot, "missing expanded side-chat dock slot");
-  assert.match(openSlot, /flex-basis:\s*min\(var\(--side-chat-width, 384px\), 46%\);/);
-  assert.match(openSlot, /width:\s*min\(var\(--side-chat-width, 384px\), 46%\);/);
+  assert.match(
+    openSlot,
+    /flex-basis:\s*min\(var\(--side-chat-width, 384px\), 46%\);/,
+  );
+  assert.match(
+    openSlot,
+    /width:\s*min\(var\(--side-chat-width, 384px\), 46%\);/,
+  );
   assert.match(openSlot, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(openSlot, /visibility:\s*visible;/);
 
@@ -262,7 +301,10 @@ test("todo and file status stay inside the composer shell", () => {
   const composerSurface = chatView.indexOf("composer composer--stacked");
 
   assert.ok(composerStart >= 0, "missing composer shell");
-  assert.ok(progress > composerStart, "task progress must render inside composer shell");
+  assert.ok(
+    progress > composerStart,
+    "task progress must render inside composer shell",
+  );
   assert.ok(
     progress < composerSurface,
     "task progress must render directly above the composer surface",
@@ -273,16 +315,25 @@ test("floating composer shares the sidebar glass material", () => {
   const composer = rule(chatStyles, ".composer");
   const focusedComposer = rule(chatStyles, ".composer:focus-within");
   const darkComposer = rule(chatStyles, 'html[data-theme="dark"] .composer');
-  const darkFocusedComposer = rule(chatStyles, 'html[data-theme="dark"] .composer:focus-within');
+  const darkFocusedComposer = rule(
+    chatStyles,
+    'html[data-theme="dark"] .composer:focus-within',
+  );
 
   assert.ok(composer, "missing composer rule");
   assert.match(composer, /--composer-surface-base:\s*var\(--sidebar-bg\);/);
-  assert.match(composer, /background:[\s\S]*var\(--composer-surface-sheen\)[\s\S]*var\(--composer-surface-base\);/);
+  assert.match(
+    composer,
+    /background:[\s\S]*var\(--composer-surface-sheen\)[\s\S]*var\(--composer-surface-base\);/,
+  );
   assert.match(
     composer,
     /border:\s*(?:0\.(?:[1-9]\d*)|[1-9]\d*(?:\.\d+)?)px solid var\(--glass-edge\);/,
   );
-  assert.match(composer, /backdrop-filter:\s*blur\(calc\(var\(--blur-glass, 20px\)/);
+  assert.match(
+    composer,
+    /backdrop-filter:\s*blur\(calc\(\s*var\(--blur-glass, 20px\)/,
+  );
   assert.match(
     composer,
     /box-shadow:[\s\S]*var\(--glass-rim\)[\s\S]*rgba\(var\(--shadow-ink\),\s*0\.\d+\)/,
@@ -298,6 +349,9 @@ test("floating composer shares the sidebar glass material", () => {
   assert.doesNotMatch(darkComposer, /background:\s*transparent;/);
 
   assert.ok(darkFocusedComposer, "missing dark focused composer rule");
-  assert.match(darkFocusedComposer, /0 0 0 (?:0\.(?:[1-9]\d*)|1)px color-mix\(/);
+  assert.match(
+    darkFocusedComposer,
+    /0 0 0 (?:0\.(?:[1-9]\d*)|1)px color-mix\(/,
+  );
   assert.doesNotMatch(darkFocusedComposer, /0 0 0 2px/);
 });

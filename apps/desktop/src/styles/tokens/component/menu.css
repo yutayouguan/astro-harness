@@ -4,48 +4,83 @@
  */
 html[data-theme="dark"] {
   --menu-glass-bg:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
-    color-mix(in srgb, var(--tone-soft, rgba(96, 165, 250, 0.16)) 42%, rgba(14, 16, 28, 0.9));
-  --menu-glass-border: color-mix(in srgb, var(--tone, transparent) 14%, rgba(255, 255, 255, 0.16));
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, rgba(96, 165, 250, 0.16)) 42%,
+      rgba(14, 16, 28, 0.9)
+    );
+  --menu-glass-border: color-mix(
+    in srgb,
+    var(--tone, transparent) 14%,
+    rgba(255, 255, 255, 0.16)
+  );
   --menu-glass-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.42),
-    0 2px 8px rgba(0, 0, 0, 0.22),
+    0 16px 40px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  --menu-glass-blur: blur(calc(28px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.4));
+  --menu-glass-blur: blur(calc(28px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.4));
   --menu-overlay-bg:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
-    color-mix(in srgb, var(--tone-soft, rgba(129, 140, 248, 0.16)) 18%, rgba(16, 14, 30, 0.92));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.09),
+      rgba(255, 255, 255, 0.025)
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, rgba(129, 140, 248, 0.16)) 18%,
+      rgba(16, 14, 30, 0.92)
+    );
   --menu-overlay-border: color-mix(
     in srgb,
     var(--tone, #818cf8) 22%,
     rgba(255, 255, 255, 0.12)
   );
   --menu-overlay-shadow:
-    0 14px 34px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    0 14px 34px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.09);
   --menu-overlay-blur: blur(calc(28px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.35));
   --titlebar-menu-bg: var(--composer-bg, rgba(12, 10, 24, 0.42));
   --titlebar-menu-border: rgba(255, 255, 255, 0.1);
   --titlebar-menu-shadow:
-    0 10px 32px rgba(0, 0, 0, 0.45),
-    0 2px 8px rgba(0, 0, 0, 0.3);
+    0 10px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
   --titlebar-menu-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.2));
 }
 
 html[data-theme="light"] {
   --menu-glass-bg:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.2) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(255, 255, 255, 0.22));
-  --menu-glass-border: color-mix(in srgb, var(--tone, #94a3b8) 10%, rgba(255, 255, 255, 0.48));
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.48) 0%,
+      rgba(255, 255, 255, 0.2) 100%
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 28%,
+      rgba(255, 255, 255, 0.22)
+    );
+  --menu-glass-border: color-mix(
+    in srgb,
+    var(--tone, #94a3b8) 10%,
+    rgba(255, 255, 255, 0.48)
+  );
   --menu-glass-shadow:
     0 16px 40px rgba(var(--shadow-ink), 0.14),
     0 2px 8px rgba(var(--shadow-ink), 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
-  --menu-glass-blur: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  --menu-glass-blur: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
   --menu-overlay-bg:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.14)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.46),
+      rgba(255, 255, 255, 0.14)
+    ),
     color-mix(
       in srgb,
       var(--tone-soft, rgba(99, 102, 241, 0.12)) 18%,
@@ -63,10 +98,13 @@ html[data-theme="light"] {
   --menu-overlay-blur: blur(calc(28px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.35));
   --titlebar-menu-bg: var(--composer-bg, #fff);
-  --titlebar-menu-border: color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  --titlebar-menu-border: color-mix(
+    in srgb,
+    var(--glass-edge) 70%,
+    transparent
+  );
   --titlebar-menu-shadow:
-    0 8px 28px rgba(15, 23, 42, 0.14),
-    0 2px 6px rgba(15, 23, 42, 0.06);
+    0 8px 28px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.06);
   --titlebar-menu-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.2));
 }

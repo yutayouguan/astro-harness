@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  X,
-  RefreshCw,
-} from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, X, RefreshCw } from "lucide-react";
 import type { LoopRunDto } from "./loopTypes";
 
 interface Props {
@@ -98,7 +92,14 @@ export default function LoopRunHistory({
 
       <div className="loop-run-history-list">
         {loading && <div className="loop-empty">Loading…</div>}
-        {error && <div className="loop-empty" style={{ color: "var(--ink-error, #ef4444)" }}>{error}</div>}
+        {error && (
+          <div
+            className="loop-empty"
+            style={{ color: "var(--ink-error, #ef4444)" }}
+          >
+            {error}
+          </div>
+        )}
 
         {!loading && !error && runs.length === 0 && (
           <div className="loop-empty">
@@ -120,17 +121,15 @@ export default function LoopRunHistory({
                 <StatusIcon status={run.status} />
               </div>
               <div className="loop-run-card-info">
-                <span className="loop-run-card-name">
-                  {run.workflow_name}
+                <span className="loop-run-card-name">{run.workflow_name}</span>
+                <span className="loop-run-card-trigger">
+                  {run.trigger_type}
                 </span>
-                <span className="loop-run-card-trigger">{run.trigger_type}</span>
               </div>
               <div className="loop-run-card-meta">
                 <span>{relativeTime(run.started_at)}</span>
                 <span className="loop-run-card-sep">·</span>
-                <span>
-                  {formatDuration(run.started_at, run.finished_at)}
-                </span>
+                <span>{formatDuration(run.started_at, run.finished_at)}</span>
                 <span className="loop-run-card-sep">·</span>
                 <span>{run.node_count} 步</span>
               </div>

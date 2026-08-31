@@ -77,8 +77,14 @@ test("subagent controls live in the pinned summary instead of the composer", () 
   assert.match(app, /useSubagentThreads\(chat\.sessionId\)/);
   assert.match(app, /header-summary-badge/);
   assert.match(app, /subagentRoots=\{subagents\.roots\}/);
-  assert.doesNotMatch(chatView, /SubagentActivityBar|SubagentsPanel|useSubagentThreads/);
-  assert.match(rightPanel, /type ChatRightTab = "summary" \| "context" \| "branches"/);
+  assert.doesNotMatch(
+    chatView,
+    /SubagentActivityBar|SubagentsPanel|useSubagentThreads/,
+  );
+  assert.match(
+    rightPanel,
+    /type ChatRightTab = "summary" \| "context" \| "branches"/,
+  );
   assert.match(rightPanel, /<ChatAgentInfo\s+variant="summary"/);
   assert.match(rightPanel, /<SubagentActivityBar[\s\S]+?showEmpty/);
   assert.match(rightPanel, /<SubagentsPanel\s+embedded/);

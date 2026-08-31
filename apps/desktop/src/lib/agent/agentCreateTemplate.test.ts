@@ -99,10 +99,10 @@ test("prepareAgentCreateSend keeps filled optional slots", () => {
 });
 
 test("prepareAgentCreateSend works for English template", () => {
-  const filled = AGENT_CREATE_TEMPLATE_EN.replace("「name」", "「Astro」").replace(
-    "「help with」",
-    "「coding」",
-  );
+  const filled = AGENT_CREATE_TEMPLATE_EN.replace(
+    "「name」",
+    "「Astro」",
+  ).replace("「help with」", "「coding」");
   const prep = prepareAgentCreateSend(filled);
   assert.equal(prep.ok, true);
   assert.match(prep.sanitized, /name is 「Astro」/);

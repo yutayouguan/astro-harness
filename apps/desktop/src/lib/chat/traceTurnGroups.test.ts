@@ -35,10 +35,16 @@ describe("groupEventsByUserTurns", () => {
       },
     ]);
     assert.equal(groups.length, 2);
-    assert.deepEqual(groups[0].events.map((e) => e.kind), ["user", "tool", "llm"]);
+    assert.deepEqual(
+      groups[0].events.map((e) => e.kind),
+      ["user", "tool", "llm"],
+    );
     assert.equal(groups[0].turn_id, "t1");
     assert.equal(groups[0].tokens, 12);
-    assert.deepEqual(groups[1].events.map((e) => e.kind), ["user", "llm"]);
+    assert.deepEqual(
+      groups[1].events.map((e) => e.kind),
+      ["user", "llm"],
+    );
     assert.equal(groups[1].turn_id, "t2");
   });
 });
@@ -48,8 +54,19 @@ describe("turnGroupTitle", () => {
     assert.equal(
       turnGroupTitle(
         [
-          { kind: "user", output: "帮我查一下北京天气", total_tokens: 0, cost_usd: 0 },
-          { kind: "llm", name: "gpt", turn_id: "abcd1234-xxxx", total_tokens: 1, cost_usd: 0 },
+          {
+            kind: "user",
+            output: "帮我查一下北京天气",
+            total_tokens: 0,
+            cost_usd: 0,
+          },
+          {
+            kind: "llm",
+            name: "gpt",
+            turn_id: "abcd1234-xxxx",
+            total_tokens: 1,
+            cost_usd: 0,
+          },
         ],
         "abcd1234-xxxx",
         "未标注",
@@ -62,7 +79,15 @@ describe("turnGroupTitle", () => {
   it("falls back to short turn id", () => {
     assert.equal(
       turnGroupTitle(
-        [{ kind: "llm", name: "assistant", turn_id: "abcd1234-xxxx", total_tokens: 1, cost_usd: 0 }],
+        [
+          {
+            kind: "llm",
+            name: "assistant",
+            turn_id: "abcd1234-xxxx",
+            total_tokens: 1,
+            cost_usd: 0,
+          },
+        ],
         "abcd1234-xxxx",
         "未标注",
         "回合",
@@ -92,6 +117,9 @@ describe("traceSessionTitle", () => {
 
   it("falls back to an unnamed label instead of UUID", () => {
     assert.equal(traceSessionTitle("", "未命名会话"), "未命名会话");
-    assert.equal(traceSessionTitle(undefined, "Unnamed session"), "Unnamed session");
+    assert.equal(
+      traceSessionTitle(undefined, "Unnamed session"),
+      "Unnamed session",
+    );
   });
 });

@@ -27,7 +27,11 @@ export function useTypingPlaceholder(
   const holdMs = opts.holdMs ?? 1800;
   const gapMs = opts.gapMs ?? 420;
   const phraseKey = useMemo(
-    () => phrases.map((p) => p.trim()).filter(Boolean).join("\0"),
+    () =>
+      phrases
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .join("\0"),
     [phrases],
   );
   const optsRef = useRef({ typeMs, deleteMs, holdMs, gapMs });
@@ -71,8 +75,12 @@ export function useTypingPlaceholder(
 
     const tick = () => {
       if (cancelled) return;
-      const { typeMs: tMs, deleteMs: dMs, holdMs: hMs, gapMs: gMs } =
-        optsRef.current;
+      const {
+        typeMs: tMs,
+        deleteMs: dMs,
+        holdMs: hMs,
+        gapMs: gMs,
+      } = optsRef.current;
       const full = clean[index] ?? clean[0];
 
       if (reduceMotion) {

@@ -16,7 +16,10 @@ import {
 import { IconSparkles, IconSkills, IconWorkspace } from "../icons/NavIcons";
 import LucideIconPicker from "./LucideIconPicker";
 import AvatarPickerDrawer from "./AvatarPickerDrawer";
-import { coverIllustrationToSvgBase64, type CoverId } from "../../illustrations";
+import {
+  coverIllustrationToSvgBase64,
+  type CoverId,
+} from "../../illustrations";
 
 /** 创建 Agent 引导卡片入参 */
 type Props = {
@@ -54,8 +57,14 @@ async function fileToBase64(file: File): Promise<string> {
 export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
   const { t } = useI18n();
   const { strokeWidth } = useMorphicons();
-  const [emoji, setEmoji] = useState<SlotState>({ previewUrl: null, fileName: null });
-  const [avatar, setAvatar] = useState<SlotState>({ previewUrl: null, fileName: null });
+  const [emoji, setEmoji] = useState<SlotState>({
+    previewUrl: null,
+    fileName: null,
+  });
+  const [avatar, setAvatar] = useState<SlotState>({
+    previewUrl: null,
+    fileName: null,
+  });
   const [coverId, setCoverId] = useState<CoverId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [avatarOpen, setAvatarOpen] = useState(false);
@@ -221,17 +230,35 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewName]);
 
-  const initial = agentNameInitial(previewName || t("chat.agentIconFallbackName"));
+  const initial = agentNameInitial(
+    previewName || t("chat.agentIconFallbackName"),
+  );
   const heroPreview = avatar.previewUrl || emoji.previewUrl;
 
   const steps = [
-    { key: "fill", icon: <IconSkills width={13} height={13} />, label: t("chat.agentGuideStep1") },
-    { key: "icon", icon: <IconSparkles width={13} height={13} />, label: t("chat.agentGuideStep2") },
-    { key: "send", icon: <IconWorkspace width={13} height={13} />, label: t("chat.agentGuideStep3") },
+    {
+      key: "fill",
+      icon: <IconSkills width={13} height={13} />,
+      label: t("chat.agentGuideStep1"),
+    },
+    {
+      key: "icon",
+      icon: <IconSparkles width={13} height={13} />,
+      label: t("chat.agentGuideStep2"),
+    },
+    {
+      key: "send",
+      icon: <IconWorkspace width={13} height={13} />,
+      label: t("chat.agentGuideStep3"),
+    },
   ] as const;
 
   return (
-    <div className="chat-empty chat-agent-guide" role="region" aria-label={t("chat.agentGuideTitle")}>
+    <div
+      className="chat-empty chat-agent-guide"
+      role="region"
+      aria-label={t("chat.agentGuideTitle")}
+    >
       <div className="chat-agent-guide-ambient" aria-hidden>
         <span className="chat-agent-guide-orb" />
         <span className="chat-agent-guide-orb chat-agent-guide-orb--soft" />
@@ -260,12 +287,17 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
               <IconSparkles width={14} height={14} />
               {t("chat.agentGuideEyebrow")}
             </span>
-            <h2 className="chat-agent-guide-title">{t("chat.agentGuideTitle")}</h2>
+            <h2 className="chat-agent-guide-title">
+              {t("chat.agentGuideTitle")}
+            </h2>
             <p className="chat-agent-guide-body">{t("chat.agentGuideBody")}</p>
           </div>
         </div>
 
-        <ol className="chat-agent-guide-steps" aria-label={t("chat.agentGuideStepsLabel")}>
+        <ol
+          className="chat-agent-guide-steps"
+          aria-label={t("chat.agentGuideStepsLabel")}
+        >
           {steps.map((step, i) => (
             <li
               key={step.key}
@@ -286,7 +318,9 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
 
         <div className="chat-agent-icons">
           <div className="chat-agent-icons-head">
-            <p className="chat-agent-icons-title">{t("chat.agentIconsTitle")}</p>
+            <p className="chat-agent-icons-title">
+              {t("chat.agentIconsTitle")}
+            </p>
             <p className="chat-agent-icons-sub">{t("chat.agentIconsSub")}</p>
           </div>
 
@@ -310,11 +344,21 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
                 )}
               </button>
               <div className="chat-agent-icon-slot-meta">
-                <span className="chat-agent-icon-slot-label">{t("chat.agentCoversTitle")}</span>
-                <span className="chat-agent-icon-slot-hint">{t("chat.agentCoversSub")}</span>
+                <span className="chat-agent-icon-slot-label">
+                  {t("chat.agentCoversTitle")}
+                </span>
+                <span className="chat-agent-icon-slot-hint">
+                  {t("chat.agentCoversSub")}
+                </span>
                 <div className="chat-agent-icon-actions">
-                  <button type="button" className="chat-agent-icon-btn" onClick={openAvatar}>
-                    {avatar.previewUrl ? t("chat.agentIconChange") : t("chat.agentIconPick")}
+                  <button
+                    type="button"
+                    className="chat-agent-icon-btn"
+                    onClick={openAvatar}
+                  >
+                    {avatar.previewUrl
+                      ? t("chat.agentIconChange")
+                      : t("chat.agentIconPick")}
                   </button>
                   {avatar.previewUrl ? (
                     <button
@@ -349,8 +393,12 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
                 )}
               </button>
               <div className="chat-agent-icon-slot-meta">
-                <span className="chat-agent-icon-slot-label">{t("chat.agentIconEmoji")}</span>
-                <span className="chat-agent-icon-slot-hint">{t("chat.agentIconEmojiHint")}</span>
+                <span className="chat-agent-icon-slot-label">
+                  {t("chat.agentIconEmoji")}
+                </span>
+                <span className="chat-agent-icon-slot-hint">
+                  {t("chat.agentIconEmojiHint")}
+                </span>
                 <div className="chat-agent-icon-actions">
                   <button
                     type="button"
@@ -358,7 +406,9 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
                     onClick={openLucide}
                     disabled={lucideBusy}
                   >
-                    {emoji.previewUrl ? t("chat.agentIconChange") : t("chat.agentIconPick")}
+                    {emoji.previewUrl
+                      ? t("chat.agentIconChange")
+                      : t("chat.agentIconPick")}
                   </button>
                   {emoji.previewUrl ? (
                     <button
@@ -378,7 +428,11 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
           {error ? <p className="chat-agent-icons-error">{error}</p> : null}
         </div>
 
-        <button type="button" className="chat-agent-guide-skip" onClick={onSkip}>
+        <button
+          type="button"
+          className="chat-agent-guide-skip"
+          onClick={onSkip}
+        >
           {t("chat.agentGuideSkip")}
         </button>
       </div>

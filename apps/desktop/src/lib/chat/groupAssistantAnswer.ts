@@ -30,10 +30,12 @@ export function groupAssistantAnswer(
 
   return {
     reasoning:
-      message.reasoning ?? reasoningSegments.map((segment) => segment.text).join(""),
+      message.reasoning ??
+      reasoningSegments.map((segment) => segment.text).join(""),
     reasoningDurationSec:
       message.reasoningDurationSec ??
       (durationFromSegments > 0 ? durationFromSegments : undefined),
-    text: message.content || textSegments.map((segment) => segment.text).join(""),
+    text:
+      message.content || textSegments.map((segment) => segment.text).join(""),
   };
 }

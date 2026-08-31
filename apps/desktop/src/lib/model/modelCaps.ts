@@ -53,9 +53,7 @@ export function listActiveModelCaps(
 }
 
 /** 将上下文窗口 token 数格式化为短标签（如 128K、1M）。 */
-export function formatContextWindow(
-  tokens?: number | null,
-): string | null {
+export function formatContextWindow(tokens?: number | null): string | null {
   if (tokens == null || !Number.isFinite(tokens) || tokens <= 0) return null;
   if (tokens >= 1_000_000) {
     const m = tokens / 1_000_000;
@@ -92,9 +90,7 @@ export function formatModelPrice(
 }
 
 /** 知识截止日期短标签（取 YYYY-MM 或原串）。 */
-export function formatKnowledgeCutoff(
-  cutoff?: string | null,
-): string | null {
+export function formatKnowledgeCutoff(cutoff?: string | null): string | null {
   const s = cutoff?.trim();
   if (!s) return null;
   const m = s.match(/^(\d{4}-\d{2})/);
@@ -229,7 +225,9 @@ export function estimateTurnCostUsd(opts: {
 }
 
 /** 格式化估费为短标签（如 `~$0.012`）。 */
-export function formatEstimateCostUsd(usd: number | null | undefined): string | null {
+export function formatEstimateCostUsd(
+  usd: number | null | undefined,
+): string | null {
   if (usd == null || !Number.isFinite(usd) || usd < 0) return null;
   if (usd === 0) return "~$0";
   if (usd < 0.0001) return "<$0.0001";

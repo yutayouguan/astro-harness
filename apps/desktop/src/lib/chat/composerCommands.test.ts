@@ -1,9 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  parseSlashInput,
-  resolveBuiltinSlash,
-} from "./composerCommands.ts";
+import { parseSlashInput, resolveBuiltinSlash } from "./composerCommands.ts";
 
 test("resolves builtins and aliases", () => {
   assert.equal(resolveBuiltinSlash("new")?.action, "new_chat");

@@ -36,9 +36,18 @@ const PAUSE_ICON = PauseData;
 const PLAY_ICON = PlayData;
 
 export type WelcomeCardId =
-  | "intro" | "skills" | "files" | "data"
-  | "image" | "music" | "video" | "web"
-  | "code" | "writing" | "search" | "translate";
+  | "intro"
+  | "skills"
+  | "files"
+  | "data"
+  | "image"
+  | "music"
+  | "video"
+  | "web"
+  | "code"
+  | "writing"
+  | "search"
+  | "translate";
 
 type Props = {
   onPickCard: (prompt: string, slotHints: string[]) => void;
@@ -57,18 +66,134 @@ type CardMeta = {
 };
 
 const ALL_CARDS: { id: WelcomeCardId; meta: CardMeta }[] = [
-  { id: "intro", meta: { title: "chat.card.intro.title", desc: "chat.card.intro.desc", prompt: "chat.card.intro.prompt", tone: "blue", Icon: SolidChat } },
-  { id: "skills", meta: { title: "chat.card.skills.title", desc: "chat.card.skills.desc", prompt: "chat.card.skills.prompt", tone: "purple", Icon: SolidStar } },
-  { id: "files", meta: { title: "chat.card.files.title", desc: "chat.card.files.desc", prompt: "chat.card.files.prompt", tone: "teal", Icon: SolidFolder } },
-  { id: "data", meta: { title: "chat.card.data.title", desc: "chat.card.data.desc", prompt: "chat.card.data.prompt", tone: "amber", Icon: SolidBolt } },
-  { id: "image", meta: { title: "chat.card.image.title" as MessageKey, desc: "chat.card.image.desc" as MessageKey, prompt: "chat.card.image.prompt" as MessageKey, tone: "rose", Icon: Image as ComponentType<IconProps>, lucide: true } },
-  { id: "music", meta: { title: "chat.card.music.title" as MessageKey, desc: "chat.card.music.desc" as MessageKey, prompt: "chat.card.music.prompt" as MessageKey, tone: "violet", Icon: Music as ComponentType<IconProps>, lucide: true } },
-  { id: "video", meta: { title: "chat.card.video.title" as MessageKey, desc: "chat.card.video.desc" as MessageKey, prompt: "chat.card.video.prompt" as MessageKey, tone: "indigo", Icon: Video as ComponentType<IconProps>, lucide: true } },
-  { id: "web", meta: { title: "chat.card.web.title" as MessageKey, desc: "chat.card.web.desc" as MessageKey, prompt: "chat.card.web.prompt" as MessageKey, tone: "emerald", Icon: Globe as ComponentType<IconProps>, lucide: true } },
-  { id: "code", meta: { title: "chat.card.code.title" as MessageKey, desc: "chat.card.code.desc" as MessageKey, prompt: "chat.card.code.prompt" as MessageKey, tone: "sky", Icon: Code as ComponentType<IconProps>, lucide: true } },
-  { id: "writing", meta: { title: "chat.card.writing.title" as MessageKey, desc: "chat.card.writing.desc" as MessageKey, prompt: "chat.card.writing.prompt" as MessageKey, tone: "pink", Icon: PenLine as ComponentType<IconProps>, lucide: true } },
-  { id: "search", meta: { title: "chat.card.search.title" as MessageKey, desc: "chat.card.search.desc" as MessageKey, prompt: "chat.card.search.prompt" as MessageKey, tone: "orange", Icon: Search as ComponentType<IconProps>, lucide: true } },
-  { id: "translate", meta: { title: "chat.card.translate.title" as MessageKey, desc: "chat.card.translate.desc" as MessageKey, prompt: "chat.card.translate.prompt" as MessageKey, tone: "cyan", Icon: Languages as ComponentType<IconProps>, lucide: true } },
+  {
+    id: "intro",
+    meta: {
+      title: "chat.card.intro.title",
+      desc: "chat.card.intro.desc",
+      prompt: "chat.card.intro.prompt",
+      tone: "blue",
+      Icon: SolidChat,
+    },
+  },
+  {
+    id: "skills",
+    meta: {
+      title: "chat.card.skills.title",
+      desc: "chat.card.skills.desc",
+      prompt: "chat.card.skills.prompt",
+      tone: "purple",
+      Icon: SolidStar,
+    },
+  },
+  {
+    id: "files",
+    meta: {
+      title: "chat.card.files.title",
+      desc: "chat.card.files.desc",
+      prompt: "chat.card.files.prompt",
+      tone: "teal",
+      Icon: SolidFolder,
+    },
+  },
+  {
+    id: "data",
+    meta: {
+      title: "chat.card.data.title",
+      desc: "chat.card.data.desc",
+      prompt: "chat.card.data.prompt",
+      tone: "amber",
+      Icon: SolidBolt,
+    },
+  },
+  {
+    id: "image",
+    meta: {
+      title: "chat.card.image.title" as MessageKey,
+      desc: "chat.card.image.desc" as MessageKey,
+      prompt: "chat.card.image.prompt" as MessageKey,
+      tone: "rose",
+      Icon: Image as ComponentType<IconProps>,
+      lucide: true,
+    },
+  },
+  {
+    id: "music",
+    meta: {
+      title: "chat.card.music.title" as MessageKey,
+      desc: "chat.card.music.desc" as MessageKey,
+      prompt: "chat.card.music.prompt" as MessageKey,
+      tone: "violet",
+      Icon: Music as ComponentType<IconProps>,
+      lucide: true,
+    },
+  },
+  {
+    id: "video",
+    meta: {
+      title: "chat.card.video.title" as MessageKey,
+      desc: "chat.card.video.desc" as MessageKey,
+      prompt: "chat.card.video.prompt" as MessageKey,
+      tone: "indigo",
+      Icon: Video as ComponentType<IconProps>,
+      lucide: true,
+    },
+  },
+  {
+    id: "web",
+    meta: {
+      title: "chat.card.web.title" as MessageKey,
+      desc: "chat.card.web.desc" as MessageKey,
+      prompt: "chat.card.web.prompt" as MessageKey,
+      tone: "emerald",
+      Icon: Globe as ComponentType<IconProps>,
+      lucide: true,
+    },
+  },
+  {
+    id: "code",
+    meta: {
+      title: "chat.card.code.title" as MessageKey,
+      desc: "chat.card.code.desc" as MessageKey,
+      prompt: "chat.card.code.prompt" as MessageKey,
+      tone: "sky",
+      Icon: Code as ComponentType<IconProps>,
+      lucide: true,
+    },
+  },
+  {
+    id: "writing",
+    meta: {
+      title: "chat.card.writing.title" as MessageKey,
+      desc: "chat.card.writing.desc" as MessageKey,
+      prompt: "chat.card.writing.prompt" as MessageKey,
+      tone: "pink",
+      Icon: PenLine as ComponentType<IconProps>,
+      lucide: true,
+    },
+  },
+  {
+    id: "search",
+    meta: {
+      title: "chat.card.search.title" as MessageKey,
+      desc: "chat.card.search.desc" as MessageKey,
+      prompt: "chat.card.search.prompt" as MessageKey,
+      tone: "orange",
+      Icon: Search as ComponentType<IconProps>,
+      lucide: true,
+    },
+  },
+  {
+    id: "translate",
+    meta: {
+      title: "chat.card.translate.title" as MessageKey,
+      desc: "chat.card.translate.desc" as MessageKey,
+      prompt: "chat.card.translate.prompt" as MessageKey,
+      tone: "cyan",
+      Icon: Languages as ComponentType<IconProps>,
+      lucide: true,
+    },
+  },
 ];
 
 const ROW1 = ALL_CARDS.slice(0, 6);
@@ -105,8 +230,12 @@ function clampedMomentum(velocity: number): number {
   return Math.max(-18, Math.min(18, velocity * 0.025));
 }
 
-function MarqueeCard({ card, onPick, duplicate = false }: {
-  card: typeof ALL_CARDS[0];
+function MarqueeCard({
+  card,
+  onPick,
+  duplicate = false,
+}: {
+  card: (typeof ALL_CARDS)[0];
   onPick: (prompt: string, slotHints: string[]) => void;
   duplicate?: boolean;
 }) {
@@ -124,7 +253,10 @@ function MarqueeCard({ card, onPick, duplicate = false }: {
       }}
       tabIndex={duplicate ? -1 : undefined}
     >
-      <span className={`chat-welcome-card-icon ${meta.lucide ? "is-lucide" : ""}`} aria-hidden>
+      <span
+        className={`chat-welcome-card-icon ${meta.lucide ? "is-lucide" : ""}`}
+        aria-hidden
+      >
         <span className="chat-welcome-card-lens" />
         <span className="chat-welcome-card-glyph">
           <Icon width={meta.lucide ? 20 : 22} height={meta.lucide ? 20 : 22} />
@@ -134,12 +266,18 @@ function MarqueeCard({ card, onPick, duplicate = false }: {
         <span className="chat-welcome-card-title">{t(meta.title)}</span>
         <span className="chat-welcome-card-desc">{t(meta.desc)}</span>
       </span>
-      <span className="chat-welcome-card-arrow" aria-hidden>→</span>
+      <span className="chat-welcome-card-arrow" aria-hidden>
+        →
+      </span>
     </button>
   );
 }
 
-function MarqueeRow({ cards, direction, onPick }: {
+function MarqueeRow({
+  cards,
+  direction,
+  onPick,
+}: {
   cards: typeof ALL_CARDS;
   direction: "left" | "right";
   onPick: (prompt: string, slotHints: string[]) => void;
@@ -152,7 +290,10 @@ function MarqueeRow({ cards, direction, onPick }: {
             <MarqueeCard key={card.id} card={card} onPick={onPick} />
           ))}
         </div>
-        <div className="chat-welcome-marquee-group chat-welcome-marquee-copy" aria-hidden="true">
+        <div
+          className="chat-welcome-marquee-group chat-welcome-marquee-copy"
+          aria-hidden="true"
+        >
           {cards.map((card) => (
             <MarqueeCard key={card.id} card={card} onPick={onPick} duplicate />
           ))}
@@ -177,7 +318,9 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
 
   useEffect(() => () => dragReturnRef.current?.cancel(), []);
 
-  const handleLogoPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const handleLogoPointerMove = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
     const drag = dragRef.current;
     if (drag?.pointerId === event.pointerId && dragLayerRef.current) {
       const now = performance.now();
@@ -189,10 +332,9 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
       drag.lastX = event.clientX;
       drag.lastY = event.clientY;
       drag.lastAt = now;
-      drag.moved ||= Math.hypot(
-        event.clientX - drag.startX,
-        event.clientY - drag.startY,
-      ) > 5;
+      drag.moved ||=
+        Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >
+        5;
       dragLayerRef.current.style.transform = `translate3d(${drag.x}px, ${drag.y}px, 0)`;
       return;
     }
@@ -201,10 +343,22 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
     const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    event.currentTarget.style.setProperty("--welcome-tilt-x", `${(-y * 10).toFixed(2)}deg`);
-    event.currentTarget.style.setProperty("--welcome-tilt-y", `${(x * 12).toFixed(2)}deg`);
-    event.currentTarget.style.setProperty("--welcome-glare-x", `${Math.round((x + 0.5) * 100)}%`);
-    event.currentTarget.style.setProperty("--welcome-glare-y", `${Math.round((y + 0.5) * 100)}%`);
+    event.currentTarget.style.setProperty(
+      "--welcome-tilt-x",
+      `${(-y * 10).toFixed(2)}deg`,
+    );
+    event.currentTarget.style.setProperty(
+      "--welcome-tilt-y",
+      `${(x * 12).toFixed(2)}deg`,
+    );
+    event.currentTarget.style.setProperty(
+      "--welcome-glare-x",
+      `${Math.round((x + 0.5) * 100)}%`,
+    );
+    event.currentTarget.style.setProperty(
+      "--welcome-glare-y",
+      `${Math.round((y + 0.5) * 100)}%`,
+    );
   };
 
   const resetLogoTilt = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -268,7 +422,10 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
       [
         { transform: `translate3d(${drag.x}px, ${drag.y}px, 0)`, offset: 0 },
         { transform: `translate3d(${peakX}px, ${peakY}px, 0)`, offset: 0.16 },
-        { transform: `translate3d(${-drag.x * 0.07}px, ${-drag.y * 0.07}px, 0)`, offset: 0.72 },
+        {
+          transform: `translate3d(${-drag.x * 0.07}px, ${-drag.y * 0.07}px, 0)`,
+          offset: 0.72,
+        },
         { transform: "translate3d(0, 0, 0)", offset: 1 },
       ],
       {
@@ -277,10 +434,14 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
         fill: "both",
       },
     );
-    dragReturnRef.current.addEventListener("finish", () => {
-      layer.style.removeProperty("transform");
-      dragReturnRef.current = null;
-    }, { once: true });
+    dragReturnRef.current.addEventListener(
+      "finish",
+      () => {
+        layer.style.removeProperty("transform");
+        dragReturnRef.current = null;
+      },
+      { once: true },
+    );
   };
 
   const activateLogo = () => {
@@ -294,7 +455,11 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
   };
 
   return (
-    <div className="chat-empty chat-welcome" role="region" aria-label={brandLabel}>
+    <div
+      className="chat-empty chat-welcome"
+      role="region"
+      aria-label={brandLabel}
+    >
       <div className="chat-welcome-hero" aria-hidden>
         <span className="chat-welcome-orb" />
         <span className="chat-welcome-orb chat-welcome-orb--soft" />
@@ -325,11 +490,17 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
                 <WelcomeLogoEffect />
               </span>
               {pulseId > 0 ? (
-                <span key={pulseId} className="chat-welcome-mark-pulse" aria-hidden />
+                <span
+                  key={pulseId}
+                  className="chat-welcome-mark-pulse"
+                  aria-hidden
+                />
               ) : null}
               {burstId > 0 ? (
                 <span key={burstId} className="chat-welcome-burst" aria-hidden>
-                  {Array.from({ length: 12 }, (_, index) => <i key={index} />)}
+                  {Array.from({ length: 12 }, (_, index) => (
+                    <i key={index} />
+                  ))}
                 </span>
               ) : null}
             </span>
@@ -341,10 +512,14 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
         </div>
 
         <h2 className="chat-welcome-title">
-          <span className="chat-welcome-greeting">{t("chat.welcomeGreeting")}</span>{" "}
+          <span className="chat-welcome-greeting">
+            {t("chat.welcomeGreeting")}
+          </span>{" "}
           <span className="chat-welcome-title-brand">Astro</span>
         </h2>
-        <p id={subtitleId} className="chat-welcome-sub">{t("chat.welcomeSub")}</p>
+        <p id={subtitleId} className="chat-welcome-sub">
+          {t("chat.welcomeSub")}
+        </p>
       </div>
 
       <div className="chat-welcome-marquee-region">
@@ -365,7 +540,9 @@ export function ChatWelcome({ onPickCard, onActivate }: Props) {
           />
         </button>
 
-        <div className={`chat-welcome-marquee-wrap ${marqueePaused ? "is-paused" : ""}`}>
+        <div
+          className={`chat-welcome-marquee-wrap ${marqueePaused ? "is-paused" : ""}`}
+        >
           <MarqueeRow cards={ROW1} direction="right" onPick={onPickCard} />
           <MarqueeRow cards={ROW2} direction="left" onPick={onPickCard} />
         </div>

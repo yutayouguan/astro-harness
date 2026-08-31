@@ -144,7 +144,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
     reject,
     reload: reloadProposals,
   } = useEvolutionProposals(active);
-  const searchProgress = useEvolutionSearchProgress(active && running && runMode === "search");
+  const searchProgress = useEvolutionSearchProgress(
+    active && running && runMode === "search",
+  );
   const [branchMsg, setBranchMsg] = useState<string | null>(null);
   const [genDraft, setGenDraft] = useState("");
   const [varDraft, setVarDraft] = useState("");
@@ -204,7 +206,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
   const [curatorMaxEnqueueDraft, setCuratorMaxEnqueueDraft] = useState("");
   const [curatorMaxLlmDraft, setCuratorMaxLlmDraft] = useState("");
   const [section, setSection] = useState<EvoSection>("setup");
-  const [expandedProposals, setExpandedProposals] = useState<Set<string>>(() => new Set());
+  const [expandedProposals, setExpandedProposals] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
 
   const submitEval = () => {
@@ -223,11 +227,16 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       setEvalExpect("");
     });
   };
-  const [providersState, setProvidersState] = useState<ProvidersStateDto | null>(null);
+  const [providersState, setProvidersState] =
+    useState<ProvidersStateDto | null>(null);
   const [providersError, setProvidersError] = useState<string | null>(null);
-  const [editingRoute, setEditingRoute] = useState<EvolutionRouteId | null>(null);
+  const [editingRoute, setEditingRoute] = useState<EvolutionRouteId | null>(
+    null,
+  );
   const [selectedProviderId, setSelectedProviderId] = useState("");
-  const [modelsByProvider, setModelsByProvider] = useState<Record<string, ModelInfo[]>>({});
+  const [modelsByProvider, setModelsByProvider] = useState<
+    Record<string, ModelInfo[]>
+  >({});
   const [loadingModelsFor, setLoadingModelsFor] = useState<string | null>(null);
   const [maxBytesDraft, setMaxBytesDraft] = useState("");
   const [judgeDraft, setJudgeDraft] = useState("");
@@ -239,7 +248,10 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
 
   useEffect(() => {
     if (!active || (section !== "lab" && section !== "run")) return;
-    void invoke<InstalledSkill[]>("list_installed_skills", { agentId: null, scope: null })
+    void invoke<InstalledSkill[]>("list_installed_skills", {
+      agentId: null,
+      scope: null,
+    })
       .then(setInstalledSkills)
       .catch(() => setInstalledSkills([]));
   }, [active, section]);
@@ -249,7 +261,10 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       { value: "", label: t("evo.evalSkillGeneric") },
       ...installedSkills
         .filter((s) => s.enabled)
-        .map((s) => ({ value: s.id, label: s.name ? `${s.name} · ${s.id}` : s.id })),
+        .map((s) => ({
+          value: s.id,
+          label: s.name ? `${s.name} · ${s.id}` : s.id,
+        })),
     ],
     [installedSkills, t],
   );
@@ -259,7 +274,10 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       { value: "", label: t("evo.focusSkillAny") },
       ...installedSkills
         .filter((s) => s.enabled)
-        .map((s) => ({ value: s.id, label: s.name ? `${s.name} · ${s.id}` : s.id })),
+        .map((s) => ({
+          value: s.id,
+          label: s.name ? `${s.name} · ${s.id}` : s.id,
+        })),
     ],
     [installedSkills, t],
   );
@@ -274,7 +292,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
 
   const routeRows = useMemo(() => {
     const byId = new Map((settings?.routes ?? []).map((r) => [r.id, r]));
-    return ROUTES.map((r) => byId.get(r.id)).filter(Boolean) as EvolutionRouteDto[];
+    return ROUTES.map((r) => byId.get(r.id)).filter(
+      Boolean,
+    ) as EvolutionRouteDto[];
   }, [settings]);
 
   useEffect(() => {
@@ -286,7 +306,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       setPopDraft(String(settings.search.populationSize));
       setEvalExDraft(String(settings.search.maxEvalExamples));
       setLlmDraft(String(settings.search.maxLlmCalls));
-      setCooldownHDraft(String(Math.round(settings.search.postApprovalCooldownSecs / 3600)));
+      setCooldownHDraft(
+        String(Math.round(settings.search.postApprovalCooldownSecs / 3600)),
+      );
       setCooldownDraft(String(settings.auto.cooldownSecs));
       setMinDecDraft(String(settings.auto.minNewDecisions));
       setMaxRunsDraft(String(settings.auto.maxRunsPerDay));
@@ -306,15 +328,25 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
     const ms = Number.parseInt(minSignalsDraft, 10);
     const sw = Number.parseInt(signalWindowDraft, 10);
     const cooldown =
-      Number.isFinite(cd) && cd >= 60 && cd <= 86400 ? cd : settings.auto.cooldownSecs;
+      Number.isFinite(cd) && cd >= 60 && cd <= 86400
+        ? cd
+        : settings.auto.cooldownSecs;
     const minDec =
-      Number.isFinite(md) && md >= 1 && md <= 50 ? md : settings.auto.minNewDecisions;
+      Number.isFinite(md) && md >= 1 && md <= 50
+        ? md
+        : settings.auto.minNewDecisions;
     const maxRuns =
-      Number.isFinite(mr) && mr >= 1 && mr <= 24 ? mr : settings.auto.maxRunsPerDay;
+      Number.isFinite(mr) && mr >= 1 && mr <= 24
+        ? mr
+        : settings.auto.maxRunsPerDay;
     const minSignals =
-      Number.isFinite(ms) && ms >= 0 && ms <= 20 ? ms : settings.auto.minSkillFailureSignals;
+      Number.isFinite(ms) && ms >= 0 && ms <= 20
+        ? ms
+        : settings.auto.minSkillFailureSignals;
     const sigWindow =
-      Number.isFinite(sw) && sw >= 1 && sw <= 30 ? sw : settings.auto.signalWindowDays;
+      Number.isFinite(sw) && sw >= 1 && sw <= 30
+        ? sw
+        : settings.auto.signalWindowDays;
     if (
       cooldown !== settings.auto.cooldownSecs ||
       minDec !== settings.auto.minNewDecisions ||
@@ -322,9 +354,14 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       minSignals !== settings.auto.minSkillFailureSignals ||
       sigWindow !== settings.auto.signalWindowDays
     ) {
-      void setAuto(settings.auto.enabled, cooldown, minDec, maxRuns, minSignals, sigWindow).then(() =>
-        reloadAutoStatus(),
-      );
+      void setAuto(
+        settings.auto.enabled,
+        cooldown,
+        minDec,
+        maxRuns,
+        minSignals,
+        sigWindow,
+      ).then(() => reloadAutoStatus());
     } else {
       setCooldownDraft(String(settings.auto.cooldownSecs));
       setMinDecDraft(String(settings.auto.minNewDecisions));
@@ -332,7 +369,16 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       setMinSignalsDraft(String(settings.auto.minSkillFailureSignals));
       setSignalWindowDraft(String(settings.auto.signalWindowDays));
     }
-  }, [settings, cooldownDraft, minDecDraft, maxRunsDraft, minSignalsDraft, signalWindowDraft, setAuto, reloadAutoStatus]);
+  }, [
+    settings,
+    cooldownDraft,
+    minDecDraft,
+    maxRunsDraft,
+    minSignalsDraft,
+    signalWindowDraft,
+    setAuto,
+    reloadAutoStatus,
+  ]);
 
   const commitCuratorNums = useCallback(() => {
     if (!settings) return;
@@ -340,11 +386,17 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
     const me = Number.parseInt(curatorMaxEnqueueDraft, 10);
     const ml = Number.parseInt(curatorMaxLlmDraft, 10);
     const interval =
-      Number.isFinite(id) && id >= 1 && id <= 90 ? id : settings.curator.intervalDays;
+      Number.isFinite(id) && id >= 1 && id <= 90
+        ? id
+        : settings.curator.intervalDays;
     const maxEnqueue =
-      Number.isFinite(me) && me >= 1 && me <= 20 ? me : settings.curator.maxEnqueue;
+      Number.isFinite(me) && me >= 1 && me <= 20
+        ? me
+        : settings.curator.maxEnqueue;
     const maxLlm =
-      Number.isFinite(ml) && ml >= 1 && ml <= 20 ? ml : settings.curator.maxLlmCalls;
+      Number.isFinite(ml) && ml >= 1 && ml <= 20
+        ? ml
+        : settings.curator.maxLlmCalls;
     if (
       interval !== settings.curator.intervalDays ||
       maxEnqueue !== settings.curator.maxEnqueue ||
@@ -379,16 +431,29 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
     const e = Number.parseInt(evalExDraft, 10);
     const l = Number.parseInt(llmDraft, 10);
     const cdh = Number.parseInt(cooldownHDraft, 10);
-    const gen = Number.isFinite(g) && g >= 1 && g <= 6 ? g : settings.search.generations;
-    const vari = Number.isFinite(v) && v >= 1 && v <= 6 ? v : settings.search.variants;
-    const pop = Number.isFinite(p) && p >= 1 && p <= 8 ? p : settings.search.populationSize;
+    const gen =
+      Number.isFinite(g) && g >= 1 && g <= 6 ? g : settings.search.generations;
+    const vari =
+      Number.isFinite(v) && v >= 1 && v <= 6 ? v : settings.search.variants;
+    const pop =
+      Number.isFinite(p) && p >= 1 && p <= 8
+        ? p
+        : settings.search.populationSize;
     const evalEx =
-      Number.isFinite(e) && e >= 0 && e <= 32 ? e : settings.search.maxEvalExamples;
-    const llm = Number.isFinite(l) && l >= 0 && l <= 500 ? l : settings.search.maxLlmCalls;
-    const cdSecs = Number.isFinite(cdh) && cdh >= 0 && cdh <= 168
-      ? cdh * 3600
-      : settings.search.postApprovalCooldownSecs;
-    const currentCdH = Math.round(settings.search.postApprovalCooldownSecs / 3600);
+      Number.isFinite(e) && e >= 0 && e <= 32
+        ? e
+        : settings.search.maxEvalExamples;
+    const llm =
+      Number.isFinite(l) && l >= 0 && l <= 500
+        ? l
+        : settings.search.maxLlmCalls;
+    const cdSecs =
+      Number.isFinite(cdh) && cdh >= 0 && cdh <= 168
+        ? cdh * 3600
+        : settings.search.postApprovalCooldownSecs;
+    const currentCdH = Math.round(
+      settings.search.postApprovalCooldownSecs / 3600,
+    );
     if (
       gen !== settings.search.generations ||
       vari !== settings.search.variants ||
@@ -397,7 +462,15 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       llm !== settings.search.maxLlmCalls ||
       cdSecs !== settings.search.postApprovalCooldownSecs
     ) {
-      void setSearch(gen, vari, settings.search.crossover, pop, evalEx, llm, cdSecs);
+      void setSearch(
+        gen,
+        vari,
+        settings.search.crossover,
+        pop,
+        evalEx,
+        llm,
+        cdSecs,
+      );
     } else {
       setGenDraft(String(settings.search.generations));
       setVarDraft(String(settings.search.variants));
@@ -406,7 +479,16 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       setLlmDraft(String(settings.search.maxLlmCalls));
       setCooldownHDraft(String(currentCdH));
     }
-  }, [settings, genDraft, varDraft, popDraft, evalExDraft, llmDraft, cooldownHDraft, setSearch]);
+  }, [
+    settings,
+    genDraft,
+    varDraft,
+    popDraft,
+    evalExDraft,
+    llmDraft,
+    cooldownHDraft,
+    setSearch,
+  ]);
 
   const toggleCrossover = useCallback(() => {
     if (!settings) return;
@@ -426,9 +508,14 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
     [enabledProviders],
   );
 
-  const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
+  const selectedProvider = enabledProviders.find(
+    (p) => p.id === selectedProviderId,
+  );
   const selectedModels = selectedProvider
-    ? ensureDefaultModel(modelsByProvider[selectedProvider.id] ?? [], selectedProvider.model)
+    ? ensureDefaultModel(
+        modelsByProvider[selectedProvider.id] ?? [],
+        selectedProvider.model,
+      )
     : [];
   const modelOptions = selectedModels.map((m) => ({
     value: m.id,
@@ -455,17 +542,23 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
     try {
       let models: ModelInfo[] = [];
       try {
-        const cached = await invoke<ProviderModelsResult | null>("get_cached_provider_models", {
-          id: provider.id,
-        });
+        const cached = await invoke<ProviderModelsResult | null>(
+          "get_cached_provider_models",
+          {
+            id: provider.id,
+          },
+        );
         if (cached?.models?.length) models = cached.models;
       } catch {
         // cache miss expected for new providers
       }
       if (models.length === 0) {
-        const fresh = await invoke<ProviderModelsResult>("list_provider_models", {
-          id: provider.id,
-        });
+        const fresh = await invoke<ProviderModelsResult>(
+          "list_provider_models",
+          {
+            id: provider.id,
+          },
+        );
         models = fresh.models ?? [];
       }
       setModelsByProvider((prev) => ({
@@ -488,7 +581,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       const nextProviderId =
         row.provider !== "auto"
           ? row.provider
-          : providersState?.active_provider_id ?? enabledProviders[0]?.id ?? "";
+          : (providersState?.active_provider_id ??
+            enabledProviders[0]?.id ??
+            "");
       setEditingRoute(row.id);
       setSelectedProviderId(nextProviderId);
       const provider = enabledProviders.find((p) => p.id === nextProviderId);
@@ -520,7 +615,8 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
   const commitMaxBytes = useCallback(() => {
     if (!gates) return;
     const parsed = Number.parseInt(maxBytesDraft, 10);
-    const next = Number.isFinite(parsed) && parsed > 0 ? parsed : gates.maxSkillBytes;
+    const next =
+      Number.isFinite(parsed) && parsed > 0 ? parsed : gates.maxSkillBytes;
     if (next !== gates.maxSkillBytes) {
       void setGates(gates.runTests, next, gates.requirePr, gates.minJudgeScore);
     } else {
@@ -532,7 +628,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
     if (!gates) return;
     const parsed = Number.parseFloat(judgeDraft);
     const next =
-      Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : gates.minJudgeScore;
+      Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
+        ? parsed
+        : gates.minJudgeScore;
     if (Math.abs(next - gates.minJudgeScore) > 1e-6) {
       void setGates(gates.runTests, gates.maxSkillBytes, gates.requirePr, next);
     } else {
@@ -542,7 +640,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
 
   const evoOn = settings?.enabled ?? false;
   const pendingCount = proposals.length;
-  const adoptionPct = history ? Math.round(history.summary.adoptionRate * 100) : null;
+  const adoptionPct = history
+    ? Math.round(history.summary.adoptionRate * 100)
+    : null;
 
   return (
     <div className="evo-page aux-page" data-tone={tone ?? "amber"}>
@@ -603,7 +703,8 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
               value: id,
               label: t(labelKey),
               icon: <Icon size={14} strokeWidth={2.25} />,
-              count: id === "run" && pendingCount > 0 ? pendingCount : undefined,
+              count:
+                id === "run" && pendingCount > 0 ? pendingCount : undefined,
             }))}
           />
           <button
@@ -659,13 +760,17 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                     <div className="aux-task-main">
                       <div className="aux-task-titleline">
                         <h3>{t(route.labelKey)}</h3>
-                        <span className={`aux-route-pill${isAuto ? " is-auto" : ""}`}>
+                        <span
+                          className={`aux-route-pill${isAuto ? " is-auto" : ""}`}
+                        >
                           {isAuto ? t("aux.auto") : t("aux.custom")}
                         </span>
                       </div>
                       <p>{t(route.descKey)}</p>
                       <div className="aux-task-current">
-                        <span>{row?.displayLabel ?? t("aux.followPrimary")}</span>
+                        <span>
+                          {row?.displayLabel ?? t("aux.followPrimary")}
+                        </span>
                         {row?.unavailable && (
                           <span className="aux-warning">
                             <AlertTriangle size={13} />
@@ -688,7 +793,10 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                             value=""
                             options={modelOptions}
                             onChange={handleModelChange}
-                            disabled={!selectedProvider || loadingModelsFor === selectedProvider?.id}
+                            disabled={
+                              !selectedProvider ||
+                              loadingModelsFor === selectedProvider?.id
+                            }
                             placeholder={
                               loadingModelsFor === selectedProvider?.id
                                 ? t("aux.loadingModels")
@@ -792,7 +900,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 <div className="aux-task-main">
                   <div className="aux-task-titleline">
                     <h3>{t("evo.requirePr")}</h3>
-                    <span className="aux-route-pill">{t("evo.requirePrLocked")}</span>
+                    <span className="aux-route-pill">
+                      {t("evo.requirePrLocked")}
+                    </span>
                   </div>
                   <p>{t("evo.requirePrDesc")}</p>
                 </div>
@@ -893,7 +1003,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
               </article>
 
               {!settings?.enabled && (
-                <p className="aux-muted evo-inline-hint">{t("evo.autoNeedMaster")}</p>
+                <p className="aux-muted evo-inline-hint">
+                  {t("evo.autoNeedMaster")}
+                </p>
               )}
 
               <div className="evo-search-cfg evo-cfg-grid">
@@ -968,7 +1080,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                   />
                 </label>
               </div>
-              <p className="aux-muted evo-inline-hint">{t("evo.autoCostHint")}</p>
+              <p className="aux-muted evo-inline-hint">
+                {t("evo.autoCostHint")}
+              </p>
 
               {autoStatusError && (
                 <div className="aux-error">
@@ -1121,22 +1235,29 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                   />
                 </label>
               </div>
-              <p className="aux-muted evo-inline-hint">{t("evo.curatorCfgHint")}</p>
+              <p className="aux-muted evo-inline-hint">
+                {t("evo.curatorCfgHint")}
+              </p>
               {curatorStatus?.due && (
                 <div className="evo-auto-banner is-ready" role="status">
-                  {t("evo.curatorDueBanner")
-                    .replace(
-                      "{detail}",
-                      curatorStatus.skipMessage ?? t("evo.curatorDueDefault"),
-                    )}
+                  {t("evo.curatorDueBanner").replace(
+                    "{detail}",
+                    curatorStatus.skipMessage ?? t("evo.curatorDueDefault"),
+                  )}
                 </div>
               )}
               {curatorStatus && !curatorStatus.due && curatorStatus.enabled && (
                 <p className="aux-muted evo-inline-hint">
                   {curatorStatus.skipMessage ??
                     t("evo.curatorNotDue")
-                      .replace("{days}", String(curatorStatus.daysSinceLast ?? 0))
-                      .replace("{interval}", String(curatorStatus.intervalDays))}
+                      .replace(
+                        "{days}",
+                        String(curatorStatus.daysSinceLast ?? 0),
+                      )
+                      .replace(
+                        "{interval}",
+                        String(curatorStatus.intervalDays),
+                      )}
                 </p>
               )}
             </section>
@@ -1171,13 +1292,17 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 className="aux-action"
                 onClick={() => {
                   searchProgress.reset();
-                  void runSearch(searchFocusSkill.trim() || null).then(() => reloadHistory());
+                  void runSearch(searchFocusSkill.trim() || null).then(() =>
+                    reloadHistory(),
+                  );
                 }}
                 disabled={running || !settings?.enabled}
                 title={t("evo.searchRunHint")}
               >
                 <Dna size={15} />
-                {running && runMode === "search" ? t("evo.runningSearch") : t("evo.searchRun")}
+                {running && runMode === "search"
+                  ? t("evo.runningSearch")
+                  : t("evo.searchRun")}
               </button>
               {running && runMode === "search" && (
                 <button
@@ -1193,136 +1318,174 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
 
           {running && (
             <p className="aux-muted evo-running-banner" role="status">
-              {runMode === "search" ? t("evo.runningSearchHint") : t("evo.runningReflectHint")}
+              {runMode === "search"
+                ? t("evo.runningSearchHint")
+                : t("evo.runningReflectHint")}
             </p>
           )}
 
           {/* 搜索实时进度面板 */}
-          {searchProgress.events.length > 0 && (() => {
-            const ev = searchProgress.latest!;
-            const budgetPct = ev.budgetLimit > 0
-              ? Math.min(1, ev.budgetUsed / ev.budgetLimit)
-              : 0;
-            const bestByStep = searchProgress.events.map((e) => e.populationBest);
-            const chartW = 240;
-            const chartH = 56;
-            const maxScore = Math.max(...bestByStep, 0.01);
-            const points = bestByStep
-              .map((s, i) => {
-                const x = bestByStep.length === 1
-                  ? chartW / 2
-                  : (i / (bestByStep.length - 1)) * chartW;
-                const y = chartH - (s / maxScore) * (chartH - 4) - 2;
-                return `${x},${y}`;
-              })
-              .join(" ");
-            const lastX = bestByStep.length === 1
-              ? chartW / 2
-              : chartW;
+          {searchProgress.events.length > 0 &&
+            (() => {
+              const ev = searchProgress.latest!;
+              const budgetPct =
+                ev.budgetLimit > 0
+                  ? Math.min(1, ev.budgetUsed / ev.budgetLimit)
+                  : 0;
+              const bestByStep = searchProgress.events.map(
+                (e) => e.populationBest,
+              );
+              const chartW = 240;
+              const chartH = 56;
+              const maxScore = Math.max(...bestByStep, 0.01);
+              const points = bestByStep
+                .map((s, i) => {
+                  const x =
+                    bestByStep.length === 1
+                      ? chartW / 2
+                      : (i / (bestByStep.length - 1)) * chartW;
+                  const y = chartH - (s / maxScore) * (chartH - 4) - 2;
+                  return `${x},${y}`;
+                })
+                .join(" ");
+              const lastX = bestByStep.length === 1 ? chartW / 2 : chartW;
 
-            return (
-              <div className="evo-search-progress">
-                <div className="evo-progress-header">
-                  <span>
-                    {t("evo.searchProgressGen" as MessageKey)
-                      .replace("{seed}", String(ev.seedIndex + 1))
-                      .replace("{total}", String(ev.seedTotal))
-                      .replace("{gen}", String(ev.generation + 1))
-                      .replace("{gens}", String(ev.generationTotal))}
-                  </span>
-                  <strong>
-                    {t("evo.searchProgressBest" as MessageKey)
-                      .replace("{score}", ev.populationBest.toFixed(2))}
-                  </strong>
+              return (
+                <div className="evo-search-progress">
+                  <div className="evo-progress-header">
+                    <span>
+                      {t("evo.searchProgressGen" as MessageKey)
+                        .replace("{seed}", String(ev.seedIndex + 1))
+                        .replace("{total}", String(ev.seedTotal))
+                        .replace("{gen}", String(ev.generation + 1))
+                        .replace("{gens}", String(ev.generationTotal))}
+                    </span>
+                    <strong>
+                      {t("evo.searchProgressBest" as MessageKey).replace(
+                        "{score}",
+                        ev.populationBest.toFixed(2),
+                      )}
+                    </strong>
+                    {ev.budgetLimit > 0 && (
+                      <span>
+                        {t("evo.searchProgressBudget" as MessageKey)
+                          .replace("{used}", String(ev.budgetUsed))
+                          .replace("{limit}", String(ev.budgetLimit))}
+                      </span>
+                    )}
+                  </div>
+
                   {ev.budgetLimit > 0 && (
-                    <span>
-                      {t("evo.searchProgressBudget" as MessageKey)
-                        .replace("{used}", String(ev.budgetUsed))
-                        .replace("{limit}", String(ev.budgetLimit))}
-                    </span>
+                    <div className="evo-budget-bar">
+                      <span style={{ transform: `scaleX(${budgetPct})` }} />
+                    </div>
                   )}
-                </div>
 
-                {ev.budgetLimit > 0 && (
-                  <div className="evo-budget-bar">
-                    <span style={{ transform: `scaleX(${budgetPct})` }} />
-                  </div>
-                )}
-
-                <svg
-                  className="evo-progress-chart"
-                  viewBox={`0 0 ${chartW} ${chartH}`}
-                  preserveAspectRatio="none"
-                >
-                  <defs>
-                    <linearGradient id="evoProgressFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--tone)" stopOpacity="0.2" />
-                      <stop offset="100%" stopColor="var(--tone)" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  {bestByStep.length > 1 && (
-                    <polygon
-                      points={`0,${chartH} ${points} ${lastX},${chartH}`}
-                      fill="url(#evoProgressFill)"
-                    />
-                  )}
-                  <polyline points={points} />
-                  {/* 当代种群各个体散点 */}
-                  {ev.populationScores.map((s, i) => {
-                    const cy = chartH - (s / maxScore) * (chartH - 4) - 2;
-                    return (
-                      <circle
-                        key={i}
-                        cx={lastX}
-                        cy={cy}
-                        r={s === ev.populationBest ? 3.5 : 2.5}
-                        className={s === ev.populationBest ? "evo-best-dot" : "evo-pop-dot"}
+                  <svg
+                    className="evo-progress-chart"
+                    viewBox={`0 0 ${chartW} ${chartH}`}
+                    preserveAspectRatio="none"
+                  >
+                    <defs>
+                      <linearGradient
+                        id="evoProgressFill"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor="var(--tone)"
+                          stopOpacity="0.2"
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="var(--tone)"
+                          stopOpacity="0"
+                        />
+                      </linearGradient>
+                    </defs>
+                    {bestByStep.length > 1 && (
+                      <polygon
+                        points={`0,${chartH} ${points} ${lastX},${chartH}`}
+                        fill="url(#evoProgressFill)"
                       />
-                    );
-                  })}
-                </svg>
+                    )}
+                    <polyline points={points} />
+                    {/* 当代种群各个体散点 */}
+                    {ev.populationScores.map((s, i) => {
+                      const cy = chartH - (s / maxScore) * (chartH - 4) - 2;
+                      return (
+                        <circle
+                          key={i}
+                          cx={lastX}
+                          cy={cy}
+                          r={s === ev.populationBest ? 3.5 : 2.5}
+                          className={
+                            s === ev.populationBest
+                              ? "evo-best-dot"
+                              : "evo-pop-dot"
+                          }
+                        />
+                      );
+                    })}
+                  </svg>
 
-                <div className="evo-progress-counts">
-                  <span>
-                    {t("evo.searchProgressEvaluated" as MessageKey)
-                      .replace("{n}", String(ev.variantsEvaluated))}
-                  </span>
-                  {ev.gatedOut > 0 && (
+                  <div className="evo-progress-counts">
                     <span>
-                      {t("evo.searchProgressGated" as MessageKey)
-                        .replace("{n}", String(ev.gatedOut))}
+                      {t("evo.searchProgressEvaluated" as MessageKey).replace(
+                        "{n}",
+                        String(ev.variantsEvaluated),
+                      )}
                     </span>
+                    {ev.gatedOut > 0 && (
+                      <span>
+                        {t("evo.searchProgressGated" as MessageKey).replace(
+                          "{n}",
+                          String(ev.gatedOut),
+                        )}
+                      </span>
+                    )}
+                    {ev.judgedOut > 0 && (
+                      <span>
+                        {t("evo.searchProgressJudged" as MessageKey).replace(
+                          "{n}",
+                          String(ev.judgedOut),
+                        )}
+                      </span>
+                    )}
+                  </div>
+
+                  {ev.critiques.length > 0 && (
+                    <div className="evo-critique-pills">
+                      {ev.critiques.map((c, i) => (
+                        <span key={i} title={c}>
+                          {c}
+                        </span>
+                      ))}
+                    </div>
                   )}
-                  {ev.judgedOut > 0 && (
-                    <span>
-                      {t("evo.searchProgressJudged" as MessageKey)
-                        .replace("{n}", String(ev.judgedOut))}
-                    </span>
+                  {/* [P3] Runtime opportunity hints */}
+                  {ev.hints && ev.hints.length > 0 && (
+                    <div className="evo-critique-pills evo-hint-pills">
+                      {ev.hints.map((h, i) => (
+                        <span key={i} className="evo-hint-pill" title={h.focus}>
+                          [{h.tag}]
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
-
-                {ev.critiques.length > 0 && (
-                  <div className="evo-critique-pills">
-                    {ev.critiques.map((c, i) => (
-                      <span key={i} title={c}>{c}</span>
-                    ))}
-                  </div>
-                )}
-                {/* [P3] Runtime opportunity hints */}
-                {ev.hints && ev.hints.length > 0 && (
-                  <div className="evo-critique-pills evo-hint-pills">
-                    {ev.hints.map((h, i) => (
-                      <span key={i} className="evo-hint-pill" title={h.focus}>[{h.tag}]</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+              );
+            })()}
 
           <div className="evo-run-panel">
             <div className="evo-focus-row">
-              <label className="evo-focus-label" title={t("evo.focusSkillDesc")}>
+              <label
+                className="evo-focus-label"
+                title={t("evo.focusSkillDesc")}
+              >
                 {t("evo.focusSkill")}
                 <SelectMenu
                   value={searchFocusSkill}
@@ -1427,7 +1590,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 </button>
               </label>
             </div>
-            <p className="aux-muted evo-inline-hint">{t("evo.searchCostHint")}</p>
+            <p className="aux-muted evo-inline-hint">
+              {t("evo.searchCostHint")}
+            </p>
           </div>
 
           {lastSearch && (
@@ -1461,7 +1626,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
               {evoError}
             </div>
           )}
-          {branchMsg && <p className="aux-muted evo-inline-hint">{branchMsg}</p>}
+          {branchMsg && (
+            <p className="aux-muted evo-inline-hint">{branchMsg}</p>
+          )}
           {lastReport && (
             <p className="evo-run-summary">
               {t("evo.runSummary")
@@ -1485,7 +1652,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 const oldS = p.oldString ?? "";
                 const newS = p.newString ?? "";
                 const truncated =
-                  p.kind === "new_skill" || p.kind === "disable" || p.kind === "merge"
+                  p.kind === "new_skill" ||
+                  p.kind === "disable" ||
+                  p.kind === "merge"
                     ? newContent.length > 1200
                     : oldS.length > 400 || newS.length > 400;
                 const diffText =
@@ -1505,94 +1674,105 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                         ? t("evo.kindDisable")
                         : t("evo.kindMerge");
                 return (
-                <article className="aux-task-row evo-proposal-card" key={p.id}>
-                  <div className="aux-task-icon">
-                    {p.kind === "new_skill" ? (
-                      <FilePlus2 size={18} />
-                    ) : p.kind === "patch" ? (
-                      <Pencil size={18} />
-                    ) : (
-                      <ClipboardList size={18} />
-                    )}
-                  </div>
-                  <div className="aux-task-main">
-                    <div className="aux-task-titleline">
-                      <h3>{p.skillId}</h3>
-                      <span className="aux-route-pill">{kindLabel}</span>
-                      {p.judgeScore != null && (
-                        <span className="evo-score-pill">
-                          {t("evo.judgeScore")} {p.judgeScore.toFixed(2)}
-                        </span>
+                  <article
+                    className="aux-task-row evo-proposal-card"
+                    key={p.id}
+                  >
+                    <div className="aux-task-icon">
+                      {p.kind === "new_skill" ? (
+                        <FilePlus2 size={18} />
+                      ) : p.kind === "patch" ? (
+                        <Pencil size={18} />
+                      ) : (
+                        <ClipboardList size={18} />
                       )}
                     </div>
-                    {p.rationale && <p>{p.rationale}</p>}
-                    {p.judgeReason && <p className="aux-muted">{p.judgeReason}</p>}
-                    {p.judgeScore != null && (
-                      <div
-                        className="evo-score-bar"
-                        aria-hidden
-                        style={
-                          {
-                            "--score": String(Math.max(0, Math.min(1, p.judgeScore))),
-                          } as CSSProperties
-                        }
-                      >
-                        <span />
+                    <div className="aux-task-main">
+                      <div className="aux-task-titleline">
+                        <h3>{p.skillId}</h3>
+                        <span className="aux-route-pill">{kindLabel}</span>
+                        {p.judgeScore != null && (
+                          <span className="evo-score-pill">
+                            {t("evo.judgeScore")} {p.judgeScore.toFixed(2)}
+                          </span>
+                        )}
                       </div>
-                    )}
-                    <pre className="evo-proposal-diff">{diffText}</pre>
-                    {truncated && (
-                      <button
-                        type="button"
-                        className="aux-action aux-action-ghost evo-diff-toggle"
-                        onClick={() =>
-                          setExpandedProposals((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(p.id)) next.delete(p.id);
-                            else next.add(p.id);
-                            return next;
-                          })
-                        }
-                      >
-                        {expanded ? t("evo.collapseDiff") : t("evo.expandDiff")}
-                      </button>
-                    )}
-                  </div>
-                  <div className="aux-task-actions evo-proposal-actions">
-                    <button
-                      type="button"
-                      className="aux-action aux-action-ghost"
-                      onClick={() => void reject(p.id)}
-                    >
-                      <Trash2 size={15} />
-                      {t("evo.reject")}
-                    </button>
-                    {(p.kind === "new_skill" || p.kind === "patch") && (
+                      {p.rationale && <p>{p.rationale}</p>}
+                      {p.judgeReason && (
+                        <p className="aux-muted">{p.judgeReason}</p>
+                      )}
+                      {p.judgeScore != null && (
+                        <div
+                          className="evo-score-bar"
+                          aria-hidden
+                          style={
+                            {
+                              "--score": String(
+                                Math.max(0, Math.min(1, p.judgeScore)),
+                              ),
+                            } as CSSProperties
+                          }
+                        >
+                          <span />
+                        </div>
+                      )}
+                      <pre className="evo-proposal-diff">{diffText}</pre>
+                      {truncated && (
+                        <button
+                          type="button"
+                          className="aux-action aux-action-ghost evo-diff-toggle"
+                          onClick={() =>
+                            setExpandedProposals((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(p.id)) next.delete(p.id);
+                              else next.add(p.id);
+                              return next;
+                            })
+                          }
+                        >
+                          {expanded
+                            ? t("evo.collapseDiff")
+                            : t("evo.expandDiff")}
+                        </button>
+                      )}
+                    </div>
+                    <div className="aux-task-actions evo-proposal-actions">
                       <button
                         type="button"
                         className="aux-action aux-action-ghost"
-                        onClick={() =>
-                          void approveToBranch(p.id).then((m) => m && setBranchMsg(m))
-                        }
+                        onClick={() => void reject(p.id)}
                       >
-                        <GitBranch size={15} />
-                        {t("evo.approveToBranch")}
+                        <Trash2 size={15} />
+                        {t("evo.reject")}
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className="aux-action"
-                      onClick={() => void approve(p.id)}
-                    >
-                      <Check size={15} />
-                      {p.kind === "disable"
-                        ? t("evo.approveDisable")
-                        : p.kind === "merge"
-                          ? t("evo.approveMerge")
-                          : t("evo.approve")}
-                    </button>
-                  </div>
-                </article>
+                      {(p.kind === "new_skill" || p.kind === "patch") && (
+                        <button
+                          type="button"
+                          className="aux-action aux-action-ghost"
+                          onClick={() =>
+                            void approveToBranch(p.id).then(
+                              (m) => m && setBranchMsg(m),
+                            )
+                          }
+                        >
+                          <GitBranch size={15} />
+                          {t("evo.approveToBranch")}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="aux-action"
+                        onClick={() => void approve(p.id)}
+                      >
+                        <Check size={15} />
+                        {p.kind === "disable"
+                          ? t("evo.approveDisable")
+                          : p.kind === "merge"
+                            ? t("evo.approveMerge")
+                            : t("evo.approve")}
+                      </button>
+                    </div>
+                  </article>
                 );
               })}
             </div>
@@ -1616,16 +1796,22 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
 
           <div className="evo-stats">
             <div className="evo-stat evo-stat-primary">
-              <span className="evo-stat-num">{history?.summary.totalRuns ?? 0}</span>
+              <span className="evo-stat-num">
+                {history?.summary.totalRuns ?? 0}
+              </span>
               <span className="evo-stat-label">{t("evo.statRuns")}</span>
             </div>
             <div className="evo-stat">
-              <span className="evo-stat-num">{history?.summary.totalProposals ?? 0}</span>
+              <span className="evo-stat-num">
+                {history?.summary.totalProposals ?? 0}
+              </span>
               <span className="evo-stat-label">{t("evo.statProposals")}</span>
             </div>
             <div className="evo-stat">
               <span className="evo-stat-num">
-                {history ? `${Math.round(history.summary.adoptionRate * 100)}%` : "—"}
+                {history
+                  ? `${Math.round(history.summary.adoptionRate * 100)}%`
+                  : "—"}
               </span>
               <span className="evo-stat-label">{t("evo.statAdoption")}</span>
             </div>
@@ -1643,18 +1829,33 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                   ? `${history.summary.approved + history.summary.branched}/${history.summary.rejected}`
                   : "—"}
               </span>
-              <span className="evo-stat-label">{t("evo.statAdoptedRejected")}</span>
+              <span className="evo-stat-label">
+                {t("evo.statAdoptedRejected")}
+              </span>
             </div>
           </div>
 
           {history && history.summary.scoreTrend.length >= 2 && (
             <div className="evo-trend">
               <span className="evo-stat-label">{t("evo.trend")}</span>
-              <svg className="evo-spark" viewBox="0 0 160 36" preserveAspectRatio="none" aria-hidden>
+              <svg
+                className="evo-spark"
+                viewBox="0 0 160 36"
+                preserveAspectRatio="none"
+                aria-hidden
+              >
                 <defs>
                   <linearGradient id="evoSparkFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--tone)" stopOpacity="0.28" />
-                    <stop offset="100%" stopColor="var(--tone)" stopOpacity="0" />
+                    <stop
+                      offset="0%"
+                      stopColor="var(--tone)"
+                      stopOpacity="0.28"
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="var(--tone)"
+                      stopOpacity="0"
+                    />
                   </linearGradient>
                 </defs>
                 <polyline
@@ -1686,7 +1887,8 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
             <div className="aux-task-list evo-history-list">
               {history.recent.slice(0, 12).map((ev, i) => {
                 const type = String(ev.type ?? "");
-                const meta = ev.search_meta as Record<string, unknown> | undefined;
+                const meta = ev.search_meta as
+                  Record<string, unknown> | undefined;
                 const line =
                   type === "run"
                     ? meta && String(ev.mode ?? "") === "search"
@@ -1698,13 +1900,17 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                           .replace("{term}", String(meta.termination ?? ""))
                           .replace(
                             "{holdout}",
-                            meta.holdout_enabled ? t("evo.holdoutOn") : t("evo.holdoutOff"),
+                            meta.holdout_enabled
+                              ? t("evo.holdoutOn")
+                              : t("evo.holdoutOff"),
                           )
                       : `run · ${String(ev.mode ?? "")} · gen ${Number(ev.generated ?? 0)} → 提案 ${Number(
                           ev.proposals ?? 0,
                         )}`
                     : `${String(ev.outcome ?? "")} · ${String(ev.skill_id ?? "")}${
-                        ev.score != null ? ` · ${Number(ev.score).toFixed(2)}` : ""
+                        ev.score != null
+                          ? ` · ${Number(ev.score).toFixed(2)}`
+                          : ""
                       }`;
                 return (
                   <article
@@ -1712,7 +1918,11 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                     key={`${type}-${i}`}
                   >
                     <div className="evo-history-kind" aria-hidden>
-                      {type === "run" ? <Play size={14} /> : <Check size={14} />}
+                      {type === "run" ? (
+                        <Play size={14} />
+                      ) : (
+                        <Check size={14} />
+                      )}
                     </div>
                     <div className="aux-task-main">
                       <p>{line}</p>
@@ -1778,9 +1988,13 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                   className={`aux-action aux-action-ghost evo-verdict-btn${
                     evalVerdict === "pass" ? " is-pass" : " is-fail"
                   }`}
-                  onClick={() => setEvalVerdict(evalVerdict === "fail" ? "pass" : "fail")}
+                  onClick={() =>
+                    setEvalVerdict(evalVerdict === "fail" ? "pass" : "fail")
+                  }
                 >
-                  {evalVerdict === "fail" ? t("evo.evalVerdictFail") : t("evo.evalVerdictPass")}
+                  {evalVerdict === "fail"
+                    ? t("evo.evalVerdictFail")
+                    : t("evo.evalVerdictPass")}
                 </button>
                 <button
                   type="button"
@@ -1796,38 +2010,55 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
 
             <div className="evo-eval-import">
               <div className="evo-eval-import-head">
-                <p className="aux-muted evo-inline-hint">{t("evo.evalImportHint")}</p>
+                <p className="aux-muted evo-inline-hint">
+                  {t("evo.evalImportHint")}
+                </p>
                 <button
                   type="button"
                   className="aux-action aux-action-ghost"
                   onClick={() => void reloadImportCandidates()}
                   disabled={importLoading}
                 >
-                  {importLoading ? t("evo.evalImportScanning") : t("evo.evalImportScan")}
+                  {importLoading
+                    ? t("evo.evalImportScanning")
+                    : t("evo.evalImportScan")}
                 </button>
               </div>
               {importCandidates.length > 0 && (
                 <div className="aux-task-list evo-eval-import-list">
                   {importCandidates.map((cand) => (
-                    <article className="aux-task-row evo-compact-row" key={cand.sessionId}>
+                    <article
+                      className="aux-task-row evo-compact-row"
+                      key={cand.sessionId}
+                    >
                       <div className="aux-task-main">
                         <div className="aux-task-titleline">
                           <h3>{cand.task}</h3>
                           <span className="aux-route-pill is-auto">
-                            {t("evo.evalImportFailCount").replace("{n}", String(cand.failCount))}
+                            {t("evo.evalImportFailCount").replace(
+                              "{n}",
+                              String(cand.failCount),
+                            )}
                           </span>
                         </div>
                         {cand.expectations.length > 0 && (
-                          <p className="aux-muted">{cand.expectations.join(" · ")}</p>
+                          <p className="aux-muted">
+                            {cand.expectations.join(" · ")}
+                          </p>
                         )}
-                        <p className="aux-muted evo-eval-import-session">{cand.sessionId}</p>
+                        <p className="aux-muted evo-eval-import-session">
+                          {cand.sessionId}
+                        </p>
                       </div>
                       <div className="aux-task-actions">
                         <button
                           type="button"
                           className="aux-action"
                           onClick={() =>
-                            void importFromSession(cand.sessionId, evalSkill.trim() || null)
+                            void importFromSession(
+                              cand.sessionId,
+                              evalSkill.trim() || null,
+                            )
                           }
                         >
                           <Check size={15} />
@@ -1856,10 +2087,14 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                             ? t("evo.evalVerdictPass")
                             : t("evo.evalVerdictFail")}
                         </span>
-                        {ex.skillId && <span className="aux-route-pill">{ex.skillId}</span>}
+                        {ex.skillId && (
+                          <span className="aux-route-pill">{ex.skillId}</span>
+                        )}
                       </div>
                       {ex.expectations.length > 0 && (
-                        <p className="aux-muted">{ex.expectations.join(" · ")}</p>
+                        <p className="aux-muted">
+                          {ex.expectations.join(" · ")}
+                        </p>
                       )}
                     </div>
                     <div className="aux-task-actions">
@@ -1890,7 +2125,10 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 <p className="prefs-card-sub">{t("evo.curatorSub")}</p>
               </div>
               <div className="aux-list-head-actions">
-                <label className="evo-cfg-toggle" title={t("evo.curatorEnqueueDesc")}>
+                <label
+                  className="evo-cfg-toggle"
+                  title={t("evo.curatorEnqueueDesc")}
+                >
                   {t("evo.curatorEnqueue")}
                   <button
                     type="button"
@@ -1913,7 +2151,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                   disabled={curatorLoading}
                 >
                   <RefreshCw size={15} />
-                  {curatorLoading ? t("evo.curatorRunning") : t("evo.curatorRun")}
+                  {curatorLoading
+                    ? t("evo.curatorRunning")
+                    : t("evo.curatorRun")}
                 </button>
               </div>
             </div>
@@ -1926,9 +2166,15 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
             )}
 
             {curatorAutoNotice != null && (
-              <div className="evo-auto-banner is-ready evo-curator-notice" role="status">
+              <div
+                className="evo-auto-banner is-ready evo-curator-notice"
+                role="status"
+              >
                 <span>
-                  {t("evo.curatorAutoRefreshed").replace("{n}", curatorAutoNotice)}
+                  {t("evo.curatorAutoRefreshed").replace(
+                    "{n}",
+                    curatorAutoNotice,
+                  )}
                 </span>
                 <button
                   type="button"
@@ -1950,7 +2196,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
             )}
 
             {!curatorReport ? (
-              <p className="aux-muted evo-inline-hint">{t("evo.curatorEmpty")}</p>
+              <p className="aux-muted evo-inline-hint">
+                {t("evo.curatorEmpty")}
+              </p>
             ) : (
               <>
                 <p className="evo-run-summary">
@@ -1964,7 +2212,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 </p>
                 {(curatorReport.overlapClusters?.length ?? 0) > 0 && (
                   <div className="evo-curator-block">
-                    <h3 className="evo-curator-block-title">{t("evo.curatorOverlapTitle")}</h3>
+                    <h3 className="evo-curator-block-title">
+                      {t("evo.curatorOverlapTitle")}
+                    </h3>
                     <ul className="evo-curator-overlap">
                       {curatorReport.overlapClusters!.map((cluster, i) => (
                         <li key={`overlap-${i}`}>
@@ -1978,7 +2228,12 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 )}
                 {(() => {
                   const rows = [...(curatorReport.rows ?? [])]
-                    .filter((r) => r.stale || r.healthScore != null || r.healthReasons.length > 0)
+                    .filter(
+                      (r) =>
+                        r.stale ||
+                        r.healthScore != null ||
+                        r.healthReasons.length > 0,
+                    )
                     .sort((a, b) => {
                       const sa = a.healthScore ?? 2;
                       const sb = b.healthScore ?? 2;
@@ -1988,7 +2243,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                   if (rows.length === 0) return null;
                   return (
                     <div className="evo-curator-block">
-                      <h3 className="evo-curator-block-title">{t("evo.curatorHealthTitle")}</h3>
+                      <h3 className="evo-curator-block-title">
+                        {t("evo.curatorHealthTitle")}
+                      </h3>
                       <div className="aux-task-list">
                         {rows.map((row) => (
                           <article
@@ -2013,23 +2270,37 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                                 </span>
                                 {row.bytes != null && (
                                   <span className="aux-muted">
-                                    {t("evo.curatorBytes").replace("{n}", String(row.bytes))}
+                                    {t("evo.curatorBytes").replace(
+                                      "{n}",
+                                      String(row.bytes),
+                                    )}
                                   </span>
                                 )}
                                 {/* [P1] 快照回滚按钮 */}
                                 <button
                                   type="button"
                                   className="aux-action aux-action-ghost"
-                                  style={{ marginLeft: "auto", fontSize: "0.75rem" }}
+                                  style={{
+                                    marginLeft: "auto",
+                                    fontSize: "0.75rem",
+                                  }}
                                   title="恢复上一个版本快照"
                                   onClick={() => {
-                                    if (window.confirm(`回滚 ${row.skillId} 到上一个版本快照？`)) {
-                                      void invoke("restore_skill_snapshot", { skillId: row.skillId })
+                                    if (
+                                      window.confirm(
+                                        `回滚 ${row.skillId} 到上一个版本快照？`,
+                                      )
+                                    ) {
+                                      void invoke("restore_skill_snapshot", {
+                                        skillId: row.skillId,
+                                      })
                                         .then(() => {
                                           alert(`${row.skillId} 已回滚`);
                                           void reloadCurator();
                                         })
-                                        .catch((e: unknown) => alert(`回滚失败：${String(e)}`));
+                                        .catch((e: unknown) =>
+                                          alert(`回滚失败：${String(e)}`),
+                                        );
                                     }
                                   }}
                                 >
@@ -2040,7 +2311,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                                 <p className="aux-muted">{row.description}</p>
                               )}
                               {row.healthReasons.length > 0 && (
-                                <p className="aux-muted">{row.healthReasons.join(" · ")}</p>
+                                <p className="aux-muted">
+                                  {row.healthReasons.join(" · ")}
+                                </p>
                               )}
                             </div>
                           </article>
@@ -2056,7 +2329,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                     <button
                       type="button"
                       className="aux-action aux-action-ghost"
-                      onClick={() => void enqueueCurator().then(() => reloadProposals())}
+                      onClick={() =>
+                        void enqueueCurator().then(() => reloadProposals())
+                      }
                       disabled={curatorLoading}
                     >
                       <Inbox size={15} />
@@ -2067,7 +2342,10 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 {curatorReport.suggestions.length > 0 && (
                   <div className="aux-task-list">
                     {curatorReport.suggestions.map((s, i) => (
-                      <article className="aux-task-row evo-compact-row" key={`${s.kind}-${s.skillId}-${i}`}>
+                      <article
+                        className="aux-task-row evo-compact-row"
+                        key={`${s.kind}-${s.skillId}-${i}`}
+                      >
                         <div className="aux-task-main">
                           <div className="aux-task-titleline">
                             <h3>{s.skillId}</h3>
@@ -2123,16 +2401,27 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 {dspyError}
               </div>
             )}
-            {dspyMessage && <p className="aux-muted evo-inline-hint">{dspyMessage}</p>}
+            {dspyMessage && (
+              <p className="aux-muted evo-inline-hint">{dspyMessage}</p>
+            )}
 
             <div className="evo-dspy-status">
-              <span className={`evo-dspy-chip${dspyStatus?.pythonOk ? " is-ok" : ""}`}>
+              <span
+                className={`evo-dspy-chip${dspyStatus?.pythonOk ? " is-ok" : ""}`}
+              >
                 Python {dspyStatus?.pythonOk ? "OK" : "—"}
               </span>
-              <span className={`evo-dspy-chip${dspyStatus?.dspyInstalled ? " is-ok" : ""}`}>
-                DSPy {dspyStatus?.dspyInstalled ? t("evo.dspyReady") : t("evo.dspyMissing")}
+              <span
+                className={`evo-dspy-chip${dspyStatus?.dspyInstalled ? " is-ok" : ""}`}
+              >
+                DSPy{" "}
+                {dspyStatus?.dspyInstalled
+                  ? t("evo.dspyReady")
+                  : t("evo.dspyMissing")}
               </span>
-              <span className={`evo-dspy-chip${dspyStatus?.enabled ? " is-ok" : ""}`}>
+              <span
+                className={`evo-dspy-chip${dspyStatus?.enabled ? " is-ok" : ""}`}
+              >
                 {dspyStatus?.enabled ? t("evo.on") : t("evo.off")}
               </span>
             </div>
@@ -2183,7 +2472,9 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                       }
                     })
                   }
-                  disabled={dspyBusy || !dspySkill.trim() || !dspyStatus?.enabled}
+                  disabled={
+                    dspyBusy || !dspySkill.trim() || !dspyStatus?.enabled
+                  }
                 >
                   <Dna size={15} />
                   {dspyBusy ? t("evo.running") : t("evo.dspyRun")}

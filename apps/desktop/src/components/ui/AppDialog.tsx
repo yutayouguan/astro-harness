@@ -1,5 +1,12 @@
 /** 应用内确认 / 输入对话框（Portal 到 body，避免被侧栏裁切）。 */
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Info, Pencil } from "lucide-react";
 import { useDynamicOverlayLayer } from "../../hooks/ui/useDynamicOverlayLayer";
@@ -43,27 +50,24 @@ export default function AppDialog({
   const [closing, setClosing] = useState(false);
   const { layer, bringToFront } = useDynamicOverlayLayer(open);
 
-  const startClose = useCallback(
-    (action: () => void) => {
-      const bd = backdropRef.current;
-      if (!bd) {
-        action();
-        return;
-      }
-      setClosing(true);
-      let done = false;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        bd.removeEventListener("animationend", finish);
-        setClosing(false);
-        action();
-      };
-      bd.addEventListener("animationend", finish);
-      setTimeout(finish, 150);
-    },
-    [],
-  );
+  const startClose = useCallback((action: () => void) => {
+    const bd = backdropRef.current;
+    if (!bd) {
+      action();
+      return;
+    }
+    setClosing(true);
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      bd.removeEventListener("animationend", finish);
+      setClosing(false);
+      action();
+    };
+    bd.addEventListener("animationend", finish);
+    setTimeout(finish, 150);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -149,9 +153,13 @@ export default function AppDialog({
             {emphasis ? (
               <div className="app-dialog-emphasis">
                 {emphasisLabel ? (
-                  <span className="app-dialog-emphasis-label">{emphasisLabel}</span>
+                  <span className="app-dialog-emphasis-label">
+                    {emphasisLabel}
+                  </span>
                 ) : null}
-                <strong className="app-dialog-emphasis-value">{emphasis}</strong>
+                <strong className="app-dialog-emphasis-value">
+                  {emphasis}
+                </strong>
               </div>
             ) : null}
             {message ? <p>{message}</p> : null}

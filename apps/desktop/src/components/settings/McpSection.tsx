@@ -72,7 +72,12 @@ type AddTab = "json" | "form";
 /** 与宿主页面共用的内容布局 */
 type McpView = "gallery" | "list" | "detail";
 
-const MCP_APPROVAL_MODES: McpToolApprovalMode[] = ["auto", "prompt", "writes", "approve"];
+const MCP_APPROVAL_MODES: McpToolApprovalMode[] = [
+  "auto",
+  "prompt",
+  "writes",
+  "approve",
+];
 
 const MCP_TYPES: McpTransportType[] = ["stdio", "streamableHttp"];
 
@@ -221,7 +226,9 @@ function McpAddDialog({
           ...Object.values(envHttpHeaders),
           ...(bearerTokenEnvVar ? [bearerTokenEnvVar] : []),
         ];
-    if (referencedEnvVars.some((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) {
+    if (
+      referencedEnvVars.some((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
+    ) {
       setFormError(t("mcpTools.formEnvVarError"));
       return;
     }
@@ -238,7 +245,8 @@ function McpAddDialog({
         envVars: isStdio ? envVars : [],
         url: isStdio ? "" : formUrl.trim(),
         headers: isStdio ? {} : parseEnvOrHeaders(formHeaders),
-        bearerTokenEnvVar: !isStdio && bearerTokenEnvVar ? bearerTokenEnvVar : undefined,
+        bearerTokenEnvVar:
+          !isStdio && bearerTokenEnvVar ? bearerTokenEnvVar : undefined,
         envHttpHeaders: isStdio ? {} : envHttpHeaders,
         enabled: true,
         required: formRequired,
@@ -384,7 +392,9 @@ function McpAddDialog({
                         return {
                           value: type,
                           label: t(MCP_TYPE_LABEL[type]),
-                          icon: <Icon size={13} strokeWidth={2.2} aria-hidden />,
+                          icon: (
+                            <Icon size={13} strokeWidth={2.2} aria-hidden />
+                          ),
                         };
                       })}
                     />
@@ -532,8 +542,12 @@ function McpAddDialog({
                         <input
                           type="text"
                           value={formBearerTokenEnvVar}
-                          onChange={(e) => setFormBearerTokenEnvVar(e.target.value)}
-                          placeholder={t("mcpTools.formBearerTokenEnvVarPlaceholder")}
+                          onChange={(e) =>
+                            setFormBearerTokenEnvVar(e.target.value)
+                          }
+                          placeholder={t(
+                            "mcpTools.formBearerTokenEnvVarPlaceholder",
+                          )}
                           autoCapitalize="off"
                           autoCorrect="off"
                           spellCheck={false}
@@ -654,7 +668,10 @@ function McpServerCard({
   server: McpServer;
   onToggle: (id: string) => void;
   onToggleTool: (serverId: string, toolName: string) => void;
-  onSetServerApprovalMode: (serverId: string, mode: McpToolApprovalMode) => void;
+  onSetServerApprovalMode: (
+    serverId: string,
+    mode: McpToolApprovalMode,
+  ) => void;
   onSetToolApprovalMode: (
     serverId: string,
     toolName: string,
@@ -704,7 +721,9 @@ function McpServerCard({
         <div className="mcp-server-meta">
           <div className="mcp-server-title-row">
             <span className="mcp-server-name">{server.name}</span>
-            <span className="mcp-server-type">{t(MCP_TYPE_LABEL[server.type])}</span>
+            <span className="mcp-server-type">
+              {t(MCP_TYPE_LABEL[server.type])}
+            </span>
           </div>
           <code className="mcp-server-cmd">{serverEndpoint(server)}</code>
           <McpStatusBadge status={runtimeStatus} />
@@ -745,13 +764,19 @@ function McpServerCard({
           </span>
         ) : null}
         {envKeys.map((k) => (
-          <span key={`env-${k}`} className="mcp-server-env-key">{k}</span>
+          <span key={`env-${k}`} className="mcp-server-env-key">
+            {k}
+          </span>
         ))}
         {forwardedEnvKeys.map((k) => (
-          <span key={`env-ref-${k}`} className="mcp-server-env-key">{k} ← env</span>
+          <span key={`env-ref-${k}`} className="mcp-server-env-key">
+            {k} ← env
+          </span>
         ))}
         {headerKeys.map((k) => (
-          <span key={`hdr-${k}`} className="mcp-server-env-key">{k}</span>
+          <span key={`hdr-${k}`} className="mcp-server-env-key">
+            {k}
+          </span>
         ))}
         {server.bearerTokenEnvVar ? (
           <span className="mcp-server-env-key">
@@ -766,9 +791,13 @@ function McpServerCard({
       </div>
       <div className="mcp-approval-setting">
         <div>
-          <span className="mcp-tool-list-label">{t("mcpTools.approval.default")}</span>
+          <span className="mcp-tool-list-label">
+            {t("mcpTools.approval.default")}
+          </span>
           <span className="mcp-approval-hint">
-            {t(`mcpTools.approval.hint.${server.defaultToolsApprovalMode}` as MessageKey)}
+            {t(
+              `mcpTools.approval.hint.${server.defaultToolsApprovalMode}` as MessageKey,
+            )}
           </span>
         </div>
         <SelectMenu
@@ -833,10 +862,14 @@ function McpServerCard({
                         onSetToolApprovalMode(
                           server.id,
                           tool.name,
-                          value === "inherit" ? undefined : (value as McpToolApprovalMode),
+                          value === "inherit"
+                            ? undefined
+                            : (value as McpToolApprovalMode),
                         )
                       }
-                      aria-label={t("mcpTools.approval.tool", { name: tool.name })}
+                      aria-label={t("mcpTools.approval.tool", {
+                        name: tool.name,
+                      })}
                     />
                     <button
                       type="button"
@@ -864,7 +897,9 @@ function McpServerCard({
             onClick={() => onAuthenticate(server.id)}
           >
             <KeyRound size={13} strokeWidth={2.2} aria-hidden />
-            {authenticating ? t("mcpTools.authenticating") : t("mcpTools.authenticate")}
+            {authenticating
+              ? t("mcpTools.authenticating")
+              : t("mcpTools.authenticate")}
           </button>
         ) : null}
         {runtimeStatus?.authenticated ? (
@@ -945,7 +980,10 @@ function McpCatalogCard({
           <code className="mcp-server-cmd">
             {installable
               ? serverEndpoint(server)
-              : [server.catalogSource, server.catalogNativeCategory ?? server.category]
+              : [
+                  server.catalogSource,
+                  server.catalogNativeCategory ?? server.category,
+                ]
                   .filter(Boolean)
                   .join(" · ")}
           </code>
@@ -955,7 +993,9 @@ function McpCatalogCard({
       {installable && credentialNames.length > 0 ? (
         <div className="mcp-server-env">
           {credentialNames.map((name) => (
-            <span key={name} className="mcp-server-env-key">{name} ← env</span>
+            <span key={name} className="mcp-server-env-key">
+              {name} ← env
+            </span>
           ))}
         </div>
       ) : null}
@@ -983,7 +1023,9 @@ function McpCatalogCard({
             </span>
           ) : null}
           {server.catalogTags?.slice(0, 3).map((tag) => (
-            <span key={tag} className="mcp-server-env-key">{tag}</span>
+            <span key={tag} className="mcp-server-env-key">
+              {tag}
+            </span>
           ))}
         </div>
       ) : null}
@@ -1007,7 +1049,11 @@ function McpCatalogCard({
             disabled={installed || !installReady}
             onClick={() => onInstall(server)}
           >
-            {installed ? <Check size={13} aria-hidden /> : <Download size={13} aria-hidden />}
+            {installed ? (
+              <Check size={13} aria-hidden />
+            ) : (
+              <Download size={13} aria-hidden />
+            )}
             {installed ? t("mcpTools.installed") : t("mcpTools.install")}
           </button>
         ) : onInstallWithAgent ? (
@@ -1035,7 +1081,10 @@ function normalizeMcpSearchText(value: string): string {
     .trim();
 }
 
-function mcpServerSearchText(server: McpServer, categoryLabel?: string): string {
+function mcpServerSearchText(
+  server: McpServer,
+  categoryLabel?: string,
+): string {
   return normalizeMcpSearchText(
     [
       server.name,
@@ -1076,7 +1125,10 @@ type McpSectionOptions = {
   /** 公开目录分类；仅 builtin/public 视图使用。 */
   publicCategory?: McpPublicCategory;
   /** 将缺少可验证运行配置的目录条目交给 Agent 辅助安装。 */
-  onInstallWithAgent?: (prompt: string, contextToken?: ComposerContextToken) => void;
+  onInstallWithAgent?: (
+    prompt: string,
+    contextToken?: ComposerContextToken,
+  ) => void;
 };
 
 export function mcpAgentInstallPrompt(server: McpServer): string {
@@ -1084,9 +1136,10 @@ export function mcpAgentInstallPrompt(server: McpServer): string {
     ["上游", server.catalogUpstreamUrl],
     ["目录", server.catalogSourceUrl ?? server.websiteUrl],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-  const referenceText = references.length > 0
-    ? references.map(([label, url]) => `- ${label}：${url}`).join("\n")
-    : "- 暂无可靠链接，请先搜索并确认官方来源";
+  const referenceText =
+    references.length > 0
+      ? references.map(([label, url]) => `- ${label}：${url}`).join("\n")
+      : "- 暂无可靠链接，请先搜索并确认官方来源";
 
   return (
     "请帮我在 Astro 中安装并配置这个公开 MCP。\n\n" +
@@ -1158,7 +1211,8 @@ export function useMcpSection({
       server.catalogInstallable === false ||
       !configuredServersReady ||
       installedServerIds.has(server.id)
-    ) return;
+    )
+      return;
     addServers([installableMcpServer(server)]);
   };
   const installCatalogServerWithAgent = (server: McpServer) => {
@@ -1173,18 +1227,21 @@ export function useMcpSection({
         server.websiteUrl,
     });
   };
-  const queryTokens = normalizeMcpSearchText(rawQuery).split(" ").filter(Boolean);
+  const queryTokens = normalizeMcpSearchText(rawQuery)
+    .split(" ")
+    .filter(Boolean);
 
   const indexedServers = useMemo(
-    () => servers.map((server) => ({
-      server,
-      searchText: mcpServerSearchText(
+    () =>
+      servers.map((server) => ({
         server,
-        server.category
-          ? t(`plugins.mcpPublic.category.${server.category}` as MessageKey)
-          : undefined,
-      ),
-    })),
+        searchText: mcpServerSearchText(
+          server,
+          server.category
+            ? t(`plugins.mcpPublic.category.${server.category}` as MessageKey)
+            : undefined,
+        ),
+      })),
     [servers, t],
   );
 
@@ -1212,425 +1269,487 @@ export function useMcpSection({
 
   useEffect(() => {
     if (viewMode !== "detail") return;
-    if (selectedDetailId && filteredServers.some((s) => s.id === selectedDetailId)) {
+    if (
+      selectedDetailId &&
+      filteredServers.some((s) => s.id === selectedDetailId)
+    ) {
       return;
     }
     setSelectedDetailId(filteredServers[0]?.id ?? null);
   }, [viewMode, filteredServers, selectedDetailId]);
 
   const selectedServer = filteredServers.find((s) => s.id === selectedDetailId);
-  const selectedRuntimeStatus = !catalogMode && selectedServer
-    ? runtimeStatuses[selectedServer.id]
-    : undefined;
+  const selectedRuntimeStatus =
+    !catalogMode && selectedServer
+      ? runtimeStatuses[selectedServer.id]
+      : undefined;
 
   const content = (
     <>
-          {!catalogMode && runtimeStatusError ? (
-            <p className="mcp-runtime-error mcp-runtime-error--global" role="alert">
-              <ShieldAlert size={13} strokeWidth={2.2} aria-hidden />
-              <span>{t("mcpTools.statusUnavailable")}: {runtimeStatusError}</span>
-            </p>
-          ) : null}
-          {servers.length === 0 ? (
-            <div className="mcp-tools-empty">
-              <div className="mcp-tools-empty-icon" aria-hidden>
-                <McpIcon size={48} />
-              </div>
-              <p className="mcp-tools-empty-title">
-                {t(`plugins.mcpEmpty.${scope}.title` as MessageKey)}
-              </p>
-              <p className="mcp-tools-empty-hint">
-                {t(`plugins.mcpEmpty.${scope}.hint` as MessageKey)}
-              </p>
-            </div>
-          ) : filteredServers.length === 0 ? (
-            <p className="agent-tools-empty">
-              {scope === "builtin" && publicCategory
-                ? t("plugins.mcpPublic.categoryEmpty")
-                : t("agentTools.empty")}
-            </p>
-          ) : viewMode === "detail" ? (
-            <div className="tools-detail">
-              <div className="tools-detail-list" role="list">
-                {filteredServers.map((server) => (
-                  <button
-                    key={server.id}
-                    type="button"
-                    role="listitem"
-                    className={`tools-detail-item ${selectedDetailId === server.id ? "is-selected" : ""} ${catalogMode || server.enabled ? "" : "is-disabled"}`}
-                    onClick={() => setSelectedDetailId(server.id)}
-                  >
-                    <span className="tools-detail-item-title">{server.name}</span>
-                    <span className="tools-detail-item-meta">
-                      {!catalogMode && runtimeStatuses[server.id]
-                        ? t(MCP_STATUS_LABEL[runtimeStatuses[server.id]!.status])
-                        : server.catalogInstallable === false
-                          ? t("plugins.mcpPublic.discoveryOnly")
-                          : t(MCP_TYPE_LABEL[server.type])}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className="tools-detail-panel">
-                {selectedServer ? (
-                  <>
-                    <header className="tools-detail-head">
-                      <div>
-                        <h3 className="tools-detail-title">{selectedServer.name}</h3>
-                        {!catalogMode ? (
+      {!catalogMode && runtimeStatusError ? (
+        <p className="mcp-runtime-error mcp-runtime-error--global" role="alert">
+          <ShieldAlert size={13} strokeWidth={2.2} aria-hidden />
+          <span>
+            {t("mcpTools.statusUnavailable")}: {runtimeStatusError}
+          </span>
+        </p>
+      ) : null}
+      {servers.length === 0 ? (
+        <div className="mcp-tools-empty">
+          <div className="mcp-tools-empty-icon" aria-hidden>
+            <McpIcon size={48} />
+          </div>
+          <p className="mcp-tools-empty-title">
+            {t(`plugins.mcpEmpty.${scope}.title` as MessageKey)}
+          </p>
+          <p className="mcp-tools-empty-hint">
+            {t(`plugins.mcpEmpty.${scope}.hint` as MessageKey)}
+          </p>
+        </div>
+      ) : filteredServers.length === 0 ? (
+        <p className="agent-tools-empty">
+          {scope === "builtin" && publicCategory
+            ? t("plugins.mcpPublic.categoryEmpty")
+            : t("agentTools.empty")}
+        </p>
+      ) : viewMode === "detail" ? (
+        <div className="tools-detail">
+          <div className="tools-detail-list" role="list">
+            {filteredServers.map((server) => (
+              <button
+                key={server.id}
+                type="button"
+                role="listitem"
+                className={`tools-detail-item ${selectedDetailId === server.id ? "is-selected" : ""} ${catalogMode || server.enabled ? "" : "is-disabled"}`}
+                onClick={() => setSelectedDetailId(server.id)}
+              >
+                <span className="tools-detail-item-title">{server.name}</span>
+                <span className="tools-detail-item-meta">
+                  {!catalogMode && runtimeStatuses[server.id]
+                    ? t(MCP_STATUS_LABEL[runtimeStatuses[server.id]!.status])
+                    : server.catalogInstallable === false
+                      ? t("plugins.mcpPublic.discoveryOnly")
+                      : t(MCP_TYPE_LABEL[server.type])}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="tools-detail-panel">
+            {selectedServer ? (
+              <>
+                <header className="tools-detail-head">
+                  <div>
+                    <h3 className="tools-detail-title">
+                      {selectedServer.name}
+                    </h3>
+                    {!catalogMode ? (
+                      <button
+                        type="button"
+                        role="switch"
+                        className="tool-toggle"
+                        aria-checked={selectedServer.enabled}
+                        onClick={() => toggleServer(selectedServer.id)}
+                      >
+                        <span className="tool-toggle-thumb" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mcp-server-actions">
+                    {catalogMode ? (
+                      <>
+                        {selectedServer.websiteUrl ? (
                           <button
                             type="button"
-                            role="switch"
-                            className="tool-toggle"
-                            aria-checked={selectedServer.enabled}
-                            onClick={() => toggleServer(selectedServer.id)}
+                            className="mcp-btn-ghost"
+                            onClick={() =>
+                              void open(selectedServer.websiteUrl!)
+                            }
                           >
-                            <span className="tool-toggle-thumb" />
+                            <ExternalLink size={13} aria-hidden />
+                            {selectedServer.catalogInstallable === false
+                              ? t("plugins.mcpPublic.viewSource")
+                              : t("mcpTools.documentation")}
                           </button>
                         ) : null}
-                      </div>
-                      <div className="mcp-server-actions">
-                        {catalogMode ? (
-                          <>
-                            {selectedServer.websiteUrl ? (
-                              <button
-                                type="button"
-                                className="mcp-btn-ghost"
-                                onClick={() => void open(selectedServer.websiteUrl!)}
-                              >
-                                <ExternalLink size={13} aria-hidden />
-                                {selectedServer.catalogInstallable === false
-                                  ? t("plugins.mcpPublic.viewSource")
-                                  : t("mcpTools.documentation")}
-                              </button>
-                            ) : null}
-                            {selectedServer.catalogInstallable !== false ? (
-                              <button
-                                type="button"
-                                className="mcp-btn-primary mcp-install-btn"
-                                disabled={
-                                  !configuredServersReady || installedServerIds.has(selectedServer.id)
-                                }
-                                onClick={() => installCatalogServer(selectedServer)}
-                              >
-                                {installedServerIds.has(selectedServer.id)
-                                  ? <Check size={13} aria-hidden />
-                                  : <Download size={13} aria-hidden />}
-                                {installedServerIds.has(selectedServer.id)
-                                  ? t("mcpTools.installed")
-                                  : t("mcpTools.install")}
-                              </button>
-                            ) : onInstallWithAgent ? (
-                              <button
-                                type="button"
-                                className="mcp-btn-primary mcp-install-btn"
-                                onClick={() => installCatalogServerWithAgent(selectedServer)}
-                              >
-                                <Bot size={13} strokeWidth={2.25} aria-hidden />
-                                {t("plugins.mcpPublic.installWithAgent")}
-                              </button>
-                            ) : null}
-                          </>
-                        ) : (
-                          <>
-                            {selectedRuntimeStatus?.status === "auth-required" ? (
-                              <button
-                                type="button"
-                                className="mcp-btn-ghost"
-                                disabled={authenticatingServerIds.has(selectedServer.id)}
-                                onClick={() => void authenticateServer(selectedServer.id)}
-                              >
-                                <KeyRound size={13} strokeWidth={2.2} aria-hidden />
-                                {authenticatingServerIds.has(selectedServer.id)
-                                  ? t("mcpTools.authenticating")
-                                  : t("mcpTools.authenticate")}
-                              </button>
-                            ) : null}
-                            {selectedRuntimeStatus?.authenticated ? (
-                              <button
-                                type="button"
-                                className="mcp-btn-ghost"
-                                disabled={authenticatingServerIds.has(selectedServer.id)}
-                                onClick={() => void logoutServer(selectedServer.id)}
-                              >
-                                <KeyRound size={13} strokeWidth={2.2} aria-hidden />
-                                {authenticatingServerIds.has(selectedServer.id)
-                                  ? t("mcpTools.loggingOut")
-                                  : t("mcpTools.logout")}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="mcp-btn-ghost mcp-reconnect-btn"
-                              disabled={reconnectingServerIds.has(selectedServer.id)}
-                              onClick={() => void reconnectServer(selectedServer.id)}
-                            >
-                              <IconRefresh
-                                width={13}
-                                height={13}
-                                className={
-                                  reconnectingServerIds.has(selectedServer.id)
-                                    ? "is-spin"
-                                    : undefined
-                                }
-                              />
-                              {reconnectingServerIds.has(selectedServer.id)
-                                ? t("mcpTools.reconnecting")
-                                : t("mcpTools.reconnect")}
-                            </button>
-                            <button
-                              type="button"
-                              className="mcp-server-remove"
-                              onClick={() => removeServer(selectedServer.id)}
-                              aria-label={t("mcpTools.remove")}
-                            >
-                              <Trash2 size={13} strokeWidth={2.25} aria-hidden />
-                              {t("mcpTools.remove")}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </header>
-                    {selectedServer.description && (
-                      <section className="tools-detail-section">
-                        <h4 className="tools-detail-label">
-                          <FileText size={15} strokeWidth={2.25} aria-hidden />
-                          {t("tools.detail.description")}
-                        </h4>
-                        <p className="tools-detail-body">
-                          {selectedServer.description}
-                        </p>
-                      </section>
-                    )}
-                    {!catalogMode && selectedRuntimeStatus?.error ? (
-                      <p className="mcp-runtime-error" role="alert">
-                        <ShieldAlert size={13} strokeWidth={2.2} aria-hidden />
-                        <span>{selectedRuntimeStatus.error}</span>
-                      </p>
-                    ) : null}
-                    <McpRetryNote status={selectedRuntimeStatus} />
-                    <section className="tools-detail-meta-grid">
-                      {!catalogMode ? (
-                        <div className="tools-detail-meta-item">
-                          <span className="tools-detail-label">
-                            {t("mcpTools.runtimeStatus")}
-                          </span>
-                          {selectedRuntimeStatus ? (
-                            <McpStatusBadge status={selectedRuntimeStatus} />
-                          ) : (
-                            <span>{t("mcpTools.status.loading")}</span>
-                          )}
-                        </div>
-                      ) : null}
-                      {selectedServer.catalogInstallable === false ? (
-                        <>
-                          <div className="tools-detail-meta-item">
-                            <span className="tools-detail-label">{t("plugins.mcpScopes")}</span>
-                            <span>{selectedServer.catalogSource}</span>
-                          </div>
-                          <div className="tools-detail-meta-item">
-                            <span className="tools-detail-label">{t("tools.detail.type")}</span>
-                            <span>{selectedServer.catalogNativeCategory ?? selectedServer.category}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="tools-detail-meta-item">
-                            <span className="tools-detail-label">
-                              {t("tools.detail.type")}
-                            </span>
-                            <span>{t(MCP_TYPE_LABEL[selectedServer.type])}</span>
-                          </div>
-                          <div className="tools-detail-meta-item">
-                            <span className="tools-detail-label">
-                              {t("tools.detail.endpoint")}
-                            </span>
-                            <code>{serverEndpoint(selectedServer)}</code>
-                          </div>
-                          <div className="tools-detail-meta-item">
-                            <span className="tools-detail-label">
-                              {t("mcpTools.startupTimeout")}
-                            </span>
-                            <span>{selectedServer.startupTimeoutSecs}s</span>
-                          </div>
-                          <div className="tools-detail-meta-item">
-                            <span className="tools-detail-label">
-                              {t("mcpTools.toolTimeout")}
-                            </span>
-                            <span>{selectedServer.toolTimeoutSecs}s</span>
-                          </div>
-                          <div className="tools-detail-meta-item">
-                            <span className="tools-detail-label">
-                              {t("mcpTools.required")}
-                            </span>
-                            <span>
-                              {selectedServer.required
-                                ? t("mcpTools.enabled")
-                                : t("mcpTools.disabled")}
-                            </span>
-                          </div>
-                        </>
-                      )}
-                      {selectedServer.cwd ? (
-                        <div className="tools-detail-meta-item">
-                          <span className="tools-detail-label">{t("mcpTools.cwd")}</span>
-                          <code>{selectedServer.cwd}</code>
-                        </div>
-                      ) : null}
-                    </section>
-                    {!catalogMode ? <section className="tools-detail-section">
-                      <h4 className="tools-detail-label">
-                        <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
-                        {t("mcpTools.approval.default")}
-                      </h4>
-                      <SelectMenu
-                        size="sm"
-                        value={selectedServer.defaultToolsApprovalMode}
-                        options={MCP_APPROVAL_MODES.map((mode) => ({
-                          value: mode,
-                          label: t(`mcpTools.approval.${mode}` as MessageKey),
-                        }))}
-                        onChange={(value) =>
-                          setServerApprovalMode(
-                            selectedServer.id,
-                            value as McpToolApprovalMode,
-                          )
-                        }
-                        aria-label={t("mcpTools.approval.default")}
-                      />
-                      <p className="tools-detail-body">
-                        {t(
-                          `mcpTools.approval.hint.${selectedServer.defaultToolsApprovalMode}` as MessageKey,
-                        )}
-                      </p>
-                    </section> : null}
-                    {!catalogMode ? <section className="tools-detail-section">
-                      <div className="mcp-tool-list-head">
-                        <h4 className="tools-detail-label">{t("mcpTools.tools")}</h4>
+                        {selectedServer.catalogInstallable !== false ? (
+                          <button
+                            type="button"
+                            className="mcp-btn-primary mcp-install-btn"
+                            disabled={
+                              !configuredServersReady ||
+                              installedServerIds.has(selectedServer.id)
+                            }
+                            onClick={() => installCatalogServer(selectedServer)}
+                          >
+                            {installedServerIds.has(selectedServer.id) ? (
+                              <Check size={13} aria-hidden />
+                            ) : (
+                              <Download size={13} aria-hidden />
+                            )}
+                            {installedServerIds.has(selectedServer.id)
+                              ? t("mcpTools.installed")
+                              : t("mcpTools.install")}
+                          </button>
+                        ) : onInstallWithAgent ? (
+                          <button
+                            type="button"
+                            className="mcp-btn-primary mcp-install-btn"
+                            onClick={() =>
+                              installCatalogServerWithAgent(selectedServer)
+                            }
+                          >
+                            <Bot size={13} strokeWidth={2.25} aria-hidden />
+                            {t("plugins.mcpPublic.installWithAgent")}
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        {selectedRuntimeStatus?.status === "auth-required" ? (
+                          <button
+                            type="button"
+                            className="mcp-btn-ghost"
+                            disabled={authenticatingServerIds.has(
+                              selectedServer.id,
+                            )}
+                            onClick={() =>
+                              void authenticateServer(selectedServer.id)
+                            }
+                          >
+                            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                            {authenticatingServerIds.has(selectedServer.id)
+                              ? t("mcpTools.authenticating")
+                              : t("mcpTools.authenticate")}
+                          </button>
+                        ) : null}
+                        {selectedRuntimeStatus?.authenticated ? (
+                          <button
+                            type="button"
+                            className="mcp-btn-ghost"
+                            disabled={authenticatingServerIds.has(
+                              selectedServer.id,
+                            )}
+                            onClick={() => void logoutServer(selectedServer.id)}
+                          >
+                            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                            {authenticatingServerIds.has(selectedServer.id)
+                              ? t("mcpTools.loggingOut")
+                              : t("mcpTools.logout")}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
-                          className="mcp-btn-ghost mcp-refresh-btn"
-                          disabled={refreshing}
-                          onClick={() => void refreshTools(selectedServer.id)}
+                          className="mcp-btn-ghost mcp-reconnect-btn"
+                          disabled={reconnectingServerIds.has(
+                            selectedServer.id,
+                          )}
+                          onClick={() =>
+                            void reconnectServer(selectedServer.id)
+                          }
                         >
                           <IconRefresh
-                            width={14}
-                            height={14}
-                            className={refreshing ? "is-spin" : undefined}
+                            width={13}
+                            height={13}
+                            className={
+                              reconnectingServerIds.has(selectedServer.id)
+                                ? "is-spin"
+                                : undefined
+                            }
                           />
-                          {refreshing ? t("mcpTools.refreshing") : t("mcpTools.refresh")}
+                          {reconnectingServerIds.has(selectedServer.id)
+                            ? t("mcpTools.reconnecting")
+                            : t("mcpTools.reconnect")}
                         </button>
-                      </div>
-                      {(selectedServer.discovered.length > 0
-                        ? selectedServer.discovered
-                        : Object.keys(selectedServer.tools).map((name) => ({
-                            name,
-                            description: "",
-                            readOnlyHint: undefined,
-                            destructiveHint: undefined,
-                            openWorldHint: undefined,
-                          }))
-                      ).map((tool) => {
-                        const on = isMcpToolEnabled(selectedServer, tool.name);
-                        return (
-                          <div key={tool.name} className="mcp-tool-row">
-                            <div className="mcp-tool-meta">
-                              <code className="mcp-tool-name">{tool.name}</code>
-                              {tool.description ? (
-                                <span className="mcp-tool-desc">{tool.description}</span>
-                              ) : null}
-                              <span className="mcp-tool-hints">
-                                {tool.readOnlyHint === true ? (
-                                  <span>{t("mcpTools.annotation.readOnly")}</span>
-                                ) : null}
-                                {tool.destructiveHint === true ? (
-                                  <span>{t("mcpTools.annotation.destructive")}</span>
-                                ) : null}
-                                {tool.openWorldHint === true ? (
-                                  <span>{t("mcpTools.annotation.openWorld")}</span>
-                                ) : null}
-                              </span>
-                            </div>
-                            <div className="mcp-tool-controls">
-                              <SelectMenu
-                                size="sm"
-                                value={selectedServer.toolApprovalModes[tool.name] ?? "inherit"}
-                                options={[
-                                  { value: "inherit", label: t("mcpTools.approval.inherit") },
-                                  ...MCP_APPROVAL_MODES.map((mode) => ({
-                                    value: mode,
-                                    label: t(`mcpTools.approval.${mode}` as MessageKey),
-                                  })),
-                                ]}
-                                disabled={!selectedServer.enabled}
-                                onChange={(value) =>
-                                  setToolApprovalMode(
-                                    selectedServer.id,
-                                    tool.name,
-                                    value === "inherit"
-                                      ? undefined
-                                      : (value as McpToolApprovalMode),
-                                  )
-                                }
-                                aria-label={t("mcpTools.approval.tool", { name: tool.name })}
-                              />
-                              <button
-                                type="button"
-                                role="switch"
-                                className="tool-toggle"
-                                aria-checked={on}
-                                disabled={!selectedServer.enabled}
-                                onClick={() => toggleTool(selectedServer.id, tool.name)}
-                              >
-                                <span className="tool-toggle-thumb" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </section> : null}
-                  </>
-                ) : (
-                  <p className="agent-tools-empty">{t("tools.detail.selectHint")}</p>
+                        <button
+                          type="button"
+                          className="mcp-server-remove"
+                          onClick={() => removeServer(selectedServer.id)}
+                          aria-label={t("mcpTools.remove")}
+                        >
+                          <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+                          {t("mcpTools.remove")}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </header>
+                {selectedServer.description && (
+                  <section className="tools-detail-section">
+                    <h4 className="tools-detail-label">
+                      <FileText size={15} strokeWidth={2.25} aria-hidden />
+                      {t("tools.detail.description")}
+                    </h4>
+                    <p className="tools-detail-body">
+                      {selectedServer.description}
+                    </p>
+                  </section>
                 )}
-              </div>
-            </div>
-          ) : (
-            <div className={`mcp-server-grid is-${viewMode}`}>
-              {filteredServers.map((s) => (
-                catalogMode ? (
-                  <McpCatalogCard
-                    key={s.id}
-                    server={s}
-                    installed={installedServerIds.has(s.id)}
-                    installReady={configuredServersReady}
-                    onInstall={installCatalogServer}
-                    onInstallWithAgent={
-                      onInstallWithAgent ? installCatalogServerWithAgent : undefined
-                    }
-                  />
-                ) : (
-                  <McpServerCard
-                    key={s.id}
-                    server={s}
-                    onToggle={toggleServer}
-                    onToggleTool={toggleTool}
-                    onSetServerApprovalMode={setServerApprovalMode}
-                    onSetToolApprovalMode={setToolApprovalMode}
-                    onRefresh={(id) => void refreshTools(id)}
-                    onRemove={removeServer}
-                    onReconnect={(id) => void reconnectServer(id)}
-                    onAuthenticate={(id) => void authenticateServer(id)}
-                    onLogout={(id) => void logoutServer(id)}
-                    refreshing={refreshing}
-                    reconnecting={reconnectingServerIds.has(s.id)}
-                    authenticating={authenticatingServerIds.has(s.id)}
-                    runtimeStatus={runtimeStatuses[s.id]}
-                  />
-                )
-              ))}
-            </div>
+                {!catalogMode && selectedRuntimeStatus?.error ? (
+                  <p className="mcp-runtime-error" role="alert">
+                    <ShieldAlert size={13} strokeWidth={2.2} aria-hidden />
+                    <span>{selectedRuntimeStatus.error}</span>
+                  </p>
+                ) : null}
+                <McpRetryNote status={selectedRuntimeStatus} />
+                <section className="tools-detail-meta-grid">
+                  {!catalogMode ? (
+                    <div className="tools-detail-meta-item">
+                      <span className="tools-detail-label">
+                        {t("mcpTools.runtimeStatus")}
+                      </span>
+                      {selectedRuntimeStatus ? (
+                        <McpStatusBadge status={selectedRuntimeStatus} />
+                      ) : (
+                        <span>{t("mcpTools.status.loading")}</span>
+                      )}
+                    </div>
+                  ) : null}
+                  {selectedServer.catalogInstallable === false ? (
+                    <>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("plugins.mcpScopes")}
+                        </span>
+                        <span>{selectedServer.catalogSource}</span>
+                      </div>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("tools.detail.type")}
+                        </span>
+                        <span>
+                          {selectedServer.catalogNativeCategory ??
+                            selectedServer.category}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("tools.detail.type")}
+                        </span>
+                        <span>{t(MCP_TYPE_LABEL[selectedServer.type])}</span>
+                      </div>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("tools.detail.endpoint")}
+                        </span>
+                        <code>{serverEndpoint(selectedServer)}</code>
+                      </div>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("mcpTools.startupTimeout")}
+                        </span>
+                        <span>{selectedServer.startupTimeoutSecs}s</span>
+                      </div>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("mcpTools.toolTimeout")}
+                        </span>
+                        <span>{selectedServer.toolTimeoutSecs}s</span>
+                      </div>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("mcpTools.required")}
+                        </span>
+                        <span>
+                          {selectedServer.required
+                            ? t("mcpTools.enabled")
+                            : t("mcpTools.disabled")}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {selectedServer.cwd ? (
+                    <div className="tools-detail-meta-item">
+                      <span className="tools-detail-label">
+                        {t("mcpTools.cwd")}
+                      </span>
+                      <code>{selectedServer.cwd}</code>
+                    </div>
+                  ) : null}
+                </section>
+                {!catalogMode ? (
+                  <section className="tools-detail-section">
+                    <h4 className="tools-detail-label">
+                      <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
+                      {t("mcpTools.approval.default")}
+                    </h4>
+                    <SelectMenu
+                      size="sm"
+                      value={selectedServer.defaultToolsApprovalMode}
+                      options={MCP_APPROVAL_MODES.map((mode) => ({
+                        value: mode,
+                        label: t(`mcpTools.approval.${mode}` as MessageKey),
+                      }))}
+                      onChange={(value) =>
+                        setServerApprovalMode(
+                          selectedServer.id,
+                          value as McpToolApprovalMode,
+                        )
+                      }
+                      aria-label={t("mcpTools.approval.default")}
+                    />
+                    <p className="tools-detail-body">
+                      {t(
+                        `mcpTools.approval.hint.${selectedServer.defaultToolsApprovalMode}` as MessageKey,
+                      )}
+                    </p>
+                  </section>
+                ) : null}
+                {!catalogMode ? (
+                  <section className="tools-detail-section">
+                    <div className="mcp-tool-list-head">
+                      <h4 className="tools-detail-label">
+                        {t("mcpTools.tools")}
+                      </h4>
+                      <button
+                        type="button"
+                        className="mcp-btn-ghost mcp-refresh-btn"
+                        disabled={refreshing}
+                        onClick={() => void refreshTools(selectedServer.id)}
+                      >
+                        <IconRefresh
+                          width={14}
+                          height={14}
+                          className={refreshing ? "is-spin" : undefined}
+                        />
+                        {refreshing
+                          ? t("mcpTools.refreshing")
+                          : t("mcpTools.refresh")}
+                      </button>
+                    </div>
+                    {(selectedServer.discovered.length > 0
+                      ? selectedServer.discovered
+                      : Object.keys(selectedServer.tools).map((name) => ({
+                          name,
+                          description: "",
+                          readOnlyHint: undefined,
+                          destructiveHint: undefined,
+                          openWorldHint: undefined,
+                        }))
+                    ).map((tool) => {
+                      const on = isMcpToolEnabled(selectedServer, tool.name);
+                      return (
+                        <div key={tool.name} className="mcp-tool-row">
+                          <div className="mcp-tool-meta">
+                            <code className="mcp-tool-name">{tool.name}</code>
+                            {tool.description ? (
+                              <span className="mcp-tool-desc">
+                                {tool.description}
+                              </span>
+                            ) : null}
+                            <span className="mcp-tool-hints">
+                              {tool.readOnlyHint === true ? (
+                                <span>{t("mcpTools.annotation.readOnly")}</span>
+                              ) : null}
+                              {tool.destructiveHint === true ? (
+                                <span>
+                                  {t("mcpTools.annotation.destructive")}
+                                </span>
+                              ) : null}
+                              {tool.openWorldHint === true ? (
+                                <span>
+                                  {t("mcpTools.annotation.openWorld")}
+                                </span>
+                              ) : null}
+                            </span>
+                          </div>
+                          <div className="mcp-tool-controls">
+                            <SelectMenu
+                              size="sm"
+                              value={
+                                selectedServer.toolApprovalModes[tool.name] ??
+                                "inherit"
+                              }
+                              options={[
+                                {
+                                  value: "inherit",
+                                  label: t("mcpTools.approval.inherit"),
+                                },
+                                ...MCP_APPROVAL_MODES.map((mode) => ({
+                                  value: mode,
+                                  label: t(
+                                    `mcpTools.approval.${mode}` as MessageKey,
+                                  ),
+                                })),
+                              ]}
+                              disabled={!selectedServer.enabled}
+                              onChange={(value) =>
+                                setToolApprovalMode(
+                                  selectedServer.id,
+                                  tool.name,
+                                  value === "inherit"
+                                    ? undefined
+                                    : (value as McpToolApprovalMode),
+                                )
+                              }
+                              aria-label={t("mcpTools.approval.tool", {
+                                name: tool.name,
+                              })}
+                            />
+                            <button
+                              type="button"
+                              role="switch"
+                              className="tool-toggle"
+                              aria-checked={on}
+                              disabled={!selectedServer.enabled}
+                              onClick={() =>
+                                toggleTool(selectedServer.id, tool.name)
+                              }
+                            >
+                              <span className="tool-toggle-thumb" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </section>
+                ) : null}
+              </>
+            ) : (
+              <p className="agent-tools-empty">
+                {t("tools.detail.selectHint")}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className={`mcp-server-grid is-${viewMode}`}>
+          {filteredServers.map((s) =>
+            catalogMode ? (
+              <McpCatalogCard
+                key={s.id}
+                server={s}
+                installed={installedServerIds.has(s.id)}
+                installReady={configuredServersReady}
+                onInstall={installCatalogServer}
+                onInstallWithAgent={
+                  onInstallWithAgent ? installCatalogServerWithAgent : undefined
+                }
+              />
+            ) : (
+              <McpServerCard
+                key={s.id}
+                server={s}
+                onToggle={toggleServer}
+                onToggleTool={toggleTool}
+                onSetServerApprovalMode={setServerApprovalMode}
+                onSetToolApprovalMode={setToolApprovalMode}
+                onRefresh={(id) => void refreshTools(id)}
+                onRemove={removeServer}
+                onReconnect={(id) => void reconnectServer(id)}
+                onAuthenticate={(id) => void authenticateServer(id)}
+                onLogout={(id) => void logoutServer(id)}
+                refreshing={refreshing}
+                reconnecting={reconnectingServerIds.has(s.id)}
+                authenticating={authenticatingServerIds.has(s.id)}
+                runtimeStatus={runtimeStatuses[s.id]}
+              />
+            ),
           )}
+        </div>
+      )}
       {showAdd && (
         <McpAddDialog
           onAdd={(incoming) => {

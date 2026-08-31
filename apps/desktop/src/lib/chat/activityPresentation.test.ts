@@ -10,7 +10,10 @@ import {
   distinctActivityVisualKinds,
 } from "./activityPresentation.ts";
 
-function activity(title: string, kind: ChatActivity["kind"] = "tool"): ChatActivity {
+function activity(
+  title: string,
+  kind: ChatActivity["kind"] = "tool",
+): ChatActivity {
   return { id: title, kind, title };
 }
 
@@ -121,10 +124,7 @@ test("returns distinct visual kinds in event order", () => {
 
 test("summarizes the batch intent instead of exposing a raw verb list", () => {
   assert.equal(
-    activityGroupSummary([
-      activity("apply_patch"),
-      activity("exec_command"),
-    ]),
+    activityGroupSummary([activity("apply_patch"), activity("exec_command")]),
     "modify_and_verify",
   );
   assert.equal(

@@ -46,7 +46,8 @@ export default function A2UIRenderer({
   }, [key]);
 
   useEffect(() => {
-    if (!initialFieldValues || Object.keys(initialFieldValues).length === 0) return;
+    if (!initialFieldValues || Object.keys(initialFieldValues).length === 0)
+      return;
     setFieldValues((current) =>
       mergeInitialFieldValues(current, initialFieldValues),
     );

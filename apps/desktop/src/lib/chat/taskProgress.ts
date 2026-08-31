@@ -132,9 +132,13 @@ function collectStructuredFileChange(
 ) {
   const record = objectValue(parseInput(activity.input));
   if (!record) return;
-  const namedOperation = normalizedToolName(activity.title).replace(/_file$/, "");
+  const namedOperation = normalizedToolName(activity.title).replace(
+    /_file$/,
+    "",
+  );
   const operation =
-    textValue(record.operation || record.action).toLowerCase() || namedOperation;
+    textValue(record.operation || record.action).toLowerCase() ||
+    namedOperation;
   const patch = textValue(record.patch || record.diff);
   if (patch.includes("*** Begin Patch")) {
     collectPatchChanges(changes, patch);

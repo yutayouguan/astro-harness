@@ -31,7 +31,11 @@
   gap: 10px;
   border: 1px solid color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--tone-soft, transparent) 58%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone-soft, transparent) 58%,
+    transparent
+  );
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -70,7 +74,11 @@
 @media (hover: hover) and (pointer: fine) {
   .sidebar-new-chat:hover {
     border-color: color-mix(in srgb, var(--tone, #64748b) 14%, transparent);
-    background: color-mix(in srgb, var(--tone-soft, transparent) 78%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 78%,
+      transparent
+    );
     box-shadow: none;
     color: var(--tone, var(--ink));
   }
@@ -78,7 +86,11 @@
 
 html[data-theme="dark"] .sidebar-new-chat {
   border-color: color-mix(in srgb, var(--tone, #94a3b8) 10%, transparent);
-  background: color-mix(in srgb, var(--tone-soft, transparent) 36%, rgba(255, 255, 255, 0.02));
+  background: color-mix(
+    in srgb,
+    var(--tone-soft, transparent) 36%,
+    rgba(255, 255, 255, 0.02)
+  );
   box-shadow: none;
   color: color-mix(in srgb, #fff 12%, var(--tone, var(--ink-soft)));
 }
@@ -86,7 +98,11 @@ html[data-theme="dark"] .sidebar-new-chat {
 @media (hover: hover) and (pointer: fine) {
   html[data-theme="dark"] .sidebar-new-chat:hover {
     border-color: color-mix(in srgb, var(--tone, #94a3b8) 18%, transparent);
-    background: color-mix(in srgb, var(--tone-soft, transparent) 52%, rgba(255, 255, 255, 0.03));
+    background: color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 52%,
+      rgba(255, 255, 255, 0.03)
+    );
     box-shadow: none;
     color: color-mix(in srgb, #fff 18%, var(--tone, var(--ink)));
   }
@@ -97,7 +113,8 @@ html[data-theme="dark"] .sidebar-new-chat {
 }
 
 .sidebar-new-chat:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 60%, transparent);
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 60%, transparent);
   outline-offset: 2px;
 }
 
@@ -138,7 +155,11 @@ html[data-theme="dark"] .sidebar-new-chat {
 
 .sidebar-feature-tab.is-active {
   color: var(--tone, var(--tone-blue));
-  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 10%,
+    transparent
+  );
 }
 
 .sidebar-feature-tab.is-active::before {
@@ -172,7 +193,8 @@ html[data-theme="dark"] .sidebar-new-chat {
   padding: 0 6px;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--ink-mute) 20%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--ink-mute) 20%, transparent)
+    transparent;
 }
 
 /* ── 可折叠分区（置顶 / 项目 / 最近） ─────────────── */
@@ -228,11 +250,13 @@ html[data-theme="dark"] .sidebar-new-chat {
 }
 
 .sidebar-collapsible-section:is(:hover, :focus-within) .sidebar-section-chevron,
-.sidebar-collapsible-section:is(:hover, :focus-within) .sidebar-section-actions {
+.sidebar-collapsible-section:is(:hover, :focus-within)
+  .sidebar-section-actions {
   opacity: 1;
 }
 
-.sidebar-collapsible-section:is(:hover, :focus-within) .sidebar-section-actions {
+.sidebar-collapsible-section:is(:hover, :focus-within)
+  .sidebar-section-actions {
   pointer-events: auto;
 }
 
@@ -293,7 +317,9 @@ html[data-theme="dark"] .sidebar-new-chat {
   -webkit-backdrop-filter: none;
   color: var(--ink-mute);
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
+  transition:
+    background 0.1s,
+    color 0.1s;
 }
 
 .sidebar-add-btn > svg,
@@ -313,7 +339,11 @@ html[data-theme="dark"] .sidebar-new-chat {
 }
 
 .sidebar-session-filter-btn.is-on {
-  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 16%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 16%,
+    transparent
+  );
   color: var(--tone, var(--tone-blue));
 }
 
@@ -330,16 +360,22 @@ html[data-theme="dark"] .sidebar-new-chat {
 .sidebar-global-search .expandable-search-btn {
   width: 40px;
   height: 40px;
-  border: 1px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 22%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 22%, transparent);
   border-radius: 12px;
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.12), transparent 72%),
-    color-mix(in srgb, var(--tone-soft, transparent) 72%, rgba(255, 255, 255, 0.04));
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 72%,
+      rgba(255, 255, 255, 0.04)
+    );
   box-shadow:
     0 4px 12px color-mix(in srgb, var(--tone, transparent) 8%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(1.16);
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(1.16);
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(1.16);
   color: color-mix(in srgb, var(--tone, var(--tone-blue)) 58%, var(--ink));
   transition:
     color 120ms ease,
@@ -351,10 +387,18 @@ html[data-theme="dark"] .sidebar-new-chat {
 
 @media (hover: hover) and (pointer: fine) {
   .sidebar-global-search .expandable-search-btn:hover {
-    border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 34%, transparent);
+    border-color: color-mix(
+      in srgb,
+      var(--tone, var(--tone-blue)) 34%,
+      transparent
+    );
     background:
       linear-gradient(155deg, rgba(255, 255, 255, 0.15), transparent 72%),
-      color-mix(in srgb, var(--tone-soft, transparent) 88%, rgba(255, 255, 255, 0.02));
+      color-mix(
+        in srgb,
+        var(--tone-soft, transparent) 88%,
+        rgba(255, 255, 255, 0.02)
+      );
     box-shadow:
       0 5px 14px color-mix(in srgb, var(--tone, transparent) 12%, transparent),
       inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -367,7 +411,8 @@ html[data-theme="dark"] .sidebar-new-chat {
 }
 
 .sidebar-global-search .expandable-search-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 60%, transparent);
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 60%, transparent);
   outline-offset: 2px;
 }
 
@@ -426,7 +471,10 @@ html[data-theme="dark"] .sidebar-new-chat {
   color: var(--ink-mute);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.12s, background 0.1s, color 0.1s;
+  transition:
+    opacity 0.12s,
+    background 0.1s,
+    color 0.1s;
 }
 
 .sidebar-project-header:hover .sidebar-project-action,
@@ -475,7 +523,9 @@ html[data-theme="dark"] .sidebar-new-chat {
   font-weight: 500;
   color: var(--ink-mute);
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
+  transition:
+    background 0.1s,
+    color 0.1s;
 }
 
 .sidebar-session-new:hover {
@@ -514,16 +564,22 @@ html[data-theme="dark"] .sidebar-new-chat {
 .sidebar-global-search .expandable-search-field {
   height: 40px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 24%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 24%, transparent);
   border-radius: 12px;
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.13), transparent 72%),
-    color-mix(in srgb, var(--tone-soft, transparent) 68%, rgba(255, 255, 255, 0.04));
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 68%,
+      rgba(255, 255, 255, 0.04)
+    );
   box-shadow:
     0 4px 14px color-mix(in srgb, var(--tone, transparent) 7%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(1.18);
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(1.18);
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(1.18);
   transition:
     background 140ms ease,
     border-color 140ms ease,
@@ -531,10 +587,18 @@ html[data-theme="dark"] .sidebar-new-chat {
 }
 
 .sidebar-global-search .expandable-search-field:focus-within {
-  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 44%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 44%,
+    transparent
+  );
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.16), transparent 72%),
-    color-mix(in srgb, var(--tone-soft, transparent) 84%, rgba(255, 255, 255, 0.03));
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 84%,
+      rgba(255, 255, 255, 0.03)
+    );
   box-shadow:
     0 5px 16px color-mix(in srgb, var(--tone, transparent) 10%, transparent),
     inset 0 0 0 1px color-mix(in srgb, var(--tone, transparent) 8%, transparent),
@@ -556,7 +620,11 @@ html[data-theme="dark"] .sidebar-new-chat {
 
 html[data-theme="dark"] .sidebar-global-search .expandable-search-btn,
 html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
-  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 28%, rgba(255, 255, 255, 0.08));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 28%,
+    rgba(255, 255, 255, 0.08)
+  );
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.05), transparent 72%),
     color-mix(in srgb, var(--tone, transparent) 14%, rgba(8, 6, 18, 0.48));
@@ -565,8 +633,14 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
-html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-within {
-  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 48%, rgba(255, 255, 255, 0.1));
+html[data-theme="dark"]
+  .sidebar-global-search
+  .expandable-search-field:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 48%,
+    rgba(255, 255, 255, 0.1)
+  );
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.07), transparent 72%),
     color-mix(in srgb, var(--tone, transparent) 19%, rgba(8, 6, 18, 0.5));
@@ -575,7 +649,6 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
 .sidebar-sessions.is-global {
   padding-left: 0;
 }
-
 
 .sidebar-empty {
   display: block;
@@ -702,7 +775,12 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
   left: 2px;
   right: 2px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 10%, transparent), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ink) 10%, transparent),
+    transparent
+  );
 }
 
 .sidebar-settings-btn {
@@ -755,7 +833,9 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
   .sidebar-global-search .expandable-search-btn,
   .sidebar-feature-tab,
   .sidebar-settings-btn {
-    transition: color 120ms ease, background 120ms ease;
+    transition:
+      color 120ms ease,
+      background 120ms ease;
   }
 
   .sidebar-new-chat:active,
@@ -788,7 +868,9 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .sidebar.is-labels .sidebar-back-btn {
@@ -834,9 +916,14 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
 }
 
 .sidebar-settings-search:focus-within {
-  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 38%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 38%,
+    transparent
+  );
   background: color-mix(in srgb, var(--bg-base) 88%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, var(--tone-blue)) 9%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 9%, transparent);
   color: var(--tone, var(--ink-soft));
 }
 
@@ -956,7 +1043,11 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
 }
 
 .sidebar-settings-nav .settings-sidebar-item.is-active {
-  border-color: color-mix(in srgb, var(--tone, var(--tone-purple)) 22%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-purple)) 22%,
+    transparent
+  );
   background: var(--tone-soft, var(--tone-purple-soft));
   color: var(--tone, var(--tone-purple));
   font-weight: 600;
@@ -971,7 +1062,11 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field:focus-wi
 }
 
 html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
-  border-color: color-mix(in srgb, var(--tone, var(--tone-purple)) 35%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-purple)) 35%,
+    transparent
+  );
   background: color-mix(
     in srgb,
     var(--tone, var(--tone-purple)) 22%,
@@ -995,11 +1090,17 @@ html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
 }
 
 /* hide label text in icon-only mode */
-.sidebar:not(.is-labels) .sidebar-settings-nav .settings-sidebar-item .sidebar-item-label {
+.sidebar:not(.is-labels)
+  .sidebar-settings-nav
+  .settings-sidebar-item
+  .sidebar-item-label {
   display: none;
 }
 
-.sidebar.is-labels .sidebar-settings-nav .settings-sidebar-item .sidebar-item-label {
+.sidebar.is-labels
+  .sidebar-settings-nav
+  .settings-sidebar-item
+  .sidebar-item-label {
   display: inline;
 }
 
@@ -1063,9 +1164,16 @@ html[data-theme="dark"] .settings-overlay {
   max-height: 800px;
   border-radius: 18px;
   background: color-mix(in srgb, var(--glass-fill, #fff) 97%, transparent);
-  backdrop-filter: blur(calc(40px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(40px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  border: 1px solid color-mix(in srgb, var(--glass-edge, rgba(0, 0, 0, 0.08)) 50%, rgba(255, 255, 255, 0.25));
+  backdrop-filter: blur(calc(40px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(40px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--glass-edge, rgba(0, 0, 0, 0.08)) 50%,
+      rgba(255, 255, 255, 0.25)
+    );
   box-shadow:
     0 24px 80px rgba(0, 0, 0, 0.15),
     0 0 0 1px rgba(255, 255, 255, 0.12) inset;
@@ -1082,8 +1190,14 @@ html[data-theme="dark"] .settings-overlay {
 }
 
 @keyframes overlay-panel-in {
-  from { opacity: 0; transform: scale(0.96) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 html[data-theme="dark"] .settings-overlay-panel {
@@ -1108,7 +1222,9 @@ html[data-theme="dark"] .settings-overlay-panel {
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 
 .settings-overlay-close:hover {
@@ -1241,7 +1357,10 @@ html[data-theme="dark"] .project-context-menu {
   color: var(--ink-mute);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.12s, background 0.1s, color 0.1s;
+  transition:
+    opacity 0.12s,
+    background 0.1s,
+    color 0.1s;
 }
 
 .sidebar-project-header:hover .sidebar-project-more,

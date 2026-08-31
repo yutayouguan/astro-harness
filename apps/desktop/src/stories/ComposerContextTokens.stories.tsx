@@ -15,7 +15,9 @@ const attachment: ChatAttachment = {
   mime: "text/markdown",
   kind: "file",
   size: 2840,
-  dataBase64: btoa("# Product brief\n\nThis text attachment supports an inline preview."),
+  dataBase64: btoa(
+    "# Product brief\n\nThis text attachment supports an inline preview.",
+  ),
 };
 
 const contexts: ComposerContextToken[] = [
@@ -78,17 +80,23 @@ function ComposerContextTokens() {
               <button
                 type="button"
                 className="composer-preview-open"
-                onClick={() => setPreview({ type: "attachment", item: attachment })}
+                onClick={() =>
+                  setPreview({ type: "attachment", item: attachment })
+                }
               >
                 <span className="composer-preview-icon" data-kind="file">
                   <FileText size={16} aria-hidden />
                 </span>
                 <span className="composer-preview-meta">
-                  <span className="composer-preview-name">{attachment.name}</span>
+                  <span className="composer-preview-name">
+                    {attachment.name}
+                  </span>
                   <span className="composer-preview-size">2.8 KB</span>
                 </span>
               </button>
-              <button type="button" className="composer-preview-remove">×</button>
+              <button type="button" className="composer-preview-remove">
+                ×
+              </button>
             </div>
             {contexts.map((token) => (
               <div
@@ -105,11 +113,17 @@ function ComposerContextTokens() {
                     <TokenIcon kind={token.kind} />
                   </span>
                   <span className="composer-context-token-meta">
-                    <span className="composer-context-token-kind">{token.kind}</span>
-                    <span className="composer-context-token-name">{token.name}</span>
+                    <span className="composer-context-token-kind">
+                      {token.kind}
+                    </span>
+                    <span className="composer-context-token-name">
+                      {token.name}
+                    </span>
                   </span>
                 </button>
-                <button type="button" className="composer-preview-remove">×</button>
+                <button type="button" className="composer-preview-remove">
+                  ×
+                </button>
               </div>
             ))}
           </div>

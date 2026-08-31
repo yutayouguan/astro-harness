@@ -39,7 +39,9 @@ export function useSidebar() {
       return false;
     }
   });
-  const [sidebarCtx, setSidebarCtx] = useState<{ x: number; y: number } | null>(null);
+  const [sidebarCtx, setSidebarCtx] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     try {
       return parseStoredSidebarWidth(localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -55,27 +57,35 @@ export function useSidebar() {
   const sidebarRef = useRef<HTMLElement>(null);
   const sidebarWidthRef = useRef(sidebarWidth);
   const sidebarResizingRef = useRef(false);
-  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
+  const resizeRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
 
   sidebarWidthRef.current = sidebarWidth;
 
   const containerWidth = useCallback(() => {
-    const width = sidebarRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
+    const width =
+      sidebarRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
     return width > 0 ? width : Number.POSITIVE_INFINITY;
   }, []);
 
-  const updateSidebarWidth = useCallback((nextWidth: number, persist = false) => {
-    const next = clampSidebarWidth(nextWidth, containerWidth());
-    sidebarWidthRef.current = next;
-    setSidebarWidth(next);
-    if (persist) {
-      try {
-        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
-      } catch {
-        // Storage can be unavailable in private or locked-down webviews.
+  const updateSidebarWidth = useCallback(
+    (nextWidth: number, persist = false) => {
+      const next = clampSidebarWidth(nextWidth, containerWidth());
+      sidebarWidthRef.current = next;
+      setSidebarWidth(next);
+      if (persist) {
+        try {
+          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+        } catch {
+          // Storage can be unavailable in private or locked-down webviews.
+        }
       }
-    }
-  }, [containerWidth]);
+    },
+    [containerWidth],
+  );
 
   useLayoutEffect(() => {
     const container = sidebarRef.current?.parentElement;
@@ -91,7 +101,10 @@ export function useSidebar() {
     };
 
     syncBounds();
-    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncBounds) : null;
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(syncBounds)
+        : null;
     observer?.observe(container);
     window.addEventListener("resize", syncBounds);
     return () => {
@@ -109,7 +122,12 @@ export function useSidebar() {
   }, []);
 
   const scheduleHideSidebar = useCallback(() => {
-    if (sidebarPinned || sidebarCtxOpenRef.current || sidebarResizingRef.current) return;
+    if (
+      sidebarPinned ||
+      sidebarCtxOpenRef.current ||
+      sidebarResizingRef.current
+    )
+      return;
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = window.setTimeout(() => {
       setSidebarOpen(false);
@@ -129,50 +147,68 @@ export function useSidebar() {
     }
   }, []);
 
-  const onSidebarResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (hideTimerRef.current) {
-      window.clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-    setSidebarOpen(true);
-    resizeRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startWidth: sidebarRef.current?.getBoundingClientRect().width ?? sidebarWidthRef.current,
-    };
-    sidebarResizingRef.current = true;
-    setSidebarResizing(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }, []);
+  const onSidebarResizePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (hideTimerRef.current) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+      setSidebarOpen(true);
+      resizeRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startWidth:
+          sidebarRef.current?.getBoundingClientRect().width ??
+          sidebarWidthRef.current,
+      };
+      sidebarResizingRef.current = true;
+      setSidebarResizing(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [],
+  );
 
-  const onSidebarResizePointerMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = resizeRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    updateSidebarWidth(drag.startWidth + event.clientX - drag.startX);
-  }, [updateSidebarWidth]);
+  const onSidebarResizePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const drag = resizeRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      updateSidebarWidth(drag.startWidth + event.clientX - drag.startX);
+    },
+    [updateSidebarWidth],
+  );
 
-  const onSidebarResizePointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    finishSidebarResize(event.pointerId);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  }, [finishSidebarResize]);
+  const onSidebarResizePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      finishSidebarResize(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    },
+    [finishSidebarResize],
+  );
 
-  const onSidebarResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    const step = event.shiftKey ? RESIZE_KEYBOARD_LARGE_STEP : RESIZE_KEYBOARD_STEP;
-    let nextWidth: number | null = null;
-    if (event.key === "ArrowRight") nextWidth = sidebarWidthRef.current + step;
-    else if (event.key === "ArrowLeft") nextWidth = sidebarWidthRef.current - step;
-    else if (event.key === "Home") nextWidth = SIDEBAR_MIN_WIDTH;
-    else if (event.key === "End") nextWidth = sidebarMaxWidth;
-    if (nextWidth == null) return;
-    event.preventDefault();
-    event.stopPropagation();
-    updateSidebarWidth(nextWidth, true);
-  }, [sidebarMaxWidth, updateSidebarWidth]);
+  const onSidebarResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      const step = event.shiftKey
+        ? RESIZE_KEYBOARD_LARGE_STEP
+        : RESIZE_KEYBOARD_STEP;
+      let nextWidth: number | null = null;
+      if (event.key === "ArrowRight")
+        nextWidth = sidebarWidthRef.current + step;
+      else if (event.key === "ArrowLeft")
+        nextWidth = sidebarWidthRef.current - step;
+      else if (event.key === "Home") nextWidth = SIDEBAR_MIN_WIDTH;
+      else if (event.key === "End") nextWidth = sidebarMaxWidth;
+      if (nextWidth == null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      updateSidebarWidth(nextWidth, true);
+    },
+    [sidebarMaxWidth, updateSidebarWidth],
+  );
 
   const resetSidebarWidth = useCallback(() => {
     updateSidebarWidth(SIDEBAR_DEFAULT_WIDTH, true);
@@ -264,13 +300,21 @@ export function useSidebar() {
   const collapseSidebar = useCallback(() => {
     setSidebarPinned(false);
     setSidebarOpen(false);
-    try { localStorage.setItem("astro.sidebarPinned", "0"); } catch { /* ignore */ }
+    try {
+      localStorage.setItem("astro.sidebarPinned", "0");
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const pinSidebar = useCallback(() => {
     setSidebarPinned(true);
     setSidebarOpen(true);
-    try { localStorage.setItem("astro.sidebarPinned", "1"); } catch { /* ignore */ }
+    try {
+      localStorage.setItem("astro.sidebarPinned", "1");
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const sidebarVisible = sidebarOpen || sidebarPinned;

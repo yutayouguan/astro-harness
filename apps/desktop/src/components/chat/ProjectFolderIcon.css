@@ -107,7 +107,8 @@ html[data-theme="dark"] .project-icon-picker {
 
 .project-icon-picker-search:focus-within {
   border-color: color-mix(in srgb, var(--tone, #64748b) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, #64748b) 10%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, #64748b) 10%, transparent);
 }
 
 .project-icon-picker-search input {
@@ -144,7 +145,10 @@ html[data-theme="dark"] .project-icon-picker {
   border-radius: 10px;
   background: color-mix(in srgb, var(--ink-mute) 5%, transparent);
   cursor: pointer;
-  transition: transform 0.1s, border-color 0.1s, background 0.1s;
+  transition:
+    transform 0.1s,
+    border-color 0.1s,
+    background 0.1s;
 }
 
 .project-icon-picker-grid > button:hover {

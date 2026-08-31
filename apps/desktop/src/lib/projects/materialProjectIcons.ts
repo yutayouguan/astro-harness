@@ -20,7 +20,9 @@ const BRAND_ICONS: MaterialProjectIcon[] = [
 ];
 
 const expandedByClosed = new Map<string, string>();
-for (const [folderName, closedId] of Object.entries(materialIconManifest.folderNames)) {
+for (const [folderName, closedId] of Object.entries(
+  materialIconManifest.folderNames,
+)) {
   const expandedId = materialIconManifest.folderNamesExpanded[folderName];
   if (expandedId && !expandedByClosed.has(closedId)) {
     expandedByClosed.set(closedId, expandedId);
@@ -32,7 +34,9 @@ expandedByClosed.set(
 );
 
 const aliasesByIcon = new Map<string, Set<string>>();
-for (const [folderName, iconId] of Object.entries(materialIconManifest.folderNames)) {
+for (const [folderName, iconId] of Object.entries(
+  materialIconManifest.folderNames,
+)) {
   const aliases = aliasesByIcon.get(iconId) ?? new Set<string>();
   aliases.add(folderName.replace(/[_-]/g, " "));
   aliasesByIcon.set(iconId, aliases);
@@ -103,12 +107,16 @@ export const MATERIAL_PROJECT_ICONS: MaterialProjectIcon[] = [
 const brandIds = new Set(BRAND_ICONS.map((icon) => icon.id));
 const knownIds = new Set(MATERIAL_PROJECT_ICONS.map((icon) => icon.id));
 
-export function isMaterialProjectIcon(iconId: string | null | undefined): boolean {
+export function isMaterialProjectIcon(
+  iconId: string | null | undefined,
+): boolean {
   return Boolean(iconId && knownIds.has(iconId));
 }
 
 /** 默认文件夹（含未设置图标）——单色，跟随当前 tab 主题色着色。 */
-export function isDefaultProjectIcon(iconId: string | null | undefined): boolean {
+export function isDefaultProjectIcon(
+  iconId: string | null | undefined,
+): boolean {
   const id = iconId?.trim();
   return !id || id === materialIconManifest.defaults.folder;
 }
@@ -127,12 +135,18 @@ export function materialProjectIconUrl(
     iconId && knownIds.has(iconId) && !brandIds.has(iconId)
       ? iconId
       : materialIconManifest.defaults.folder;
-  const resolvedId = expanded ? (expandedByClosed.get(closedId) ?? closedId) : closedId;
+  const resolvedId = expanded
+    ? (expandedByClosed.get(closedId) ?? closedId)
+    : closedId;
   return `${MATERIAL_ICON_DIR}${resolvedId}.svg`;
 }
 
-export function filterMaterialProjectIcons(query: string): MaterialProjectIcon[] {
+export function filterMaterialProjectIcons(
+  query: string,
+): MaterialProjectIcon[] {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return MATERIAL_PROJECT_ICONS;
-  return MATERIAL_PROJECT_ICONS.filter((icon) => icon.searchText.includes(normalized));
+  return MATERIAL_PROJECT_ICONS.filter((icon) =>
+    icon.searchText.includes(normalized),
+  );
 }

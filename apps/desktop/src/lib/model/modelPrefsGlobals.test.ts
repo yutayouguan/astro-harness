@@ -1,9 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  loadPickerGlobals,
-  savePickerGlobals,
-} from "./modelPrefs.ts";
+import { loadPickerGlobals, savePickerGlobals } from "./modelPrefs.ts";
 
 test("loadPickerGlobals forces auto and maxMode off and persists", () => {
   const key = "astro.model.pickerGlobals";

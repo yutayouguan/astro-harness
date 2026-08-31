@@ -1,12 +1,6 @@
 // 侧栏会话列表：按项目分组或全局搜索结果，含全部会话操作。
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -53,7 +47,10 @@ const STORAGE_KEY = "astro:sidebar-visible-sessions";
 function readVisibleCount(): number {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
-    if (v) { const n = Number(v); if (n >= 1 && n <= 50) return n; }
+    if (v) {
+      const n = Number(v);
+      if (n >= 1 && n <= 50) return n;
+    }
   } catch {}
   return DEFAULT_VISIBLE_COUNT;
 }
@@ -126,14 +123,26 @@ export default function SidebarSessionList({
     }
   }, [listKind, placement, projectId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  useEffect(() => subscribeSessionsChanged(() => { void load(); }), [load]);
+  useEffect(
+    () =>
+      subscribeSessionsChanged(() => {
+        void load();
+      }),
+    [load],
+  );
 
-  useEffect(() => subscribeSessionUnread(() => setUnreadTick((n) => n + 1)), []);
+  useEffect(
+    () => subscribeSessionUnread(() => setUnreadTick((n) => n + 1)),
+    [],
+  );
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let disposed = false;
     let unlisten: (() => void) | undefined;
     type SessionEventPayload = {
@@ -169,9 +178,12 @@ export default function SidebarSessionList({
     y: number;
   } | null>(null);
 
-  const openSessionMenu = useCallback((sessionId: string, x: number, y: number) => {
-    setSessionMenu({ sessionId, x, y });
-  }, []);
+  const openSessionMenu = useCallback(
+    (sessionId: string, x: number, y: number) => {
+      setSessionMenu({ sessionId, x, y });
+    },
+    [],
+  );
 
   const runQuickAction = useCallback(
     async (command: string, sessionId: string) => {
@@ -203,7 +215,9 @@ export default function SidebarSessionList({
     );
   }, [items, placement, query]);
 
-  useEffect(() => { onCountChange?.(filtered.length); }, [filtered.length, onCountChange]);
+  useEffect(() => {
+    onCountChange?.(filtered.length);
+  }, [filtered.length, onCountChange]);
 
   const hasQuery = query.trim().length > 0;
   const archived = listKind === "archived";
@@ -215,7 +229,8 @@ export default function SidebarSessionList({
 
   // 搜索结果不折叠，避免匹配项被藏在「展开显示」后面。
   const collapsible = !hasQuery && filtered.length > visibleCount;
-  const visible = expanded || !collapsible ? filtered : filtered.slice(0, visibleCount);
+  const visible =
+    expanded || !collapsible ? filtered : filtered.slice(0, visibleCount);
   const hiddenCount = collapsible ? filtered.length - visibleCount : 0;
 
   return (
@@ -277,29 +292,32 @@ export default function SidebarSessionList({
           </span>
         </button>
       )}
-      {sessionMenu && (() => {
-        const menuSession = items.find(
-          (item) => item.sessionId === sessionMenu.sessionId,
-        );
-        if (!menuSession) return null;
-        return (
-          <SessionActionsMenu
-            session={{
-              ...menuSession,
-              projectId: menuSession.projectId ?? projectId,
-            }}
-            x={sessionMenu.x}
-            y={sessionMenu.y}
-            status={resolveSessionStatus(sessionStatuses[sessionMenu.sessionId])}
-            activeSessionId={activeSessionId}
-            onClose={() => setSessionMenu(null)}
-            onOpenSession={onOpenSession}
-            showToast={showToast}
-            onPrepareDeleteCurrentSession={onPrepareDeleteCurrentSession}
-            onClearDeletedCurrentSession={onClearDeletedCurrentSession}
-          />
-        );
-      })()}
+      {sessionMenu &&
+        (() => {
+          const menuSession = items.find(
+            (item) => item.sessionId === sessionMenu.sessionId,
+          );
+          if (!menuSession) return null;
+          return (
+            <SessionActionsMenu
+              session={{
+                ...menuSession,
+                projectId: menuSession.projectId ?? projectId,
+              }}
+              x={sessionMenu.x}
+              y={sessionMenu.y}
+              status={resolveSessionStatus(
+                sessionStatuses[sessionMenu.sessionId],
+              )}
+              activeSessionId={activeSessionId}
+              onClose={() => setSessionMenu(null)}
+              onOpenSession={onOpenSession}
+              showToast={showToast}
+              onPrepareDeleteCurrentSession={onPrepareDeleteCurrentSession}
+              onClearDeletedCurrentSession={onClearDeletedCurrentSession}
+            />
+          );
+        })()}
       {createPortal(toastHost, document.body)}
     </div>
   );
@@ -357,7 +375,11 @@ function SessionItem({
       className={`sidebar-session-item ${isActive ? "is-active" : ""} ${
         status === "awaiting" ? "is-awaiting" : ""
       } ${status === "error" ? "is-errored" : ""} ${showUnread ? "is-unread" : ""}`}
-      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu(e.clientX, e.clientY);
+      }}
       onMouseEnter={handleMouseEnter}
     >
       <button
@@ -372,10 +394,17 @@ function SessionItem({
           </span>
         </span>
         {s.pinnedAt && (
-          <Pin className="sidebar-session-pin-mark" size={10} strokeWidth={2} aria-hidden />
+          <Pin
+            className="sidebar-session-pin-mark"
+            size={10}
+            strokeWidth={2}
+            aria-hidden
+          />
         )}
         {status === "idle" && (
-          <span className="sidebar-session-time">{relativeTime(s.createdAt, t)}</span>
+          <span className="sidebar-session-time">
+            {relativeTime(s.createdAt, t)}
+          </span>
         )}
         <SessionStatusIcon
           status={status}
@@ -388,7 +417,15 @@ function SessionItem({
         />
       </button>
       <div className="sidebar-session-actions">
-        <button type="button" className="sidebar-session-action-btn" title={s.pinnedAt ? t("sessions.unpin") : t("sessions.pin")} onClick={(e) => { e.stopPropagation(); onPinToggle(); }}>
+        <button
+          type="button"
+          className="sidebar-session-action-btn"
+          title={s.pinnedAt ? t("sessions.unpin") : t("sessions.pin")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPinToggle();
+          }}
+        >
           <MorphToggleIcon
             active={Boolean(s.pinnedAt)}
             activeIcon={PinOffData}
@@ -398,7 +435,15 @@ function SessionItem({
             aria-hidden
           />
         </button>
-        <button type="button" className="sidebar-session-action-btn" title={archived ? t("sessions.unarchive") : t("sessions.archive")} onClick={(e) => { e.stopPropagation(); onArchiveToggle(); }}>
+        <button
+          type="button"
+          className="sidebar-session-action-btn"
+          title={archived ? t("sessions.unarchive") : t("sessions.archive")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onArchiveToggle();
+          }}
+        >
           <MorphToggleIcon
             active={archived}
             activeIcon={ArchiveRestoreData}

@@ -17,11 +17,7 @@ export {
   type ButtonVariant,
   type IconButtonProps,
 } from "./Button";
-export {
-  Surface,
-  type SurfaceProps,
-  type SurfaceVariant,
-} from "./Surface";
+export { Surface, type SurfaceProps, type SurfaceVariant } from "./Surface";
 export {
   SegmentedTabs,
   type SegmentedTabItem,

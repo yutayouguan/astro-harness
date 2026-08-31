@@ -22,8 +22,14 @@ test("imports stdio and Streamable HTTP servers", () => {
     ["stdio", "streamableHttp"],
   );
   assert.deepEqual(
-    servers.map((server) => [server.startupTimeoutSecs, server.toolTimeoutSecs]),
-    [[10, 60], [10, 60]],
+    servers.map((server) => [
+      server.startupTimeoutSecs,
+      server.toolTimeoutSecs,
+    ]),
+    [
+      [10, 60],
+      [10, 60],
+    ],
   );
 });
 
@@ -31,7 +37,11 @@ test("preserves timeout field names", () => {
   const [server] = parseMcpJson(
     JSON.stringify({
       mcpServers: {
-        local: { command: "npx", startup_timeout_sec: 17, tool_timeout_sec: 91 },
+        local: {
+          command: "npx",
+          startup_timeout_sec: 17,
+          tool_timeout_sec: 91,
+        },
       },
     }),
   );
@@ -63,7 +73,11 @@ test("preserves environment credential references", () => {
 
 test("bounds imported timeout values", () => {
   const [server] = parseMcpJson(
-    JSON.stringify({ command: "npx", startupTimeoutSecs: 0, toolTimeoutSecs: 9000 }),
+    JSON.stringify({
+      command: "npx",
+      startupTimeoutSecs: 0,
+      toolTimeoutSecs: 9000,
+    }),
   );
 
   assert.equal(server.startupTimeoutSecs, 1);
@@ -141,7 +155,8 @@ test("normalizes MCP runtime status and rejects unknown state strings", () => {
     },
   );
   assert.equal(
-    normalizeMcpRuntimeStatus({ id: "future", status: "future_state" as never }).status,
+    normalizeMcpRuntimeStatus({ id: "future", status: "future_state" as never })
+      .status,
     "unknown",
   );
 });

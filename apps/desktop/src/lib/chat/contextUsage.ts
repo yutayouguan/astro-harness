@@ -26,9 +26,7 @@ export type ContextUsageSegment = {
 };
 
 export type ContextUsageSource =
-  | "provider_reported"
-  | "provider_recomputed"
-  | "local_estimate";
+  "provider_reported" | "provider_recomputed" | "local_estimate";
 
 export type ContextTokenUsage = {
   inputTokens: number;
@@ -90,7 +88,8 @@ export function formatTokenCount(n: number): string {
   if (n < 1000) return String(Math.round(n));
   if (n < 1_000_000) {
     const k = n / 1000;
-    const s = k >= 100 || Number.isInteger(k) ? String(Math.round(k)) : k.toFixed(1);
+    const s =
+      k >= 100 || Number.isInteger(k) ? String(Math.round(k)) : k.toFixed(1);
     return `${s.replace(/\.0$/, "")}K`;
   }
   const m = n / 1_000_000;
@@ -105,10 +104,15 @@ export function usagePercent(used: number, window: number): number {
 
 export function cacheHitPercent(usage: ContextTokenUsage): number | null {
   if (!usage.cacheReadReported || usage.inputTokens <= 0) return null;
-  return Math.min(100, Math.round((usage.cacheReadTokens / usage.inputTokens) * 100));
+  return Math.min(
+    100,
+    Math.round((usage.cacheReadTokens / usage.inputTokens) * 100),
+  );
 }
 
-export function visibleSegments(snap: ContextUsageSnapshot): ContextUsageSegment[] {
+export function visibleSegments(
+  snap: ContextUsageSnapshot,
+): ContextUsageSegment[] {
   return snap.segments
     .filter((s) => s.tokens > 0 || (s.items?.length ?? 0) > 0)
     .slice()
@@ -171,7 +175,8 @@ export function normalizeContextUsageEvent(payload: {
   const recommendCompact =
     payload.recommend_compact === true || payload.recommendCompact === true;
   const source: ContextUsageSource =
-    payload.source === "provider_reported" || payload.source === "provider_recomputed"
+    payload.source === "provider_reported" ||
+    payload.source === "provider_recomputed"
       ? payload.source
       : "local_estimate";
   const rawUsage = payload.latest_usage;
@@ -193,7 +198,8 @@ export function normalizeContextUsageEvent(payload: {
   return {
     contextWindow: payload.context_window ?? 0,
     totalTokens: payload.total_tokens ?? 0,
-    estimatedTotalTokens: payload.estimated_total_tokens ?? payload.total_tokens ?? 0,
+    estimatedTotalTokens:
+      payload.estimated_total_tokens ?? payload.total_tokens ?? 0,
     source,
     latestUsage,
     updatedAt: payload.updated_at ?? 0,
@@ -207,7 +213,9 @@ export function normalizeContextUsageEvent(payload: {
         normalized.count = segment.count;
       }
       const items = (segment.items ?? [])
-        .filter((it): it is NonNullable<typeof it> => !!it && (it.tokens ?? 0) > 0)
+        .filter(
+          (it): it is NonNullable<typeof it> => !!it && (it.tokens ?? 0) > 0,
+        )
         .map((it) => ({
           id: it.id ?? it.label ?? "item",
           label: it.label || it.id || "item",
