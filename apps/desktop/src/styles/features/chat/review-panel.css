@@ -13,12 +13,10 @@
   isolation: isolate;
   border: var(--chat-dock-surface-border);
   border-radius: var(--chat-dock-radius);
-  background:
-    radial-gradient(circle at 76% 8%, color-mix(in srgb, var(--tone-soft) 18%, transparent), transparent 34%),
-    color-mix(in srgb, var(--glass-panel) 84%, transparent);
-  box-shadow: 0 4px 18px rgba(var(--shadow-ink), 0.08);
-  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
-  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
+  background: var(--chat-dock-surface-background);
+  box-shadow: var(--chat-dock-surface-shadow);
+  backdrop-filter: var(--chat-dock-surface-filter);
+  -webkit-backdrop-filter: var(--chat-dock-surface-filter);
 }
 
 .chat-review-header {
@@ -310,7 +308,7 @@
 
 @media (max-width: 760px) {
   .chat-review-panel {
-    --review-panel-width: calc(100% - 12px);
+    --review-panel-width: 100%;
   }
 
   .chat-review-content {

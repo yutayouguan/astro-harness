@@ -22,7 +22,7 @@
   > .page-body--chat
   > .chat-layout-with-right
   > .chat-main {
-  --chat-header-overlay-height: 54px;
+  --chat-header-overlay-height: 50px;
 }
 
 .content-header--chat {
@@ -34,15 +34,15 @@
   );
   position: absolute;
   z-index: 42;
-  top: 4px;
-  right: 8px;
-  left: 8px;
+  top: 0;
+  right: 0;
+  left: 0;
   gap: 12px;
   min-height: 42px;
   box-sizing: border-box;
   padding: 4px 16px;
   border: 0.75px solid var(--glass-edge);
-  border-radius: 16px;
+  border-radius: 0;
   background:
     var(--chat-header-surface-sheen),
     var(--chat-header-surface-base);

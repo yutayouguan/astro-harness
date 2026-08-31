@@ -49,6 +49,8 @@
   border-radius: var(--chat-dock-radius);
   background: var(--chat-dock-surface-background);
   box-shadow: var(--chat-dock-surface-shadow);
+  backdrop-filter: var(--chat-dock-surface-filter);
+  -webkit-backdrop-filter: var(--chat-dock-surface-filter);
   will-change: transform, opacity;
 }
 

@@ -30,6 +30,10 @@ const sideChatStyles = await readFile(
   new URL("../../styles/features/chat/side-chat.css", import.meta.url),
   "utf8",
 );
+const reviewPanelStyles = await readFile(
+  new URL("../../styles/features/chat/review-panel.css", import.meta.url),
+  "utf8",
+);
 const cronRunStyles = await readFile(
   new URL("../../styles/features/cron/run-drawer.css", import.meta.url),
   "utf8",
@@ -58,9 +62,10 @@ test("chat header chrome stays anchored while project files animate", () => {
   assert.ok(header, "missing chat header rule");
   assert.match(header, /position:\s*absolute;/);
   assert.match(header, /z-index:\s*42;/);
-  assert.match(header, /top:\s*4px;/);
-  assert.match(header, /right:\s*8px;/);
-  assert.match(header, /left:\s*8px;/);
+  assert.match(header, /top:\s*0;/);
+  assert.match(header, /right:\s*0;/);
+  assert.match(header, /left:\s*0;/);
+  assert.match(header, /border-radius:\s*0;/);
   assert.match(header, /min-height:\s*42px;/);
   assert.match(header, /padding:\s*4px 16px;/);
   assert.ok(actions, "missing chat header action rule");
@@ -79,7 +84,7 @@ test("chat header shares composer glass while messages scroll underneath", () =>
   assert.ok(header, "missing chat header rule");
   assert.ok(chatPane, "missing chat content pane rule");
   assert.match(chatPane, /position:\s*relative;/);
-  assert.match(headerStyles, /\.chat-main\s*\{\s*--chat-header-overlay-height:\s*54px;/);
+  assert.match(headerStyles, /\.chat-main\s*\{\s*--chat-header-overlay-height:\s*50px;/);
   assert.match(header, /--chat-header-surface-base:\s*var\(--sidebar-bg\);/);
   assert.match(
     header,
@@ -103,7 +108,7 @@ test("chat header shares composer glass while messages scroll underneath", () =>
   assert.match(app, /content-pane--chat/);
   assert.match(
     coreStyles,
-    /\.content-pane--chat[\s\S]*?> \.message-list\s*\{[\s\S]*?padding-top:\s*var\(--chat-header-overlay-height, 54px\);[\s\S]*?scroll-padding-block-start:/,
+    /\.content-pane--chat[\s\S]*?> \.message-list\s*\{[\s\S]*?padding-top:\s*var\(--chat-header-overlay-height, 50px\);[\s\S]*?scroll-padding-block-start:/,
   );
   assert.match(headerStyles, /@media \(prefers-reduced-transparency: reduce\)/);
   assert.match(headerStyles, /@media \(prefers-contrast: more\)/);
@@ -126,7 +131,7 @@ test("conversation title keeps a compact optical type scale", () => {
   assert.match(title, /letter-spacing:\s*0\.01em;/);
 });
 
-test("right-side chat surfaces share one inset container material", () => {
+test("right-side chat surfaces share one flush square glass material", () => {
   const layout = rule(rightPanelStyles, ".chat-layout-with-right.has-right-dock");
   const layoutBase = rule(rightPanelStyles, ".chat-layout-with-right");
   const runtimePanel = rule(rightPanelStyles, ".chat-right-panel");
@@ -134,33 +139,43 @@ test("right-side chat surfaces share one inset container material", () => {
   const openProjectPanel = rule(projectFilesStyles, ".project-files-panel.is-open");
   const projectWorkbench = rule(projectFilesStyles, ".project-file-workbench");
   const sidePanel = rule(sideChatStyles, ".side-chat-panel");
+  const reviewPanel = rule(reviewPanelStyles, ".chat-review-panel");
 
   assert.ok(layout, "missing docked chat layout rule");
   assert.match(layout, /border-radius:\s*28px 0 0 0;/);
   assert.ok(layoutBase, "missing shared chat dock surface tokens");
-  assert.match(layoutBase, /--chat-dock-inset:\s*6px;/);
-  assert.match(layoutBase, /--chat-dock-radius:\s*18px;/);
+  assert.match(layoutBase, /--chat-dock-inset:\s*0px;/);
+  assert.match(layoutBase, /--chat-dock-radius:\s*0px;/);
+  assert.match(layoutBase, /--chat-workbench-radius:\s*18px;/);
   assert.match(layoutBase, /--chat-dock-surface-border:/);
   assert.match(layoutBase, /--chat-dock-surface-background:/);
   assert.match(layoutBase, /--chat-dock-surface-shadow:/);
+  assert.match(layoutBase, /--chat-dock-surface-filter:/);
   assert.ok(runtimePanel, "missing runtime panel rule");
   assert.match(runtimePanel, /right:\s*var\(--chat-dock-inset\);/);
   assert.match(runtimePanel, /bottom:\s*var\(--chat-dock-inset\);/);
-  assert.match(runtimePanel, /backdrop-filter:\s*blur\(calc\(24px \* var\(--glass-blur-scale, 1\)\)\)/);
-  assert.match(runtimePanel, /-webkit-backdrop-filter:\s*blur\(calc\(24px \* var\(--glass-blur-scale, 1\)\)\)/);
+  assert.match(runtimePanel, /backdrop-filter:\s*var\(--chat-dock-surface-filter\);/);
+  assert.match(runtimePanel, /-webkit-backdrop-filter:\s*var\(--chat-dock-surface-filter\);/);
   assert.ok(projectPanel, "missing project files panel rule");
   assert.ok(openProjectPanel, "missing open project files panel rule");
   assert.ok(projectWorkbench, "missing project file workbench rule");
   assert.ok(sidePanel, "missing side chat panel rule");
+  assert.ok(reviewPanel, "missing review panel rule");
 
-  for (const panel of [runtimePanel, projectPanel, projectWorkbench, sidePanel]) {
+  for (const panel of [runtimePanel, projectPanel, sidePanel, reviewPanel]) {
     assert.match(panel, /border:\s*var\(--chat-dock-surface-border\);/);
     assert.match(panel, /border-radius:\s*var\(--chat-dock-radius\);/);
     assert.match(panel, /background:\s*var\(--chat-dock-surface-background\);/);
     assert.match(panel, /box-shadow:\s*var\(--chat-dock-surface-shadow\);/);
   }
+  for (const panel of [runtimePanel, projectPanel, sidePanel, reviewPanel]) {
+    assert.match(panel, /backdrop-filter:\s*var\(--chat-dock-surface-filter\);/);
+  }
+  assert.match(projectWorkbench, /border-radius:\s*var\(--chat-workbench-radius, 18px\);/);
   assert.match(openProjectPanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
+  assert.match(rightPanelStyles, /@media \(prefers-reduced-transparency: reduce\)/);
+  assert.match(rightPanelStyles, /@media \(prefers-contrast: more\)/);
 });
 
 test("project files dock animates layout in both directions", () => {

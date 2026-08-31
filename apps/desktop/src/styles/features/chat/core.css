@@ -29,8 +29,8 @@
   > .chat-pane
   > .message-list-wrap
   > .message-list {
-  padding-top: var(--chat-header-overlay-height, 54px);
-  scroll-padding-block-start: var(--chat-header-overlay-height, 54px);
+  padding-top: var(--chat-header-overlay-height, 50px);
+  scroll-padding-block-start: var(--chat-header-overlay-height, 50px);
 }
 
 .message-list::-webkit-scrollbar {

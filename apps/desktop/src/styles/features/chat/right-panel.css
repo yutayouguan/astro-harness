@@ -1,12 +1,22 @@
-/* 右栏浮层：限制在对话布局内，圆角与主窗一致，避免四角光晕溢出 */
+/* 右侧 dock 与顶部标题栏组成贴窗的连续玻璃 chrome：外壳不留缝、不加圆角，
+   内部按钮和输入控件仍保留各自半径。 */
 .chat-layout-with-right {
-  --chat-dock-inset: 6px;
-  --chat-dock-radius: 18px;
+  --chat-dock-inset: 0px;
+  --chat-dock-radius: 0px;
+  --chat-workbench-radius: 18px;
   --chat-dock-surface-border: 1px solid color-mix(in srgb, var(--glass-edge) 62%, transparent);
   --chat-dock-surface-background:
-    radial-gradient(circle at 72% 12%, color-mix(in srgb, var(--tone-soft) 24%, transparent), transparent 42%),
-    color-mix(in srgb, var(--glass-panel) 32%, transparent);
-  --chat-dock-surface-shadow: 0 2px 10px rgba(var(--shadow-ink), 0.04);
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
+      transparent 72%
+    ),
+    var(--sidebar-bg);
+  --chat-dock-surface-shadow:
+    var(--glass-rim),
+    -1px 0 8px rgba(var(--shadow-ink), 0.045);
+  --chat-dock-surface-filter: blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
   position: relative;
   flex: 1;
   min-height: 0;
@@ -83,8 +93,8 @@
   border-radius: var(--chat-dock-radius);
   background: var(--chat-dock-surface-background);
   box-shadow: var(--chat-dock-surface-shadow);
-  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
-  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
+  backdrop-filter: var(--chat-dock-surface-filter);
+  -webkit-backdrop-filter: var(--chat-dock-surface-filter);
   min-height: 0;
   overflow: hidden;
   will-change: transform, opacity;
@@ -133,6 +143,24 @@
 
 .chat-right-panel.is-resizing {
   user-select: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .chat-layout-with-right {
+    --chat-dock-surface-background: var(--surface-panel-background);
+    --chat-dock-surface-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .chat-layout-with-right {
+    --chat-dock-surface-border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent);
+    --chat-dock-surface-background: color-mix(
+      in srgb,
+      var(--surface-panel-background) 94%,
+      transparent
+    );
+  }
 }
 
 .chat-right-header {

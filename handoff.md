@@ -646,9 +646,10 @@ Astro 已能从部分 Provider 读取 input、output、cache read/write 和 reas
 ### 修复结果
 
 - `.content-header--chat` 已改为不占据正文高度的绝对定位玻璃层，并复用输入框的半透明基底、sheen、玻璃边缘、内高光与 backdrop blur 配方。
-- 主消息滚动容器从窗顶开始，首屏使用 54px 安全留白；滚动后文字会进入玻璃标题栏背后。侧边聊天不继承该留白，定时任务浮卡和临时会话提示同步避让。
+- 主消息滚动容器从窗顶开始，首屏使用 50px 安全留白；滚动后文字会进入玻璃标题栏背后。侧边聊天不继承该留白，定时任务浮卡和临时会话提示同步避让。
 - 空白区域保持事件透传，标题、会话菜单和右侧操作区保持可点击；补充降低透明度和高对比度回退。
-- `chatFloatingChrome.test.mjs` 11 项测试、TypeScript、CSS lint 与生产构建通过；Storybook 浅色/深色及真实滚动验证确认标题栏高 42px、消息视口顶点为 0，滚动时存在内容进入标题栏背后；640px 窄屏无控件重叠。
+- `chatFloatingChrome.test.mjs` 聚焦测试、TypeScript、CSS lint 与生产构建通过；Storybook 浅色/深色及真实滚动验证确认标题栏高 42px、消息视口顶点为 0，滚动时存在内容进入标题栏背后；窄屏无控件重叠。
+- 后续视觉对齐将标题栏改为 `top/right/left: 0` 与 `border-radius: 0`，并把项目文件、侧聊、运行摘要和评审面板统一为贴窗方角玻璃材质；内部编辑器卡片仍保留 18px 圆角。
 
 ## H-019 活动组进度参数存在重复字段导致前端无法构建
 
@@ -685,3 +686,27 @@ Astro 已能从部分 Provider 读取 input、output、cache read/write 和 reas
 - 建议修复方向
 - 验收标准
 ```
+
+## H-020 活动组件残留未使用类型导致前端类型检查失败
+
+| 字段 | 内容 |
+| --- | --- |
+| 状态 | `Closed` |
+| 严重度 | High |
+| 发现日期 | 2026-08-31 |
+| 发现阶段 | 右侧玻璃栏 TypeScript 回归检查 |
+| 是否已修复 | 是 |
+
+### 问题与证据
+
+`MsgActivity.tsx` 导入了 `ActivityVisualKind`，但当前实现没有使用该类型。项目启用了未使用声明检查，`npx tsc --noEmit` 报告 `TS6133`，生产构建会在进入 Vite 前失败。
+
+### 修复方向与验收标准
+
+- 只移除无效类型导入，不改变活动展示或状态映射逻辑。
+- 活动呈现聚焦测试、TypeScript 与生产构建恢复通过。
+
+### 修复结果
+
+- 已移除 `ActivityVisualKind` 的无效类型导入，未触碰活动展示逻辑。
+- 18 项相关测试、TypeScript、CSS lint 与生产构建均通过。

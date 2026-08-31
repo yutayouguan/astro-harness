@@ -1,5 +1,5 @@
-/* 项目文件工作台：右侧目录树是布局的一部分，编辑器只替换聊天消息区。
-   编辑器与目录栏是同一套半径的并排卡片，避免外层 28px 大圆角削掉内部直角元素。 */
+/* 项目文件工作台：右侧目录树是贴窗的方角玻璃侧栏，
+   编辑器仍是独立卡片，只替换聊天消息区。 */
 .chat-layout-with-right {
   --pf-gutter: 6px;
   --pf-radius-card: 18px;
@@ -25,6 +25,8 @@
   border-radius: var(--chat-dock-radius);
   background: var(--chat-dock-surface-background);
   box-shadow: var(--chat-dock-surface-shadow);
+  backdrop-filter: var(--chat-dock-surface-filter);
+  -webkit-backdrop-filter: var(--chat-dock-surface-filter);
   overflow: hidden;
   opacity: 0;
   visibility: hidden;
@@ -276,7 +278,7 @@
   overflow: hidden;
   isolation: isolate;
   border: var(--chat-dock-surface-border);
-  border-radius: var(--chat-dock-radius);
+  border-radius: var(--chat-workbench-radius, 18px);
   background: var(--chat-dock-surface-background);
   box-shadow: var(--chat-dock-surface-shadow);
 }
