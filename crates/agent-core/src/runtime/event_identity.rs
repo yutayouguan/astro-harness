@@ -89,12 +89,18 @@ pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> Stri
         | EventMsg::ItemCompleted(event)
         | EventMsg::McpToolCallBegin(event)
         | EventMsg::McpToolCallEnd(event)
-        | EventMsg::HookStarted(event)
-        | EventMsg::HookCompleted(event)
         | EventMsg::SubAgentActivity(event)
         | EventMsg::ContextCompacted(event) => {
             event.turn_id.clone_from(&turn_id);
             normalize_turn_item(&mut event.item);
+        }
+        EventMsg::HookStarted(event) => {
+            event.turn_id = Some(turn_id.clone());
+            event.run.id = event_item_id(&event.run.id);
+        }
+        EventMsg::HookCompleted(event) => {
+            event.turn_id = Some(turn_id.clone());
+            event.run.id = event_item_id(&event.run.id);
         }
         EventMsg::AgentMessageContentDelta(event)
         | EventMsg::PlanDelta(event)

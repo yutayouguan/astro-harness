@@ -169,6 +169,133 @@ pub struct ContextUsageEvent {
     pub recommend_compact: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookEventName {
+    PreToolUse,
+    PermissionRequest,
+    PostToolUse,
+    PreCompact,
+    PostCompact,
+    SessionStart,
+    SessionEnd,
+    UserPromptSubmit,
+    SubagentStart,
+    SubagentStop,
+    Stop,
+    Interrupt,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookHandlerType {
+    Command,
+    McpTool,
+    Prompt,
+    Agent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookExecutionMode {
+    Sync,
+    Async,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookScope {
+    Thread,
+    Turn,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookSource {
+    System,
+    User,
+    Project,
+    Mdm,
+    SessionFlags,
+    Plugin,
+    CloudRequirements,
+    CloudManagedConfig,
+    LegacyManagedConfigFile,
+    LegacyManagedConfigMdm,
+    #[default]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookTrustStatus {
+    Managed,
+    Untrusted,
+    Trusted,
+    Modified,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookRunStatus {
+    Running,
+    Completed,
+    Failed,
+    Blocked,
+    Stopped,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookOutputEntryKind {
+    Warning,
+    Stop,
+    Feedback,
+    Context,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct HookOutputEntry {
+    pub kind: HookOutputEntryKind,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct HookRunSummary {
+    pub id: String,
+    pub event_name: HookEventName,
+    pub handler_type: HookHandlerType,
+    pub execution_mode: HookExecutionMode,
+    pub scope: HookScope,
+    pub source_path: String,
+    #[serde(default)]
+    pub source: HookSource,
+    pub display_order: i64,
+    pub status: HookRunStatus,
+    pub status_message: Option<String>,
+    pub started_at: i64,
+    pub completed_at: Option<i64>,
+    pub duration_ms: Option<i64>,
+    pub entries: Vec<HookOutputEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct HookStartedEvent {
+    pub turn_id: Option<String>,
+    pub run: HookRunSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct HookCompletedEvent {
+    pub turn_id: Option<String>,
+    pub run: HookRunSummary,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum EventMsg {
@@ -190,8 +317,8 @@ pub enum EventMsg {
     DynamicToolCallResponse(ControlRequestEvent),
     McpToolCallBegin(ItemEvent),
     McpToolCallEnd(ItemEvent),
-    HookStarted(ItemEvent),
-    HookCompleted(ItemEvent),
+    HookStarted(HookStartedEvent),
+    HookCompleted(HookCompletedEvent),
     SubAgentActivity(ItemEvent),
     ContextCompacted(ItemEvent),
     ContextUsage(ContextUsageEvent),
@@ -233,6 +360,40 @@ mod tests {
         let json = serde_json::to_string(&event).unwrap();
         let restored: Event = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, event);
+    }
+
+    #[test]
+    fn hook_lifecycle_roundtrips_native_run_summary() {
+        let run = HookRunSummary {
+            id: "hook-run-1".into(),
+            event_name: HookEventName::PreToolUse,
+            handler_type: HookHandlerType::Command,
+            execution_mode: HookExecutionMode::Sync,
+            scope: HookScope::Turn,
+            source_path: "/tmp/config.toml".into(),
+            source: HookSource::Project,
+            display_order: 0,
+            status: HookRunStatus::Running,
+            status_message: Some("Checking command".into()),
+            started_at: 42,
+            completed_at: None,
+            duration_ms: None,
+            entries: Vec::new(),
+        };
+        let event = Event {
+            id: "turn-1".into(),
+            msg: EventMsg::HookStarted(HookStartedEvent {
+                turn_id: Some("turn-1".into()),
+                run,
+            }),
+        };
+
+        let json = serde_json::to_string(&event).unwrap();
+        let restored: Event = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored, event);
+        assert!(json.contains("\"event_name\":\"pre_tool_use\""));
+        assert!(json.contains("\"handler_type\":\"command\""));
     }
 
     #[test]

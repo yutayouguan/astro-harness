@@ -52,10 +52,10 @@ fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
         | EventMsg::ItemCompleted(event)
         | EventMsg::McpToolCallBegin(event)
         | EventMsg::McpToolCallEnd(event)
-        | EventMsg::HookStarted(event)
-        | EventMsg::HookCompleted(event)
         | EventMsg::SubAgentActivity(event)
         | EventMsg::ContextCompacted(event) => Some(event.turn_id.clone()),
+        EventMsg::HookStarted(event) => event.turn_id.clone(),
+        EventMsg::HookCompleted(event) => event.turn_id.clone(),
         EventMsg::AgentMessageContentDelta(event)
         | EventMsg::PlanDelta(event)
         | EventMsg::ReasoningContentDelta(event)

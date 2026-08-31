@@ -175,16 +175,31 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
             request.turn_id.clone(),
             Payload::ControlRequest(control_payload("dynamic_tool_response", request)),
         ),
-        EventMsg::McpToolCallBegin(item) | EventMsg::HookStarted(item) => (
+        EventMsg::McpToolCallBegin(item) => (
             item.turn_id.clone(),
             Payload::ItemStarted(item_payload(&item.item, "in_progress")),
         ),
         EventMsg::McpToolCallEnd(item)
-        | EventMsg::HookCompleted(item)
         | EventMsg::SubAgentActivity(item)
         | EventMsg::ContextCompacted(item) => (
             item.turn_id.clone(),
             Payload::ItemCompleted(item_payload(&item.item, "completed")),
+        ),
+        EventMsg::HookStarted(hook) => (
+            hook.turn_id.clone().unwrap_or_else(|| event.id.clone()),
+            Payload::Extension(extension_payload(
+                hook.run.id.clone(),
+                "astro.hook_started",
+                hook,
+            )),
+        ),
+        EventMsg::HookCompleted(hook) => (
+            hook.turn_id.clone().unwrap_or_else(|| event.id.clone()),
+            Payload::Extension(extension_payload(
+                hook.run.id.clone(),
+                "astro.hook_completed",
+                hook,
+            )),
         ),
         EventMsg::ContextUsage(usage) => (
             usage.turn_id.clone(),

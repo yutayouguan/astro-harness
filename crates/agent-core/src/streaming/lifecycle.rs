@@ -516,7 +516,7 @@ pub(crate) async fn emit_hook_started(
     emit(
         session,
         turn_context,
-        EventMsg::HookStarted(ItemEvent {
+        EventMsg::ItemStarted(ItemEvent {
             turn_id: turn_context.sub_id().to_string(),
             item: TurnItem::HookPrompt(TextItem {
                 id: item_id.clone(),
@@ -537,7 +537,7 @@ pub(crate) async fn emit_hook_completed(
     emit(
         session,
         turn_context,
-        EventMsg::HookCompleted(ItemEvent {
+        EventMsg::ItemCompleted(ItemEvent {
             turn_id: turn_context.sub_id().to_string(),
             item: TurnItem::HookPrompt(TextItem {
                 id: item_id,
@@ -864,11 +864,11 @@ mod tests {
         let completed = rx.recv().await.unwrap();
         assert!(matches!(
             started.msg,
-            EventMsg::HookStarted(ItemEvent { item, .. }) if item.id() == item_id
+            EventMsg::ItemStarted(ItemEvent { item, .. }) if item.id() == item_id
         ));
         assert!(matches!(
             completed.msg,
-            EventMsg::HookCompleted(ItemEvent { item, .. }) if item.id() == item_id
+            EventMsg::ItemCompleted(ItemEvent { item, .. }) if item.id() == item_id
         ));
     }
 
