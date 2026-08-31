@@ -16,6 +16,12 @@ export type SkillUpdateSummary = {
   noOrigin: number;
 };
 
+export type SkillUpdateVersionPresentation = {
+  installedVersion: string | null;
+  latestVersion: string | null;
+  showVersionFlow: boolean;
+};
+
 /** 从路径 id 取文件夹名（与 `skillInstalledMatch` 一致） */
 function folderFromId(id: string): string | undefined {
   const parts = id.split(/[/\\]/).filter(Boolean);
@@ -140,6 +146,24 @@ export function applyCheckResults(
     if (!check) return row;
     return { ...row, status: check.status };
   });
+}
+
+/**
+ * 可更新条目始终展示“已安装 → 最新”。
+ * SkillHub 可能只更新内容/时间戳而不提升版本号，因此不能用版本号是否不同决定是否显示箭头。
+ */
+export function resolveUpdateVersionPresentation(
+  row: SkillUpdateRow,
+  check: SkillUpdateCheckResult | undefined,
+): SkillUpdateVersionPresentation {
+  const installedVersion = row.origin?.remote_version?.trim() || null;
+  const latestVersion = check?.remote_version?.trim() || null;
+  return {
+    installedVersion,
+    latestVersion,
+    showVersionFlow:
+      row.status === "outdated" && Boolean(installedVersion || latestVersion),
+  };
 }
 
 /** 按筛选芯片过滤合并行；`updatable` 仅保留远端检查为 outdated 的行 */

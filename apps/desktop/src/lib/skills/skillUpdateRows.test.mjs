@@ -4,6 +4,7 @@ import {
   applyCheckResults,
   filterUpdateRows,
   mergeUpdateRows,
+  resolveUpdateVersionPresentation,
   summarizeUpdateRows,
 } from "./skillUpdateRows.ts";
 
@@ -234,6 +235,48 @@ test("applyCheckResults maps current status by origin folder", () => {
     },
   ]);
   assert.equal(applied[0].status, "current");
+});
+
+test("outdated row shows installed to latest flow when versions differ", () => {
+  const origin = { ...pptOrigin, remote_version: "1.0.0" };
+  const check = {
+    folder: "ppt-generator-skill",
+    status: "outdated",
+    remote_version: "2.0.0",
+    remote_updated_at: 99,
+    message: "",
+  };
+  const [row] = applyCheckResults(
+    mergeUpdateRows([pptInstalled], [], [origin], "workspace"),
+    [check],
+  );
+
+  assert.deepEqual(resolveUpdateVersionPresentation(row, check), {
+    installedVersion: "1.0.0",
+    latestVersion: "2.0.0",
+    showVersionFlow: true,
+  });
+});
+
+test("timestamp-only update still shows installed to latest flow", () => {
+  const origin = { ...pptOrigin, remote_version: "1.0.0" };
+  const check = {
+    folder: "ppt-generator-skill",
+    status: "outdated",
+    remote_version: "1.0.0",
+    remote_updated_at: 99,
+    message: "",
+  };
+  const [row] = applyCheckResults(
+    mergeUpdateRows([pptInstalled], [], [origin], "workspace"),
+    [check],
+  );
+
+  assert.deepEqual(resolveUpdateVersionPresentation(row, check), {
+    installedVersion: "1.0.0",
+    latestVersion: "1.0.0",
+    showVersionFlow: true,
+  });
 });
 
 test("applyCheckResults leaves no_origin rows unchanged", () => {

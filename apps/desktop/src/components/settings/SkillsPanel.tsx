@@ -89,6 +89,7 @@ import {
   filterUpdateRows,
   mergeUpdateRows,
   originMatchesSkill,
+  resolveUpdateVersionPresentation,
   summarizeUpdateRows,
 } from "../../lib/skills/skillUpdateRows";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
@@ -2209,11 +2210,8 @@ export default function SkillsPanel({
     const check = origin ? updateChecksByFolder.get(origin.folder) : undefined;
     const canUpdate = canUpdateSkillFromOrigin(skill, origin);
     const isUpdating = updatingFolder === folder;
-    const installedVersion = origin?.remote_version?.trim() || null;
-    const latestVersion = check?.remote_version?.trim() || null;
-    const hasVersionUpgrade =
-      row.status === "outdated" &&
-      Boolean(latestVersion && latestVersion !== installedVersion);
+    const { installedVersion, latestVersion, showVersionFlow } =
+      resolveUpdateVersionPresentation(row, check);
     const remoteUpdatedLabel = check?.remote_updated_at
       ? formatStoreUpdatedAt(check.remote_updated_at, t)
       : null;
@@ -2277,7 +2275,7 @@ export default function SkillsPanel({
         <div className="skill-card-desc">
           <p>{skill.description || skill.path}</p>
           <div className="skill-update-meta">
-            {hasVersionUpgrade ? (
+            {showVersionFlow ? (
               <span className="skill-update-version-flow">
                 <span className="is-current-version">
                   {t("skills.installedVersion").replace(
