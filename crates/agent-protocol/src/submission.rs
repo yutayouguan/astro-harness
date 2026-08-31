@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::control::{
+    DynamicToolResponse, InterAgentCommunication, RequestPermissionsResponse,
+    RequestUserInputResponse, ReviewDecision, ReviewRequest,
+};
 use crate::items::ExtensionItem;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +66,7 @@ pub enum SuspendTurnOutcome {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Op {
     TurnInput {
         request: TurnInputRequest,
@@ -85,23 +90,23 @@ pub enum Op {
     },
     ExecApproval {
         id: String,
-        decision: Value,
+        decision: ReviewDecision,
     },
     PatchApproval {
         id: String,
-        decision: Value,
+        decision: ReviewDecision,
     },
     UserInputAnswer {
         id: String,
-        response: Value,
+        response: RequestUserInputResponse,
     },
     RequestPermissionsResponse {
         id: String,
-        response: Value,
+        response: RequestPermissionsResponse,
     },
     DynamicToolResponse {
         id: String,
-        response: Value,
+        response: DynamicToolResponse,
     },
     RefreshMcpServers,
     ReloadUserConfig,
@@ -110,10 +115,10 @@ pub enum Op {
         num_turns: u32,
     },
     Review {
-        request: Value,
+        review_request: ReviewRequest,
     },
     InterAgentCommunication {
-        communication: Value,
+        communication: InterAgentCommunication,
     },
     EmitExtension {
         item: ExtensionItem,

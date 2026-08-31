@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
-use agent_protocol::{ErrorEvent, EventMsg, ItemEvent, Op, Submission, TurnItem};
+use agent_protocol::{
+    ContentItem, ErrorEvent, EventMsg, InterAgentCommunication, ItemEvent, Op, ResponseItem,
+    ReviewDecision, Submission, TurnInput, TurnInputMode, TurnInputRequest, TurnItem,
+};
 use async_channel::Receiver;
 use futures::FutureExt;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use super::Session;
 use crate::streaming::ChatOverride;
@@ -201,16 +204,31 @@ impl Session {
                 self.resolve_approval(submission_id, id, decision).await;
             }
             Op::UserInputAnswer { id, response } => {
-                self.resolve_control_response(submission_id, id, "resolved", response)
-                    .await;
+                self.resolve_control_response(
+                    submission_id,
+                    id,
+                    "resolved",
+                    serde_json::to_value(response).expect("user-input response is serializable"),
+                )
+                .await;
             }
             Op::RequestPermissionsResponse { id, response } => {
-                self.resolve_control_response(submission_id, id, "resolved", response)
-                    .await;
+                self.resolve_control_response(
+                    submission_id,
+                    id,
+                    "resolved",
+                    serde_json::to_value(response).expect("permissions response is serializable"),
+                )
+                .await;
             }
             Op::DynamicToolResponse { id, response } => {
-                self.resolve_control_response(submission_id, id, "resolved", response)
-                    .await;
+                self.resolve_control_response(
+                    submission_id,
+                    id,
+                    "resolved",
+                    serde_json::to_value(response).expect("dynamic-tool response is serializable"),
+                )
+                .await;
             }
             Op::Compact => {
                 let context = self.create_turn_context(submission_id.clone()).await;
@@ -231,7 +249,7 @@ impl Session {
             Op::ThreadRollback { num_turns } => {
                 self.rollback_thread(submission_id, num_turns).await;
             }
-            Op::Review { request } => {
+            Op::Review { review_request } => {
                 let context = self.create_turn_context(submission_id.clone()).await;
                 let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
                     Arc::clone(self),
@@ -242,7 +260,7 @@ impl Session {
                     .spawn_task(
                         context,
                         Vec::new(),
-                        crate::tasks::ReviewTask::new(args, request),
+                        crate::tasks::ReviewTask::new(args, review_request),
                     )
                     .await
                 {
@@ -256,8 +274,8 @@ impl Session {
                     .await;
                 }
             }
-            Op::InterAgentCommunication { .. } => {
-                self.emit_unsupported_op(submission_id, "inter_agent_communication")
+            Op::InterAgentCommunication { communication } => {
+                self.handle_inter_agent_communication(submission_id, communication, chat_override)
                     .await;
             }
             Op::TurnInput { .. }
@@ -269,13 +287,99 @@ impl Session {
             | Op::Shutdown => {
                 unreachable!("submission loop routes primary control operations directly")
             }
+            op => {
+                self.emit_control_error(
+                    submission_id,
+                    "unsupported_operation",
+                    format!("operation {op:?} is not supported by this runtime"),
+                )
+                .await;
+            }
         }
     }
 
-    async fn resolve_approval(&self, submission_id: String, id: String, decision: Value) {
+    async fn resolve_approval(&self, submission_id: String, id: String, decision: ReviewDecision) {
         let (status, payload) = approval_resolution(decision);
         self.resolve_control_response(submission_id, id, status, payload)
             .await;
+    }
+
+    async fn handle_inter_agent_communication(
+        self: &Arc<Self>,
+        submission_id: String,
+        communication: InterAgentCommunication,
+        chat_override: Option<ChatOverride>,
+    ) {
+        let Some(bindings) = self.runtime_io.get() else {
+            self.emit_control_error(
+                submission_id,
+                "inter_agent_communication",
+                "inter-agent communication requires bound rollout persistence",
+            )
+            .await;
+            return;
+        };
+        let payload = serde_json::to_value(&communication)
+            .expect("inter-agent communication is serializable");
+        if let Err(error) = bindings
+            .rollout
+            .record(vec![agent_rollout::RolloutItem::InterAgentCommunication(
+                payload,
+            )])
+            .await
+        {
+            self.emit_control_error(submission_id, "inter_agent_communication", error)
+                .await;
+            return;
+        }
+
+        let visible_text = format!(
+            "<inter_agent_message from=\"{}\" to=\"{}\">\n{}\n</inter_agent_message>",
+            communication.author, communication.recipient, communication.content
+        );
+        if communication.trigger_turn && !communication.content.trim().is_empty() {
+            let result = self
+                .submit_turn_input(
+                    submission_id.clone(),
+                    TurnInputRequest {
+                        input: vec![TurnInput {
+                            content: visible_text.clone(),
+                            image_data_urls: Vec::new(),
+                            client_message_id: communication.id.as_ref().map(ToString::to_string),
+                        }],
+                    },
+                    TurnInputMode::StartOrSteer,
+                    chat_override,
+                )
+                .await;
+            if matches!(
+                result,
+                Ok(agent_protocol::TurnInputSubmission::Started { .. }
+                    | agent_protocol::TurnInputSubmission::Steered { .. })
+            ) {
+                return;
+            }
+            if let Err(error) = result {
+                self.emit_control_error(submission_id.clone(), "inter_agent_communication", error)
+                    .await;
+            }
+        }
+
+        if communication.content.trim().is_empty() {
+            return;
+        }
+        let item = ResponseItem::Message {
+            id: communication.id,
+            role: "developer".into(),
+            content: vec![ContentItem::InputText { text: visible_text }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: communication
+                .internal_chat_message_metadata_passthrough,
+        };
+        if let Err(error) = self.record_response_items(vec![item]).await {
+            self.emit_control_error(submission_id, "inter_agent_communication", error)
+                .await;
+        }
     }
 
     async fn resolve_control_response(
@@ -305,12 +409,17 @@ impl Session {
         }
     }
 
-    async fn emit_unsupported_op(&self, submission_id: String, operation: &str) {
+    async fn emit_control_error(
+        &self,
+        submission_id: String,
+        operation: &str,
+        error: impl std::fmt::Display,
+    ) {
         self.send_event(
             &submission_id,
             EventMsg::Error(ErrorEvent {
-                message: format!("operation {operation} is not supported by this runtime"),
-                error_type: "unsupported_op".into(),
+                message: error.to_string(),
+                error_type: format!("{operation}_failed"),
             }),
         )
         .await;
@@ -367,53 +476,48 @@ impl Session {
     }
 }
 
-fn approval_resolution(decision: Value) -> (&'static str, Value) {
+fn approval_resolution(decision: ReviewDecision) -> (&'static str, Value) {
     match decision {
-        Value::String(decision) => approval_resolution_from_name(&decision, Map::new()),
-        Value::Object(mut decision) => {
-            if decision.get("approved").and_then(Value::as_bool).is_some() {
-                return ("resolved", Value::Object(decision));
-            }
-            let name = decision
-                .remove("decision")
-                .and_then(|value| value.as_str().map(str::to_owned))
-                .or_else(|| {
-                    (decision.len() == 1)
-                        .then(|| decision.keys().next().cloned())
-                        .flatten()
-                })
-                .unwrap_or_else(|| "denied".into());
-            approval_resolution_from_name(&name, decision)
-        }
-        _ => ("resolved", serde_json::json!({ "approved": false })),
+        ReviewDecision::Approved => ("resolved", serde_json::json!({ "approved": true })),
+        ReviewDecision::ApprovedForSession => (
+            "resolved",
+            serde_json::json!({ "approved": true, "always": true }),
+        ),
+        ReviewDecision::ApprovedExecpolicyAmendment {
+            proposed_execpolicy_amendment,
+        } => (
+            "resolved",
+            serde_json::json!({
+                "approved": true,
+                "proposed_execpolicy_amendment": proposed_execpolicy_amendment,
+            }),
+        ),
+        ReviewDecision::ApprovedMcpPolicyAmendment => (
+            "resolved",
+            serde_json::json!({ "approved": true, "mcp_policy_amendment": true }),
+        ),
+        ReviewDecision::NetworkPolicyAmendment {
+            network_policy_amendment,
+        } => (
+            "resolved",
+            serde_json::json!({
+                "approved": true,
+                "network_policy_amendment": network_policy_amendment,
+            }),
+        ),
+        ReviewDecision::Denied { rejection } => (
+            "resolved",
+            serde_json::json!({ "approved": false, "rejection": rejection }),
+        ),
+        ReviewDecision::TimedOut => (
+            "timeout",
+            serde_json::json!({ "approved": false, "timed_out": true }),
+        ),
+        ReviewDecision::Abort => (
+            "cancelled",
+            serde_json::json!({ "approved": false, "abort": true }),
+        ),
     }
-}
-
-fn approval_resolution_from_name(
-    decision: &str,
-    mut metadata: Map<String, Value>,
-) -> (&'static str, Value) {
-    let normalized = decision.trim().to_ascii_lowercase();
-    let (status, approved, always, abort) = match normalized.as_str() {
-        "approved" | "approve" | "allow" | "allow_once" => ("resolved", true, false, false),
-        "approved_for_session"
-        | "approvedforsession"
-        | "allow_always"
-        | "approved_execpolicy_amendment"
-        | "approved_mcp_policy_amendment"
-        | "network_policy_amendment" => ("resolved", true, true, false),
-        "timed_out" | "timeout" => ("timeout", false, false, false),
-        "abort" | "cancelled" | "canceled" => ("cancelled", false, false, true),
-        _ => ("resolved", false, false, false),
-    };
-    metadata.insert("approved".into(), Value::Bool(approved));
-    if always {
-        metadata.insert("always".into(), Value::Bool(true));
-    }
-    if abort {
-        metadata.insert("abort".into(), Value::Bool(true));
-    }
-    (status, Value::Object(metadata))
 }
 
 #[cfg(test)]
@@ -421,7 +525,9 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use agent_protocol::{Op, Submission, TurnInput};
+    use agent_protocol::{
+        Op, RequestUserInputAnswer, RequestUserInputResponse, ReviewDecision, Submission, TurnInput,
+    };
     use serde_json::json;
     use tokio::sync::Notify;
     use tokio_util::sync::CancellationToken;
@@ -539,7 +645,7 @@ mod tests {
             id: "approval-submission".into(),
             op: Op::ExecApproval {
                 id: "approval-1".into(),
-                decision: Value::String("approved_for_session".into()),
+                decision: ReviewDecision::ApprovedForSession,
             },
         })
         .await
@@ -554,7 +660,14 @@ mod tests {
             id: "answer-submission".into(),
             op: Op::UserInputAnswer {
                 id: "question-1".into(),
-                response: json!({ "answers": { "choice": ["yes"] } }),
+                response: RequestUserInputResponse {
+                    answers: std::collections::HashMap::from([(
+                        "choice".into(),
+                        RequestUserInputAnswer {
+                            answers: vec!["yes".into()],
+                        },
+                    )]),
+                },
             },
         })
         .await
@@ -563,7 +676,7 @@ mod tests {
         assert_eq!(answer.status, "resolved");
         assert_eq!(
             serde_json::from_str::<Value>(&answer.payload_json).unwrap(),
-            json!({ "answers": { "choice": ["yes"] } })
+            json!({ "answers": { "choice": { "answers": ["yes"] } } })
         );
 
         drop(tx);
@@ -572,17 +685,17 @@ mod tests {
 
     #[test]
     fn approval_resolution_accepts_codex_decision_names() {
-        let (status, approved) = approval_resolution(Value::String("approved".into()));
+        let (status, approved) = approval_resolution(ReviewDecision::Approved);
         assert_eq!(status, "resolved");
         assert_eq!(approved, json!({ "approved": true }));
 
-        let (status, denied) = approval_resolution(json!({
-            "denied": { "rejection": "unsafe" }
-        }));
+        let (status, denied) = approval_resolution(ReviewDecision::Denied {
+            rejection: "unsafe".into(),
+        });
         assert_eq!(status, "resolved");
         assert_eq!(denied["approved"], false);
 
-        let (status, timeout) = approval_resolution(Value::String("timed_out".into()));
+        let (status, timeout) = approval_resolution(ReviewDecision::TimedOut);
         assert_eq!(status, "timeout");
         assert_eq!(timeout["approved"], false);
     }

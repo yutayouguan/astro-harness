@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use agent_protocol::{EventMsg, ItemEvent, TextItem, TurnItem, TurnStartedEvent};
-use serde_json::Value;
+use agent_protocol::{
+    EventMsg, ItemEvent, ReviewRequest, ReviewTarget, TextItem, TurnItem, TurnStartedEvent,
+};
 use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext, TurnResult};
@@ -11,30 +12,32 @@ use super::{SessionTask, SessionTaskResult, TaskKind, TurnCancelled, TurnInput};
 
 pub(crate) struct ReviewTask {
     args: RunTurnArgs,
-    request: Value,
+    request: ReviewRequest,
 }
 
 impl ReviewTask {
-    pub(crate) fn new(args: RunTurnArgs, request: Value) -> Self {
+    pub(crate) fn new(args: RunTurnArgs, request: ReviewRequest) -> Self {
         Self { args, request }
     }
 
     fn prompt(&self) -> String {
-        self.request
-            .as_str()
-            .map(str::to_owned)
-            .or_else(|| {
-                self.request
-                    .get("prompt")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-            })
-            .unwrap_or_else(|| {
-                format!(
-                    "Review the current workspace changes. Focus on correctness, regressions, and missing tests. Review request: {}",
-                    self.request
-                )
-            })
+        let target = match &self.request.target {
+            ReviewTarget::UncommittedChanges => "Review the working tree changes.".to_string(),
+            ReviewTarget::BaseBranch { branch } => {
+                format!("Review the changes against base branch `{branch}`.")
+            }
+            ReviewTarget::Commit { sha, title } => match title {
+                Some(title) => format!("Review commit `{sha}` ({title})."),
+                None => format!("Review commit `{sha}`."),
+            },
+            ReviewTarget::Custom { instructions } => instructions.clone(),
+        };
+        match self.request.user_facing_hint.as_deref() {
+            Some(hint) if !hint.trim().is_empty() => {
+                format!("{target}\n\nAdditional context: {hint}")
+            }
+            _ => target,
+        }
     }
 
     async fn exit_review_mode(
@@ -91,7 +94,7 @@ impl SessionTask for ReviewTask {
                     turn_id: ctx.sub_id().to_string(),
                     item: TurnItem::EnteredReviewMode(TextItem {
                         id: mode_item_id.clone(),
-                        content: self.request.to_string(),
+                        content: self.prompt(),
                     }),
                 }),
             )

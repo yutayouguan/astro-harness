@@ -780,7 +780,12 @@ mod tests {
         .unwrap();
         let turn_id = thread
             .submit(Op::Review {
-                request: serde_json::json!({ "prompt": "review the current diff" }),
+                review_request: agent_protocol::ReviewRequest {
+                    target: agent_protocol::ReviewTarget::Custom {
+                        instructions: "review the current diff".into(),
+                    },
+                    user_facing_hint: None,
+                },
             })
             .await
             .unwrap();
@@ -817,5 +822,152 @@ mod tests {
         timeout(Duration::from_secs(1), thread.wait_terminated())
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn non_triggering_inter_agent_message_is_durable_and_model_visible() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("actor-inter-agent.jsonl");
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "actor-inter-agent".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        let thread = AstroThread::spawn(
+            Arc::clone(&session),
+            RolloutRecorder::open(path.clone()).await.unwrap(),
+        )
+        .unwrap();
+
+        thread
+            .submit(Op::InterAgentCommunication {
+                communication: agent_protocol::InterAgentCommunication {
+                    id: Some(agent_protocol::ResponseItemId::with_suffix("mail", "1")),
+                    author: "/root/reviewer".into(),
+                    recipient: "/root".into(),
+                    other_recipients: Vec::new(),
+                    content: "check the rollback boundary".into(),
+                    encrypted_content: None,
+                    internal_chat_message_metadata_passthrough: None,
+                    trigger_turn: false,
+                },
+            })
+            .await
+            .unwrap();
+        let barrier_id = thread
+            .submit(Op::ThreadSettings {
+                settings: serde_json::json!({}),
+            })
+            .await
+            .unwrap();
+        loop {
+            let event = thread.next_event().await.unwrap();
+            if event.id == barrier_id
+                && matches!(
+                    event.msg,
+                    agent_protocol::EventMsg::ThreadSettingsApplied(_)
+                )
+            {
+                break;
+            }
+        }
+        let history = session.clone_response_history().await;
+        assert!(matches!(
+            history.last(),
+            Some(agent_protocol::ResponseItem::Message { role, content, .. })
+                if role == "developer"
+                    && matches!(content.first(), Some(agent_protocol::ContentItem::InputText { text }) if text.contains("check the rollback boundary"))
+        ));
+        thread.flush_rollout().await.unwrap();
+        assert!(read_rollout(&path).await.unwrap().iter().any(|item| {
+            matches!(item, RolloutItem::InterAgentCommunication(payload) if payload["author"] == "/root/reviewer")
+        }));
+
+        thread.submit(Op::Shutdown).await.unwrap();
+        thread.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn triggering_inter_agent_message_starts_a_regular_turn() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "actor-inter-agent-trigger".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        session.set_chat_targets(vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }]);
+        let chat: crate::streaming::ChatOverride = Arc::new(move |_messages, _tools, _config| {
+            Box::pin(async {
+                Ok(Box::pin(futures::stream::iter(
+                    vec![
+                        StreamChunk::Text("mail received".into()),
+                        StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        },
+                    ]
+                    .into_iter()
+                    .map(Ok),
+                )) as CompletionStream)
+            })
+        });
+        let thread = AstroThread::spawn_with_chat_override(
+            Arc::clone(&session),
+            recorder(&dir, "actor-inter-agent-trigger.jsonl").await,
+            chat,
+        )
+        .unwrap();
+
+        let turn_id = thread
+            .submit(Op::InterAgentCommunication {
+                communication: agent_protocol::InterAgentCommunication {
+                    id: Some(agent_protocol::ResponseItemId::with_suffix(
+                        "mail", "trigger",
+                    )),
+                    author: "/root/reviewer".into(),
+                    recipient: "/root".into(),
+                    other_recipients: Vec::new(),
+                    content: "continue from this result".into(),
+                    encrypted_content: None,
+                    internal_chat_message_metadata_passthrough: None,
+                    trigger_turn: true,
+                },
+            })
+            .await
+            .unwrap();
+        timeout(Duration::from_secs(2), async {
+            loop {
+                let event = thread.next_event().await.unwrap();
+                if matches!(
+                    event.msg,
+                    agent_protocol::EventMsg::TurnComplete(ref complete)
+                        if complete.turn_id == turn_id
+                ) {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        let history = session.clone_response_history().await;
+        assert!(history.iter().any(|item| {
+            matches!(item, agent_protocol::ResponseItem::Message { role, content, .. }
+                if role == "user"
+                    && matches!(content.first(), Some(agent_protocol::ContentItem::InputText { text }) if text.contains("continue from this result")))
+        }));
+
+        thread.submit(Op::Shutdown).await.unwrap();
+        thread.wait_terminated().await;
     }
 }
