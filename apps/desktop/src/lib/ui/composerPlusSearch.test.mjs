@@ -30,3 +30,10 @@ test("plus-menu search exposes a restrained theme focus ring", () => {
     /\.composer-mcp-menu-search\.composer-plus-search:focus-within\s*\{[\s\S]*?var\(--tone, var\(--accent\)\)[\s\S]*?0 0 0 3px/,
   );
 });
+
+test("MCP settings footer uses compact text without shrinking its hit area", () => {
+  assert.match(
+    styles,
+    /\.composer-mcp-menu-footer\s*\{[\s\S]*?padding:\s*10px 12px;[\s\S]*?font-size:\s*12px;/,
+  );
+});

@@ -2472,6 +2472,7 @@ html[data-theme="dark"] .composer-mcp-menu-search.composer-plus-search {
   color: var(--ink-soft);
   padding: 10px 12px;
   font: inherit;
+  font-size: 12px;
   cursor: pointer;
   text-align: left;
 }
