@@ -421,15 +421,6 @@ impl AgentLoop {
         if let Err(msg) = tools::check_tool_call(interaction_mode, exec_name, &exec_args) {
             return Ok(msg.into());
         }
-        if step_context
-            .as_ref()
-            .is_some_and(|step_context| !step_context.advertises_tool(exec_name))
-        {
-            return Ok(format!(
-                "工具 `{exec_name}` 不在生成本次调用的 StepContext 中，已拒绝执行。"
-            )
-            .into());
-        }
         let raw_result = self
             .dispatch_named_tool(exec_name, &exec_args, grants, step_context.as_deref())
             .await?;
@@ -496,7 +487,7 @@ impl AgentLoop {
                 .tool_registry
                 .write()
                 .expect("tool registry lock poisoned")
-                .activate_skill(skill_id, &astro_tools);
+                .activate_skill_toolsets(&astro_tools);
         }
     }
 

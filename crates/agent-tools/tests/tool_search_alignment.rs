@@ -5,7 +5,7 @@ use tools::builtin::shell::tool_search::{dispatch, ToolSearchArgs};
 use tools::{ToolContext, ToolEntry, ToolRegistry};
 
 #[tokio::test]
-async fn search_returns_full_schema_and_activates_deferred_dynamic_tool() {
+async fn search_returns_full_schema_without_mutating_deferred_dynamic_tool() {
     let dir = TempDir::new().unwrap();
     let workspace = dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
@@ -75,7 +75,14 @@ async fn search_returns_full_schema_and_activates_deferred_dynamic_tool() {
     );
 
     let visible = registry.read().unwrap().schemas_for_api();
-    assert!(visible.iter().any(|spec| {
+    assert!(!visible.iter().any(|spec| {
+        spec.get("name")
+            .or_else(|| spec.pointer("/function/name"))
+            .and_then(|name| name.as_str())
+            == Some("mcp__calendar__list_events")
+    }));
+    let callable = registry.read().unwrap().all_callable_tool_schemas();
+    assert!(callable.iter().any(|spec| {
         spec.get("name")
             .or_else(|| spec.pointer("/function/name"))
             .and_then(|name| name.as_str())
@@ -84,7 +91,7 @@ async fn search_returns_full_schema_and_activates_deferred_dynamic_tool() {
 }
 
 #[test]
-fn deferred_activation_survives_registry_reregistration() {
+fn deferred_tool_remains_deferred_after_registry_reregistration() {
     let mut registry = ToolRegistry::new();
     let deferred = || ToolEntry {
         name: "mcp__calendar__list_events".into(),
@@ -95,13 +102,12 @@ fn deferred_activation_survives_registry_reregistration() {
     };
 
     registry.register(deferred());
-    assert!(registry.activate_deferred("mcp__calendar__list_events"));
     registry.unregister_toolset("mcp");
     registry.register(deferred());
 
     assert_eq!(
         registry.get("mcp__calendar__list_events").unwrap().exposure,
-        types::ToolExposure::Direct
+        types::ToolExposure::Deferred
     );
 }
 

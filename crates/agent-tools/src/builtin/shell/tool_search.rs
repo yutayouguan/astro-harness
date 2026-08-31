@@ -1,4 +1,4 @@
-//! 工具搜索：从当前 Session 注册表中搜索 deferred 工具并加载。
+//! 工具搜索：从当前 Step 的完整注册表中搜索 deferred 工具。
 
 use bm25::{Document, Language, SearchEngineBuilder};
 use schemars::JsonSchema;
@@ -28,7 +28,7 @@ pub fn register(registry: &mut ToolRegistry) {
         name: "tool_search".to_string(),
         toolset: "system".to_string(),
         description:
-            "Search deferred tools by keyword. Returns complete loadable tool definitions ranked by relevance (BM25) and makes every match available on the next model call. Use this to discover specialized built-in and MCP tools that are not in the default tool list."
+            "Search deferred tools by keyword. Returns complete loadable tool definitions ranked by relevance (BM25). Use this to discover specialized built-in and MCP tools that are not in the default tool list."
                 .to_string(),
         schema: schema_for_args::<ToolSearchArgs>(),
         check_fn: None,
@@ -112,8 +112,10 @@ fn search(
         .collect()
 }
 
-/// 搜索当前 Session 的 deferred 工具，返回完整可加载 schema，并将命中
-/// 工具激活为下一次 sampling step 的模型可见工具。
+/// 搜索当前 Step 的 deferred 工具并返回完整可加载 schema。
+///
+/// 结果会由 Responses 适配器序列化为 `tool_search_output`；搜索本身不改写
+/// 注册表，执行时由 StepContext 中的完整路由解析已发现工具。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::Result<String> {
     let query = args.query.trim();
     if query.is_empty() {
@@ -122,20 +124,10 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::R
 
     let limit = args.limit.min(50);
     if let Some(registry) = ctx.tool_registry {
-        let matches = {
-            let registry = registry
-                .read()
-                .map_err(|_| anyhow::anyhow!("tool registry lock poisoned"))?;
-            search(&searchable_entries(&registry), query, limit)
-        };
-        {
-            let mut registry = registry
-                .write()
-                .map_err(|_| anyhow::anyhow!("tool registry lock poisoned"))?;
-            for (name, _) in &matches {
-                registry.activate_deferred(name);
-            }
-        }
+        let registry = registry
+            .read()
+            .map_err(|_| anyhow::anyhow!("tool registry lock poisoned"))?;
+        let matches = search(&searchable_entries(&registry), query, limit);
         let specs: Vec<_> = matches.into_iter().map(|(_, spec)| spec).collect();
         return Ok(serde_json::to_string_pretty(&specs)?);
     }

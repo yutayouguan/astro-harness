@@ -195,10 +195,10 @@ mod tests {
             fs::read_to_string(dir.path().join("skills/creative-media/SKILL.md")).unwrap();
         assert!(creative.contains("music_gen"));
         assert!(creative.contains("ask_user"));
-        assert!(creative.contains("astro_tools: [music_gen, image_gen, speech_gen, video_gen]"));
+        assert!(!creative.contains("astro_tools:"));
         let storyboard =
             fs::read_to_string(dir.path().join("skills/storyboard-video/SKILL.md")).unwrap();
-        assert!(storyboard.contains("astro_tools: [image_gen, video_gen]"));
+        assert!(!storyboard.contains("astro_tools:"));
         let r2 = seed_bundled_into(dir.path());
         assert!(r2.installed.is_empty());
         assert!(r2.skipped.contains(&"aihot".to_string()));

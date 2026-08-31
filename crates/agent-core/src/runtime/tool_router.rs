@@ -1,6 +1,6 @@
 //! 采样步骤级工具路由快照。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -22,10 +22,9 @@ struct ToolRoute {
 /// 不可变的注册表投影，与单次模型请求可见的工具规格配对。
 ///
 /// `routes` 是该步骤的可调用集合，是 `model_visible_specs` 的超集：
-/// deferred 工具不向模型通告，但一旦 `tool_search` 发现它们即可调用。
+/// deferred 工具不进入初始可见列表，但仍保留完整路由供搜索后的调用执行。
 pub(crate) struct ToolRouter {
     routes: HashMap<String, ToolRoute>,
-    model_visible_routes: HashSet<String>,
     model_visible_specs: Arc<[serde_json::Value]>,
 }
 
@@ -56,14 +55,8 @@ impl ToolRouter {
                 );
             }
         }
-        let model_visible_routes = model_visible_specs
-            .iter()
-            .flat_map(|spec| spec_route_names(registry, spec))
-            .map(|(wire_name, _)| wire_name)
-            .collect();
         Self {
             routes,
-            model_visible_routes,
             model_visible_specs: model_visible_specs.into(),
         }
     }
@@ -74,10 +67,6 @@ impl ToolRouter {
 
     pub(crate) fn has_tool(&self, name: &str) -> bool {
         self.routes.contains_key(name)
-    }
-
-    pub(crate) fn is_model_visible(&self, name: &str) -> bool {
-        self.model_visible_routes.contains(name)
     }
 
     pub(crate) fn registered_name<'a>(&'a self, wire_name: &'a str) -> &'a str {
@@ -270,18 +259,12 @@ mod tests {
         });
 
         let visible = registry.schemas_for_api();
-        let router = ToolRouter::from_registry(
-            &registry,
-            &registry.all_tool_schemas_including_deferred(),
-            visible,
-        );
+        let router =
+            ToolRouter::from_registry(&registry, &registry.all_callable_tool_schemas(), visible);
 
         assert!(router.has_tool("direct_tool"));
         assert!(router.has_tool("deferred_tool"));
         assert!(!router.has_tool("hidden_tool"));
-        assert!(router.is_model_visible("direct_tool"));
-        assert!(!router.is_model_visible("deferred_tool"));
-
         let specs = router.model_visible_specs();
         let advertised: Vec<&str> = specs
             .iter()
@@ -305,11 +288,8 @@ mod tests {
             ..types::ToolEntry::lifecycle_defaults()
         });
         let visible = registry.schemas_for_api();
-        let router = ToolRouter::from_registry(
-            &registry,
-            &registry.all_tool_schemas_including_deferred(),
-            visible,
-        );
+        let router =
+            ToolRouter::from_registry(&registry, &registry.all_callable_tool_schemas(), visible);
 
         assert!(router.has_tool("cron.list"));
         assert_eq!(router.registered_name("cron.list"), "cron_list");

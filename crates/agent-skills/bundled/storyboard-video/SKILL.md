@@ -1,8 +1,7 @@
 ---
 name: storyboard-video
 description: Turn a short scene idea into a shot list and generate clips with video_gen (Veo). Use when the user wants 分镜、短剧片段、连续镜头、角色一致视频。单张图/单首歌/配音请用 creative-media。
-astro_tools: [image_gen, video_gen]
-astro_bundled_rev: 6
+astro_bundled_rev: 7
 ---
 
 # 分镜短视频（storyboard-video）
