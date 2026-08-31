@@ -40,6 +40,7 @@ test("each activation restarts the pinwheel feedback", () => {
   assert.match(component, /rotor\.animate\(/);
   assert.match(component, /reduceMotion \? 360 : 720/);
   assert.match(component, /duration: reduceMotion \? 1320 : 1680/);
+  assert.match(component, /easing: "linear"/);
   assert.match(component, /ref=\{rotorRef\}/);
   assert.match(component, /onReshuffle\(\)/);
   assert.match(component, /shell-dynamic-palette-stem/);

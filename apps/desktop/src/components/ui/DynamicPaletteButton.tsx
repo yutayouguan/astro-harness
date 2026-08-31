@@ -26,7 +26,7 @@ export default function DynamicPaletteButton({ label, onReshuffle }: Props) {
         ],
         {
           duration: reduceMotion ? 1320 : 1680,
-          easing: "cubic-bezier(0.77, 0, 0.175, 1)",
+          easing: "linear",
         },
       );
     }
