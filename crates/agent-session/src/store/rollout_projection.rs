@@ -1,6 +1,6 @@
 //! 从持久 rollout 确定性重建的 SQLite 消息投影。
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashSet;
 
 use agent_db::sqlx::{self, Row};
 use anyhow::{Context, Result};
@@ -99,43 +99,19 @@ pub async fn rebuild_messages_from_rollout(
 }
 
 fn project_response_items(items: &[agent_rollout::RolloutItem]) -> Result<Vec<ProjectedMessage>> {
-    let messages = items
+    let reconstructed = agent_rollout::reconstruct_messages(items)?
+        .into_iter()
+        .filter(|entry| !matches!(entry.message.role, Role::System))
+        .collect::<Vec<_>>();
+    let messages = reconstructed
         .iter()
-        .filter_map(|item| match item {
-            agent_rollout::RolloutItem::ResponseItem(message)
-                if !matches!(message.role, Role::System) =>
-            {
-                Some(message)
-            }
-            _ => None,
-        })
+        .map(|entry| &entry.message)
         .collect::<Vec<_>>();
     validate_role_order(&messages)?;
 
-    let mut pending_tool_names = HashMap::<String, VecDeque<String>>::new();
-    let mut projected = Vec::with_capacity(messages.len());
-    for message in messages {
-        let tool_name = message.tool_call_id.as_ref().and_then(|tool_call_id| {
-            let name = pending_tool_names
-                .get_mut(tool_call_id)
-                .and_then(VecDeque::pop_front);
-            if pending_tool_names
-                .get(tool_call_id)
-                .is_some_and(VecDeque::is_empty)
-            {
-                pending_tool_names.remove(tool_call_id);
-            }
-            name
-        });
-        if matches!(message.role, Role::Assistant) {
-            for call in message.tool_calls.iter().flatten() {
-                pending_tool_names
-                    .entry(call.id.clone())
-                    .or_default()
-                    .push_back(call.name.clone());
-            }
-        }
-        projected.push(project_message(message, tool_name)?);
+    let mut projected = Vec::with_capacity(reconstructed.len());
+    for entry in reconstructed {
+        projected.push(project_message(&entry.message, entry.tool_name)?);
     }
     Ok(projected)
 }

@@ -1530,6 +1530,9 @@ impl Session {
     /// 将对话条目追加到会话拥有的历史记录中。
     pub async fn record_items(&self, items: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
+        if let Err(error) = self.persist_response_messages(&items, None).await {
+            tracing::warn!(%error, "failed to persist response items");
+        }
         self.record_items_unlocked(items);
     }
 

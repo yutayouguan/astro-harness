@@ -1047,7 +1047,6 @@ impl AstroServiceImpl {
             return Ok(managed);
         }
 
-        let session = self.get_session(thread_id).await?;
         let rollout_root = self.memory_dir.join("sessions").join("rollouts");
         let rollout_path = agent_rollout::find_rollout(&rollout_root, thread_id)
             .map_err(|error| Status::internal(error.to_string()))?
@@ -1061,6 +1060,20 @@ impl AstroServiceImpl {
         } else {
             Vec::new()
         };
+        let projection = open_sessions(&self.memory_dir)
+            .await
+            .map_err(Status::internal)?;
+        session::rebuild_messages_from_rollout(&projection, thread_id, &existing_items)
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        let session = self.get_session(thread_id).await?;
+        let history = agent_rollout::reconstruct_messages(&existing_items)
+            .map_err(|error| Status::internal(error.to_string()))?
+            .into_iter()
+            .map(|entry| entry.message)
+            .collect();
+        session.replace_history(history).await;
+        session.restore_prompt_context_from_rollout(&existing_items);
         let rollout = agent_rollout::RolloutRecorder::open(rollout_path)
             .await
             .map_err(|error| Status::internal(error.to_string()))?;

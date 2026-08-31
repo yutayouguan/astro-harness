@@ -1640,7 +1640,7 @@ async fn cold_start_hydrates_history_from_db() {
 }
 
 #[tokio::test]
-async fn cold_start_preserves_projected_user_audio_and_video_media_kinds() {
+async fn cold_start_preserves_codex_supported_projected_media_kinds() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().to_path_buf();
     let image_url = "data:image/png;base64,aW1hZ2U=";
@@ -1649,10 +1649,14 @@ async fn cold_start_preserves_projected_user_audio_and_video_media_kinds() {
     let projected_media = vec![
         types::MediaAsset::data_url(types::MediaKind::Image, image_url, "image/png"),
         types::MediaAsset::data_url(types::MediaKind::Audio, audio_url, "audio/mpeg"),
-        types::MediaAsset::data_url(types::MediaKind::Video, video_url, "video/webm"),
     ];
     let mut user = types::message::Message::user("inspect cold media");
     user.media = projected_media.clone();
+    user.media.push(types::MediaAsset::data_url(
+        types::MediaKind::Video,
+        video_url,
+        "video/webm",
+    ));
     {
         let store = session::SessionStore::open_sessions_dir(&path.join("data"))
             .await
@@ -1660,7 +1664,11 @@ async fn cold_start_preserves_projected_user_audio_and_video_media_kinds() {
         session::store::rebuild_messages_from_rollout(
             &store,
             "hydrate-media",
-            &[agent_rollout::RolloutItem::ResponseItem(user)],
+            &agent_rollout::response_items_from_message(&user, None)
+                .unwrap()
+                .into_iter()
+                .map(agent_rollout::RolloutItem::ResponseItem)
+                .collect::<Vec<_>>(),
         )
         .await
         .unwrap();

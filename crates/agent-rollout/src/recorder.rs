@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{is_persisted_rollout_item, RolloutItem};
+use crate::{is_persisted_rollout_item, RolloutItem, RolloutLine};
 
 enum RecorderCommand {
     Record {
@@ -120,8 +120,13 @@ where
 {
     let mut bytes = Vec::new();
     for item in items {
-        let item = serde_json::to_vec(&item).map_err(io::Error::other)?;
-        bytes.extend_from_slice(&item);
+        let line = RolloutLine {
+            timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            ordinal: None,
+            item,
+        };
+        let line = serde_json::to_vec(&line).map_err(io::Error::other)?;
+        bytes.extend_from_slice(&line);
         bytes.push(b'\n');
     }
     writer.write_all(&bytes).await?;
@@ -193,6 +198,32 @@ mod tests {
             items.get(1),
             Some(RolloutItem::EventMsg(EventMsg::TurnStarted(_)))
         ));
+
+        recorder.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn writes_codex_rollout_line_envelope() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("rollout.jsonl");
+        let recorder = RolloutRecorder::open(path.clone()).await.unwrap();
+        recorder
+            .record(vec![RolloutItem::SessionMeta(
+                json!({"thread_id": "thread-1"}),
+            )])
+            .await
+            .unwrap();
+        recorder.flush().await.unwrap();
+
+        let raw = std::fs::read_to_string(path).unwrap();
+        let line: serde_json::Value = serde_json::from_str(raw.trim()).unwrap();
+        assert!(line
+            .get("timestamp")
+            .and_then(serde_json::Value::as_str)
+            .is_some());
+        assert_eq!(line["type"], "session_meta");
+        assert_eq!(line["payload"]["thread_id"], "thread-1");
+        assert!(line.get("data").is_none());
 
         recorder.shutdown().await.unwrap();
     }

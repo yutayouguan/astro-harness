@@ -1,9 +1,21 @@
 use agent_rollout::RolloutItem;
 use session::store::{NewMessage, SessionStore};
-use types::message::{
-    ContentPart, Message, MessageContent, Role, ToolCall, GOOGLE_THOUGHT_SIGNATURE_KEY,
-};
+use types::message::{ContentPart, Message, MessageContent, Role, ToolCall};
 use types::{MediaAsset, MediaKind, MediaRef};
+
+fn response_items(message: &Message, tool_name: Option<&str>) -> Vec<RolloutItem> {
+    agent_rollout::response_items_from_message(message, tool_name)
+        .unwrap()
+        .into_iter()
+        .map(RolloutItem::ResponseItem)
+        .collect()
+}
+
+fn response_item(message: Message) -> RolloutItem {
+    let mut items = response_items(&message, None);
+    assert_eq!(items.len(), 1);
+    items.remove(0)
+}
 
 fn rich_rollout() -> Vec<RolloutItem> {
     let image_url = "data:image/png;base64,aGVsbG8=".to_string();
@@ -34,17 +46,20 @@ fn rich_rollout() -> Vec<RolloutItem> {
     );
     tool.compressed_content = Some("tool compressed".into());
 
-    vec![
-        RolloutItem::SessionMeta(serde_json::json!({"id": "thread-1"})),
-        RolloutItem::ResponseItem(user),
-        RolloutItem::ResponseItem(assistant),
-        RolloutItem::ResponseItem(tool),
-        RolloutItem::TurnContext(serde_json::json!({"turn_id": "turn-1"})),
-    ]
+    let mut items = vec![RolloutItem::SessionMeta(
+        serde_json::json!({"id": "thread-1"}),
+    )];
+    items.extend(response_items(&user, None));
+    items.extend(response_items(&assistant, None));
+    items.extend(response_items(&tool, Some("exec_command")));
+    items.push(RolloutItem::TurnContext(
+        serde_json::json!({"turn_id": "turn-1"}),
+    ));
+    items
 }
 
 #[tokio::test]
-async fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
+async fn repeated_rebuild_is_idempotent_for_native_response_items() {
     let dir = tempfile::tempdir().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db"))
         .await
@@ -78,10 +93,7 @@ async fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
     );
     assert_eq!(messages[0].role, "user");
     assert_eq!(messages[0].content.as_deref(), Some("hello"));
-    assert_eq!(
-        messages[0].compressed_content.as_deref(),
-        Some("hello compressed")
-    );
+    assert_eq!(messages[0].compressed_content, None);
     let user_media: Vec<MediaAsset> =
         serde_json::from_str(messages[0].media_json.as_deref().unwrap()).unwrap();
     assert_eq!(user_media.len(), 1);
@@ -89,32 +101,18 @@ async fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
 
     assert_eq!(messages[1].role, "assistant");
     assert_eq!(messages[1].content.as_deref(), Some("world"));
-    assert_eq!(
-        messages[1].compressed_content.as_deref(),
-        Some("world compressed")
-    );
+    assert_eq!(messages[1].compressed_content, None);
     assert_eq!(messages[1].reasoning.as_deref(), Some("careful reasoning"));
     assert_eq!(messages[1].tool_calls.as_ref().unwrap()[0]["id"], "call-1");
-    assert_eq!(
-        messages[1].tool_calls.as_ref().unwrap()[0]["signature"],
-        "tool-signature"
-    );
-    assert_eq!(
-        messages[1].reasoning_details.as_ref().unwrap()[GOOGLE_THOUGHT_SIGNATURE_KEY],
-        "thought-signature"
-    );
+    assert!(messages[1].tool_calls.as_ref().unwrap()[0]["signature"].is_null());
+    assert!(messages[1].reasoning_details.is_none());
 
     assert_eq!(messages[2].role, "tool");
     assert_eq!(messages[2].tool_call_id.as_deref(), Some("call-1"));
     assert_eq!(messages[2].tool_name.as_deref(), Some("exec_command"));
     assert_eq!(messages[2].content.as_deref(), Some("tool output"));
-    assert_eq!(
-        messages[2].compressed_content.as_deref(),
-        Some("tool compressed")
-    );
-    let tool_media: Vec<MediaAsset> =
-        serde_json::from_str(messages[2].media_json.as_deref().unwrap()).unwrap();
-    assert_eq!(tool_media[0].workspace_path(), Some("generated/result.png"));
+    assert_eq!(messages[2].compressed_content, None);
+    assert!(messages[2].media_json.is_none());
 
     let session = store.get_session("thread-1").await.unwrap().unwrap();
     assert_eq!(session.source, "rollout");
@@ -145,7 +143,7 @@ async fn rebuild_only_replaces_the_target_session_projection() {
     session::store::rebuild_messages_from_rollout(
         &store,
         "thread-1",
-        &[RolloutItem::ResponseItem(Message::user("replacement"))],
+        &[response_item(Message::user("replacement"))],
     )
     .await
     .unwrap();
@@ -206,8 +204,8 @@ async fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
         &store,
         "thread-1",
         &[
-            RolloutItem::ResponseItem(Message::assistant("partial replacement")),
-            RolloutItem::ResponseItem(Message::tool("reject-me")),
+            response_item(Message::assistant("partial replacement")),
+            response_item(Message::tool("reject-me")),
         ],
     )
     .await;
@@ -223,7 +221,7 @@ async fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
     let missing_session_result = session::store::rebuild_messages_from_rollout(
         &store,
         "thread-new",
-        &[RolloutItem::ResponseItem(Message::user("reject-me"))],
+        &[response_item(Message::user("reject-me"))],
     )
     .await;
     assert!(missing_session_result.is_err());
@@ -242,16 +240,27 @@ async fn duplicate_tool_call_ids_bind_results_in_rollout_order() {
         arguments: serde_json::json!({"name": name}),
         signature: None,
     };
-    let items = vec![
-        RolloutItem::ResponseItem(Message::assistant_with_tools("first", vec![call("tool-a")])),
-        RolloutItem::ResponseItem(Message::tool_with_id("duplicate-id", "result-a")),
-        RolloutItem::ResponseItem(Message::assistant_with_tools(
-            "second",
-            vec![call("tool-b")],
-        )),
-        RolloutItem::ResponseItem(Message::tool_with_id("duplicate-id", "result-b")),
-        RolloutItem::ResponseItem(Message::tool_with_id("missing-id", "unmatched")),
-    ];
+    let mut items = Vec::new();
+    items.extend(response_items(
+        &Message::assistant_with_tools("first", vec![call("tool-a")]),
+        None,
+    ));
+    items.extend(response_items(
+        &Message::tool_with_id("duplicate-id", "result-a"),
+        Some("tool-a"),
+    ));
+    items.extend(response_items(
+        &Message::assistant_with_tools("second", vec![call("tool-b")]),
+        None,
+    ));
+    items.extend(response_items(
+        &Message::tool_with_id("duplicate-id", "result-b"),
+        Some("tool-b"),
+    ));
+    items.extend(response_items(
+        &Message::tool_with_id("missing-id", "unmatched"),
+        None,
+    ));
 
     session::store::rebuild_messages_from_rollout(&store, "thread-tools", &items)
         .await
@@ -291,9 +300,9 @@ async fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplica
         &store,
         "thread-media",
         &[
-            RolloutItem::ResponseItem(parts_only),
-            RolloutItem::ResponseItem(Message::assistant("boundary")),
-            RolloutItem::ResponseItem(redundant),
+            response_item(parts_only),
+            response_item(Message::assistant("boundary")),
+            response_item(redundant),
         ],
     )
     .await
@@ -302,7 +311,7 @@ async fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplica
     let messages = store.get_messages("thread-media").await.unwrap();
     let media: Vec<MediaAsset> =
         serde_json::from_str(messages[0].media_json.as_deref().unwrap()).unwrap();
-    assert_eq!(media.len(), 3);
+    assert_eq!(media.len(), 2);
     assert!(matches!(
         &media[0],
         MediaAsset {
@@ -319,16 +328,7 @@ async fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplica
             mime_type,
             reference: MediaRef::RemoteUri(url),
             ..
-        } if mime_type == "audio/mpeg" && url == "https://example.test/audio.mp3"
-    ));
-    assert!(matches!(
-        &media[2],
-        MediaAsset {
-            kind: MediaKind::Video,
-            mime_type,
-            reference: MediaRef::DataUrl(url),
-            ..
-        } if mime_type == "video/webm" && url.starts_with("data:video/webm;")
+        } if mime_type == "audio/*" && url == "https://example.test/audio.mp3"
     ));
     let redundant_media: Vec<MediaAsset> =
         serde_json::from_str(messages[2].media_json.as_deref().unwrap()).unwrap();
@@ -350,7 +350,7 @@ async fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplica
     assert!(session::store::rebuild_messages_from_rollout(
         &store,
         "thread-invalid-media",
-        &[RolloutItem::ResponseItem(invalid)],
+        &[response_item(invalid)],
     )
     .await
     .is_err());
@@ -383,9 +383,9 @@ async fn invalid_adjacent_roles_are_rejected_before_projection_mutation() {
         &store,
         "thread-existing",
         &[
-            RolloutItem::ResponseItem(Message::user("first")),
-            RolloutItem::ResponseItem(Message::system("filtered")),
-            RolloutItem::ResponseItem(Message::user("second")),
+            response_item(Message::user("first")),
+            response_item(Message::system("filtered")),
+            response_item(Message::user("second")),
         ],
     )
     .await;
@@ -403,19 +403,17 @@ async fn invalid_adjacent_roles_are_rejected_before_projection_mutation() {
         1
     );
 
-    let new_result = session::store::rebuild_messages_from_rollout(
+    session::store::rebuild_messages_from_rollout(
         &store,
         "thread-new-invalid",
         &[
-            RolloutItem::ResponseItem(Message::assistant("first")),
-            RolloutItem::ResponseItem(Message::assistant("second")),
+            response_item(Message::assistant("first")),
+            response_item(Message::assistant("second")),
         ],
     )
-    .await;
-    assert!(new_result.is_err());
-    assert!(store
-        .get_session("thread-new-invalid")
-        .await
-        .unwrap()
-        .is_none());
+    .await
+    .unwrap();
+    let messages = store.get_messages("thread-new-invalid").await.unwrap();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].content.as_deref(), Some("first\nsecond"));
 }

@@ -3,7 +3,7 @@ use std::path::Path;
 
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-use crate::RolloutItem;
+use crate::{RolloutItem, RolloutLine};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RolloutRead {
@@ -33,8 +33,8 @@ pub async fn read_rollout_with_diagnostics(path: &Path) -> io::Result<RolloutRea
             record.clear();
             continue;
         }
-        match serde_json::from_slice(&record) {
-            Ok(item) => items.push(item),
+        match serde_json::from_slice::<RolloutLine>(&record) {
+            Ok(line) => items.push(line.item),
             Err(_) => parse_errors += 1,
         }
         record.clear();
@@ -60,9 +60,9 @@ mod tests {
         std::fs::write(
             &path,
             concat!(
-                "{\"type\":\"session_meta\",\"data\":{\"index\":1}}\n",
+                "{\"timestamp\":\"2026-08-31T00:00:00.000Z\",\"type\":\"session_meta\",\"payload\":{\"index\":1}}\n",
                 "not json\n",
-                "{\"type\":\"session_meta\",\"data\":{\"index\":2}}\n"
+                "{\"timestamp\":\"2026-08-31T00:00:01.000Z\",\"type\":\"session_meta\",\"payload\":{\"index\":2}}\n"
             ),
         )
         .unwrap();
@@ -81,8 +81,8 @@ mod tests {
         std::fs::write(
             &path,
             concat!(
-                "{\"type\":\"session_meta\",\"data\":{\"index\":1}}\n",
-                "{\"type\":\"session_meta\",\"data\":"
+                "{\"timestamp\":\"2026-08-31T00:00:00.000Z\",\"type\":\"session_meta\",\"payload\":{\"index\":1}}\n",
+                "{\"timestamp\":\"2026-08-31T00:00:01.000Z\",\"type\":\"session_meta\",\"payload\":"
             ),
         )
         .unwrap();
@@ -96,7 +96,7 @@ mod tests {
     async fn retains_valid_prefix_before_a_truncated_utf8_final_record() {
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("rollout.jsonl");
-        let mut bytes = b"{\"type\":\"session_meta\",\"data\":{\"index\":1}}\n".to_vec();
+        let mut bytes = b"{\"timestamp\":\"2026-08-31T00:00:00.000Z\",\"type\":\"session_meta\",\"payload\":{\"index\":1}}\n".to_vec();
         bytes.extend_from_slice(&[0xe4, 0xb8]);
         std::fs::write(&path, bytes).unwrap();
 

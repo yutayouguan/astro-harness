@@ -120,6 +120,67 @@ mod tests {
         RolloutRecorder::open(dir.path().join(name)).await.unwrap()
     }
 
+    #[tokio::test]
+    async fn native_tool_search_history_is_persisted_without_chat_projection() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("native-tool-search.jsonl");
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "native-tool-search".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        let thread = AstroThread::spawn(
+            Arc::clone(&session),
+            RolloutRecorder::open(path.clone()).await.unwrap(),
+        )
+        .unwrap();
+
+        session
+            .record_assistant_message_with_tools(
+                "",
+                Some(vec![types::message::ToolCall {
+                    id: "call-search".into(),
+                    name: "tool_search".into(),
+                    arguments: serde_json::json!({"query": "image"}),
+                    signature: None,
+                }]),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        session
+            .record_tool_result_with_id(
+                Some("call-search"),
+                Some("tool_search"),
+                "[{\"name\":\"image_gen\"}]",
+            )
+            .await
+            .unwrap();
+        thread.flush_rollout().await.unwrap();
+
+        let items = read_rollout(&path).await.unwrap();
+        assert!(matches!(
+            items.first(),
+            Some(RolloutItem::ResponseItem(
+                agent_protocol::ResponseItem::ToolSearchCall { .. }
+            ))
+        ));
+        assert!(matches!(
+            items.get(1),
+            Some(RolloutItem::ResponseItem(
+                agent_protocol::ResponseItem::ToolSearchOutput { tools, .. }
+            )) if tools.first().and_then(|tool| tool.get("name")).and_then(serde_json::Value::as_str)
+                == Some("image_gen")
+        ));
+
+        thread.submit(Op::Shutdown).await.unwrap();
+        thread.wait_terminated().await;
+    }
+
     fn prompt_context(content: &str) -> crate::prompt::PromptContract {
         crate::prompt::PromptContract {
             base_instructions: "stable base".into(),

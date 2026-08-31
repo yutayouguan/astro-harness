@@ -731,6 +731,12 @@ impl Session {
         } = input;
         let mut message = Message::user_with_images(content, image_data_urls);
         message.compressed_content = marker.map(str::to_string);
+        if let Err(error) = self
+            .persist_response_messages(std::slice::from_ref(&message), None)
+            .await
+        {
+            tracing::warn!(%error, "failed to persist turn input response item");
+        }
         self.record_items_unlocked(vec![message]);
         #[cfg(test)]
         if let Some(hook) = self

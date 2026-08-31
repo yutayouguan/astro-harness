@@ -134,20 +134,23 @@ mod tests {
 
     #[test]
     fn response_items_compare_structurally() {
-        let item = RolloutItem::ResponseItem(types::message::Message::assistant_with_tools(
-            "run it",
-            vec![types::message::ToolCall {
-                id: "call-1".into(),
-                name: "exec_command".into(),
-                arguments: serde_json::json!({"command": "pwd"}),
-                signature: Some("sig-1".into()),
-            }],
-        ));
+        let item = RolloutItem::ResponseItem(agent_protocol::ResponseItem::FunctionCall {
+            id: None,
+            name: "exec_command".into(),
+            namespace: None,
+            arguments: "{\"command\":\"pwd\"}".into(),
+            encrypted_function_args: None,
+            call_id: "call-1".into(),
+            internal_chat_message_metadata_passthrough: None,
+        });
         let equal = item.clone();
         let mut changed = item.clone();
-        if let RolloutItem::ResponseItem(message) = &mut changed {
-            message.tool_calls.as_mut().unwrap()[0].arguments =
-                serde_json::json!({"command": "ls"});
+        if let RolloutItem::ResponseItem(agent_protocol::ResponseItem::FunctionCall {
+            arguments,
+            ..
+        }) = &mut changed
+        {
+            *arguments = "{\"command\":\"ls\"}".into();
         }
 
         assert_eq!(item, equal);

@@ -98,7 +98,8 @@ pub async fn fork_rollout(
 fn is_user_response(item: &RolloutItem) -> bool {
     matches!(
         item,
-        RolloutItem::ResponseItem(message) if message.role == types::message::Role::User
+        RolloutItem::ResponseItem(agent_protocol::ResponseItem::Message { role, .. })
+            if role == "user"
     )
 }
 
@@ -160,6 +161,16 @@ mod tests {
     use super::fork_rollout;
     use crate::{find_rollout, new_rollout_path, read_rollout, RolloutItem, RolloutRecorder};
 
+    fn response(message: Message) -> RolloutItem {
+        RolloutItem::ResponseItem(
+            crate::response_items_from_message(&message, None)
+                .unwrap()
+                .into_iter()
+                .next()
+                .unwrap(),
+        )
+    }
+
     fn now() -> chrono::DateTime<chrono::Utc> {
         chrono::Utc.with_ymd_and_hms(2026, 8, 26, 9, 0, 0).unwrap()
     }
@@ -170,18 +181,18 @@ mod tests {
         recorder
             .record(vec![
                 RolloutItem::SessionMeta(serde_json::json!({"thread_id": "source"})),
-                RolloutItem::ResponseItem(Message::user("first")),
+                response(Message::user("first")),
                 RolloutItem::WorldState(serde_json::json!({
                     "full": true,
                     "state": {"astro.prompt_context.v1": {"version": 2, "messages": []}},
                 })),
-                RolloutItem::ResponseItem(Message::assistant("first answer")),
-                RolloutItem::ResponseItem(Message::user("second")),
+                response(Message::assistant("first answer")),
+                response(Message::user("second")),
                 RolloutItem::WorldState(serde_json::json!({
                     "full": false,
                     "state": {"astro.prompt_context.v1": {"version": 2, "messages": []}},
                 })),
-                RolloutItem::ResponseItem(Message::assistant("second answer")),
+                response(Message::assistant("second answer")),
             ])
             .await
             .unwrap();
@@ -211,19 +222,13 @@ mod tests {
         assert_eq!(meta["forked_from"]["thread_id"], "source");
         assert_eq!(meta["ephemeral"], true);
         assert_eq!(meta["exclude_turns"], true);
+        let copied_messages = crate::reconstruct_messages(&items).unwrap();
         assert_eq!(
-            items[1..]
+            copied_messages
                 .iter()
-                .filter_map(|item| match item {
-                    RolloutItem::ResponseItem(message) => Some(message.content.clone()),
-                    RolloutItem::WorldState(_) => None,
-                    other => panic!("unexpected item {other:?}"),
-                })
+                .map(|entry| entry.message.content_text())
                 .collect::<Vec<_>>(),
-            vec![
-                types::message::MessageContent::Text("first".into()),
-                types::message::MessageContent::Text("first answer".into()),
-            ]
+            vec!["first", "first answer"]
         );
         let copied_world_states = items
             .iter()

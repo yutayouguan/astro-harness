@@ -240,7 +240,9 @@ pub(crate) fn restore(items: &[RolloutItem]) -> RestoredPromptContext {
                 user_count = 0;
                 continue;
             }
-            RolloutItem::ResponseItem(message) if message.role == types::message::Role::User => {
+            RolloutItem::ResponseItem(agent_protocol::ResponseItem::Message { role, .. })
+                if role == "user" =>
+            {
                 user_count += 1;
                 continue;
             }
@@ -449,11 +451,20 @@ mod tests {
             value.as_object_mut().unwrap().remove("before_user");
         }
 
+        let response = |message: types::message::Message| {
+            RolloutItem::ResponseItem(
+                agent_rollout::response_items_from_message(&message, None)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )
+        };
         let restored = restore(&[
-            RolloutItem::ResponseItem(types::message::Message::user("first")),
+            response(types::message::Message::user("first")),
             full,
-            RolloutItem::ResponseItem(types::message::Message::assistant("answer")),
-            RolloutItem::ResponseItem(types::message::Message::user("second")),
+            response(types::message::Message::assistant("answer")),
+            response(types::message::Message::user("second")),
             patch,
         ]);
 

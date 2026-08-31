@@ -6,6 +6,26 @@ use types::message::Message;
 use super::AgentLoop;
 
 impl AgentLoop {
+    pub(crate) async fn persist_response_messages(
+        &self,
+        messages: &[Message],
+        tool_name: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let Some(bindings) = self.runtime_io.get() else {
+            return Ok(());
+        };
+        let mut items = Vec::new();
+        for message in messages {
+            items.extend(
+                agent_rollout::response_items_from_message(message, tool_name)?
+                    .into_iter()
+                    .map(agent_rollout::RolloutItem::ResponseItem),
+            );
+        }
+        bindings.rollout.record(items).await?;
+        Ok(())
+    }
+
     pub(crate) async fn ensure_assistant_error_boundary(&self) -> anyhow::Result<()> {
         const CONTENT: &str =
             "[astro:system]\nThe agent turn failed before producing an assistant response.";
@@ -109,6 +129,8 @@ impl AgentLoop {
         let mut msg = msg;
         msg.reasoning = reasoning.map(str::to_string);
         msg.thought_signature = thought_signature;
+        self.persist_response_messages(std::slice::from_ref(&msg), None)
+            .await?;
         self.record_items_unlocked(vec![msg]);
         Ok(())
     }
@@ -171,7 +193,10 @@ impl AgentLoop {
                 ..NewMessage::empty(&self.session_id, "user")
             })
             .await?;
-        self.record_items_unlocked(vec![Message::user(content)]);
+        let message = Message::user(content);
+        self.persist_response_messages(std::slice::from_ref(&message), None)
+            .await?;
+        self.record_items_unlocked(vec![message]);
         Ok(())
     }
 
@@ -284,6 +309,8 @@ impl AgentLoop {
         if let Some(view) = spill_view {
             msg.compressed_content = Some(view);
         }
+        self.persist_response_messages(std::slice::from_ref(&msg), tool_name)
+            .await?;
         self.record_items_unlocked(vec![msg]);
         Ok(())
     }
