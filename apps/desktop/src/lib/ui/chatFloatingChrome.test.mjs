@@ -84,7 +84,10 @@ test("chat header shares composer glass while messages scroll underneath", () =>
   assert.ok(header, "missing chat header rule");
   assert.ok(chatPane, "missing chat content pane rule");
   assert.match(chatPane, /position:\s*relative;/);
-  assert.match(headerStyles, /\.chat-main\s*\{\s*--chat-header-overlay-height:\s*50px;/);
+  assert.match(
+    headerStyles,
+    /> \.chat-layout-with-right\s*\{\s*--chat-header-overlay-height:\s*50px;/,
+  );
   assert.match(header, /--chat-header-surface-base:\s*var\(--sidebar-bg\);/);
   assert.match(
     header,
@@ -171,11 +174,16 @@ test("right-side chat surfaces share one flush square glass material", () => {
     assert.match(panel, /border-radius:\s*var\(--chat-dock-radius\);/);
     assert.match(panel, /background:\s*var\(--chat-dock-surface-background\);/);
     assert.match(panel, /box-shadow:\s*var\(--chat-dock-surface-shadow\);/);
+    assert.match(panel, /padding-top:\s*var\(--chat-header-overlay-height, 50px\);/);
   }
   for (const panel of [runtimePanel, projectPanel, sidePanel, reviewPanel]) {
     assert.match(panel, /backdrop-filter:\s*var\(--chat-dock-surface-filter\);/);
   }
   assert.match(projectWorkbench, /border-radius:\s*var\(--chat-workbench-radius, 18px\);/);
+  assert.match(
+    projectWorkbench,
+    /margin:[\s\S]*calc\(var\(--pf-gutter, 6px\) \+ var\(--chat-header-overlay-height, 50px\)\)/,
+  );
   assert.match(openProjectPanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(rightPanelStyles, /@media \(prefers-reduced-transparency: reduce\)/);

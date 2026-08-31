@@ -43,6 +43,7 @@
   min-width: 0;
   min-height: 0;
   margin: var(--chat-dock-inset);
+  padding-top: var(--chat-header-overlay-height, 50px);
   overflow: hidden;
   isolation: isolate;
   border: var(--chat-dock-surface-border);

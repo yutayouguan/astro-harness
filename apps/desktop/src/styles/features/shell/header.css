@@ -20,8 +20,7 @@
 
 .content-pane--chat
   > .page-body--chat
-  > .chat-layout-with-right
-  > .chat-main {
+  > .chat-layout-with-right {
   --chat-header-overlay-height: 50px;
 }
 

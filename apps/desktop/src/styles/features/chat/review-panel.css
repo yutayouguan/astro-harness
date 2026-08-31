@@ -7,6 +7,7 @@
   bottom: var(--chat-dock-inset, 6px);
   width: var(--review-panel-width);
   min-width: 0;
+  padding-top: var(--chat-header-overlay-height, 50px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
