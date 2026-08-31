@@ -74,6 +74,15 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                 let had_any_tool_call = content
                     .iter()
                     .any(|c| matches!(c, AssistantContent::ToolCall(_)));
+                let text = m.text_content();
+                // Responses 兼容端要求 tool call 后紧跟配对的 output。
+                // 先放 assistant 文本，避免它被插到 call/output 之间。
+                if !text.is_empty() {
+                    input.push(json!({
+                        "role": "assistant",
+                        "content": json!(text),
+                    }));
+                }
                 for part in content {
                     if let AssistantContent::ToolCall(ToolCall {
                         id,
@@ -122,14 +131,15 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                         }
                     }
                 }
-                let text = m.text_content();
                 if had_any_tool_call && text.is_empty() {
                     continue;
                 }
-                input.push(json!({
-                    "role": "assistant",
-                    "content": json!(text),
-                }));
+                if text.is_empty() {
+                    input.push(json!({
+                        "role": "assistant",
+                        "content": json!(text),
+                    }));
+                }
             }
 
             Message::User { content } => {
@@ -445,6 +455,32 @@ mod tests {
         assert_eq!(input[0]["name"], "get_weather");
         assert_eq!(input[0]["call_id"], "call_123");
         assert_eq!(input[1]["type"], "function_call_output");
+    }
+
+    #[test]
+    fn assistant_text_precedes_tool_call_and_its_output() {
+        let msgs = vec![
+            Message::assistant(vec![
+                AssistantContent::Text {
+                    text: "I will generate the image.".into(),
+                },
+                AssistantContent::ToolCall(ToolCall {
+                    id: "call_image".into(),
+                    name: "image_gen".into(),
+                    arguments: json!({"prompt": "diagram"}),
+                    signature: None,
+                }),
+            ]),
+            Message::tool_result("call_image", "generated/image.png", false),
+        ];
+
+        let input = to_responses_input(&msgs);
+        assert_eq!(input.len(), 3);
+        assert_eq!(input[0]["role"], "assistant");
+        assert_eq!(input[1]["type"], "function_call");
+        assert_eq!(input[1]["call_id"], "call_image");
+        assert_eq!(input[2]["type"], "function_call_output");
+        assert_eq!(input[2]["call_id"], "call_image");
     }
 
     #[test]
