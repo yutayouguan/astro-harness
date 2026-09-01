@@ -1690,7 +1690,15 @@ fn parse_output(
     if event == crate::SESSION_END {
         return CommandHookDecision::default();
     }
-    let wire = match serde_json::from_str::<WireOutput>(stdout) {
+    let wire = match serde_json::from_str::<Value>(stdout).and_then(|value| {
+        if !event_output_has_codex_shape(event, &value) {
+            return Err(serde_json::Error::io(std::io::Error::new(
+                ErrorKind::InvalidData,
+                format!("fields do not match the {event} output schema"),
+            )));
+        }
+        serde_json::from_value::<WireOutput>(value)
+    }) {
         Ok(wire) => wire,
         Err(_)
             if matches!(
@@ -1923,6 +1931,67 @@ fn parse_output(
         decision.stop_reason = None;
     }
     decision
+}
+
+fn event_output_has_codex_shape(event: &str, value: &Value) -> bool {
+    const UNIVERSAL: &[&str] = &["continue", "stopReason", "suppressOutput", "systemMessage"];
+    const DECISION: &[&str] = &["decision", "reason"];
+    const PRE_TOOL: &[&str] = &[
+        "hookEventName",
+        "additionalContext",
+        "updatedInput",
+        "permissionDecision",
+        "permissionDecisionReason",
+    ];
+    const POST_TOOL: &[&str] = &["hookEventName", "additionalContext", "updatedMCPToolOutput"];
+    const PERMISSION: &[&str] = &["hookEventName", "decision"];
+    const CONTEXT: &[&str] = &["hookEventName", "additionalContext"];
+
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    let (top_level, specific) = match event {
+        crate::PRE_TOOL_USE => (
+            merge_fields(UNIVERSAL, &["decision", "reason", "hookSpecificOutput"]),
+            Some(PRE_TOOL),
+        ),
+        crate::POST_TOOL_USE | crate::USER_PROMPT_SUBMIT => (
+            merge_fields(UNIVERSAL, &["decision", "reason", "hookSpecificOutput"]),
+            Some(if event == crate::POST_TOOL_USE {
+                POST_TOOL
+            } else {
+                CONTEXT
+            }),
+        ),
+        crate::PERMISSION_REQUEST => (
+            merge_fields(UNIVERSAL, &["hookSpecificOutput"]),
+            Some(PERMISSION),
+        ),
+        crate::SESSION_START | crate::SUBAGENT_START => (
+            merge_fields(UNIVERSAL, &["hookSpecificOutput"]),
+            Some(CONTEXT),
+        ),
+        crate::PRE_COMPACT | crate::POST_COMPACT => (UNIVERSAL.to_vec(), None),
+        crate::STOP | crate::SUBAGENT_STOP => (merge_fields(UNIVERSAL, DECISION), None),
+        crate::INTERRUPT => (vec!["systemMessage"], None),
+        _ => return false,
+    };
+    if object.keys().any(|key| !top_level.contains(&key.as_str())) {
+        return false;
+    }
+
+    match (object.get("hookSpecificOutput"), specific) {
+        (None | Some(Value::Null), _) => true,
+        (Some(Value::Object(output)), Some(allowed)) => {
+            output.keys().all(|key| allowed.contains(&key.as_str()))
+        }
+        (Some(_), Some(_)) => true,
+        (Some(_), None) => false,
+    }
+}
+
+fn merge_fields<'a>(left: &'a [&'a str], right: &'a [&'a str]) -> Vec<&'a str> {
+    left.iter().chain(right).copied().collect()
 }
 
 fn trimmed_reason(reason: &str) -> Option<String> {
@@ -2249,6 +2318,50 @@ mod tests {
 
         assert!(decision.additional_context.is_none());
         assert!(decision.error.is_some());
+    }
+
+    #[test]
+    fn output_fields_are_validated_against_each_codex_event_schema() {
+        for (event, stdout) in [
+            (crate::INTERRUPT, r#"{"continue":false}"#),
+            (
+                crate::PRE_COMPACT,
+                r#"{"hookSpecificOutput":{"hookEventName":"PreCompact"}}"#,
+            ),
+            (crate::SESSION_START, r#"{"decision":"block"}"#),
+            (
+                crate::STOP,
+                r#"{"hookSpecificOutput":{"hookEventName":"Stop"}}"#,
+            ),
+            (crate::PERMISSION_REQUEST, r#"{"reason":"denied"}"#),
+        ] {
+            let decision = parse_output(
+                event,
+                &HandlerOutput {
+                    exit_code: Some(0),
+                    stdout: stdout.into(),
+                    stderr: String::new(),
+                },
+                true,
+            );
+            assert_eq!(
+                decision.error,
+                Some(format!("hook returned invalid {event} JSON output"))
+            );
+        }
+
+        let session_end = parse_output(
+            crate::SESSION_END,
+            &HandlerOutput {
+                exit_code: Some(0),
+                stdout: r#"{"ignored":true}"#.into(),
+                stderr: String::new(),
+            },
+            true,
+        );
+        assert!(session_end.error.is_none());
+        assert!(session_end.block_reason.is_none());
+        assert!(session_end.stop_reason.is_none());
     }
 
     #[tokio::test]
