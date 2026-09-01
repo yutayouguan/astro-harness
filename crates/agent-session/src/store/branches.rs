@@ -460,74 +460,6 @@ impl SessionStore {
         })
     }
 
-    pub(crate) async fn write_fork_metadata_from_response_items(
-        &self,
-        source_id: &str,
-        target_id: &str,
-        copied_source_items: &[StoredResponseItem],
-        kind: BranchKind,
-    ) -> Result<()> {
-        let turns = turn_spans(copied_source_items);
-        let completed = turns
-            .iter()
-            .filter(|turn| turn.completed)
-            .collect::<Vec<_>>();
-        let anchor = completed.last().copied();
-        self.write_branch_metadata(
-            source_id,
-            target_id,
-            kind,
-            &ResolvedBranchMetadata {
-                parent_message_id: anchor.map(|turn| turn.user_message_id),
-                parent_turn_index: anchor.map(|turn| turn.index),
-                inherited_turn_count: i64::try_from(completed.len()).unwrap_or(i64::MAX),
-            },
-        )
-        .await
-    }
-
-    pub(crate) async fn infer_and_write_branch_metadata(
-        &self,
-        source_id: &str,
-        target_id: &str,
-        kind: BranchKind,
-    ) -> Result<()> {
-        let inferred = infer_branch_metadata(
-            &self.get_response_items(source_id).await?,
-            &self.get_response_items(target_id).await?,
-        );
-        self.write_branch_metadata(source_id, target_id, kind, &inferred)
-            .await
-    }
-
-    async fn write_branch_metadata(
-        &self,
-        source_id: &str,
-        target_id: &str,
-        kind: BranchKind,
-        metadata: &ResolvedBranchMetadata,
-    ) -> Result<()> {
-        sqlx::query(
-            "UPDATE sessions SET
-                branch_parent_message_id = ?1,
-                branch_parent_turn_index = ?2,
-                branch_inherited_turn_count = ?3,
-                branch_created_at = COALESCE(branch_created_at, ?4),
-                branch_kind = ?5
-             WHERE id = ?6 AND parent_session_id = ?7",
-        )
-        .bind(metadata.parent_message_id)
-        .bind(metadata.parent_turn_index)
-        .bind(metadata.inherited_turn_count)
-        .bind(now_epoch_secs()?)
-        .bind(kind.as_str())
-        .bind(target_id)
-        .bind(source_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
     async fn load_all_sessions(&self) -> Result<HashMap<String, StoredSession>> {
         let ids: Vec<(String,)> = sqlx::query_as("SELECT id FROM sessions ORDER BY started_at, id")
             .fetch_all(&self.pool)
@@ -578,6 +510,77 @@ struct ResolvedBranchMetadata {
     parent_message_id: Option<i64>,
     parent_turn_index: Option<i64>,
     inherited_turn_count: i64,
+}
+
+pub(crate) async fn write_fork_metadata_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    source_id: &str,
+    target_id: &str,
+    copied_source_items: &[StoredResponseItem],
+    kind: BranchKind,
+) -> Result<()> {
+    let turns = turn_spans(copied_source_items);
+    let completed = turns
+        .iter()
+        .filter(|turn| turn.completed)
+        .collect::<Vec<_>>();
+    let anchor = completed.last().copied();
+    write_branch_metadata_in_transaction(
+        tx,
+        source_id,
+        target_id,
+        kind,
+        &ResolvedBranchMetadata {
+            parent_message_id: anchor.map(|turn| turn.user_message_id),
+            parent_turn_index: anchor.map(|turn| turn.index),
+            inherited_turn_count: i64::try_from(completed.len()).unwrap_or(i64::MAX),
+        },
+    )
+    .await
+}
+
+pub(crate) async fn write_inferred_metadata_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    source_id: &str,
+    target_id: &str,
+    source_items: &[StoredResponseItem],
+    copied_source_items: &[StoredResponseItem],
+    kind: BranchKind,
+) -> Result<()> {
+    let metadata = infer_branch_metadata(source_items, copied_source_items);
+    write_branch_metadata_in_transaction(tx, source_id, target_id, kind, &metadata).await
+}
+
+async fn write_branch_metadata_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    source_id: &str,
+    target_id: &str,
+    kind: BranchKind,
+    metadata: &ResolvedBranchMetadata,
+) -> Result<()> {
+    let result = sqlx::query(
+        "UPDATE sessions SET
+            branch_parent_message_id = ?1,
+            branch_parent_turn_index = ?2,
+            branch_inherited_turn_count = ?3,
+            branch_created_at = COALESCE(branch_created_at, ?4),
+            branch_kind = ?5
+         WHERE id = ?6 AND parent_session_id = ?7",
+    )
+    .bind(metadata.parent_message_id)
+    .bind(metadata.parent_turn_index)
+    .bind(metadata.inherited_turn_count)
+    .bind(now_epoch_secs()?)
+    .bind(kind.as_str())
+    .bind(target_id)
+    .bind(source_id)
+    .execute(&mut **tx)
+    .await?;
+    anyhow::ensure!(
+        result.rows_affected() == 1,
+        "branch target metadata not found"
+    );
+    Ok(())
 }
 
 async fn copy_prefix_through_turn(

@@ -101,6 +101,10 @@ impl StoredResponseItem {
                     | ResponseItem::CustomToolCall { .. }
                     | ResponseItem::ToolSearchCall { .. }
                     | ResponseItem::Reasoning { .. }
+                    | ResponseItem::LocalShellCall { .. }
+                    | ResponseItem::WebSearchCall { .. }
+                    | ResponseItem::ImageGenerationCall { .. }
+                    | ResponseItem::AgentMessage { .. }
             ) {
                 Some("assistant")
             } else {

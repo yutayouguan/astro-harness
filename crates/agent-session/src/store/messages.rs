@@ -5,8 +5,10 @@ use agent_protocol::{ContentItem, ResponseItem};
 use anyhow::{Context, Result};
 use serde_json::Value;
 
+use super::branches::{write_fork_metadata_in_transaction, write_inferred_metadata_in_transaction};
 use super::{
-    now_epoch_secs, truncate_chars, BranchKind, NewResponseItem, SessionStore, StoredResponseItem,
+    is_unique_constraint, now_epoch_secs, truncate_chars, BranchKind, NewResponseItem,
+    SessionStore, StoredResponseItem,
 };
 
 pub(crate) fn response_item_role(item: &ResponseItem) -> Option<&str> {
@@ -18,7 +20,11 @@ pub(crate) fn response_item_role(item: &ResponseItem) -> Option<&str> {
         ResponseItem::FunctionCall { .. }
         | ResponseItem::CustomToolCall { .. }
         | ResponseItem::ToolSearchCall { .. }
-        | ResponseItem::Reasoning { .. } => Some("assistant"),
+        | ResponseItem::Reasoning { .. }
+        | ResponseItem::LocalShellCall { .. }
+        | ResponseItem::WebSearchCall { .. }
+        | ResponseItem::ImageGenerationCall { .. }
+        | ResponseItem::AgentMessage { .. } => Some("assistant"),
         _ => None,
     }
 }
@@ -137,26 +143,7 @@ impl SessionStore {
     }
 
     pub async fn get_response_items(&self, session_id: &str) -> Result<Vec<StoredResponseItem>> {
-        let rows = sqlx::query(
-            "SELECT id, session_id, item_json, timestamp, token_count, finish_reason
-             FROM response_items WHERE session_id = ?1 ORDER BY timestamp, id",
-        )
-        .bind(session_id)
-        .fetch_all(&self.pool)
-        .await?;
-        rows.into_iter()
-            .map(|row| {
-                Ok(StoredResponseItem {
-                    id: row.get(0),
-                    session_id: row.get(1),
-                    item: serde_json::from_str(&row.get::<String, _>(2))
-                        .context("deserialize stored response item")?,
-                    timestamp: row.get(3),
-                    token_count: row.get(4),
-                    finish_reason: row.get(5),
-                })
-            })
-            .collect()
+        fetch_response_items(&self.pool, session_id).await
     }
 
     pub async fn update_response_item_compressed_content(
@@ -215,7 +202,9 @@ impl SessionStore {
         details: &Value,
     ) -> Result<()> {
         let row = sqlx::query(
-            "SELECT id FROM response_items WHERE session_id = ?1 AND role = 'assistant'
+            "SELECT id FROM response_items
+             WHERE session_id = ?1 AND role = 'assistant'
+               AND json_extract(item_json, '$.type') = 'message'
              ORDER BY id DESC LIMIT 1",
         )
         .bind(session_id)
@@ -243,14 +232,13 @@ impl SessionStore {
         if source_id == new_id {
             anyhow::bail!("fork_session: source and target session ids must differ");
         }
-        if self.get_session(new_id).await?.is_some() {
-            anyhow::bail!("fork_session: target session already exists");
-        }
-        let parent = self.get_session(source_id).await?;
-        let model = parent.as_ref().and_then(|p| p.model.clone());
-        self.create_session(new_id, "tauri", model.as_deref(), None, Some(source_id))
-            .await?;
-        let items = self.get_response_items(source_id).await?;
+        let parent = self
+            .get_session(source_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("fork_session: source session not found"))?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        ensure_target_absent(&mut tx, new_id, "fork_session").await?;
+        let items = fetch_response_items(&mut *tx, source_id).await?;
         let selected = if keep_chat_bubbles == 0 {
             &items[..0]
         } else if let Some(end) = end_inclusive_for_bubbles(&items, keep_chat_bubbles) {
@@ -258,48 +246,23 @@ impl SessionStore {
         } else {
             items.as_slice()
         };
-        self.copy_response_items(new_id, selected).await?;
-        self.write_fork_metadata_from_response_items(source_id, new_id, selected, BranchKind::Fork)
-            .await?;
-        if let Some(title) = parent
-            .and_then(|p| p.title)
-            .filter(|t| !t.trim().is_empty())
-        {
-            let _ = self
-                .set_session_title(new_id, &format!("{title} · branch"))
-                .await;
-        }
-        Ok(())
-    }
-
-    async fn copy_response_items(&self, new_id: &str, items: &[StoredResponseItem]) -> Result<()> {
-        self.copy_response_items_with_base_timestamp(new_id, items, None)
-            .await
-    }
-
-    async fn copy_response_items_with_base_timestamp(
-        &self,
-        new_id: &str,
-        items: &[StoredResponseItem],
-        base_timestamp: Option<f64>,
-    ) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
-        for (index, item) in items.iter().enumerate() {
-            insert_response_item_row(
-                &mut *tx,
-                NewResponseItem {
-                    session_id: new_id,
-                    item: &item.item,
-                    token_count: item.token_count,
-                    finish_reason: item.finish_reason.as_deref(),
-                },
-                base_timestamp
-                    .map(|base| base + (index + 1) as f64 * 0.000_001)
-                    .unwrap_or(item.timestamp),
-            )
-            .await?;
-        }
+        insert_child_session(
+            &mut tx,
+            new_id,
+            "tauri",
+            parent.model.as_deref(),
+            source_id,
+            BranchKind::Fork,
+            now_epoch_secs()?,
+        )
+        .await?;
+        insert_response_items_into(&mut tx, new_id, selected, None).await?;
         refresh_counts(&mut *tx, new_id).await?;
+        if let Some(title) = parent.title.filter(|title| !title.trim().is_empty()) {
+            set_title_in_transaction(&mut tx, new_id, &format!("{title} · branch")).await?;
+        }
+        write_fork_metadata_in_transaction(&mut tx, source_id, new_id, selected, BranchKind::Fork)
+            .await?;
         tx.commit().await?;
         Ok(())
     }
@@ -317,32 +280,41 @@ impl SessionStore {
             .get_session(source_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("source session not found: {source_id:?}"))?;
-        if self.get_session(new_id).await?.is_some() {
-            anyhow::bail!("fork_session_recent_turns: target session already exists");
-        }
-        self.create_session(
-            new_id,
-            "tauri",
-            parent.model.as_deref(),
-            None,
-            Some(source_id),
-        )
-        .await?;
-        let items = self.get_response_items(source_id).await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        ensure_target_absent(&mut tx, new_id, "fork_session_recent_turns").await?;
+        let items = fetch_response_items(&mut *tx, source_id).await?;
         let selected = match recent_turns {
             Some(0) => &items[..0],
             None => items.as_slice(),
-            Some(turns) => start_inclusive_for_tail_bubbles(&items, turns)
+            Some(turns) => start_inclusive_for_recent_turns(&items, turns)
                 .map(|start| &items[start..])
                 .unwrap_or(items.as_slice()),
         };
-        self.copy_response_items(new_id, selected).await?;
+        insert_child_session(
+            &mut tx,
+            new_id,
+            "tauri",
+            parent.model.as_deref(),
+            source_id,
+            BranchKind::Agent,
+            now_epoch_secs()?,
+        )
+        .await?;
+        insert_response_items_into(&mut tx, new_id, selected, None).await?;
+        refresh_counts(&mut *tx, new_id).await?;
         if let Some(title) = parent.title.filter(|title| !title.trim().is_empty()) {
-            let branched = format!("{title} · branch");
-            let _ = self.set_session_title(new_id, &branched).await;
+            set_title_in_transaction(&mut tx, new_id, &format!("{title} · branch")).await?;
         }
-        self.infer_and_write_branch_metadata(source_id, new_id, BranchKind::Agent)
-            .await?;
+        write_inferred_metadata_in_transaction(
+            &mut tx,
+            source_id,
+            new_id,
+            &items,
+            selected,
+            BranchKind::Agent,
+        )
+        .await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -430,19 +402,34 @@ impl SessionStore {
         if parent.ended_at.is_some() {
             anyhow::bail!("compact_and_split: source session already ended");
         }
-        let items = self.get_response_items(old_id).await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        ensure_target_absent(&mut tx, new_id, "compact_and_split").await?;
+        let items = fetch_response_items(&mut *tx, old_id).await?;
         if expected_last_item_id.is_some()
             && items.last().map(|item| item.id) != expected_last_item_id
         {
             anyhow::bail!("compact_and_split: source session changed while summarizing");
         }
-        self.end_session(old_id, "compacted").await?;
-        self.create_session(
+        let now = now_epoch_secs()?;
+        let changed = sqlx::query(
+            "UPDATE sessions SET ended_at = ?1, end_reason = 'compacted'
+             WHERE id = ?2 AND ended_at IS NULL",
+        )
+        .bind(now)
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await?;
+        if changed.rows_affected() != 1 {
+            anyhow::bail!("compact_and_split: source session already ended");
+        }
+        insert_child_session(
+            &mut tx,
             new_id,
             &parent.source,
             parent.model.as_deref(),
-            None,
-            Some(old_id),
+            old_id,
+            BranchKind::Fork,
+            now,
         )
         .await?;
         let summary = ResponseItem::Message {
@@ -454,24 +441,18 @@ impl SessionStore {
             phase: None,
             internal_chat_message_metadata_passthrough: None,
         };
-        self.append_response_item(NewResponseItem::new(new_id, &summary))
-            .await?;
+        insert_response_item_row(&mut *tx, NewResponseItem::new(new_id, &summary), now).await?;
         if keep_tail_bubbles > 0 {
             if let Some(start) = start_inclusive_for_tail_bubbles(&items, keep_tail_bubbles) {
-                self.copy_response_items_with_base_timestamp(
-                    new_id,
-                    &items[start..],
-                    Some(now_epoch_secs()?),
-                )
-                .await?;
+                insert_response_items_into(&mut tx, new_id, &items[start..], Some(now)).await?;
             }
         }
+        refresh_counts(&mut *tx, new_id).await?;
         if let Some(title) = parent.title.filter(|title| !title.trim().is_empty()) {
             let continued = format!("{title} · continued");
-            let _ = self
-                .set_session_title(new_id, &truncate_chars(&continued, 80))
-                .await;
+            set_title_in_transaction(&mut tx, new_id, &truncate_chars(&continued, 80)).await?;
         }
+        tx.commit().await?;
         Ok(())
     }
 
@@ -481,6 +462,128 @@ impl SessionStore {
             .into_iter()
             .map(|entry| serde_json::to_value(entry.item).map_err(Into::into))
             .collect()
+    }
+}
+
+async fn fetch_response_items<'e>(
+    executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    session_id: &str,
+) -> Result<Vec<StoredResponseItem>> {
+    let rows = sqlx::query(
+        "SELECT id, session_id, item_json, timestamp, token_count, finish_reason
+         FROM response_items WHERE session_id = ?1 ORDER BY timestamp, id",
+    )
+    .bind(session_id)
+    .fetch_all(executor)
+    .await?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(StoredResponseItem {
+                id: row.get(0),
+                session_id: row.get(1),
+                item: serde_json::from_str(&row.get::<String, _>(2))
+                    .context("deserialize stored response item")?,
+                timestamp: row.get(3),
+                token_count: row.get(4),
+                finish_reason: row.get(5),
+            })
+        })
+        .collect()
+}
+
+async fn ensure_target_absent(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    session_id: &str,
+    operation: &str,
+) -> Result<()> {
+    let exists: bool = sqlx::query("SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)")
+        .bind(session_id)
+        .fetch_one(&mut **tx)
+        .await?
+        .get(0);
+    if exists {
+        anyhow::bail!("{operation}: target session already exists");
+    }
+    Ok(())
+}
+
+async fn insert_child_session(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: &str,
+    source: &str,
+    model: Option<&str>,
+    parent_session_id: &str,
+    kind: BranchKind,
+    started_at: f64,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO sessions (
+            id, source, model, parent_session_id, started_at,
+            branch_kind, branch_inherited_turn_count, branch_created_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?5)",
+    )
+    .bind(id)
+    .bind(source)
+    .bind(model)
+    .bind(parent_session_id)
+    .bind(started_at)
+    .bind(kind.as_str())
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn insert_response_items_into(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    new_id: &str,
+    items: &[StoredResponseItem],
+    base_timestamp: Option<f64>,
+) -> Result<()> {
+    for (index, item) in items.iter().enumerate() {
+        insert_response_item_row(
+            &mut **tx,
+            NewResponseItem {
+                session_id: new_id,
+                item: &item.item,
+                token_count: item.token_count,
+                finish_reason: item.finish_reason.as_deref(),
+            },
+            base_timestamp
+                .map(|base| base + (index + 1) as f64 * 0.000_001)
+                .unwrap_or(item.timestamp),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn set_title_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    session_id: &str,
+    title: &str,
+) -> Result<()> {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    let result = sqlx::query("UPDATE sessions SET title = ?1 WHERE id = ?2")
+        .bind(trimmed)
+        .bind(session_id)
+        .execute(&mut **tx)
+        .await;
+    match result {
+        Ok(_) => Ok(()),
+        Err(error) if is_unique_constraint(&error) => {
+            let suffix: String = session_id.chars().take(8).collect();
+            let unique = format!("{} · {}", truncate_chars(trimmed, 60), suffix);
+            sqlx::query("UPDATE sessions SET title = ?1 WHERE id = ?2")
+                .bind(unique)
+                .bind(session_id)
+                .execute(&mut **tx)
+                .await?;
+            Ok(())
+        }
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -506,15 +609,19 @@ fn start_inclusive_for_tail_bubbles(items: &[StoredResponseItem], keep: usize) -
     if keep == 0 || items.is_empty() {
         return None;
     }
+    let starts = response_item_bubble_starts(items);
+    (!starts.is_empty()).then(|| starts[starts.len().saturating_sub(keep)])
+}
+
+fn start_inclusive_for_recent_turns(items: &[StoredResponseItem], keep: usize) -> Option<usize> {
+    if keep == 0 || items.is_empty() {
+        return None;
+    }
     let starts = items
         .iter()
         .enumerate()
         .filter_map(|(index, item)| {
-            matches!(
-                response_item_message_role(&item.item),
-                Some("user" | "assistant")
-            )
-            .then_some(index)
+            (response_item_message_role(&item.item) == Some("user")).then_some(index)
         })
         .collect::<Vec<_>>();
     (!starts.is_empty()).then(|| starts[starts.len().saturating_sub(keep)])
@@ -524,24 +631,11 @@ fn end_inclusive_for_bubbles(items: &[StoredResponseItem], keep: usize) -> Optio
     if keep == 0 || items.is_empty() {
         return None;
     }
-    let mut bubbles = 0usize;
-    for (index, item) in items.iter().enumerate() {
-        if matches!(
-            response_item_message_role(&item.item),
-            Some("user" | "assistant")
-        ) {
-            bubbles += 1;
-            if bubbles == keep {
-                let next = items[index + 1..]
-                    .iter()
-                    .position(|item| response_item_message_role(&item.item).is_some())
-                    .map(|offset| index + offset)
-                    .unwrap_or(items.len() - 1);
-                return Some(next);
-            }
-        }
+    let starts = response_item_bubble_starts(items);
+    if starts.is_empty() || keep >= starts.len() {
+        return Some(items.len() - 1);
     }
-    Some(items.len() - 1)
+    Some(starts[keep] - 1)
 }
 
 fn response_item_ids_in_bubble_range(
@@ -549,17 +643,32 @@ fn response_item_ids_in_bubble_range(
     start: usize,
     end: usize,
 ) -> Vec<i64> {
-    let mut bubble = 0usize;
-    let mut deleting = false;
-    let mut ids = Vec::new();
-    for item in items {
-        if response_item_message_role(&item.item).is_some() {
-            deleting = bubble >= start && bubble < end;
-            bubble += 1;
-        }
-        if deleting {
-            ids.push(item.id);
+    let starts = response_item_bubble_starts(items);
+    let Some(&item_start) = starts.get(start) else {
+        return Vec::new();
+    };
+    let item_end = starts.get(end).copied().unwrap_or(items.len());
+    items[item_start..item_end]
+        .iter()
+        .map(|item| item.id)
+        .collect()
+}
+
+fn response_item_bubble_starts(items: &[StoredResponseItem]) -> Vec<usize> {
+    let mut starts = Vec::new();
+    let mut assistant_bubble_open = false;
+    for (index, item) in items.iter().enumerate() {
+        match response_item_message_role(&item.item) {
+            Some("user") => {
+                starts.push(index);
+                assistant_bubble_open = false;
+            }
+            _ if response_item_role(&item.item) == Some("assistant") && !assistant_bubble_open => {
+                starts.push(index);
+                assistant_bubble_open = true;
+            }
+            _ => {}
         }
     }
-    ids
+    starts
 }

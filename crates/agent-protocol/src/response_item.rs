@@ -299,6 +299,14 @@ impl ResponseItem {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
+            Self::AgentMessage { content, .. } => content
+                .iter()
+                .filter_map(|part| match part {
+                    AgentMessageInputContent::InputText { text } => Some(text.as_str()),
+                    AgentMessageInputContent::EncryptedContent { .. } => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
             Self::FunctionCallOutput { output, .. } | Self::CustomToolCallOutput { output, .. } => {
                 output.to_text().unwrap_or_default()
             }
@@ -320,6 +328,13 @@ impl ResponseItem {
             } => format!("{name}: {arguments}"),
             Self::CustomToolCall { name, input, .. } => format!("{name}: {input}"),
             Self::ToolSearchCall { arguments, .. } => arguments.to_string(),
+            Self::LocalShellCall { action, .. } => action.to_string(),
+            Self::WebSearchCall { action, .. } => {
+                action.as_ref().map(Value::to_string).unwrap_or_default()
+            }
+            Self::ImageGenerationCall { revised_prompt, .. } => {
+                revised_prompt.clone().unwrap_or_default()
+            }
             _ => String::new(),
         }
     }
@@ -697,5 +712,34 @@ mod tests {
             ])
         );
         assert_eq!(structured.to_text().as_deref(), Some("caption"));
+    }
+
+    #[test]
+    fn text_extracts_native_non_message_item_content_without_binary_payloads() {
+        let agent_message = ResponseItem::AgentMessage {
+            id: None,
+            author: "root".into(),
+            recipient: "worker".into(),
+            content: vec![
+                AgentMessageInputContent::InputText {
+                    text: "inspect the provider".into(),
+                },
+                AgentMessageInputContent::EncryptedContent {
+                    encrypted_content: "secret".into(),
+                },
+            ],
+            internal_chat_message_metadata_passthrough: None,
+        };
+        assert_eq!(agent_message.text(), "inspect the provider");
+
+        let image = ResponseItem::ImageGenerationCall {
+            id: None,
+            status: "completed".into(),
+            revised_prompt: Some("a revised prompt".into()),
+            result: "very-large-base64-result".into(),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        assert_eq!(image.text(), "a revised prompt");
+        assert!(!image.text().contains("base64"));
     }
 }

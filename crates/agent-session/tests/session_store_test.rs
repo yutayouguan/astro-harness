@@ -120,6 +120,42 @@ async fn compression_changes_only_response_item_metadata() {
 }
 
 #[tokio::test]
+async fn assistant_metadata_patch_targets_message_not_following_tool_call() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("s1", "test").await.unwrap();
+    store
+        .append_response_items(
+            "s1",
+            &[
+                ResponseItem::assistant_text("working"),
+                ResponseItem::FunctionCall {
+                    id: None,
+                    name: "exec_command".into(),
+                    namespace: None,
+                    arguments: "{}".into(),
+                    encrypted_function_args: None,
+                    call_id: "call_1".into(),
+                    internal_chat_message_metadata_passthrough: None,
+                },
+            ],
+        )
+        .await
+        .unwrap();
+
+    store
+        .patch_last_assistant_metadata("s1", &serde_json::json!({"astro_timeline": []}))
+        .await
+        .unwrap();
+    let stored = store.get_response_items("s1").await.unwrap();
+    assert!(stored[0]
+        .item
+        .metadata()
+        .and_then(|metadata| metadata.get("astro_timeline"))
+        .is_some());
+    assert!(stored[1].item.metadata().is_none());
+}
+
+#[tokio::test]
 async fn fork_and_truncate_preserve_complete_response_item_groups() {
     let (_dir, store) = test_store().await;
     store.ensure_session("source", "test").await.unwrap();
@@ -158,6 +194,108 @@ async fn fork_and_truncate_preserve_complete_response_item_groups() {
 }
 
 #[tokio::test]
+async fn bubble_operations_coalesce_consecutive_assistant_response_items() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("source", "test").await.unwrap();
+    let items = vec![
+        ResponseItem::user_text("u1"),
+        ResponseItem::FunctionCall {
+            id: None,
+            name: "exec_command".into(),
+            namespace: None,
+            arguments: "{}".into(),
+            encrypted_function_args: None,
+            call_id: "call_1".into(),
+            internal_chat_message_metadata_passthrough: None,
+        },
+        ResponseItem::assistant_text("commentary"),
+        ResponseItem::assistant_text("final"),
+        ResponseItem::user_text("u2"),
+        ResponseItem::assistant_text("a2"),
+    ];
+    store.append_response_items("source", &items).await.unwrap();
+
+    store.fork_session("source", "branch", 2).await.unwrap();
+    let branch = store.get_response_items("branch").await.unwrap();
+    assert_eq!(branch.len(), 4);
+    assert_eq!(branch.last().unwrap().text(), "final");
+
+    store.remove_chat_bubbles("source", 1, 2).await.unwrap();
+    let remaining = store.get_response_items("source").await.unwrap();
+    assert_eq!(remaining.len(), 3);
+    assert_eq!(remaining[0].text(), "u1");
+    assert_eq!(remaining[1].text(), "u2");
+    assert_eq!(remaining[2].text(), "a2");
+}
+
+#[tokio::test]
+async fn fork_recent_turns_rolls_back_target_after_item_insert_failure() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("source", "test").await.unwrap();
+    store
+        .append_response_items(
+            "source",
+            &[
+                ResponseItem::user_text("hello"),
+                ResponseItem::assistant_text("answer"),
+            ],
+        )
+        .await
+        .unwrap();
+    agent_db::sqlx::raw_sql(
+        "CREATE TRIGGER fail_branch_response_item
+         BEFORE INSERT ON response_items
+         WHEN NEW.session_id = 'branch'
+         BEGIN SELECT RAISE(ABORT, 'forced branch insert failure'); END;",
+    )
+    .execute(store.pool())
+    .await
+    .unwrap();
+
+    assert!(store
+        .fork_session_recent_turns("source", "branch", None)
+        .await
+        .is_err());
+    assert!(store.get_session("branch").await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn fork_recent_turns_keeps_the_complete_last_user_turn() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("source", "test").await.unwrap();
+    store
+        .append_response_items(
+            "source",
+            &[
+                ResponseItem::user_text("u1"),
+                ResponseItem::assistant_text("a1"),
+                ResponseItem::user_text("u2"),
+                ResponseItem::FunctionCall {
+                    id: None,
+                    name: "exec_command".into(),
+                    namespace: None,
+                    arguments: "{}".into(),
+                    encrypted_function_args: None,
+                    call_id: "call_2".into(),
+                    internal_chat_message_metadata_passthrough: None,
+                },
+                ResponseItem::assistant_text("a2"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    store
+        .fork_session_recent_turns("source", "branch", Some(1))
+        .await
+        .unwrap();
+    let branch = store.get_response_items("branch").await.unwrap();
+    assert_eq!(branch.len(), 3);
+    assert_eq!(branch[0].text(), "u2");
+    assert_eq!(branch[2].text(), "a2");
+}
+
+#[tokio::test]
 async fn compact_keeps_summary_and_tail_counts_consistent() {
     let (_dir, store) = test_store().await;
     store.ensure_session("old", "test").await.unwrap();
@@ -190,6 +328,44 @@ async fn compact_keeps_summary_and_tail_counts_consistent() {
             .message_count,
         3
     );
+}
+
+#[tokio::test]
+async fn compact_rolls_back_source_and_target_after_item_insert_failure() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("old", "test").await.unwrap();
+    store
+        .append_response_items(
+            "old",
+            &[
+                ResponseItem::user_text("hello"),
+                ResponseItem::assistant_text("answer"),
+            ],
+        )
+        .await
+        .unwrap();
+    agent_db::sqlx::raw_sql(
+        "CREATE TRIGGER fail_compacted_response_item
+         BEFORE INSERT ON response_items
+         WHEN NEW.session_id = 'new'
+         BEGIN SELECT RAISE(ABORT, 'forced compaction insert failure'); END;",
+    )
+    .execute(store.pool())
+    .await
+    .unwrap();
+
+    assert!(store
+        .compact_and_split("old", "new", "summary", 1)
+        .await
+        .is_err());
+    assert!(store.get_session("new").await.unwrap().is_none());
+    assert!(store
+        .get_session("old")
+        .await
+        .unwrap()
+        .unwrap()
+        .ended_at
+        .is_none());
 }
 
 #[tokio::test]
