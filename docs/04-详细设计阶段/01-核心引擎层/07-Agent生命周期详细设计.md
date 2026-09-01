@@ -1,9 +1,9 @@
 # Agent 生命周期详细设计
 
-> 版本：v3.0
+> 版本：v3.1
 > 日期：2026-09-01
 > 状态：当前实现基线
-> 适用范围：`agent-core`、`agent-protocol`、`agent-rollout`、`agent-subagents`、`agent-hooks`
+> 适用范围：`agent-core`、`agent-protocol`、`agent-rollout`、`agent-subagents`、`agent-hooks`、`agent-mcp`、`agent-server`、Desktop shell
 
 ## 1. 生命周期层级
 
@@ -23,7 +23,7 @@ ThreadManager
 | --- | --- | --- |
 | Thread | 跨多个 turn | identity、submission queue、event receiver、rollout binding |
 | Session | thread 驻留期 | services、配置、active task、history、event dispatch |
-| Task | 一次可取消工作 | regular / compact / review、cancel token、join handle |
+| Task | 一次可取消工作 | regular / compact / review / user shell、cancel token、join handle |
 | Turn | 一条用户意图 | turn id、权限、交互模式、项目/父子上下文 |
 | Step | 一次 model sampling | model target、工具/MCP 快照、prompt contract |
 | Attempt | 一次工具执行 | approval、sandbox、managed network、hook 和结果 |
@@ -45,6 +45,9 @@ AstroThread::submit(Op)
 - `TurnInput`、`RecoverTurn`、`SuspendTurnAndShutdown`；
 - `Interrupt`、`CleanBackgroundTerminals`；
 - `ThreadSettings`、approval/user-input/permission/dynamic-tool response；
+- `ResolveElicitation`、`TurnSettings`、`ApproveGuardianDeniedAction`；
+- `RunUserShellCommand`；
+- `RealtimeConversationStart/Audio/Text/Speech/Close/ListVoices`；
 - `RefreshMcpServers`、`ReloadUserConfig`；
 - `Compact`、`Review`、`ThreadRollback`；
 - `InterAgentCommunication`、`EmitExtension`、`Shutdown`。
@@ -53,13 +56,14 @@ AstroThread::submit(Op)
 
 ## 3. SessionTask
 
-`SessionTask` 是可恢复任务抽象，当前只有三种 `TaskKind`：
+`SessionTask` 是可恢复任务抽象，当前有四种 `TaskKind`：
 
 | Task | 行为 |
 | --- | --- |
 | `RegularTask` | 正常 Responses sampling 与工具循环 |
 | `CompactTask` | 执行 compact、更新 canonical history、发送 compact 生命周期事件 |
 | `ReviewTask` | 在隔离配置中运行只读代码审查，再回传结果并清理资源 |
+| `UserShellTask` | 运行用户明确输入的 login-shell 命令，投影命令事件并参与取消收敛 |
 
 `ActiveTurn` 最多持有一个 `RunningTask`。它保存 task、kind、`CancellationToken`、`TurnContext`、完成信号、主 handle 和 auxiliary handles。
 
@@ -157,7 +161,75 @@ Core 使用 typed request/outcome；Command/MCP handler 使用事件专属 JSON 
 
 模型可使用六个协作工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。`send_message` 只入 mailbox；`followup_task` 在 idle 时触发新 turn。子 Agent 不隐式创建 git worktree。
 
-## 10. 事件与持久化
+## 10. 交互控制面
+
+交互控制操作都通过 `AstroThread::submit(Op)` 进入单一 submission queue。gRPC/Tauri 层只做 DTO 转换和应答映射，不直接修改 `Session`、`TurnContext` 或 MCP 状态。
+
+### 10.1 `ResolveElicitation`
+
+```text
+MCP server: elicitation/create
+  -> McpElicitationBroker::request
+  -> pending[(server_name, request_id)]
+  -> desktop elicitation event
+  -> ResolveElicitation { action, content, meta }
+  -> broker.resolve
+  -> original MCP request future resumes
+```
+
+- `accept`、`decline`、`cancel` 保持原语义；只有 `accept` 会向 MCP server 提交 content。
+- pending key 是 `(server_name, request_id)`，一次 resolve 只移除对应项，不清空其他待处理请求。
+- broker 最多保留 128 个 pending request，UI channel 使用非阻塞有界入队；满载、重复 id、channel 关闭均 fail closed。
+- cleanup token 将超时/取消的旧 future 与同 key 的新请求区分，防止旧 cleanup 误删新 pending entry。
+
+### 10.2 `TurnSettings`
+
+`TurnSettingsUpdate` 可更新 `model`、`reasoning_effort`、`reasoning_summary` 和 `service_tier`。嵌套 `Option` 区分“不变”与“清空”。
+
+1. submission loop 校验 `turn_id` 必须等于 active task 的 `TurnContext::sub_id()`；
+2. `TurnContext` 克隆当前 provider settings，在副本上完成全部校验和更新；
+3. 失败返回 `TargetUnavailable` 或 `Rejected`，原快照不变；
+4. 成功时递增 generation 并原子替换快照，只供下一 sampling step 读取。
+
+它不追溯修改已发出的 Provider 请求，也不更改 Thread 默认配置或其他 turn。
+
+### 10.3 Guardian assessment / retry
+
+Guardian 对高风险工具操作发送 `in_progress`、`approved`、`denied` 或 `aborted` assessment event。拒绝项以 assessment id 保留，并绑定 `SHA-256(tool_name + NUL + serialized_arguments)` 得到的 canonical action。
+
+```text
+denied assessment
+  -> user approves assessment_id
+  -> enqueue one AuthorizedRetry
+  -> model/user retries an identical tool call
+  -> consume the matching authorization once
+  -> execute without repeating the same Guardian denial
+```
+
+- 授权不等于立即重放，必须再出现内容完全一致的工具调用才可消费。
+- 每个授权只允许一次重试；不同 assessment 即使对应相同 action，也以 FIFO 顺序独立保留。
+- pending denied 和 authorized retry 各限 128 项，超限时淘汰旧项，避免 Session 常驻状态无界增长。
+- 当前后端、gRPC 和 Tauri command 已完整接线；桌面端仍需从 assessment 表面显式触发授权，不应将拒绝自动视为同意。
+
+### 10.4 独立用户 Shell
+
+`RunUserShellCommand` 只承载用户明确输入的命令，不注册为模型可见工具。运行时使用 `$SHELL -lc`；`$SHELL` 不是有效绝对文件时回退到 `/bin/sh`。cwd 依次取显式参数、turn project root、workspace dir。
+
+- 有 active task 时，Shell 作为其 child task 运行，共享 turn id 并继承取消；无 active task 时创建独立 `UserShellTask` 和 turn。
+- 进程明确标记 `origin=user` 与 `sandbox=disabled`。这是用户终端能力边界，不应被 Agent 工具路径复用。
+- stdout/stderr 都以 delta 事件流式输出，每路最多捕获 1 MiB；超限后只发送一次截断标记，完成项携带 `stdout_truncated` / `stderr_truncated`。
+- 取消时 kill 子进程、回收读取 task，并以 failed/cancelled 命令项收敛。
+
+### 10.5 Realtime 会话
+
+Realtime 是 Thread 所有的会话级连接，并非一个普通 sampling step。它通过独立 `Op` 处理 start、audio、text、speech、voice listing 和 close，并将 Provider 事件投影为统一 `EventMsg`。
+
+- `RealtimeConversationStart` 的 reply 在 Provider handshake 成功或失败后才完成，不把“已入队”当成“已连接”。
+- Realtime `ChatTarget` 和 API credential 仅属于该连接，不改写普通文本回合的 primary/fallback targets。
+- `include_startup_context` 默认为 `true`：注入截断后的 system prompt，并取最近 32 条 user/assistant 文本项；显式关闭时不注入。
+- 连接和媒体通道必须有界；启动、传输或关闭失败通过 typed error/closed event 收敛，不留下伪活跃会话。
+
+## 11. 事件与持久化
 
 `Session::send_event` 在 `event_dispatch` guard 内执行：
 
@@ -172,7 +244,7 @@ normalize event identity
 
 SessionStore 是查询、FTS 和 UI read model，不是工具执行事实源。其消息可从 rollout 重建。
 
-## 11. 核心不变量
+## 12. 核心不变量
 
 1. 一个 Session 同时最多一个 active task。
 2. 一个 turn 只创建一个 `TurnContext`；fallback 不改变它。
@@ -183,8 +255,12 @@ SessionStore 是查询、FTS 和 UI read model，不是工具执行事实源。�
 7. task cancellation 必须传播到工具、hook、子进程和 auxiliary handles。
 8. durable event 先落 rollout，再 live 投递。
 9. 真实对话与 Agent Graph 状态分库存储，互不冒充事实源。
+10. 控制操作必须经 Thread submission queue 串行化，不绕过 Session 直接改写状态。
+11. `TurnSettings` 只修改命中 turn 的下一 sampling step，Realtime target 只修改当前连接。
+12. Elicitation 和 Guardian 授权都是可定位、有界的人在回路状态；Elicitation 可取消，解决和重试授权都只能消费一次。
+13. 独立用户 Shell 不是模型工具；虽不进入 Agent sandbox，仍必须有任务归属、取消与输出上限。
 
-## 12. 验证
+## 13. 验证
 
 ```bash
 cargo test -p agent
@@ -194,12 +270,13 @@ cargo test -p subagents
 cargo test -p hooks
 ```
 
-重点覆盖：task replacement、steer turn identity、interrupt terminal、suspend/recover、compact replacement、rollback replay、review cleanup、tool call/output pairing、Hook shutdown 和 rollout-before-live ordering。
+重点覆盖：task replacement、steer turn identity、interrupt terminal、suspend/recover、compact replacement、rollback replay、review cleanup、tool call/output pairing、Hook shutdown、rollout-before-live ordering、Realtime handshake 边界、Elicitation 重复/取消、TurnSettings 原子替换、Guardian 重复操作 FIFO 和 UserShell 输出截断。
 
-## 13. 相关设计
+## 14. 相关设计
 
 - [Responses 原生 Agent 运行时架构](../../03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)
 - [Agent 事件与恢复详细设计](12-Agent事件与恢复详细设计.md)
 - [Hooks 系统详细设计](08-Hooks系统详细设计.md)
 - [Agent Harness 执行外壳详细设计](14-Agent-Harness执行外壳详细设计.md)
 - [工具系统详细设计](../04-工具与扩展生态/02-工具系统详细设计.md)
+- [2026-09-01 Codex 生命周期对齐更新说明](../../更新说明/2026-09-01-Codex生命周期对齐.md)
