@@ -64,9 +64,13 @@ test("hover actions exclude deletion and only the latest user question can be ed
   assert.doesNotMatch(styles, /msg-dissolve/);
 });
 
-test("chat surfaces do not expose read-aloud or voice-input controls", async () => {
+test("chat surface exposes realtime voice without restoring legacy ASR or read-aloud controls", async () => {
   const source = await readFile(chatViewUrl, "utf8");
   const messages = await readFile(messagesUrl, "utf8");
+  const realtime = await readFile(
+    new URL("../../hooks/chat/useRealtimeConversation.ts", import.meta.url),
+    "utf8",
+  );
   const styles = await Promise.all([
     readFile(coreCssUrl, "utf8"),
     readFile(markdownCssUrl, "utf8"),
@@ -77,15 +81,21 @@ test("chat surfaces do not expose read-aloud or voice-input controls", async () 
     "speech_to_text",
     "MediaRecorder",
     "chat.readAloud",
-    "chat.micStart",
-    "chat.micStop",
-    "chat.micTranscribing",
   ]) {
     assert.doesNotMatch(source, new RegExp(removedContract), removedContract);
     assert.doesNotMatch(messages, new RegExp(removedContract), removedContract);
   }
 
-  assert.doesNotMatch(styles.join("\n"), /msg-tts-spin|mic-pulse|is-recording/);
+  assert.match(source, /useRealtimeConversation/);
+  assert.match(source, /composer-realtime-btn/);
+  assert.match(realtime, /AudioWorkletNode/);
+  assert.match(realtime, /send_realtime_audio/);
+  assert.match(realtime, /MAX_QUEUED_AUDIO_FRAMES/);
+  assert.match(realtime, /input_audio_buffer\.speech_started/);
+  assert.match(messages, /"chat\.realtimeStart": "开始实时语音"/);
+  assert.match(messages, /"chat\.realtimeUnavailable"/);
+  assert.match(styles.join("\n"), /realtime-mic-pulse/);
+  assert.doesNotMatch(styles.join("\n"), /msg-tts-spin|is-recording/);
 });
 
 test("composer does not expose a reasoning control", async () => {

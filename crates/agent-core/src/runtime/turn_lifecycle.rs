@@ -124,7 +124,7 @@ impl Session {
         submission_id: String,
         request: TurnInputRequest,
         mode: TurnInputMode,
-        responses_override: Option<crate::streaming::ResponsesOverride>,
+        chat_override: Option<crate::streaming::ChatOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         let TurnInputRequest {
             input,
@@ -158,7 +158,7 @@ impl Session {
                         .await
                 }
                 None => {
-                    self.start_turn(submission_id, input, thread_settings, responses_override)
+                    self.start_turn(submission_id, input, thread_settings, chat_override)
                         .await
                 }
             },
@@ -167,7 +167,7 @@ impl Session {
                     reason: "not_idle".into(),
                 }),
                 None => {
-                    self.start_turn(submission_id, input, thread_settings, responses_override)
+                    self.start_turn(submission_id, input, thread_settings, chat_override)
                         .await
                 }
             },
@@ -198,7 +198,7 @@ impl Session {
         turn_id: String,
         input: Vec<TurnInput>,
         thread_settings: agent_protocol::ThreadSettingsOverrides,
-        responses_override: Option<crate::streaming::ResponsesOverride>,
+        chat_override: Option<crate::streaming::ChatOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         let has_settings = !thread_settings.is_empty();
         let previous_settings = has_settings.then(|| self.snapshot_request_settings());
@@ -214,7 +214,7 @@ impl Session {
         let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
             Arc::clone(self),
             Arc::clone(&context),
-            responses_override,
+            chat_override,
         );
         let applied_event = async {
             if let Some(thread_settings) = applied_settings {
@@ -242,7 +242,7 @@ impl Session {
     pub(crate) async fn recover_turn(
         self: &Arc<Self>,
         turn_id: String,
-        responses_override: Option<crate::streaming::ResponsesOverride>,
+        chat_override: Option<crate::streaming::ChatOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         if self.active_turn_id().await.is_some() || self.terminating_turn_id().await.is_some() {
             return Ok(TurnInputSubmission::NotSubmitted {
@@ -262,7 +262,7 @@ impl Session {
         let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
             Arc::clone(self),
             Arc::clone(&context),
-            responses_override,
+            chat_override,
         );
         self.spawn_task(context, Vec::new(), RegularTask::recovery(args))
             .await

@@ -7,7 +7,7 @@ use tokio::sync::oneshot;
 use super::session_io::{AgentStatus, SessionIo};
 use super::submission_loop::submission_loop;
 use super::{RuntimeIoBindError, Session};
-use crate::streaming::ResponsesOverride;
+use crate::streaming::ChatOverride;
 
 /// 向单个会话长生命周期任务提交工作的稳定句柄。
 pub struct AstroThread {
@@ -26,7 +26,7 @@ impl AstroThread {
     fn spawn_inner(
         session: Arc<Session>,
         rollout: RolloutRecorder,
-        responses_override: Option<ResponsesOverride>,
+        chat_override: Option<ChatOverride>,
     ) -> Result<Arc<Self>, RuntimeIoBindError> {
         let (io, rx_sub, event_tx, status_tx, termination_tx) = SessionIo::new();
         session.bind_runtime_io(event_tx, status_tx, rollout)?;
@@ -37,7 +37,7 @@ impl AstroThread {
             io,
         });
         tokio::spawn(async move {
-            submission_loop(Arc::clone(&session), rx_sub, responses_override).await;
+            submission_loop(Arc::clone(&session), rx_sub, chat_override).await;
             session.close_event_stream();
             session.set_status(AgentStatus::Shutdown);
             let _ = termination_tx.send(true);
@@ -46,12 +46,12 @@ impl AstroThread {
     }
 
     #[cfg(test)]
-    fn spawn_with_responses_override(
+    fn spawn_with_chat_override(
         session: Arc<Session>,
         rollout: RolloutRecorder,
-        responses_override: ResponsesOverride,
+        chat_override: ChatOverride,
     ) -> Result<Arc<Self>, RuntimeIoBindError> {
-        Self::spawn_inner(session, rollout, Some(responses_override))
+        Self::spawn_inner(session, rollout, Some(chat_override))
     }
 
     pub async fn submit(&self, op: Op) -> anyhow::Result<String> {
@@ -492,7 +492,7 @@ mod tests {
         }]);
         let calls = Arc::new(AtomicUsize::new(0));
         let called = Arc::new(tokio::sync::Notify::new());
-        let responses_override: crate::streaming::ResponsesOverride = {
+        let chat_override: crate::streaming::ChatOverride = {
             let calls = Arc::clone(&calls);
             let called = Arc::clone(&called);
             Arc::new(move |_messages, _tools, _config| {
@@ -510,10 +510,10 @@ mod tests {
                 })
             })
         };
-        let thread = AstroThread::spawn_with_responses_override(
+        let thread = AstroThread::spawn_with_chat_override(
             Arc::clone(&session),
             recorder(&dir, "actor.jsonl").await,
-            responses_override,
+            chat_override,
         )
         .unwrap();
 
@@ -562,7 +562,7 @@ mod tests {
             base_url: String::new(),
         }]);
         let observed_config = Arc::new(std::sync::Mutex::new(None));
-        let responses_override: crate::streaming::ResponsesOverride = {
+        let chat_override: crate::streaming::ChatOverride = {
             let observed_config = Arc::clone(&observed_config);
             Arc::new(move |_messages, _tools, config| {
                 *observed_config.lock().unwrap() = Some(config);
@@ -576,10 +576,10 @@ mod tests {
                 })
             })
         };
-        let thread = AstroThread::spawn_with_responses_override(
+        let thread = AstroThread::spawn_with_chat_override(
             Arc::clone(&session),
             recorder(&dir, "settings-accepted-turn.jsonl").await,
-            responses_override,
+            chat_override,
         )
         .unwrap();
 
@@ -670,7 +670,7 @@ mod tests {
             base_url: String::new(),
         }]);
         let entered = Arc::new(tokio::sync::Notify::new());
-        let responses_override: crate::streaming::ResponsesOverride = {
+        let chat_override: crate::streaming::ChatOverride = {
             let entered = Arc::clone(&entered);
             Arc::new(move |_messages, _tools, _config| {
                 entered.notify_one();
@@ -682,10 +682,10 @@ mod tests {
                 })
             })
         };
-        let thread = AstroThread::spawn_with_responses_override(
+        let thread = AstroThread::spawn_with_chat_override(
             Arc::clone(&session),
             recorder(&dir, "settings-rejected-turn.jsonl").await,
-            responses_override,
+            chat_override,
         )
         .unwrap();
         let (_, started) = thread
@@ -761,7 +761,7 @@ mod tests {
             base_url: String::new(),
         }]);
         let calls = Arc::new(AtomicUsize::new(0));
-        let responses_override: crate::streaming::ResponsesOverride = {
+        let chat_override: crate::streaming::ChatOverride = {
             let calls = Arc::clone(&calls);
             Arc::new(move |_messages, _tools, _config| {
                 let call = calls.fetch_add(1, Ordering::SeqCst);
@@ -797,10 +797,10 @@ mod tests {
                 })
             })
         };
-        let thread = AstroThread::spawn_with_responses_override(
+        let thread = AstroThread::spawn_with_chat_override(
             Arc::clone(&session),
             recorder(&dir, "actor-hitl.jsonl").await,
-            responses_override,
+            chat_override,
         )
         .unwrap();
         let (_, submitted) = thread
@@ -888,7 +888,7 @@ mod tests {
             base_url: String::new(),
         }]);
         let entered = Arc::new(tokio::sync::Notify::new());
-        let first_chat: crate::streaming::ResponsesOverride = {
+        let first_chat: crate::streaming::ChatOverride = {
             let entered = Arc::clone(&entered);
             Arc::new(move |_messages, _tools, _config| {
                 entered.notify_one();
@@ -900,7 +900,7 @@ mod tests {
                 })
             })
         };
-        let first_thread = AstroThread::spawn_with_responses_override(
+        let first_thread = AstroThread::spawn_with_chat_override(
             first_session,
             RolloutRecorder::open(rollout_path.clone()).await.unwrap(),
             first_chat,
@@ -950,7 +950,7 @@ mod tests {
             api_key: String::new(),
             base_url: String::new(),
         }]);
-        let second_chat: crate::streaming::ResponsesOverride =
+        let second_chat: crate::streaming::ChatOverride =
             Arc::new(move |_messages, _tools, _config| {
                 Box::pin(async {
                     Ok(Box::pin(futures::stream::iter(
@@ -965,7 +965,7 @@ mod tests {
                     )) as CompletionStream)
                 })
             });
-        let second_thread = AstroThread::spawn_with_responses_override(
+        let second_thread = AstroThread::spawn_with_chat_override(
             Arc::clone(&second_session),
             RolloutRecorder::open(rollout_path.clone()).await.unwrap(),
             second_chat,
@@ -1031,33 +1031,32 @@ mod tests {
             .record_assistant_message("old assistant")
             .await
             .unwrap();
-        let chat: crate::streaming::ResponsesOverride =
-            Arc::new(move |messages, tools, _config| {
-                let request = format!("{messages:?}");
-                assert!(!request.contains("old user"));
-                assert!(!request.contains("old assistant"));
-                assert!(request.contains("review the current diff"));
-                assert!(request.contains("You are a code reviewer"));
-                let tools = serde_json::to_string(&tools).unwrap();
-                assert!(!tools.contains("spawn_agent"));
-                assert!(!tools.contains("web_search"));
-                assert!(!tools.contains("image_gen"));
-                assert!(!tools.contains("apply_patch"));
-                Box::pin(async {
-                    Ok(Box::pin(futures::stream::iter(
-                        vec![
-                            StreamChunk::Text("no findings".into()),
-                            StreamChunk::Done {
-                                finish_reason: "stop".into(),
-                            },
-                        ]
-                        .into_iter()
-                        .map(Ok),
-                    )) as CompletionStream)
-                })
-            });
+        let chat: crate::streaming::ChatOverride = Arc::new(move |messages, tools, _config| {
+            let request = format!("{messages:?}");
+            assert!(!request.contains("old user"));
+            assert!(!request.contains("old assistant"));
+            assert!(request.contains("review the current diff"));
+            assert!(request.contains("You are a code reviewer"));
+            let tools = serde_json::to_string(&tools).unwrap();
+            assert!(!tools.contains("spawn_agent"));
+            assert!(!tools.contains("web_search"));
+            assert!(!tools.contains("image_gen"));
+            assert!(!tools.contains("apply_patch"));
+            Box::pin(async {
+                Ok(Box::pin(futures::stream::iter(
+                    vec![
+                        StreamChunk::Text("no findings".into()),
+                        StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        },
+                    ]
+                    .into_iter()
+                    .map(Ok),
+                )) as CompletionStream)
+            })
+        });
         let rollout_path = dir.path().join("actor-review.jsonl");
-        let thread = AstroThread::spawn_with_responses_override(
+        let thread = AstroThread::spawn_with_chat_override(
             Arc::clone(&session),
             RolloutRecorder::open(rollout_path.clone()).await.unwrap(),
             chat,
@@ -1174,16 +1173,15 @@ mod tests {
             api_key: String::new(),
             base_url: String::new(),
         }]);
-        let chat: crate::streaming::ResponsesOverride =
-            Arc::new(move |_messages, _tools, _config| {
-                Box::pin(async {
-                    Ok(
-                        Box::pin(futures::stream::pending::<anyhow::Result<StreamChunk>>())
-                            as CompletionStream,
-                    )
-                })
-            });
-        let thread = AstroThread::spawn_with_responses_override(
+        let chat: crate::streaming::ChatOverride = Arc::new(move |_messages, _tools, _config| {
+            Box::pin(async {
+                Ok(
+                    Box::pin(futures::stream::pending::<anyhow::Result<StreamChunk>>())
+                        as CompletionStream,
+                )
+            })
+        });
+        let thread = AstroThread::spawn_with_chat_override(
             Arc::clone(&session),
             recorder(&dir, "actor-review-interrupt.jsonl").await,
             chat,
@@ -1333,22 +1331,21 @@ mod tests {
             api_key: String::new(),
             base_url: String::new(),
         }]);
-        let chat: crate::streaming::ResponsesOverride =
-            Arc::new(move |_messages, _tools, _config| {
-                Box::pin(async {
-                    Ok(Box::pin(futures::stream::iter(
-                        vec![
-                            StreamChunk::Text("mail received".into()),
-                            StreamChunk::Done {
-                                finish_reason: "stop".into(),
-                            },
-                        ]
-                        .into_iter()
-                        .map(Ok),
-                    )) as CompletionStream)
-                })
-            });
-        let thread = AstroThread::spawn_with_responses_override(
+        let chat: crate::streaming::ChatOverride = Arc::new(move |_messages, _tools, _config| {
+            Box::pin(async {
+                Ok(Box::pin(futures::stream::iter(
+                    vec![
+                        StreamChunk::Text("mail received".into()),
+                        StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        },
+                    ]
+                    .into_iter()
+                    .map(Ok),
+                )) as CompletionStream)
+            })
+        });
+        let thread = AstroThread::spawn_with_chat_override(
             Arc::clone(&session),
             recorder(&dir, "actor-inter-agent-trigger.jsonl").await,
             chat,

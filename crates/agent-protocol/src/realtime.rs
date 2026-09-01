@@ -17,7 +17,7 @@ pub enum RealtimeOutputModality {
 pub enum ConversationTextRole {
     #[default]
     User,
-    Developer,
+    System,
     Assistant,
 }
 
@@ -65,9 +65,6 @@ pub struct ConversationStartParams {
     pub noise_reduction: Option<RealtimeNoiseReduction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_audio_transcription_model: Option<String>,
-    /// Existing provider-side session id to reconnect to when supported.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub realtime_session_id: Option<String>,
 }
 
 impl Default for ConversationStartParams {
@@ -82,7 +79,6 @@ impl Default for ConversationStartParams {
             turn_detection: RealtimeTurnDetection::ServerVad,
             noise_reduction: None,
             input_audio_transcription_model: Some("gpt-4o-mini-transcribe".into()),
-            realtime_session_id: None,
         }
     }
 }
@@ -92,16 +88,12 @@ impl Default for ConversationStartParams {
 pub enum RealtimeAudioFormat {
     #[default]
     Pcm16,
-    G711Ulaw,
-    G711Alaw,
 }
 
 impl RealtimeAudioFormat {
     pub fn wire_name(self) -> &'static str {
         match self {
             Self::Pcm16 => "pcm16",
-            Self::G711Ulaw => "g711_ulaw",
-            Self::G711Alaw => "g711_alaw",
         }
     }
 }
@@ -163,12 +155,13 @@ impl RealtimeVoicesList {
     pub fn builtin() -> Self {
         Self {
             voices: [
-                "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse",
+                "alloy", "ash", "ballad", "cedar", "coral", "echo", "marin", "sage", "shimmer",
+                "verse",
             ]
             .into_iter()
             .map(str::to_string)
             .collect(),
-            default_voice: "alloy".into(),
+            default_voice: "marin".into(),
         }
     }
 }

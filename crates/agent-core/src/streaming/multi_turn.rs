@@ -206,7 +206,7 @@ pub(crate) struct ThreadTurnTaskArgs {
     pub(crate) prompt: Option<crate::prompt::PromptContract>,
     pub(crate) pause: Arc<PauseControl>,
     pub(crate) hitl_gate: Option<Arc<HitlGate>>,
-    pub(crate) responses_override: Option<super::provider::ResponsesOverride>,
+    pub(crate) chat_override: Option<super::provider::ChatOverride>,
 }
 
 pub(crate) struct InstalledMultiTurn {
@@ -231,7 +231,7 @@ pub struct ThreadTurnEventArgs {
     pub pause: Arc<PauseControl>,
     pub hitl_gate: Option<Arc<HitlGate>>,
     pub tx: mpsc::Sender<anyhow::Result<Event>>,
-    pub responses_override: Option<super::provider::ResponsesOverride>,
+    pub chat_override: Option<super::provider::ChatOverride>,
 }
 
 pub(crate) async fn install_multi_turn_task(
@@ -246,7 +246,7 @@ pub(crate) async fn install_multi_turn_task(
         prompt,
         pause,
         hitl_gate,
-        responses_override,
+        chat_override,
     } = args;
     let session_id = session.session_id().to_string();
     let sub_id = uuid::Uuid::new_v4().to_string();
@@ -261,7 +261,7 @@ pub(crate) async fn install_multi_turn_task(
         prompt,
         pause,
         hitl_gate,
-        responses_override,
+        chat_override,
         drain_mailbox: true,
     });
     tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
@@ -291,7 +291,7 @@ pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
         pause,
         hitl_gate,
         tx,
-        responses_override,
+        chat_override,
     } = args;
     match install_multi_turn_task(ThreadTurnTaskArgs {
         session: Arc::clone(&session),
@@ -302,7 +302,7 @@ pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
         prompt: None,
         pause,
         hitl_gate,
-        responses_override,
+        chat_override,
     })
     .await
     {
@@ -336,9 +336,9 @@ pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
 
 /// 为现有生命周期测试提供的预构建 turn 便捷接缝。
 #[doc(hidden)]
-pub async fn run_multi_turn_events_with_responses_fn(
+pub async fn run_multi_turn_events_with_chat_fn(
     session: Arc<Session>,
-    responses_fn: super::provider::ResponsesOverride,
+    chat_fn: super::provider::ChatOverride,
     config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
@@ -361,15 +361,15 @@ pub async fn run_multi_turn_events_with_responses_fn(
         pause,
         hitl_gate,
         tx,
-        responses_override: Some(responses_fn),
+        chat_override: Some(chat_fn),
     })
     .await;
 }
-pub async fn run_multi_turn_stream_with_responses_fn(
+pub async fn run_multi_turn_stream_with_chat_fn(
     session: Arc<Session>,
     turn_context: Arc<TurnContext>,
     input: Vec<TurnInput>,
-    responses_fn: super::provider::ResponsesOverride,
+    chat_fn: super::provider::ChatOverride,
 ) -> anyhow::Result<()> {
     let args = RunTurnArgs::submitted(
         Arc::clone(&session),
@@ -394,7 +394,7 @@ pub(crate) struct RunTurnArgs {
     prompt: Option<crate::prompt::PromptContract>,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
-    responses_override: Option<super::provider::ResponsesOverride>,
+    chat_override: Option<super::provider::ChatOverride>,
     drain_mailbox: bool,
 }
 
@@ -402,7 +402,7 @@ impl RunTurnArgs {
     pub(crate) fn submitted(
         session: Arc<Session>,
         turn_context: Arc<TurnContext>,
-        responses_override: Option<super::provider::ResponsesOverride>,
+        chat_override: Option<super::provider::ChatOverride>,
     ) -> Self {
         let mut targets = session.chat_targets();
         let provider = session.chat_provider();
@@ -440,7 +440,7 @@ impl RunTurnArgs {
             prompt: None,
             pause,
             hitl_gate: Some(hitl_gate),
-            responses_override,
+            chat_override,
             drain_mailbox: true,
         }
     }
@@ -473,7 +473,7 @@ impl RunTurnArgs {
         session: Arc<Session>,
         turn_context: Arc<TurnContext>,
     ) -> Self {
-        let mut args = Self::submitted(session, turn_context, self.responses_override.clone());
+        let mut args = Self::submitted(session, turn_context, self.chat_override.clone());
         args.drain_mailbox = false;
         args
     }
@@ -580,7 +580,7 @@ pub(crate) async fn run_turn(
         prompt,
         pause,
         hitl_gate,
-        responses_override,
+        chat_override,
         drain_mailbox,
     } = args;
     debug_assert!(
@@ -588,18 +588,9 @@ pub(crate) async fn run_turn(
         "prebuilt system prompt must be consumed by RegularTask"
     );
     let prompt = prompt.expect("RegularTask prepares the prompt contract");
-    turn_context.initialize_provider_settings(targets, base_config);
-    let initial_settings = turn_context
-        .provider_settings()
-        .expect("turn provider settings initialized above");
-    let mut settings_generation = initial_settings.generation;
-    let mut streamer = match responses_override.clone() {
-        Some(f) => ProviderStreamer::with_responses_override(
-            initial_settings.targets,
-            initial_settings.base_config,
-            f,
-        ),
-        None => ProviderStreamer::new(initial_settings.targets, initial_settings.base_config),
+    let streamer = match chat_override {
+        Some(f) => ProviderStreamer::with_chat_override(targets, base_config, f),
+        None => ProviderStreamer::new(targets, base_config),
     };
     let mut total_usage = Usage::default();
     let mut saw_usage = false;
@@ -738,22 +729,6 @@ pub(crate) async fn run_turn(
 
         let sampling = match run_sampling_request(
             &session,
-        // An in-flight request keeps its original snapshot. A complete settings update is
-        // published atomically immediately before the next provider request.
-        if let Some(settings) = turn_context.provider_settings() {
-            if settings.generation != settings_generation {
-                settings_generation = settings.generation;
-                streamer = match responses_override.clone() {
-                    Some(f) => ProviderStreamer::with_responses_override(
-                        settings.targets,
-                        settings.base_config,
-                        f,
-                    ),
-                    None => ProviderStreamer::new(settings.targets, settings.base_config),
-                };
-            }
-        }
-
             &streamer,
             &prompt,
             &prompt_context,

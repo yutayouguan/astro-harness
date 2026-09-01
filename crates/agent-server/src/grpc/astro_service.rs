@@ -2865,7 +2865,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::Duration;
 
-    use agent::streaming::{run_multi_turn_events_with_responses_fn, ResponsesOverride};
+    use agent::streaming::{run_multi_turn_events_with_chat_fn, ChatOverride};
     use providers::CompletionStream;
     use tempfile::TempDir;
 
@@ -3248,11 +3248,11 @@ mod tests {
         tokio::task::JoinHandle<()>,
         tokio::sync::mpsc::Receiver<anyhow::Result<agent_protocol::Event>>,
     ) {
-        let chat: ResponsesOverride = Arc::new(|_, _, _| {
+        let chat: ChatOverride = Arc::new(|_, _, _| {
             Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
         });
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
-        let handle = tokio::spawn(run_multi_turn_events_with_responses_fn(
+        let handle = tokio::spawn(run_multi_turn_events_with_chat_fn(
             session,
             chat,
             ProviderConfig {

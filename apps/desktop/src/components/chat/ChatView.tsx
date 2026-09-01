@@ -30,6 +30,7 @@ import {
   Infinity as InfinityIcon,
   ListX,
   ListTree,
+  Mic,
   Music2,
   Pencil,
   Plus,
@@ -39,6 +40,7 @@ import {
   ShieldCheck,
   Sparkles,
   Square,
+  PhoneOff,
   Trash2,
   X,
   MoreHorizontal,
@@ -160,6 +162,7 @@ import AssistantMessageContextMenu, {
 } from "./AssistantMessageContextMenu";
 import { useMcpTools } from "../../hooks/providers/useMcpTools";
 import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
+import { useRealtimeConversation } from "../../hooks/chat/useRealtimeConversation";
 import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import ComposerClarifySurface from "./ComposerClarifySurface";
@@ -382,6 +385,10 @@ type Props = {
   agentId?: string | null;
   /** 当前聊天模型 id：助手无自定义头像时用作品牌图标 */
   modelId?: string | null;
+  /** Realtime 凭据解析所需的 provider 条目与 backend id。 */
+  realtimeProviderId?: string | null;
+  realtimeBackendId?: string | null;
+  realtimeAvailable?: boolean;
   /** 当前任务绑定浏览器的悬浮预览。 */
   browserPreview?: BrowserPreview | null;
   onCloseBrowserPreview?: () => void;
@@ -852,6 +859,9 @@ export default function ChatView({
   onPickWelcomePrompt,
   agentId = null,
   modelId = null,
+  realtimeProviderId = null,
+  realtimeBackendId = null,
+  realtimeAvailable = false,
   browserPreview = null,
   onCloseBrowserPreview,
   cronProviders = [],
@@ -873,6 +883,17 @@ export default function ChatView({
 }: Props) {
   const { t } = useI18n();
   const { showToast, toastHost } = useTransientToast();
+  const realtime = useRealtimeConversation({
+    sessionId,
+    providerId: realtimeProviderId,
+    backendId: realtimeBackendId,
+  });
+  const realtimeErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!realtime.error || realtime.error === realtimeErrorRef.current) return;
+    realtimeErrorRef.current = realtime.error;
+    showToast(realtime.error, { error: true });
+  }, [realtime.error, showToast]);
   const confirm = useConfirm();
   const lastUserMessageId = useMemo(
     () => findLastUserMessageId(messages),
@@ -2176,6 +2197,7 @@ export default function ChatView({
   const canQueueWhileBusy = streaming || turnInFlight || interruptBlocked;
   const canSend =
     !sendBlocked &&
+    !realtime.active &&
     (input.trim().length > 0 ||
       attachments.length > 0 ||
       composerContexts.length > 0) &&
@@ -2188,7 +2210,8 @@ export default function ChatView({
   const showStopControl = streaming || turnInFlight;
   const showPauseResume = streaming;
   const showSendButton = !streaming && !composerClarify;
-  const modeSwitchLocked = streaming || turnInFlight || interruptBlocked;
+  const modeSwitchLocked =
+    streaming || turnInFlight || interruptBlocked || realtime.active;
   const contextProgress =
     typeof contextUsagePercent === "number" &&
     Number.isFinite(contextUsagePercent)
@@ -3866,11 +3889,16 @@ export default function ChatView({
                           ? t("chat.welcomePlaceholder")
                           : composerPlaceholder || t("chat.placeholder")
                   }
-                  disabled={sendBlocked}
+                  disabled={sendBlocked || realtime.active}
                   autoFocus
                 />
               </div>
             )}
+            {realtime.active && realtime.transcript ? (
+              <div className="composer-realtime-transcript" aria-live="polite">
+                {realtime.transcript}
+              </div>
+            ) : null}
             <div className="composer-bar">
               <div className="composer-bar-left">
                 <div className="composer-mode" ref={modeMenuRef}>
@@ -4017,7 +4045,7 @@ export default function ChatView({
                     className={`composer-icon-btn composer-plus-btn ${plusOpen ? "is-open" : ""} ${
                       mcpHasEnabled ? "has-dot" : ""
                     }`}
-                    disabled={streaming}
+                    disabled={streaming || realtime.active}
                     title={t("chat.plusMenu")}
                     aria-label={t("chat.plusMenu")}
                     aria-haspopup="dialog"
@@ -4066,6 +4094,45 @@ export default function ChatView({
               </div>
 
               <div className="composer-bar-right">
+                {!showStopControl ? (
+                  <button
+                    type="button"
+                    className={`composer-icon-btn composer-realtime-btn ${
+                      realtime.active ? "is-on" : ""
+                    } ${realtime.status === "connecting" ? "is-connecting" : ""}`.trim()}
+                    disabled={
+                      sendBlocked ||
+                      !sessionId ||
+                      !realtimeAvailable ||
+                      !realtimeProviderId ||
+                      !realtimeBackendId
+                    }
+                    aria-pressed={realtime.active}
+                    aria-label={t(
+                      !realtimeAvailable
+                        ? "chat.realtimeUnavailable"
+                        : realtime.active
+                          ? "chat.realtimeStop"
+                          : "chat.realtimeStart",
+                    )}
+                    title={t(
+                      !realtimeAvailable
+                        ? "chat.realtimeUnavailable"
+                        : realtime.status === "connecting"
+                          ? "chat.realtimeConnecting"
+                          : realtime.active
+                            ? "chat.realtimeStop"
+                            : "chat.realtimeStart",
+                    )}
+                    onClick={realtime.toggle}
+                  >
+                    {realtime.active ? (
+                      <PhoneOff size={17} strokeWidth={2.1} />
+                    ) : (
+                      <Mic size={17} strokeWidth={2.1} />
+                    )}
+                  </button>
+                ) : null}
                 <div
                   className="composer-context-wrap"
                   ref={contextWrapRef}

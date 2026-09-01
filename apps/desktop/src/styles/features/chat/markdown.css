@@ -1546,6 +1546,46 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   cursor: not-allowed;
 }
 
+.composer-realtime-btn.is-on {
+  color: #ef4444;
+  border-color: color-mix(in srgb, #ef4444 34%, transparent);
+  background: color-mix(in srgb, #ef4444 13%, transparent);
+}
+
+.composer-realtime-btn.is-connecting svg {
+  animation: realtime-mic-pulse 1.1s ease-in-out infinite;
+}
+
+.composer-realtime-transcript {
+  max-height: 72px;
+  margin: 0 10px 6px;
+  padding: 7px 10px;
+  overflow: auto;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg1) 72%, transparent);
+  color: var(--ink-mute);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@keyframes realtime-mic-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-realtime-btn.is-connecting svg {
+    animation: none;
+  }
+}
+
 .composer-shell {
   position: absolute;
   z-index: 12;

@@ -224,6 +224,11 @@ export default function SideChatPanel({
           contextUsage={chat.contextUsage}
           contextWindow={contextWindow}
           modelId={provider.model}
+          realtimeProviderId={provider.id}
+          realtimeBackendId={provider.backend_id}
+          realtimeAvailable={
+            provider.backend_id === "openai" && provider.has_api_key
+          }
           cronProviders={providers.map((item) => ({
             id: item.id,
             name: item.display_name,

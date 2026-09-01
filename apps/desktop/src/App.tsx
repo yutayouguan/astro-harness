@@ -1999,6 +1999,12 @@ export default function App() {
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
                       modelId={activeProvider?.model ?? null}
+                      realtimeProviderId={activeProvider?.id ?? null}
+                      realtimeBackendId={activeProvider?.backend_id ?? null}
+                      realtimeAvailable={Boolean(
+                        activeProvider?.backend_id === "openai" &&
+                        activeProvider.has_api_key,
+                      )}
                       browserPreview={chat.browserPreview}
                       onCloseBrowserPreview={chat.dismissBrowserPreview}
                       cronProviders={providers.map((provider) => ({
