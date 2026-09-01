@@ -7,6 +7,7 @@
 
 pub mod auth;
 pub mod config;
+mod elicitation;
 pub mod hub;
 pub mod names;
 mod protocol;
@@ -18,6 +19,9 @@ pub use config::{
     McpHttpAuth, McpServerConfig, McpToolConfig, McpToolSettings, McpTransportType,
     DEFAULT_STARTUP_TIMEOUT_SECS, DEFAULT_TOOL_TIMEOUT_SECS, STARTUP_TIMEOUT_SECS_RANGE,
     TOOL_TIMEOUT_SECS_RANGE,
+};
+pub use elicitation::{
+    McpElicitationAction, McpElicitationBroker, McpElicitationRequest, McpElicitationResponse,
 };
 pub use hub::{
     call_tool_with_peer, filter_enabled_tool_names, toolset_name, McpBrokerCapabilities,

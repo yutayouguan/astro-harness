@@ -12,6 +12,10 @@ import { listen } from "@tauri-apps/api/event";
 import { sealOpenReasoning } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import {
+  buildElicitationContent,
+  elicitationRequestId,
+} from "../../lib/chat/elicitation";
+import {
   type ChatInteractionMode,
   type ChatWorkMode,
   type ModeSwitchRequest,
@@ -1715,6 +1719,58 @@ export function useChatSession({
         }
       } else {
         payload = { ...context };
+      }
+
+      const elicitation = interrupts.find((item) => item.reason === "elicitation");
+      if (elicitation) {
+        if (parallelTask) {
+          await resumeParallelHitl(messageId, payload);
+          return;
+        }
+        const metadataPayload = elicitation.metadata?.payload;
+        const metadata =
+          metadataPayload &&
+          typeof metadataPayload === "object" &&
+          !Array.isArray(metadataPayload)
+            ? (metadataPayload as Record<string, unknown>)
+            : undefined;
+        const serverName =
+          typeof metadata?.server_name === "string" ? metadata.server_name : "";
+        const targetSessionId = sessionId;
+        if (!targetSessionId || !serverName) {
+          showTransientToast("MCP elicitation routing metadata is missing", {
+            tone: "error",
+          });
+          return;
+        }
+        try {
+          await invoke("resolve_elicitation", {
+            sessionId: targetSessionId,
+            serverName,
+            requestId: elicitationRequestId(elicitation),
+            action:
+              name === "cancel"
+                ? "cancel"
+                : name === "deny"
+                  ? "decline"
+                  : "accept",
+            contentJson:
+              name === "deny" || name === "cancel"
+                ? null
+                : JSON.stringify(buildElicitationContent(elicitation, payload)),
+            metaJson: null,
+          });
+          setSessionPendingInterrupts([]);
+          setStreaming(true);
+          setStatus("busy");
+          setStatusPhase("generating");
+        } catch (error) {
+          showTransientToast(
+            error instanceof Error ? error.message : String(error),
+            { tone: "error" },
+          );
+        }
+        return;
       }
 
       if (parallelTask) {

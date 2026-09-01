@@ -243,6 +243,81 @@ impl Session {
                 )
                 .await;
             }
+            Op::ResolveElicitation {
+                server_name,
+                request_id,
+                response,
+                reply,
+            } => {
+                let broker = Arc::clone(&self.mcp_elicitation);
+                let action = match response.action {
+                    agent_protocol::ElicitationAction::Accept => mcp::McpElicitationAction::Accept,
+                    agent_protocol::ElicitationAction::Decline => {
+                        mcp::McpElicitationAction::Decline
+                    }
+                    agent_protocol::ElicitationAction::Cancel => mcp::McpElicitationAction::Cancel,
+                };
+                let resolved = broker
+                    .resolve(
+                        &server_name,
+                        &request_id,
+                        mcp::McpElicitationResponse {
+                            action,
+                            content: response.content,
+                            meta: response.meta,
+                        },
+                    )
+                    .await;
+                let _ = reply.send(resolved);
+                if !resolved {
+                    self.emit_control_error(
+                        submission_id,
+                        "resolve_elicitation",
+                        anyhow::anyhow!("MCP elicitation is not pending or already resolved"),
+                    )
+                    .await;
+                }
+            }
+            Op::TurnSettings {
+                turn_id,
+                update,
+                reply,
+            } => {
+                let outcome = {
+                    let active = self.active_turn.lock().await;
+                    match active.as_ref().and_then(|active| active.task.as_ref()) {
+                        Some(running) if running.turn_context.sub_id() == turn_id => {
+                            running.turn_context.apply_settings_update(update)
+                        }
+                        _ => agent_protocol::TurnSettingsOutcome::Rejected {
+                            message: "target turn is not active".into(),
+                        },
+                    }
+                };
+                let _ = reply.send(outcome);
+            }
+            Op::RunUserShellCommand {
+                command,
+                cwd,
+                reply,
+            } => {
+                let _ = reply.send(self.launch_user_shell(command, cwd).await);
+            }
+            Op::ApproveGuardianDeniedAction {
+                assessment_id,
+                reply,
+            } => {
+                let approved = self.guardian_retry.approve_denied(&assessment_id);
+                let _ = reply.send(approved);
+                if !approved {
+                    self.emit_control_error(
+                        submission_id,
+                        "approve_guardian_denied_action",
+                        anyhow::anyhow!("Guardian assessment is not denied or already consumed"),
+                    )
+                    .await;
+                }
+            }
             Op::Compact => {
                 let context = self.create_turn_context(submission_id.clone()).await;
                 if let Err(error) = self

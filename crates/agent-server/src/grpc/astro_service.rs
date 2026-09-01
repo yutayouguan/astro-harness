@@ -16,10 +16,12 @@ use home::AgentRuntimeConfig;
 use memory::MemoryManager;
 use proto::astro_service_server::AstroService;
 use proto::{
-    ChatControlAction, ChatControlRequest, Empty, FileListRequest, FileListResponse, ImageEvent,
-    ImageRequest, McpReconnectRequest, McpServerList, McpServerListRequest, MemoryQuery,
-    MemoryResult, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList,
-    SkillRequest, SteerChatRequest, SteerChatResponse,
+    ApproveGuardianDeniedActionRequest, ChatControlAction, ChatControlRequest, Empty,
+    FileListRequest, FileListResponse, ImageEvent, ImageRequest, McpReconnectRequest,
+    McpServerList, McpServerListRequest, MemoryQuery, MemoryResult, ResolveElicitationRequest,
+    RunUserShellCommandRequest, RunUserShellCommandResponse, SessionSnippet as ProtoSessionSnippet,
+    SkillEvent, SkillInfo, SkillList, SkillRequest, SteerChatRequest, SteerChatResponse,
+    UpdateTurnSettingsRequest, UpdateTurnSettingsResponse,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
@@ -68,6 +70,7 @@ fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
         | EventMsg::ElicitationRequest(event)
         | EventMsg::DynamicToolCallRequest(event)
         | EventMsg::DynamicToolCallResponse(event) => Some(event.turn_id.clone()),
+        EventMsg::GuardianAssessment(event) => Some(event.turn_id.clone()),
         EventMsg::ContextUsage(event) => Some(event.turn_id.clone()),
         EventMsg::TokenCount(event) => event.turn_id.clone(),
         EventMsg::TurnComplete(event) => Some(event.turn_id.clone()),
@@ -2401,6 +2404,163 @@ impl AstroService for AstroServiceImpl {
             }
         }
         Ok(Response::new(Empty {}))
+    }
+
+    async fn resolve_elicitation(
+        &self,
+        request: Request<ResolveElicitationRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let managed = self
+            .threads
+            .get(&req.session_id)
+            .await
+            .ok_or_else(|| Status::not_found("session runtime is not loaded"))?;
+        let action = match req.action.as_str() {
+            "accept" => agent_protocol::ElicitationAction::Accept,
+            "decline" => agent_protocol::ElicitationAction::Decline,
+            "cancel" => agent_protocol::ElicitationAction::Cancel,
+            _ => {
+                return Err(Status::invalid_argument(
+                    "action must be accept, decline, or cancel",
+                ))
+            }
+        };
+        let parse_optional_json = |raw: String| -> Result<Option<serde_json::Value>, Status> {
+            if raw.trim().is_empty() {
+                Ok(None)
+            } else {
+                serde_json::from_str(&raw)
+                    .map(Some)
+                    .map_err(|error| Status::invalid_argument(error.to_string()))
+            }
+        };
+        let (reply, result) = tokio::sync::oneshot::channel();
+        managed
+            .runtime
+            .submit(agent_protocol::Op::ResolveElicitation {
+                server_name: req.server_name,
+                request_id: req.request_id,
+                response: agent_protocol::ElicitationResponse {
+                    action,
+                    content: parse_optional_json(req.content_json)?,
+                    meta: parse_optional_json(req.meta_json)?,
+                },
+                reply,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        if !result
+            .await
+            .map_err(|_| Status::internal("elicitation reply channel closed"))?
+        {
+            return Err(Status::failed_precondition(
+                "MCP elicitation is not pending or already resolved",
+            ));
+        }
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn update_turn_settings(
+        &self,
+        request: Request<UpdateTurnSettingsRequest>,
+    ) -> Result<Response<UpdateTurnSettingsResponse>, Status> {
+        let req = request.into_inner();
+        let managed = self
+            .threads
+            .get(&req.session_id)
+            .await
+            .ok_or_else(|| Status::not_found("session runtime is not loaded"))?;
+        let optional = |value: Option<String>| {
+            value.map(|value| (!value.trim().is_empty()).then(|| value.trim().to_string()))
+        };
+        let (reply, result) = tokio::sync::oneshot::channel();
+        managed
+            .runtime
+            .submit(agent_protocol::Op::TurnSettings {
+                turn_id: req.turn_id,
+                update: agent_protocol::TurnSettingsUpdate {
+                    model: req.model.map(|value| value.trim().to_string()),
+                    reasoning_effort: optional(req.reasoning_effort),
+                    reasoning_summary: optional(req.reasoning_summary),
+                    service_tier: optional(req.service_tier),
+                },
+                reply,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        let outcome = result
+            .await
+            .map_err(|_| Status::internal("turn settings reply channel closed"))?;
+        let (status, message) = match outcome {
+            agent_protocol::TurnSettingsOutcome::Applied => ("applied", String::new()),
+            agent_protocol::TurnSettingsOutcome::TargetUnavailable { message } => {
+                ("target_unavailable", message)
+            }
+            agent_protocol::TurnSettingsOutcome::Rejected { message } => ("rejected", message),
+        };
+        Ok(Response::new(UpdateTurnSettingsResponse {
+            status: status.into(),
+            message,
+        }))
+    }
+
+    async fn approve_guardian_denied_action(
+        &self,
+        request: Request<ApproveGuardianDeniedActionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let managed = self
+            .threads
+            .get(&req.session_id)
+            .await
+            .ok_or_else(|| Status::not_found("session runtime is not loaded"))?;
+        let (reply, result) = tokio::sync::oneshot::channel();
+        managed
+            .runtime
+            .submit(agent_protocol::Op::ApproveGuardianDeniedAction {
+                assessment_id: req.assessment_id,
+                reply,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        if !result
+            .await
+            .map_err(|_| Status::internal("guardian approval reply channel closed"))?
+        {
+            return Err(Status::failed_precondition(
+                "Guardian assessment is not denied or already consumed",
+            ));
+        }
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn run_user_shell_command(
+        &self,
+        request: Request<RunUserShellCommandRequest>,
+    ) -> Result<Response<RunUserShellCommandResponse>, Status> {
+        let req = request.into_inner();
+        let managed = self.get_or_create_thread(&req.session_id).await?;
+        let (reply, result) = tokio::sync::oneshot::channel();
+        let submission_id = managed
+            .runtime
+            .submit(agent_protocol::Op::RunUserShellCommand {
+                command: req.command,
+                cwd: (!req.cwd.trim().is_empty()).then(|| PathBuf::from(req.cwd)),
+                reply,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        let launch = result
+            .await
+            .map_err(|_| Status::internal("user shell reply channel closed"))?
+            .map_err(Status::invalid_argument)?;
+        Ok(Response::new(RunUserShellCommandResponse {
+            submission_id,
+            turn_id: launch.turn_id,
+            item_id: launch.item_id,
+            attached_to_active_turn: launch.attached_to_active_turn,
+        }))
     }
 
     /// 文生图流：先推送 progress，再推送 `image_data` 或 error。

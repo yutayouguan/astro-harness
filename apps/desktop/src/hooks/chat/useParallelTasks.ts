@@ -30,6 +30,10 @@ import {
 } from "../../lib/chat/toolActivityStatus";
 import { parseHitlRunFinished } from "../../lib/chat/hitlRunFinished";
 import {
+  buildElicitationContent,
+  elicitationRequestId,
+} from "../../lib/chat/elicitation";
+import {
   countRunningParallel,
   isParallelTaskActive,
   MAX_PARALLEL_RUNNING,
@@ -239,6 +243,54 @@ export function useParallelTasks(deps: Deps) {
           (t.pendingInterrupts?.length ?? 0) > 0,
       );
       if (!task?.pendingInterrupts?.length) return false;
+
+      const elicitation = task.pendingInterrupts.find(
+        (item) => item.reason === "elicitation",
+      );
+      if (elicitation) {
+        const metadataPayload = elicitation.metadata?.payload;
+        const metadata =
+          metadataPayload &&
+          typeof metadataPayload === "object" &&
+          !Array.isArray(metadataPayload)
+            ? (metadataPayload as Record<string, unknown>)
+            : undefined;
+        const serverName =
+          typeof metadata?.server_name === "string" ? metadata.server_name : "";
+        if (!serverName) {
+          depsRef.current.showTransientToast(
+            "MCP elicitation routing metadata is missing",
+            { tone: "error" },
+          );
+          return true;
+        }
+        try {
+          await invoke("resolve_elicitation", {
+            sessionId: task.sessionId,
+            serverName,
+            requestId: elicitationRequestId(elicitation),
+            action: payload.approved === false ? "decline" : "accept",
+            contentJson:
+              payload.approved === false
+                ? null
+                : JSON.stringify(buildElicitationContent(elicitation, payload)),
+            metaJson: null,
+          });
+          setParallelTasks((prev) =>
+            prev.map((entry) =>
+              entry.id === task.id
+                ? { ...entry, status: "running", pendingInterrupts: undefined }
+                : entry,
+            ),
+          );
+        } catch (error) {
+          depsRef.current.showTransientToast(
+            error instanceof Error ? error.message : String(error),
+            { tone: "error" },
+          );
+        }
+        return true;
+      }
 
       const resumeJson = JSON.stringify(
         task.pendingInterrupts.map((p) => ({

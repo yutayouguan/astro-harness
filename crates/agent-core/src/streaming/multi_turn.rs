@@ -252,6 +252,7 @@ pub(crate) async fn install_multi_turn_task(
     let sub_id = uuid::Uuid::new_v4().to_string();
     let events = session.subscribe_turn_events(&sub_id).await;
     let turn_context = session.create_turn_context(sub_id.clone()).await;
+    turn_context.initialize_provider_settings(targets.clone(), base_config.clone());
     let task = RegularTask::new(RunTurnArgs {
         session: session.clone(),
         turn_context: Arc::clone(&turn_context),
@@ -431,6 +432,7 @@ impl RunTurnArgs {
             ..ProviderConfig::default()
         };
         let (pause, hitl_gate, _approval_cache) = session.ensure_thread_controls();
+        turn_context.initialize_provider_settings(targets.clone(), base_config.clone());
         Self {
             session,
             turn_context,
@@ -588,9 +590,18 @@ pub(crate) async fn run_turn(
         "prebuilt system prompt must be consumed by RegularTask"
     );
     let prompt = prompt.expect("RegularTask prepares the prompt contract");
-    let streamer = match chat_override {
-        Some(f) => ProviderStreamer::with_chat_override(targets, base_config, f),
-        None => ProviderStreamer::new(targets, base_config),
+    turn_context.initialize_provider_settings(targets, base_config);
+    let initial_settings = turn_context
+        .provider_settings()
+        .expect("turn provider settings initialized above");
+    let mut settings_generation = initial_settings.generation;
+    let mut streamer = match chat_override.clone() {
+        Some(f) => ProviderStreamer::with_chat_override(
+            initial_settings.targets,
+            initial_settings.base_config,
+            f,
+        ),
+        None => ProviderStreamer::new(initial_settings.targets, initial_settings.base_config),
     };
     let mut total_usage = Usage::default();
     let mut saw_usage = false;
@@ -726,6 +737,22 @@ pub(crate) async fn run_turn(
             &tool_specs,
         )
         .await;
+
+        // An in-flight request keeps its original snapshot. A complete settings update is
+        // published atomically immediately before the next provider request.
+        if let Some(settings) = turn_context.provider_settings() {
+            if settings.generation != settings_generation {
+                settings_generation = settings.generation;
+                streamer = match chat_override.clone() {
+                    Some(f) => ProviderStreamer::with_chat_override(
+                        settings.targets,
+                        settings.base_config,
+                        f,
+                    ),
+                    None => ProviderStreamer::new(settings.targets, settings.base_config),
+                };
+            }
+        }
 
         let sampling = match run_sampling_request(
             &session,

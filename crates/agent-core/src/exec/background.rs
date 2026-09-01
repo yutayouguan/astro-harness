@@ -244,6 +244,7 @@ async fn collect_background_events(
             | EventMsg::RequestPermissions(_)
             | EventMsg::RequestUserInput(_)
             | EventMsg::ElicitationRequest(_)
+            | EventMsg::GuardianAssessment(_)
             | EventMsg::DynamicToolCallRequest(_)
             | EventMsg::DynamicToolCallResponse(_)
             | EventMsg::McpToolCallBegin(_)

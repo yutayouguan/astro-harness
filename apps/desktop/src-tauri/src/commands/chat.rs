@@ -2,7 +2,9 @@
 
 use proto::astro_service_client::AstroServiceClient;
 use proto::{
-    ChatControlAction, ChatControlRequest, ChatRequest, ImageRequest, MemoryQuery, SteerChatRequest,
+    ApproveGuardianDeniedActionRequest, ChatControlAction, ChatControlRequest, ChatRequest,
+    ImageRequest, MemoryQuery, ResolveElicitationRequest, RunUserShellCommandRequest,
+    SteerChatRequest, UpdateTurnSettingsRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -901,6 +903,120 @@ pub async fn interrupt_resume(session_id: String, resume_json: String) -> Result
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn resolve_elicitation(
+    session_id: String,
+    server_name: String,
+    request_id: String,
+    action: String,
+    content_json: Option<String>,
+    meta_json: Option<String>,
+) -> Result<(), String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    client
+        .resolve_elicitation(ResolveElicitationRequest {
+            session_id,
+            server_name,
+            request_id,
+            action,
+            content_json: content_json.unwrap_or_default(),
+            meta_json: meta_json.unwrap_or_default(),
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TurnSettingsResultDto {
+    pub status: String,
+    pub message: String,
+}
+
+#[tauri::command]
+pub async fn update_turn_settings(
+    session_id: String,
+    turn_id: String,
+    model: Option<String>,
+    reasoning_effort: Option<String>,
+    reasoning_summary: Option<String>,
+    service_tier: Option<String>,
+) -> Result<TurnSettingsResultDto, String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .update_turn_settings(UpdateTurnSettingsRequest {
+            session_id,
+            turn_id,
+            model,
+            reasoning_effort,
+            reasoning_summary,
+            service_tier,
+        })
+        .await
+        .map_err(|error| error.to_string())?
+        .into_inner();
+    Ok(TurnSettingsResultDto {
+        status: response.status,
+        message: response.message,
+    })
+}
+
+#[tauri::command]
+pub async fn approve_guardian_denied_action(
+    session_id: String,
+    assessment_id: String,
+) -> Result<(), String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    client
+        .approve_guardian_denied_action(ApproveGuardianDeniedActionRequest {
+            session_id,
+            assessment_id,
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserShellLaunchDto {
+    pub submission_id: String,
+    pub turn_id: String,
+    pub item_id: String,
+    pub attached_to_active_turn: bool,
+}
+
+#[tauri::command]
+pub async fn run_user_shell_command(
+    session_id: String,
+    command: String,
+    cwd: Option<String>,
+) -> Result<UserShellLaunchDto, String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .run_user_shell_command(RunUserShellCommandRequest {
+            session_id,
+            command,
+            cwd: cwd.unwrap_or_default(),
+        })
+        .await
+        .map_err(|error| error.to_string())?
+        .into_inner();
+    Ok(UserShellLaunchDto {
+        submission_id: response.submission_id,
+        turn_id: response.turn_id,
+        item_id: response.item_id,
+        attached_to_active_turn: response.attached_to_active_turn,
+    })
 }
 
 /// 从请求/钥匙串/环境解析聊天 Provider 凭证（仅 primary；完整链见 `resolve_chat_targets`）。

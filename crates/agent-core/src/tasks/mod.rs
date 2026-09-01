@@ -3,6 +3,7 @@
 mod compact;
 mod regular;
 mod review;
+mod user_shell;
 
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
@@ -24,6 +25,7 @@ use crate::runtime::{Session, TurnContext};
 pub(crate) use compact::CompactTask;
 pub(crate) use regular::RegularTask;
 pub(crate) use review::ReviewTask;
+pub(crate) use user_shell::UserShellTask;
 
 pub(crate) type SessionTaskResult = anyhow::Result<Option<String>>;
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -47,6 +49,7 @@ pub enum TaskKind {
     Regular,
     Review,
     Compact,
+    UserShell,
 }
 
 /// 驱动单个 session turn 的异步任务 trait。
@@ -196,6 +199,70 @@ impl ActiveTurn {
 }
 
 impl Session {
+    pub(crate) async fn launch_user_shell(
+        self: &Arc<Self>,
+        command: String,
+        cwd: Option<std::path::PathBuf>,
+    ) -> Result<agent_protocol::UserShellLaunch, String> {
+        let command = command.trim().to_string();
+        if command.is_empty() {
+            return Err("user shell command cannot be empty".into());
+        }
+        let item_id = uuid::Uuid::new_v4().to_string();
+        let mut active_turn = self.active_turn.lock().await;
+        if let Some(running) = active_turn.as_mut().and_then(|turn| turn.task.as_mut()) {
+            let turn_context = Arc::clone(&running.turn_context);
+            let turn_id = turn_context.sub_id().to_string();
+            let cancellation = running.cancellation_token.child_token();
+            let permit = turn_context.track_child();
+            let session = Arc::clone(self);
+            let command_for_task = command.clone();
+            let cwd_for_task = cwd.clone();
+            let item_for_task = item_id.clone();
+            let handle = tokio::spawn(async move {
+                let _permit = permit;
+                if let Err(error) = user_shell::run_user_shell_process(
+                    session,
+                    turn_context,
+                    command_for_task,
+                    cwd_for_task,
+                    item_for_task,
+                    cancellation,
+                )
+                .await
+                {
+                    tracing::debug!(%error, "attached user shell ended");
+                }
+            });
+            running.auxiliary_handles.push(handle);
+            return Ok(agent_protocol::UserShellLaunch {
+                turn_id,
+                item_id,
+                attached_to_active_turn: true,
+            });
+        }
+        drop(active_turn);
+
+        let turn_id = uuid::Uuid::new_v4().to_string();
+        let turn_context = self.create_turn_context(turn_id.clone()).await;
+        self.spawn_task(
+            turn_context,
+            Vec::new(),
+            UserShellTask {
+                command,
+                cwd,
+                item_id: item_id.clone(),
+            },
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+        Ok(agent_protocol::UserShellLaunch {
+            turn_id,
+            item_id,
+            attached_to_active_turn: false,
+        })
+    }
+
     /// Detach an unfinished regular turn for recovery by another runtime.
     ///
     /// Unlike interruption, suspension deliberately emits no terminal turn event.

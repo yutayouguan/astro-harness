@@ -133,6 +133,11 @@ pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> Stri
             }
         }
         EventMsg::ContextUsage(event) => event.turn_id.clone_from(&turn_id),
+        EventMsg::GuardianAssessment(event) => {
+            event.turn_id.clone_from(&turn_id);
+            event.id = event_item_id(&event.id);
+            event.target_item_id = event_item_id(&event.target_item_id);
+        }
         EventMsg::TokenCount(event) => {
             if event.turn_id.is_some() {
                 event.turn_id = Some(turn_id.clone());

@@ -3339,6 +3339,7 @@ version = "0.1.0"
 dependencies = [
  "agent-config",
  "anyhow",
+ "async-channel",
  "async-trait",
  "futures",
  "home",
@@ -3352,6 +3353,7 @@ dependencies = [
  "sse-stream",
  "tempfile",
  "tokio",
+ "tokio-util",
  "toml 0.8.2",
  "tracing",
  "types",

@@ -122,6 +122,60 @@ pub struct DynamicToolResponse {
     pub success: bool,
 }
 
+/// User decision returned to an MCP server for an `elicitation/create` request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ElicitationAction {
+    Accept,
+    Decline,
+    Cancel,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ElicitationResponse {
+    pub action: ElicitationAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meta: Option<Value>,
+}
+
+/// Settings that can change the next sampling step of one active turn.
+///
+/// Nested options distinguish "leave unchanged" from "clear the current value".
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TurnSettingsUpdate {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_summary: Option<Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<Option<String>>,
+}
+
+impl TurnSettingsUpdate {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum TurnSettingsOutcome {
+    Applied,
+    TargetUnavailable { message: String },
+    Rejected { message: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UserShellLaunch {
+    pub turn_id: String,
+    pub item_id: String,
+    pub attached_to_active_turn: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DynamicToolCallOutputContentItem {
@@ -220,6 +274,29 @@ impl InterAgentCommunication {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn turn_settings_preserve_clear_vs_unchanged() {
+        let unchanged = TurnSettingsUpdate::default();
+        let explicit_clear = TurnSettingsUpdate {
+            reasoning_effort: Some(None),
+            ..Default::default()
+        };
+        assert_eq!(unchanged.reasoning_effort, None);
+        assert_eq!(explicit_clear.reasoning_effort, Some(None));
+    }
+
+    #[test]
+    fn elicitation_response_roundtrips_action_and_payload() {
+        let response = ElicitationResponse {
+            action: ElicitationAction::Accept,
+            content: Some(serde_json::json!({"name":"Ada"})),
+            meta: None,
+        };
+        let restored: ElicitationResponse =
+            serde_json::from_str(&serde_json::to_string(&response).unwrap()).unwrap();
+        assert_eq!(restored, response);
+    }
 
     #[test]
     fn control_payloads_use_codex_wire_shapes() {

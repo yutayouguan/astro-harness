@@ -159,6 +159,8 @@ pub struct Session {
     // ── 会话级服务与注册表 ──────────────────────────
     pub(crate) services: SessionServices,
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
+    mcp_elicitation: Arc<mcp::McpElicitationBroker>,
+    pub(crate) guardian_retry: crate::control::guardian::GuardianRetryState,
 
     // ── 注入的依赖 ─────────────────────────────────────────
     /// 共享的 Plugin/Gateway/Shell hook 运行时。
@@ -350,6 +352,85 @@ impl ::hooks::HookMcpExecutor for SessionHookMcpExecutor {
     }
 }
 
+fn elicitation_operations(request_id: &str, params: &Value) -> Vec<Value> {
+    let message = params
+        .get("message")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("MCP server needs additional information");
+    let schema = params.get("requestedSchema").unwrap_or(&Value::Null);
+    let mut steps = schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|properties| properties.iter())
+        .map(|(id, property)| {
+            let question = property
+                .get("title")
+                .or_else(|| property.get("description"))
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or(id)
+                .to_string();
+            let options = property
+                .get("enum")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|value| match value {
+                    Value::String(value) => Some(value.clone()),
+                    Value::Bool(value) => Some(value.to_string()),
+                    Value::Number(value) => Some(value.to_string()),
+                    _ => None,
+                })
+                .collect();
+            a2ui::templates::ClarifyStep {
+                id: id.clone(),
+                question,
+                options,
+            }
+        })
+        .collect::<Vec<_>>();
+    if steps.is_empty() {
+        steps.push(a2ui::templates::ClarifyStep {
+            id: "response".into(),
+            question: message.to_string(),
+            options: Vec::new(),
+        });
+    }
+    a2ui::templates::build_clarify_surface(
+        &format!("mcp-elicitation-{request_id}"),
+        message,
+        &steps,
+    )
+}
+
+#[cfg(test)]
+mod elicitation_surface_tests {
+    use super::*;
+
+    #[test]
+    fn requested_schema_becomes_fillable_clarify_surface() {
+        let operations = elicitation_operations(
+            "request-1",
+            &serde_json::json!({
+                "message": "Choose deployment settings",
+                "requestedSchema": {
+                    "type": "object",
+                    "properties": {
+                        "region": {"title": "Region", "enum": ["east", "west"]},
+                        "replicas": {"description": "Replica count", "type": "integer"}
+                    }
+                }
+            }),
+        );
+        let serialized = serde_json::to_string(&operations).unwrap();
+        assert!(serialized.contains("ClarifyWizard"));
+        assert!(serialized.contains("Region"));
+        assert!(serialized.contains("replicas"));
+    }
+}
+
 /// 兼容性别名，在下游 crate 迁移到 [`Config`] 期间保留。
 pub type AgentConfig = Config;
 
@@ -498,6 +579,8 @@ impl Session {
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
         let mut mcp_hub_inner = McpHub::new();
         mcp_hub_inner.set_agent_id(Some(agent_id.clone()));
+        let mcp_elicitation = Arc::new(mcp::McpElicitationBroker::new());
+        mcp_hub_inner.set_elicitation_broker(Arc::clone(&mcp_elicitation));
         let mcp_hub = Arc::new(TokioMutex::new(mcp_hub_inner));
 
         let execution: Arc<dyn tools::AgentThreadDispatch> = Arc::new(
@@ -536,6 +619,8 @@ impl Session {
                 agent_path,
             ),
             mcp_hub,
+            mcp_elicitation,
+            guardian_retry: crate::control::guardian::GuardianRetryState::default(),
             hook_runtime: StdMutex::new(Arc::new(::hooks::HookRuntime::new())),
             hook_run_observer: StdMutex::new(None),
             subagent_hook_context: StdMutex::new(None),
@@ -602,6 +687,49 @@ impl Session {
                 rollout,
             })
             .map_err(|_| RuntimeIoBindError::AlreadyBound)
+    }
+
+    /// Forward MCP server elicitation callbacks into the unified thread event stream.
+    pub(crate) fn bind_mcp_elicitation_events(self: &Arc<Self>) {
+        let requests = self.mcp_elicitation.requests();
+        let session = Arc::clone(self);
+        let shutdown = self.runtime_shutdown_complete.clone();
+        tokio::spawn(async move {
+            loop {
+                let request = tokio::select! {
+                    _ = shutdown.cancelled() => break,
+                    request = requests.recv() => match request {
+                        Ok(request) => request,
+                        Err(_) => break,
+                    },
+                };
+                let turn_id = session
+                    .current_turn_id()
+                    .await
+                    .unwrap_or_else(|| session.session_id().to_string());
+                let item_id = format!(
+                    "mcp-elicitation:{}:{}",
+                    request.server_name, request.request_id
+                );
+                let operations = elicitation_operations(&request.request_id, &request.params);
+                session
+                    .send_event(
+                        &turn_id,
+                        EventMsg::ElicitationRequest(agent_protocol::ControlRequestEvent {
+                            turn_id: turn_id.clone(),
+                            item_id,
+                            request_id: request.request_id.clone(),
+                            payload: serde_json::json!({
+                                "server_name": request.server_name,
+                                "mcp_request_id": request.request_id,
+                                "request": request.params,
+                                "operations": operations,
+                            }),
+                        }),
+                    )
+                    .await;
+            }
+        });
     }
 
     /// 返回 actor 提交的轮次所使用的稳定 pause、HITL 和审批缓存控制。

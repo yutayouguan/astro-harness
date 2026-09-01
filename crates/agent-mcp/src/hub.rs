@@ -10,7 +10,7 @@ use std::process::Stdio;
 use anyhow::{anyhow, Context};
 use futures::{stream, StreamExt};
 use http::{header::AUTHORIZATION, HeaderName, HeaderValue};
-use rmcp::model::{CallToolRequestParams, ContentBlock, Tool as RmcpTool};
+use rmcp::model::{CallToolRequestParams, ContentBlock, ElicitRequestParams, Tool as RmcpTool};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{Peer, RoleClient, ServiceExt};
@@ -24,6 +24,7 @@ use crate::config::{
     load_mcp_servers_layered, merge_discovered, persist_discovered_layered, DiscoveredTool,
     McpHttpAuth, McpServerConfig, McpTransportType,
 };
+use crate::elicitation::McpElicitationBroker;
 use crate::names::{
     is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_TOOLSET,
 };
@@ -283,11 +284,35 @@ struct ToolChangeHandler {
     server_id: String,
     /// 单调递增序列号，确保旧响应不覆盖新响应。
     next_seq: Arc<std::sync::atomic::AtomicU64>,
+    elicitation: Option<Arc<McpElicitationBroker>>,
 }
 
 impl rmcp::handler::client::ClientHandler for ToolChangeHandler {
     fn get_info(&self) -> rmcp::model::ClientInfo {
         rmcp::model::ClientInfo::default()
+    }
+
+    async fn create_elicitation(
+        &self,
+        request: ElicitRequestParams,
+        context: rmcp::service::RequestContext<rmcp::service::RoleClient>,
+    ) -> Result<rmcp::model::ElicitResult, rmcp::model::ErrorData> {
+        let request_id = serde_json::to_value(&context.id)
+            .map(|value| match value {
+                Value::String(value) => value,
+                value => value.to_string(),
+            })
+            .map_err(|error| rmcp::model::ErrorData::internal_error(error.to_string(), None))?;
+        let params = serde_json::to_value(request)
+            .map_err(|error| rmcp::model::ErrorData::internal_error(error.to_string(), None))?;
+        let Some(elicitation) = &self.elicitation else {
+            return Ok(rmcp::model::ElicitResult::new(
+                rmcp::model::ElicitationAction::Decline,
+            ));
+        };
+        elicitation
+            .request(self.server_id.clone(), request_id, params, context.ct)
+            .await
     }
 
     async fn on_tool_list_changed(
@@ -371,6 +396,7 @@ pub struct McpHub {
     retries: HashMap<String, RetryState>,
     /// 当前 session/profile 对 MCP 连接施加的不可变权限快照。
     execution_context: Option<McpExecutionContext>,
+    elicitation: Arc<McpElicitationBroker>,
 }
 
 impl Default for McpHub {
@@ -391,7 +417,16 @@ impl McpHub {
             states: HashMap::new(),
             retries: HashMap::new(),
             execution_context: None,
+            elicitation: Arc::new(McpElicitationBroker::new()),
         }
+    }
+
+    pub fn elicitation_broker(&self) -> Arc<McpElicitationBroker> {
+        Arc::clone(&self.elicitation)
+    }
+
+    pub fn set_elicitation_broker(&mut self, broker: Arc<McpElicitationBroker>) {
+        self.elicitation = broker;
     }
 
     /// 当前绑定的 Agent id（若有）。
@@ -531,12 +566,15 @@ impl McpHub {
         }
 
         let execution_context = self.execution_context.clone();
+        let elicitation = Arc::clone(&self.elicitation);
         let futures = pending
             .into_iter()
             .map(|cfg| {
                 let execution_context = execution_context.clone();
+                let elicitation = Arc::clone(&elicitation);
                 async move {
-                    let result = connect_server(&cfg, execution_context.as_ref()).await;
+                    let result =
+                        connect_server(&cfg, execution_context.as_ref(), Some(elicitation)).await;
                     (cfg, result)
                 }
             })
@@ -1025,7 +1063,7 @@ impl McpHub {
             if !cfg.enabled && server_id.is_none() {
                 continue;
             }
-            match connect_server(cfg, Some(execution_context)).await {
+            match connect_server(cfg, Some(execution_context), None).await {
                 Ok(running) => {
                     let discovered: Vec<DiscoveredTool> = running
                         .tools
@@ -1175,13 +1213,14 @@ pub async fn call_tool_with_peer(
 async fn connect_server(
     cfg: &McpServerConfig,
     execution_context: Option<&McpExecutionContext>,
+    elicitation: Option<Arc<McpElicitationBroker>>,
 ) -> anyhow::Result<RunningServer> {
     let sid = sanitize_server_id(&cfg.id);
     let timeout_secs = cfg.effective_startup_timeout_secs();
     with_startup_timeout(
         &sid,
         timeout_secs,
-        connect_server_inner(cfg, execution_context),
+        connect_server_inner(cfg, execution_context, elicitation),
     )
     .await
 }
@@ -1277,6 +1316,7 @@ where
 async fn connect_server_inner(
     cfg: &McpServerConfig,
     execution_context: Option<&McpExecutionContext>,
+    elicitation: Option<Arc<McpElicitationBroker>>,
 ) -> anyhow::Result<RunningServer> {
     let sid = sanitize_server_id(&cfg.id);
     let execution_context = execution_context.ok_or_else(|| {
@@ -1292,6 +1332,7 @@ async fn connect_server_inner(
         state: Arc::clone(&shared_state),
         server_id: sid.clone(),
         next_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        elicitation,
     };
 
     let mut authenticated = false;
@@ -2045,7 +2086,9 @@ mod tests {
             .with_sandbox_audit(audit);
         let server = stdio_server("echo");
 
-        assert!(connect_server_inner(&server, Some(&context)).await.is_err());
+        assert!(connect_server_inner(&server, Some(&context), None,)
+            .await
+            .is_err());
         let events = sandbox::list_recent_sandbox_audits(dir.path(), 10).unwrap();
         assert!(events.iter().any(|event| {
             event.event == sandbox::SandboxAuditKind::Spawned
@@ -2232,7 +2275,7 @@ mod tests {
 
     #[tokio::test]
     async fn missing_execution_context_fails_closed() {
-        let error = connect_server(&stdio_server("echo"), None)
+        let error = connect_server(&stdio_server("echo"), None, None)
             .await
             .err()
             .expect("missing policy must fail")
@@ -2255,7 +2298,7 @@ mod tests {
         server.r#type = McpTransportType::StreamableHttp;
         server.url = "https://example.invalid/mcp".into();
 
-        let error = connect_server(&server, Some(&context))
+        let error = connect_server(&server, Some(&context), None)
             .await
             .err()
             .expect("restricted network must fail")

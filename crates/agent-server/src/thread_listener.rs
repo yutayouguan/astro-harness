@@ -167,6 +167,14 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
             request.turn_id.clone(),
             Payload::ControlRequest(control_payload("elicitation", request)),
         ),
+        EventMsg::GuardianAssessment(assessment) => (
+            assessment.turn_id.clone(),
+            Payload::Extension(extension_payload(
+                assessment.id.clone(),
+                "astro.guardian_assessment",
+                assessment,
+            )),
+        ),
         EventMsg::DynamicToolCallRequest(request) => (
             request.turn_id.clone(),
             Payload::ControlRequest(control_payload("dynamic_tool_call", request)),

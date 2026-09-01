@@ -35,6 +35,13 @@ struct TurnInputState {
     in_flight_admissions: usize,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct TurnProviderSettings {
+    pub(crate) targets: Vec<types::ChatTarget>,
+    pub(crate) base_config: providers::ProviderConfig,
+    pub(crate) generation: u64,
+}
+
 /// 输入准入预留凭证，drop 时自动释放 in-flight 计数。
 pub(crate) struct TurnInputReservation {
     turn_context: Arc<TurnContext>,
@@ -83,6 +90,7 @@ pub struct TurnContext {
     /// 注入活跃任务的用户输入，在下一次采样请求前被消费。
     input_state: Mutex<TurnInputState>,
     input_notify: Notify,
+    provider_settings: Mutex<Option<TurnProviderSettings>>,
     child_tracker: Arc<ChildTracker>,
     #[cfg(test)]
     preparing_reservation_notify: Notify,
@@ -139,6 +147,7 @@ impl TurnContext {
                 in_flight_admissions: 0,
             }),
             input_notify: Notify::new(),
+            provider_settings: Mutex::new(None),
             child_tracker: Arc::new(ChildTracker::default()),
             #[cfg(test)]
             preparing_reservation_notify: Notify::new(),
@@ -164,6 +173,108 @@ impl TurnContext {
 
     pub fn requested_tool_mode(&self) -> types::ToolMode {
         self.requested_tool_mode
+    }
+
+    pub(crate) fn initialize_provider_settings(
+        &self,
+        targets: Vec<types::ChatTarget>,
+        base_config: providers::ProviderConfig,
+    ) {
+        let mut settings = self
+            .provider_settings
+            .lock()
+            .expect("turn provider settings mutex poisoned");
+        if settings.is_none() {
+            *settings = Some(TurnProviderSettings {
+                targets,
+                base_config,
+                generation: 0,
+            });
+        }
+    }
+
+    pub(crate) fn provider_settings(&self) -> Option<TurnProviderSettings> {
+        self.provider_settings
+            .lock()
+            .expect("turn provider settings mutex poisoned")
+            .clone()
+    }
+
+    pub(crate) fn apply_settings_update(
+        &self,
+        update: agent_protocol::TurnSettingsUpdate,
+    ) -> agent_protocol::TurnSettingsOutcome {
+        if update.is_empty() {
+            return agent_protocol::TurnSettingsOutcome::Rejected {
+                message: "turn settings update is empty".into(),
+            };
+        }
+        let mut guard = self
+            .provider_settings
+            .lock()
+            .expect("turn provider settings mutex poisoned");
+        let Some(current) = guard.as_ref() else {
+            return agent_protocol::TurnSettingsOutcome::Rejected {
+                message: "turn has not reached provider setup".into(),
+            };
+        };
+        let mut next = current.clone();
+        if let Some(model) = update.model {
+            let model = model.trim();
+            if model.is_empty() {
+                return agent_protocol::TurnSettingsOutcome::Rejected {
+                    message: "model cannot be empty".into(),
+                };
+            }
+            let Some(primary) = next.targets.first_mut() else {
+                return agent_protocol::TurnSettingsOutcome::TargetUnavailable {
+                    message: "active turn has no provider target".into(),
+                };
+            };
+            primary.model = model.to_string();
+            next.base_config.model = model.to_string();
+        }
+        if let Some(reasoning_effort) = update.reasoning_effort {
+            next.base_config.reasoning_effort = reasoning_effort.unwrap_or_default();
+        }
+        if update.reasoning_summary.is_some() || update.service_tier.is_some() {
+            let reasoning_effort = next.base_config.reasoning_effort.clone();
+            let params = match &mut next.base_config.additional_params {
+                serde_json::Value::Null => {
+                    next.base_config.additional_params = serde_json::json!({});
+                    next.base_config.additional_params.as_object_mut().unwrap()
+                }
+                serde_json::Value::Object(params) => params,
+                _ => {
+                    return agent_protocol::TurnSettingsOutcome::Rejected {
+                        message: "provider additional_params must be a JSON object".into(),
+                    };
+                }
+            };
+            if let Some(value) = update.reasoning_summary {
+                let mut reasoning = serde_json::Map::new();
+                if !reasoning_effort.trim().is_empty() {
+                    reasoning.insert("effort".into(), reasoning_effort.into());
+                }
+                if let Some(value) = value {
+                    reasoning.insert("summary".into(), value.into());
+                }
+                params.insert("reasoning".into(), reasoning.into());
+            }
+            if let Some(value) = update.service_tier {
+                match value {
+                    Some(value) => {
+                        params.insert("service_tier".into(), value.into());
+                    }
+                    None => {
+                        params.remove("service_tier");
+                    }
+                }
+            }
+        }
+        next.generation = current.generation.wrapping_add(1);
+        *guard = Some(next);
+        agent_protocol::TurnSettingsOutcome::Applied
     }
 
     pub fn permission_profile(&self) -> Option<&str> {
@@ -563,5 +674,91 @@ mod tests {
         assert!(!turn_context.close_if_no_pending_input());
         turn_context.retract_input(&unrelated);
         assert!(turn_context.close_if_no_pending_input());
+    }
+
+    #[test]
+    fn turn_settings_apply_atomically_to_next_provider_snapshot() {
+        let turn_context = TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        );
+        turn_context.initialize_provider_settings(
+            vec![types::ChatTarget {
+                provider_id: "provider".into(),
+                backend_id: "openai".into(),
+                model: "old-model".into(),
+                api_key: "secret".into(),
+                base_url: String::new(),
+            }],
+            providers::ProviderConfig {
+                model: "old-model".into(),
+                reasoning_effort: "high".into(),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            turn_context.apply_settings_update(agent_protocol::TurnSettingsUpdate {
+                model: Some("new-model".into()),
+                reasoning_effort: Some(None),
+                reasoning_summary: Some(Some("concise".into())),
+                service_tier: Some(Some("priority".into())),
+            }),
+            agent_protocol::TurnSettingsOutcome::Applied
+        );
+        let snapshot = turn_context.provider_settings().unwrap();
+        assert_eq!(snapshot.generation, 1);
+        assert_eq!(snapshot.targets[0].model, "new-model");
+        assert_eq!(snapshot.base_config.model, "new-model");
+        assert!(snapshot.base_config.reasoning_effort.is_empty());
+        assert_eq!(
+            snapshot.base_config.additional_params["reasoning"]["summary"],
+            "concise"
+        );
+        assert_eq!(
+            snapshot.base_config.additional_params["service_tier"],
+            "priority"
+        );
+    }
+
+    #[test]
+    fn rejected_turn_settings_leave_the_snapshot_unchanged() {
+        let turn_context = TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        );
+        turn_context.initialize_provider_settings(
+            vec![types::ChatTarget {
+                provider_id: "provider".into(),
+                backend_id: "openai".into(),
+                model: "old-model".into(),
+                api_key: "secret".into(),
+                base_url: String::new(),
+            }],
+            providers::ProviderConfig {
+                model: "old-model".into(),
+                additional_params: serde_json::json!(["not", "an", "object"]),
+                ..Default::default()
+            },
+        );
+
+        assert!(matches!(
+            turn_context.apply_settings_update(agent_protocol::TurnSettingsUpdate {
+                model: Some("new-model".into()),
+                reasoning_summary: Some(Some("concise".into())),
+                ..Default::default()
+            }),
+            agent_protocol::TurnSettingsOutcome::Rejected { .. }
+        ));
+        let snapshot = turn_context.provider_settings().unwrap();
+        assert_eq!(snapshot.generation, 0);
+        assert_eq!(snapshot.targets[0].model, "old-model");
+        assert_eq!(snapshot.base_config.model, "old-model");
     }
 }

@@ -34,6 +34,33 @@ pub struct ControlRequestEvent {
     pub payload: Value,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GuardianAssessmentStatus {
+    InProgress,
+    Approved,
+    Denied,
+    Aborted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GuardianAssessmentEvent {
+    pub id: String,
+    pub target_item_id: String,
+    pub turn_id: String,
+    pub status: GuardianAssessmentStatus,
+    pub canonical_action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_source: Option<String>,
+    pub started_at_ms: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at_ms: Option<i64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnStartedEvent {
     pub turn_id: String,
@@ -346,6 +373,7 @@ pub enum EventMsg {
     RequestPermissions(ControlRequestEvent),
     RequestUserInput(ControlRequestEvent),
     ElicitationRequest(ControlRequestEvent),
+    GuardianAssessment(GuardianAssessmentEvent),
     DynamicToolCallRequest(ControlRequestEvent),
     DynamicToolCallResponse(ControlRequestEvent),
     McpToolCallBegin(ItemEvent),

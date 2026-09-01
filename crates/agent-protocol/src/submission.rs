@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::control::{
-    DynamicToolResponse, InterAgentCommunication, RequestPermissionsResponse,
+    DynamicToolResponse, ElicitationResponse, InterAgentCommunication, RequestPermissionsResponse,
     RequestUserInputResponse, ReviewDecision, ReviewRequest, ThreadSettingsOverrides,
+    TurnSettingsOutcome, TurnSettingsUpdate, UserShellLaunch,
 };
 use crate::items::ExtensionItem;
 use crate::realtime::{
@@ -125,6 +126,30 @@ pub enum Op {
     DynamicToolResponse {
         id: String,
         response: DynamicToolResponse,
+    },
+    /// Resolve one pending MCP `elicitation/create` request.
+    ResolveElicitation {
+        server_name: String,
+        request_id: String,
+        response: ElicitationResponse,
+        reply: tokio::sync::oneshot::Sender<bool>,
+    },
+    /// Atomically update the next sampling step of the named active turn.
+    TurnSettings {
+        turn_id: String,
+        update: TurnSettingsUpdate,
+        reply: tokio::sync::oneshot::Sender<TurnSettingsOutcome>,
+    },
+    /// Arm exactly one retry for a previously denied Guardian assessment.
+    ApproveGuardianDeniedAction {
+        assessment_id: String,
+        reply: tokio::sync::oneshot::Sender<bool>,
+    },
+    /// Run an explicit user-authored login-shell command outside the agent sandbox.
+    RunUserShellCommand {
+        command: String,
+        cwd: Option<std::path::PathBuf>,
+        reply: tokio::sync::oneshot::Sender<Result<UserShellLaunch, String>>,
     },
     RefreshMcpServers,
     ReloadUserConfig,

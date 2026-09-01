@@ -49,6 +49,8 @@ export function parseHitlRunFinished(
       interrupt.toolCallId = record.tool_call_id.trim();
     }
     if (schema) interrupt.responseSchema = schema;
+    const metadata = parseObject(record.metadata_json);
+    if (metadata) interrupt.metadata = metadata;
     return [interrupt];
   });
 

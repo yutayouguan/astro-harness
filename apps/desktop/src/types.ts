@@ -105,6 +105,8 @@ export type PendingInterrupt = {
   toolCallId?: string;
   /** 所属助手消息 id */
   assistantMessageId?: string;
+  /** Transport metadata used to route non-HITL control responses. */
+  metadata?: Record<string, unknown>;
 };
 
 /** 单条助手回复的 token 用量（来自流式 usage 事件） */

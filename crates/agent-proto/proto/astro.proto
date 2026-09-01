@@ -20,6 +20,10 @@ service AstroService {
   rpc UnsubscribeThread(UnsubscribeThreadRequest) returns (Empty);
   // 校验并登记 interrupt 的 resume 项（随后 Chat 携带 resume_json 续跑）。
   rpc InterruptResume(InterruptResumeRequest) returns (Empty);
+  rpc ResolveElicitation(ResolveElicitationRequest) returns (Empty);
+  rpc UpdateTurnSettings(UpdateTurnSettingsRequest) returns (UpdateTurnSettingsResponse);
+  rpc ApproveGuardianDeniedAction(ApproveGuardianDeniedActionRequest) returns (Empty);
+  rpc RunUserShellCommand(RunUserShellCommandRequest) returns (RunUserShellCommandResponse);
   // 文生图流：进度、图片字节或错误。
   rpc GenerateImage(ImageRequest) returns (stream ImageEvent);
   // 列出已安装且可用于提示的技能。
@@ -324,6 +328,47 @@ message InterruptResumeItem {
 message InterruptResumeRequest {
   string session_id = 1;
   repeated InterruptResumeItem resume = 2;
+}
+
+message ResolveElicitationRequest {
+  string session_id = 1;
+  string server_name = 2;
+  string request_id = 3;
+  string action = 4; // accept | decline | cancel
+  string content_json = 5;
+  string meta_json = 6;
+}
+
+message UpdateTurnSettingsRequest {
+  string session_id = 1;
+  string turn_id = 2;
+  optional string model = 3;
+  optional string reasoning_effort = 4;
+  optional string reasoning_summary = 5;
+  optional string service_tier = 6;
+}
+
+message UpdateTurnSettingsResponse {
+  string status = 1; // applied | target_unavailable | rejected
+  string message = 2;
+}
+
+message ApproveGuardianDeniedActionRequest {
+  string session_id = 1;
+  string assessment_id = 2;
+}
+
+message RunUserShellCommandRequest {
+  string session_id = 1;
+  string command = 2;
+  string cwd = 3;
+}
+
+message RunUserShellCommandResponse {
+  string submission_id = 1;
+  string turn_id = 2;
+  string item_id = 3;
+  bool attached_to_active_turn = 4;
 }
 
 message ImageRequest {

@@ -12,6 +12,7 @@ pub fn should_persist_event_msg(event: &EventMsg) -> bool {
         | EventMsg::UserInputCommitted(_)
         | EventMsg::TurnComplete(_)
         | EventMsg::TurnAborted(_)
+        | EventMsg::GuardianAssessment(_)
         | EventMsg::TokenCount(_)
         | EventMsg::ContextUsage(_)
         | EventMsg::ThreadSettingsApplied(_)

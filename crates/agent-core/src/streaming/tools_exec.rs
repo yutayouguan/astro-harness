@@ -1823,19 +1823,132 @@ async fn execute_tools_serial_inner(
                         } else {
                             // 仅 Smart 模式尝试辅模型降级；Manual 直接弹卡
                             let smart_action = if route == ApprovalRoute::Smart {
-                                let agent = session.as_ref();
-                                let targets: Vec<_> = agent
-                                    .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
-                                    .iter()
-                                    .map(crate::control::smart_approval::ApprovalTarget::from)
-                                    .collect();
-                                let smart_ctx = build_smart_approval_context(session).await;
-                                crate::control::smart_approval::maybe_smart_downgrade_ask(
-                                    &permission_request,
-                                    &targets,
-                                    smart_ctx.as_ref(),
-                                )
-                                .await
+                                let canonical_action =
+                                    crate::control::guardian::GuardianRetryState::canonical_action(
+                                        &call.name,
+                                        &call.arguments,
+                                    );
+                                if let Some(assessment_id) =
+                                    session.guardian_retry.consume_retry(&canonical_action)
+                                {
+                                    let now = chrono::Utc::now().timestamp_millis();
+                                    session
+                                        .send_event(
+                                            turn_context.sub_id(),
+                                            agent_protocol::EventMsg::GuardianAssessment(
+                                                agent_protocol::GuardianAssessmentEvent {
+                                                    id: assessment_id,
+                                                    target_item_id: call.id.clone(),
+                                                    turn_id: turn_context.sub_id().to_string(),
+                                                    status: agent_protocol::GuardianAssessmentStatus::Approved,
+                                                    canonical_action,
+                                                    risk: None,
+                                                    rationale: Some(
+                                                        "user authorized one exact retry".into(),
+                                                    ),
+                                                    decision_source: Some("user_retry".into()),
+                                                    started_at_ms: now,
+                                                    completed_at_ms: Some(now),
+                                                },
+                                            ),
+                                        )
+                                        .await;
+                                    types::ApprovalAction::Auto
+                                } else {
+                                    let assessment_id = uuid::Uuid::new_v4().to_string();
+                                    let started_at_ms = chrono::Utc::now().timestamp_millis();
+                                    session
+                                        .send_event(
+                                            turn_context.sub_id(),
+                                            agent_protocol::EventMsg::GuardianAssessment(
+                                                agent_protocol::GuardianAssessmentEvent {
+                                                    id: assessment_id.clone(),
+                                                    target_item_id: call.id.clone(),
+                                                    turn_id: turn_context.sub_id().to_string(),
+                                                    status: agent_protocol::GuardianAssessmentStatus::InProgress,
+                                                    canonical_action: canonical_action.clone(),
+                                                    risk: None,
+                                                    rationale: None,
+                                                    decision_source: Some("guardian".into()),
+                                                    started_at_ms,
+                                                    completed_at_ms: None,
+                                                },
+                                            ),
+                                        )
+                                        .await;
+                                    let agent = session.as_ref();
+                                    let targets: Vec<_> = agent
+                                        .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
+                                        .iter()
+                                        .map(crate::control::smart_approval::ApprovalTarget::from)
+                                        .collect();
+                                    let smart_ctx = build_smart_approval_context(session).await;
+                                    let verdict = crate::control::smart_approval::assess_guardian(
+                                        &permission_request,
+                                        &targets,
+                                        smart_ctx.as_ref(),
+                                    )
+                                    .await;
+                                    let (status, action, risk, rationale) = match verdict {
+                                        Ok(verdict) => match verdict.decision {
+                                            crate::control::smart_approval::GuardianDecision::ApproveOnce => (
+                                                agent_protocol::GuardianAssessmentStatus::Approved,
+                                                types::ApprovalAction::Auto,
+                                                verdict.risk,
+                                                verdict.reason,
+                                            ),
+                                            crate::control::smart_approval::GuardianDecision::Deny => (
+                                                agent_protocol::GuardianAssessmentStatus::Denied,
+                                                types::ApprovalAction::Deny,
+                                                verdict.risk,
+                                                verdict.reason,
+                                            ),
+                                            crate::control::smart_approval::GuardianDecision::Indeterminate => (
+                                                agent_protocol::GuardianAssessmentStatus::Aborted,
+                                                types::ApprovalAction::Ask,
+                                                verdict.risk,
+                                                verdict.reason,
+                                            ),
+                                        },
+                                        Err(error) => (
+                                            agent_protocol::GuardianAssessmentStatus::Aborted,
+                                            types::ApprovalAction::Ask,
+                                            None,
+                                            Some(error),
+                                        ),
+                                    };
+                                    session
+                                        .send_event(
+                                            turn_context.sub_id(),
+                                            agent_protocol::EventMsg::GuardianAssessment(
+                                                agent_protocol::GuardianAssessmentEvent {
+                                                    id: assessment_id.clone(),
+                                                    target_item_id: call.id.clone(),
+                                                    turn_id: turn_context.sub_id().to_string(),
+                                                    status,
+                                                    canonical_action: canonical_action.clone(),
+                                                    risk,
+                                                    rationale,
+                                                    decision_source: Some("guardian".into()),
+                                                    started_at_ms,
+                                                    completed_at_ms: Some(
+                                                        chrono::Utc::now().timestamp_millis(),
+                                                    ),
+                                                },
+                                            ),
+                                        )
+                                        .await;
+                                    if action == types::ApprovalAction::Deny {
+                                        session
+                                            .guardian_retry
+                                            .record_denied(assessment_id.clone(), canonical_action);
+                                        out.push(format!(
+                                            "Command denied by Guardian assessment {assessment_id}. The user may authorize one exact retry."
+                                        ).into());
+                                        continue;
+                                    }
+                                    action
+                                }
                             } else {
                                 types::ApprovalAction::Ask
                             };

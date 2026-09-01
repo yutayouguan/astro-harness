@@ -8,7 +8,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use types::ApprovalAction;
 
 const SMART_TIMEOUT: Duration = Duration::from_secs(8);
@@ -48,6 +48,27 @@ pub struct TurnSummary {
     pub content_preview: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuardianDecision {
+    ApproveOnce,
+    Deny,
+    Indeterminate,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuardianVerdict {
+    pub decision: GuardianDecision,
+    pub reason: Option<String>,
+    pub risk: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RawGuardianVerdict {
+    decision: String,
+    reason: Option<String>,
+    risk: Option<String>,
+}
+
 static SENSITIVE_PATTERN: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
     regex::Regex::new(
         r"(?i)(api[_-]?key|token|secret|password|bearer|credential|auth[_-]?key)\s*[=:]\s*\S+",
@@ -73,12 +94,29 @@ pub fn truncate_preview(text: &str) -> String {
 
 /// 解析审查器 JSON：仅明确的 `approve_once` 才放行。
 pub fn parse_smart_verdict(text: &str) -> ApprovalAction {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(text.trim()) else {
-        return ApprovalAction::Ask;
+    match parse_guardian_verdict(text).decision {
+        GuardianDecision::ApproveOnce => ApprovalAction::Auto,
+        GuardianDecision::Deny | GuardianDecision::Indeterminate => ApprovalAction::Ask,
+    }
+}
+
+pub fn parse_guardian_verdict(text: &str) -> GuardianVerdict {
+    let Ok(value) = serde_json::from_str::<RawGuardianVerdict>(text.trim()) else {
+        return GuardianVerdict {
+            decision: GuardianDecision::Indeterminate,
+            reason: Some("guardian returned invalid JSON".into()),
+            risk: None,
+        };
     };
-    match value.get("decision").and_then(|value| value.as_str()) {
-        Some("approve_once") => ApprovalAction::Auto,
-        _ => ApprovalAction::Ask,
+    let decision = match value.decision.as_str() {
+        "approve_once" => GuardianDecision::ApproveOnce,
+        "deny" => GuardianDecision::Deny,
+        _ => GuardianDecision::Indeterminate,
+    };
+    GuardianVerdict {
+        decision,
+        reason: value.reason,
+        risk: value.risk,
     }
 }
 
@@ -137,6 +175,48 @@ where
         }
     }
     Err(last_err)
+}
+
+pub async fn assess_guardian_with_completion<F, Fut>(
+    targets: &[ApprovalTarget],
+    mut complete: F,
+) -> Result<GuardianVerdict, String>
+where
+    F: FnMut(&ApprovalTarget) -> Fut,
+    Fut: std::future::Future<Output = Result<String, String>>,
+{
+    let mut last_err = "no approval targets".to_string();
+    for target in targets.iter().take(2) {
+        match complete(target).await {
+            Ok(text) if !text.trim().is_empty() => return Ok(parse_guardian_verdict(&text)),
+            Ok(_) => {
+                last_err = format!("empty smart-approval response from {}", target.backend_id);
+            }
+            Err(error) => last_err = error,
+        }
+    }
+    Err(last_err)
+}
+
+pub async fn assess_guardian(
+    request: &types::PermissionRequest,
+    targets: &[ApprovalTarget],
+    context: Option<&SmartApprovalContext>,
+) -> Result<GuardianVerdict, String> {
+    if targets.is_empty() {
+        return Err("no guardian targets".into());
+    }
+    let prompt = build_prompt(request, context);
+    tokio::time::timeout(SMART_TIMEOUT, async {
+        assess_guardian_with_completion(targets, |target| {
+            let prompt = prompt.clone();
+            let target = target.clone();
+            async move { ask_model(&target, &prompt).await }
+        })
+        .await
+    })
+    .await
+    .map_err(|_| "guardian timed out".to_string())?
 }
 
 /// 对 `Ask` 命令尝试辅模型降级；未开启或失败时返回 `Ask`。
@@ -238,6 +318,13 @@ mod tests {
         );
         assert_eq!(parse_smart_verdict("AUTO"), ApprovalAction::Ask);
         assert_eq!(parse_smart_verdict("AUTO please"), ApprovalAction::Ask);
+
+        let denied = parse_guardian_verdict(
+            r#"{"decision":"deny","reason":"credential access","risk":"high"}"#,
+        );
+        assert_eq!(denied.decision, GuardianDecision::Deny);
+        assert_eq!(denied.reason.as_deref(), Some("credential access"));
+        assert_eq!(denied.risk.as_deref(), Some("high"));
     }
 
     #[tokio::test]

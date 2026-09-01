@@ -2055,6 +2055,9 @@ fn map_control_request(
 ) -> Vec<ChatStreamEvent> {
     let payload = serde_json::from_str::<serde_json::Value>(&control.payload_json)
         .unwrap_or(serde_json::Value::Null);
+    let elicitation = (control.kind == "elicitation")
+        .then(|| payload.get("request"))
+        .flatten();
     if control.kind == "dynamic_tool_call" {
         return vec![ChatStreamEvent::ToolCallDelta {
             index: payload
@@ -2098,9 +2101,9 @@ fn map_control_request(
         interrupts_json: serde_json::json!([{
             "id": control.request_id,
             "reason": payload.get("reason").and_then(serde_json::Value::as_str).unwrap_or(&control.kind),
-            "message": payload.get("message").and_then(serde_json::Value::as_str).unwrap_or_default(),
+            "message": elicitation.and_then(|request| request.get("message")).and_then(serde_json::Value::as_str).or_else(|| payload.get("message").and_then(serde_json::Value::as_str)).unwrap_or_default(),
             "tool_call_id": control.item_id,
-            "response_schema_json": payload.get("response_schema").cloned().unwrap_or_default().to_string(),
+            "response_schema_json": elicitation.and_then(|request| request.get("requestedSchema")).cloned().or_else(|| payload.get("response_schema").cloned()).unwrap_or_default().to_string(),
             "expires_at": payload.get("expires_at").and_then(serde_json::Value::as_str).unwrap_or_default(),
             "metadata_json": serde_json::json!({"kind":control.kind,"operations":payload.get("operations").cloned().unwrap_or_default(),"payload":payload}).to_string(),
         }])
