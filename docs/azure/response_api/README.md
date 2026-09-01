@@ -1,6 +1,6 @@
 # Azure OpenAI 官方文档镜像
 
-本目录保存 Microsoft Learn 中文文档的 Markdown 快照，便于离线检索和实现对照。
+本目录保存 Microsoft Learn 中 Azure OpenAI Responses API 相关中文文档的 Markdown 快照，便于离线检索和实现对照。
 
 > - 抓取日期：2026-09-01
 > - 内容来源：Microsoft Learn 返回的官方 Markdown（请求头 `Accept: text/markdown`）
@@ -23,7 +23,7 @@
 
 ## 更新方法
 
-在仓库根目录执行以下命令。命令会直接覆盖现有快照，因此更新前可先用 `git diff -- docs/azure` 检查当前改动。
+在仓库根目录执行以下命令。命令会直接覆盖现有快照，因此更新前可先用 `git diff -- docs/azure/response_api` 检查当前改动。
 
 ```bash
 set -euo pipefail
@@ -31,7 +31,7 @@ set -euo pipefail
 refresh_azure_doc() {
   local output="$1"
   local url="$2"
-  local target="docs/azure/$output"
+  local target="docs/azure/response_api/$output"
   local downloaded
   downloaded="$(mktemp)"
   curl --location --fail --silent --show-error \
@@ -54,7 +54,7 @@ refresh_azure_doc embeddings.md 'https://learn.microsoft.com/zh-cn/azure/foundry
 更新后建议检查文件完整性和上游版本：
 
 ```bash
-rg -n '^(title|canonicalUrl|git_commit_id|ms.date|updated_at):' docs/azure/*.md
-git diff --stat -- docs/azure
-git diff -- docs/azure
+rg -n '^(title|canonicalUrl|git_commit_id|ms.date|updated_at):' docs/azure/response_api/*.md
+git diff --stat -- docs/azure/response_api
+git diff -- docs/azure/response_api
 ```
