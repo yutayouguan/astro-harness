@@ -376,8 +376,6 @@ pub fn ensure_default_workspace_dirs() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
-
     #[test]
     fn canonical_database_paths_share_data_directory() {
         let base = Path::new("/tmp/astro-home");

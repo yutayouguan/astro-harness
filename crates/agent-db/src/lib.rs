@@ -87,7 +87,7 @@ impl AstroDb {
         }
 
         let opts = SqliteConnectOptions::new()
-            .filename(&path)
+            .filename(path)
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal)

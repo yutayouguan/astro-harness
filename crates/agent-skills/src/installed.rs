@@ -602,7 +602,7 @@ pub fn list_enabled_for_prompt_with_config(config: &[(PathBuf, bool)]) -> Vec<(S
             }
         }
     }
-    out.sort_by(|left, right| left.0.to_lowercase().cmp(&right.0.to_lowercase()));
+    out.sort_by_key(|left| left.0.to_lowercase());
     out
 }
 

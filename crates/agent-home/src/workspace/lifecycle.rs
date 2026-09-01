@@ -564,10 +564,7 @@ pub struct EnsureWorkspaceReport {
 
 #[cfg(test)]
 mod tests {
-    use super::super::paths::{
-        active_agent_id, agent_workspace_dir, is_generated_agent_id, list_daily_memory_dates,
-        set_active_agent,
-    };
+    use super::super::paths::{active_agent_id, list_daily_memory_dates, set_active_agent};
     use super::super::templates::{CORE_FILES, ENSURED_DIRS, STATE_FILES};
     use super::*;
     use tempfile::TempDir;
