@@ -1,6 +1,6 @@
 # Astro Agent
 
-本地 AI 桌面工作站（阿童木）。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。
+本地 AI 桌面工作站（阿童木）。支持智能对话、Realtime 语音会话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。
 
 技术栈：**Rust workspace + Tauri 2 + React / Vite**。
 
@@ -141,17 +141,30 @@ cd apps/desktop && npm run tauri dev
 
 也可在 `~/.astro/.env` 写入 `ASTRO_EMBED_BACKEND=0` / `ASTRO_GRPC_ADDR=…`。
 
+## Realtime 语音会话
+
+Realtime 已拆分为独立 `agent-realtime` crate，并通过统一 Thread 协议接入桌面端：
+
+- 桌面端默认使用 WebRTC，通过 `oai-events` data channel 和媒体 track 建立双向会话；
+- 支持 WebSocket 兼容传输、WebRTC SDP offer/answer，以及 ExistingCall sideband 接管；
+- 支持 V2 GA 与显式 V3 `/live/{call_id}` 协议，Provider JSON 在 crate 内转换为 typed events；
+- 完整 transcript、会话边界和 BEM promotion 以 `RealtimeItem` 持久化到 rollout，原始音频和 delta 不落盘；
+- Codex handoff 可把语音请求转为普通 Agent turn，再按 `thinking` / `commentary` / `bem_tags` 返回 Realtime call。
+
+设计与恢复契约见 [Realtime 子系统](./docs/realtime-subsystem.md)，整体 Agent 边界见 [架构总览](./docs/03-系统设计阶段/01-架构设计/01-架构总览.md)。
+
 ## 仓库结构
 
 ```text
 astro/
-├── Cargo.toml              # Workspace 根（25 个 crate + 1 个桌面应用）
+├── Cargo.toml              # Workspace 根（26 个 crate + 1 个桌面应用）
 ├── crates/                 # 所有 Rust crate（扁平 agent-* 命名）
 │   ├── agent-core/         # Agent 运行时核心（Session、streaming、工具路由）
 │   ├── agent-types/        # 通用 DTO 与兼容投影（Message、ToolEntry、ToolExposure 等）
 │   ├── agent-config/       # 分层配置原语
 │   ├── agent-protocol/     # Core 协议与 canonical ResponseItem
 │   ├── agent-rollout/      # JSONL append-only 历史
+│   ├── agent-realtime/     # WebSocket/WebRTC/ExistingCall 与 V2/V3 会话
 │   ├── agent-providers/    # 多厂商 LLM/图像 Provider（15+ 厂商）
 │   ├── agent-tools/        # 工具实现 + ToolRegistry（BM25 搜索、三级暴露）
 │   ├── agent-subagents/    # V2 Agent Thread 子 Agent 系统
@@ -185,11 +198,12 @@ astro/
 | `agent-config` | 分层配置原语 |
 | `agent-protocol` | Core 协议（Op、EventMsg、TurnItem、ResponseItem） |
 | `agent-rollout` | JSONL append-only 权威历史 |
+| `realtime` | Realtime 运输、typed event、transcript reducer 与 Codex handoff/BEM |
 | `skills` / `mcp` | 扩展能力（Skills 管理、MCP 客户端） |
 | `hooks` | Plugin、Command/MCP、Gateway、Shell 生命周期钩子 |
 | `proto` / `types` | gRPC 契约与公共类型 |
 
-运行时架构见 [`docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md`](./docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，钩子说明见 [`docs/hooks.md`](./docs/hooks.md)。
+运行时架构见 [`docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md`](./docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，Realtime 见 [`docs/realtime-subsystem.md`](./docs/realtime-subsystem.md)，钩子说明见 [`docs/hooks.md`](./docs/hooks.md)。
 
 Azure `gpt-image-2` 文档：
 

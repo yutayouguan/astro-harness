@@ -1,13 +1,19 @@
-# Realtime subsystem
+# Realtime 子系统设计
 
-## Goals
+> 状态：已实现
+>
+> 对应 crate：`crates/agent-realtime`
+>
+> 适用版本：V2 GA / V3 live
 
-Astro Realtime is a versioned conversation subsystem, not a special case in the
-agent loop. It owns transport negotiation, provider wire decoding, typed events,
-handoff routing, and durable transcript projection. The ordinary agent runtime
-continues to own model turns and tools.
+## 目标与边界
 
-## Boundaries
+Astro Realtime 是版本化的会话子系统，不是 Agent 循环中的特殊分支。
+`agent-realtime` 拥有传输协商、Provider wire 解码、typed event、handoff wire
+与 transcript reducer；`agent-core` 继续拥有普通 model turn、工具执行和
+rollout 写入时机。
+
+## 系统边界
 
 ```text
 Desktop WebRTC media/data channel
@@ -28,54 +34,113 @@ agent-realtime
              +---- RealtimeItem -----> rollout JSONL
 ```
 
-`agent-realtime` depends only on `agent-protocol`. `agent-core` adapts typed
-handoff requests to normal turns and persists the history projection. Provider
-wire JSON never crosses the crate boundary.
+`agent-realtime` 只依赖 `agent-protocol`。`agent-core` 将 typed handoff 请求适配为
+普通 turn，并持久化 history projection。Provider 原始 JSON 不跨越 crate 边界。
 
-## Transport contract
+## 传输契约
 
-- `websocket` opens the provider Realtime endpoint and carries audio plus events.
-- `webrtc` accepts a browser SDP offer, creates a call through
-  `POST /v1/realtime/calls`, returns the answer SDP, and opens a server-side
-  sideband WebSocket using the returned call id.
-- `existing_call` attaches only the sideband WebSocket. It never mutates session
-  configuration because the call owner already established it.
-- V3 sideband reconnects with bounded exponential backoff. V2 closes on loss so
-  callers do not accidentally replay non-idempotent audio or response requests.
+| transport | 媒体路径 | Server 路径 | start 成功边界 |
+| --- | --- | --- | --- |
+| `websocket` | Core 发送 PCM16 并接收音频事件 | `/v1/realtime?model=...` | 收到 `session.created/updated` |
+| `webrtc` | 浏览器 media track + `oai-events` data channel | `POST /v1/realtime/calls` 后使用 call id 连接 sideband | 获得 SDP answer 与 call id；sideband 后台接入 |
+| `existing_call` | 由现有 call 拥有者维持 | 只连接 call id 对应的 sideband | 本地会话接管已启动，连接失败通过 typed closed/error 收敛 |
 
-## Version contract
+WebRTC 不在返回 SDP answer 前同步等待 sideband，避免 Provider 等待浏览器
+`setRemoteDescription` 时形成互等。ExistingCall 不允许再注入 instructions、startup
+context 或 initial items，因为这些属于原 call owner。
 
-- V2 is the public OpenAI GA default and uses `session.update`, conversation
-  items, `response.create`, and the GA transcript/audio event names.
-- V3 is explicit. It uses the frameless `/live/{call_id}` sideband, session
-  context/delegation events, and BEM channel routing. It is not silently selected
-  for public OpenAI models.
+V3 sideband 使用有界指数退避（最多 5 次，200 ms 起步，5 s 封顶）。V2
+丢失连接后直接关闭，避免重放非幂等的音频帧或 `response.create`。
 
-## Handoff and BEM
+## 版本契约
 
-A typed `HandoffRequested` event starts or steers a normal Astro turn. The turn's
-assistant deltas are streamed back to the active handoff. `thinking` sends an
-unqualified context append, `commentary` selects the commentary channel, and
-`bem_tags` parses `[ANALYSIS]`, `[COMMENTARY]`, and `[FINAL]` (plus configured
-prefixes) before selecting commentary or speakable output. Completion is sent
-exactly once after the turn reaches a terminal event.
+- V2 是默认公开 GA 协议，使用 `session.update`、conversation item、
+  `response.create` 与 GA transcript/audio 事件。
+- V3 必须显式选择，使用 frameless `/live/{call_id}` sideband、
+  `session.context.append`、delegation 事件与 BEM channel，不会对公开模型暗中升级。
+- V3 context append 以 500 UTF-8 字节为上限分片，不在多字节字符中间切断。
 
-## Durable history
+## Typed events
 
-Raw deltas remain transient. A `RealtimeHistory` reducer writes only:
+Provider 事件在 parser 层收敛为 `RealtimeEvent`：
 
-- session started;
-- complete user/assistant transcript segments;
-- BEM item promotions that connect a regular turn item to a realtime session;
-- session closed with `ended` or `failed` outcome.
+- session：`SessionUpdated`；
+- input：`speech_started`、transcript delta/done；
+- output：transcript delta/done、`AudioOut`；
+- response/item：created、cancelled、done；
+- delegation：`HandoffRequested`、`NoopRequested`；
+- failure：`Error`。
 
-This makes replay deterministic without storing audio or duplicating every
-provider delta.
+gRPC/Tauri/live stream 只传输这些 typed events；Provider 字段变化只需在 V2/V3
+parser 内处理。
 
-## Delivery phases
+## Handoff 与 BEM
 
-1. Versioned protocol types and parser tests.
-2. `agent-realtime` transports, WebRTC call creation, sideband recovery, and BEM.
-3. Core lifecycle, handoff bridge, rollout projection, and gRPC/Tauri contracts.
-4. Browser WebRTC media path and typed-event UI.
-5. Focused tests, integration checks, and dirty-worktree-safe commit.
+typed `HandoffRequested` 会预先订阅目标 turn 的事件 tap，然后启动或 steer 普通
+Astro turn，避免丢失首个 delta。turn 的 assistant delta 以 200 ms 窗口合并后
+回传 active handoff：
+
+- `thinking`：不指定 channel 的 context append；
+- `commentary`：显式进入 commentary channel；
+- `bem_tags`：增量解析 `[ANALYSIS]`、`[COMMENTARY]`、`[FINAL]` 及自定义
+  prefix，将可播放内容投影到 speakable channel。
+
+V2 用 `[BACKEND]` user message 和 function output 完成 handoff；V3 用
+`delegation.context.append` / `delegation.complete`。turn 进入终态后只发送一次
+completion。
+
+## Transcript 持久化
+
+原始 delta 保持 transient，音频不落盘。`RealtimeHistory` reducer 只写入：
+
+- session started；
+- 完整 user/assistant transcript segment；
+- 将普通 turn item 与 Realtime session 关联的 BEM promotion；
+- 带 `ended` / `failed` outcome 的 session closed。
+
+这些事实以 `RolloutItem::RealtimeItem` 追加到 JSONL，通过
+`agent_rollout::realtime_history()` 重建，既保持确定性，也不会重复存储每个
+Provider delta。关闭时可选择保留或丢弃未完成的 transcript tail。
+
+## 流控、失败与安全
+
+- command/event channel 都是有界队列；音频队列满时丢弃当前帧，不阻塞录音线程。
+- 单帧最大 1 MiB，且必须是 24 kHz、mono、PCM16。
+- 正常 WebSocket close 不触发重连；仅 V3 异常 sideband 中断使用有界重试。
+- API key 和 `ChatTarget` 只存在当前 Realtime connection，不改写普通文本回合路由。
+- 一个 `Session` 同时只保留一个 active Realtime conversation；新会话不会静默覆盖活跃会话。
+
+## 公共接入面
+
+```text
+React useRealtimeConversation
+  -> Tauri start_realtime_conversation
+  -> gRPC RealtimeConversationStartRequest
+  -> AstroThread::submit(RealtimeConversationStart)
+  -> agent-realtime::RealtimeConversationManager
+```
+
+前端默认 WebRTC，仍可显式选择 WebSocket；ExistingCall 路径只接管 sideband，
+不重新开启本地录音。Tauri/gRPC DTO 暴露 transport、SDP/call id、version、
+handoff mode、BEM prefixes 和 transcript-tail 策略。
+
+## 验证矩阵
+
+- `agent-realtime`：endpoint shaping、WebSocket handshake、WebRTC multipart SDP、V2/V3 parser、
+  UTF-8 分片、BEM parser、history reducer。
+- `agent-protocol` / `agent-rollout`：typed event serde、durable policy 和 history 重建。
+- Desktop：WebRTC 默认路径、`oai-events`、SDP answer、ExistingCall 不启动本地录音。
+- 组合检查：`agent` + `server` + `astro-agent`，并对共享工作区中的非 Realtime
+  迁移失败单独归因。
+
+## 实现索引
+
+- 协议类型：`crates/agent-protocol/src/realtime.rs`
+- 传输与重连：`crates/agent-realtime/src/manager.rs`
+- V2/V3 解码：`crates/agent-realtime/src/parser.rs`
+- Provider wire 编码：`crates/agent-realtime/src/wire.rs`
+- BEM 增量解析：`crates/agent-realtime/src/bem.rs`
+- transcript reducer：`crates/agent-realtime/src/history.rs`
+- Agent handoff：`crates/agent-core/src/runtime/submission_loop.rs`
+- gRPC/Tauri/UI：`agent-proto`、`agent-server`、`apps/desktop/src-tauri`、
+  `apps/desktop/src/hooks/chat/useRealtimeConversation.ts`
