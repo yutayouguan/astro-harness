@@ -1698,7 +1698,7 @@ export default function App() {
           ) : (
             <>
               <div
-                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}${chat.emptyMode ? " is-welcome" : chatHeaderHasUnderlay || projectFiles.tabs.length > 0 ? " has-content-underlay" : ""}`}
+                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}${projectFiles.tabs.length > 0 ? " has-project-file" : ""}${chat.emptyMode ? " is-welcome" : chatHeaderHasUnderlay || projectFiles.tabs.length > 0 ? " has-content-underlay" : ""}`}
               >
                 <div className="content-heading">
                   {conversationTitle && (
@@ -1875,7 +1875,9 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <div className="page-body page-body--chat">
+              <div
+                className={`page-body page-body--chat${projectFiles.tabs.length > 0 ? " has-project-file" : ""}`}
+              >
                 <div
                   className={`chat-layout-with-right${activeChatRightDock === "project-files" ? " has-project-files" : ""}${activeChatRightDock === "side-chat" ? " has-side-chat" : ""}${activeChatRightDock === "inspector" ? " has-chat-right" : ""}${activeChatRightDock === "review" ? " has-review" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
                   style={

@@ -3,7 +3,6 @@
 .chat-layout-with-right {
   --chat-dock-inset: 0px;
   --chat-dock-radius: 0px;
-  --chat-workbench-radius: 18px;
   --chat-dock-surface-border: 0.5px solid
     color-mix(in srgb, var(--glass-edge) 62%, transparent);
   --chat-dock-surface-background:

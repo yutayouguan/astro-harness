@@ -212,6 +212,14 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar {
   );
 }
 
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .body-row {
+  --sidebar-chrome-sheen: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--unified-tone-soft, transparent) 26%, transparent),
+    transparent 72%
+  );
+}
+
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-card,
 html:is([data-color-style="unified"], [data-color-style="dynamic"])
   .prefs-section {

@@ -87,6 +87,10 @@ test("chat header is invisible at rest and adds glass only above scrolling conte
     headerStyles,
     ".content-header--chat.has-content-underlay",
   );
+  const fileHeader = rule(
+    headerStyles,
+    ".content-header--chat.has-project-file",
+  );
   const chatPane = rule(headerStyles, ".content-pane--chat");
 
   assert.ok(header, "missing chat header rule");
@@ -125,6 +129,15 @@ test("chat header is invisible at rest and adds glass only above scrolling conte
   );
   assert.match(underlay, /--chat-header-filter:\s*blur\(/);
   assert.match(underlay, /saturate\(1\.05\);/);
+  assert.ok(fileHeader, "missing project file header material rule");
+  assert.match(
+    fileHeader,
+    /background:\s*var\(--sidebar-chrome-background\);/,
+  );
+  assert.match(
+    fileHeader,
+    /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/,
+  );
   assert.match(header, /pointer-events:\s*none;/);
   assert.match(
     headerStyles,
@@ -139,6 +152,10 @@ test("chat header is invisible at rest and adds glass only above scrolling conte
   assert.match(
     app,
     /chatHeaderHasUnderlay \|\| projectFiles\.tabs\.length > 0\s*\? " has-content-underlay"/,
+  );
+  assert.match(
+    app,
+    /projectFiles\.tabs\.length > 0 \? " has-project-file"/,
   );
   assert.match(app, /onHeaderUnderlayChange=\{setChatHeaderHasUnderlay\}/);
   assert.match(chatView, /notifyHeaderUnderlay\(list\.scrollTop > 8\);/);
@@ -182,13 +199,16 @@ test("right-side chat surfaces stay flush while files use a continuous workbench
   const projectWorkbench = rule(projectFilesStyles, ".project-file-workbench");
   const sidePanel = rule(sideChatStyles, ".side-chat-panel");
   const reviewPanel = rule(reviewPanelStyles, ".chat-review-panel");
+  const filePageBody = rule(
+    projectFilesStyles,
+    ".content-pane--chat > .page-body--chat.has-project-file",
+  );
 
   assert.ok(layout, "missing docked chat layout rule");
   assert.match(layout, /border-radius:\s*28px 0 0 0;/);
   assert.ok(layoutBase, "missing shared chat dock surface tokens");
   assert.match(layoutBase, /--chat-dock-inset:\s*0px;/);
   assert.match(layoutBase, /--chat-dock-radius:\s*0px;/);
-  assert.match(layoutBase, /--chat-workbench-radius:\s*18px;/);
   assert.match(layoutBase, /--chat-dock-surface-border:\s*0\.5px solid/);
   assert.match(layoutBase, /--chat-dock-surface-background:/);
   assert.match(layoutBase, /--chat-dock-surface-shadow:/);
@@ -209,6 +229,8 @@ test("right-side chat surfaces stay flush while files use a continuous workbench
   assert.ok(projectWorkbench, "missing project file workbench rule");
   assert.ok(sidePanel, "missing side chat panel rule");
   assert.ok(reviewPanel, "missing review panel rule");
+  assert.ok(filePageBody, "missing edge-aligned file workspace rule");
+  assert.match(filePageBody, /padding-left:\s*0;/);
 
   for (const panel of [runtimePanel, sidePanel, reviewPanel]) {
     assert.match(panel, /border:\s*var\(--chat-dock-surface-border\);/);
@@ -246,6 +268,10 @@ test("right-side chat surfaces stay flush while files use a continuous workbench
   assert.match(openProjectPanel, /margin:\s*0;/);
   assert.match(openProjectPanel, /border-left-width:\s*0\.5px;/);
   assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
+  assert.match(
+    app,
+    /page-body page-body--chat.*projectFiles\.tabs\.length > 0 \? " has-project-file"/,
+  );
   assert.match(
     rightPanelStyles,
     /@media \(prefers-reduced-transparency: reduce\)/,
@@ -299,6 +325,10 @@ test("project file mode uses opaque editor chrome and a compact composer", () =>
   assert.match(activeTab, /box-shadow:\s*inset 0 -2px 0/);
   assert.ok(editor, "missing project file editor body rule");
   assert.match(editor, /background:\s*var\(--project-workbench-surface\);/);
+  assert.match(
+    projectFilesStyles,
+    /padding-bottom:\s*calc\(var\(--composer-overlay-height, 72px\) \+ 12px\);/,
+  );
   assert.ok(composerShell, "missing compact project composer shell rule");
   assert.match(composerShell, /max-width:\s*720px;/);
   assert.ok(composer, "missing compact project composer rule");

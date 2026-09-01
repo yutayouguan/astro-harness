@@ -55,6 +55,19 @@
     saturate(1.05);
 }
 
+/* 文件工作台需要一条稳定的顶部 chrome；与左侧栏共用材质，
+   避免浅色主题下出现一条独立的亮白标题栏。 */
+.content-header--chat.has-project-file {
+  --chat-header-divider: color-mix(
+    in srgb,
+    var(--glass-edge) 62%,
+    transparent
+  );
+  background: var(--sidebar-chrome-background);
+  backdrop-filter: var(--sidebar-chrome-filter);
+  -webkit-backdrop-filter: var(--sidebar-chrome-filter);
+}
+
 .content-header--chat .page-title-block,
 .content-header--chat .conversation-menu {
   pointer-events: auto;

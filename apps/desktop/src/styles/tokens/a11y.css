@@ -65,6 +65,7 @@
     background: var(--glass-panel);
   }
 
+  .body-row,
   .sidebar {
     --sidebar-chrome-sheen: none;
     --sidebar-chrome-background: var(--sidebar-bg);
@@ -133,12 +134,16 @@
     --seg-item-rim: transparent;
   }
 
+  .body-row,
   .sidebar {
     --sidebar-chrome-background: color-mix(
       in srgb,
       var(--surface-panel-background) 94%,
       transparent
     );
+  }
+
+  .sidebar {
     border-right-color: color-mix(in srgb, var(--ink) 28%, transparent);
   }
 }

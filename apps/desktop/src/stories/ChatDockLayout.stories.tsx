@@ -388,6 +388,7 @@ function ChatDockLayout({
   const hasDock = kind !== null;
   return (
     <main
+      className="body-row"
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -396,7 +397,7 @@ function ChatDockLayout({
     >
       <section className="content-pane content-pane--chat">
         <div
-          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}`}
+          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}${kind === "files" ? " has-project-file has-content-underlay" : ""}`}
         >
           <div className="content-heading">
             <div className="page-title-block">
@@ -419,7 +420,9 @@ function ChatDockLayout({
           </div>
           <HeaderActions kind={kind} onSelect={onSelect} />
         </div>
-        <div className="page-body page-body--chat">
+        <div
+          className={`page-body page-body--chat${kind === "files" ? " has-project-file" : ""}`}
+        >
           <div
             className={`chat-layout-with-right${hasDock ? " has-right-dock" : ""}${dockClasses}`}
             style={
