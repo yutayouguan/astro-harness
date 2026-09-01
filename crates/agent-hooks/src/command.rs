@@ -24,6 +24,9 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::warn;
 
+#[cfg(windows)]
+use crate::windows_job::WindowsJobObject;
+
 use crate::mcp::{expand_argument_template, unavailable_executor, HookMcpCall, HookMcpExecutor};
 use crate::run::{
     unix_timestamp, HookExecutionMode, HookHandlerType, HookOutputEntry, HookOutputEntryKind,
@@ -1361,6 +1364,8 @@ struct HandlerOutput {
 
 struct ProcessTreeGuard {
     process_id: Option<u32>,
+    #[cfg(windows)]
+    job: Option<WindowsJobObject>,
 }
 
 impl ProcessTreeGuard {
@@ -1377,6 +1382,19 @@ impl Drop for ProcessTreeGuard {
             // descendants that inherited stdout/stderr, otherwise their readers can leak.
             unsafe {
                 libc::kill(-process_id, libc::SIGKILL);
+            }
+        }
+        #[cfg(windows)]
+        if let Some(process_id) = self.process_id {
+            if let Some(job) = self.job.as_ref() {
+                let _ = job.terminate();
+            } else {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/PID", &process_id.to_string(), "/T", "/F"])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn();
             }
         }
     }
@@ -1442,6 +1460,9 @@ async fn run_command(
     hook_environment: &[(String, String)],
 ) -> anyhow::Result<HandlerOutput> {
     let mut command = default_shell_command(session_environment);
+    #[cfg(windows)]
+    command.raw_arg(format!(r#""{command_text}""#));
+    #[cfg(not(windows))]
     command.arg(command_text);
     command
         .env_clear()
@@ -1455,9 +1476,29 @@ async fn run_command(
     scrub_non_inheritable_env_vars(command.as_std_mut());
     #[cfg(unix)]
     command.process_group(0);
-    let mut child = command.spawn()?;
+
+    #[cfg(windows)]
+    let mut process_tree_job = WindowsJobObject::create().ok();
+    #[cfg(windows)]
+    let child = match process_tree_job.as_ref() {
+        Some(job) => match job.spawn_contained(&mut command) {
+            Ok(child) => Ok(child),
+            Err(_) => {
+                process_tree_job = None;
+                command.creation_flags(0);
+                command.spawn()
+            }
+        },
+        None => command.spawn(),
+    };
+    #[cfg(not(windows))]
+    let child = command.spawn();
+
+    let mut child = child?;
     let mut process_tree_guard = ProcessTreeGuard {
         process_id: child.id(),
+        #[cfg(windows)]
+        job: process_tree_job,
     };
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
@@ -1496,6 +1537,10 @@ async fn run_command(
     };
     match tokio::time::timeout(handler.timeout, execution).await {
         Ok(Ok(output)) => {
+            #[cfg(windows)]
+            if let Some(job) = process_tree_guard.job.as_ref() {
+                let _ = job.preserve_descendants();
+            }
             process_tree_guard.disarm();
             Ok(output)
         }

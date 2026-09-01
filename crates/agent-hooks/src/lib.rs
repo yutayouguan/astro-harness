@@ -17,6 +17,8 @@ pub mod run;
 pub mod shell;
 pub mod tool_events;
 pub mod ui;
+#[cfg(windows)]
+mod windows_job;
 
 pub use command::{
     CommandHookDecision, CommandHookRunner, CommandHookScope, CommandHookSourceSummary,
