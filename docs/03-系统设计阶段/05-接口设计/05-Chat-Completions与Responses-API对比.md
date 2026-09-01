@@ -84,7 +84,7 @@ POST /v1/chat/completions
 | 工具控制 | `tools`、`tool_choice`、`parallel_tool_calls` | 声明应用函数并控制调用策略 |
 | 输出与传输 | `response_format`、`stream`、`stream_options` | 控制结构化输出、SSE 和 usage |
 
-Chat Completions 没有独立的顶层 `instructions`。在 Astro 的兼容实现中，`CompletionRequest.instructions` 会先降级为 system message，再与 `input` 合成 `messages[]`。
+Chat Completions 没有独立的顶层 `instructions`。在 Astro 的非 Agent 兼容实现中，`ChatCompletionRequest.instructions` 会先降级为 system message，再与 `input` 合成 `messages[]`。
 
 ### 3.2 响应模型
 
@@ -393,27 +393,26 @@ PromptContract + canonical ResponseItem history
   -> ProviderStreamer::stream_response
   -> try_stream_responses_with_fallback
   -> providers::agent_responses_stream
-  -> CompletionRequest.response_input
+  -> ResponsesRequest.input: Vec<ResponseItem>
   -> OpenAIResponsesModel
   -> POST .../responses
 
 非 Agent / 兼容路径
 Vec<Message>
   -> providers::chat_stream
-  -> CompletionRequest.input
+  -> ChatCompletionRequest.input: Vec<Message>
   -> OpenAICompletionModel 或其他协议 adapter
   -> POST .../chat/completions（当选择 Chat adapter 时）
 ```
 
-`agent_responses_stream()` 会先调用 `supports_agent_responses()`，不满足能力的 Provider 在发出网络请求前即被拒绝；随后它把 `api_mode` 固定为 `responses`、保持 `input` 为空，并把原生历史放入 `response_input`。因此，通用 Provider 配置中的 `api_mode` 不能绕过 Agent capability gate。
+`agent_responses_stream()` 会先调用 `supports_agent_responses()`，不满足能力的 Provider 在发出网络请求前即被拒绝；随后它把 `api_mode` 固定为 `responses`，并将原生历史直接放入 `ResponsesRequest.input`。因此，通用 Provider 配置中的 `api_mode` 不能绕过 Agent capability gate。
 
 ### 7.2 Astro 的请求映射
 
-| `CompletionRequest` 字段 | Chat Completions adapter | Responses adapter |
+| 语义 | `ChatCompletionRequest` | `ResponsesRequest` |
 | --- | --- | --- |
 | `instructions` | 降级成 system message | 顶层 `instructions` |
-| `input: Vec<Message>` | 序列化成 `messages[]` | 仅兼容调用时转换成 input Items |
-| `response_input: Vec<ResponseItem>` | 不使用 | Agent 路径直接序列化 |
+| 输入 | `Vec<Message>` 序列化成 `messages[]` | `Vec<ResponseItem>` 直接序列化 |
 | `tools` | 外层 `function` 包装 | 扁平 typed tool 定义 |
 | `tool_choice` | 指定函数时为 `function.name` | 指定函数时为顶层 `name` |
 | `max_tokens` | 当前兼容层发为 `max_tokens` | 映射为 `max_output_tokens` |
@@ -446,13 +445,28 @@ Astro 的 Responses parser 会把官方 typed events 映射为内部 `StreamChun
 - usage → `Usage`；
 - completed/incomplete/failed → `Done` 或 `Error`。
 
-Chat parser 则从 `choices[].delta` 中抽取文本、reasoning 兼容字段、tool calls、usage 与 finish reason。两条 parser 最终可以共享上层流消费接口，但不会把它们的线协议误认为相同。
+Chat parser 则从 `choices[].delta` 中抽取文本、reasoning 兼容字段、tool calls、usage 与 finish reason。两条 parser 最终只共享 `CompletionStream` 输出抽象；请求类型、模型 trait、registry 槽位和测试注入点均相互独立。
 
 ### 7.5 当前 Provider 策略
 
 当前 profile 中声明为 Agent Responses-capable 的内置 Provider 是 OpenAI、DeepSeek、Azure OpenAI、百炼、MiniMax 和 Mimo。权威来源始终是 `ProviderProfile.supports_responses`；第三方只提供名义上的 `/responses` endpoint，不足以证明其 reasoning、并行工具、custom tool、tool search、usage 和终态事件都兼容。
 
 当前注册成功的 custom provider 也会被视为可进入 Agent 路由；这代表配置方声明兼容，不等于 Astro 已验证其行为。生产环境仍应为每个 custom endpoint 单独执行契约测试。
+
+### 7.6 本轮对齐审计结果
+
+| 检查项 | 当前结果 |
+| --- | --- |
+| Agent 请求类型 | `ResponsesRequest`，唯一历史字段为 `Vec<ResponseItem>` |
+| Agent 模型 trait | `ResponsesModel` / `DynResponsesModel` |
+| Registry 槽位 | `responses_model`，与 `chat_completion_model` 独立 |
+| 厂商差异 trait | `OpenAIResponsesCompatible`，不再依赖 Chat 的 `OpenAICompatible` |
+| 生产 Agent 入口 | `agent_responses_stream` / `agent_responses_prompt` |
+| 测试注入 | `ResponsesOverrideInput { instructions, items }`，不再把 Items 还原成 `Message` |
+| Chat Completions | 仅保留在 workflow、媒体与显式非 Agent 兼容调用中 |
+| 隐式协议降级 | Agent 路径不存在；不支持 Responses 时返回 `UnsupportedCapability` |
+
+代码中仍保留 `ChatTarget`、`chat_targets` 等名称。它们表示桌面产品中的“会话模型目标/凭证链”，不是 Chat Completions wire contract；其值会先经过 Responses capability gate，再进入 Agent 主链，因此没有作为兼容命名迁移。若未来统一产品术语，可单独改为 `ModelTarget`，但不应与协议迁移混在一起破坏持久化或 RPC 字段。
 
 ## 8. 对 Astro 的建议
 
@@ -573,7 +587,7 @@ Astro 当前代码：
 - [`crates/agent-providers/src/compat/responses.rs`](../../../crates/agent-providers/src/compat/responses.rs)：Responses 请求；
 - [`crates/agent-providers/src/openai/responses.rs`](../../../crates/agent-providers/src/openai/responses.rs)：ResponseItem 序列化与 SSE 解析；
 - [`crates/agent-providers/src/profile.rs`](../../../crates/agent-providers/src/profile.rs)：`ApiMode` 与 Provider capability；
-- [`crates/agent-providers/src/types/request.rs`](../../../crates/agent-providers/src/types/request.rs)：统一请求模型；
+- [`crates/agent-providers/src/types/request.rs`](../../../crates/agent-providers/src/types/request.rs)：独立的 Responses / Chat 请求类型；
 - [`crates/agent-protocol/src/response_item.rs`](../../../crates/agent-protocol/src/response_item.rs)：canonical `ResponseItem`；
 - [`crates/agent-core/src/streaming/provider.rs`](../../../crates/agent-core/src/streaming/provider.rs)：Agent 侧 Responses 调用链；
 - [Responses 原生 Agent 运行时架构](../01-架构设计/12-Responses原生Agent运行时架构.md)：系统级设计基线。

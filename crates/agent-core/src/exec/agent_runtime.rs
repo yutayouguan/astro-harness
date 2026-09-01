@@ -14,7 +14,7 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 use crate::runtime::{Config, Session, TurnResult};
-use crate::streaming::ChatOverride;
+use crate::streaming::ResponsesOverride;
 use crate::tasks::TurnInput;
 
 /// 启动一个 Agent Turn 所需的全部参数（线程、运行时配置、邮箱等）。
@@ -23,7 +23,7 @@ pub struct RunAgentTurnRequest {
     pub thread: AgentThreadV2,
     pub runtime: SpawnRuntimeV2Request,
     pub memory_dir: PathBuf,
-    pub chat_override: Option<ChatOverride>,
+    pub responses_override: Option<ResponsesOverride>,
     /// 后续轮次在首个采样边界从持久化邮箱获取用户输入，
     /// 而非将其作为初始输入重复传入。
     pub consume_mailbox: bool,
@@ -1677,16 +1677,16 @@ async fn run_request(
         let _ = started.send(Some(Ok(())));
     }
     let result = if let Some(system_prompt) = prepared_system_prompt {
-        crate::exec::background::run_background_prepared_turn_controlled_with_chat(
+        crate::exec::background::run_background_prepared_turn_controlled_with_responses(
             Arc::clone(&session),
             targets,
             system_prompt,
             Some(Arc::clone(&interrupt)),
-            request.chat_override.clone(),
+            request.responses_override.clone(),
         )
         .await
     } else {
-        crate::exec::background::run_background_multi_turn_controlled_with_chat(
+        crate::exec::background::run_background_multi_turn_controlled_with_responses(
             Arc::clone(&session),
             targets,
             vec![TurnInput {
@@ -1695,7 +1695,7 @@ async fn run_request(
                 client_message_id: None,
             }],
             Some(Arc::clone(&interrupt)),
-            request.chat_override.clone(),
+            request.responses_override.clone(),
         )
         .await
     };
@@ -1738,7 +1738,7 @@ mod tests {
 
     use agent_db::sqlx;
 
-    use crate::streaming::ChatOverride;
+    use crate::streaming::ResponsesOverride;
 
     use super::{
         sandbox_profile, wait_for_termination, AckSubscribeHook, ActiveAgentTurn,
@@ -1816,7 +1816,7 @@ mod tests {
         drop(guard_b);
     }
 
-    fn scripted_chat(reply: &str) -> ChatOverride {
+    fn scripted_responses(reply: &str) -> ResponsesOverride {
         let reply = reply.to_string();
         Arc::new(move |_messages, _tools, _config| {
             let reply = reply.clone();
@@ -1831,7 +1831,7 @@ mod tests {
         })
     }
 
-    fn pending_chat() -> ChatOverride {
+    fn pending_responses() -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(stream::pending::<anyhow::Result<StreamChunk>>()) as CompletionStream)
@@ -1839,7 +1839,7 @@ mod tests {
         })
     }
 
-    fn barrier_pending_chat(barrier: Arc<tokio::sync::Barrier>) -> ChatOverride {
+    fn barrier_pending_responses(barrier: Arc<tokio::sync::Barrier>) -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             let barrier = Arc::clone(&barrier);
             Box::pin(async move {
@@ -1849,11 +1849,11 @@ mod tests {
         })
     }
 
-    fn gated_scripted_chat(
+    fn gated_scripted_responses(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
         reply: &str,
-    ) -> ChatOverride {
+    ) -> ResponsesOverride {
         let reply = reply.to_string();
         Arc::new(move |_messages, _tools, _config| {
             let entered = Arc::clone(&entered);
@@ -1872,10 +1872,10 @@ mod tests {
         })
     }
 
-    fn gated_failing_chat(
+    fn gated_failing_responses(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
-    ) -> ChatOverride {
+    ) -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             let entered = Arc::clone(&entered);
             let release = Arc::clone(&release);
@@ -1887,12 +1887,14 @@ mod tests {
         })
     }
 
-    fn role_capturing_chat(captured_roles: Arc<std::sync::Mutex<Vec<String>>>) -> ChatOverride {
+    fn role_capturing_responses(
+        captured_roles: Arc<std::sync::Mutex<Vec<String>>>,
+    ) -> ResponsesOverride {
         Arc::new(move |messages, _tools, _config| {
             *captured_roles.lock().unwrap() = messages
-                .iter()
-                .filter(|message| message.role() != providers::types::message::Role::System)
-                .map(|message| message.role().as_str().to_string())
+                .message_roles()
+                .filter(|role| *role != "system")
+                .map(str::to_string)
                 .collect();
             Box::pin(async move {
                 Ok(Box::pin(stream::iter(vec![
@@ -1905,7 +1907,7 @@ mod tests {
         })
     }
 
-    fn history_asserting_chat(saw_structured_tool: Arc<AtomicBool>) -> ChatOverride {
+    fn history_asserting_responses(saw_structured_tool: Arc<AtomicBool>) -> ResponsesOverride {
         Arc::new(move |messages, _tools, _config| {
             let serialized = serde_json::to_string(&messages).unwrap();
             if serialized.contains("call-1") && serialized.contains("tool result") {
@@ -1953,7 +1955,7 @@ mod tests {
         control: Arc<AgentControl>,
         thread: subagents::AgentThreadV2,
         memory_dir: std::path::PathBuf,
-        chat_override: ChatOverride,
+        responses_override: ResponsesOverride,
     ) -> RunAgentTurnRequest {
         RunAgentTurnRequest {
             control,
@@ -1991,7 +1993,7 @@ mod tests {
                 interrupt_message: true,
             },
             memory_dir,
-            chat_override: Some(chat_override),
+            responses_override: Some(responses_override),
             consume_mailbox: false,
             startup_tx: None,
             startup_accept_rx: None,
@@ -2012,7 +2014,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            gated_scripted_chat(Arc::clone(&entered), Arc::clone(&release), "finished"),
+            gated_scripted_responses(Arc::clone(&entered), Arc::clone(&release), "finished"),
         );
 
         let (run_result, observed_ack) = tokio::join!(manager.start_turn(run), async {
@@ -2091,7 +2093,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             memory_dir.clone(),
-            scripted_chat("done"),
+            scripted_responses("done"),
         );
         run.consume_mailbox = true;
 
@@ -2162,7 +2164,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             memory_dir.clone(),
-            scripted_chat("must not sample"),
+            scripted_responses("must not sample"),
         );
         first.consume_mailbox = true;
         let first_error = AgentRuntimeManager::default()
@@ -2183,7 +2185,7 @@ mod tests {
             Arc::clone(&control),
             retry_thread,
             memory_dir.clone(),
-            scripted_chat("done"),
+            scripted_responses("done"),
         );
         retry.consume_mailbox = true;
         AgentRuntimeManager::default()
@@ -2242,7 +2244,7 @@ mod tests {
             let memory_dir = dir.path().join("memory");
             async move {
                 manager
-                    .start_turn(request(control, thread, memory_dir, pending_chat()))
+                    .start_turn(request(control, thread, memory_dir, pending_responses()))
                     .await
             }
         });
@@ -2381,7 +2383,7 @@ mod tests {
                 Arc::clone(&recovered),
                 recovered_thread,
                 memory_dir,
-                role_capturing_chat(Arc::clone(&captured_roles)),
+                role_capturing_responses(Arc::clone(&captured_roles)),
             ))
             .await
             .unwrap();
@@ -2482,7 +2484,7 @@ mod tests {
                 Arc::clone(&recovered),
                 recovered_thread,
                 memory_dir.clone(),
-                scripted_chat("unreachable"),
+                scripted_responses("unreachable"),
             ))
             .await
             .unwrap_err();
@@ -2520,7 +2522,7 @@ mod tests {
                 Arc::clone(&recovered),
                 retry_thread,
                 memory_dir,
-                role_capturing_chat(Arc::clone(&captured_roles)),
+                role_capturing_responses(Arc::clone(&captured_roles)),
             ))
             .await
             .unwrap();
@@ -2556,7 +2558,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            gated_scripted_chat(Arc::clone(&entered), Arc::clone(&release), "finished"),
+            gated_scripted_responses(Arc::clone(&entered), Arc::clone(&release), "finished"),
         );
 
         let (run_result, observed_ack) = tokio::join!(manager.start_turn(run), async {
@@ -2612,7 +2614,7 @@ mod tests {
                 Arc::clone(&control),
                 thread,
                 dir.path().join("memory"),
-                scripted_chat("follow-up completed"),
+                scripted_responses("follow-up completed"),
             ))
             .await
             .unwrap();
@@ -2629,7 +2631,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            gated_scripted_chat(Arc::clone(&entered), Arc::clone(&release), "finished"),
+            gated_scripted_responses(Arc::clone(&entered), Arc::clone(&release), "finished"),
         );
 
         let (run_result, (observed_ack, second_observer)) =
@@ -2677,7 +2679,7 @@ mod tests {
                 Arc::clone(&control),
                 thread,
                 dir.path().join("memory"),
-                scripted_chat("follow-up completed"),
+                scripted_responses("follow-up completed"),
             ))
             .await
             .unwrap();
@@ -2696,7 +2698,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 broken_memory,
-                scripted_chat("unreachable"),
+                scripted_responses("unreachable"),
             ))
             .await
             .unwrap_err();
@@ -2728,7 +2730,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             memory_dir.clone(),
-            gated_failing_chat(Arc::clone(&entered), Arc::clone(&release)),
+            gated_failing_responses(Arc::clone(&entered), Arc::clone(&release)),
         );
 
         let (run_result, observed_ack) = tokio::join!(manager.start_turn(run), async {
@@ -2758,7 +2760,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 memory_dir.clone(),
-                role_capturing_chat(Arc::clone(&captured_roles)),
+                role_capturing_responses(Arc::clone(&captured_roles)),
             ))
             .await
             .unwrap();
@@ -2793,7 +2795,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            pending_chat(),
+            pending_responses(),
         );
 
         let (run_result, interrupted) = tokio::join!(run_manager.start_turn(run), async {
@@ -2835,7 +2837,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            barrier_pending_chat(Arc::clone(&barrier)),
+            barrier_pending_responses(Arc::clone(&barrier)),
         );
 
         let (run_result, (interrupt_result, observer_one, observer_two)) =
@@ -2913,7 +2915,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            pending_chat(),
+            pending_responses(),
         );
         let entered = Arc::new(tokio::sync::Notify::new());
         let release = Arc::new(tokio::sync::Notify::new());
@@ -2967,7 +2969,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&barrier)),
+                barrier_pending_responses(Arc::clone(&barrier)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3026,7 +3028,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                scripted_chat("follow-up completed"),
+                scripted_responses("follow-up completed"),
             ))
             .await
             .unwrap();
@@ -3068,7 +3070,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&barrier)),
+                barrier_pending_responses(Arc::clone(&barrier)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3120,7 +3122,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&provider_ready)),
+                barrier_pending_responses(Arc::clone(&provider_ready)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3213,7 +3215,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&provider_ready)),
+                barrier_pending_responses(Arc::clone(&provider_ready)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3260,7 +3262,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&provider_ready)),
+                barrier_pending_responses(Arc::clone(&provider_ready)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3308,7 +3310,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&barrier)),
+                barrier_pending_responses(Arc::clone(&barrier)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3451,7 +3453,7 @@ mod tests {
                     Arc::clone(&control),
                     thread.clone(),
                     memory_dir.clone(),
-                    scripted_chat("replacement completed"),
+                    scripted_responses("replacement completed"),
                 ),
             )
             .unwrap();
@@ -3471,7 +3473,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             memory_dir,
-            scripted_chat("must not run"),
+            scripted_responses("must not run"),
         );
         let (stale_tx, _stale_rx) = watch::channel(None);
         stale.followup_start_tx = Some(stale_tx);
@@ -3501,7 +3503,7 @@ mod tests {
                     Arc::clone(&control),
                     thread.clone(),
                     dir.path().join("memory"),
-                    scripted_chat("must not run"),
+                    scripted_responses("must not run"),
                 ),
             )
             .unwrap();
@@ -3534,7 +3536,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            pending_chat(),
+            pending_responses(),
         );
 
         let (run_result, (terminate_result, observed_ack)) =
@@ -3595,7 +3597,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&provider_ready)),
+                barrier_pending_responses(Arc::clone(&provider_ready)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3654,7 +3656,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            barrier_pending_chat(Arc::clone(&barrier)),
+            barrier_pending_responses(Arc::clone(&barrier)),
         );
 
         let (run_result, terminate_result) = tokio::join!(manager.start_turn(run), async {
@@ -3767,7 +3769,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 memory_dir,
-                history_asserting_chat(Arc::clone(&saw_structured_tool)),
+                history_asserting_responses(Arc::clone(&saw_structured_tool)),
             ))
             .await
             .unwrap();

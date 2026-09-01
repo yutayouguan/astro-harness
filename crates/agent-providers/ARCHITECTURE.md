@@ -7,7 +7,7 @@
 
 Provider crate 同时服务两类需求，但不混淆其协议边界：
 
-1. **Agent completion**：只使用 Responses API，以 `ResponseItem` 为原生历史。
+1. **Agent Responses**：只使用 Responses API，以 `ResponseItem` 为原生历史。
 2. **工具与媒体能力**：允许使用厂商原生或兼容协议，例如 Chat Completions、Anthropic Messages、Gemini Native、Interactions、embedding、TTS、图像和视频 API。
 
 `ApiMode` 中仍出现多种协议，不表示 Agent 可在它们之间切换。Agent 的资格由 `supports_agent_responses()` 单独决定。
@@ -15,13 +15,18 @@ Provider crate 同时服务两类需求，但不混淆其协议边界：
 ## 2. 类型边界
 
 ```rust
-pub struct CompletionRequest {
+pub struct ResponsesRequest {
     pub model: String,
     pub instructions: String,
-    pub input: Vec<Message>,
-    pub response_input: Option<Vec<agent_protocol::ResponseItem>>,
+    pub input: Vec<agent_protocol::ResponseItem>,
     pub tools: Vec<ToolDefinition>,
     // tool choice, thinking, token and provider-specific parameters...
+}
+
+pub struct ChatCompletionRequest {
+    pub instructions: String,
+    pub input: Vec<Message>,
+    // compatibility-only fields...
 }
 ```
 
@@ -29,9 +34,9 @@ pub struct CompletionRequest {
 
 | 字段 | 所属路径 | 规则 |
 | --- | --- | --- |
-| `instructions` | Agent 与通用 completion | 稳定指令，不与历史消息混排 |
-| `response_input` | Agent | canonical Responses input；adapter 直接序列化 |
-| `input` | 非 Agent | `Message` 兼容输入；Agent 请求必须为空 |
+| `ResponsesRequest.instructions` | Agent | 顶层稳定指令，不与历史消息混排 |
+| `ResponsesRequest.input` | Agent | canonical Responses Items；adapter 直接序列化 |
+| `ChatCompletionRequest.input` | 非 Agent | `Message` 兼容输入，类型上无法进入 Agent 模型 |
 | `tools` | 独立 schema | 保留 function/custom/namespace/tool_search/web_search 类型 |
 
 Agent 内部可以为了 UI、搜索或特定辅助计算生成 `Message` 视图，但该视图不回写 canonical history，也不用于发送下一次 Agent 请求。
@@ -43,8 +48,8 @@ agent-core Vec<ResponseItem>
   -> agent_responses_stream
   -> normalize provider id
   -> supports_agent_responses
-  -> CompletionRequest { response_input: Some(...), input: [] }
-  -> Registry completion model
+  -> ResponsesRequest { input: Vec<ResponseItem>, ... }
+  -> Registry ResponsesModel
   -> Responses adapter
   -> POST /responses + SSE
   -> CompletionStream
@@ -74,7 +79,7 @@ ToolSearchCall(id=C)          -> ToolSearchOutput(id=C)
 
 ## 4. 通用 Provider 路径
 
-`chat_stream()` 和 `chat_stream_direct()` 为非 Agent 调用保留。调用者可通过 `CompletionRequest.input` 使用 `Message`，registry 再按 `ApiMode` 选择 Chat Completions、Anthropic、Responses、Interactions 或 Gemini Native adapter。
+`chat_stream()` 和 `chat_stream_direct()` 为非 Agent 调用保留。调用者通过 `ChatCompletionRequest.input` 使用 `Message`，registry 从独立的 `chat_completion_model` 选择 Chat Completions、Anthropic、Interactions 或 Gemini Native adapter；它不会进入 Agent fallback 链。
 
 这条路径主要服务：
 

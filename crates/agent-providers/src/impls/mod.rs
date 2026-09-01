@@ -37,6 +37,8 @@ macro_rules! openai_compat {
             const STREAM_USAGE: bool = $su;
         }
 
+        impl crate::compat::OpenAIResponsesCompatible for $name {}
+
         openai_compat!(@caps $name, $caps);
     };
     // ── auth 分支 ──

@@ -75,7 +75,7 @@ pub enum ToolChoice {
 
 /// Agent 交给模型的原生 Responses prompt。
 #[derive(Debug, Clone)]
-pub struct Prompt {
+pub struct ResponsesRequest {
     pub model: String,
     /// 稳定的基础指令，独立于带角色的对话输入。
     pub instructions: String,
@@ -93,7 +93,7 @@ pub struct Prompt {
     pub additional_params: Value,
 }
 
-impl Default for Prompt {
+impl Default for ResponsesRequest {
     fn default() -> Self {
         Self {
             model: String::new(),

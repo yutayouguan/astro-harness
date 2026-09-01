@@ -1,6 +1,6 @@
 # 多模态 Provider 系统
 
-> **Harness 边界（2026-08-29）**：Provider 是 Model 网关和协议适配层，不拥有 Agent turn、工具权限或持久化生命周期。Harness 通过 `CompletionRequest` 交付 messages/tool schemas，并将流规范化为 `StreamChunk`。原生工具契约见 [Codex 原生工具协议](../../04-详细设计阶段/04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md)。
+> **Harness 边界（2026-09-01）**：Provider 是 Model 网关和协议适配层，不拥有 Agent turn、工具权限或持久化生命周期。Agent 通过 `ResponsesRequest` 交付原生 Items/tool schemas；非 Agent 兼容调用使用 `ChatCompletionRequest`。两条请求类型不互相降级。原生工具契约见 [Codex 原生工具协议](../../04-详细设计阶段/04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md)。
 
 > 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-08-22
 
@@ -12,8 +12,9 @@
 dispatch (唯一入口)
   ├── register_provider() — 按 provider id + config.api_mode 路由
   │     ├── 内置厂商 → trait 系统 (OpenAICompatible / Anthropic / Google / ...)
-  │     └── TOML 自定义 → ConfigDrivenCompletionModel (Responses API)
-  ├── chat_stream() / chat_stream_direct() — 聊天补全
+  │     └── TOML 自定义 → ConfigDrivenResponsesModel (Responses API)
+  ├── agent_responses_stream() — Agent Responses-only
+  ├── chat_stream() / chat_stream_direct() — 非 Agent 兼容补全
   ├── generate_image() / text_to_speech() / generate_video() — 媒体
   └── verify() — 连通性探测
 ```
@@ -39,7 +40,8 @@ dispatch (唯一入口)
 ### 核心 Trait 层次
 
 ```text
-CompletionModel          — 聊天补全（唯一异步 trait）
+ResponsesModel           — Agent Responses 请求
+ChatCompletionModel      — 非 Agent 兼容补全
 EmbeddingModel           — 向量嵌入
 ImageGenModel            — 图像生成
 VideoGenModel            — 视频生成
@@ -47,7 +49,8 @@ TTSModel                 — 语音合成
 MusicGenModel            — 音乐生成
 
 ProviderExt              — 厂商基础（NAME, BASE_URL, auth_headers）
-OpenAICompatible: ProviderExt — OpenAI 兼容厂商 hook（声明式常量 + finalize hook）
+OpenAIResponsesCompatible: ProviderExt — Responses 线路 hook
+OpenAICompatible: ProviderExt — Chat Completions 兼容线路 hook
 Capabilities<Chat, Embedding, ImageGen, ...> — 编译期能力声明
 ```
 
@@ -60,8 +63,6 @@ impl OpenAICompatible for NewProvider {
     // 基础能力
     const STREAM_USAGE: bool = true;
     const SUPPORTS_TOOLS: bool = true;
-    const SUPPORTS_RESPONSES: bool = true;
-
     // Thinking 格式（4 种）
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::DeepSeek;
     //   None             — 不处理 thinking
@@ -72,10 +73,12 @@ impl OpenAICompatible for NewProvider {
     // Effort 映射表
     const EFFORT_MAP: &[(&str, &str)] = &[("max", "max"), ("xhigh", "max")];
 
-    // Responses API 行为
-    const RESPONSES_STORE_FALSE: bool = false;
-    const RESPONSES_PARALLEL_TOOLS: bool = false;
-    const RESPONSES_REASONING_SUMMARY: bool = false;
+}
+
+impl OpenAIResponsesCompatible for NewProvider {
+    const STORE_FALSE: bool = false;
+    const PARALLEL_TOOLS: bool = false;
+    const REASONING_SUMMARY: bool = false;
 }
 ```
 
@@ -85,7 +88,7 @@ impl OpenAICompatible for NewProvider {
 |---|---|---|
 | `OpenAICompletionModel<Ext>` | `compat/completion.rs` | Chat Completions 路径 |
 | `OpenAIResponsesModel<Ext>` | `compat/responses.rs` | Responses API 路径 |
-| `ConfigDrivenCompletionModel` | `custom.rs` | TOML 自定义 provider（仅 Responses） |
+| `ConfigDrivenResponsesModel` | `custom.rs` | TOML 自定义 provider（仅 Responses） |
 
 共享 thinking 转换：`apply_thinking_compat(ThinkingFormat, &[effort_map], body)` — 4 种格式统一处理。
 
@@ -203,23 +206,25 @@ pub struct Registry {
 
 // DynProvider — 按能力组合
 DynProvider::new(id, name)
-    .with_completion(model)    // CompletionModel
+    .with_responses(model)       // ResponsesModel
+    .with_chat_completion(model) // ChatCompletionModel
     .with_embedding(model)     // EmbeddingModel
     .with_image_gen(model)     // ImageGenModel
     .with_tts(model)           // TTSModel
     .with_video_gen(model)     // VideoGenModel
     .with_music_gen(model)     // MusicGenModel
 
-// dispatch::register_provider — 按 id + api_mode 路由
+// dispatch::register_provider — Chat/media 与 Responses 能力独立挂载
 fn register_provider(reg, provider, config) {
     let responses = config.api_mode == "responses";
     match provider {
-        "openai" if responses => reg.register_openai_responses(...),
         "openai" => reg.register_openai(...),
-        "deepseek" if responses => reg.register_openai_compat_responses::<DeepSeek>(...),
         "deepseek" => register_compat::<DeepSeek>(...),
         // ...
         other => lookup_custom_provider(other) 或 fallback OpenAI compat
+    }
+    if responses {
+        reg.attach_responses::<Provider>(...);
     }
 }
 ```

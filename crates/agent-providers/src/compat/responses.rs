@@ -1,7 +1,7 @@
 //! OpenAI Responses API 兼容补全模型。
 //!
-//! `OpenAIResponsesModel<Ext>` 与 `OpenAICompletionModel<Ext>` 平行，
-//! 通过 `Ext: OpenAICompatible` 的 hook 方法处理厂商差异。
+//! `OpenAIResponsesModel<Ext>` 直接消费 Agent 的原生 Responses prompt，
+//! 通过独立的 `OpenAIResponsesCompatible` trait 处理线路差异。
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -10,14 +10,28 @@ use anyhow::{anyhow, Context, Result};
 use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
-use super::completion::OpenAICompatible;
 use crate::traits::{FromClient, ProviderClient, ProviderExt, ResponsesModel};
-use crate::types::{CompletionStream, Prompt};
+use crate::types::{CompletionStream, ResponsesRequest};
+
+/// OpenAI 风格 Responses 线路的厂商差异。
+///
+/// 该契约与 Chat Completions 兼容 trait 分离，Agent 模型不依赖旧消息协议。
+pub trait OpenAIResponsesCompatible: ProviderExt {
+    const STORE_FALSE: bool = false;
+    const PARALLEL_TOOLS: bool = false;
+    const REASONING_SUMMARY: bool = false;
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] = &[];
+
+    fn finalize_responses_body(&self, _body: &mut Value) {}
+
+    fn responses_base_url<'a>(&self, base: &'a str) -> std::borrow::Cow<'a, str> {
+        std::borrow::Cow::Borrowed(base)
+    }
+}
 
 /// 泛型 OpenAI Responses API 补全模型。
 ///
-/// `Ext` 为厂商扩展类型，通过 `OpenAICompatible` trait 的 hook 处理厂商差异。
-/// 与 `OpenAICompletionModel<Ext>` 使用相同的 trait 系统，但走 Responses API。
+/// `Ext` 为厂商扩展类型，通过独立 Responses trait 的 hook 处理厂商差异。
 pub struct OpenAIResponsesModel<Ext> {
     http: HttpClient,
     base_url: String,
@@ -56,9 +70,9 @@ impl<Ext: ProviderExt> FromClient<Ext> for OpenAIResponsesModel<Ext> {
 #[async_trait::async_trait]
 impl<Ext> ResponsesModel for OpenAIResponsesModel<Ext>
 where
-    Ext: OpenAICompatible + Clone + Send + Sync + 'static,
+    Ext: OpenAIResponsesCompatible + Clone + Send + Sync + 'static,
 {
-    async fn stream(&self, request: Prompt) -> Result<CompletionStream> {
+    async fn stream(&self, request: ResponsesRequest) -> Result<CompletionStream> {
         if self.api_key.trim().is_empty() {
             return Err(anyhow!("Responses API Key 为空"));
         }
@@ -78,7 +92,7 @@ where
             "input": input,
             "stream": true,
         });
-        if Ext::RESPONSES_STORE_FALSE {
+        if Ext::STORE_FALSE {
             body["store"] = json!(false);
         }
         if !request.instructions.is_empty() {
@@ -106,7 +120,7 @@ where
                 .collect::<Result<_, _>>()?;
             body["tools"] = Value::Array(tools);
             body["tool_choice"] = json!("auto");
-            if Ext::RESPONSES_PARALLEL_TOOLS {
+            if Ext::PARALLEL_TOOLS {
                 body["parallel_tool_calls"] = json!(true);
             }
         }
@@ -120,7 +134,7 @@ where
                     .find(|(k, _)| *k == raw)
                     .map(|(_, v)| *v)
                     .unwrap_or(if raw.is_empty() { "high" } else { raw });
-                if Ext::RESPONSES_REASONING_SUMMARY {
+                if Ext::REASONING_SUMMARY {
                     body["reasoning"] = json!({"effort": effort, "summary": "auto"});
                 } else {
                     body["reasoning"] = json!({"effort": effort});
@@ -175,8 +189,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compat::OpenAICompatible;
-
     #[derive(Debug, Clone, Copy, Default)]
     struct FakeResponses;
 
@@ -188,9 +200,7 @@ mod tests {
         }
     }
 
-    impl OpenAICompatible for FakeResponses {
-        const SUPPORTS_RESPONSES: bool = true;
-    }
+    impl OpenAIResponsesCompatible for FakeResponses {}
 
     #[test]
     fn responses_model_from_client() {

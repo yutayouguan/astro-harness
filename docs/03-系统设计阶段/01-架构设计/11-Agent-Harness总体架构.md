@@ -26,7 +26,7 @@ Agent Harness 不是一段 system prompt，也不是一个工具调用函数。�
 | 术语 | 责任 | 在 Astro 中的对应 |
 | --- | --- | --- |
 | Model | 推理、生成、工具选择 | `agent-providers`、`ChatTarget`、Provider 适配器 |
-| Scaffold | 基础指令、动态上下文、工具 schema、输出契约 | `PromptContract`、`CompletionRequest.tools` |
+| Scaffold | 基础指令、动态上下文、工具 schema、输出契约 | `PromptContract`、`ResponsesRequest.tools` |
 | Harness | 运行循环、状态、工具、权限、恢复和观测 | `agent-core` 为中心的跨 crate 系统 |
 | Framework | 构建 Agent 的 API/组件集 | Astro 整体可被视为框架，但不与 Harness 同义 |
 | Orchestrator | 协调多 Agent/多任务 | `agent-subagents`、Agent Threads 控制面 |
@@ -105,7 +105,7 @@ Harness 的上边界是 `Op`：外部提交用户输入、中断、设置更新�
 - 捕获本次 step 的工具与配置快照；
 - 向 Provider 发起流式请求。
 
-`PromptContract` 区分稳定基础指令和带角色的动态上下文。原生工具 schema 独立位于 `CompletionRequest.tools`，不伪装成 system prompt 文本。
+`PromptContract` 区分稳定基础指令和带角色的动态上下文。原生工具 schema 独立位于 `ResponsesRequest.tools`，不伪装成 system prompt 文本。
 
 ### 5.2 Act
 

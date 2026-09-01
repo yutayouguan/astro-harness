@@ -9,10 +9,10 @@
 | Agent | `agent_responses_stream` / `agent_responses_prompt` | `Vec<agent_protocol::ResponseItem>` | 必须声明 Responses capability；不做 Chat fallback |
 | 通用 Provider | `chat_stream`、媒体/embedding API | `Message` 或专用请求 | 可按调用方需要使用兼容协议 |
 
-`CompletionRequest` 同时保留两种输入字段是边界兼容，不是双 canonical model：
+两条边界使用不同请求类型，不存在双输入或隐式降级：
 
-- `response_input`：Agent 权威输入，Responses adapter 直接序列化；
-- `input`：非 Agent 兼容输入，不得用于重建 Agent 工具历史。
+- `ResponsesRequest`：Agent 权威请求，直接持有 `Vec<ResponseItem>`；
+- `ChatCompletionRequest`：非 Agent 兼容请求，持有 `Vec<Message>`。
 
 ## 核心职责
 
@@ -28,7 +28,7 @@
 | --- | --- |
 | `src/dispatch.rs` | Agent Responses 入口及通用 provider/media 分发 |
 | `src/profile.rs` | `ProviderProfile`、`ApiMode`、Responses capability |
-| `src/types/request.rs` | `CompletionRequest` 及 Agent/兼容输入边界 |
+| `src/types/request.rs` | `ResponsesRequest` 与 `ChatCompletionRequest` 两条请求边界 |
 | `src/types/message.rs` | 非 Agent 和派生投影使用的 `Message`、工具定义 |
 | `src/types/stream.rs` | `CompletionStream`、`StreamChunk`、`Usage` |
 | `src/compat/responses.rs` | Responses 请求序列化与 SSE 解码 |
@@ -49,7 +49,7 @@ agent_responses_stream(
 ).await
 ```
 
-该入口会规范化 provider id、执行 capability gate、强制本次请求为 Responses，并设置 `CompletionRequest.response_input = Some(items)`。Agent 辅助任务使用 `agent_responses_prompt()`，同样受该 gate 约束。
+该入口会规范化 provider id、执行 capability gate，并构造只接受原生 Items 的 `ResponsesRequest`。Agent 辅助任务使用 `agent_responses_prompt()`，同样受该 gate 约束。
 
 ## 关键不变量
 
@@ -58,7 +58,8 @@ agent_responses_stream(
 3. `supports_responses` 是 Agent 可路由能力；`api_mode` 只是通用 adapter 选择，不能越过 capability gate。
 4. fallback 只在首个可见 chunk 前切换，并且候选目标也必须支持 Responses。
 5. Provider usage 统一归一化，但保留 reported 状态；reasoning 是 output 子集，cached input 是 input 子集。
-6. 媒体能力与 Agent completion capability 分开声明。
+6. `ResponsesModel`、`DynResponsesModel` 和 registry 的 `responses_model` 与 Chat compatibility model 分开声明。
+7. 测试注入也直接接收 `ResponsesOverrideInput`，不得为测试把 Items 降级成 `Message`。
 
 ## 文档
 

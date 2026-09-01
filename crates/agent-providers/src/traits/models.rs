@@ -5,13 +5,13 @@ use async_trait::async_trait;
 
 use crate::types::{
     ChatCompletionRequest, CompletionStream, Embedding, GeneratedAudio, GeneratedImage,
-    GeneratedVideo, ImageGenConfig, MusicGenConfig, Prompt, TTSConfig, VideoGenConfig,
+    GeneratedVideo, ImageGenConfig, MusicGenConfig, ResponsesRequest, TTSConfig, VideoGenConfig,
 };
 
 /// Agent 原生 Responses 模型。
 #[async_trait]
 pub trait ResponsesModel: Send + Sync {
-    async fn stream(&self, prompt: Prompt) -> Result<CompletionStream>;
+    async fn stream(&self, prompt: ResponsesRequest) -> Result<CompletionStream>;
 }
 
 /// 非 Agent Chat/Anthropic/Gemini 兼容模型。

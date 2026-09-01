@@ -9,7 +9,7 @@ use crate::types::error::{ProviderError, ProviderResult};
 use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
 use crate::types::message::{FunctionToolDefinition, Message, ToolDefinition};
 use crate::types::request::{
-    ChatCompletionRequest, Prompt, ProviderConfig, ThinkingConfig, ToolChoice,
+    ChatCompletionRequest, ProviderConfig, ResponsesRequest, ThinkingConfig, ToolChoice,
 };
 use crate::types::stream::CompletionStream;
 
@@ -36,7 +36,7 @@ pub async fn chat_stream_direct(
 /// Agent 原生 Responses 管线分发。
 pub async fn responses_stream_direct(
     provider: &str,
-    prompt: Prompt,
+    prompt: ResponsesRequest,
     config: &ProviderConfig,
 ) -> ProviderResult<CompletionStream> {
     let provider = normalize_provider_id(provider);
@@ -87,7 +87,7 @@ pub async fn agent_responses_stream(
     }
     let mut config = config.clone();
     config.api_mode = "responses".to_string();
-    let prompt = Prompt {
+    let prompt = ResponsesRequest {
         model: config.model.clone(),
         instructions,
         input,

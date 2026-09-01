@@ -61,7 +61,7 @@ ToolRegistry -- exposure + namespace + grammar --> native JSON schemas
           |                              dispatch::parse_tool_definition
           |                                           |
           |                                           v
-          |                              CompletionRequest.tools
+          |                              ResponsesRequest.tools
           |                                           |
           |                         +-----------------+------------------+
           |                         |                                    |
@@ -85,7 +85,7 @@ next request: reconstruct the matching native call/output history pair
 
 ### 4.1 为什么需要 tagged union
 
-`CompletionRequest.tools` 不再是“一组看起来像 Function 的 JSON”，而是 `ToolDefinition` 的有类型联合：
+`ResponsesRequest.tools` 不再是“一组看起来像 Function 的 JSON”，而是 `ToolDefinition` 的有类型联合：
 
 | 变体 | Responses wire type | 输入形式 | 主要用途 |
 | --- | --- | --- | --- |
@@ -98,7 +98,7 @@ next request: reconstruct the matching native call/output history pair
 代码位置：
 
 - `crates/agent-providers/src/types/message.rs`：`ToolDefinition` 及其子类型；
-- `crates/agent-providers/src/types/request.rs`：`CompletionRequest.tools`；
+- `crates/agent-providers/src/types/request.rs`：`ResponsesRequest.tools`；
 - `crates/agent-providers/src/dispatch.rs`：从 Registry JSON 解析为强类型定义；
 - `crates/agent-tools/src/engine/registry.rs`：生成模型可见 schema。
 
@@ -244,7 +244,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 
 ### 5.2 当前实际给模型的工具
 
-工具列表不是全局常量。每次 sampling 前，Registry 还会受 toolset 开关、`check_fn` 环境检测、Skill additive override、已激活 Deferred 集合、当前 MCP 连接和 `ToolMode` 影响。因此“实际列表”应以当前 Step 的 `CompletionRequest.tools` 为准，而不是把注册表中的所有 handler 等同于模型可见工具。
+工具列表不是全局常量。每次 sampling 前，Registry 还会受 toolset 开关、`check_fn` 环境检测、Skill additive override、已激活 Deferred 集合、当前 MCP 连接和 `ToolMode` 影响。因此“实际列表”应以当前 Step 的 `ResponsesRequest.tools` 为准，而不是把注册表中的所有 handler 等同于模型可见工具。
 
 在 toolset 启用、运行条件满足且尚未进行 Deferred 激活的默认状态下：
 
@@ -568,7 +568,7 @@ ModelSpec.tool_mode 显式值
 
 ## 10. 关键不变量
 
-1. 工具 schema 通过 `CompletionRequest.tools` 传输，不拼入 system prompt。
+1. 工具 schema 通过 `ResponsesRequest.tools` 传输，不拼入 system prompt。
 2. Responses 原生类型在请求、SSE 事件、执行和历史回放之间保持对称。
 3. Deferred 仅表示可见性，不表示授权。
 4. `tool_search` 激活在下一次 sampling step 生效，MCP 热重载不丢失状态。

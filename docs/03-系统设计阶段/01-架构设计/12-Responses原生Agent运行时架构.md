@@ -17,7 +17,7 @@ Astro 的 Agent 对话链路只接受 Responses API。`agent_protocol::ResponseI
 核心不变量如下：
 
 1. Agent target 必须通过 `supports_agent_responses()`，否则在发请求前拒绝。
-2. Agent 请求必须使用 `CompletionRequest.response_input`；`input: Vec<Message>` 仅属于非 Agent 兼容入口。
+2. Agent 请求必须使用 `ResponsesRequest.input: Vec<ResponseItem>`；`ChatCompletionRequest.input: Vec<Message>` 仅属于非 Agent 兼容入口。
 3. Session 与 rollout 保存原生 `ResponseItem`；UI、搜索或旧接口所需的 `Message` 只能是派生投影，不能反向成为模型历史事实源。
 4. Function、custom、tool search 等 call/output 项必须保持原始类型、标识和顺序；output 紧邻对应 call，不能跨轮重排。
 5. 标题、压缩、记忆回顾、智能审批等 Agent 自有辅助任务同样走 Responses-only 入口。
@@ -42,7 +42,7 @@ TurnInput
   -> EventMsg + TurnItem live projection
 ```
 
-`PromptContract.base_instructions` 对应 Responses 的 `instructions`；用户输入、上下文消息、reasoning、assistant output、tool call 和 tool output 位于 `response_input`；工具 schema 位于独立的 `tools` 字段。三者不能通过拼接 system 文本互相替代。
+`PromptContract.base_instructions` 对应 Responses 的 `instructions`；用户输入、上下文消息、reasoning、assistant output、tool call 和 tool output 位于 `ResponsesRequest.input`；工具 schema 位于独立的 `tools` 字段。三者不能通过拼接 system 文本互相替代。
 
 ## 3. Canonical `ResponseItem`
 
@@ -76,10 +76,10 @@ Agent 调用入口是 `agent_responses_stream()` 和 `agent_responses_prompt()`�
 - 规范化 provider id；
 - 检查 `ProviderProfile.supports_responses` 或 custom provider 配置；
 - 强制本次配置使用 `responses`；
-- 将 `Vec<ResponseItem>` 放入 `CompletionRequest.response_input`；
+- 将 `Vec<ResponseItem>` 放入 `ResponsesRequest.input`；
 - 通过 Responses adapter 发起流式请求。
 
-`chat_stream()`、`CompletionRequest.input` 以及其他协议 adapter 是 provider/tool 层兼容能力，不是 Agent fallback。新增 Provider 若要成为 Agent 模型，必须先实现并验证 Responses 的文本、reasoning、工具调用、工具输出与 usage 契约，再标记 `supports_responses = true`。
+`chat_stream()`、`ChatCompletionRequest` 以及其他协议 adapter 是 provider/tool 层兼容能力，不是 Agent fallback。Agent 只读取 registry 的 `responses_model`，测试注入也直接接收 `ResponsesOverrideInput`；新增 Provider 若要成为 Agent 模型，必须先实现并验证 Responses 的文本、reasoning、工具调用、工具输出与 usage 契约，再标记 `supports_responses = true`。
 
 当前内置 Agent-capable provider 由 `profile.rs` 的 capability 标志决定；文档不复制一份独立白名单，避免配置与实现漂移。
 

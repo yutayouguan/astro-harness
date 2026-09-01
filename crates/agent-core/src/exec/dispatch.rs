@@ -340,7 +340,7 @@ pub struct DefaultAgentThreadDispatch {
     runtime_requests: Arc<RuntimeRequestRegistry>,
     wait_cursor: Arc<AtomicU64>,
     #[cfg(any(test, feature = "test-support"))]
-    chat_override: Option<crate::streaming::ChatOverride>,
+    responses_override: Option<crate::streaming::ResponsesOverride>,
     #[cfg(test)]
     before_followup_atomic_hook: Option<super::agent_runtime::AckSubscribeHook>,
 }
@@ -360,7 +360,7 @@ impl DefaultAgentThreadDispatch {
             runtime_requests: RuntimeRequestRegistry::global(),
             wait_cursor: Arc::new(AtomicU64::new(wait_cursor.0)),
             #[cfg(any(test, feature = "test-support"))]
-            chat_override: None,
+            responses_override: None,
             #[cfg(test)]
             before_followup_atomic_hook: None,
         }
@@ -381,7 +381,7 @@ impl DefaultAgentThreadDispatch {
             runtime_manager,
             runtime_requests: Arc::new(RuntimeRequestRegistry::default()),
             wait_cursor: Arc::new(AtomicU64::new(wait_cursor.0)),
-            chat_override: None,
+            responses_override: None,
             before_followup_atomic_hook: None,
         }
     }
@@ -424,9 +424,9 @@ impl DefaultAgentThreadDispatch {
             runtime: stored.runtime,
             memory_dir: stored.memory_dir,
             #[cfg(any(test, feature = "test-support"))]
-            chat_override: self.chat_override.clone(),
+            responses_override: self.responses_override.clone(),
             #[cfg(not(any(test, feature = "test-support")))]
-            chat_override: None,
+            responses_override: None,
             consume_mailbox,
             startup_tx: None,
             startup_accept_rx: None,
@@ -1196,7 +1196,7 @@ pub struct DefaultDesktopAgentThreadControl {
     runtime_requests: Arc<RuntimeRequestRegistry>,
     control_override: Option<Arc<AgentControl>>,
     #[cfg(any(test, feature = "test-support"))]
-    chat_override: Option<crate::streaming::ChatOverride>,
+    responses_override: Option<crate::streaming::ResponsesOverride>,
     #[cfg(test)]
     close_barrier_hook: Option<super::agent_runtime::AckSubscribeHook>,
 }
@@ -1209,7 +1209,7 @@ impl DefaultDesktopAgentThreadControl {
             runtime_requests: RuntimeRequestRegistry::global(),
             control_override: None,
             #[cfg(any(test, feature = "test-support"))]
-            chat_override: None,
+            responses_override: None,
             #[cfg(test)]
             close_barrier_hook: None,
         }
@@ -1221,14 +1221,14 @@ impl DefaultDesktopAgentThreadControl {
         control: Arc<AgentControl>,
         runtime_manager: Arc<AgentRuntimeManager>,
         runtime_requests: Arc<RuntimeRequestRegistry>,
-        chat_override: Option<crate::streaming::ChatOverride>,
+        responses_override: Option<crate::streaming::ResponsesOverride>,
     ) -> Self {
         Self {
             memory_dir,
             runtime_manager,
             runtime_requests,
             control_override: Some(control),
-            chat_override,
+            responses_override,
             close_barrier_hook: None,
         }
     }
@@ -1239,14 +1239,14 @@ impl DefaultDesktopAgentThreadControl {
         control: Arc<AgentControl>,
         runtime_manager: Arc<AgentRuntimeManager>,
         runtime_requests: Arc<RuntimeRequestRegistry>,
-        chat_override: crate::streaming::ChatOverride,
+        responses_override: crate::streaming::ResponsesOverride,
     ) -> Self {
         Self {
             memory_dir,
             runtime_manager,
             runtime_requests,
             control_override: Some(control),
-            chat_override: Some(chat_override),
+            responses_override: Some(responses_override),
             #[cfg(test)]
             close_barrier_hook: None,
         }
@@ -1284,7 +1284,7 @@ impl DefaultDesktopAgentThreadControl {
             runtime_requests: Arc::clone(&self.runtime_requests),
             wait_cursor: Arc::new(AtomicU64::new(wait_cursor.0)),
             #[cfg(any(test, feature = "test-support"))]
-            chat_override: self.chat_override.clone(),
+            responses_override: self.responses_override.clone(),
             #[cfg(test)]
             before_followup_atomic_hook: None,
         }
@@ -1570,12 +1570,12 @@ mod tests {
             runtime_manager: Arc::clone(&dispatch.runtime_manager),
             runtime_requests: Arc::clone(&dispatch.runtime_requests),
             wait_cursor: Arc::new(AtomicU64::new(dispatch.control.activity_cursor().0)),
-            chat_override: dispatch.chat_override.clone(),
+            responses_override: dispatch.responses_override.clone(),
             before_followup_atomic_hook: None,
         }
     }
 
-    fn scripted_chat(reply: &str) -> crate::streaming::ChatOverride {
+    fn scripted_responses(reply: &str) -> crate::streaming::ResponsesOverride {
         let reply = reply.to_string();
         Arc::new(move |_messages, _tools, _config| {
             let reply = reply.clone();
@@ -1590,7 +1590,7 @@ mod tests {
         })
     }
 
-    fn pending_chat() -> crate::streaming::ChatOverride {
+    fn pending_responses() -> crate::streaming::ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(stream::pending::<anyhow::Result<StreamChunk>>()) as CompletionStream)
@@ -1598,10 +1598,10 @@ mod tests {
         })
     }
 
-    fn gated_scripted_chat(
+    fn gated_scripted_responses(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
-    ) -> crate::streaming::ChatOverride {
+    ) -> crate::streaming::ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             let entered = Arc::clone(&entered);
             let release = Arc::clone(&release);
@@ -1618,34 +1618,24 @@ mod tests {
         })
     }
 
-    fn immediate_error_chat() -> crate::streaming::ChatOverride {
+    fn immediate_error_responses() -> crate::streaming::ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move { anyhow::bail!("injected immediate provider failure") })
         })
     }
 
-    fn capturing_chat(
+    fn capturing_responses(
         captured: Arc<Mutex<Vec<Vec<String>>>>,
         fail_call: Option<usize>,
-    ) -> crate::streaming::ChatOverride {
+    ) -> crate::streaming::ResponsesOverride {
         let calls = Arc::new(AtomicUsize::new(0));
         Arc::new(move |messages, _tools, _config| {
             let call = calls.fetch_add(1, Ordering::SeqCst);
             captured.lock().unwrap().push(
                 messages
-                    .iter()
-                    .flat_map(|message| match message {
-                        providers::Message::User { content } => content
-                            .iter()
-                            .filter_map(|part| match part {
-                                providers::types::message::UserContent::Text { text } => {
-                                    Some(text.clone())
-                                }
-                                _ => None,
-                            })
-                            .collect::<Vec<_>>(),
-                        _ => Vec::new(),
-                    })
+                    .message_summaries()
+                    .into_iter()
+                    .filter_map(|(role, text)| (role == "user").then_some(text))
                     .collect(),
             );
             Box::pin(async move {
@@ -1664,7 +1654,7 @@ mod tests {
 
     fn capturing_config_chat(
         captured: Arc<Mutex<Vec<providers::types::ProviderConfig>>>,
-    ) -> crate::streaming::ChatOverride {
+    ) -> crate::streaming::ResponsesOverride {
         Arc::new(move |_messages, _tools, config| {
             captured.lock().unwrap().push(config.clone());
             Box::pin(async move {
@@ -1678,10 +1668,10 @@ mod tests {
         })
     }
 
-    fn gated_first_turn_chat(
+    fn gated_first_turn_responses(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
-    ) -> crate::streaming::ChatOverride {
+    ) -> crate::streaming::ResponsesOverride {
         let calls = Arc::new(AtomicUsize::new(0));
         Arc::new(move |_messages, _tools, _config| {
             let call = calls.fetch_add(1, Ordering::SeqCst);
@@ -1702,27 +1692,21 @@ mod tests {
         })
     }
 
-    fn gated_tool_then_final_chat(
+    fn gated_tool_then_final_responses(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
         saw_followup: Arc<AtomicBool>,
-    ) -> crate::streaming::ChatOverride {
+    ) -> crate::streaming::ResponsesOverride {
         let calls = Arc::new(AtomicUsize::new(0));
         Arc::new(move |messages, _tools, _config| {
             let call = calls.fetch_add(1, Ordering::SeqCst);
             let entered = Arc::clone(&entered);
             let release = Arc::clone(&release);
             let saw_followup = Arc::clone(&saw_followup);
-            let has_followup = messages.iter().any(|message| match message {
-                providers::Message::User { content } => content.iter().any(|part| {
-                    matches!(
-                        part,
-                        providers::types::message::UserContent::Text { text }
-                            if text.contains("consume in current turn")
-                    )
-                }),
-                _ => false,
-            });
+            let has_followup = messages
+                .message_summaries()
+                .iter()
+                .any(|(role, text)| role == "user" && text.contains("consume in current turn"));
             Box::pin(async move {
                 if call == 0 {
                     entered.notify_one();
@@ -1754,10 +1738,10 @@ mod tests {
         })
     }
 
-    fn gated_first_then_pending_chat(
+    fn gated_first_then_pending_responses(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
-    ) -> crate::streaming::ChatOverride {
+    ) -> crate::streaming::ResponsesOverride {
         let calls = Arc::new(AtomicUsize::new(0));
         Arc::new(move |_messages, _tools, _config| {
             let call = calls.fetch_add(1, Ordering::SeqCst);
@@ -1828,7 +1812,7 @@ mod tests {
             Arc::clone(&dispatch.control),
             Arc::clone(&dispatch.runtime_manager),
             Arc::clone(&dispatch.runtime_requests),
-            dispatch.chat_override.clone(),
+            dispatch.responses_override.clone(),
         )
     }
 
@@ -1939,7 +1923,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let request = spawn_request(&memory_dir);
         let root_material = request.runtime.clone();
         let child = AgentThreadDispatch::spawn_agent(&dispatch, request)
@@ -2186,7 +2170,7 @@ mod tests {
             hooks::HookOutcome::Continue
         });
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let mut parent_request = request_with_hook_bus(&memory_dir, Arc::clone(&bus));
         parent_request.request.task_name = "parent".into();
         let parent = AgentThreadDispatch::spawn_agent(&dispatch, parent_request)
@@ -2203,7 +2187,7 @@ mod tests {
             runtime_manager: Arc::clone(&dispatch.runtime_manager),
             runtime_requests: Arc::clone(&dispatch.runtime_requests),
             wait_cursor: Arc::clone(&dispatch.wait_cursor),
-            chat_override: Some(scripted_chat("done")),
+            responses_override: Some(scripted_responses("done")),
             before_followup_atomic_hook: None,
         };
         let mut leaf_request = request_with_hook_bus(&memory_dir, bus);
@@ -2309,7 +2293,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
             .unwrap();
@@ -2362,7 +2346,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
             .unwrap();
@@ -2423,7 +2407,7 @@ mod tests {
             .ensure_session("root-b", "test")
             .await
             .unwrap();
-        dispatch_a.chat_override = Some(pending_chat());
+        dispatch_a.responses_override = Some(pending_responses());
         let worker_a = AgentThreadDispatch::spawn_agent(&dispatch_a, spawn_request(&memory_a))
             .await
             .unwrap()
@@ -2485,7 +2469,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let worker = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
             .unwrap()
@@ -2542,7 +2526,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
             .await
@@ -2614,7 +2598,7 @@ mod tests {
         let provider_entered = Arc::new(tokio::sync::Notify::new());
         let provider_release = Arc::new(tokio::sync::Notify::new());
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(gated_scripted_chat(
+        dispatch.responses_override = Some(gated_scripted_responses(
             Arc::clone(&provider_entered),
             Arc::clone(&provider_release),
         ));
@@ -2703,7 +2687,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
             .await
@@ -2777,7 +2761,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
             .await
@@ -2848,7 +2832,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
             .unwrap();
@@ -2890,7 +2874,7 @@ mod tests {
             .await
             .unwrap();
         let mut root_dispatch = dispatch(&dir).await;
-        root_dispatch.chat_override = Some(pending_chat());
+        root_dispatch.responses_override = Some(pending_responses());
         let parent = AgentThreadDispatch::spawn_agent(&root_dispatch, spawn_request(&memory_dir))
             .await
             .unwrap()
@@ -2901,7 +2885,7 @@ mod tests {
             parent.thread_id.clone(),
             Arc::clone(&root_dispatch.runtime_manager),
         );
-        child_dispatch.chat_override = Some(pending_chat());
+        child_dispatch.responses_override = Some(pending_responses());
         let mut leaf_request = spawn_request(&memory_dir);
         leaf_request.request.task_name = "leaf".into();
         let leaf = AgentThreadDispatch::spawn_agent(&child_dispatch, leaf_request)
@@ -3042,7 +3026,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
             .unwrap();
@@ -3307,7 +3291,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
             .unwrap();
@@ -3363,7 +3347,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
 
         let result = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -3401,7 +3385,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
         bus.register(hooks::SUBAGENT_START, |_| panic!("injected hook panic"));
         let payloads = Arc::new(Mutex::new(Vec::<hooks::HookPayload>::new()));
@@ -3464,7 +3448,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
         let stop_count = Arc::new(AtomicUsize::new(0));
         let observed = Arc::clone(&stop_count);
@@ -3518,7 +3502,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
         bus.register(hooks::SUBAGENT_STOP, |_| panic!("injected hook panic"));
         let sensitive_probe = Arc::new(());
@@ -3600,7 +3584,7 @@ mod tests {
             hooks::HookOutcome::Continue
         });
 
-        dispatch.chat_override = Some(immediate_error_chat());
+        dispatch.responses_override = Some(immediate_error_responses());
         let errored = AgentThreadDispatch::spawn_agent(
             &dispatch,
             request_with_hook_bus(&memory_dir, Arc::clone(&bus)),
@@ -3631,7 +3615,7 @@ mod tests {
 
         let mut interrupted_request = request_with_hook_bus(&memory_dir, Arc::clone(&bus));
         interrupted_request.request.task_name = "interrupted".into();
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let interrupted = AgentThreadDispatch::spawn_agent(&dispatch, interrupted_request)
             .await
             .unwrap();
@@ -3762,7 +3746,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(immediate_error_chat());
+        dispatch.responses_override = Some(immediate_error_responses());
 
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
@@ -3826,7 +3810,7 @@ mod tests {
             "root-session".into(),
             Arc::new(AgentRuntimeManager::default()),
         );
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let bus = Arc::new(hooks::PluginHookBus::new());
         let start_count = Arc::new(AtomicUsize::new(0));
         let observed = Arc::clone(&start_count);
@@ -3933,7 +3917,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("must not survive cancellation"));
+        dispatch.responses_override = Some(scripted_responses("must not survive cancellation"));
         let hook = super::super::agent_runtime::AckSubscribeHook {
             entered: Arc::new(tokio::sync::Notify::new()),
             release: Arc::new(tokio::sync::Notify::new()),
@@ -4057,7 +4041,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("must not survive cancellation"));
+        dispatch.responses_override = Some(scripted_responses("must not survive cancellation"));
         let hook = super::super::agent_runtime::AckSubscribeHook {
             entered: Arc::new(tokio::sync::Notify::new()),
             release: Arc::new(tokio::sync::Notify::new()),
@@ -4157,7 +4141,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
             .unwrap();
@@ -4706,7 +4690,7 @@ mod tests {
         let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
-        dispatch.chat_override = Some(gated_first_turn_chat(
+        dispatch.responses_override = Some(gated_first_turn_responses(
             Arc::clone(&entered_sampling),
             Arc::clone(&release_sampling),
         ));
@@ -4760,7 +4744,7 @@ mod tests {
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
         let saw_followup = Arc::new(AtomicBool::new(false));
-        dispatch.chat_override = Some(gated_tool_then_final_chat(
+        dispatch.responses_override = Some(gated_tool_then_final_responses(
             Arc::clone(&entered_sampling),
             Arc::clone(&release_sampling),
             Arc::clone(&saw_followup),
@@ -4881,7 +4865,7 @@ mod tests {
             .await
             .unwrap();
         let mut initial = dispatch(&dir).await;
-        initial.chat_override = Some(scripted_chat("initial"));
+        initial.responses_override = Some(scripted_responses("initial"));
         let mut spawn = spawn_request(&memory_dir);
         spawn.request.agent_type = Some("reviewer".into());
         spawn.runtime.project_root = Some(project);
@@ -4945,7 +4929,7 @@ mod tests {
             Arc::new(AgentRuntimeManager::default()),
         );
         let captured = Arc::new(Mutex::new(Vec::new()));
-        recovered.chat_override = Some(capturing_config_chat(Arc::clone(&captured)));
+        recovered.responses_override = Some(capturing_config_responses(Arc::clone(&captured)));
 
         AgentThreadDispatch::followup_task(
             &recovered,
@@ -5011,7 +4995,7 @@ mod tests {
             .await
             .unwrap();
         let mut initial = dispatch(&dir).await;
-        initial.chat_override = Some(scripted_chat("initial"));
+        initial.responses_override = Some(scripted_responses("initial"));
         let mut spawn = spawn_request(&memory_dir);
         spawn.request.model = Some("openai:pinned-model".into());
         let mut runtime_material = spawn.runtime.clone();
@@ -5156,7 +5140,7 @@ mod tests {
             .await
             .unwrap();
         let mut initial = dispatch(&dir).await;
-        initial.chat_override = Some(scripted_chat("done"));
+        initial.responses_override = Some(scripted_responses("done"));
         let mut parent_request = spawn_request(&memory_dir);
         parent_request.request.task_name = "parent".into();
         parent_request.request.agent_type = Some("parent".into());
@@ -5186,7 +5170,7 @@ mod tests {
             runtime_manager: Arc::clone(&initial.runtime_manager),
             runtime_requests: Arc::clone(&initial.runtime_requests),
             wait_cursor: Arc::clone(&initial.wait_cursor),
-            chat_override: initial.chat_override.clone(),
+            responses_override: initial.responses_override.clone(),
             before_followup_atomic_hook: None,
         };
         let mut leaf_request = spawn_request(&memory_dir);
@@ -5221,7 +5205,7 @@ mod tests {
             "root-session".into(),
             Arc::new(AgentRuntimeManager::default()),
         );
-        recovered.chat_override = Some(scripted_chat("recovered"));
+        recovered.responses_override = Some(scripted_responses("recovered"));
         AgentThreadDispatch::followup_task(
             &recovered,
             FollowupAgentDispatchRequest {
@@ -5264,7 +5248,7 @@ mod tests {
             .await
             .unwrap();
         let mut initial = dispatch(&dir).await;
-        initial.chat_override = Some(scripted_chat("done"));
+        initial.responses_override = Some(scripted_responses("done"));
 
         let mut alpha_request = spawn_request(&memory_dir);
         alpha_request.request.task_name = "alpha".into();
@@ -5296,7 +5280,7 @@ mod tests {
             runtime_manager: Arc::clone(&initial.runtime_manager),
             runtime_requests: Arc::clone(&initial.runtime_requests),
             wait_cursor: Arc::clone(&initial.wait_cursor),
-            chat_override: initial.chat_override.clone(),
+            responses_override: initial.responses_override.clone(),
             before_followup_atomic_hook: None,
         };
         let mut leaf_request = spawn_request(&memory_dir);
@@ -5328,7 +5312,7 @@ mod tests {
             alpha.thread_id.clone(),
             Arc::new(AgentRuntimeManager::default()),
         );
-        recovered.chat_override = Some(scripted_chat("must not run"));
+        recovered.responses_override = Some(scripted_responses("must not run"));
 
         let error = AgentThreadDispatch::followup_task(
             &recovered,
@@ -5371,7 +5355,7 @@ mod tests {
             .unwrap();
         let captured = Arc::new(Mutex::new(Vec::new()));
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(capturing_chat(Arc::clone(&captured), Some(1)));
+        dispatch.responses_override = Some(capturing_responses(Arc::clone(&captured), Some(1)));
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
             .unwrap();
@@ -5517,7 +5501,7 @@ mod tests {
         let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
-        dispatch.chat_override = Some(gated_first_turn_chat(
+        dispatch.responses_override = Some(gated_first_turn_responses(
             Arc::clone(&entered_sampling),
             Arc::clone(&release_sampling),
         ));
@@ -5651,7 +5635,7 @@ mod tests {
             .unwrap();
         drop(sessions);
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
             .await
             .unwrap();
@@ -5740,7 +5724,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let dispatch = Arc::new(dispatch);
         let spawn = spawn_request(&memory_dir);
         let runtime_material = spawn.runtime.clone();
@@ -5847,7 +5831,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
             .await
@@ -5945,7 +5929,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(scripted_chat("done"));
+        dispatch.responses_override = Some(scripted_responses("done"));
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
             .await
@@ -6030,7 +6014,7 @@ mod tests {
         let mut dispatch = dispatch(&dir).await;
         let entered_sampling = Arc::new(tokio::sync::Notify::new());
         let release_sampling = Arc::new(tokio::sync::Notify::new());
-        dispatch.chat_override = Some(gated_first_then_pending_chat(
+        dispatch.responses_override = Some(gated_first_then_pending_responses(
             Arc::clone(&entered_sampling),
             Arc::clone(&release_sampling),
         ));
@@ -6167,7 +6151,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let dispatch = Arc::new(dispatch);
         let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
             .await
@@ -6242,7 +6226,7 @@ mod tests {
             .await
             .unwrap();
         let mut dispatch = dispatch(&dir).await;
-        dispatch.chat_override = Some(pending_chat());
+        dispatch.responses_override = Some(pending_responses());
         let checked = Arc::new(tokio::sync::Notify::new());
         let resume = Arc::new(tokio::sync::Notify::new());
         dispatch.before_followup_atomic_hook = Some(crate::exec::agent_runtime::AckSubscribeHook {
@@ -6367,7 +6351,7 @@ mod tests {
             runtime_manager: Arc::clone(&dispatch.runtime_manager),
             runtime_requests: Arc::clone(&dispatch.runtime_requests),
             wait_cursor: Arc::clone(&dispatch.wait_cursor),
-            chat_override: None,
+            responses_override: None,
             before_followup_atomic_hook: None,
         };
         let self_error = AgentThreadDispatch::interrupt_agent(

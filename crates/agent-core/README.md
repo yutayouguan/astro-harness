@@ -63,7 +63,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | `streaming/multi_turn.rs` | 多轮工具循环编排（核心流式主循环） |
 | `streaming/traits.rs` | 三层 Streaming trait 定义 |
 | `streaming/provider.rs` | `ProviderStreamer` — trait 实现 + fallback 接入 |
-| `streaming/fallback.rs` | 聊天主模型首包前故障切换 |
+| `streaming/fallback.rs` | Agent Responses 主模型首包前故障切换 |
 | `streaming/tools_exec.rs` | 单轮工具调用执行（串行 HITL / 并发普通） |
 | `streaming/hitl_bridge.rs` | `astro_hitl` 解析与会话 park/resume 桥 |
 | `streaming/summary.rs` | 迭代预算耗尽后的强制总结轮 |
@@ -82,7 +82,8 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 - `HitlGate` / `HitlRequest` / `HitlResolution` — 人机交互闸门
 - `Interrupt` / `InterruptPending` — 中断状态机
 - `ProviderStreamer` — 流式补全实现，含 fallback 切换
-- `StreamingChat` / `StreamingCompletion` / `StreamingPrompt` — 三层流式 trait
+- `StreamingResponses` — Agent 原生 Responses 流式 trait
+- `ResponsesOverride` / `ResponsesOverrideInput` — 保留 instructions 与 Items 边界的测试注入接缝
 - `CancelSignal` — 可克隆取消信号，供 UI 或上层触发中断
 
 ## Crate 关系
@@ -90,7 +91,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | 方向 | crate | 说明 |
 |------|-------|------|
 | 依赖 | `agent-protocol` | `Op`、`EventMsg`、`TurnItem` 与 canonical `ResponseItem` |
-| 依赖 | `types` | 通用 DTO：ChatTarget、ToolEntry、InteractionMode 及兼容 Message 投影 |
+| 依赖 | `types` | 通用 DTO：ChatTarget、ToolEntry、InteractionMode；`ChatTarget` 是模型路由目标名，不代表 Chat Completions 协议 |
 | 依赖 | `providers` | LLM 流式调用、fallback、media 生成 |
 | 依赖 | `tools` | 工具注册表、分发、审批、ToolContext |
 | 依赖 | `memory` | MemoryManager、配置加载、workspace 引导 |

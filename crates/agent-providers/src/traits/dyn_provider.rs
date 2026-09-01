@@ -11,7 +11,7 @@ use crate::types::media::{
     Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenConfig, MusicGenConfig,
     TTSConfig, VideoGenConfig,
 };
-use crate::types::{ChatCompletionRequest, CompletionStream, Prompt};
+use crate::types::{ChatCompletionRequest, CompletionStream, ResponsesRequest};
 
 // ─── 宏：生成 Dyn trait + blanket impl + Box Clone ──────
 
@@ -53,7 +53,7 @@ macro_rules! dyn_model {
 dyn_model! {
     /// 类型擦除的 Agent Responses 模型。
     DynResponsesModel for ResponsesModel {
-        async fn stream(&self, prompt: Prompt) -> Result<CompletionStream>;
+        async fn stream(&self, prompt: ResponsesRequest) -> Result<CompletionStream>;
     }
 }
 

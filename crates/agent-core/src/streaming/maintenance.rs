@@ -554,7 +554,7 @@ pub(super) async fn run_sampling_request(
         );
     }
     match streamer
-        .stream_chat_with_contract(prompt, prompt_context, history, tool_specs)
+        .stream_responses_with_contract(prompt, prompt_context, history, tool_specs)
         .await
     {
         Ok(s) => {

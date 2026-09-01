@@ -8,40 +8,38 @@
 
 `agent-providers` 是多供应商协议与媒体适配层。其最重要的边界不是“统一成一种 Message”，而是区分：
 
-- **Agent completion**：Responses-only，输入为 canonical `agent_protocol::ResponseItem`；
+- **Agent Responses**：Responses-only，输入为 canonical `agent_protocol::ResponseItem`；
 - **通用/工具/媒体调用**：可保留 `Message` 和厂商原生协议。
 
 因此 `ApiMode` 的多协议枚举属于通用 Provider 层，不是 Agent 模式选项。Agent target 必须通过 `supports_agent_responses()`；不支持 Responses 时在调用前返回 `UnsupportedCapability`。
 
 ## 2. 请求模型
 
-`CompletionRequest` 的关键字段如下：
+Agent 与兼容路径使用两个互不兼容的请求类型：
 
-| 字段 | 语义 |
+| 类型/字段 | 语义 |
 | --- | --- |
-| `instructions` | 独立的稳定指令 |
-| `response_input` | Agent 的 `Vec<ResponseItem>`，Responses adapter 直接序列化 |
-| `input` | 非 Agent 的 `Vec<Message>` 兼容入口 |
-| `tools` | 原生工具定义，不拼入 prompt |
-| `thinking` | 统一 reasoning 配置，adapter 映射厂商差异 |
-| `additional_params` | 明确允许的厂商扩展参数 |
+| `ResponsesRequest.instructions` | Agent 独立稳定指令 |
+| `ResponsesRequest.input` | Agent 的 `Vec<ResponseItem>`，adapter 直接序列化 |
+| `ResponsesRequest.tools` | 原生工具定义，不拼入 prompt |
+| `ChatCompletionRequest.input` | 非 Agent 的 `Vec<Message>` 兼容入口 |
 
-Agent 请求必须满足 `response_input.is_some()` 且 `input.is_empty()`。`Message` 投影只能用于 UI、查询、兼容 API 或明确的局部计算，不可作为恢复后的模型历史。
+两个请求类型没有共享的消息输入字段，因此 Agent 无法在类型层误传 `Vec<Message>`。`Message` 投影只能用于 UI、查询、兼容 API 或明确的局部计算，不可作为恢复后的模型历史。
 
 ## 3. Agent 请求链
 
 ```text
-ProviderStreamer::stream_chat_with_contract
+ProviderStreamer::stream_responses_with_contract
   -> to_response_items_with_context_history
   -> ProviderStreamer::stream_response
   -> try_stream_responses_with_fallback
   -> providers::agent_responses_stream
-  -> CompletionRequest.response_input
-  -> Registry completion model
+  -> ResponsesRequest.input
+  -> Registry responses_model
   -> Responses adapter
 ```
 
-生产 Agent 链路不会调用 `chat_stream()`。测试可以通过 `ChatOverride` 建立隔离 seam；这不是生产协议 fallback。
+生产 Agent 链路不会调用 `chat_stream()`。测试通过 `ResponsesOverride` / `ResponsesOverrideInput` 接收原生 Items，不存在测试专用的 Message 降级路径。
 
 ### 3.1 Target 过滤
 
@@ -67,7 +65,7 @@ Agent 历史由 `ResponseItem` 表示并直接进入 Responses input：
 
 ## 5. Adapter 与 Registry
 
-`Registry` 根据通用配置注册 completion 与媒体能力。Agent 入口先执行 capability gate，再把本次配置固定为 Responses；adapter 选择不能反向覆盖这一决定。
+`Registry` 分别注册 `responses_model`、`chat_completion_model` 与媒体能力。Agent 入口先执行 capability gate，再把本次配置固定为 Responses；adapter 选择不能反向覆盖这一决定。`OpenAIResponsesCompatible` 与 Chat 的 `OpenAICompatible` 也是独立 trait。
 
 Provider profile 描述：
 

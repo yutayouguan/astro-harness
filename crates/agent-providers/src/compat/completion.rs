@@ -60,18 +60,6 @@ pub trait OpenAICompatible: ProviderExt {
     /// Chat Completions 是否原生接受 `developer` role；旧兼容端点降级为 `system`。
     const SUPPORTS_DEVELOPER_ROLE: bool = false;
 
-    /// 是否支持 Responses API（`/responses` 端点）。
-    const SUPPORTS_RESPONSES: bool = false;
-
-    /// Responses API: 是否设置 `store: false`（OpenAI 平台专有）。
-    const RESPONSES_STORE_FALSE: bool = false;
-
-    /// Responses API: 是否启用 `parallel_tool_calls`。
-    const RESPONSES_PARALLEL_TOOLS: bool = false;
-
-    /// Responses API: reasoning 对象是否包含 `summary: "auto"`。
-    const RESPONSES_REASONING_SUMMARY: bool = false;
-
     /// Thinking 请求格式。
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::None;
 
@@ -85,19 +73,6 @@ pub trait OpenAICompatible: ProviderExt {
     /// 仅在需要非 thinking 相关的特殊处理时才需覆盖（如 Azure 删除 model）。
     fn finalize_body(&self, body: &mut Value) {
         apply_thinking_compat(Self::THINKING_FORMAT, Self::EFFORT_MAP, body);
-    }
-
-    /// Responses API 请求体微调。
-    ///
-    /// 在 Responses JSON body 构造完成后、发送前调用。
-    /// 默认空实现；厂商可覆盖以处理 thinking/reasoning 等差异。
-    fn finalize_responses_body(&self, _body: &mut Value) {}
-
-    /// Responses API 的 base URL。
-    ///
-    /// 默认直接返回传入的 base_url。Azure 覆盖此方法追加 `/openai/v1`。
-    fn responses_base_url<'a>(&self, base: &'a str) -> std::borrow::Cow<'a, str> {
-        std::borrow::Cow::Borrowed(base)
     }
 }
 

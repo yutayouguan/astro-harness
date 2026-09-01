@@ -5,7 +5,8 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use crate::compat::{
-    apply_thinking_compat, OpenAICompatible, OpenAICompletionModel, ThinkingFormat,
+    apply_thinking_compat, OpenAICompatible, OpenAICompletionModel, OpenAIResponsesCompatible,
+    ThinkingFormat,
 };
 use crate::traits::{Capabilities, Capable, Nothing, ProviderExt};
 
@@ -34,9 +35,18 @@ impl OpenAICompatible for Azure {
         &[("max", "high"), ("xhigh", "high")];
 
     fn finalize_body(&self, body: &mut Value) {
-        apply_thinking_compat(Self::THINKING_FORMAT, Self::EFFORT_MAP, body);
+        apply_thinking_compat(
+            Self::THINKING_FORMAT,
+            <Self as OpenAICompatible>::EFFORT_MAP,
+            body,
+        );
         body.as_object_mut().map(|obj| obj.remove("model"));
     }
+}
+
+impl OpenAIResponsesCompatible for Azure {
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] =
+        &[("max", "high"), ("xhigh", "high")];
 
     fn responses_base_url<'a>(&self, base: &'a str) -> std::borrow::Cow<'a, str> {
         let b = base.trim_end_matches('/');

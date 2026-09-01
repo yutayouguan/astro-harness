@@ -1,10 +1,10 @@
 //! [`ProviderStreamer`]：包装 fallback 链，实现三层 Streaming trait。
 
+use std::ops::Deref;
 use std::sync::{Arc, Mutex as StdMutex};
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::CompletionStream;
 use providers::ProviderConfig;
 use types::ChatTarget;
@@ -13,10 +13,71 @@ use super::fallback::{try_stream_responses_with_fallback, ActiveTargetMeta};
 use super::traits::StreamingResponses;
 use super::types::{map_new_provider_stream, AssistantContentStream};
 
-/// 测试用 chat 函数覆盖：跳过 dispatch，直接返回脚本化的 CompletionStream。
-pub type ChatOverride = Arc<
+/// 测试用 Responses 调用快照，保留顶层 instructions 与原生 item 历史的边界。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ResponsesOverrideInput {
+    pub instructions: String,
+    pub items: Vec<agent_protocol::ResponseItem>,
+}
+
+impl Deref for ResponsesOverrideInput {
+    type Target = [agent_protocol::ResponseItem];
+
+    fn deref(&self) -> &Self::Target {
+        &self.items
+    }
+}
+
+impl ResponsesOverrideInput {
+    pub fn contains_text(&self, expected: &str) -> bool {
+        self.items.iter().any(|item| match item {
+            agent_protocol::ResponseItem::Message { content, .. } => content.iter().any(|part| {
+                matches!(
+                    part,
+                    agent_protocol::ContentItem::InputText { text }
+                        | agent_protocol::ContentItem::OutputText { text }
+                        if text == expected
+                )
+            }),
+            _ => false,
+        })
+    }
+
+    pub fn message_roles(&self) -> impl Iterator<Item = &str> {
+        self.items.iter().filter_map(|item| match item {
+            agent_protocol::ResponseItem::Message { role, .. } => Some(role.as_str()),
+            _ => None,
+        })
+    }
+
+    pub fn message_summaries(&self) -> Vec<(String, String)> {
+        self.items
+            .iter()
+            .filter_map(|item| match item {
+                agent_protocol::ResponseItem::Message { role, content, .. } => Some((
+                    role.clone(),
+                    content
+                        .iter()
+                        .filter_map(|part| match part {
+                            agent_protocol::ContentItem::InputText { text }
+                            | agent_protocol::ContentItem::OutputText { text } => {
+                                Some(text.as_str())
+                            }
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+/// 测试用 Responses 函数覆盖：跳过 dispatch，直接返回脚本化的 CompletionStream。
+pub type ResponsesOverride = Arc<
     dyn Fn(
-            Vec<ProviderMessage>,
+            ResponsesOverrideInput,
             Vec<serde_json::Value>,
             ProviderConfig,
         ) -> std::pin::Pin<
@@ -36,7 +97,7 @@ pub struct ProviderStreamer {
     /// 最近一次已尝试的目标，包括最终失败的 fallback 目标。
     last_attempt: StdMutex<Option<ActiveTargetMeta>>,
     /// 测试覆盖：非空时跳过 dispatch，直接使用此函数获取 CompletionStream。
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 }
 
 impl ProviderStreamer {
@@ -46,22 +107,22 @@ impl ProviderStreamer {
             base_config,
             last_hit: StdMutex::new(None),
             last_attempt: StdMutex::new(None),
-            chat_override: None,
+            responses_override: None,
         }
     }
 
     /// 构造带测试覆盖的 ProviderStreamer（供集成测试注入脚本化回复）。
-    pub fn with_chat_override(
+    pub fn with_responses_override(
         targets: Vec<ChatTarget>,
         base_config: ProviderConfig,
-        chat_override: ChatOverride,
+        responses_override: ResponsesOverride,
     ) -> Self {
         Self {
             targets,
             base_config,
             last_hit: StdMutex::new(None),
             last_attempt: StdMutex::new(None),
-            chat_override: Some(chat_override),
+            responses_override: Some(responses_override),
         }
     }
 
@@ -96,7 +157,7 @@ impl ProviderStreamer {
 
     /// 使用稳定指令采样，同时保持持久化的角色上下文历史独立分离。
     /// 原生工具 schema 保留在独立的 `tools` 参数中。
-    pub(crate) async fn stream_chat_with_contract(
+    pub(crate) async fn stream_responses_with_contract(
         &self,
         prompt: &crate::prompt::PromptContract,
         prompt_context: &[crate::prompt::context_state::PromptContextEvent],
@@ -126,15 +187,16 @@ impl StreamingResponses for ProviderStreamer {
             *guard = self.targets.first().map(ActiveTargetMeta::from_target);
         }
 
-        let (stream, meta) = if let Some(ref chat_fn) = self.chat_override {
-            // Compatibility test seam. Production requests never take this
-            // projection path.
-            let projected = agent_rollout::reconstruct_response_items(input.clone())?
-                .into_iter()
-                .map(|entry| entry.message)
-                .collect::<Vec<_>>();
-            let messages = crate::prompt::messages::to_provider_messages(&instructions, &projected);
-            let stream = chat_fn(messages, tools, config.clone()).await?;
+        let (stream, meta) = if let Some(ref responses_fn) = self.responses_override {
+            let stream = responses_fn(
+                ResponsesOverrideInput {
+                    instructions,
+                    items: input,
+                },
+                tools,
+                config.clone(),
+            )
+            .await?;
             let meta = ActiveTargetMeta {
                 provider_id: self
                     .targets

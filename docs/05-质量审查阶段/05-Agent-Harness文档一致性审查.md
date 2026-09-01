@@ -27,7 +27,7 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 | --- | --- | --- |
 | 运行层级 | `AstroThread → Session → SessionTask/RegularTask → TurnContext → StepContext → tool attempt` | 已实现 |
 | 执行循环 | 每个 Step 进行模型采样；工具意图经 Harness 执行和回灌后进入下一 Step | 已实现 |
-| Scaffold | `PromptContract` 管基础指令和动态上下文；原生工具 schema 经 `CompletionRequest.tools` 独立传递 | 已实现 |
+| Scaffold | `PromptContract` 管基础指令和动态上下文；原生工具 schema 经 `ResponsesRequest.tools` 独立传递 | 已实现 |
 | Provider | Function / Freeform / Namespace / ToolSearch / WebSearch 是 wire protocol，不等同于本地注册表 | 已实现/部分实现 |
 | 工具可见性 | Direct / Deferred / Hidden / ModelOnly / CodeModeOnly 与授权正交 | 已实现 |
 | 延迟激活 | `tool_search` 搜索 Deferred 工具和 MCP 元数据，激活结果在后续 Step 生效 | 已实现 |

@@ -2,7 +2,9 @@
 
 use reqwest::header::HeaderMap;
 
-use crate::compat::{OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
+use crate::compat::{
+    OpenAICompatible, OpenAICompletionModel, OpenAIResponsesCompatible, ThinkingFormat,
+};
 use crate::traits::{Capabilities, Capable, Nothing, ProviderExt};
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -18,8 +20,11 @@ impl ProviderExt for DeepSeek {
 
 impl OpenAICompatible for DeepSeek {
     const STREAM_USAGE: bool = true;
-    const SUPPORTS_RESPONSES: bool = true;
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::DeepSeek;
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] = &[("max", "max"), ("xhigh", "max")];
+}
+
+impl OpenAIResponsesCompatible for DeepSeek {
     const EFFORT_MAP: &'static [(&'static str, &'static str)] = &[("max", "max"), ("xhigh", "max")];
 }
 

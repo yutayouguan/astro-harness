@@ -132,7 +132,7 @@ pub async fn maybe_generate_session_title(
         let prompt = prompt.clone();
         let target = target.clone();
         async move {
-            complete_title_chat(&target, &prompt)
+            complete_title_response(&target, &prompt)
                 .await
                 .map_err(|e| e.to_string())
         }
@@ -170,7 +170,10 @@ async fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::Ses
     session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await
 }
 
-async fn complete_title_chat(target: &types::ChatTarget, prompt: &str) -> anyhow::Result<String> {
+async fn complete_title_response(
+    target: &types::ChatTarget,
+    prompt: &str,
+) -> anyhow::Result<String> {
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {

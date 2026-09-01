@@ -10,7 +10,7 @@ pub mod think_tag;
 pub use completion::{
     apply_thinking_compat, OpenAICompatible, OpenAICompletionModel, ThinkingFormat,
 };
-pub use responses::OpenAIResponsesModel;
+pub use responses::{OpenAIResponsesCompatible, OpenAIResponsesModel};
 
 /// 规范化 OpenAI 兼容 API 基址（自动补 `/v1` 等后缀）。
 ///

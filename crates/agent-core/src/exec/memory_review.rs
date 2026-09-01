@@ -175,7 +175,7 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
         let digest = digest.clone();
         let target = target.clone();
         async move {
-            complete_review_chat(
+            complete_review_response(
                 &target.backend_id,
                 &target.model,
                 &target.api_key,
@@ -216,7 +216,7 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
     Ok(applied)
 }
 
-async fn complete_review_chat(
+async fn complete_review_response(
     backend_id: &str,
     model: &str,
     api_key: &str,

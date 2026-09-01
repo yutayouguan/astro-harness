@@ -13,7 +13,7 @@ use tokio::sync::Notify;
 
 use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
-    run_multi_turn_stream_with_chat_fn, run_thread_turn_events, ChatOverride,
+    run_multi_turn_stream_with_responses_fn, run_thread_turn_events, ResponsesOverride,
     StreamedAssistantContent, ThreadTurnEventArgs,
 };
 use agent::TurnInput;
@@ -54,7 +54,7 @@ struct ProjectedStreamArgs {
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<agent::HitlGate>>,
     tx: tokio::sync::mpsc::Sender<anyhow::Result<ProjectedStreamItem>>,
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 }
 
 fn project_event(event: Event) -> Vec<ProjectedStreamItem> {
@@ -244,14 +244,14 @@ async fn run_projected_stream(args: ProjectedStreamArgs) {
         pause: args.pause,
         hitl_gate: args.hitl_gate,
         tx: event_tx,
-        chat_override: args.chat_override,
+        responses_override: args.responses_override,
     });
     tokio::join!(run, projected);
 }
 
-async fn run_projected_stream_with_chat_fn(
+async fn run_projected_stream_with_responses_fn(
     session: Arc<agent::Session>,
-    chat_fn: ChatOverride,
+    responses_fn: ResponsesOverride,
     config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
@@ -273,7 +273,7 @@ async fn run_projected_stream_with_chat_fn(
         pause,
         hitl_gate,
         tx,
-        chat_override: Some(chat_fn),
+        responses_override: Some(responses_fn),
     })
     .await;
 }
@@ -283,7 +283,7 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
     let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
     let turn_id = "scripted-tool-turn";
     let turn_context = session.create_turn_context(turn_id.into()).await;
-    let chat = scripted_chat(vec![
+    let chat = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -307,7 +307,7 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
             },
         ],
     ]);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -373,14 +373,14 @@ async fn legacy_xml_tool_markup_is_plain_text_and_never_executes() {
     let turn_context = session.create_turn_context(turn_id.into()).await;
     let legacy_markup =
         "<tool_call>{\"name\":\"echo\",\"arguments\":{\"text\":\"hello\"}}</tool_call>";
-    let chat = scripted_chat(vec![vec![
+    let chat = scripted_responses(vec![vec![
         StreamChunk::Text(legacy_markup.into()),
         StreamChunk::Done {
             finish_reason: "stop".into(),
         },
     ]]);
 
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -420,7 +420,7 @@ async fn async_user_message_is_a_durable_item_separate_from_the_final_answer() {
     let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
     let turn_id = "async-user-message";
     let turn_context = session.create_turn_context(turn_id.into()).await;
-    let chat = scripted_chat(vec![
+    let chat = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -443,7 +443,7 @@ async fn async_user_message_is_a_durable_item_separate_from_the_final_answer() {
             },
         ],
     ]);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -561,7 +561,7 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
     let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
     let turn_id = "stable-tool-ids";
     let turn_context = session.create_turn_context(turn_id.into()).await;
-    let chat = scripted_chat(vec![
+    let chat = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -599,7 +599,7 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
             },
         ],
     ]);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -703,7 +703,7 @@ async fn argument_only_malformed_tool_delta_emits_no_orphan_request() {
     let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
     let turn_id = "malformed-tool-delta";
     let turn_context = session.create_turn_context(turn_id.into()).await;
-    let chat = scripted_chat(vec![vec![
+    let chat = scripted_responses(vec![vec![
         StreamChunk::ToolCallDelta {
             index: 0,
             arguments: r#"{"command":"pwd"}"#.into(),
@@ -712,7 +712,7 @@ async fn argument_only_malformed_tool_delta_emits_no_orphan_request() {
             finish_reason: "tool_calls".into(),
         },
     ]]);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -753,14 +753,14 @@ async fn billing_token_count_total_includes_cached_tokens() {
         reasoning_reported: true,
         ..Default::default()
     };
-    let chat = scripted_chat(vec![vec![
+    let chat = scripted_responses(vec![vec![
         StreamChunk::Text("done".into()),
         StreamChunk::Usage(usage),
         StreamChunk::Done {
             finish_reason: "stop".into(),
         },
     ]]);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -851,7 +851,7 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
     session
         .record_items(vec![types::message::Message::user("generate media")])
         .await;
-    let chat = scripted_chat(vec![
+    let chat = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -875,7 +875,7 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
         ],
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let run = tokio::spawn(run_projected_stream_with_chat_fn(
+    let run = tokio::spawn(run_projected_stream_with_responses_fn(
         Arc::clone(&session),
         chat,
         ProviderConfig::default(),
@@ -1012,7 +1012,7 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
         .await
         .unwrap();
     let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
-    let chat = scripted_chat(vec![
+    let chat = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -1036,7 +1036,7 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
         ],
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let run = tokio::spawn(run_projected_stream_with_chat_fn(
+    let run = tokio::spawn(run_projected_stream_with_responses_fn(
         Arc::clone(&session),
         chat,
         ProviderConfig::default(),
@@ -1114,10 +1114,10 @@ fn assert_bounded_large_media_payload(serialized: Vec<u8>, sentinel: &str, max_b
     assert!(!serialized.contains("data:image/png;base64"));
 }
 
-/// 从脚本化轮次列表构造 [`ChatOverride`]。
+/// 从脚本化轮次列表构造 [`ResponsesOverride`]。
 ///
 /// 每次调用消费一轮 chunks；轮次用尽后返回默认 "done" 回复。
-fn scripted_chat(rounds: Vec<Vec<StreamChunk>>) -> ChatOverride {
+fn scripted_responses(rounds: Vec<Vec<StreamChunk>>) -> ResponsesOverride {
     let rounds = Arc::new(tokio::sync::Mutex::new(rounds));
     Arc::new(move |_msgs, _tools, _cfg| {
         let rounds = rounds.clone();
@@ -1141,11 +1141,11 @@ fn scripted_chat(rounds: Vec<Vec<StreamChunk>>) -> ChatOverride {
 }
 
 /// Boom 型 chat override：每次调用均返回错误。
-fn boom_chat() -> ChatOverride {
+fn boom_responses() -> ResponsesOverride {
     Arc::new(move |_msgs, _tools, _cfg| Box::pin(async move { Err(anyhow::anyhow!("boom")) }))
 }
 
-fn pending_chat() -> ChatOverride {
+fn pending_responses() -> ResponsesOverride {
     Arc::new(move |_msgs, _tools, _cfg| {
         Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
     })
@@ -1161,15 +1161,13 @@ async fn regular_task_owns_initial_input_persistence() {
             .unwrap(),
     );
     let saw_initial_input = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let chat_fn: ChatOverride = {
+    let responses_fn: ResponsesOverride = {
         let saw_initial_input = Arc::clone(&saw_initial_input);
         Arc::new(move |messages, _tools, _config| {
             let saw_initial_input = Arc::clone(&saw_initial_input);
             Box::pin(async move {
                 saw_initial_input.store(
-                    messages
-                        .iter()
-                        .any(|message| message.text_content() == "owned by regular task"),
+                    messages.contains_text("owned by regular task"),
                     Ordering::SeqCst,
                 );
                 Ok(Box::pin(futures::stream::iter(vec![
@@ -1205,7 +1203,7 @@ async fn regular_task_owns_initial_input_persistence() {
         pause: PauseControl::new(),
         hitl_gate: None,
         tx,
-        chat_override: Some(chat_fn),
+        responses_override: Some(responses_fn),
     })
     .await;
     while rx.recv().await.is_some() {}
@@ -1246,7 +1244,7 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
         pause: PauseControl::new(),
         hitl_gate: None,
         tx,
-        chat_override: Some(pending_chat()),
+        responses_override: Some(pending_responses()),
     })
     .await;
 
@@ -1295,7 +1293,7 @@ async fn regular_task_prepare_error_emits_error_then_done() {
         pause: PauseControl::new(),
         hitl_gate: None,
         tx,
-        chat_override: Some(pending_chat()),
+        responses_override: Some(pending_responses()),
     })
     .await;
 
@@ -1332,7 +1330,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     let saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let first_started = Arc::new(Notify::new());
     let release_first = Arc::new(Notify::new());
-    let chat_fn: ChatOverride = {
+    let responses_fn: ResponsesOverride = {
         let calls = Arc::clone(&calls);
         let saw_follow_up = Arc::clone(&saw_follow_up);
         let first_started = Arc::clone(&first_started);
@@ -1344,11 +1342,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
             let release_first = Arc::clone(&release_first);
             Box::pin(async move {
                 let call = calls.fetch_add(1, Ordering::SeqCst);
-                if call > 0
-                    && messages
-                        .iter()
-                        .any(|message| message.text_content() == "follow up")
-                {
+                if call > 0 && messages.contains_text("follow up") {
                     saw_follow_up.store(true, Ordering::SeqCst);
                 }
                 if call == 0 {
@@ -1369,7 +1363,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     let run = tokio::spawn({
         let session = Arc::clone(&session);
         async move {
-            run_projected_stream_with_chat_fn(
+            run_projected_stream_with_responses_fn(
                 session,
                 chat_fn,
                 ProviderConfig {
@@ -1434,7 +1428,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
             .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::Text("thinking…".into()),
             StreamChunk::ToolCallStart {
@@ -1469,7 +1463,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             cfg,
@@ -1556,7 +1550,7 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
         .record_items(vec![types::message::Message::user("call a tool")])
         .await;
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -1581,7 +1575,7 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
-    run_projected_stream_with_chat_fn(
+    run_projected_stream_with_responses_fn(
         session,
         chat_fn,
         ProviderConfig {
@@ -1702,7 +1696,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
             .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::Thinking("deep ".into()),
             StreamChunk::Thinking("thought".into()),
@@ -1739,7 +1733,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             cfg,
@@ -1810,7 +1804,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
         .await;
     let session = Arc::new(agent);
 
-    let chat_fn = scripted_chat(vec![vec![
+    let responses_fn = scripted_responses(vec![vec![
         StreamChunk::Text("hello".into()),
         StreamChunk::Usage(Usage::from_parts(3, 2)),
         StreamChunk::Done {
@@ -1826,7 +1820,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             cfg,
@@ -1895,7 +1889,7 @@ async fn post_llm_call_observes_raw_candidate_before_final_transform() {
     let session = Arc::new(agent);
     let session_for_check = Arc::clone(&session);
 
-    let chat_fn = scripted_chat(vec![vec![
+    let responses_fn = scripted_responses(vec![vec![
         StreamChunk::Text("hello world".into()),
         StreamChunk::Usage(Usage::from_parts(3, 2)),
         StreamChunk::Done {
@@ -1911,7 +1905,7 @@ async fn post_llm_call_observes_raw_candidate_before_final_transform() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             cfg,
@@ -1960,7 +1954,7 @@ async fn stop_fires_at_terminal_boundary_without_disk_write() {
         .await;
     let session = Arc::new(agent);
 
-    let chat_fn = scripted_chat(vec![vec![
+    let responses_fn = scripted_responses(vec![vec![
         StreamChunk::Text("hi there".into()),
         StreamChunk::Done {
             finish_reason: "stop".into(),
@@ -1975,7 +1969,7 @@ async fn stop_fires_at_terminal_boundary_without_disk_write() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             cfg,
@@ -2024,7 +2018,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     let session = Arc::new(agent);
     let session_for_check = Arc::clone(&session);
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         // round 1: 写盘工具调用，置位 turn_wrote_disk
         vec![
             StreamChunk::ToolCallStart {
@@ -2072,7 +2066,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             cfg,
@@ -2216,7 +2210,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
         a.record_items(vec![types::message::Message::user("hi")])
             .await;
     }
-    let chat_fn = scripted_chat(vec![vec![
+    let responses_fn = scripted_responses(vec![vec![
         StreamChunk::Text("a".into()),
         StreamChunk::Usage(Usage::from_parts(1, 1)),
         StreamChunk::Text("b".into()),
@@ -2228,7 +2222,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -2283,11 +2277,11 @@ async fn error_has_single_error_terminal_before_done() {
         a.record_items(vec![types::message::Message::user("x")])
             .await;
     }
-    let chat_fn = boom_chat();
+    let responses_fn = boom_responses();
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -2356,7 +2350,7 @@ async fn stream_failure_emits_one_failed_post_llm_call_with_partial_length() {
         .record_items(vec![types::message::Message::user("x")])
         .await;
     let session = Arc::new(agent);
-    let chat_fn: ChatOverride = Arc::new(move |_messages, _tools, _config| {
+    let responses_fn: ResponsesOverride = Arc::new(move |_messages, _tools, _config| {
         Box::pin(async move {
             let chunks: Vec<anyhow::Result<StreamChunk>> = vec![
                 Ok(StreamChunk::Text("partial".into())),
@@ -2368,7 +2362,7 @@ async fn stream_failure_emits_one_failed_post_llm_call_with_partial_length() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -2419,9 +2413,9 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     let pause = PauseControl::new();
     let run_pause = pause.clone();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            pending_chat(),
+            pending_responses(),
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -2473,7 +2467,7 @@ async fn tool_call_delta_and_memory_path() {
             .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -2504,7 +2498,7 @@ async fn tool_call_delta_and_memory_path() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -2563,7 +2557,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
             .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -2595,7 +2589,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -2712,7 +2706,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-allow";
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -2742,7 +2736,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -2884,7 +2878,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-deny";
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -2914,7 +2908,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -3024,7 +3018,7 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
             .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
@@ -3055,7 +3049,7 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
             chat_fn,
             ProviderConfig {

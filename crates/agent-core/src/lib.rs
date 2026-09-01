@@ -44,9 +44,9 @@ pub use runtime::{
 };
 /// 流式 API re-export。
 pub use streaming::{
-    run_multi_turn_events_with_chat_fn, run_multi_turn_stream_with_chat_fn, run_thread_turn_events,
-    ChatOverride, ProviderStreamer, StreamedAssistantContent, StreamingResponses,
-    ThreadTurnEventArgs,
+    run_multi_turn_events_with_responses_fn, run_multi_turn_stream_with_responses_fn,
+    run_thread_turn_events, ProviderStreamer, ResponsesOverride, ResponsesOverrideInput,
+    StreamedAssistantContent, StreamingResponses, ThreadTurnEventArgs,
 };
 /// 工具注册表（实现位于 `tools` crate）。
 pub use tools::ToolRegistry;

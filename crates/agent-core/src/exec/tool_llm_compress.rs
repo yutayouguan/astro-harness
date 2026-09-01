@@ -54,7 +54,7 @@ pub fn make_llm_compress_view(
     )
 }
 
-async fn complete_compaction_chat(
+async fn complete_compaction_response(
     target: &types::ChatTarget,
     prompt: &str,
     max_tokens: u32,
@@ -110,7 +110,7 @@ pub async fn summarize_tool_result(
     let max_tokens = u32::try_from((max_chars / 3).clamp(256, 1_024)).unwrap_or(512);
     let mut last_err = None;
     for target in targets.iter().take(2) {
-        match complete_compaction_chat(target, &prompt, max_tokens).await {
+        match complete_compaction_response(target, &prompt, max_tokens).await {
             Ok(text) => {
                 return Ok(make_llm_compress_view(
                     tool_name,

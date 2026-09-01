@@ -1,8 +1,8 @@
-//! Rig 风格流式分层与多轮工具循环。
+//! Responses 原生流式抽象与多轮工具循环。
 //!
 //! 本模块将 Provider 原始 chunk 流映射为 Agent 语义事件，并实现
-//! `StreamingCompletion` / `StreamingChat` / `StreamingPrompt` 三层 trait，
-//! 最终在 canonical Thread task 中驱动「LLM 流式 → 工具执行 → 再请求」闭环。
+//! `StreamingResponses` trait 在 canonical Thread task 中驱动
+//! 「LLM 流式 → 工具执行 → 再请求」闭环。
 //!
 //! 子模块划分：
 //! - [`types`]：Provider assistant 内容类型（`StreamedAssistantContent`）
@@ -14,7 +14,7 @@
 //! - [`tools_exec`]：单轮工具调用执行（串行 HITL 路径 / 并发路径）
 //! - [`multi_turn`]：多轮工具循环编排（本模块的核心）
 
-/// 聊天主模型故障切换（首包前 fallback）。
+/// Responses 主模型故障切换（首包前 fallback）。
 pub mod fallback;
 /// Astro HITL 桥：`astro_hitl` 解析与当前会话 park/resume。
 pub(crate) mod hitl_bridge;
@@ -32,16 +32,16 @@ pub mod run_state;
 mod summary;
 /// 单轮工具调用执行：串行（HITL/危险命令）与并发（普通工具）。
 mod tools_exec;
-/// 三层 Streaming trait。
+/// Agent Responses streaming trait。
 mod traits;
 /// 流式事件与内容类型。
 mod types;
 
 pub use multi_turn::{
-    run_multi_turn_events_with_chat_fn, run_multi_turn_stream_with_chat_fn, run_thread_turn_events,
-    ThreadTurnEventArgs,
+    run_multi_turn_events_with_responses_fn, run_multi_turn_stream_with_responses_fn,
+    run_thread_turn_events, ThreadTurnEventArgs,
 };
-pub use provider::{ChatOverride, ProviderStreamer};
+pub use provider::{ProviderStreamer, ResponsesOverride, ResponsesOverrideInput};
 pub use run_state::{RunPhase, RunRequirements, RunState};
 pub use traits::StreamingResponses;
 pub use types::{AssistantContentStream, StreamedAssistantContent};

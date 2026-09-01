@@ -58,7 +58,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 |---|---|---|
 | `crates/agent-core` | `agent` | Agent 运行时核心：`Session` 状态机、`AstroThread` 句柄、`submission_loop` 有序提交、`SessionTask`/`ActiveTurn` 任务生命周期、`TurnContext`/`StepContext` 层级上下文、工具路由（`ToolRouter`）、压缩、HITL、hooks、prompt 组装、`git_worktree`（项目根解析与 worktree 隔离）。 |
 | `crates/agent-config` | `agent-config` | 分层配置原语：`ConfigLayer`、`ConfigLayerSource`（4 级优先级）、`ConfigKeyPath`、provenance 追溯。无产品特有字段，不做文件系统发现。 |
-| `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：trait 系统（`OpenAICompatible` + `ThinkingFormat`）、数据驱动兼容、Responses API（`upgrade_to_responses` 统一注册，参见 `RESPONSES-API.md`）、TOML 自定义 provider、`ProviderProfile` 表、流式 `ChatStream`、fallback 链。支持 Google Interactions、OpenAI、Claude、DeepSeek、MiniMax、Ollama、Azure、百炼、混元等 15+ 厂商。 |
+| `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：Agent 使用独立 `ResponsesModel` / `ResponsesRequest`，Chat 兼容使用 `ChatCompletionModel` / `ChatCompletionRequest`；`attach_responses` 挂载 Responses 能力，二者不相互升级或降级。另含 TOML 自定义 provider、`ProviderProfile`、流式解析与 fallback。 |
 | `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap、权限审计。 |
 | `crates/agent-subagents` | `subagents` | Codex V2 Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.astro` 自定义 agent 配置。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
@@ -171,7 +171,7 @@ id = "corp-v3"
 context_window = 128000
 reasoning = true
 ```
-自定义 provider 统一走 Responses API，由 `ConfigDrivenCompletionModel` 实现。TOML 声明的模型元数据在启动时注入 `models.json` 缓存。
+自定义 provider 统一走 Responses API，由 `ConfigDrivenResponsesModel` 实现。TOML 声明的模型元数据在启动时注入 `models.json` 缓存。
 
 **模型元数据**（三层合并）：API 厂商端点发现 → OpenRouter 模型表 enrich → 已知能力补丁 (`apply_known_capability_overrides`)。合并结果持久化到 `~/.astro/cache/models.json`，前端和运行时共用。
 

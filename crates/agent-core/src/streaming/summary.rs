@@ -80,7 +80,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     };
 
     let raw_stream = match streamer
-        .stream_chat_with_contract(prompt, &prompt_context, &history, Vec::new())
+        .stream_responses_with_contract(prompt, &prompt_context, &history, Vec::new())
         .await
     {
         Ok(s) => s,

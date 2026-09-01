@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::traits::ResponsesModel;
-use crate::types::{CompletionStream, Prompt};
+use crate::types::{CompletionStream, ResponsesRequest};
 
 /// 自定义模型声明（TOML 中的 `[[custom_providers.<id>.models]]`）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,7 +121,7 @@ impl ConfigDrivenResponsesModel {
 
 #[async_trait::async_trait]
 impl ResponsesModel for ConfigDrivenResponsesModel {
-    async fn stream(&self, request: Prompt) -> Result<CompletionStream> {
+    async fn stream(&self, request: ResponsesRequest) -> Result<CompletionStream> {
         if self.api_key.trim().is_empty() {
             anyhow::bail!("{} API Key 为空", self.provider_id);
         }

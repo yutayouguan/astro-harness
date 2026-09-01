@@ -16,7 +16,9 @@ Provider 成为 Agent target 必须同时满足：
 5. 保持 call/output id、类型与顺序；
 6. 正确解析文本、reasoning、tool call、usage 和终态 SSE。
 
-不要先注册 Chat Completions 再把 Agent 请求隐式升级或降级。通用 registry 可以复用 adapter，但 Agent capability 必须显式成立。
+registry 可以同时保存 Responses、Chat 和媒体能力，但它们是独立槽位。Agent 只读取 `responses_model`；`attach_responses()` 只是挂载 Responses adapter，不替换、不升级 Chat model，也不存在失败后改发 Chat 的路径。
+
+Agent 请求使用 `ResponsesRequest`：顶层 `instructions`、`Vec<ResponseItem>`、typed tools、tool choice、parallel tools、thinking 与 token 参数各自保留。非 Agent 调用使用独立的 `ChatCompletionRequest`，两者没有共享的消息输入字段。
 
 ## 当前内置能力
 
@@ -48,6 +50,7 @@ Anthropic、Google/Gemini、Ollama、OpenRouter、智谱、Moonshot、火山、�
 - 首个 chunk 前网络/5xx fallback；
 - 400/401/429 不被错误降级到 Chat Completions；
 - cached input、reasoning、reported total usage。
+- 测试覆盖接缝直接接收 `ResponsesOverrideInput`，不得将 Items 投影为 Chat `Message`。
 
 ## 相关文档
 

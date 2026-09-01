@@ -163,8 +163,11 @@ impl Registry {
         base_url: Option<&str>,
         model: &str,
     ) where
-        Ext:
-            crate::compat::OpenAICompatible + crate::traits::ProviderExt + Default + Copy + 'static,
+        Ext: crate::compat::OpenAIResponsesCompatible
+            + crate::traits::ProviderExt
+            + Default
+            + Copy
+            + 'static,
     {
         use crate::traits::FromClient;
         let ext = Ext::default();
@@ -281,6 +284,16 @@ mod tests {
         assert!(p.embedding_model().is_some());
         assert!(p.image_gen_model().is_some());
         assert!(p.tts_model().is_some());
+    }
+
+    #[test]
+    fn responses_and_chat_models_are_independent_slots() {
+        let mut reg = Registry::new();
+        reg.register_openai("test-key", None, "gpt-5.6");
+        reg.attach_responses::<crate::impls::openai::OpenAI>("openai", "test-key", None, "gpt-5.6");
+        let provider = reg.get("openai").unwrap();
+        assert!(provider.responses_model().is_some());
+        assert!(provider.chat_completion_model().is_some());
     }
 
     #[test]

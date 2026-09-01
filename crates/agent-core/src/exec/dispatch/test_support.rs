@@ -22,7 +22,7 @@ use super::{
     RuntimeRequestRegistry,
 };
 use crate::exec::agent_runtime::AgentRuntimeManager;
-use crate::streaming::ChatOverride;
+use crate::streaming::ResponsesOverride;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScriptedTurn {
@@ -44,32 +44,24 @@ pub struct LifecycleTestApp {
     control: Arc<AgentControl>,
     runtime_manager: Arc<AgentRuntimeManager>,
     runtime_requests: Arc<RuntimeRequestRegistry>,
-    chat_override: ChatOverride,
+    responses_override: ResponsesOverride,
     provider_calls: Arc<Mutex<Vec<CapturedProviderCall>>>,
     hook_bus: Arc<hooks::PluginHookBus>,
     hook_events: Arc<Mutex<Vec<String>>>,
 }
 
-fn scripted_chat(
+fn scripted_responses(
     script: Vec<ScriptedTurn>,
-) -> (ChatOverride, Arc<Mutex<Vec<CapturedProviderCall>>>) {
+) -> (ResponsesOverride, Arc<Mutex<Vec<CapturedProviderCall>>>) {
     let script = Arc::new(Mutex::new(VecDeque::from(script)));
     let calls = Arc::new(Mutex::new(Vec::new()));
     let observed = Arc::clone(&calls);
-    let chat: ChatOverride = Arc::new(
-        move |messages: Vec<providers::Message>,
+    let chat: ResponsesOverride = Arc::new(
+        move |request: crate::streaming::ResponsesOverrideInput,
               tools: Vec<serde_json::Value>,
               config: providers::ProviderConfig| {
             observed.lock().unwrap().push(CapturedProviderCall {
-                messages: messages
-                    .iter()
-                    .map(|message| {
-                        (
-                            message.role().as_str().to_string(),
-                            message.text_content().to_string(),
-                        )
-                    })
-                    .collect(),
+                messages: request.message_summaries(),
                 tool_names: tools
                     .iter()
                     .filter_map(|tool| {
@@ -151,7 +143,7 @@ impl LifecycleTestApp {
             },
         )
         .await?;
-        let (chat_override, provider_calls) = scripted_chat(script);
+        let (responses_override, provider_calls) = scripted_responses(script);
         let (hook_bus, hook_events) = lifecycle_hooks();
         Ok(Self {
             memory_dir,
@@ -159,7 +151,7 @@ impl LifecycleTestApp {
             control,
             runtime_manager: Arc::new(AgentRuntimeManager::default()),
             runtime_requests: Arc::new(RuntimeRequestRegistry::default()),
-            chat_override,
+            responses_override,
             provider_calls,
             hook_bus,
             hook_events,
@@ -176,7 +168,7 @@ impl LifecycleTestApp {
             runtime_manager: Arc::clone(&self.runtime_manager),
             runtime_requests: Arc::clone(&self.runtime_requests),
             wait_cursor: Arc::new(AtomicU64::new(self.control.activity_cursor().0)),
-            chat_override: Some(Arc::clone(&self.chat_override)),
+            responses_override: Some(Arc::clone(&self.responses_override)),
             #[cfg(test)]
             before_followup_atomic_hook: None,
         })
@@ -188,7 +180,7 @@ impl LifecycleTestApp {
             Arc::clone(&self.control),
             Arc::clone(&self.runtime_manager),
             Arc::clone(&self.runtime_requests),
-            Arc::clone(&self.chat_override),
+            Arc::clone(&self.responses_override),
         )
     }
 
@@ -315,7 +307,7 @@ impl LifecycleTestApp {
         .await?;
         self.runtime_manager = Arc::new(AgentRuntimeManager::default());
         self.runtime_requests = Arc::new(RuntimeRequestRegistry::default());
-        (self.chat_override, self.provider_calls) = scripted_chat(script);
+        (self.responses_override, self.provider_calls) = scripted_responses(script);
         let previous_hook_events = Arc::clone(&self.hook_events);
         (self.hook_bus, self.hook_events) = lifecycle_hooks();
         let sessions =

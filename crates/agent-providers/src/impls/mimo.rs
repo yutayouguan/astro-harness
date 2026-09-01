@@ -2,7 +2,9 @@
 
 use reqwest::header::HeaderMap;
 
-use crate::compat::{OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
+use crate::compat::{
+    OpenAICompatible, OpenAICompletionModel, OpenAIResponsesCompatible, ThinkingFormat,
+};
 use crate::traits::{Capabilities, Capable, Nothing, ProviderExt};
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -18,8 +20,12 @@ impl ProviderExt for Mimo {
 
 impl OpenAICompatible for Mimo {
     const STREAM_USAGE: bool = true;
-    const SUPPORTS_RESPONSES: bool = true;
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::ReasoningEffort;
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] =
+        &[("max", "high"), ("xhigh", "high")];
+}
+
+impl OpenAIResponsesCompatible for Mimo {
     const EFFORT_MAP: &'static [(&'static str, &'static str)] =
         &[("max", "high"), ("xhigh", "high")];
 }
