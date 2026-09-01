@@ -2,7 +2,7 @@
 
 > **Harness 边界（2026-09-01）**：Provider 是 Model 网关和协议适配层，不拥有 Agent turn、工具权限或持久化生命周期。Agent 通过 `ResponsesRequest` 交付原生 Items/tool schemas；非 Agent 兼容调用使用 `ChatCompletionRequest`。两条请求类型不互相降级。原生工具契约见 [Codex 原生工具协议](../../04-详细设计阶段/04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md)。
 
-> 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-08-22
+> 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-09-01
 
 ## 架构概览
 
@@ -135,7 +135,7 @@ default_effort = "high"
 | `env_keys` | 环境变量名列表 |
 | `supports_responses` | 是否支持 Responses API 模式切换（前端 UI 标志） |
 | `supports_stream_usage` | 是否支持 stream_options.include_usage |
-| `image_mode` | 图片生成协议路由（OpenAi / GoogleInteractions / MiniMax） |
+| `image_mode` | 图片生成协议路由（OpenAi / AzureOpenAiV1 / GoogleInteractions / MiniMax） |
 | `default_*_model` | 各模态默认模型名 |
 
 ---
@@ -182,16 +182,22 @@ pub struct ChatTarget {
 
 ## 能力矩阵（实际实现）
 
-| 能力 | Anthropic | OpenAI | Google | DeepSeek | MiniMax | 混元 | 智谱 | 百炼 | 火山 |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| 聊天 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Responses API | — | ✓ | — | ✓ | ✓ | — | — | — | — |
-| 嵌入 | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 图像生成 | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| TTS | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 视频生成 | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 音乐生成 | — | — | ✓ | — | ✓ | ✓ | ✓ | — | ✓ |
-| ASR | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 能力 | Anthropic | OpenAI | Google | Azure | DeepSeek | MiniMax | 混元 | 智谱 | 百炼 | 火山 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| 聊天 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Responses API | — | ✓ | — | ✓ | ✓ | ✓ | — | — | — | — |
+| 嵌入 | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 图像生成 | — | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| TTS | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 视频生成 | — | — | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 音乐生成 | — | — | ✓ | — | — | ✓ | ✓ | ✓ | — | ✓ |
+| ASR | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+### Azure Foundry `gpt-image-2`
+
+Azure 图片生成使用独立的 `AzureOpenAiV1` 路由：Foundry endpoint 必须以 `/openai/v1` 结尾，请求使用 Bearer 认证，不复用 Azure Chat 的 `api-key` header。当前契约固定为 `gpt-image-2`、`n=1`、`1024x1024`、PNG。
+
+详细配置见 [Azure AI Foundry `gpt-image-2` 使用说明](../../azure-gpt-image-2.md)，分层和安全契约见 [接入设计](../../superpowers/specs/2026-09-01-azure-gpt-image-2-design.md)。
 
 ---
 
@@ -219,6 +225,7 @@ fn register_provider(reg, provider, config) {
     let responses = config.api_mode == "responses";
     match provider {
         "openai" => reg.register_openai(...),
+        "azure" => reg.register_azure(...),
         "deepseek" => register_compat::<DeepSeek>(...),
         // ...
         other => lookup_custom_provider(other) 或 fallback OpenAI compat

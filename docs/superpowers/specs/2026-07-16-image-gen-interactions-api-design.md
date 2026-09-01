@@ -1,12 +1,16 @@
 # image_gen 升级至 Gemini Interactions API（Nano Banana）
 
-日期：2026-07-16  
-状态：已批准，待实现  
-参考：[Nano Banana 图片生成](https://ai.google.dev/gemini-api/docs/image-generation?hl=zh-cn)
+> 日期：2026-07-16
+>
+> 状态：已实现；2026-09-01 补充 Azure Foundry v1 路径
+>
+> 参考：[Nano Banana 图片生成](https://ai.google.dev/gemini-api/docs/image-generation?hl=zh-cn)
+
+Azure `gpt-image-2` 的独立契约见 [Azure AI Foundry `gpt-image-2` 接入设计](./2026-09-01-azure-gpt-image-2-design.md)。
 
 ## 背景
 
-当前 `image_gen` 仅支持 `prompt` + 可选 `aspect_ratio`。Google 路径优先走 OpenAI 兼容 `POST …/images/generations`，失败再回退原生 `generateContent`（`responseModalities: IMAGE`）。
+本设计提出时，`image_gen` 仅支持 `prompt` + 可选 `aspect_ratio`。Google 路径优先走 OpenAI 兼容 `POST …/images/generations`，失败再回退原生 `generateContent`（`responseModalities: IMAGE`）。
 
 官方文档已将 **Interactions API**（`POST /v1beta/interactions`）作为 Nano Banana 图片生成的主推荐接口，并覆盖：
 
@@ -22,7 +26,7 @@
 
 1. Google 出图主路径改为 Interactions API，对齐官方能力全集。
 2. 扩展 `image_gen` 工具参数，风格与 `video_gen` 一致（路径相对工作区、结果含可复用 id）。
-3. OpenAI 出图路径保持现有 `Provider::generate_image`，高级参数在 OpenAI 上忽略并注明。
+3. OpenAI / Azure / MiniMax 出图路径保持 prompt-only；高级参数在请求前拒绝。
 4. 产物仍写入 `workspace/generated/images/`；成功返回 `interaction_id` 供多轮编辑。
 
 ## 非目标
@@ -38,9 +42,9 @@
 | 项 | 选择 |
 |----|------|
 | 范围 | 全做：基础出图 + 参考图 + 多轮 + Search + thinking + 视频转图 |
-| 实现路径 | 方案 2：工具层 Google 直连 Interactions；OpenAI 仍走 trait |
-| Interactions 失败 | 不回退 OpenAI 兼容出图（避免参数语义漂移） |
-| 默认模型 | `gemini-3.1-flash-image`（已有） |
+| 实现路径 | 工具层 Google 直连 Interactions；其他 Provider 经 `dispatch::generate_image` 按 profile 路由 |
+| Interactions 失败 | 继续尝试已配置 fallback；高级参数不会在非 Google 路径上静默降级 |
+| 默认模型 | 由 Provider 媒体配置和 profile 解析，不在工具内固化 |
 | 交错多图 | 取 steps 中最后一张 image 落盘 |
 
 ## 架构
@@ -50,15 +54,17 @@ image_gen (tools)
   ├─ Google → providers::interactions_http::google_interactions_image
   │            POST {google_native_base}/v1beta/interactions
   │            Header: x-goog-api-key
-  └─ OpenAI → Provider::generate_image（仅 prompt；忽略高级参数并 note）
+  ├─ OpenAI → providers::dispatch::generate_image（仅 prompt/title）
+  ├─ Azure → AzureOpenAiV1 → POST /openai/v1/images/generations
+  └─ MiniMax → MiniMax T2I（仅 prompt/title）
 ```
 
-新增类型（建议放 `crates/agent-providers/src/protocol/interactions_http.rs`）：
+最终类型位于 `crates/agent-providers/src/google/interactions_http.rs`：
 
 - `InteractionImageRequest`：prompt、response_format 字段、参考图 bytes、video、tools、previous_id、thinking_level
 - `InteractionImageResult`：`GeneratedImage`（或等价）+ `interaction_id` + 可选 `output_text` / `search_suggestions`
 
-旧 `google_openai_generate_image` / `google_generate_image` 保留但不再作为 `image_gen` Google 主路径；可后续清理。
+`image_gen` 的 Google 主路径直接使用 Interactions，不再先尝试 OpenAI-compatible 图片端点。
 
 ## 工具契约（`ImageGenArgs`）
 
@@ -82,7 +88,7 @@ image_gen (tools)
 - `video` 与 `video_uri` 同时存在 → 错误
 - 参考图 / 本地视频不可读或不在工作区可解析范围 → 错误
 - 参考图超过 14 → 错误
-- OpenAI 路径：高级字段忽略 + 结果 `note:` 一行
+- OpenAI / Azure / MiniMax 路径：高级字段在 HTTP 请求前拒绝，不静默忽略
 
 ### 成功返回（文本）
 
@@ -133,7 +139,7 @@ hint: 下次编辑可传 previous_interaction_id；可用作 video_gen 的 image
 
 1. `interactions_http`：请求构建 + 响应解析 + 单测
 2. 扩展 `image_gen` Args / 校验 / Google 直连接线
-3. OpenAI 忽略高级参数的 note 行为
+3. OpenAI / Azure / MiniMax 高级参数的请求前拒绝行为
 4. 工具描述与注册文案更新
 5. 手动冒烟：文生图 → 多轮 → 参考图 → Search（可选）
 

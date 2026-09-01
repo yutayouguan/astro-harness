@@ -191,6 +191,11 @@ astro/
 
 运行时架构见 [`docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md`](./docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，钩子说明见 [`docs/hooks.md`](./docs/hooks.md)。
 
+Azure `gpt-image-2` 文档：
+
+- [配置与使用说明](./docs/azure-gpt-image-2.md)
+- [实现设计](./docs/superpowers/specs/2026-09-01-azure-gpt-image-2-design.md)
+
 ## 常用命令
 
 ```bash
