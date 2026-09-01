@@ -147,11 +147,15 @@ Realtime 已拆分为独立 `agent-realtime` crate，并通过统一 Thread 协�
 
 - 桌面端默认使用 WebRTC，通过 `oai-events` data channel 和媒体 track 建立双向会话；
 - 支持 WebSocket 兼容传输、WebRTC SDP offer/answer，以及 ExistingCall sideband 接管；
+- Azure OpenAI 使用 GA `/openai/v1`：WebSocket/sideband 采用 `api-key`，WebRTC 通过
+  `client_secrets` 临时凭据与原始 `application/sdp` 协商；
 - 支持 V2 GA 与显式 V3 `/live/{call_id}` 协议，Provider JSON 在 crate 内转换为 typed events；
 - 完整 transcript、会话边界和 BEM promotion 以 `RealtimeItem` 持久化到 rollout，原始音频和 delta 不落盘；
 - Codex handoff 可把语音请求转为普通 Agent turn，再按 `thinking` / `commentary` / `bem_tags` 返回 Realtime call。
 
-设计与恢复契约见 [Realtime 子系统](./docs/realtime-subsystem.md)，整体 Agent 边界见 [架构总览](./docs/03-系统设计阶段/01-架构设计/01-架构总览.md)。
+设计与恢复契约见 [Realtime 子系统](./docs/realtime-subsystem.md)，Azure 来源快照与映射见
+[Azure OpenAI Realtime 参考](./docs/azure/realtime/README.md)，整体 Agent 边界见
+[架构总览](./docs/03-系统设计阶段/01-架构设计/01-架构总览.md)。
 
 ## 仓库结构
 

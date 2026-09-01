@@ -4,7 +4,7 @@ Astro Agent 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rus
 
 Agent 运行时统一采用 **Agent = Model + Harness** 的定义。架构入口见 [Agent Harness 总体架构](03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)，Responses-only 与原生历史契约见 [Responses 原生 Agent 运行时架构](03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，代码级契约见 [Agent Harness 执行外壳详细设计](04-详细设计阶段/01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。
 
-最新生命周期能力与兼容性变更见 [2026-09-01 Codex 生命周期对齐更新说明](更新说明/2026-09-01-Codex生命周期对齐.md)，包含 Realtime、`ResolveElicitation`、`TurnSettings`、Guardian retry 和独立用户 Shell；Realtime 运输、版本、handoff 与恢复契约见 [Realtime 子系统](realtime-subsystem.md)。
+最新生命周期能力与兼容性变更见 [2026-09-01 Codex 生命周期对齐更新说明](更新说明/2026-09-01-Codex生命周期对齐.md)，包含 Realtime、`ResolveElicitation`、`TurnSettings`、Guardian retry 和独立用户 Shell；Realtime 运输、版本、handoff 与恢复契约见 [Realtime 子系统](realtime-subsystem.md)，Azure GA 原始资料与实现映射见 [Azure OpenAI Realtime 参考](azure/realtime/README.md)。
 
 > 文档状态：上述三份文档及各 crate README 描述当前实现。`docs/superpowers/plans/`、`docs/superpowers/specs/` 和 `_v0.3规划/` 是历史或目标记录；与当前基线冲突时，不作为运行时契约。
 

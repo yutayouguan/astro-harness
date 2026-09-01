@@ -52,6 +52,24 @@ context 或 initial items，因为这些属于原 call owner。
 V3 sideband 使用有界指数退避（最多 5 次，200 ms 起步，5 s 封顶）。V2
 丢失连接后直接关闭，避免重放非幂等的音频帧或 `response.create`。
 
+### Azure OpenAI GA 适配
+
+Azure target 由 `backend_id = "azure"` 显式选择，不按 URL 或密钥形态推断。资源根地址
+规范为 `/openai/v1`，并拒绝带日期型 `api-version` 的旧 preview URL。模型字段在这里是
+Azure deployment name。
+
+- WebSocket 与 ExistingCall sideband 使用 `api-key` 请求头；
+- WebRTC 先以长期 API Key 调用 `/realtime/client_secrets`，再以返回的临时 Bearer
+  token 将原始 `application/sdp` 发到 `/realtime/calls?webrtcfilter=on`；
+- `Location` 同时支持 path call id 与 `?call_id=` 形态；
+- Azure WebRTC/ExistingCall 的首次 sideband 接入使用有界重试；连接成功后的 V2
+  断线仍直接关闭，不重放非幂等事件；
+- Azure 只走 V2 GA，V3 `/live/{call_id}` 保持 Codex 专用；
+- 长期密钥和临时 token 都不进入浏览器，浏览器只接收 SDP answer。
+
+Microsoft Learn 离线快照及逐项实现映射见
+[Azure OpenAI Realtime 参考](azure/realtime/README.md)。
+
 ## 版本契约
 
 - V2 是默认公开 GA 协议，使用 `session.update`、conversation item、
@@ -107,7 +125,7 @@ Provider delta。关闭时可选择保留或丢弃未完成的 transcript tail�
 - command/event channel 都是有界队列；音频队列满时丢弃当前帧，不阻塞录音线程。
 - 单帧最大 1 MiB，且必须是 24 kHz、mono、PCM16。
 - 正常 WebSocket close 不触发重连；仅 V3 异常 sideband 中断使用有界重试。
-- API key 和 `ChatTarget` 只存在当前 Realtime connection，不改写普通文本回合路由。
+- API key 和 `ModelTarget` 只存在当前 Realtime connection，不改写普通文本回合路由。
 - 一个 `Session` 同时只保留一个 active Realtime conversation；新会话不会静默覆盖活跃会话。
 
 ## 公共接入面
@@ -126,7 +144,8 @@ handoff mode、BEM prefixes 和 transcript-tail 策略。
 
 ## 验证矩阵
 
-- `agent-realtime`：endpoint shaping、WebSocket handshake、WebRTC multipart SDP、V2/V3 parser、
+- `agent-realtime`：endpoint shaping、provider-specific auth、OpenAI multipart SDP、Azure
+  client-secret/raw SDP、WebSocket handshake、V2/V3 parser、
   UTF-8 分片、BEM parser、history reducer。
 - `agent-protocol` / `agent-rollout`：typed event serde、durable policy 和 history 重建。
 - Desktop：WebRTC 默认路径、`oai-events`、SDP answer、ExistingCall 不启动本地录音。

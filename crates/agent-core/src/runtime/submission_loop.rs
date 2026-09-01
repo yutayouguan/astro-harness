@@ -239,6 +239,9 @@ impl Session {
                         api_key: target.api_key,
                         base_url: target.base_url,
                         model: model.clone(),
+                        api_flavor: realtime::RealtimeApiFlavor::from_backend_id(
+                            &target.backend_id,
+                        ),
                         params: params.clone(),
                     })
                     .await

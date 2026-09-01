@@ -9,7 +9,7 @@ use agent_protocol::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use futures::{SinkExt, StreamExt};
-use reqwest::header::{AUTHORIZATION, LOCATION, USER_AGENT};
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, LOCATION, USER_AGENT};
 use reqwest::multipart::{Form, Part};
 use serde_json::Value;
 use tokio::sync::mpsc::error::TrySendError;
@@ -79,7 +79,24 @@ pub struct RealtimeConnectionConfig {
     pub api_key: String,
     pub base_url: String,
     pub model: String,
+    pub api_flavor: RealtimeApiFlavor,
     pub params: ConversationStartParams,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RealtimeApiFlavor {
+    OpenAi,
+    AzureOpenAi,
+}
+
+impl RealtimeApiFlavor {
+    pub fn from_backend_id(backend_id: &str) -> Self {
+        if backend_id.eq_ignore_ascii_case("azure") {
+            Self::AzureOpenAi
+        } else {
+            Self::OpenAi
+        }
+    }
 }
 
 pub struct RealtimeConnection {
@@ -97,6 +114,10 @@ struct WebrtcCall {
 
 impl RealtimeConversationManager {
     pub async fn start(&self, config: RealtimeConnectionConfig) -> Result<RealtimeConnection> {
+        let mut config = config;
+        if config.api_flavor == RealtimeApiFlavor::AzureOpenAi {
+            config.base_url = normalize_azure_realtime_base_url(&config.base_url)?;
+        }
         let mut state = self.state.lock().await;
         if state
             .as_ref()
@@ -154,7 +175,7 @@ impl RealtimeConversationManager {
         let cancel = CancellationToken::new();
         let active = Arc::new(AtomicBool::new(true));
         let (initial_socket, initial_event) = if is_direct_websocket {
-            let mut socket = connect(&endpoint, &config.api_key).await?;
+            let mut socket = connect(&endpoint, &config.api_key, config.api_flavor).await?;
             let event = await_session_started(&mut socket, version).await?;
             (Some(socket), event)
         } else {
@@ -181,11 +202,17 @@ impl RealtimeConversationManager {
             initial_socket,
             endpoint,
             api_key: config.api_key,
+            api_flavor: config.api_flavor,
             model: config.model.clone(),
             params: config.params.clone(),
             initialize_session,
             initialize_items,
-            reconnect: sideband_reconnect_enabled(version, &config.params.transport),
+            retry_initial_connect: initial_sideband_retry_enabled(
+                config.api_flavor,
+                version,
+                &config.params.transport,
+            ),
+            reconnect_on_loss: sideband_reconnect_enabled(version, &config.params.transport),
             command_rx,
             event_tx,
             cancel: cancel.clone(),
@@ -349,6 +376,11 @@ fn validate_start(config: &RealtimeConnectionConfig) -> Result<()> {
     if config.api_key.trim().is_empty() {
         bail!("the active provider has no API key for realtime authentication");
     }
+    if config.api_flavor == RealtimeApiFlavor::AzureOpenAi
+        && config.params.version != RealtimeConversationVersion::V2
+    {
+        bail!("Azure OpenAI Realtime supports the V2 GA protocol only");
+    }
     match &config.params.transport {
         ConversationStartTransport::Webrtc { sdp } if sdp.trim().is_empty() => {
             bail!("WebRTC requires an SDP offer")
@@ -368,6 +400,9 @@ fn validate_start(config: &RealtimeConnectionConfig) -> Result<()> {
 }
 
 async fn create_webrtc_call(config: &RealtimeConnectionConfig, sdp: &str) -> Result<WebrtcCall> {
+    if config.api_flavor == RealtimeApiFlavor::AzureOpenAi {
+        return create_azure_webrtc_call(config, sdp).await;
+    }
     let endpoint = calls_endpoint(&config.base_url)?;
     let session = session_config(&config.model, &config.params);
     let form = Form::new()
@@ -391,6 +426,73 @@ async fn create_webrtc_call(config: &RealtimeConnectionConfig, sdp: &str) -> Res
         .send()
         .await
         .with_context(|| format!("create realtime WebRTC call {endpoint}"))?;
+    finish_webrtc_call(response, &endpoint).await
+}
+
+async fn create_azure_webrtc_call(
+    config: &RealtimeConnectionConfig,
+    sdp: &str,
+) -> Result<WebrtcCall> {
+    let client = reqwest::Client::new();
+    let secret_endpoint = client_secrets_endpoint(&config.base_url)?;
+    let secret_response = azure_client_secret_request(&client, secret_endpoint.clone(), config)
+        .send()
+        .await
+        .with_context(|| format!("create Azure Realtime client secret {secret_endpoint}"))?;
+    let secret_status = secret_response.status();
+    let secret_body = secret_response
+        .text()
+        .await
+        .context("read Azure Realtime client secret response")?;
+    if !secret_status.is_success() {
+        bail!("Azure Realtime client secret failed ({secret_status}): {secret_body}");
+    }
+    let ephemeral_key = serde_json::from_str::<Value>(&secret_body)
+        .context("decode Azure Realtime client secret response")?
+        .get("value")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| anyhow!("Azure Realtime client secret response omitted value"))?;
+
+    let mut endpoint = calls_endpoint(&config.base_url)?;
+    endpoint.query_pairs_mut().append_pair("webrtcfilter", "on");
+    let response = azure_sdp_request(&client, endpoint.clone(), &ephemeral_key, sdp)
+        .send()
+        .await
+        .with_context(|| format!("create Azure Realtime WebRTC call {endpoint}"))?;
+    finish_webrtc_call(response, &endpoint).await
+}
+
+fn azure_client_secret_request(
+    client: &reqwest::Client,
+    endpoint: Url,
+    config: &RealtimeConnectionConfig,
+) -> reqwest::RequestBuilder {
+    client
+        .post(endpoint)
+        .header("api-key", config.api_key.trim())
+        .header(USER_AGENT, "astro-agent/realtime")
+        .json(&serde_json::json!({
+            "session": session_config(&config.model, &config.params)
+        }))
+}
+
+fn azure_sdp_request(
+    client: &reqwest::Client,
+    endpoint: Url,
+    ephemeral_key: &str,
+    sdp: &str,
+) -> reqwest::RequestBuilder {
+    client
+        .post(endpoint)
+        .bearer_auth(ephemeral_key)
+        .header(USER_AGENT, "astro-agent/realtime")
+        .header(CONTENT_TYPE, "application/sdp")
+        .body(sdp.to_string())
+}
+
+async fn finish_webrtc_call(response: reqwest::Response, endpoint: &Url) -> Result<WebrtcCall> {
     let status = response.status();
     let location = response
         .headers()
@@ -399,7 +501,7 @@ async fn create_webrtc_call(config: &RealtimeConnectionConfig, sdp: &str) -> Res
         .map(str::to_string);
     let answer = response.text().await.context("read realtime SDP answer")?;
     if !status.is_success() {
-        bail!("realtime WebRTC call failed ({status}): {answer}");
+        bail!("realtime WebRTC call failed ({status}) at {endpoint}: {answer}");
     }
     let call_id = location
         .as_deref()
@@ -415,11 +517,13 @@ struct TransportTask {
     initial_socket: Option<RealtimeSocket>,
     endpoint: Url,
     api_key: String,
+    api_flavor: RealtimeApiFlavor,
     model: String,
     params: ConversationStartParams,
     initialize_session: bool,
     initialize_items: bool,
-    reconnect: bool,
+    retry_initial_connect: bool,
+    reconnect_on_loss: bool,
     command_rx: mpsc::Receiver<RealtimeCommand>,
     event_tx: mpsc::Sender<RealtimeTransportEvent>,
     cancel: CancellationToken,
@@ -431,10 +535,11 @@ async fn run_transport(mut task: TransportTask) {
     let reason = loop {
         let connection = match task.initial_socket.take() {
             Some(socket) => Ok(socket),
-            None => connect(&task.endpoint, &task.api_key).await,
+            None => connect(&task.endpoint, &task.api_key, task.api_flavor).await,
         };
         match connection {
             Ok(mut websocket) => {
+                attempt = 0;
                 if task.initialize_session {
                     let update = session_update(&task.model, &task.params);
                     if let Err(error) = websocket
@@ -480,7 +585,7 @@ async fn run_transport(mut task: TransportTask) {
                 match run_socket(&mut websocket, &mut task).await {
                     SocketExit::Requested(reason) => break reason,
                     SocketExit::Lost(reason)
-                        if task.reconnect
+                        if task.reconnect_on_loss
                             && attempt < MAX_SIDEBAND_RETRIES
                             && !task.cancel.is_cancelled() =>
                     {
@@ -496,7 +601,7 @@ async fn run_transport(mut task: TransportTask) {
                 }
             }
             Err(error)
-                if task.reconnect
+                if task.retry_initial_connect
                     && attempt < MAX_SIDEBAND_RETRIES
                     && !task.cancel.is_cancelled() =>
             {
@@ -504,7 +609,7 @@ async fn run_transport(mut task: TransportTask) {
                 let delay = RECONNECT_BASE_DELAY
                     .saturating_mul(2_u32.saturating_pow(attempt - 1))
                     .min(RECONNECT_MAX_DELAY);
-                tracing::warn!(attempt, delay_ms = delay.as_millis(), %error, "reconnecting realtime V3 sideband");
+                tracing::warn!(attempt, delay_ms = delay.as_millis(), %error, "retrying initial realtime sideband connection");
                 tokio::time::sleep(delay).await;
             }
             Err(error) => break Some(error.to_string()),
@@ -638,18 +743,42 @@ fn command_payloads(
     }
 }
 
-async fn connect(endpoint: &Url, api_key: &str) -> Result<RealtimeSocket> {
+fn websocket_request(
+    endpoint: &Url,
+    api_key: &str,
+    api_flavor: RealtimeApiFlavor,
+) -> Result<tokio_tungstenite::tungstenite::http::Request<()>> {
     let mut request = endpoint
         .as_str()
         .into_client_request()
         .context("build realtime websocket request")?;
-    request.headers_mut().insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {api_key}")).context("invalid realtime API key")?,
-    );
+    match api_flavor {
+        RealtimeApiFlavor::OpenAi => {
+            request.headers_mut().insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {api_key}"))
+                    .context("invalid realtime API key")?,
+            );
+        }
+        RealtimeApiFlavor::AzureOpenAi => {
+            request.headers_mut().insert(
+                "api-key",
+                HeaderValue::from_str(api_key).context("invalid Azure Realtime API key")?,
+            );
+        }
+    }
     request
         .headers_mut()
         .insert(USER_AGENT, HeaderValue::from_static("astro-agent/realtime"));
+    Ok(request)
+}
+
+async fn connect(
+    endpoint: &Url,
+    api_key: &str,
+    api_flavor: RealtimeApiFlavor,
+) -> Result<RealtimeSocket> {
+    let request = websocket_request(endpoint, api_key, api_flavor)?;
     let (socket, _) =
         tokio::time::timeout(CONNECT_TIMEOUT, tokio_tungstenite::connect_async(request))
             .await
@@ -666,6 +795,18 @@ pub fn calls_endpoint(base_url: &str) -> Result<Url> {
     } else {
         url.set_path(&format!("{path}/realtime/calls"));
     }
+    Ok(url)
+}
+
+pub fn client_secrets_endpoint(base_url: &str) -> Result<Url> {
+    let mut url = api_url(base_url)?;
+    let path = url.path().trim_end_matches('/');
+    if path.ends_with("/realtime") {
+        url.set_path(&format!("{path}/client_secrets"));
+    } else {
+        url.set_path(&format!("{path}/realtime/client_secrets"));
+    }
+    url.set_query(None);
     Ok(url)
 }
 
@@ -726,6 +867,22 @@ fn api_url(base_url: &str) -> Result<Url> {
     .context("invalid realtime base URL")
 }
 
+pub fn normalize_azure_realtime_base_url(base_url: &str) -> Result<String> {
+    let mut url = Url::parse(base_url.trim()).context("invalid Azure Realtime base URL")?;
+    if url.query().is_some() || url.fragment().is_some() {
+        bail!("Azure Realtime requires the GA /openai/v1 endpoint without api-version");
+    }
+    let path = url.path().trim_end_matches('/');
+    let normalized = match path {
+        "" | "/" | "/openai" | "/v1" => "/openai/v1",
+        "/openai/v1" => "/openai/v1",
+        "/openai/v1/realtime" => "/openai/v1",
+        _ => bail!("Azure Realtime base URL must be the resource root or end with /openai/v1"),
+    };
+    url.set_path(normalized);
+    Ok(url.to_string().trim_end_matches('/').to_string())
+}
+
 fn sideband_reconnect_enabled(
     version: RealtimeConversationVersion,
     transport: &ConversationStartTransport,
@@ -738,7 +895,29 @@ fn sideband_reconnect_enabled(
         )
 }
 
+fn initial_sideband_retry_enabled(
+    api_flavor: RealtimeApiFlavor,
+    version: RealtimeConversationVersion,
+    transport: &ConversationStartTransport,
+) -> bool {
+    sideband_reconnect_enabled(version, transport)
+        || (api_flavor == RealtimeApiFlavor::AzureOpenAi
+            && matches!(
+                transport,
+                ConversationStartTransport::Webrtc { .. }
+                    | ConversationStartTransport::ExistingCall { .. }
+            ))
+}
+
 fn call_id_from_location(location: &str) -> Option<String> {
+    if let Ok(url) = Url::parse(location) {
+        if let Some(call_id) = url
+            .query_pairs()
+            .find_map(|(key, value)| (key == "call_id").then(|| value.into_owned()))
+        {
+            return (!call_id.is_empty()).then_some(call_id);
+        }
+    }
     location
         .split('?')
         .next()?
@@ -780,6 +959,39 @@ mod tests {
             .as_str(),
             "wss://api.openai.com/v1/live/rtc_123"
         );
+        assert_eq!(
+            calls_endpoint("https://example.openai.azure.com/openai/v1")
+                .unwrap()
+                .as_str(),
+            "https://example.openai.azure.com/openai/v1/realtime/calls"
+        );
+        assert_eq!(
+            client_secrets_endpoint("https://example.openai.azure.com/openai/v1")
+                .unwrap()
+                .as_str(),
+            "https://example.openai.azure.com/openai/v1/realtime/client_secrets"
+        );
+    }
+
+    #[test]
+    fn normalizes_azure_ga_base_and_rejects_preview_query() {
+        assert_eq!(
+            normalize_azure_realtime_base_url("https://example.openai.azure.com").unwrap(),
+            "https://example.openai.azure.com/openai/v1"
+        );
+        assert_eq!(
+            normalize_azure_realtime_base_url(
+                "https://example.services.ai.azure.com/openai/v1/realtime/"
+            )
+            .unwrap(),
+            "https://example.services.ai.azure.com/openai/v1"
+        );
+        assert!(normalize_azure_realtime_base_url(
+            "https://example.openai.azure.com/openai/realtimeapi/sessions?api-version=2025-04-01-preview"
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("without api-version"));
     }
 
     #[test]
@@ -788,6 +1000,28 @@ mod tests {
             call_id_from_location("https://api.openai.com/v1/realtime/calls/rtc_123?x=1"),
             Some("rtc_123".into())
         );
+        assert_eq!(
+            call_id_from_location(
+                "https://example.openai.azure.com/openai/v1/realtime?call_id=rtc_azure"
+            ),
+            Some("rtc_azure".into())
+        );
+    }
+
+    #[test]
+    fn websocket_auth_is_provider_specific() {
+        let endpoint = Url::parse("wss://example.invalid/openai/v1/realtime").unwrap();
+        let openai = websocket_request(&endpoint, "openai-key", RealtimeApiFlavor::OpenAi).unwrap();
+        assert_eq!(
+            openai.headers().get(AUTHORIZATION).unwrap(),
+            "Bearer openai-key"
+        );
+        assert!(openai.headers().get("api-key").is_none());
+
+        let azure =
+            websocket_request(&endpoint, "azure-key", RealtimeApiFlavor::AzureOpenAi).unwrap();
+        assert_eq!(azure.headers().get("api-key").unwrap(), "azure-key");
+        assert!(azure.headers().get(AUTHORIZATION).is_none());
     }
 
     #[test]
@@ -819,6 +1053,21 @@ mod tests {
         assert!(sideband_reconnect_enabled(
             RealtimeConversationVersion::V3,
             &existing
+        ));
+        assert!(initial_sideband_retry_enabled(
+            RealtimeApiFlavor::AzureOpenAi,
+            RealtimeConversationVersion::V2,
+            &webrtc
+        ));
+        assert!(initial_sideband_retry_enabled(
+            RealtimeApiFlavor::AzureOpenAi,
+            RealtimeConversationVersion::V2,
+            &existing
+        ));
+        assert!(!initial_sideband_retry_enabled(
+            RealtimeApiFlavor::OpenAi,
+            RealtimeConversationVersion::V2,
+            &webrtc
         ));
     }
 
@@ -854,6 +1103,7 @@ mod tests {
                 api_key: "test-key".into(),
                 base_url: format!("http://{address}/v1"),
                 model: "gpt-realtime".into(),
+                api_flavor: RealtimeApiFlavor::OpenAi,
                 params: ConversationStartParams::default(),
             })
             .await
@@ -870,7 +1120,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn webrtc_call_posts_sdp_and_reads_location_call_id() {
+    async fn webrtc_requests_follow_openai_and_azure_contracts() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -919,6 +1169,7 @@ mod tests {
             api_key: "test-key".into(),
             base_url: format!("http://{address}/v1"),
             model: "gpt-realtime".into(),
+            api_flavor: RealtimeApiFlavor::OpenAi,
             params: ConversationStartParams {
                 transport: ConversationStartTransport::Webrtc {
                     sdp: "offer-sdp".into(),
@@ -927,7 +1178,7 @@ mod tests {
             },
         };
         let manager = RealtimeConversationManager::default();
-        let connection = tokio::time::timeout(Duration::from_secs(5), manager.start(config))
+        let connection = tokio::time::timeout(CONNECT_TIMEOUT, manager.start(config))
             .await
             .expect("WebRTC start must return before sideband connection")
             .unwrap();
@@ -935,5 +1186,52 @@ mod tests {
         assert_eq!(connection.call_id.as_deref(), Some("rtc_test"));
         manager.close().await;
         server.await.unwrap();
+
+        // Build the Azure requests after the live HTTP fixture is done so TLS/client
+        // initialization cannot contend with the timing-sensitive local handshake test.
+        let config = RealtimeConnectionConfig {
+            api_key: "azure-key".into(),
+            base_url: "https://example.openai.azure.com/openai/v1".into(),
+            model: "deployment-realtime".into(),
+            api_flavor: RealtimeApiFlavor::AzureOpenAi,
+            params: ConversationStartParams {
+                transport: ConversationStartTransport::Webrtc {
+                    sdp: "azure-offer-sdp".into(),
+                },
+                ..ConversationStartParams::default()
+            },
+        };
+        let client = reqwest::Client::new();
+        let secret = azure_client_secret_request(
+            &client,
+            client_secrets_endpoint(&config.base_url).unwrap(),
+            &config,
+        )
+        .build()
+        .unwrap();
+        assert_eq!(secret.url().path(), "/openai/v1/realtime/client_secrets");
+        assert_eq!(secret.headers().get("api-key").unwrap(), "azure-key");
+        assert!(secret.headers().get(AUTHORIZATION).is_none());
+        let secret_body = secret.body().unwrap().as_bytes().unwrap();
+        assert!(String::from_utf8_lossy(secret_body).contains("\"model\":\"deployment-realtime\""));
+
+        let mut calls = calls_endpoint(&config.base_url).unwrap();
+        calls.query_pairs_mut().append_pair("webrtcfilter", "on");
+        let offer = azure_sdp_request(&client, calls, "ephemeral-token", "azure-offer-sdp")
+            .build()
+            .unwrap();
+        assert_eq!(offer.url().query(), Some("webrtcfilter=on"));
+        assert_eq!(
+            offer.headers().get(AUTHORIZATION).unwrap(),
+            "Bearer ephemeral-token"
+        );
+        assert_eq!(
+            offer.headers().get(CONTENT_TYPE).unwrap(),
+            "application/sdp"
+        );
+        assert_eq!(
+            offer.body().unwrap().as_bytes().unwrap(),
+            b"azure-offer-sdp"
+        );
     }
 }
