@@ -47,10 +47,6 @@ import type {
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import type { SessionActivityStatus } from "./SessionStatusIcon";
 
-type ChatHistoryExportDto = {
-  messages: Array<{ role: string; content: string }>;
-};
-
 type Props = {
   session: RecentSessionDto;
   x: number;

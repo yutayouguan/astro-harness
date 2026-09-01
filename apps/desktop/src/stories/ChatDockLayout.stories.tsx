@@ -2,6 +2,8 @@ import { useState, type CSSProperties } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Activity,
+  Eye,
+  FileText,
   FolderTree,
   Gauge,
   GitBranch,
@@ -10,6 +12,7 @@ import {
   PanelRight,
   Plus,
   RotateCw,
+  Save,
   SendHorizontal,
   X,
 } from "lucide-react";
@@ -269,7 +272,92 @@ function ProjectFilesDockPreview({ open }: { open: boolean }) {
         </span>
       </header>
       <div className="project-files-search">筛选文件…</div>
+      <div className="project-files-tree">
+        <button type="button" className="project-file-row">
+          <span className="project-file-chevron">⌄</span>
+          <FolderTree size={15} />
+          <span className="project-file-name">plans</span>
+        </button>
+        <button
+          type="button"
+          className="project-file-row is-active"
+          style={{ "--tree-level": 1 } as CSSProperties}
+        >
+          <span className="project-file-chevron-spacer" />
+          <FileText size={14} />
+          <span className="project-file-name">20260830-f28f42.md</span>
+        </button>
+        <button type="button" className="project-file-row">
+          <span className="project-file-chevron">›</span>
+          <FolderTree size={15} />
+          <span className="project-file-name">skills</span>
+        </button>
+      </div>
     </aside>
+  );
+}
+
+function ProjectFileWorkbenchPreview() {
+  return (
+    <section className="project-file-workbench">
+      <div className="project-file-tabs">
+        <div className="project-file-tabs-scroll">
+          <div className="project-file-tab">
+            <FileText size={14} />
+            <span>20260829-2db8a3.md</span>
+            <span className="project-file-tab-close">×</span>
+          </div>
+          <div className="project-file-tab is-active">
+            <FileText size={14} />
+            <span>20260830-f28f42.md</span>
+            <span className="project-file-tab-close">×</span>
+          </div>
+        </div>
+        <div className="project-file-tab-actions">
+          <button type="button" aria-label="预览">
+            <Eye size={15} />
+          </button>
+          <button type="button" aria-label="保存">
+            <Save size={15} />
+          </button>
+          <button type="button" aria-label="关闭">
+            <X size={15} />
+          </button>
+        </div>
+      </div>
+      <div className="project-file-editor-body">
+        <div
+          aria-label="Markdown 编辑器预览"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "32px minmax(0, 1fr)",
+            gap: "10px 14px",
+            padding: "18px 24px",
+            color: "var(--ink-soft)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 13,
+            lineHeight: 1.55,
+          }}
+        >
+          <span style={{ color: "var(--ink-mute)", textAlign: "right" }}>
+            1
+          </span>
+          <strong># 简单网页标题爬虫</strong>
+          <span style={{ color: "var(--ink-mute)", textAlign: "right" }}>
+            2
+          </span>
+          <span />
+          <span style={{ color: "var(--ink-mute)", textAlign: "right" }}>
+            3
+          </span>
+          <span>- [ ] 编写抓取页面标题的脚本</span>
+          <span style={{ color: "var(--ink-mute)", textAlign: "right" }}>
+            4
+          </span>
+          <span>- [ ] 实测脚本并整理输出标题</span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -342,11 +430,55 @@ function ChatDockLayout({
             }
           >
             <div className="chat-main">
-              <div className="chat-pane" style={{ padding: 28 }}>
-                <strong style={{ color: "var(--ink)" }}>主对话区域</strong>
-                <p style={{ color: "var(--ink-mute)" }}>
-                  顶部工具组不再覆盖右侧停靠面板。
-                </p>
+              <div
+                className={`chat-pane${kind === "files" ? " has-project-file" : ""}`}
+              >
+                {kind === "files" ? (
+                  <ProjectFileWorkbenchPreview />
+                ) : (
+                  <div style={{ padding: 28 }}>
+                    <strong style={{ color: "var(--ink)" }}>主对话区域</strong>
+                    <p style={{ color: "var(--ink-mute)" }}>
+                      顶部工具组不再覆盖右侧停靠面板。
+                    </p>
+                  </div>
+                )}
+                {kind === "files" ? (
+                  <form className="composer-shell">
+                    <div className="composer composer--stacked">
+                      <div className="composer-input-wrap">
+                        <textarea
+                          className="composer-input"
+                          placeholder="询问或编辑当前文件…"
+                          rows={1}
+                        />
+                      </div>
+                      <div className="composer-bar">
+                        <div className="composer-bar-left">
+                          <button type="button" className="composer-mode-pill">
+                            ∞ Agent
+                          </button>
+                          <button
+                            type="button"
+                            className="composer-icon-btn"
+                            aria-label="添加"
+                          >
+                            <Plus size={17} />
+                          </button>
+                        </div>
+                        <div className="composer-bar-right">
+                          <button
+                            type="button"
+                            className="send-btn send-btn--round"
+                            aria-label="发送"
+                          >
+                            <SendHorizontal size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+                ) : null}
               </div>
             </div>
             <ProjectFilesDockPreview open={kind === "files"} />

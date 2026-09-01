@@ -181,7 +181,9 @@ impl SessionStore {
         )
         .execute(&self.pool)
         .await
-        .context("session database schema marker is current but response_items table is incomplete")?;
+        .context(
+            "session database schema marker is current but response_items table is incomplete",
+        )?;
         sqlx::query("SELECT rowid FROM response_items_fts LIMIT 0")
             .execute(&self.pool)
             .await

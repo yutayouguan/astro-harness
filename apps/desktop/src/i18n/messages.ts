@@ -842,6 +842,7 @@ export const zh = {
   "chat.placeholder": "输入消息，Enter 发送",
   "chat.placeholderStreaming": "输入跟进，将加入队列…",
   "chat.placeholderStreamingBusy": "AI 正在回复…",
+  "chat.placeholderFile": "询问或编辑当前文件…",
   "chat.placeholderPlan": "描述目标，我先只读规划（不写文件）…",
   "chat.queue.title": "{count} 排队中",
   "chat.queue.edit": "编辑",
@@ -3595,6 +3596,7 @@ export const en: Record<MessageKey, string> = {
   "chat.placeholder": "Message… Enter to send",
   "chat.placeholderStreaming": "Add a follow-up — it will be queued…",
   "chat.placeholderStreamingBusy": "AI is replying…",
+  "chat.placeholderFile": "Ask about or edit the current file…",
   "chat.placeholderPlan":
     "Describe the goal — read-only planning (no file writes)…",
   "chat.queue.title": "{count} Queued",

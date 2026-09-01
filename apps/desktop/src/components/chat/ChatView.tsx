@@ -2448,9 +2448,11 @@ export default function ChatView({
           ? ""
           : attachments.length
             ? t("chat.placeholderWithAttach")
-            : chatMode === "plan"
-              ? t("chat.placeholderPlan")
-              : t("chat.placeholder");
+            : workspaceContent
+              ? t("chat.placeholderFile")
+              : chatMode === "plan"
+                ? t("chat.placeholderPlan")
+                : t("chat.placeholder");
 
   useEffect(() => {
     if (

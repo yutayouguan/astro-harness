@@ -109,7 +109,7 @@ const meta = {
       if (command === "set_cron_job_enabled") return true;
       if (command === "run_cron_job_now") return runs[0];
       if (command === "get_cron_run") return runs[0];
-      if (command === "get_chat_history") return { messages: [] };
+      if (command === "get_chat_history") return { items: [] };
       return null;
     });
     return () => clearMocks();

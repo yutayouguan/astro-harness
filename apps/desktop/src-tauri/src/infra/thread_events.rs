@@ -5604,12 +5604,14 @@ mod tests {
         let activation = source
             .find("let activation = bridge.activate(sid2.clone()).await;")
             .expect("start_chat activation marker");
-        let spawn = source
-            .find("tauri::async_runtime::spawn(async move {")
-            .expect("start_chat spawn marker");
-        let wait_ready = source
-            .find(".wait_ready_for(THREAD_EVENTS_READY_TIMEOUT)")
-            .expect("start_chat readiness marker");
+        let spawn = activation
+            + source[activation..]
+                .find("tauri::async_runtime::spawn(async move {")
+                .expect("start_chat spawn marker");
+        let wait_ready = spawn
+            + source[spawn..]
+                .find(".wait_ready_for(THREAD_EVENTS_READY_TIMEOUT)")
+                .expect("start_chat readiness marker");
         assert!(activation < spawn && spawn < wait_ready);
     }
 
