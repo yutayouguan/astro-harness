@@ -115,7 +115,7 @@ impl RealtimeConversationManager {
             config.params.transport,
             ConversationStartTransport::Websocket
         );
-        let (sdp, call_id, endpoint, initialize_session, initialize_items, reconnect) =
+        let (sdp, call_id, endpoint, initialize_session, initialize_items) =
             match &config.params.transport {
                 ConversationStartTransport::Websocket => (
                     None,
@@ -123,7 +123,6 @@ impl RealtimeConversationManager {
                     websocket_endpoint(&config.base_url, &config.model, version, None)?,
                     true,
                     version == RealtimeConversationVersion::V2,
-                    false,
                 ),
                 ConversationStartTransport::Webrtc { sdp } => {
                     let call = create_webrtc_call(&config, sdp).await?;
@@ -139,7 +138,6 @@ impl RealtimeConversationManager {
                         endpoint,
                         false,
                         version == RealtimeConversationVersion::V2,
-                        true,
                     )
                 }
                 ConversationStartTransport::ExistingCall { call_id } => (
@@ -148,7 +146,6 @@ impl RealtimeConversationManager {
                     websocket_endpoint(&config.base_url, &config.model, version, Some(call_id))?,
                     false,
                     false,
-                    true,
                 ),
             };
 
@@ -188,7 +185,7 @@ impl RealtimeConversationManager {
             params: config.params.clone(),
             initialize_session,
             initialize_items,
-            reconnect: reconnect && version == RealtimeConversationVersion::V3,
+            reconnect: sideband_reconnect_enabled(version, &config.params.transport),
             command_rx,
             event_tx,
             cancel: cancel.clone(),
@@ -729,6 +726,18 @@ fn api_url(base_url: &str) -> Result<Url> {
     .context("invalid realtime base URL")
 }
 
+fn sideband_reconnect_enabled(
+    version: RealtimeConversationVersion,
+    transport: &ConversationStartTransport,
+) -> bool {
+    version == RealtimeConversationVersion::V3
+        && matches!(
+            transport,
+            ConversationStartTransport::Webrtc { .. }
+                | ConversationStartTransport::ExistingCall { .. }
+        )
+}
+
 fn call_id_from_location(location: &str) -> Option<String> {
     location
         .split('?')
@@ -779,6 +788,38 @@ mod tests {
             call_id_from_location("https://api.openai.com/v1/realtime/calls/rtc_123?x=1"),
             Some("rtc_123".into())
         );
+    }
+
+    #[test]
+    fn only_v3_sideband_transports_reconnect() {
+        let websocket = ConversationStartTransport::Websocket;
+        let webrtc = ConversationStartTransport::Webrtc {
+            sdp: "offer".into(),
+        };
+        let existing = ConversationStartTransport::ExistingCall {
+            call_id: "rtc_123".into(),
+        };
+
+        assert!(!sideband_reconnect_enabled(
+            RealtimeConversationVersion::V2,
+            &webrtc
+        ));
+        assert!(!sideband_reconnect_enabled(
+            RealtimeConversationVersion::V2,
+            &existing
+        ));
+        assert!(!sideband_reconnect_enabled(
+            RealtimeConversationVersion::V3,
+            &websocket
+        ));
+        assert!(sideband_reconnect_enabled(
+            RealtimeConversationVersion::V3,
+            &webrtc
+        ));
+        assert!(sideband_reconnect_enabled(
+            RealtimeConversationVersion::V3,
+            &existing
+        ));
     }
 
     #[tokio::test]
