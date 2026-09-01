@@ -70,6 +70,8 @@ pub struct TurnContext {
     pub(crate) turn: usize,
     /// turn 开始时准入的交互模式。
     pub(crate) mode: types::InteractionMode,
+    /// turn 开始时准入的工具暴露模式。
+    pub(crate) requested_tool_mode: types::ToolMode,
     /// turn 开始时准入的权限配置。
     pub(crate) permission_profile: Option<String>,
     /// turn 开始时准入的项目根路径。
@@ -123,6 +125,7 @@ impl TurnContext {
             sub_id,
             turn,
             mode,
+            requested_tool_mode: types::ToolMode::Direct,
             permission_profile,
             project_root,
             workspace_roots,
@@ -149,6 +152,15 @@ impl TurnContext {
 
     pub fn mode(&self) -> types::InteractionMode {
         self.mode
+    }
+
+    pub(crate) fn with_requested_tool_mode(mut self, mode: types::ToolMode) -> Self {
+        self.requested_tool_mode = mode;
+        self
+    }
+
+    pub fn requested_tool_mode(&self) -> types::ToolMode {
+        self.requested_tool_mode
     }
 
     pub fn permission_profile(&self) -> Option<&str> {

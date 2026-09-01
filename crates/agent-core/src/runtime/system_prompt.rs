@@ -149,7 +149,10 @@ impl AgentLoop {
             )
         };
         // 项目行为准则只取主 cwd；无项目文件时回退全局 default 工作区。
-        let project_root = self.project_root();
+        let project_root = match self.current_turn_context().await {
+            Some(context) => context.project_root().map(ToOwned::to_owned),
+            None => self.project_root(),
+        };
         let ws = self.resolve_workspace_dir();
         if let Some(content) = load_agent_instructions(project_root.as_deref(), &ws) {
             static_ctx.agent_md = content;
@@ -316,7 +319,12 @@ impl AgentLoop {
 
     /// 随 Turn 变化的开发者策略与上下文时间戳。
     async fn system_prompt_runtime_context(&self) -> (&'static str, String) {
-        let developer_guidance = self.interaction_mode().await.system_guidance();
+        let interaction_mode = self
+            .current_turn_context()
+            .await
+            .map(|context| context.mode())
+            .unwrap_or_else(|| self.lock_state().interaction_mode);
+        let developer_guidance = interaction_mode.system_guidance();
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
         let timestamp = format!("# 当前时间\n{now}");
         (developer_guidance, timestamp)

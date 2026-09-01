@@ -41,6 +41,26 @@ pub struct UserInputCommittedEvent {
     pub client_message_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ThreadSettingsSnapshot {
+    pub provider: String,
+    pub model: String,
+    pub interaction_mode: types::InteractionMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_root: Option<String>,
+    pub workspace_roots: Vec<String>,
+    pub context_window: u32,
+    pub temperature: f32,
+    pub thinking_enabled: bool,
+    pub reasoning_effort: String,
+    pub max_tokens: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ThreadSettingsAppliedEvent {
+    pub thread_settings: ThreadSettingsSnapshot,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ErrorEvent {
     pub message: String,
@@ -328,7 +348,7 @@ pub enum EventMsg {
     ContextCompacted(ItemEvent),
     ContextUsage(ContextUsageEvent),
     TokenCount(TokenCountEvent),
-    ThreadSettingsApplied(Value),
+    ThreadSettingsApplied(ThreadSettingsAppliedEvent),
     ThreadRolledBack(ThreadRolledBackEvent),
     Error(ErrorEvent),
     Warning(ErrorEvent),

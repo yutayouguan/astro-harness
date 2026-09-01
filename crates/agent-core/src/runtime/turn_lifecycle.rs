@@ -126,9 +126,12 @@ impl Session {
         mode: TurnInputMode,
         chat_override: Option<crate::streaming::ChatOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
-        if request.input.is_empty()
-            || request
-                .input
+        let TurnInputRequest {
+            input,
+            thread_settings,
+        } = request;
+        if input.is_empty()
+            || input
                 .iter()
                 .all(|item| item.content.trim().is_empty() && item.image_data_urls.is_empty())
         {
@@ -150,9 +153,12 @@ impl Session {
         }
         match mode {
             TurnInputMode::StartOrSteer => match active_turn_id {
-                Some(turn_id) => self.steer_turn(Some(&turn_id), request.input).await,
+                Some(turn_id) => {
+                    self.steer_turn(submission_id, Some(&turn_id), input, thread_settings)
+                        .await
+                }
                 None => {
-                    self.start_turn(submission_id, request.input, chat_override)
+                    self.start_turn(submission_id, input, thread_settings, chat_override)
                         .await
                 }
             },
@@ -161,13 +167,18 @@ impl Session {
                     reason: "not_idle".into(),
                 }),
                 None => {
-                    self.start_turn(submission_id, request.input, chat_override)
+                    self.start_turn(submission_id, input, thread_settings, chat_override)
                         .await
                 }
             },
             TurnInputMode::Steer { expected_turn_id } => {
-                self.steer_turn(Some(&expected_turn_id), request.input)
-                    .await
+                self.steer_turn(
+                    submission_id,
+                    Some(&expected_turn_id),
+                    input,
+                    thread_settings,
+                )
+                .await
             }
         }
     }
@@ -186,17 +197,45 @@ impl Session {
         self: &Arc<Self>,
         turn_id: String,
         input: Vec<TurnInput>,
+        thread_settings: agent_protocol::ThreadSettingsOverrides,
         chat_override: Option<crate::streaming::ChatOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
+        let has_settings = !thread_settings.is_empty();
+        let previous_settings = has_settings.then(|| self.snapshot_request_settings());
+        let applied_settings = if has_settings {
+            Some(
+                self.apply_thread_settings(thread_settings)
+                    .map_err(TurnInputError::Invalid)?,
+            )
+        } else {
+            None
+        };
         let context = self.create_turn_context(turn_id.clone()).await;
         let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
             Arc::clone(self),
             Arc::clone(&context),
             chat_override,
         );
-        self.spawn_task(context, input, RegularTask::new(args))
+        let applied_event = async {
+            if let Some(thread_settings) = applied_settings {
+                self.send_event(
+                    &turn_id,
+                    agent_protocol::EventMsg::ThreadSettingsApplied(
+                        agent_protocol::ThreadSettingsAppliedEvent { thread_settings },
+                    ),
+                )
+                .await;
+            }
+        };
+        if let Err(error) = self
+            .spawn_task_with_install_hook(context, input, RegularTask::new(args), applied_event)
             .await
-            .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
+        {
+            if let Some(previous_settings) = previous_settings {
+                self.restore_request_settings(previous_settings);
+            }
+            return Err(TurnInputError::Invalid(error.to_string()));
+        }
         Ok(TurnInputSubmission::Started { turn_id })
     }
 
@@ -263,8 +302,10 @@ impl Session {
 
     async fn steer_turn(
         &self,
+        submission_id: String,
         expected_turn_id: Option<&str>,
         input: Vec<TurnInput>,
+        thread_settings: agent_protocol::ThreadSettingsOverrides,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         let turn_id = self.active_turn_id().await.ok_or_else(|| {
             TurnInputError::Invalid("no active turn available for steering".into())
@@ -289,6 +330,18 @@ impl Session {
                     reason: "turn_not_accepting_input".into(),
                 });
             }
+        }
+        if !thread_settings.is_empty() {
+            let thread_settings = self
+                .apply_thread_settings(thread_settings)
+                .map_err(TurnInputError::Invalid)?;
+            self.send_event(
+                &submission_id,
+                agent_protocol::EventMsg::ThreadSettingsApplied(
+                    agent_protocol::ThreadSettingsAppliedEvent { thread_settings },
+                ),
+            )
+            .await;
         }
         Ok(TurnInputSubmission::Steered { turn_id })
     }
@@ -926,13 +979,30 @@ impl Session {
                 internal_chat_message_metadata_passthrough: None,
             });
         }
-        let (interaction_mode, requested_tool_mode) = {
+        let turn_context = {
             let state = self.lock_state();
-            (
-                state.interaction_mode,
-                state.model_ctx.requested_tool_mode(self.config.tool_mode),
-            )
+            state.current_turn_context.clone().unwrap_or_else(|| {
+                let requested_tool_mode =
+                    state.model_ctx.requested_tool_mode(self.config.tool_mode);
+                Arc::new(
+                    TurnContext::new_with_roots(
+                        state
+                            .turn
+                            .current_turn_id()
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                        state.turn.current_turn(),
+                        state.interaction_mode,
+                        state.permission_profile.clone(),
+                        state.project_root.clone(),
+                        state.workspace_roots.clone(),
+                    )
+                    .with_requested_tool_mode(requested_tool_mode),
+                )
+            })
         };
+        let interaction_mode = turn_context.mode();
+        let requested_tool_mode = turn_context.requested_tool_mode();
         let tool_router = {
             let registry = self
                 .services
@@ -951,23 +1021,6 @@ impl Session {
                 &callable_specs,
                 visible_specs,
             ))
-        };
-        let turn_context = {
-            let state = self.lock_state();
-            state.current_turn_context.clone().unwrap_or_else(|| {
-                Arc::new(TurnContext::new_with_roots(
-                    state
-                        .turn
-                        .current_turn_id()
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
-                    state.turn.current_turn(),
-                    state.interaction_mode,
-                    state.permission_profile.clone(),
-                    state.project_root.clone(),
-                    state.workspace_roots.clone(),
-                ))
-            })
         };
         let step_context = Arc::new(StepContext::new(
             turn_context,

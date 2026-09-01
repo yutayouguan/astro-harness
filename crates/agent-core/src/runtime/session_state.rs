@@ -10,7 +10,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use types::message::Message;
 
-use super::{compression_state, model_ctx, turn_budget, StepContext, TurnContext};
+use super::{
+    compression_state, model_ctx, turn_budget, StepContext, ThreadProviderOptions, TurnContext,
+};
 
 /// 此前直接存储在 [`super::Session`] 上的持久化可变状态。
 pub(crate) struct SessionState {
@@ -19,6 +21,7 @@ pub(crate) struct SessionState {
     pub(crate) history: Vec<ResponseItem>,
     pub(crate) pending_session_start_source: Option<String>,
     pub(crate) model_ctx: model_ctx::ModelContext,
+    pub(crate) thread_provider_options: ThreadProviderOptions,
     pub(crate) compression: compression_state::CompressionState,
     pub(crate) turn: turn_budget::TurnState,
     pub(crate) pending_inject_context: Option<String>,
@@ -51,6 +54,7 @@ impl SessionState {
             history,
             pending_session_start_source: Some(session_start_source.to_string()),
             model_ctx: model_ctx::ModelContext::default(),
+            thread_provider_options: ThreadProviderOptions::default(),
             compression: compression_state::CompressionState::default(),
             turn: turn_budget::TurnState::default(),
             pending_inject_context: None,

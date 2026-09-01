@@ -227,6 +227,7 @@ async fn prepare_failure_emits_one_error_and_complete_with_error() {
                     image_data_urls: Vec::new(),
                     client_message_id: None,
                 }],
+                thread_settings: Default::default(),
             },
             TurnInputMode::StartIfIdle,
         )
@@ -273,6 +274,7 @@ async fn prepare_hook_cancellation_emits_only_turn_aborted() {
                     image_data_urls: Vec::new(),
                     client_message_id: None,
                 }],
+                thread_settings: Default::default(),
             },
             TurnInputMode::StartIfIdle,
         )

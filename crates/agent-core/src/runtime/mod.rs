@@ -174,7 +174,6 @@ pub struct Session {
     pub(crate) cancel: CancelSignal,
     /// 长生命周期控制，供 actor 提交的轮次复用并暴露给适配器。
     thread_controls: StdMutex<Option<ThreadControls>>,
-    thread_provider_options: StdMutex<ThreadProviderOptions>,
     /// 本会话的 Codex 风格单活跃任务注册表。
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
     /// 序列化会话任务的 abort-old -> install -> bind -> start 准入流程。
@@ -390,6 +389,7 @@ impl Default for ThreadProviderOptions {
 /// Chat 请求作用域设置的不透明回滚点。
 pub struct SessionRequestSettingsSnapshot {
     model_ctx: model_ctx::ModelContext,
+    thread_provider_options: ThreadProviderOptions,
     interaction_mode: types::InteractionMode,
     project_root: Option<PathBuf>,
     workspace_roots: Vec<PathBuf>,
@@ -523,7 +523,6 @@ impl Session {
             execution,
             cancel: CancelSignal::new(),
             thread_controls: StdMutex::new(None),
-            thread_provider_options: StdMutex::new(ThreadProviderOptions::default()),
             active_turn: TokioMutex::new(None),
             task_admission: TokioMutex::new(()),
             task_completions: TokioMutex::new(HashMap::new()),
@@ -577,17 +576,11 @@ impl Session {
     }
 
     pub fn set_thread_provider_options(&self, options: ThreadProviderOptions) {
-        *self
-            .thread_provider_options
-            .lock()
-            .expect("thread provider options mutex poisoned") = options;
+        self.lock_state().thread_provider_options = options;
     }
 
     pub fn thread_provider_options(&self) -> ThreadProviderOptions {
-        self.thread_provider_options
-            .lock()
-            .expect("thread provider options mutex poisoned")
-            .clone()
+        self.lock_state().thread_provider_options.clone()
     }
 
     pub(crate) fn close_event_stream(&self) {
@@ -748,6 +741,7 @@ impl Session {
         let state = self.lock_state();
         SessionRequestSettingsSnapshot {
             model_ctx: state.model_ctx.clone(),
+            thread_provider_options: state.thread_provider_options.clone(),
             interaction_mode: state.interaction_mode,
             project_root: state.project_root.clone(),
             workspace_roots: state.workspace_roots.clone(),
@@ -760,11 +754,114 @@ impl Session {
     pub fn restore_request_settings(&self, snapshot: SessionRequestSettingsSnapshot) {
         let mut state = self.lock_state();
         state.model_ctx = snapshot.model_ctx;
+        state.thread_provider_options = snapshot.thread_provider_options;
         state.interaction_mode = snapshot.interaction_mode;
         state.project_root = snapshot.project_root;
         state.workspace_roots = snapshot.workspace_roots;
         state.temperature = snapshot.temperature;
         state.additional_params = snapshot.additional_params;
+    }
+
+    /// Publish a prepared settings update as one session-state mutation.
+    ///
+    /// The submission actor calls this in queue order. Existing turns keep the
+    /// immutable values captured in their [`TurnContext`] and [`RunTurnArgs`].
+    #[doc(hidden)]
+    pub fn apply_thread_settings(
+        &self,
+        update: agent_protocol::ThreadSettingsOverrides,
+    ) -> Result<agent_protocol::ThreadSettingsSnapshot, String> {
+        if update
+            .chat_targets
+            .as_ref()
+            .is_some_and(|targets| targets.is_empty())
+        {
+            return Err("chat_targets cannot be empty".into());
+        }
+        if update.context_window.is_some_and(|window| window == 0) {
+            return Err("context_window must be greater than zero".into());
+        }
+        if update.temperature.is_some_and(|temperature| {
+            !temperature.is_finite() || !(0.0..=2.0).contains(&temperature)
+        }) {
+            return Err("temperature must be between 0 and 2".into());
+        }
+        if update.max_tokens.is_some_and(|max_tokens| max_tokens == 0) {
+            return Err("max_tokens must be greater than zero".into());
+        }
+        let mut state = self.lock_state();
+        if let Some(targets) = update.chat_targets {
+            state.model_ctx.set_chat_targets(targets);
+        }
+        if let Some(targets) = update.auxiliary_targets {
+            state.model_ctx.set_auxiliary_targets(targets);
+        }
+        if let Some(targets) = update.image_gen_targets {
+            state.model_ctx.set_image_gen_targets(targets);
+        }
+        if let Some(context_window) = update.context_window {
+            state.model_ctx.set_context_window(context_window);
+        }
+        if let Some(interaction_mode) = update.interaction_mode {
+            state.interaction_mode = interaction_mode;
+        }
+        if let Some(project_root) = update.project_root {
+            state.project_root = project_root;
+        }
+        if let Some(workspace_roots) = update.workspace_roots {
+            let mut normalized = Vec::new();
+            if let Some(project_root) = state.project_root.clone() {
+                normalized.push(project_root);
+            }
+            for root in workspace_roots {
+                if !normalized.contains(&root) {
+                    normalized.push(root);
+                }
+            }
+            state.workspace_roots = normalized;
+        }
+        if let Some(temperature) = update.temperature {
+            state.temperature = temperature;
+        }
+        if let Some(additional_params) = update.additional_params {
+            state.additional_params = additional_params;
+        }
+        if update.thinking_enabled.is_some()
+            || update.reasoning_effort.is_some()
+            || update.max_tokens.is_some()
+        {
+            let options = &mut state.thread_provider_options;
+            if let Some(thinking_enabled) = update.thinking_enabled {
+                options.thinking_enabled = thinking_enabled;
+            }
+            if let Some(reasoning_effort) = update.reasoning_effort {
+                options.reasoning_effort = reasoning_effort;
+            }
+            if let Some(max_tokens) = update.max_tokens {
+                options.max_tokens = max_tokens;
+            }
+        }
+
+        let primary = state.model_ctx.primary_chat_target();
+        Ok(agent_protocol::ThreadSettingsSnapshot {
+            provider: primary.backend_id,
+            model: primary.model,
+            interaction_mode: state.interaction_mode,
+            project_root: state
+                .project_root
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned()),
+            workspace_roots: state
+                .workspace_roots
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect(),
+            context_window: state.model_ctx.context_window(),
+            temperature: state.temperature,
+            thinking_enabled: state.thread_provider_options.thinking_enabled,
+            reasoning_effort: state.thread_provider_options.reasoning_effort.clone(),
+            max_tokens: state.thread_provider_options.max_tokens,
+        })
     }
 
     pub(crate) fn set_status(&self, status: AgentStatus) {
@@ -793,14 +890,18 @@ impl Session {
         let sub_id = turn_id.into();
         let mut state = self.lock_state();
         let workspace_roots = state.workspace_roots.clone();
-        let turn_context = Arc::new(TurnContext::new_with_roots(
-            sub_id,
-            state.turn.current_turn(),
-            state.interaction_mode,
-            state.permission_profile.clone(),
-            state.project_root.clone(),
-            workspace_roots,
-        ));
+        let requested_tool_mode = state.model_ctx.requested_tool_mode(self.config.tool_mode);
+        let turn_context = Arc::new(
+            TurnContext::new_with_roots(
+                sub_id,
+                state.turn.current_turn(),
+                state.interaction_mode,
+                state.permission_profile.clone(),
+                state.project_root.clone(),
+                workspace_roots,
+            )
+            .with_requested_tool_mode(requested_tool_mode),
+        );
         state
             .turn
             .set_current_turn_id(turn_context.sub_id().to_string());
@@ -811,14 +912,18 @@ impl Session {
     pub async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
         let state = self.lock_state();
         let workspace_roots = state.workspace_roots.clone();
-        Arc::new(TurnContext::new_with_roots(
-            sub_id,
-            state.turn.current_turn().saturating_add(1),
-            state.interaction_mode,
-            state.permission_profile.clone(),
-            state.project_root.clone(),
-            workspace_roots,
-        ))
+        let requested_tool_mode = state.model_ctx.requested_tool_mode(self.config.tool_mode);
+        Arc::new(
+            TurnContext::new_with_roots(
+                sub_id,
+                state.turn.current_turn().saturating_add(1),
+                state.interaction_mode,
+                state.permission_profile.clone(),
+                state.project_root.clone(),
+                workspace_roots,
+            )
+            .with_requested_tool_mode(requested_tool_mode),
+        )
     }
 
     pub(crate) async fn bind_turn_context(&self, turn_context: Arc<TurnContext>) {

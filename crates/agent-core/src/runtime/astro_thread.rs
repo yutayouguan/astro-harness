@@ -407,6 +407,72 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn thread_settings_are_applied_by_the_submission_actor() {
+        let dir = TempDir::new().unwrap();
+        let project_root = dir.path().join("project");
+        let session = Arc::new(
+            Session::new(Config::with_defaults(dir.path().to_path_buf()))
+                .await
+                .unwrap(),
+        );
+        let thread =
+            AstroThread::spawn(Arc::clone(&session), recorder(&dir, "settings.jsonl").await)
+                .unwrap();
+        let submission_id = thread
+            .submit(Op::ThreadSettings {
+                thread_settings: agent_protocol::ThreadSettingsOverrides {
+                    chat_targets: Some(vec![types::ChatTarget {
+                        provider_id: "provider-1".into(),
+                        backend_id: "openai".into(),
+                        model: "gpt-test".into(),
+                        api_key: "must-not-leak".into(),
+                        base_url: "https://example.test".into(),
+                    }]),
+                    context_window: Some(64_000),
+                    interaction_mode: Some(types::InteractionMode::Plan),
+                    project_root: Some(Some(project_root.clone())),
+                    workspace_roots: Some(vec![project_root.clone(), dir.path().to_path_buf()]),
+                    temperature: Some(0.25),
+                    thinking_enabled: Some(true),
+                    reasoning_effort: Some("medium".into()),
+                    max_tokens: Some(4096),
+                    ..Default::default()
+                },
+            })
+            .await
+            .unwrap();
+
+        let applied = loop {
+            let event = thread.next_event().await.unwrap();
+            if event.id == submission_id {
+                if let agent_protocol::EventMsg::ThreadSettingsApplied(event) = event.msg {
+                    break event.thread_settings;
+                }
+            }
+        };
+        assert_eq!(session.chat_model(), "gpt-test");
+        assert_eq!(
+            session.interaction_mode().await,
+            types::InteractionMode::Plan
+        );
+        assert_eq!(
+            session.project_root().as_deref(),
+            Some(project_root.as_path())
+        );
+        assert_eq!(session.context_window(), 64_000);
+        assert_eq!(session.temperature(), 0.25);
+        assert_eq!(session.thread_provider_options().max_tokens, 4096);
+        assert_eq!(applied.model, "gpt-test");
+        assert_eq!(applied.interaction_mode, types::InteractionMode::Plan);
+        assert!(!serde_json::to_string(&applied)
+            .unwrap()
+            .contains("must-not-leak"));
+
+        thread.submit(Op::Shutdown).await.unwrap();
+        thread.wait_terminated().await;
+    }
+
+    #[tokio::test]
     async fn actor_submit_turn_executes_the_model_loop() {
         let dir = TempDir::new().unwrap();
         let session = Arc::new(
@@ -459,6 +525,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    thread_settings: Default::default(),
                 },
                 TurnInputMode::StartIfIdle,
             )
@@ -470,6 +537,205 @@ mod tests {
             .expect("actor submission should enter the model loop");
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
+        thread.submit(Op::Shutdown).await.unwrap();
+        timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn accepted_turn_applies_settings_before_turn_started() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "settings-accepted-turn".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        session.set_chat_targets(vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "old-model".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }]);
+        let observed_config = Arc::new(std::sync::Mutex::new(None));
+        let chat_override: crate::streaming::ChatOverride = {
+            let observed_config = Arc::clone(&observed_config);
+            Arc::new(move |_messages, _tools, config| {
+                *observed_config.lock().unwrap() = Some(config);
+                Box::pin(async {
+                    Ok(Box::pin(futures::stream::iter(vec![
+                        Ok(StreamChunk::Text("configured".into())),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        }),
+                    ])) as CompletionStream)
+                })
+            })
+        };
+        let thread = AstroThread::spawn_with_chat_override(
+            Arc::clone(&session),
+            recorder(&dir, "settings-accepted-turn.jsonl").await,
+            chat_override,
+        )
+        .unwrap();
+
+        let (_, submitted) = thread
+            .submit_turn(
+                TurnInputRequest {
+                    input: vec![agent_protocol::TurnInput {
+                        content: "use the new settings".into(),
+                        image_data_urls: Vec::new(),
+                        client_message_id: None,
+                    }],
+                    thread_settings: agent_protocol::ThreadSettingsOverrides {
+                        chat_targets: Some(vec![types::ChatTarget {
+                            provider_id: "scripted".into(),
+                            backend_id: "scripted".into(),
+                            model: "new-model".into(),
+                            api_key: "secret".into(),
+                            base_url: String::new(),
+                        }]),
+                        temperature: Some(0.2),
+                        max_tokens: Some(1234),
+                        ..Default::default()
+                    },
+                },
+                TurnInputMode::StartIfIdle,
+            )
+            .await
+            .unwrap();
+        let turn_id = submitted.turn_id().unwrap().to_string();
+        let mut settings_index = None;
+        let mut started_index = None;
+        let mut event_index = 0;
+        timeout(Duration::from_secs(2), async {
+            loop {
+                let event = thread.next_event().await.unwrap();
+                match event.msg {
+                    agent_protocol::EventMsg::ThreadSettingsApplied(applied) => {
+                        assert_eq!(applied.thread_settings.model, "new-model");
+                        settings_index = Some(event_index);
+                    }
+                    agent_protocol::EventMsg::TurnStarted(started)
+                        if started.turn_id == turn_id =>
+                    {
+                        started_index = Some(event_index);
+                    }
+                    agent_protocol::EventMsg::TurnComplete(complete)
+                        if complete.turn_id == turn_id =>
+                    {
+                        break;
+                    }
+                    _ => {}
+                }
+                event_index += 1;
+            }
+        })
+        .await
+        .expect("configured turn should complete");
+
+        assert!(settings_index.is_some_and(|index| index < started_index.unwrap()));
+        let config = observed_config.lock().unwrap();
+        let config = config.as_ref().expect("model call should observe settings");
+        assert_eq!(config.model, "new-model");
+        assert_eq!(config.temperature, 0.2);
+        assert_eq!(config.max_tokens, 1234);
+
+        thread.submit(Op::Shutdown).await.unwrap();
+        timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn rejected_turn_input_does_not_apply_its_thread_settings() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "settings-rejected-turn".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        session.set_chat_targets(vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }]);
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let chat_override: crate::streaming::ChatOverride = {
+            let entered = Arc::clone(&entered);
+            Arc::new(move |_messages, _tools, _config| {
+                entered.notify_one();
+                Box::pin(async {
+                    Ok(
+                        Box::pin(futures::stream::pending::<anyhow::Result<StreamChunk>>())
+                            as CompletionStream,
+                    )
+                })
+            })
+        };
+        let thread = AstroThread::spawn_with_chat_override(
+            Arc::clone(&session),
+            recorder(&dir, "settings-rejected-turn.jsonl").await,
+            chat_override,
+        )
+        .unwrap();
+        let (_, started) = thread
+            .submit_turn(
+                TurnInputRequest {
+                    input: vec![agent_protocol::TurnInput {
+                        content: "keep running".into(),
+                        image_data_urls: Vec::new(),
+                        client_message_id: None,
+                    }],
+                    thread_settings: Default::default(),
+                },
+                TurnInputMode::StartIfIdle,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(started, TurnInputSubmission::Started { .. }));
+        timeout(Duration::from_secs(1), entered.notified())
+            .await
+            .unwrap();
+
+        let (_, rejected) = thread
+            .submit_turn(
+                TurnInputRequest {
+                    input: vec![agent_protocol::TurnInput {
+                        content: "do not accept".into(),
+                        image_data_urls: Vec::new(),
+                        client_message_id: None,
+                    }],
+                    thread_settings: agent_protocol::ThreadSettingsOverrides {
+                        interaction_mode: Some(types::InteractionMode::Plan),
+                        temperature: Some(1.5),
+                        ..Default::default()
+                    },
+                },
+                TurnInputMode::StartIfIdle,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            rejected,
+            TurnInputSubmission::NotSubmitted { ref reason } if reason == "not_idle"
+        ));
+        assert_eq!(
+            session.interaction_mode().await,
+            types::InteractionMode::Agent
+        );
+        assert_eq!(session.temperature(), 0.7);
+
+        thread.submit(Op::Interrupt).await.unwrap();
         thread.submit(Op::Shutdown).await.unwrap();
         timeout(Duration::from_secs(1), thread.wait_terminated())
             .await
@@ -545,6 +811,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    thread_settings: Default::default(),
                 },
                 TurnInputMode::StartIfIdle,
             )
@@ -647,6 +914,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    thread_settings: Default::default(),
                 },
                 TurnInputMode::StartIfIdle,
             )
@@ -859,7 +1127,7 @@ mod tests {
             .unwrap();
         let barrier_id = thread
             .submit(Op::ThreadSettings {
-                settings: serde_json::json!({}),
+                thread_settings: agent_protocol::ThreadSettingsOverrides::default(),
             })
             .await
             .unwrap();

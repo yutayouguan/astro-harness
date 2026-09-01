@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use thiserror::Error;
 
 use crate::control::{
     DynamicToolResponse, InterAgentCommunication, RequestPermissionsResponse,
-    RequestUserInputResponse, ReviewDecision, ReviewRequest,
+    RequestUserInputResponse, ReviewDecision, ReviewRequest, ThreadSettingsOverrides,
 };
 use crate::items::ExtensionItem;
 
@@ -17,9 +16,12 @@ pub struct TurnInput {
     pub client_message_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TurnInputRequest {
     pub input: Vec<TurnInput>,
+    /// Persistent settings applied only after this input is accepted.
+    #[serde(skip, default)]
+    pub thread_settings: ThreadSettingsOverrides,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,7 +88,7 @@ pub enum Op {
     /// Terminate this thread's background terminal jobs without interrupting the active turn.
     CleanBackgroundTerminals,
     ThreadSettings {
-        settings: Value,
+        thread_settings: ThreadSettingsOverrides,
     },
     ExecApproval {
         id: String,

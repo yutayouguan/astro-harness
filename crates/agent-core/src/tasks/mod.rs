@@ -272,8 +272,7 @@ impl Session {
             .await
     }
 
-    #[cfg(test)]
-    async fn spawn_task_with_install_hook<T, F>(
+    pub(crate) async fn spawn_task_with_install_hook<T, F>(
         self: &Arc<Self>,
         turn_context: Arc<TurnContext>,
         input: Vec<TurnInput>,
@@ -1942,6 +1941,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    thread_settings: Default::default(),
                 },
                 agent_protocol::TurnInputMode::StartIfIdle,
             ),
@@ -1963,6 +1963,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    thread_settings: Default::default(),
                 },
                 agent_protocol::TurnInputMode::StartOrSteer,
             ),

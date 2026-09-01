@@ -1179,16 +1179,22 @@ impl AstroServiceImpl {
         req: &proto::ChatRequest,
     ) -> Result<(), Status> {
         let hook_runtime = self.hook_runtime_for_project(&req.project_root);
-        self.configure_thread_from_chat_with_hooks(thread, req, hook_runtime)
-            .await
+        let settings = self
+            .prepare_thread_settings_from_chat_with_hooks(thread, req, hook_runtime)
+            .await?;
+        thread
+            .session()
+            .apply_thread_settings(settings)
+            .map_err(Status::invalid_argument)?;
+        Ok(())
     }
 
-    pub(crate) async fn configure_thread_from_chat_with_hooks(
+    pub(crate) async fn prepare_thread_settings_from_chat_with_hooks(
         &self,
         thread: &agent::AstroThread,
         req: &proto::ChatRequest,
         hook_runtime: Arc<::hooks::HookRuntime>,
-    ) -> Result<(), Status> {
+    ) -> Result<agent_protocol::ThreadSettingsOverrides, Status> {
         // Validate the complete request before mutating the reusable session. Invalid legacy
         // modes or malformed provider parameters must not partially reconfigure a live thread.
         let interaction_mode =
@@ -1272,61 +1278,54 @@ impl AstroServiceImpl {
                 replaced.cancel_all().await;
             }
         }
-        session.set_chat_credentials(provider, &model, &api_key, &base_url);
-        session.set_thread_provider_options(agent::runtime::ThreadProviderOptions {
-            thinking_enabled: req.thinking_enabled,
-            reasoning_effort: if req.reasoning_effort.trim().is_empty() {
+        Ok(agent_protocol::ThreadSettingsOverrides {
+            chat_targets: Some(targets),
+            auxiliary_targets: Some(parse_auxiliary_targets(req.auxiliary_targets.clone())),
+            image_gen_targets: Some(tools::image_gen_targets_from_parts(tools::ImageGenParts {
+                provider: &req.image_gen_provider,
+                model: &req.image_gen_model,
+                api_key: &req.image_gen_api_key,
+                base_url: &req.image_gen_base_url,
+                fb_provider: &req.image_gen_fallback_provider,
+                fb_model: &req.image_gen_fallback_model,
+                fb_api_key: &req.image_gen_fallback_api_key,
+                fb_base_url: &req.image_gen_fallback_base_url,
+                video_model: &req.image_gen_video_model,
+                music_model: &req.image_gen_music_model,
+                tts_model: &req.image_gen_tts_model,
+                fb_video_model: &req.image_gen_fallback_video_model,
+                fb_music_model: &req.image_gen_fallback_music_model,
+                fb_tts_model: &req.image_gen_fallback_tts_model,
+                vision_model: &req.image_gen_vision_model,
+                fb_vision_model: &req.image_gen_fallback_vision_model,
+            })),
+            context_window: (req.context_window > 0).then_some(req.context_window),
+            interaction_mode: Some(interaction_mode),
+            project_root: Some(
+                (!req.project_root.trim().is_empty())
+                    .then(|| PathBuf::from(req.project_root.trim())),
+            ),
+            workspace_roots: Some(
+                req.workspace_roots
+                    .iter()
+                    .map(|root| PathBuf::from(root.trim()))
+                    .filter(|root| !root.as_os_str().is_empty())
+                    .collect(),
+            ),
+            temperature: req.temperature,
+            additional_params,
+            thinking_enabled: Some(req.thinking_enabled),
+            reasoning_effort: Some(if req.reasoning_effort.trim().is_empty() {
                 "high".into()
             } else {
                 req.reasoning_effort.trim().into()
-            },
-            max_tokens: if req.max_output_tokens > 0 {
+            }),
+            max_tokens: Some(if req.max_output_tokens > 0 {
                 req.max_output_tokens
             } else {
                 8192
-            },
-        });
-        session.set_chat_targets(targets);
-        session.set_auxiliary_targets(parse_auxiliary_targets(req.auxiliary_targets.clone()));
-        session.set_image_gen_targets(tools::image_gen_targets_from_parts(tools::ImageGenParts {
-            provider: &req.image_gen_provider,
-            model: &req.image_gen_model,
-            api_key: &req.image_gen_api_key,
-            base_url: &req.image_gen_base_url,
-            fb_provider: &req.image_gen_fallback_provider,
-            fb_model: &req.image_gen_fallback_model,
-            fb_api_key: &req.image_gen_fallback_api_key,
-            fb_base_url: &req.image_gen_fallback_base_url,
-            video_model: &req.image_gen_video_model,
-            music_model: &req.image_gen_music_model,
-            tts_model: &req.image_gen_tts_model,
-            fb_video_model: &req.image_gen_fallback_video_model,
-            fb_music_model: &req.image_gen_fallback_music_model,
-            fb_tts_model: &req.image_gen_fallback_tts_model,
-            vision_model: &req.image_gen_vision_model,
-            fb_vision_model: &req.image_gen_fallback_vision_model,
-        }));
-        if req.context_window > 0 {
-            session.set_context_window(req.context_window);
-        }
-        session.set_interaction_mode(interaction_mode).await;
-        session.set_project_root(
-            (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim())),
-        );
-        session.set_workspace_roots(
-            req.workspace_roots
-                .iter()
-                .map(|root| PathBuf::from(root.trim()))
-                .filter(|root| !root.as_os_str().is_empty())
-                .collect(),
-        );
-        if let Some(temperature) = req.temperature {
-            session.set_temperature(temperature);
-        }
-        if let Some(params) = additional_params {
-            session.set_additional_params(params);
-        }
-        Ok(())
+            }),
+        })
     }
 
     fn spawn_idle_unload(&self, thread_id: String, managed: Arc<ManagedThread>) {
@@ -2333,6 +2332,7 @@ impl AstroService for AstroServiceImpl {
                         client_message_id: (!req.client_message_id.trim().is_empty())
                             .then(|| req.client_message_id.trim().to_string()),
                     }],
+                    thread_settings: Default::default(),
                 },
                 agent_protocol::TurnInputMode::Steer { expected_turn_id },
             )

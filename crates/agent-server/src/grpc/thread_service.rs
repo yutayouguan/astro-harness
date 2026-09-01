@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use agent_protocol::{Op, TurnInput, TurnInputMode, TurnInputRequest, TurnInputSubmission};
+use agent_protocol::{TurnInput, TurnInputMode, TurnInputRequest, TurnInputSubmission};
 use futures::Stream;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -275,38 +275,22 @@ pub(crate) async fn submit_turn(
     let managed = service.get_or_create_thread(thread_id).await?;
     resume(&managed, subscription.clone(), false).await?;
     let submit = async {
-        service
-            .configure_thread_from_chat_with_hooks(
+        let thread_settings = service
+            .prepare_thread_settings_from_chat_with_hooks(
                 &managed.runtime,
                 &chat,
                 std::sync::Arc::clone(&request_hook_runtime),
             )
             .await?;
         debug_assert_eq!(
-            managed.runtime.session().interaction_mode().await,
-            validated.interaction_mode
+            thread_settings.interaction_mode,
+            Some(validated.interaction_mode)
         );
-        managed
-            .runtime
-            .submit(Op::ThreadSettings {
-                settings: serde_json::json!({
-                    "provider": chat.provider,
-                    "model": chat.model,
-                    "interaction_mode": chat.interaction_mode,
-                    "project_root": chat.project_root,
-                }),
-            })
-            .await
-            .map_err(|error| Status::unavailable(error.to_string()))?;
-        let submitted = managed
-            .runtime
-            .submit_turn(
-                validated
-                    .turn_request
-                    .expect("non-resume validation must produce turn input"),
-                mode,
-            )
-            .await;
+        let mut turn_request = validated
+            .turn_request
+            .expect("non-resume validation must produce turn input");
+        turn_request.thread_settings = thread_settings;
+        let submitted = managed.runtime.submit_turn(turn_request, mode).await;
         match submitted {
             Ok(submitted) => Ok(submitted),
             Err(error) if explicit_steer => {
@@ -484,6 +468,7 @@ fn turn_request_from_chat_with_requirement(
             client_message_id: (!chat.client_message_id.trim().is_empty())
                 .then(|| chat.client_message_id.trim().to_string()),
         }],
+        thread_settings: Default::default(),
     })
 }
 
@@ -588,6 +573,7 @@ async fn prepare_resume_before_side_effects(
 
 #[cfg(test)]
 mod tests {
+    use agent_protocol::Op;
     use futures::StreamExt;
     use tempfile::TempDir;
 

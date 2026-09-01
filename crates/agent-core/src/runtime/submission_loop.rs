@@ -169,9 +169,22 @@ impl Session {
         chat_override: Option<ChatOverride>,
     ) {
         match op {
-            Op::ThreadSettings { settings } => {
-                self.send_event(&submission_id, EventMsg::ThreadSettingsApplied(settings))
-                    .await;
+            Op::ThreadSettings { thread_settings } => {
+                match self.apply_thread_settings(thread_settings) {
+                    Ok(thread_settings) => {
+                        self.send_event(
+                            &submission_id,
+                            EventMsg::ThreadSettingsApplied(
+                                agent_protocol::ThreadSettingsAppliedEvent { thread_settings },
+                            ),
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        self.emit_control_error(submission_id, "thread_settings", error)
+                            .await;
+                    }
+                }
             }
             Op::RefreshMcpServers => {
                 if let Err(error) = self.reload_mcp().await {
@@ -351,6 +364,7 @@ impl Session {
                                     .as_ref()
                                     .map(ToString::to_string),
                             }],
+                            thread_settings: Default::default(),
                         },
                         TurnInputMode::StartOrSteer,
                         chat_override,

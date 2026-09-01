@@ -1,9 +1,63 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{AgentMessageInputContent, ResponseItem, ResponseItemId};
+
+/// Persistent settings published in submission order for subsequent turns.
+///
+/// The custom `Debug` implementation deliberately omits provider credentials.
+#[derive(Clone, Default, PartialEq)]
+pub struct ThreadSettingsOverrides {
+    pub chat_targets: Option<Vec<types::ChatTarget>>,
+    pub auxiliary_targets: Option<HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>>>,
+    pub image_gen_targets: Option<types::ImageGenTargets>,
+    pub context_window: Option<u32>,
+    pub interaction_mode: Option<types::InteractionMode>,
+    /// `None` preserves the current root; `Some(None)` clears it.
+    pub project_root: Option<Option<PathBuf>>,
+    pub workspace_roots: Option<Vec<PathBuf>>,
+    pub temperature: Option<f32>,
+    pub additional_params: Option<Value>,
+    pub thinking_enabled: Option<bool>,
+    pub reasoning_effort: Option<String>,
+    pub max_tokens: Option<u32>,
+}
+
+impl ThreadSettingsOverrides {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
+impl fmt::Debug for ThreadSettingsOverrides {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ThreadSettingsOverrides")
+            .field(
+                "chat_targets",
+                &self.chat_targets.as_ref().map(|targets| targets.len()),
+            )
+            .field(
+                "auxiliary_targets",
+                &self.auxiliary_targets.as_ref().map(HashMap::len),
+            )
+            .field("image_gen_targets", &self.image_gen_targets.is_some())
+            .field("context_window", &self.context_window)
+            .field("interaction_mode", &self.interaction_mode)
+            .field("project_root", &self.project_root)
+            .field("workspace_roots", &self.workspace_roots)
+            .field("temperature", &self.temperature)
+            .field("additional_params", &self.additional_params.is_some())
+            .field("thinking_enabled", &self.thinking_enabled)
+            .field("reasoning_effort", &self.reasoning_effort)
+            .field("max_tokens", &self.max_tokens)
+            .finish()
+    }
+}
 
 /// User decision for an execution or patch approval request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
