@@ -1,6 +1,6 @@
 # Astro Extension Manifest
 
-Astro 扩展包使用 `extension.toml` 同时声明 MCP Server、Skill、配置 Schema 和已编译工具集合。运行时在每个 turn 的准备边界发现扩展，并生成不可变 `ExtensionSnapshot`；同一 turn 的所有模型采样与工具调用复用同一版本，磁盘变化从下一 turn 生效。
+Astro 扩展包使用 `extension.toml` 同时声明 MCP Server、Skill、配置 Schema 和已编译工具集合。`agent-extensions` crate 负责发现、校验、合并和生成不可变 `ExtensionSnapshot`；`agent-core` 在每个 turn 的准备边界发布该快照，同一 turn 的所有模型采样与工具调用复用同一版本，磁盘变化从下一 turn 生效。
 
 ## 目录
 
@@ -58,12 +58,14 @@ deployment = "gpt-image-2"
 size = "1536x1024"
 ```
 
-v1 会解析并冻结 JSON Schema，供设置 UI 或扩展消费者生成表单和执行校验；核心运行时暂不自行解释任意业务字段。
+v1 会解析并校验 JSON Schema，并在合并 defaults 与用户/项目配置后验证最终配置。Schema 或配置不合法时，整个扩展包会被跳过并产生诊断；运行时不解释任意业务字段。
 
 ## 安全边界
 
 - Manifest 路径必须相对扩展根目录，解析后不能逃逸该目录。
 - 项目扩展遵循现有 `ProjectTrust`。
+- `agent-core` 只在配置加载器明确返回 `Trusted` 时向扩展解析器传入项目根；扩展解析器还会验证该根是工作目录的祖先。
+- JSON Schema 校验不解析 HTTP 或扩展目录之外的外部引用；需要复用的定义应放在同一 Schema 的 `$defs` 中。
 - MCP Server id 会加上 `ext-<extension-id>-` 命名空间。
 - `tools` 只能启用已经编译进 Astro 的 toolset，不加载动态库或任意原生处理器。
 - 新的可执行工具应由 MCP Server 提供；Skill 负责说明、编排和按需激活。

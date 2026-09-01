@@ -26,6 +26,7 @@ network-proxy = { path = "../agent-network-proxy" }
 agent-protocol = { path = "../agent-protocol" }
 agent-rollout = { path = "../agent-rollout" }
 realtime = { path = "../agent-realtime" }
+agent-extensions = { path = "../agent-extensions" }
 agent-config = { path = "../agent-config" }
 tracing = { workspace = true }
 tokio = { workspace = true }
@@ -40,7 +41,6 @@ uuid = { version = "1", features = ["v4", "v5"] }
 chrono = { version = "0.4", features = ["clock"] }
 futures = "0.3"
 regex = "1"
-toml = "0.8"
 async-channel = "2"
 base64 = { workspace = true }
 tokio-tungstenite = { workspace = true }

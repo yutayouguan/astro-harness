@@ -777,4 +777,49 @@ mod tests {
         assert_eq!(snapshot.targets[0].model, "old-model");
         assert_eq!(snapshot.base_config.model, "old-model");
     }
+
+    #[test]
+    fn extension_snapshot_publishes_only_the_first_value() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home/.astro");
+        let project = root.path().join("project");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+        let loaded = agent_config::loader::load_local_config(
+            &agent_config::loader::LocalConfigOptions::new(&home, &project),
+        )
+        .unwrap();
+        let effective = loaded.resolve();
+        let snapshot = |version: &str| {
+            Arc::new(
+                crate::extensions::discover_extension_snapshot(
+                    &crate::extensions::ExtensionDiscoveryOptions::new(
+                        &home,
+                        &project,
+                        effective.raw().clone(),
+                        version,
+                    ),
+                )
+                .unwrap(),
+            )
+        };
+        let first = snapshot("config-v1");
+        let second = snapshot("config-v2");
+        assert_ne!(first.version(), second.version());
+        let first_version = first.version().to_string();
+        let turn = TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            Some(project),
+        );
+
+        let published = turn.publish_extension_snapshot(first);
+        let repeated = turn.publish_extension_snapshot(second);
+
+        assert_eq!(published.version(), first_version);
+        assert_eq!(repeated.version(), first_version);
+        assert!(Arc::ptr_eq(&published, &repeated));
+    }
 }

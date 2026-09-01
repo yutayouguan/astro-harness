@@ -2030,10 +2030,19 @@ impl Session {
             )
         };
         let working_dir = project_root.unwrap_or_else(|| self.workspace_dir.clone());
+        let loaded_config = agent_config::loader::load_local_config(
+            &agent_config::loader::LocalConfigOptions::new(&self.config.memory_dir, &working_dir),
+        )?;
+        let effective_config = loaded_config.resolve();
         let mut options = crate::extensions::ExtensionDiscoveryOptions::new(
             self.config.memory_dir.clone(),
             working_dir,
+            effective_config.raw().clone(),
+            effective_config.version(),
         );
+        if loaded_config.project_trust == agent_config::loader::ProjectTrust::Trusted {
+            options = options.with_trusted_project_root(loaded_config.project_root);
+        }
         options.mcp_overrides = mcp_overrides;
         options.skill_overrides = skill_overrides;
         let snapshot = Arc::new(crate::extensions::discover_extension_snapshot(&options)?);

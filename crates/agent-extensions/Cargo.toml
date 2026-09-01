@@ -1,0 +1,17 @@
+[package]
+name = "agent-extensions"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mcp = { path = "../agent-mcp" }
+skills = { path = "../agent-skills" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+jsonschema = { version = "0.52", default-features = false }
+sha2 = "0.10"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"

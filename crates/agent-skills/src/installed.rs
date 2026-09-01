@@ -85,7 +85,10 @@ fn save_enabled_state(agent_id: Option<&str>, state: &HashMap<String, bool>) -> 
 }
 
 /// Astro 管理范围：`~/.astro/skills` + 当前 Agent 工作区 skills
-fn astro_skill_roots(agent_id: Option<&str>) -> Vec<PathBuf> {
+fn astro_skill_roots_for_workspace(
+    agent_id: Option<&str>,
+    workspace_override: Option<&Path>,
+) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     let astro = memory_dir().join("skills");
     let _ = fs::create_dir_all(&astro);
@@ -96,7 +99,7 @@ fn astro_skill_roots(agent_id: Option<&str>) -> Vec<PathBuf> {
         roots.push(ws.join("skills"));
         roots.push(ws.join(".agents/skills"));
         roots.push(ws.join(".cursor/skills"));
-    } else if let Some(ws) = crate::workspace_override() {
+    } else if let Some(ws) = workspace_override {
         roots.push(ws.join("skills"));
         roots.push(ws.join(".agents/skills"));
         roots.push(ws.join(".cursor/skills"));
@@ -441,9 +444,16 @@ fn id_belongs_to_roots(id: &str, roots: &[PathBuf]) -> bool {
 
 /// 扫描 Astro 管理的技能根。
 fn scan_astro(agent_id: Option<&str>) -> Vec<InstalledSkill> {
+    scan_astro_for_workspace(agent_id, crate::workspace_override().as_deref())
+}
+
+fn scan_astro_for_workspace(
+    agent_id: Option<&str>,
+    workspace_override: Option<&Path>,
+) -> Vec<InstalledSkill> {
     let mut state = load_enabled_state(agent_id);
     let mut dirty = false;
-    let roots = astro_skill_roots(agent_id);
+    let roots = astro_skill_roots_for_workspace(agent_id, workspace_override);
     let mut out = scan_roots(&roots, agent_id, "global", &mut state, &mut dirty, true);
 
     let seen: std::collections::HashSet<_> = out.iter().map(|s| s.id.clone()).collect();
@@ -569,11 +579,27 @@ fn configured_skill(path: &Path, enabled: bool) -> Result<(LoadedSkill, bool)> {
 /// Apply a child-session `[[skills.config]]` layer without mutating the
 /// parent's persisted enable state. Later entries win for the same path.
 pub fn list_enabled_for_prompt_with_config(config: &[(PathBuf, bool)]) -> Vec<(String, String)> {
-    if config.is_empty() {
-        return list_enabled_for_prompt();
-    }
-    let mut out = Vec::new();
     let installed = list_installed();
+    enabled_for_prompt_from_installed(installed, config)
+}
+
+/// 构建 prompt Skill 索引，并为无显式 Agent workspace 的调用固定工作目录。
+///
+/// 与进程级 [`crate::set_workspace_override`] 不同，该函数不会影响并发 session。
+pub fn list_enabled_for_prompt_with_config_in_workspace(
+    workspace: &Path,
+    config: &[(PathBuf, bool)],
+) -> Vec<(String, String)> {
+    let agent_id = active_agent_id();
+    let installed = scan_astro_for_workspace(agent_id.as_deref(), Some(workspace));
+    enabled_for_prompt_from_installed(installed, config)
+}
+
+fn enabled_for_prompt_from_installed(
+    installed: Vec<InstalledSkill>,
+    config: &[(PathBuf, bool)],
+) -> Vec<(String, String)> {
+    let mut out = Vec::new();
     for skill in installed {
         let skill_path = Path::new(&skill.path);
         let enabled = config
@@ -1285,6 +1311,32 @@ mod tests {
         assert!(list_enabled_for_prompt_with_config(&config)
             .iter()
             .all(|(name, _)| name != "configured-reviewer"));
+    }
+
+    #[test]
+    fn prompt_index_workspace_does_not_mutate_process_override() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path().join("astro"));
+        let existing_workspace = dir.path().join("existing-workspace");
+        let snapshot_workspace = dir.path().join("snapshot-workspace");
+        fs::create_dir_all(&existing_workspace).unwrap();
+        let skill_dir = snapshot_workspace.join("skills/snapshot-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: snapshot-skill\ndescription: isolated workspace\n---\n",
+        )
+        .unwrap();
+        crate::set_workspace_override(&existing_workspace);
+
+        let index = list_enabled_for_prompt_with_config_in_workspace(&snapshot_workspace, &[]);
+
+        assert!(index.iter().any(|(name, _)| name == "snapshot-skill"));
+        assert_eq!(
+            crate::workspace_override().as_deref(),
+            Some(existing_workspace.as_path())
+        );
     }
 
     #[test]

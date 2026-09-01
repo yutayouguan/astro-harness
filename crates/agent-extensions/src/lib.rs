@@ -1,4 +1,4 @@
-//! 统一扩展包发现与 turn 级不可变快照。
+//! Astro 统一扩展包发现、校验与 turn 级不可变快照。
 //!
 //! 扩展包位于 `~/.astro/extensions/<id>/extension.toml`，可信项目还可在
 //! `<project>/.astro/extensions/<id>/extension.toml` 提供同 id 覆盖。Manifest 只声明
@@ -9,7 +9,6 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use agent_config::loader::{load_local_config, LocalConfigOptions, ProjectTrust};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -183,18 +182,38 @@ impl ExtensionSnapshot {
 pub struct ExtensionDiscoveryOptions {
     pub astro_home: PathBuf,
     pub working_dir: PathBuf,
+    /// 仅当上层已经确认项目可信时设置；`None` 表示禁止读取项目扩展。
+    pub trusted_project_root: Option<PathBuf>,
+    /// 当前 turn 已解析的完整分层配置。
+    pub effective_config: toml::Value,
+    /// 与 `effective_config` 对应的稳定版本。
+    pub config_version: String,
     pub mcp_overrides: Vec<mcp::McpServerConfig>,
     pub skill_overrides: Vec<(PathBuf, bool)>,
 }
 
 impl ExtensionDiscoveryOptions {
-    pub fn new(astro_home: impl Into<PathBuf>, working_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(
+        astro_home: impl Into<PathBuf>,
+        working_dir: impl Into<PathBuf>,
+        effective_config: toml::Value,
+        config_version: impl Into<String>,
+    ) -> Self {
         Self {
             astro_home: astro_home.into(),
             working_dir: working_dir.into(),
+            trusted_project_root: None,
+            effective_config,
+            config_version: config_version.into(),
             mcp_overrides: Vec::new(),
             skill_overrides: Vec::new(),
         }
+    }
+
+    /// 启用来自已受信任项目根的扩展包。
+    pub fn with_trusted_project_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.trusted_project_root = Some(root.into());
+        self
     }
 }
 
@@ -210,11 +229,6 @@ struct ManifestCandidate {
 pub fn discover_extension_snapshot(
     options: &ExtensionDiscoveryOptions,
 ) -> Result<ExtensionSnapshot> {
-    let loaded = load_local_config(&LocalConfigOptions::new(
-        &options.astro_home,
-        &options.working_dir,
-    ))?;
-    let effective = loaded.resolve();
     let mut diagnostics = Vec::new();
     let mut selected = BTreeMap::<String, ManifestCandidate>::new();
 
@@ -224,9 +238,10 @@ pub fn discover_extension_snapshot(
         &mut selected,
         &mut diagnostics,
     );
-    if loaded.project_trust == ProjectTrust::Trusted {
+    if let Some(project_root) = options.trusted_project_root.as_deref() {
+        validate_trusted_project_root(project_root, &options.working_dir)?;
         collect_candidates(
-            &loaded.project_root.join(".astro/extensions"),
+            &project_root.join(".astro/extensions"),
             ExtensionScope::Project,
             &mut selected,
             &mut diagnostics,
@@ -238,7 +253,7 @@ pub fn discover_extension_snapshot(
         if !candidate.manifest.enabled {
             continue;
         }
-        match resolve_candidate(candidate, effective.raw()) {
+        match resolve_candidate(candidate, &options.effective_config) {
             Ok(extension) => resolved_candidates.push(extension),
             Err(error) => diagnostics.push(ExtensionDiagnostic {
                 manifest_path: error.0,
@@ -249,7 +264,7 @@ pub fn discover_extension_snapshot(
     }
 
     let mut mcp_by_id = BTreeMap::new();
-    for config in mcp::decode_mcp_servers_from_value(effective.raw())? {
+    for config in mcp::decode_mcp_servers_from_value(&options.effective_config)? {
         mcp_by_id.insert(mcp::sanitize_server_id(&config.id), config);
     }
     let mut skill_configs = Vec::new();
@@ -289,11 +304,13 @@ pub fn discover_extension_snapshot(
     toolsets.sort();
     toolsets.dedup();
 
-    skills::set_workspace_override(&options.working_dir);
-    let skill_index = skills::list_enabled_for_prompt_with_config(&skill_configs);
+    let skill_index = skills::list_enabled_for_prompt_with_config_in_workspace(
+        &options.working_dir,
+        &skill_configs,
+    );
     let mcp_servers = mcp_by_id.into_values().collect::<Vec<_>>();
     let version = snapshot_fingerprint(
-        effective.version(),
+        &options.config_version,
         &options.working_dir,
         &resolved,
         &mcp_servers,
@@ -304,7 +321,7 @@ pub fn discover_extension_snapshot(
 
     Ok(ExtensionSnapshot {
         version,
-        config_version: effective.version().to_string(),
+        config_version: options.config_version.clone(),
         working_dir: options.working_dir.clone(),
         extensions: resolved,
         mcp_servers,
@@ -313,6 +330,28 @@ pub fn discover_extension_snapshot(
         toolsets,
         diagnostics,
     })
+}
+
+fn validate_trusted_project_root(project_root: &Path, working_dir: &Path) -> Result<()> {
+    let project_root = project_root.canonicalize().with_context(|| {
+        format!(
+            "canonicalize trusted project root {}",
+            project_root.display()
+        )
+    })?;
+    let working_dir = working_dir.canonicalize().with_context(|| {
+        format!(
+            "canonicalize extension working directory {}",
+            working_dir.display()
+        )
+    })?;
+    anyhow::ensure!(
+        working_dir.starts_with(&project_root),
+        "trusted project root {} is not an ancestor of working directory {}",
+        project_root.display(),
+        working_dir.display()
+    );
+    Ok(())
 }
 
 fn collect_candidates(
@@ -428,6 +467,9 @@ fn resolve_candidate_inner(
     if let Some(overrides) = extension_config_value(effective_config, extension_id) {
         merge_toml(&mut config, overrides);
     }
+    if let Some(schema) = config_schema.as_ref() {
+        validate_extension_config(extension_id, schema, &config)?;
+    }
 
     let mut skill_configs = Vec::new();
     for skill in &candidate.manifest.skills {
@@ -480,6 +522,30 @@ fn resolve_candidate_inner(
         skill_configs,
         toolsets,
     })
+}
+
+fn validate_extension_config(
+    extension_id: &str,
+    schema: &serde_json::Value,
+    config: &toml::Value,
+) -> Result<()> {
+    jsonschema::meta::validate(schema)
+        .map_err(|error| anyhow::anyhow!("invalid config JSON Schema: {error}"))?;
+    let validator = jsonschema::validator_for(schema)
+        .map_err(|error| anyhow::anyhow!("compile config JSON Schema: {error}"))?;
+    let instance = serde_json::to_value(config)
+        .with_context(|| format!("serialize configuration for extension {extension_id}"))?;
+    let errors = validator
+        .iter_errors(&instance)
+        .take(8)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>();
+    anyhow::ensure!(
+        errors.is_empty(),
+        "extension configuration does not match JSON Schema: {}",
+        errors.join("; ")
+    );
+    Ok(())
 }
 
 fn resolve_inside_root(root: &Path, path: &Path, require_file: bool) -> Result<PathBuf> {
@@ -589,25 +655,32 @@ fn canonicalize_json(value: &mut serde_json::Value) {
 mod tests {
     use super::*;
 
-    fn quoted(path: &Path) -> String {
-        format!("{:?}", path.to_string_lossy())
-    }
-
     fn fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home/.astro");
         let project = root.path().join("project");
         fs::create_dir_all(&home).unwrap();
         fs::create_dir_all(project.join(".git")).unwrap();
-        fs::write(
-            home.join("config.toml"),
-            format!(
-                "[projects.{}]\ntrust_level = 'trusted'\n[extensions.demo]\nlabel = 'configured'\n",
-                quoted(&project)
-            ),
-        )
-        .unwrap();
         (root, home, project)
+    }
+
+    fn discovery_options(home: &Path, project: &Path, trusted: bool) -> ExtensionDiscoveryOptions {
+        let config = toml::from_str("[extensions.demo]\nlabel = 'configured'\n").unwrap();
+        discovery_options_with_config(home, project, trusted, config)
+    }
+
+    fn discovery_options_with_config(
+        home: &Path,
+        project: &Path,
+        trusted: bool,
+        config: toml::Value,
+    ) -> ExtensionDiscoveryOptions {
+        let options = ExtensionDiscoveryOptions::new(home, project, config, "test-config-v1");
+        if trusted {
+            options.with_trusted_project_root(project)
+        } else {
+            options
+        }
     }
 
     fn write_demo_extension(root: &Path, description: &str) {
@@ -657,7 +730,7 @@ args = ["ready"]
         write_demo_extension(&home.join("extensions"), "global");
 
         let snapshot =
-            discover_extension_snapshot(&ExtensionDiscoveryOptions::new(&home, &project)).unwrap();
+            discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
 
         assert_eq!(snapshot.extensions().len(), 1);
         assert_eq!(
@@ -682,7 +755,7 @@ args = ["ready"]
         write_demo_extension(&project.join(".astro/extensions"), "project");
 
         let snapshot =
-            discover_extension_snapshot(&ExtensionDiscoveryOptions::new(&home, &project)).unwrap();
+            discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
 
         assert_eq!(snapshot.extensions().len(), 1);
         assert_eq!(snapshot.extensions()[0].scope, ExtensionScope::Project);
@@ -694,7 +767,7 @@ args = ["ready"]
         let (_temp, home, project) = fixture();
         write_demo_extension(&home.join("extensions"), "global");
         let skill_path = home.join("extensions/demo/skills/demo-skill");
-        let mut options = ExtensionDiscoveryOptions::new(&home, &project);
+        let mut options = discovery_options(&home, &project, true);
         options.skill_overrides.push((skill_path, false));
 
         let snapshot = discover_extension_snapshot(&options).unwrap();
@@ -708,11 +781,10 @@ args = ["ready"]
     #[test]
     fn untrusted_project_extensions_are_not_read() {
         let (_temp, home, project) = fixture();
-        fs::write(home.join("config.toml"), "model = 'test'\n").unwrap();
         write_demo_extension(&project.join(".astro/extensions"), "project");
 
         let snapshot =
-            discover_extension_snapshot(&ExtensionDiscoveryOptions::new(&home, &project)).unwrap();
+            discover_extension_snapshot(&discovery_options(&home, &project, false)).unwrap();
 
         assert!(snapshot.extensions().is_empty());
         assert!(snapshot.diagnostics().is_empty());
@@ -736,7 +808,7 @@ args = ["ready"]
         .unwrap();
 
         let snapshot =
-            discover_extension_snapshot(&ExtensionDiscoveryOptions::new(&home, &project)).unwrap();
+            discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
 
         assert!(snapshot.extensions().is_empty());
         assert_eq!(snapshot.diagnostics().len(), 1);
@@ -750,13 +822,13 @@ args = ["ready"]
     fn mcp_id_collision_skips_the_whole_extension() {
         let (_temp, home, project) = fixture();
         write_demo_extension(&home.join("extensions"), "global");
-        let config_path = home.join("config.toml");
-        let mut config = fs::read_to_string(&config_path).unwrap();
-        config.push_str("\n[mcp_servers.ext-demo-echo]\nurl = 'https://example.invalid/mcp'\n");
-        fs::write(config_path, config).unwrap();
-
-        let snapshot =
-            discover_extension_snapshot(&ExtensionDiscoveryOptions::new(&home, &project)).unwrap();
+        let config = toml::from_str(
+            "[extensions.demo]\nlabel = 'configured'\n\
+             [mcp_servers.ext-demo-echo]\nurl = 'https://example.invalid/mcp'\n",
+        )
+        .unwrap();
+        let options = discovery_options_with_config(&home, &project, true, config);
+        let snapshot = discover_extension_snapshot(&options).unwrap();
 
         assert!(snapshot.extensions().is_empty());
         assert!(snapshot
@@ -773,44 +845,69 @@ args = ["ready"]
         let (_temp, home, project) = fixture();
         let root = home.join("extensions");
         write_demo_extension(&root, "before");
-        let first =
-            discover_extension_snapshot(&ExtensionDiscoveryOptions::new(&home, &project)).unwrap();
+        let first = discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
         write_demo_extension(&root, "after");
 
         assert_eq!(first.extensions()[0].manifest.description, "before");
         let second =
-            discover_extension_snapshot(&ExtensionDiscoveryOptions::new(&home, &project)).unwrap();
+            discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
         assert_eq!(second.extensions()[0].manifest.description, "after");
         assert_ne!(first.version(), second.version());
     }
 
     #[test]
-    fn turn_context_publishes_only_the_first_snapshot() {
+    fn config_must_match_declared_json_schema() {
         let (_temp, home, project) = fixture();
-        let root = home.join("extensions");
-        write_demo_extension(&root, "first");
-        let first = std::sync::Arc::new(
-            discover_extension_snapshot(&ExtensionDiscoveryOptions::new(&home, &project)).unwrap(),
-        );
-        let first_version = first.version().to_string();
-        write_demo_extension(&root, "second");
-        let second = std::sync::Arc::new(
-            discover_extension_snapshot(&ExtensionDiscoveryOptions::new(&home, &project)).unwrap(),
-        );
-        assert_ne!(first.version(), second.version());
+        write_demo_extension(&home.join("extensions"), "global");
+        let config = toml::from_str("[extensions.demo]\nlabel = 42\n").unwrap();
 
-        let turn = crate::runtime::TurnContext::new(
-            "turn-1".into(),
-            1,
-            types::InteractionMode::Agent,
-            None,
-            Some(project),
-        );
-        let published = turn.publish_extension_snapshot(first);
-        let repeated = turn.publish_extension_snapshot(second);
+        let snapshot = discover_extension_snapshot(&discovery_options_with_config(
+            &home, &project, true, config,
+        ))
+        .unwrap();
 
-        assert_eq!(published.version(), first_version);
-        assert_eq!(repeated.version(), first_version);
-        assert!(std::sync::Arc::ptr_eq(&published, &repeated));
+        assert!(snapshot.extensions().is_empty());
+        assert_eq!(snapshot.diagnostics().len(), 1);
+        assert!(snapshot.diagnostics()[0]
+            .message
+            .contains("does not match JSON Schema"));
+    }
+
+    #[test]
+    fn malformed_json_schema_skips_the_whole_extension() {
+        let (_temp, home, project) = fixture();
+        write_demo_extension(&home.join("extensions"), "global");
+        fs::write(
+            home.join("extensions/demo/schema.json"),
+            r#"{"type":"not-a-json-schema-type"}"#,
+        )
+        .unwrap();
+
+        let snapshot =
+            discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
+
+        assert!(snapshot.extensions().is_empty());
+        assert_eq!(snapshot.diagnostics().len(), 1);
+        assert!(snapshot.diagnostics()[0]
+            .message
+            .contains("invalid config JSON Schema"));
+    }
+
+    #[test]
+    fn trusted_project_root_must_contain_the_working_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home/.astro");
+        let project = root.path().join("project");
+        let unrelated = root.path().join("unrelated");
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        fs::create_dir_all(&unrelated).unwrap();
+        let options =
+            ExtensionDiscoveryOptions::new(&home, &project, empty_table(), "test-config-v1")
+                .with_trusted_project_root(&unrelated);
+
+        let error = discover_extension_snapshot(&options).unwrap_err();
+
+        assert!(error.to_string().contains("is not an ancestor"));
     }
 }
