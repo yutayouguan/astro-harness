@@ -38,6 +38,10 @@ pub struct ImageGenConfig {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub n: u32,
+    pub output_format: Option<String>,
+    pub output_compression: Option<u8>,
+    pub quality: Option<String>,
+    pub background: Option<String>,
     pub additional_params: serde_json::Value,
 }
 

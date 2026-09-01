@@ -821,6 +821,20 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     }
   };
 
+  const setImageActive = async (id: string) => {
+    if (!isTauri()) return;
+    setError(null);
+    try {
+      const next = await invoke<ProvidersStateDto>(
+        "set_active_image_provider",
+        { id },
+      );
+      applyState(next);
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
   const addProvider = async () => {
     if (!isTauri()) return;
     setError(null);
@@ -1301,6 +1315,8 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   const enabledCount = state?.providers.filter((p) => p.enabled).length ?? 0;
   const total = state?.providers.length ?? 0;
   const isActive = state?.active_provider_id === selected?.id;
+  const isImageActive =
+    state?.active_image_provider_id === selected?.id;
   const needsKey = selected?.kind !== "ollama";
   const filteredModels = useMemo(() => {
     const q = modelFilter.trim().toLowerCase();
@@ -1668,6 +1684,17 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                         <IconStar />
                       </IconButton>
                     )}
+                  {!isImageActive && draft.enabled && selected.supports_image && (
+                    <IconButton
+                      variant="secondary"
+                      className="providers-pane-action"
+                      title={t("providers.setImageActive")}
+                      aria-label={t("providers.setImageActive")}
+                      onClick={() => void setImageActive(selected.id)}
+                    >
+                      <Image />
+                    </IconButton>
+                  )}
                   <IconButton
                     variant="danger"
                     className="providers-pane-action"
@@ -1721,6 +1748,11 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                       {isActive && (
                         <span className="providers-badge">
                           {t("providers.active")}
+                        </span>
+                      )}
+                      {isImageActive && (
+                        <span className="providers-badge">
+                          {t("providers.imageActive")}
                         </span>
                       )}
                     </h3>

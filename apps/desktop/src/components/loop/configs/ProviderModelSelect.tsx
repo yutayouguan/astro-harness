@@ -24,6 +24,7 @@ interface ProviderDto {
 interface ProvidersState {
   providers: ProviderDto[];
   active_provider_id: string | null;
+  active_image_provider_id: string | null;
 }
 
 export type MediaType =
@@ -114,15 +115,21 @@ export default function ProviderModelSelect({
           (p) => p.enabled && p.has_api_key,
         );
         setAllProviders(available);
-        setActiveId(state.active_provider_id ?? null);
+        setActiveId(
+          mediaType === "image"
+            ? (state.active_image_provider_id ?? state.active_provider_id ?? null)
+            : (state.active_provider_id ?? null),
+        );
 
         const capable = available.filter((p) => supportsMedia(p, mediaType));
         const matchesCurrent = capable.find((p) => p.id === providerId);
 
         if (!providerId || !matchesCurrent) {
-          const best =
-            capable.find((p) => p.id === state.active_provider_id) ??
-            capable[0];
+          const preferredId =
+            mediaType === "image"
+              ? state.active_image_provider_id
+              : state.active_provider_id;
+          const best = capable.find((p) => p.id === preferredId) ?? capable[0];
           if (best) {
             providerJustChanged.current = true;
             onProviderChange(best.id);

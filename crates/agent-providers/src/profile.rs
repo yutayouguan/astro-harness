@@ -212,11 +212,11 @@ pub static PROFILES: &[ProviderProfile] = &[
     ProviderProfile {
         id: "azure",
         api_mode: ApiMode::Responses,
-        default_base_url: "",
-        auth: AuthKind::AzureHeader,
+        default_base_url: "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1",
+        auth: AuthKind::Bearer,
         env_keys: &["AZURE_OPENAI_API_KEY", "AZURE_API_KEY"],
-        azure_deployment_style: true,
-        default_model: "gpt-5.6",
+        azure_deployment_style: false,
+        default_model: "gpt-5.6-sol",
         supports_image_gen: true,
         supports_embedding: false,
         image_mode: Some(ImageGenMode::AzureOpenAiV1),
@@ -725,11 +725,16 @@ mod tests {
     }
 
     #[test]
-    fn azure_defaults_to_responses_with_deployment_quirk() {
+    fn azure_defaults_to_openai_v1_responses() {
         let p = resolve("azure").expect("azure");
         assert_eq!(p.api_mode, ApiMode::Responses);
-        assert!(p.azure_deployment_style);
-        assert_eq!(p.auth, AuthKind::AzureHeader);
+        assert!(!p.azure_deployment_style);
+        assert_eq!(p.auth, AuthKind::Bearer);
+        assert_eq!(
+            p.default_base_url,
+            "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1"
+        );
+        assert_eq!(p.default_model, "gpt-5.6-sol");
         assert!(p.supports_image_gen);
         assert_eq!(p.image_mode, Some(ImageGenMode::AzureOpenAiV1));
         assert_eq!(p.default_image_model, "gpt-image-2");

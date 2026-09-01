@@ -53,14 +53,13 @@ pub async fn probe(
                     Err(e) => return fail(e),
                 }
             }
-            (ApiMode::ChatCompletions, true) => {
-                match crate::impls::azure::probe_azure(client, &model, config).await {
-                    Ok(m) => m,
-                    Err(e) => return fail(e),
-                }
-            }
             (ApiMode::Responses, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
+                let endpoint = if p.id == "azure" {
+                    crate::impls::azure::azure_openai_v1_base(&endpoint)
+                } else {
+                    endpoint
+                };
                 match crate::impls::openai::probe_openai_responses(
                     client,
                     &endpoint,
@@ -79,8 +78,13 @@ pub async fn probe(
                     Err(e) => return fail(e),
                 }
             }
-            (ApiMode::GeminiNative, _) | (ApiMode::ChatCompletions, false) => {
+            (ApiMode::GeminiNative, _) | (ApiMode::ChatCompletions, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
+                let endpoint = if p.id == "azure" {
+                    crate::impls::azure::azure_openai_v1_base(&endpoint)
+                } else {
+                    endpoint
+                };
                 match crate::impls::openai::probe_openai_compat(
                     client,
                     &endpoint,

@@ -4,6 +4,42 @@ use workflow::model::{NewWorkflow, NodeType, Position, Workflow, WorkflowEdge, W
 use workflow::run_db::{WorkflowRunDb, WorkflowRunRow, WorkflowStepLogRow};
 use workflow::store::WorkflowStore;
 
+fn workflow_provider_configs(
+) -> Result<std::collections::HashMap<String, workflow::engine::RuntimeProviderConfig>, String> {
+    use super::providers::{find_provider, get_providers_state, resolve_api_key};
+
+    let state = get_providers_state()?;
+    let mut runtime = std::collections::HashMap::new();
+    for provider in state
+        .providers
+        .into_iter()
+        .filter(|provider| provider.enabled)
+    {
+        let stored = find_provider(&provider.id)?;
+        let (has_key, _, _, api_key) = resolve_api_key(&stored);
+        if stored.kind.requires_api_key() && !has_key {
+            continue;
+        }
+        let resolved = workflow::engine::RuntimeProviderConfig {
+            backend_id: provider.backend_id.clone(),
+            config: providers::ProviderConfig {
+                api_key: api_key.unwrap_or_default(),
+                base_url: (!stored.endpoint.trim().is_empty()).then_some(stored.endpoint.clone()),
+                model: stored.model.clone(),
+                api_mode: String::new(),
+                ..providers::ProviderConfig::default()
+            },
+            image_model: provider.image_model.clone(),
+            video_model: provider.video_model.clone(),
+            tts_model: provider.tts_model.clone(),
+            music_model: provider.music_model.clone(),
+        };
+        runtime.insert(provider.backend_id, resolved.clone());
+        runtime.insert(provider.id, resolved);
+    }
+    Ok(runtime)
+}
+
 // ── DTO ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,6 +213,7 @@ pub async fn run_loop(id: String) -> Result<WorkflowRunResult, String> {
         .get(&id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("workflow {} 不存在", id))?;
+    let provider_configs = workflow_provider_configs()?;
 
     // WorkflowRunDb 在 spawn_blocking + current_thread runtime 中执行
     tokio::task::spawn_blocking(move || {
@@ -188,9 +225,15 @@ pub async fn run_loop(id: String) -> Result<WorkflowRunResult, String> {
             let run_db = WorkflowRunDb::open_default()
                 .await
                 .map_err(|e| e.to_string())?;
-            workflow::engine::execute_workflow(&wf, serde_json::json!({}), "manual", &run_db)
-                .await
-                .map_err(|e| e.to_string())
+            workflow::engine::execute_workflow_with_provider_configs(
+                &wf,
+                serde_json::json!({}),
+                "manual",
+                &run_db,
+                provider_configs,
+            )
+            .await
+            .map_err(|e| e.to_string())
         })
     })
     .await

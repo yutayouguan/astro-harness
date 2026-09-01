@@ -15,6 +15,7 @@ use crate::run_db::WorkflowRunDb;
 use crate::store::WorkflowStore;
 use dag::resolve_dag;
 use executor::NodeResult;
+pub use variables::RuntimeProviderConfig;
 use variables::VariableContext;
 
 macro_rules! log_db_err {
@@ -44,6 +45,93 @@ pub async fn execute_workflow(
     trigger_type: &str,
     run_db: &WorkflowRunDb,
 ) -> Result<WorkflowRunResult> {
+    execute_workflow_with_provider_configs(
+        workflow,
+        trigger_input,
+        trigger_type,
+        run_db,
+        environment_provider_configs(),
+    )
+    .await
+}
+
+#[derive(serde::Deserialize)]
+struct StoredProviders {
+    #[serde(default)]
+    providers: Vec<StoredProvider>,
+}
+
+#[derive(serde::Deserialize)]
+struct StoredProvider {
+    id: String,
+    kind: String,
+    endpoint: String,
+    model: String,
+    #[serde(default)]
+    enabled: bool,
+    #[serde(default)]
+    image_model: String,
+    #[serde(default)]
+    video_model: String,
+    #[serde(default)]
+    tts_model: String,
+    #[serde(default)]
+    music_model: String,
+}
+
+/// Headless workflow runs cannot access the desktop keyring. They still resolve
+/// persisted provider IDs to backend IDs/endpoints and obtain credentials from
+/// the provider's documented environment variables.
+fn environment_provider_configs() -> HashMap<String, RuntimeProviderConfig> {
+    let path = home::default_memory_dir().join("providers.json");
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return HashMap::new();
+    };
+    let Ok(stored) = serde_json::from_str::<StoredProviders>(&raw) else {
+        return HashMap::new();
+    };
+    let mut configs = HashMap::new();
+    for provider in stored
+        .providers
+        .into_iter()
+        .filter(|provider| provider.enabled)
+    {
+        let backend_id = providers::profile::normalize_provider_id(&provider.kind).to_string();
+        let requires_key =
+            providers::AuthKind::for_provider(&backend_id) != providers::AuthKind::None;
+        let api_key = providers::profile::read_env_api_key(&backend_id).unwrap_or_default();
+        if requires_key && api_key.is_empty() {
+            continue;
+        }
+        let runtime = RuntimeProviderConfig {
+            backend_id: backend_id.clone(),
+            config: providers::ProviderConfig {
+                api_key,
+                base_url: (!provider.endpoint.trim().is_empty()).then_some(provider.endpoint),
+                model: provider.model,
+                ..providers::ProviderConfig::default()
+            },
+            image_model: provider.image_model,
+            video_model: provider.video_model,
+            tts_model: provider.tts_model,
+            music_model: provider.music_model,
+        };
+        configs.insert(backend_id, runtime.clone());
+        configs.insert(provider.id, runtime);
+    }
+    configs
+}
+
+/// 执行工作流，并传入只存在于本次运行内存中的 Provider 凭据。
+///
+/// 密钥不写回 Workflow JSON，也不进入节点输出或日志。
+pub async fn execute_workflow_with_provider_configs(
+    workflow: &Workflow,
+    trigger_input: serde_json::Value,
+    trigger_type: &str,
+    run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+) -> Result<WorkflowRunResult> {
     let run_id = uuid::Uuid::new_v4().to_string();
     let started_at = Local::now().to_rfc3339();
 
@@ -65,7 +153,7 @@ pub async fn execute_workflow(
 
     let result = match tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        execute_inner(workflow, trigger_input, &run_id, run_db),
+        execute_inner(workflow, trigger_input, &run_id, run_db, provider_configs),
     )
     .await
     {
@@ -121,8 +209,9 @@ async fn execute_inner(
     trigger_input: serde_json::Value,
     run_id: &str,
     run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
 ) -> Result<WorkflowRunResult> {
-    execute_inner_with_depth(workflow, trigger_input, run_id, run_db, 0).await
+    execute_inner_with_depth(workflow, trigger_input, run_id, run_db, 0, provider_configs).await
 }
 
 async fn execute_inner_with_depth(
@@ -131,12 +220,14 @@ async fn execute_inner_with_depth(
     run_id: &str,
     run_db: &WorkflowRunDb,
     depth: u32,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
 ) -> Result<WorkflowRunResult> {
     let plan = resolve_dag(&workflow.nodes, &workflow.edges)?;
 
     let executors = nodes::executor_registry();
 
-    let mut ctx = VariableContext::new(workflow.variables.clone());
+    let mut ctx =
+        VariableContext::new(workflow.variables.clone()).with_provider_configs(provider_configs);
 
     // 将 trigger_input 注入全局变量
     if let serde_json::Value::Object(map) = trigger_input {
@@ -593,7 +684,15 @@ fn execute_sub_workflow<'a>(
                 .await
         );
 
-        let result = execute_inner_with_depth(&sub_wf, input, &sub_run_id, run_db, depth + 1).await;
+        let result = execute_inner_with_depth(
+            &sub_wf,
+            input,
+            &sub_run_id,
+            run_db,
+            depth + 1,
+            ctx.provider_configs(),
+        )
+        .await;
 
         let finished_at = Local::now().to_rfc3339();
         match &result {

@@ -284,6 +284,7 @@ export type ProviderDto = {
 export type ProvidersStateDto = {
   providers: ProviderDto[];
   active_provider_id: string | null;
+  active_image_provider_id: string | null;
 };
 
 /** 辅助模型任务 id（对齐 `memory::AuxiliaryKind` / `common::AuxiliaryTask`） */

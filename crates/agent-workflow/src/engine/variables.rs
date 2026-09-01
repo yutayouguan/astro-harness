@@ -2,11 +2,38 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
+#[derive(Clone)]
+pub struct RuntimeProviderConfig {
+    pub backend_id: String,
+    pub config: providers::ProviderConfig,
+    pub image_model: String,
+    pub video_model: String,
+    pub tts_model: String,
+    pub music_model: String,
+}
+
+impl std::fmt::Debug for RuntimeProviderConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeProviderConfig")
+            .field("backend_id", &self.backend_id)
+            .field("model", &self.config.model)
+            .field("image_model", &self.image_model)
+            .field("video_model", &self.video_model)
+            .field("tts_model", &self.tts_model)
+            .field("music_model", &self.music_model)
+            .field("base_url", &self.config.base_url)
+            .field("api_key", &"[REDACTED]")
+            .finish()
+    }
+}
+
 /// 工作流执行上下文：管理全局变量与各节点输出
 #[derive(Debug, Clone, Default)]
 pub struct VariableContext {
     global: HashMap<String, serde_json::Value>,
     node_outputs: HashMap<String, serde_json::Value>,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
 }
 
 impl VariableContext {
@@ -14,7 +41,24 @@ impl VariableContext {
         Self {
             global: globals,
             node_outputs: HashMap::new(),
+            provider_configs: HashMap::new(),
         }
+    }
+
+    pub fn with_provider_configs(
+        mut self,
+        provider_configs: HashMap<String, RuntimeProviderConfig>,
+    ) -> Self {
+        self.provider_configs = provider_configs;
+        self
+    }
+
+    pub fn provider_config(&self, provider_id: &str) -> Option<&RuntimeProviderConfig> {
+        self.provider_configs.get(provider_id)
+    }
+
+    pub(crate) fn provider_configs(&self) -> HashMap<String, RuntimeProviderConfig> {
+        self.provider_configs.clone()
     }
 
     pub fn set_node_output(&mut self, node_id: &str, output: serde_json::Value) {
@@ -299,5 +343,32 @@ mod tests {
         let mut ctx = VariableContext::default();
         ctx.set_node_output("api", serde_json::json!({"data": {"items": [1, 2, 3]}}));
         assert_eq!(ctx.resolve("api.data.items.1"), Some(serde_json::json!(2)));
+    }
+
+    #[test]
+    fn runtime_provider_config_is_available_without_exposing_key_in_debug() {
+        let runtime = RuntimeProviderConfig {
+            backend_id: "azure".into(),
+            config: providers::ProviderConfig {
+                api_key: "super-secret".into(),
+                model: "gpt-image-2".into(),
+                ..providers::ProviderConfig::default()
+            },
+            image_model: "gpt-image-2".into(),
+            video_model: String::new(),
+            tts_model: String::new(),
+            music_model: String::new(),
+        };
+        let ctx = VariableContext::default()
+            .with_provider_configs(HashMap::from([("azure-record".into(), runtime)]));
+        assert_eq!(
+            ctx.provider_config("azure-record")
+                .expect("runtime config")
+                .backend_id,
+            "azure"
+        );
+        let debug = format!("{ctx:?}");
+        assert!(!debug.contains("super-secret"));
+        assert!(debug.contains("[REDACTED]"));
     }
 }

@@ -10,11 +10,14 @@ use crate::traits::dyn_provider::DynProvider;
 
 pub fn shared_http_client() -> reqwest::Client {
     use std::sync::OnceLock;
+    use std::time::Duration;
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT
         .get_or_init(|| {
             reqwest::Client::builder()
                 .pool_max_idle_per_host(8)
+                .connect_timeout(Duration::from_secs(30))
+                .timeout(Duration::from_secs(180))
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new())
         })
@@ -116,7 +119,8 @@ impl Registry {
     /// 注册 Azure provider（Chat + Azure AI Foundry OpenAI v1 ImageGen）。
     pub fn register_azure(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::azure::Azure;
-        let client = self.make_client(api_key, base_url, Azure);
+        let normalized_base = base_url.map(crate::impls::azure::azure_openai_v1_base);
+        let client = self.make_client(api_key, normalized_base.as_deref(), Azure);
         let provider = DynProvider::new("azure", "azure")
             .with_chat_completion(client.chat_completion_model(model))
             .with_image_gen(client.image_model(crate::image_gen::default_image_model("azure")));

@@ -223,6 +223,22 @@ pub async fn generate_image(
     prompt: &str,
     config: &ProviderConfig,
 ) -> ProviderResult<Vec<GeneratedImage>> {
+    generate_image_with_options(
+        provider,
+        prompt,
+        config,
+        &crate::types::ImageGenConfig::default(),
+    )
+    .await
+}
+
+/// 图片生成，传递统一尺寸、数量和输出选项。
+pub async fn generate_image_with_options(
+    provider: &str,
+    prompt: &str,
+    config: &ProviderConfig,
+    options: &crate::types::ImageGenConfig,
+) -> ProviderResult<Vec<GeneratedImage>> {
     let provider = normalize_provider_id(provider);
     let profile = crate::profile::resolve_or_openai_compat(provider);
     let mode = profile
@@ -231,36 +247,118 @@ pub async fn generate_image(
             provider: provider.to_string(),
             capability: "图片生成".to_string(),
         })?;
+    let count = if options.n == 0 { 1 } else { options.n };
+    if count > 10 {
+        return Err(ProviderError::Other(anyhow::anyhow!(
+            "图片生成张数 n 必须在 1..=10 之间"
+        )));
+    }
+    if matches!(
+        (options.width, options.height),
+        (Some(_), None) | (None, Some(_))
+    ) {
+        return Err(ProviderError::Other(anyhow::anyhow!(
+            "图片尺寸必须同时提供 width 和 height"
+        )));
+    }
+    if let Some(format) = options.output_format.as_deref() {
+        if !matches!(
+            format.to_ascii_lowercase().as_str(),
+            "png" | "jpg" | "jpeg" | "webp"
+        ) {
+            return Err(ProviderError::Other(anyhow::anyhow!(
+                "不支持的图片输出格式: {format}"
+            )));
+        }
+    }
+    if options.output_compression.is_some_and(|value| value > 100) {
+        return Err(ProviderError::Other(anyhow::anyhow!(
+            "output_compression 必须在 0..=100 之间"
+        )));
+    }
     let mut cfg = config.clone();
-    if cfg.model.trim().is_empty() && !profile.default_image_model.is_empty() {
+    if !options.model.trim().is_empty() {
+        cfg.model = options.model.trim().to_string();
+    } else if cfg.model.trim().is_empty() && !profile.default_image_model.is_empty() {
         cfg.model = profile.default_image_model.to_string();
     }
     let client = shared_http_client();
     match mode {
-        crate::profile::ImageGenMode::OpenAi => {
-            Ok(crate::openai::image_http::openai_generate_image(&client, prompt, &cfg).await?)
-        }
+        crate::profile::ImageGenMode::OpenAi => Ok(
+            crate::openai::image_http::openai_generate_image_with_config(
+                &client, prompt, &cfg, options,
+            )
+            .await?,
+        ),
         crate::profile::ImageGenMode::AzureOpenAiV1 => Ok(
-            crate::openai::image_http::azure_foundry_generate_image(&client, prompt, &cfg).await?,
+            crate::openai::image_http::azure_foundry_generate_image_with_config(
+                &client, prompt, &cfg, options,
+            )
+            .await?,
         ),
         crate::profile::ImageGenMode::GoogleInteractions => {
-            let req = crate::google::interactions_http::InteractionImageRequest {
-                prompt: prompt.to_string(),
-                ..Default::default()
-            };
-            let result =
-                crate::google::interactions_http::google_interactions_image(&client, &cfg, &req)
-                    .await?;
-            Ok(vec![result.image])
+            let aspect_ratio =
+                options
+                    .aspect_ratio
+                    .clone()
+                    .or_else(|| match (options.width, options.height) {
+                        (Some(width), Some(height)) if width > 0 && height > 0 => {
+                            let divisor = gcd(width, height);
+                            Some(format!("{}:{}", width / divisor, height / divisor))
+                        }
+                        _ => None,
+                    });
+            let mime_type = options
+                .output_format
+                .as_deref()
+                .map(|format| match format.to_ascii_lowercase().as_str() {
+                    "png" => "image/png",
+                    "webp" => "image/webp",
+                    _ => "image/jpeg",
+                })
+                .map(str::to_string);
+            let mut images = Vec::with_capacity(count as usize);
+            for _ in 0..count {
+                let req = crate::google::interactions_http::InteractionImageRequest {
+                    prompt: prompt.to_string(),
+                    aspect_ratio: aspect_ratio.clone(),
+                    mime_type: mime_type.clone(),
+                    ..Default::default()
+                };
+                let result = crate::google::interactions_http::google_interactions_image(
+                    &client, &cfg, &req,
+                )
+                .await?;
+                images.push(result.image);
+            }
+            Ok(images)
         }
         crate::profile::ImageGenMode::MiniMax => {
             let req = crate::minimax::image_http::MiniMaxImageRequest {
+                model: cfg.model.clone(),
                 prompt: prompt.to_string(),
+                aspect_ratio: options
+                    .aspect_ratio
+                    .clone()
+                    .unwrap_or_else(|| "1:1".to_string()),
+                width: options.width,
+                height: options.height,
+                response_format: "url".to_string(),
+                n: count,
                 ..Default::default()
             };
             Ok(crate::minimax::image_http::minimax_generate_image(&client, &cfg, &req).await?)
         }
     }
+}
+
+fn gcd(mut left: u32, mut right: u32) -> u32 {
+    while right != 0 {
+        let remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    left.max(1)
 }
 
 /// 语音合成（TTS）。

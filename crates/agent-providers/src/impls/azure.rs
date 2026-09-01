@@ -1,8 +1,7 @@
-//! Azure OpenAI — Chat/Responses 使用 deployment 协议，Foundry OpenAI v1 图片使用 Bearer 认证。
+//! Azure OpenAI v1 — Responses、Chat Completions 和 Images 共用 OpenAI v1 协议与 Bearer 认证。
 
-use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::Client;
-use serde_json::{json, Value};
+use reqwest::header::HeaderMap;
+use serde_json::Value;
 
 use crate::compat::{
     apply_thinking_compat, OpenAICompatible, OpenAICompletionModel, OpenAIResponsesCompatible,
@@ -14,8 +13,6 @@ use crate::traits::{
 };
 use crate::types::media::{GeneratedImage, ImageGenConfig};
 
-const API_VERSION: &str = "2024-06-01";
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Azure;
 
@@ -23,12 +20,10 @@ impl ProviderExt for Azure {
     const NAME: &'static str = "azure";
     const BASE_URL: &'static str = "";
 
-    fn auth_headers(&self, key: &str) -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        if let Ok(val) = HeaderValue::from_str(key) {
-            headers.insert("api-key", val);
-        }
-        headers
+    fn auth_headers(&self, _key: &str) -> HeaderMap {
+        // Azure OpenAI v1 follows the OpenAI SDK contract: an empty provider-specific
+        // header map makes the shared clients add `Authorization: Bearer ...`.
+        HeaderMap::new()
     }
 }
 
@@ -44,7 +39,6 @@ impl OpenAICompatible for Azure {
             <Self as OpenAICompatible>::EFFORT_MAP,
             body,
         );
-        body.as_object_mut().map(|obj| obj.remove("model"));
     }
 }
 
@@ -53,12 +47,7 @@ impl OpenAIResponsesCompatible for Azure {
         &[("max", "high"), ("xhigh", "high")];
 
     fn responses_base_url<'a>(&self, base: &'a str) -> std::borrow::Cow<'a, str> {
-        let b = base.trim_end_matches('/');
-        if b.ends_with("/v1") || b.ends_with("/openai") {
-            std::borrow::Cow::Borrowed(base)
-        } else {
-            std::borrow::Cow::Owned(format!("{b}/openai/v1"))
-        }
+        std::borrow::Cow::Owned(azure_openai_v1_base(base))
     }
 }
 
@@ -86,60 +75,51 @@ impl ImageGenModel for AzureImageModel {
     async fn generate(
         &self,
         prompt: &str,
-        _config: &ImageGenConfig,
+        config: &ImageGenConfig,
     ) -> anyhow::Result<Vec<GeneratedImage>> {
         let cfg = self.0.to_provider_config();
-        crate::openai::image_http::azure_foundry_generate_image(self.0.http(), prompt, &cfg).await
-    }
-}
-
-/// 从 Azure endpoint 提取资源根路径。
-pub fn azure_base(endpoint: &str) -> String {
-    endpoint
-        .trim_end_matches('/')
-        .trim_end_matches("/openai")
-        .trim_end_matches("/v1")
-        .to_string()
-}
-
-/// 构造 Azure 部署 URL。
-pub fn azure_deployment_url(endpoint: &str, deployment: &str) -> String {
-    let base = azure_base(endpoint);
-    format!("{base}/openai/deployments/{deployment}/chat/completions?api-version={API_VERSION}")
-}
-
-/// Azure OpenAI 连通性探测（deployment URL + api-key 认证）。
-pub async fn probe_azure(
-    client: &Client,
-    model: &str,
-    config: &crate::types::request::ProviderConfig,
-) -> Result<String, String> {
-    let endpoint = config
-        .base_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("");
-    let url = azure_deployment_url(endpoint, model);
-    let body = json!({
-        "max_tokens": 1,
-        "messages": [{"role": "user", "content": "ping"}]
-    });
-    let resp = client
-        .post(&url)
-        .header("api-key", &config.api_key)
-        .header("content-type", "application/json")
-        .json(&body)
-        .send()
+        crate::openai::image_http::azure_foundry_generate_image_with_config(
+            self.0.http(),
+            prompt,
+            &cfg,
+            config,
+        )
         .await
-        .map_err(|e| format!("连接 Azure OpenAI 失败: {e}"))?;
-    let status = resp.status();
-    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
-    if !status.is_success() {
-        return Err(format!(
-            "失败 ({status}): {}",
-            super::openai::extract_error_message(&json)
-        ));
     }
-    Ok("调用成功".to_string())
+}
+
+/// 将 Azure 资源根地址或 OpenAI v1 地址规范为统一基址。
+///
+/// 同时支持新的 `services.ai.azure.com` 和传统 `openai.azure.com`
+/// 主机名；新配置应优先使用前者。
+pub fn azure_openai_v1_base(endpoint: &str) -> String {
+    let base = endpoint.trim().trim_end_matches('/');
+    if base.ends_with("/openai/v1") || base.ends_with("/v1") {
+        base.to_string()
+    } else if base.ends_with("/openai") {
+        format!("{base}/v1")
+    } else {
+        format!("{base}/openai/v1")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::azure_openai_v1_base;
+
+    #[test]
+    fn normalizes_both_azure_host_styles_to_openai_v1() {
+        assert_eq!(
+            azure_openai_v1_base("https://example.services.ai.azure.com/openai/v1/"),
+            "https://example.services.ai.azure.com/openai/v1"
+        );
+        assert_eq!(
+            azure_openai_v1_base("https://example.openai.azure.com"),
+            "https://example.openai.azure.com/openai/v1"
+        );
+        assert_eq!(
+            azure_openai_v1_base("https://example.openai.azure.com/openai"),
+            "https://example.openai.azure.com/openai/v1"
+        );
+    }
 }

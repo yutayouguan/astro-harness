@@ -10,7 +10,10 @@ use crate::engine::executor::{NodeExecutor, NodeResult};
 use crate::engine::variables::VariableContext;
 use crate::model::WorkflowNode;
 
-fn build_provider_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
+fn build_provider_config(
+    node: &WorkflowNode,
+    ctx: &VariableContext,
+) -> Result<(String, ProviderConfig)> {
     let provider_id = node
         .config
         .get("provider_id")
@@ -31,6 +34,16 @@ fn build_provider_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)
         .get("max_tokens")
         .and_then(|v| v.as_u64())
         .unwrap_or(4096) as u32;
+
+    if let Some(runtime) = ctx.provider_config(provider_id) {
+        let mut config = runtime.config.clone();
+        if !model.trim().is_empty() {
+            config.model = model.to_string();
+        }
+        config.temperature = temperature;
+        config.max_tokens = max_tokens;
+        return Ok((runtime.backend_id.clone(), config));
+    }
 
     let auth = providers::AuthKind::for_provider(provider_id);
     let api_key = if auth == providers::AuthKind::None {
@@ -105,7 +118,7 @@ impl NodeExecutor for AiAgentTaskExec {
             bail!("AI 节点的指令(prompt_template)为空");
         }
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, system_prompt, &prompt).await?;
 
         Ok(NodeResult::Success(serde_json::json!({
@@ -149,7 +162,7 @@ impl NodeExecutor for ParameterExtractionExec {
             field_desc,
         );
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &prompt).await?;
 
         let parsed: serde_json::Value = serde_json::from_str(response.trim())
@@ -208,7 +221,7 @@ impl NodeExecutor for QuestionClassificationExec {
             class_desc,
         );
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &prompt).await?;
         let chosen_id = response.trim();
 
@@ -256,7 +269,7 @@ impl NodeExecutor for KnowledgeRetrievalExec {
              知识来源参考: {}。以 JSON 数组返回，每条包含 content 和 relevance 字段。只输出 JSON。",
             top_k, knowledge_path,
         );
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &query).await?;
 
         let parsed: serde_json::Value = serde_json::from_str(response.trim())
@@ -297,7 +310,7 @@ impl NodeExecutor for SummarizationExec {
             "你是一个文本摘要助手。请用「{}」风格对用户输入进行摘要，控制在 {} 字以内。只输出摘要文本。",
             style, max_len,
         );
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &text).await?;
 
         Ok(NodeResult::Success(serde_json::json!({
@@ -341,7 +354,7 @@ impl NodeExecutor for SentimentAnalysisExec {
              可选标签: {}。以 JSON 返回 {{\"label\": \"...\", \"confidence\": 0.0~1.0}}。只输出 JSON。",
             labels,
         );
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &text).await?;
 
         let parsed: serde_json::Value = serde_json::from_str(response.trim())
@@ -385,7 +398,7 @@ impl NodeExecutor for DocumentUnderstandingExec {
             format!("文档: {}\n\n指令: {}", input_path, prompt)
         };
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &user_msg).await?;
 
         let parsed: serde_json::Value = serde_json::from_str(response.trim())
@@ -441,7 +454,7 @@ impl NodeExecutor for VisionUnderstandingExec {
             format!("data:{};base64,{}", mime, b64)
         };
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let messages = vec![
             ChatCompletionMessage::system("你是一个视觉理解助手。根据用户提示分析图片内容。"),
             ChatCompletionMessage::user(vec![

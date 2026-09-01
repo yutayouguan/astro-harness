@@ -2890,6 +2890,12 @@ impl AstroService for AstroServiceImpl {
         let model = req.model;
         let api_key = req.api_key;
         let base_url = req.base_url;
+        let image_options = providers::types::ImageGenConfig {
+            width: (req.width > 0).then_some(req.width as u32),
+            height: (req.height > 0).then_some(req.height as u32),
+            n: if req.count > 0 { req.count as u32 } else { 1 },
+            ..providers::types::ImageGenConfig::default()
+        };
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ImageEvent, Status>>(8);
 
@@ -2939,7 +2945,14 @@ impl AstroService for AstroServiceImpl {
                 ..ProviderConfig::default()
             };
 
-            match providers::dispatch::generate_image(&provider_name, &prompt, &config).await {
+            match providers::dispatch::generate_image_with_options(
+                &provider_name,
+                &prompt,
+                &config,
+                &image_options,
+            )
+            .await
+            {
                 Ok(images) => {
                     for img in images {
                         let _ = tx

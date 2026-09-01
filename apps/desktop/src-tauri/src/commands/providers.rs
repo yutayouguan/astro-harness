@@ -125,7 +125,7 @@ impl ProviderKind {
             Self::Deepseek => "https://api.deepseek.com/v1",
             Self::Ollama => "http://localhost:11434/v1",
             Self::Google => "https://generativelanguage.googleapis.com",
-            Self::Azure => "https://YOUR_RESOURCE.openai.azure.com",
+            Self::Azure => "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1",
             Self::Zhipu => "https://open.bigmodel.cn/api/paas/v4",
             Self::Openrouter => "https://openrouter.ai/api/v1",
             Self::Bailian => "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -146,7 +146,7 @@ impl ProviderKind {
             Self::Deepseek => "deepseek-chat",
             Self::Ollama => "llama3.3",
             Self::Google => "gemini-3.1-ultra",
-            Self::Azure => "gpt-5.6",
+            Self::Azure => "gpt-5.6-sol",
             Self::Zhipu => "glm-5.2-plus",
             Self::Openrouter => "openai/gpt-5.6",
             Self::Bailian => "qwen3.8-max",
@@ -293,6 +293,8 @@ impl ProviderConfig {
 pub struct ProvidersState {
     pub providers: Vec<ProviderConfig>,
     pub active_provider_id: Option<String>,
+    #[serde(default)]
+    pub active_image_provider_id: Option<String>,
 }
 
 impl ProvidersState {
@@ -399,6 +401,17 @@ impl ProvidersState {
                         _ => {}
                     }
                 }
+                ProviderKind::Azure => {
+                    let ep = p.endpoint.trim_end_matches('/');
+                    if ep == "https://YOUR_RESOURCE.openai.azure.com" {
+                        p.endpoint = ProviderKind::Azure.default_endpoint().to_string();
+                        changed = true;
+                    }
+                    if p.model == "gpt-5.6" {
+                        p.model = ProviderKind::Azure.default_model().to_string();
+                        changed = true;
+                    }
+                }
                 _ => {}
             }
         }
@@ -427,6 +440,20 @@ impl ProvidersState {
                 self.active_provider_id = self.providers.first().map(|p| p.id.clone());
                 changed = true;
             }
+        }
+        if self
+            .active_image_provider_id
+            .as_ref()
+            .is_some_and(|active| {
+                !self.providers.iter().any(|provider| {
+                    &provider.id == active
+                        && provider.enabled
+                        && providers::dispatch::supports_image_gen(&toml_backend_id(provider))
+                })
+            })
+        {
+            self.active_image_provider_id = None;
+            changed = true;
         }
         changed
     }
@@ -473,6 +500,7 @@ pub struct ProviderConfigDto {
 pub struct ProvidersStateDto {
     pub providers: Vec<ProviderConfigDto>,
     pub active_provider_id: Option<String>,
+    pub active_image_provider_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -864,6 +892,7 @@ fn to_state_dto(state: &ProvidersState) -> ProvidersStateDto {
     ProvidersStateDto {
         providers: state.providers.iter().map(to_dto).collect(),
         active_provider_id: state.active_provider_id.clone(),
+        active_image_provider_id: state.active_image_provider_id.clone(),
     }
 }
 
@@ -972,6 +1001,12 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             vision_model: provider.vision_model.trim().to_string(),
             music_model: provider.music_model.trim().to_string(),
         };
+        if s.active_image_provider_id.as_deref() == Some(s.providers[idx].id.as_str())
+            && (!s.providers[idx].enabled
+                || !providers::dispatch::supports_image_gen(&toml_backend_id(&s.providers[idx])))
+        {
+            s.active_image_provider_id = None;
+        }
         Ok(to_state_dto(s))
     })
 }
@@ -1031,6 +1066,9 @@ pub fn delete_provider(id: String) -> Result<ProvidersStateDto, String> {
         {
             s.active_provider_id = s.providers.first().map(|p| p.id.clone());
         }
+        if s.active_image_provider_id.as_deref() == Some(&id) {
+            s.active_image_provider_id = None;
+        }
         let _ = delete_api_key(&keyring_service_for_provider(&id));
         Ok(to_state_dto(s))
     })
@@ -1050,6 +1088,23 @@ pub fn set_active_provider(id: String) -> Result<ProvidersStateDto, String> {
         }
         s.active_provider_id = Some(id);
         Ok(to_state_dto(s))
+    })
+}
+
+/// 设置独立的默认图片生成 Provider。
+#[tauri::command]
+pub fn set_active_image_provider(id: String) -> Result<ProvidersStateDto, String> {
+    with_state_mut(|state| {
+        let provider = state
+            .providers
+            .iter()
+            .find(|provider| provider.id == id && provider.enabled)
+            .ok_or_else(|| "提供商不存在或未启用".to_string())?;
+        if !providers::dispatch::supports_image_gen(&toml_backend_id(provider)) {
+            return Err("该提供商不支持图片生成".to_string());
+        }
+        state.active_image_provider_id = Some(id);
+        Ok(to_state_dto(state))
     })
 }
 
@@ -1330,9 +1385,13 @@ pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
         .unwrap_or_else(|| kind.default_model().to_string())
 }
 
-/// 从 providers 面板解析图片生成候选：当前活动 Provider 优先，再按 Google → OpenAI → Azure → MiniMax。
+/// 从 providers 面板解析图片生成候选：独立生图默认优先，未配置时回退聊天默认。
 pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
     with_state(|s| {
+        let preferred_id = s
+            .active_image_provider_id
+            .as_deref()
+            .or(s.active_provider_id.as_deref());
         let mut active: Option<ImageGenTarget> = None;
         let mut google: Option<ImageGenTarget> = None;
         let mut openai: Option<ImageGenTarget> = None;
@@ -1373,7 +1432,7 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
                     default_music_model_for_kind(&p.kind),
                 ),
             };
-            if s.active_provider_id.as_deref() == Some(p.id.as_str()) {
+            if preferred_id == Some(p.id.as_str()) {
                 active = Some(target);
                 continue;
             }
@@ -1482,19 +1541,9 @@ fn google_native_endpoint(endpoint: &str) -> String {
     base
 }
 
-const AZURE_API_VERSION: &str = "2024-06-01";
-
 /// 规范化 Anthropic endpoint：剥离用户误加的 `/v1` 后缀，避免拼出 `/v1/v1/messages`。
 fn anthropic_base(endpoint: &str) -> String {
     trim_slash(endpoint).trim_end_matches("/v1").to_string()
-}
-
-/// 规范化 Azure OpenAI endpoint 根路径。
-fn azure_base(endpoint: &str) -> String {
-    trim_slash(endpoint)
-        .trim_end_matches("/openai")
-        .trim_end_matches("/v1")
-        .to_string()
 }
 
 /// 缺少 API Key 时返回可读错误。
@@ -1728,11 +1777,11 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             (models, format!("{}:/models", provider.kind.as_str()))
         }
         ProviderKind::Azure => {
-            let base = azure_base(&provider.endpoint);
-            let url = format!("{base}/openai/models?api-version={AZURE_API_VERSION}");
+            let base = providers::impls::azure::azure_openai_v1_base(&provider.endpoint);
+            let url = format!("{base}/models");
             let resp = client
                 .get(&url)
-                .header("api-key", &api_key)
+                .bearer_auth(&api_key)
                 .send()
                 .await
                 .map_err(|e| format!("连接 Azure OpenAI 失败: {e}"))?;
@@ -1756,7 +1805,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                     Some(crate::meta::model_meta::enrich_from_id(&id, kind, None))
                 })
                 .collect::<Vec<_>>();
-            (models, "azure:/openai/models".to_string())
+            (models, "azure:/openai/v1/models".to_string())
         }
     };
 
@@ -2121,6 +2170,37 @@ mod tests {
     }
 
     #[test]
+    fn azure_defaults_to_latest_openai_v1_endpoint() {
+        assert_eq!(
+            ProviderKind::Azure.default_endpoint(),
+            "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1"
+        );
+        assert_eq!(ProviderKind::Azure.default_model(), "gpt-5.6-sol");
+    }
+
+    #[test]
+    fn providers_state_without_image_default_is_backward_compatible() {
+        let state: ProvidersState =
+            serde_json::from_str(r#"{"providers":[],"active_provider_id":null}"#)
+                .expect("legacy state");
+        assert_eq!(state.active_image_provider_id, None);
+    }
+
+    #[test]
+    fn invalid_image_default_is_cleared() {
+        let mut provider = ProviderConfig::new(ProviderKind::Azure);
+        provider.id = "azure-image".to_string();
+        provider.enabled = false;
+        let mut state = ProvidersState {
+            providers: vec![provider],
+            active_provider_id: None,
+            active_image_provider_id: Some("azure-image".to_string()),
+        };
+        assert!(state.ensure_unique_ids());
+        assert_eq!(state.active_image_provider_id, None);
+    }
+
+    #[test]
     fn validate_http_endpoint_rejects_non_http() {
         assert!(validate_http_endpoint("https://ok.example/v1").is_ok());
         assert!(validate_http_endpoint("http://localhost:11434").is_ok());
@@ -2156,6 +2236,7 @@ mod tests {
     fn migrate_stale_defaults_updates_known_old_values() {
         let mut s = ProvidersState {
             active_provider_id: None,
+            active_image_provider_id: None,
             providers: vec![
                 ProviderConfig {
                     id: "m1".into(),

@@ -26,12 +26,12 @@ Azure `gpt-image-2` 的独立契约见 [Azure AI Foundry `gpt-image-2` 接入设
 
 1. Google 出图主路径改为 Interactions API，对齐官方能力全集。
 2. 扩展 `image_gen` 工具参数，风格与 `video_gen` 一致（路径相对工作区、结果含可复用 id）。
-3. OpenAI / Azure / MiniMax 出图路径保持 prompt-only；高级参数在请求前拒绝。
+3. Agent 工具中 OpenAI / Azure / MiniMax 保持 prompt-only；通用 Provider 层和 Workflow 可传递尺寸、数量和输出格式。
 4. 产物仍写入 `workspace/generated/images/`；成功返回 `interaction_id` 供多轮编辑。
 
 ## 非目标
 
-- 前端独立生图 UI / 设置页
+- 独立的图片编辑 / mask UI
 - Batch API 批量出图
 - Imagen 专用模型路径（已弃用方向）
 - 将 Thought 临时图落盘到工作区

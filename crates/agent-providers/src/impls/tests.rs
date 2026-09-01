@@ -101,7 +101,7 @@ mod finalize_body {
     }
 
     #[test]
-    fn azure_removes_model() {
+    fn azure_openai_v1_keeps_model() {
         let az = crate::impls::azure::Azure;
         let mut body = json!({
             "model": "gpt-4o",
@@ -109,7 +109,7 @@ mod finalize_body {
             "stream": true
         });
         az.finalize_body(&mut body);
-        assert!(body.get("model").is_none());
+        assert_eq!(body["model"], "gpt-4o");
         assert_eq!(body["stream"], true);
     }
 

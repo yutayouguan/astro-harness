@@ -195,7 +195,9 @@ pub struct ChatTarget {
 
 ### Azure Foundry `gpt-image-2`
 
-Azure 图片生成使用独立的 `AzureOpenAiV1` 路由：Foundry endpoint 必须以 `/openai/v1` 结尾，请求使用 Bearer 认证，不复用 Azure Chat 的 `api-key` header。当前契约固定为 `gpt-image-2`、`n=1`、`1024x1024`、PNG。
+Azure 的 Responses 和图片生成共用 OpenAI v1 base URL 与 Bearer 认证。新配置默认使用 `https://<resource>.services.ai.azure.com/openai/v1`，同时兼容 `https://<resource>.openai.azure.com/openai/v1`。聊天部署名与 `gpt-image-2` 媒体部署名独立配置，生图路由仍以 `ImageGenMode::AzureOpenAiV1` 与其他协议隔离。
+
+`ImageGenConfig` 传递尺寸、数量、PNG/JPEG/WebP、compression、quality 和 background。Provider 设置另存 `active_image_provider_id`，因此 Azure 可作为默认生图 Provider，而不改变默认聊天 Provider。Workflow 运行时从 keyring/环境变量注入凭据，不将 Key 写入节点 JSON。
 
 详细配置见 [Azure AI Foundry `gpt-image-2` 使用说明](../../azure-gpt-image-2.md)，分层和安全契约见 [接入设计](../../superpowers/specs/2026-09-01-azure-gpt-image-2-design.md)。
 
