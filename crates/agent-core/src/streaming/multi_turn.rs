@@ -262,6 +262,7 @@ pub(crate) async fn install_multi_turn_task(
         pause,
         hitl_gate,
         chat_override,
+        drain_mailbox: true,
     });
     tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
     if let Err(error) = session.spawn_task(turn_context, input, task).await {
@@ -394,6 +395,7 @@ pub(crate) struct RunTurnArgs {
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
     chat_override: Option<super::provider::ChatOverride>,
+    drain_mailbox: bool,
 }
 
 impl RunTurnArgs {
@@ -439,6 +441,7 @@ impl RunTurnArgs {
             pause,
             hitl_gate: Some(hitl_gate),
             chat_override,
+            drain_mailbox: true,
         }
     }
 
@@ -463,6 +466,16 @@ impl RunTurnArgs {
             system_prompt: None,
             ..self.clone()
         }
+    }
+
+    pub(crate) fn for_isolated_review(
+        &self,
+        session: Arc<Session>,
+        turn_context: Arc<TurnContext>,
+    ) -> Self {
+        let mut args = Self::submitted(session, turn_context, self.chat_override.clone());
+        args.drain_mailbox = false;
+        args
     }
 
     pub(crate) fn prepared_system_prompt(&self) -> Option<&str> {
@@ -568,6 +581,7 @@ pub(crate) async fn run_turn(
         pause,
         hitl_gate,
         chat_override,
+        drain_mailbox,
     } = args;
     debug_assert!(
         system_prompt.is_none(),
@@ -641,15 +655,17 @@ pub(crate) async fn run_turn(
             .await;
         }
 
-        if let Err(error) = drain_available_mailbox(&session, &turn_context).await {
-            return finish_task_error(
-                &session,
-                &turn_context,
-                &streamer,
-                error.to_string(),
-                saw_usage.then_some(total_usage),
-            )
-            .await;
+        if drain_mailbox {
+            if let Err(error) = drain_available_mailbox(&session, &turn_context).await {
+                return finish_task_error(
+                    &session,
+                    &turn_context,
+                    &streamer,
+                    error.to_string(),
+                    saw_usage.then_some(total_usage),
+                )
+                .await;
+            }
         }
         if pre_llm_maintenance(&session, &turn_context).await {
             return finish_task_cancelled(

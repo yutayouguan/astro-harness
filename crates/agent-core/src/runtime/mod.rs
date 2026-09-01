@@ -72,6 +72,7 @@ pub use turn_context::TurnContext;
 pub use validate::validate_message_order;
 
 /// Agent 运行时配置，控制轮次预算、记忆召回与提示组装策略。
+#[derive(Clone)]
 pub struct Config {
     /// 整个会话允许的最大对话轮次（用户消息计数）。
     pub max_turns: usize,
@@ -462,15 +463,34 @@ impl Session {
     async fn from_memory_with_agent_control(
         config: Config,
         session_id: String,
+        memory: MemoryManager,
+        agent_control: Arc<subagents::AgentControl>,
+        agent_path: subagents::AgentPath,
+    ) -> anyhow::Result<Self> {
+        let sessions: Box<dyn ConversationStore> =
+            Box::new(SessionStore::open_sessions_dir(&home::data_dir(&config.memory_dir)).await?);
+        Self::from_memory_with_agent_control_and_store(
+            config,
+            session_id,
+            memory,
+            agent_control,
+            agent_path,
+            sessions,
+        )
+        .await
+    }
+
+    async fn from_memory_with_agent_control_and_store(
+        config: Config,
+        session_id: String,
         mut memory: MemoryManager,
         agent_control: Arc<subagents::AgentControl>,
         agent_path: subagents::AgentPath,
+        sessions: Box<dyn ConversationStore>,
     ) -> anyhow::Result<Self> {
         // 新 session / 构造路径：显式固化 MEMORY/USER snapshot（open 已对齐 live，此处钉死契约）。
         memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
-        let sessions: Box<dyn ConversationStore> =
-            Box::new(SessionStore::open_sessions_dir(&home::data_dir(&config.memory_dir)).await?);
         let history = hydrate_response_history(&config.memory_dir, &*sessions, &session_id).await?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
@@ -531,6 +551,41 @@ impl Session {
             runtime_shutdown: AtomicBool::new(false),
             runtime_shutdown_complete: tokio_util::sync::CancellationToken::new(),
         })
+    }
+
+    /// Build a one-shot review runtime with isolated history and no durable
+    /// conversation store. Model settings and workspace scope are snapshotted
+    /// from the parent, while hooks and task controls start empty.
+    pub(crate) async fn isolated_review_session(
+        &self,
+        child_session_id: String,
+        review_instructions: String,
+    ) -> anyhow::Result<Self> {
+        let mut config = self.config.clone();
+        config.thread_memory_mode = types::ThreadMemoryMode::Disabled;
+        config.static_override = Some(crate::prompt::context::StaticContext {
+            soul: review_instructions,
+            ..Default::default()
+        });
+        let memory = MemoryManager::for_agent(config.memory_dir.clone(), &self.agent_id)?;
+        let child = Self::from_memory_with_agent_control_and_store(
+            config,
+            child_session_id,
+            memory,
+            Arc::clone(&self.services.agent_control),
+            self.services.agent_path.clone(),
+            Box::new(session_services::EphemeralConversationStore::default()),
+        )
+        .await?;
+        child.restore_request_settings(self.snapshot_request_settings());
+        {
+            let parent = self.lock_state();
+            let mut child_state = child.lock_state();
+            child_state.mcp_config_override = parent.mcp_config_override.clone();
+            child_state.skill_config_overrides = parent.skill_config_overrides.clone();
+        }
+        child.set_permission_profile(Some(types::READ_ONLY_PROFILE.into()));
+        Ok(child)
     }
 
     pub(crate) fn bind_runtime_io(

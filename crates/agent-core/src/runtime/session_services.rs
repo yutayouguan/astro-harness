@@ -1,5 +1,6 @@
 //! Session 生命周期内的共享服务容器（AgentControl、压缩策略等）。
 
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use anyhow::Result;
@@ -146,5 +147,169 @@ impl ConversationStore for SharedConversationStore {
         self.inner
             .search_messages(query, source_filter, role_filter, limit)
             .await
+    }
+}
+
+/// Process-local conversation storage for one-shot child runs such as review.
+///
+/// It intentionally implements only local message semantics: billing and search
+/// are not durable, while recent/context reads still observe the child's own
+/// messages so the normal model loop can run unchanged.
+#[derive(Default)]
+pub(crate) struct EphemeralConversationStore {
+    next_id: AtomicI64,
+    messages: Mutex<Vec<StoredMessage>>,
+}
+
+#[async_trait::async_trait]
+impl ConversationStore for EphemeralConversationStore {
+    async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        self.messages
+            .lock()
+            .expect("ephemeral conversation mutex poisoned")
+            .push(StoredMessage {
+                id,
+                session_id: msg.session_id.to_string(),
+                role: msg.role.to_string(),
+                content: msg.content.map(str::to_string),
+                compressed_content: msg.compressed_content.map(str::to_string),
+                tool_call_id: msg.tool_call_id.map(str::to_string),
+                tool_calls: msg.tool_calls,
+                tool_name: msg.tool_name.map(str::to_string),
+                timestamp: chrono::Utc::now().timestamp_millis() as f64 / 1_000.0,
+                token_count: msg.token_count,
+                finish_reason: msg.finish_reason.map(str::to_string),
+                reasoning: msg.reasoning.map(str::to_string),
+                reasoning_details: msg.reasoning_details,
+                media_json: msg.media_json.map(str::to_string),
+            });
+        Ok(id)
+    }
+
+    async fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
+        Ok(self
+            .messages
+            .lock()
+            .expect("ephemeral conversation mutex poisoned")
+            .iter()
+            .filter(|message| message.session_id == session_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn update_message_compressed_content(
+        &self,
+        message_id: i64,
+        compressed: Option<&str>,
+    ) -> Result<()> {
+        if let Some(message) = self
+            .messages
+            .lock()
+            .expect("ephemeral conversation mutex poisoned")
+            .iter_mut()
+            .find(|message| message.id == message_id)
+        {
+            message.compressed_content = compressed.map(str::to_string);
+        }
+        Ok(())
+    }
+
+    async fn patch_last_assistant_reasoning_details(
+        &self,
+        session_id: &str,
+        details: &Value,
+    ) -> Result<()> {
+        if let Some(message) = self
+            .messages
+            .lock()
+            .expect("ephemeral conversation mutex poisoned")
+            .iter_mut()
+            .rev()
+            .find(|message| message.session_id == session_id && message.role == "assistant")
+        {
+            message.reasoning_details = Some(details.clone());
+        }
+        Ok(())
+    }
+
+    async fn ensure_session(&self, _id: &str, _source: &str) -> Result<()> {
+        Ok(())
+    }
+
+    async fn update_session_billing(&self, _id: &str, _delta: BillingDelta) -> Result<()> {
+        Ok(())
+    }
+
+    async fn recent_messages(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<ScrolledMessage>> {
+        let messages = self
+            .messages
+            .lock()
+            .expect("ephemeral conversation mutex poisoned");
+        let matching = messages
+            .iter()
+            .filter(|message| message.session_id == session_id)
+            .collect::<Vec<_>>();
+        Ok(matching
+            .into_iter()
+            .rev()
+            .take(limit)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .map(|message| ScrolledMessage {
+                id: message.id,
+                role: message.role.clone(),
+                content: message.content.clone().unwrap_or_default(),
+                is_anchor: false,
+            })
+            .collect())
+    }
+
+    async fn recall_message_ids(
+        &self,
+        _session_id: &str,
+        _query: &str,
+        _limit: usize,
+    ) -> Result<Vec<i64>> {
+        Ok(Vec::new())
+    }
+
+    async fn scroll_context_window(
+        &self,
+        session_id: &str,
+        around_message_id: i64,
+        window_size: i64,
+    ) -> Result<Vec<ScrolledMessage>> {
+        Ok(self
+            .messages
+            .lock()
+            .expect("ephemeral conversation mutex poisoned")
+            .iter()
+            .filter(|message| {
+                message.session_id == session_id
+                    && (message.id - around_message_id).abs() <= window_size
+            })
+            .map(|message| ScrolledMessage {
+                id: message.id,
+                role: message.role.clone(),
+                content: message.content.clone().unwrap_or_default(),
+                is_anchor: message.id == around_message_id,
+            })
+            .collect())
+    }
+
+    async fn search_messages(
+        &self,
+        _query: &str,
+        _source_filter: Option<&str>,
+        _role_filter: Option<&str>,
+        _limit: i64,
+    ) -> Result<Vec<SearchHit>> {
+        Ok(Vec::new())
     }
 }

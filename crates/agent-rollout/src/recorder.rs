@@ -26,6 +26,17 @@ pub struct RolloutRecorder {
 }
 
 impl RolloutRecorder {
+    /// Create a recorder that preserves ordering/backpressure semantics without
+    /// writing a rollout file. Intended for isolated one-shot child runtimes.
+    pub fn sink() -> Self {
+        let (tx, rx) = mpsc::unbounded_channel();
+        tokio::spawn(run_writer_loop(tokio::io::sink(), rx));
+        Self {
+            path: PathBuf::new(),
+            tx,
+        }
+    }
+
     pub async fn open(path: PathBuf) -> io::Result<Self> {
         if let Some(parent) = path
             .parent()
@@ -199,6 +210,20 @@ mod tests {
             Some(RolloutItem::EventMsg(EventMsg::TurnStarted(_)))
         ));
 
+        recorder.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn sink_accepts_and_flushes_records_without_a_file() {
+        let recorder = RolloutRecorder::sink();
+        assert!(recorder.path().as_os_str().is_empty());
+        recorder
+            .record(vec![RolloutItem::SessionMeta(
+                serde_json::json!({"thread_id": "ephemeral"}),
+            )])
+            .await
+            .unwrap();
+        recorder.flush().await.unwrap();
         recorder.shutdown().await.unwrap();
     }
 

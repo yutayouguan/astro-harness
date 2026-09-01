@@ -1026,7 +1026,20 @@ mod tests {
             api_key: String::new(),
             base_url: String::new(),
         }]);
-        let chat: crate::streaming::ChatOverride = Arc::new(move |_messages, _tools, _config| {
+        session.record_user_message("old user").await.unwrap();
+        session
+            .record_assistant_message("old assistant")
+            .await
+            .unwrap();
+        let chat: crate::streaming::ChatOverride = Arc::new(move |messages, tools, _config| {
+            let request = format!("{messages:?}");
+            assert!(!request.contains("old user"));
+            assert!(!request.contains("old assistant"));
+            assert!(request.contains("review the current diff"));
+            assert!(request.contains("You are a code reviewer"));
+            let tools = serde_json::to_string(&tools).unwrap();
+            assert!(!tools.contains("spawn_agent"));
+            assert!(!tools.contains("web_search"));
             Box::pin(async {
                 Ok(Box::pin(futures::stream::iter(
                     vec![
@@ -1040,9 +1053,10 @@ mod tests {
                 )) as CompletionStream)
             })
         });
+        let rollout_path = dir.path().join("actor-review.jsonl");
         let thread = AstroThread::spawn_with_chat_override(
-            session,
-            recorder(&dir, "actor-review.jsonl").await,
+            Arc::clone(&session),
+            RolloutRecorder::open(rollout_path.clone()).await.unwrap(),
             chat,
         )
         .unwrap();
@@ -1085,6 +1099,130 @@ mod tests {
         .await
         .unwrap();
         assert!(entered && exited);
+        let history = session.clone_response_history().await;
+        assert_eq!(history.len(), 4);
+        let serialized = serde_json::to_string(&history).unwrap();
+        assert_eq!(serialized.matches("old user").count(), 1);
+        assert_eq!(serialized.matches("old assistant").count(), 1);
+        assert_eq!(serialized.matches("review the current diff").count(), 1);
+        assert_eq!(
+            serialized.matches("no findings").count(),
+            1,
+            "history={serialized}"
+        );
+        let stored = session
+            .sessions()
+            .get_messages(session.session_id())
+            .await
+            .unwrap();
+        assert_eq!(stored.len(), 4);
+        assert!(session
+            .sessions()
+            .get_messages(&format!("{}::review::{turn_id}", session.session_id()))
+            .await
+            .unwrap()
+            .is_empty());
+        session.flush_rollout().await.unwrap();
+        let rollout = read_rollout(&rollout_path).await.unwrap();
+        assert_eq!(
+            rollout
+                .iter()
+                .filter(|item| matches!(item, RolloutItem::ResponseItem(_)))
+                .count(),
+            2
+        );
+
+        thread.submit(Op::Shutdown).await.unwrap();
+        timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn interrupting_review_records_only_the_parent_exit_pair() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "actor-review-interrupt".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        session.set_chat_targets(vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }]);
+        let chat: crate::streaming::ChatOverride = Arc::new(move |_messages, _tools, _config| {
+            Box::pin(async {
+                Ok(
+                    Box::pin(futures::stream::pending::<anyhow::Result<StreamChunk>>())
+                        as CompletionStream,
+                )
+            })
+        });
+        let thread = AstroThread::spawn_with_chat_override(
+            Arc::clone(&session),
+            recorder(&dir, "actor-review-interrupt.jsonl").await,
+            chat,
+        )
+        .unwrap();
+        let turn_id = thread
+            .submit(Op::Review {
+                review_request: agent_protocol::ReviewRequest {
+                    target: agent_protocol::ReviewTarget::UncommittedChanges,
+                    user_facing_hint: None,
+                },
+            })
+            .await
+            .unwrap();
+        timeout(Duration::from_secs(2), async {
+            loop {
+                let event = thread.next_event().await.unwrap();
+                if matches!(
+                    event.msg,
+                    agent_protocol::EventMsg::ItemCompleted(ref event)
+                        if matches!(event.item, agent_protocol::TurnItem::EnteredReviewMode(_))
+                ) {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+
+        thread.submit(Op::Interrupt).await.unwrap();
+        let mut exited = false;
+        timeout(Duration::from_secs(2), async {
+            loop {
+                let event = thread.next_event().await.unwrap();
+                match event.msg {
+                    agent_protocol::EventMsg::ItemCompleted(ref event)
+                        if matches!(event.item, agent_protocol::TurnItem::ExitedReviewMode(_)) =>
+                    {
+                        exited = true;
+                    }
+                    agent_protocol::EventMsg::TurnAborted(ref aborted)
+                        if aborted.turn_id.as_deref() == Some(&turn_id) =>
+                    {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert!(exited);
+        let history = serde_json::to_string(&session.clone_response_history().await).unwrap();
+        assert_eq!(
+            history.matches("Review the working tree changes.").count(),
+            1
+        );
+        assert_eq!(history.matches("Review was interrupted").count(), 1);
 
         thread.submit(Op::Shutdown).await.unwrap();
         timeout(Duration::from_secs(1), thread.wait_terminated())
