@@ -8,7 +8,8 @@ use serde_json::Value;
 use crate::types::error::{ProviderError, ProviderResult};
 use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
 use crate::types::request::{
-    ChatCompletionRequest, ProviderConfig, ResponsesRequest, ThinkingConfig, ToolChoice,
+    ChatCompletionRequest, PromptCacheConfig, ProviderConfig, ResponsesRequest, ThinkingConfig,
+    ToolChoice,
 };
 use crate::types::request_content::{
     ChatCompletionMessage, FunctionToolDefinition, ToolDefinition,
@@ -89,6 +90,21 @@ pub async fn agent_responses_stream(
     }
     let mut config = config.clone();
     config.api_mode = "responses".to_string();
+    let mut additional_params = config.additional_params.clone();
+    let prompt_cache = PromptCacheConfig::take_from_additional_params(&mut additional_params)
+        .map_err(|detail| ProviderError::ModelError {
+            provider: provider.to_string(),
+            detail,
+        })?;
+    if prompt_cache.is_some() && explicitly_lacks_prompt_cache_controls(provider, &config.model) {
+        return Err(ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: format!(
+                "GPT-5.6+ prompt cache controls for model `{}`",
+                config.model
+            ),
+        });
+    }
     let prompt = ResponsesRequest {
         model: config.model.clone(),
         instructions,
@@ -103,7 +119,8 @@ pub async fn agent_responses_stream(
             budget_tokens: None,
             effort: config.reasoning_effort.clone(),
         }),
-        additional_params: config.additional_params.clone(),
+        prompt_cache,
+        additional_params,
     };
     responses_stream_direct(provider, prompt, &config).await
 }
@@ -139,6 +156,32 @@ pub fn supports_agent_responses(provider: &str) -> bool {
     let provider = normalize_provider_id(provider);
     crate::profile::resolve(provider).is_some_and(|profile| profile.supports_responses)
         || lookup_custom_provider(provider).is_some()
+}
+
+fn parsed_gpt_version(model: &str) -> Option<(u16, u16)> {
+    let lower = model.to_ascii_lowercase();
+    let marker = lower.find("gpt-")?;
+    let version = &lower[marker + 4..];
+    let mut parts = version.split(|ch: char| !ch.is_ascii_digit() && ch != '.');
+    let numeric = parts.find(|part| !part.is_empty())?;
+    let mut numbers = numeric.split('.');
+    let major = numbers.next()?.parse().ok()?;
+    let minor = numbers.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor))
+}
+
+/// 当 Azure 部署名可识别为 GPT-5.4+ 时启用原生 Tool Search。
+///
+/// Azure 的 deployment name 可自定义；对无法判定的名称采用保守策略，
+/// 不发送可能导致 400 的 `tool_search` schema。其他 provider 保持现有行为。
+pub fn supports_native_tool_search(provider: &str, model: &str) -> bool {
+    normalize_provider_id(provider) != "azure"
+        || parsed_gpt_version(model).is_some_and(|version| version >= (5, 4))
+}
+
+fn explicitly_lacks_prompt_cache_controls(provider: &str, model: &str) -> bool {
+    normalize_provider_id(provider) == "azure"
+        && parsed_gpt_version(model).is_some_and(|version| version < (5, 6))
 }
 
 pub(crate) async fn chat_stream_with_tool_policy(
@@ -626,6 +669,15 @@ pub async fn embed(
         });
     }
     let mut cfg = config.clone();
+    if provider == "azure" {
+        let endpoint = cfg
+            .base_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(profile.default_base_url);
+        cfg.base_url = Some(crate::impls::azure::azure_openai_v1_base(endpoint));
+    }
     if cfg.model.trim().is_empty() && !profile.default_embedding_model.is_empty() {
         cfg.model = profile.default_embedding_model.to_string();
     }
@@ -953,5 +1005,40 @@ mod tests {
         }))
         .unwrap();
         assert!(matches!(namespace, ToolDefinition::Namespace(_)));
+    }
+
+    #[test]
+    fn azure_tool_search_requires_gpt_5_4_or_newer() {
+        assert!(!supports_native_tool_search("azure", "gpt-4o"));
+        assert!(!supports_native_tool_search("azure", "gpt-5.3"));
+        assert!(supports_native_tool_search("azure", "gpt-5.4"));
+        assert!(supports_native_tool_search(
+            "azure",
+            "prod-gpt-5.6-deployment"
+        ));
+        assert!(!supports_native_tool_search("azure", "production-slot"));
+        assert!(supports_native_tool_search("openai", "deployment-alias"));
+    }
+
+    #[tokio::test]
+    async fn azure_rejects_known_unsupported_prompt_cache_controls_before_http() {
+        let config = ProviderConfig {
+            api_key: "test-key".into(),
+            base_url: Some("https://example.invalid/openai/v1".into()),
+            model: "gpt-5.5".into(),
+            additional_params: serde_json::json!({
+                "prompt_cache_key": "agent:v1",
+                "prompt_cache_options": {"mode": "implicit", "ttl": "30m"}
+            }),
+            ..ProviderConfig::default()
+        };
+        let error =
+            match agent_responses_stream("azure", String::new(), Vec::new(), Vec::new(), &config)
+                .await
+            {
+                Ok(_) => panic!("known pre-5.6 Azure model must be rejected"),
+                Err(error) => error,
+            };
+        assert!(matches!(error, ProviderError::UnsupportedCapability { .. }));
     }
 }

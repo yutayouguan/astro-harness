@@ -21,6 +21,30 @@
 
 用户提供的 Responses API 链接重复出现两次，本地仅保留一份 `responses.md`。
 
+## Astro 接入状态
+
+| 能力 | 状态 | 实现策略 |
+| --- | --- | --- |
+| Responses API | 已接入 | Azure OpenAI v1 + Bearer API Key；强制 `store: false`，推理开启时请求 `reasoning.encrypted_content` |
+| Tool Search | 已接入（客户端执行） | Azure 仅对可识别的 GPT-5.4+ 部署发送原生 `tool_search` schema |
+| Prompt caching | 已接入请求级配置 | 默认使用服务端 implicit cache；`prompt_cache_key` / `prompt_cache_options` 会在 provider 边界转为强类型配置并校验 |
+| Embeddings | 已接入 | 复用 OpenAI-compatible `/openai/v1/embeddings`，默认部署名 `text-embedding-3-small`，可独立保存 embedding 模型 |
+| Web Search | 本地工具 | 默认保留 Astro `web_search`；尚未开启 Azure hosted Web Search |
+| Shell / Skills | 本地工具 | 保留 Astro 沙箱、权限、审计和本地 Skills；不接入 Azure hosted 执行面 |
+
+Azure 的 `model` 是部署名。如果使用完全自定义、不包含模型版本的部署名，Astro 无法在本地确认 Tool Search 能力，会保守地不发送该 schema，并将原本延迟加载的工具改为直接暴露，避免工具不可用。
+
+GPT-5.6+ 的 Prompt Cache 控制可写入 provider 的 `additional_params`：
+
+```json
+{
+  "prompt_cache_key": "agent:workspace:v1",
+  "prompt_cache_options": { "mode": "implicit", "ttl": "30m" }
+}
+```
+
+Astro 会提取并校验这两个字段；对可识别为 GPT-5.6 之前的 Azure 模型会在发请求前拒绝，避免 Azure 返回 400。不配置这些字段时，Azure 仍使用服务端默认的 implicit cache。
+
 ## 更新方法
 
 在仓库根目录执行以下命令。命令会直接覆盖现有快照，因此更新前可先用 `git diff -- docs/azure/response_api` 检查当前改动。

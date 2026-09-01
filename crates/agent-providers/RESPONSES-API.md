@@ -28,7 +28,7 @@ Agent 请求使用 `ResponsesRequest`：顶层 `instructions`、`Vec<ResponseIte
 | --- | --- | --- |
 | OpenAI | `POST /v1/responses` | `store: false`、parallel tools、reasoning summary |
 | DeepSeek | `POST /v1/responses` | OpenAI Responses 兼容；thinking 字段由 adapter 归一化 |
-| Azure OpenAI | `POST /openai/v1/responses` | `api-key` header；deployment name 位于 model 字段 |
+| Azure OpenAI | `POST /openai/v1/responses` | 静态 API Key 以 `Authorization: Bearer` 发送；deployment name 位于 model 字段；强制 `store: false`；支持 v1 Embeddings |
 | 百炼 | `POST /compatible-mode/v1/responses` | thinking/cache 扩展参数；不支持 background |
 | MiniMax | `POST /v1/responses` | reasoning details 与媒体 API 分离 |
 | Mimo | `POST /v1/responses` | OpenAI Responses 兼容 |

@@ -23,3 +23,12 @@ test("provider settings no longer expose an Agent API mode selector", () => {
   assert.doesNotMatch(providersPanel, /chat_completions/);
   assert.doesNotMatch(providersPanel, /api_mode/);
 });
+
+test("embedding settings persist a model independently from chat", () => {
+  assert.match(providersPanel, /value=\{draft\.embedding_model\}/);
+  assert.match(providersPanel, /embedding_model: e\.target\.value/);
+  assert.match(
+    providersPanel,
+    /embedding_model: draft\.embedding_model\.trim\(\)/,
+  );
+});

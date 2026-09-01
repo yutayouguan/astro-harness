@@ -218,7 +218,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         azure_deployment_style: false,
         default_model: "gpt-5.6-sol",
         supports_image_gen: true,
-        supports_embedding: false,
+        supports_embedding: true,
         image_mode: Some(ImageGenMode::AzureOpenAiV1),
         default_image_model: "gpt-image-2",
         default_vision_model: "",
@@ -227,7 +227,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
-        default_embedding_model: "",
+        default_embedding_model: "text-embedding-3-small",
         supports_responses: true,
     },
     ProviderProfile {
@@ -736,8 +736,10 @@ mod tests {
         );
         assert_eq!(p.default_model, "gpt-5.6-sol");
         assert!(p.supports_image_gen);
+        assert!(p.supports_embedding);
         assert_eq!(p.image_mode, Some(ImageGenMode::AzureOpenAiV1));
         assert_eq!(p.default_image_model, "gpt-image-2");
+        assert_eq!(p.default_embedding_model, "text-embedding-3-small");
     }
 
     #[test]

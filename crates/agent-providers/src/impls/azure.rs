@@ -8,10 +8,10 @@ use crate::compat::{
     ThinkingFormat,
 };
 use crate::traits::{
-    Capabilities, Capable, FromClient, ImageGenModel, ModelBase, Nothing, ProviderClient,
-    ProviderExt,
+    Capabilities, Capable, EmbeddingModel, FromClient, ImageGenModel, ModelBase, Nothing,
+    ProviderClient, ProviderExt,
 };
-use crate::types::media::{GeneratedImage, ImageGenConfig};
+use crate::types::media::{Embedding, GeneratedImage, ImageGenConfig};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Azure;
@@ -43,6 +43,8 @@ impl OpenAICompatible for Azure {
 }
 
 impl OpenAIResponsesCompatible for Azure {
+    const STORE_FALSE: bool = true;
+    const INCLUDE_ENCRYPTED_REASONING: bool = true;
     const EFFORT_MAP: &'static [(&'static str, &'static str)] =
         &[("max", "high"), ("xhigh", "high")];
 
@@ -53,11 +55,46 @@ impl OpenAIResponsesCompatible for Azure {
 
 impl Capabilities for Azure {
     type Chat = Capable<OpenAICompletionModel<Self>>;
-    type Embedding = Nothing;
+    type Embedding = Capable<AzureEmbeddingModel>;
     type ImageGen = Capable<AzureImageModel>;
     type VideoGen = Nothing;
     type TTS = Nothing;
     type MusicGen = Nothing;
+}
+
+/// Azure AI Foundry OpenAI v1 embedding model.
+#[derive(Clone)]
+pub struct AzureEmbeddingModel(ModelBase);
+
+impl FromClient<Azure> for AzureEmbeddingModel {
+    fn from_client(client: &ProviderClient<Azure>, model: &str) -> Self {
+        Self(ModelBase::from_client(client, model))
+    }
+}
+
+#[async_trait::async_trait]
+impl EmbeddingModel for AzureEmbeddingModel {
+    async fn embed(&self, texts: &[String]) -> anyhow::Result<Vec<Embedding>> {
+        let mut cfg = self.0.to_provider_config();
+        let endpoint = cfg
+            .base_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| crate::profile::default_base_for("azure"));
+        cfg.base_url = Some(azure_openai_v1_base(endpoint));
+        let vectors = crate::openai::embeddings_http::openai_batch_embed(
+            self.0.http(),
+            texts,
+            self.0.model(),
+            &cfg,
+        )
+        .await?;
+        Ok(vectors
+            .into_iter()
+            .map(|values| Embedding { values })
+            .collect())
+    }
 }
 
 /// Azure AI Foundry OpenAI v1 image generation model.

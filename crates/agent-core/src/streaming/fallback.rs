@@ -90,6 +90,35 @@ fn is_error_only_pre_content_chunk(chunk: &StreamChunk) -> bool {
     matches!(chunk, StreamChunk::Error(_)) && !chunk_has_meaningful_content(chunk)
 }
 
+fn tools_for_target(target: &ModelTarget, tools: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    if providers::dispatch::supports_native_tool_search(&target.backend_id, &target.model) {
+        return tools.to_vec();
+    }
+    tools
+        .iter()
+        .filter(|tool| tool.get("type").and_then(serde_json::Value::as_str) != Some("tool_search"))
+        .cloned()
+        .map(|mut tool| {
+            if let Some(object) = tool.as_object_mut() {
+                object.remove("defer_loading");
+                if object.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
+                    if let Some(children) = object
+                        .get_mut("tools")
+                        .and_then(serde_json::Value::as_array_mut)
+                    {
+                        for child in children {
+                            if let Some(child) = child.as_object_mut() {
+                                child.remove("defer_loading");
+                            }
+                        }
+                    }
+                }
+            }
+            tool
+        })
+        .collect()
+}
+
 /// Peek 首个流事件：首包前错误（流 Err 或 error-only chunk）直接失败；否则还原含已 peek 项的流。
 pub async fn probe_or_wrap_pre_content(
     mut stream: CompletionStream,
@@ -145,13 +174,14 @@ pub async fn try_stream_responses_with_fallback(
             previous_interaction_id: None,
             api_mode: "responses".into(),
         };
+        let target_tools = tools_for_target(target, &tools);
 
         let attempt = async {
             let stream = providers::dispatch::agent_responses_stream(
                 &target.backend_id,
                 instructions.clone(),
                 input.clone(),
-                tools.clone(),
+                target_tools,
                 &config,
             )
             .await?;
@@ -225,6 +255,45 @@ mod tests {
         assert!(!is_failover_eligible(&anyhow::anyhow!(
             "waited 5000ms then gave up"
         )));
+    }
+
+    #[test]
+    fn azure_tool_search_schema_is_filtered_per_fallback_target() {
+        let tools = vec![
+            serde_json::json!({"type": "tool_search", "execution": "client"}),
+            serde_json::json!({
+                "type": "function",
+                "name": "terminal",
+                "defer_loading": true
+            }),
+            serde_json::json!({
+                "type": "namespace",
+                "name": "media",
+                "tools": [{
+                    "type": "function",
+                    "name": "image_gen",
+                    "defer_loading": true
+                }]
+            }),
+        ];
+        let old = ModelTarget {
+            provider_id: "azure-old".into(),
+            backend_id: "azure".into(),
+            model: "gpt-5.3".into(),
+            api_key: "key".into(),
+            base_url: "https://example.invalid/openai/v1".into(),
+        };
+        let current = ModelTarget {
+            model: "gpt-5.6".into(),
+            ..old.clone()
+        };
+
+        let filtered = tools_for_target(&old, &tools);
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0]["name"], "terminal");
+        assert!(filtered[0].get("defer_loading").is_none());
+        assert!(filtered[1]["tools"][0].get("defer_loading").is_none());
+        assert_eq!(tools_for_target(&current, &tools), tools);
     }
 
     #[tokio::test]

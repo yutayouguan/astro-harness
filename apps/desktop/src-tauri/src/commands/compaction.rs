@@ -290,6 +290,7 @@ mod tests {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
+            embedding_model: String::new(),
         }
     }
 

@@ -7,6 +7,79 @@ use agent_protocol::ResponseItem;
 
 use super::request_content::{ChatCompletionMessage, ToolDefinition};
 
+/// Azure/OpenAI Responses 提示缓存的请求级模式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PromptCacheMode {
+    Implicit,
+    Explicit,
+}
+
+/// Azure/OpenAI Responses 提示缓存的强类型配置。
+///
+/// `ttl` 当前仅支持 Azure 文档定义的 `30m`，因此不暴露任意字符串。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PromptCacheConfig {
+    pub key: Option<String>,
+    pub mode: Option<PromptCacheMode>,
+    pub ttl_30m: bool,
+}
+
+impl PromptCacheConfig {
+    /// 从透传参数提取并校验 Responses 提示缓存字段。
+    ///
+    /// 已提取的字段会从 `additional_params` 移除，避免未校验值在后续
+    /// 浅合并时覆盖强类型结果。
+    pub fn take_from_additional_params(params: &mut Value) -> Result<Option<Self>, String> {
+        let Some(object) = params.as_object_mut() else {
+            return Ok(None);
+        };
+        let key = match object.remove("prompt_cache_key") {
+            Some(Value::String(value)) if !value.trim().is_empty() => {
+                Some(value.trim().to_string())
+            }
+            Some(Value::String(_)) => return Err("prompt_cache_key must not be empty".into()),
+            None => None,
+            Some(_) => return Err("prompt_cache_key must be a string".into()),
+        };
+
+        let mut mode = None;
+        let mut ttl_30m = false;
+        if let Some(options) = object.remove("prompt_cache_options") {
+            let Value::Object(options) = options else {
+                return Err("prompt_cache_options must be an object".into());
+            };
+            if let Some(value) = options.get("mode") {
+                mode = Some(match value.as_str() {
+                    Some("implicit") => PromptCacheMode::Implicit,
+                    Some("explicit") => PromptCacheMode::Explicit,
+                    _ => {
+                        return Err("prompt_cache_options.mode must be implicit or explicit".into())
+                    }
+                });
+            }
+            if let Some(value) = options.get("ttl") {
+                if value.as_str() != Some("30m") {
+                    return Err("prompt_cache_options.ttl must be 30m".into());
+                }
+                ttl_30m = true;
+            }
+            if let Some(key) = options
+                .keys()
+                .find(|key| !matches!(key.as_str(), "mode" | "ttl"))
+            {
+                return Err(format!("unsupported prompt_cache_options field: {key}"));
+            }
+        }
+
+        if key.is_none() && mode.is_none() && !ttl_30m {
+            Ok(None)
+        } else {
+            Ok(Some(Self { key, mode, ttl_30m }))
+        }
+    }
+}
+
 /// 单次模型调用的运行时配置。
 #[derive(Debug, Clone)]
 pub struct ProviderConfig {
@@ -90,6 +163,8 @@ pub struct ResponsesRequest {
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
     pub thinking: Option<ThinkingConfig>,
+    /// 已校验的 Responses 提示缓存参数。
+    pub prompt_cache: Option<PromptCacheConfig>,
     pub additional_params: Value,
 }
 
@@ -105,6 +180,7 @@ impl Default for ResponsesRequest {
             temperature: None,
             max_tokens: None,
             thinking: None,
+            prompt_cache: None,
             additional_params: Value::Null,
         }
     }
@@ -162,6 +238,40 @@ impl ChatCompletionRequest {
 mod tests {
     use super::*;
     use crate::types::request_content::Role;
+
+    #[test]
+    fn prompt_cache_config_is_extracted_and_validated() {
+        let mut params = serde_json::json!({
+            "top_p": 0.9,
+            "prompt_cache_key": " agent:workspace:v1 ",
+            "prompt_cache_options": {"mode": "explicit", "ttl": "30m"}
+        });
+        let cache = PromptCacheConfig::take_from_additional_params(&mut params)
+            .expect("valid prompt cache config")
+            .expect("cache config");
+        assert_eq!(cache.key.as_deref(), Some("agent:workspace:v1"));
+        assert_eq!(cache.mode, Some(PromptCacheMode::Explicit));
+        assert!(cache.ttl_30m);
+        assert_eq!(params, serde_json::json!({"top_p": 0.9}));
+    }
+
+    #[test]
+    fn prompt_cache_config_rejects_unknown_ttl() {
+        let mut params = serde_json::json!({
+            "prompt_cache_options": {"mode": "implicit", "ttl": "24h"}
+        });
+        let error = PromptCacheConfig::take_from_additional_params(&mut params)
+            .expect_err("unsupported ttl must fail");
+        assert!(error.contains("ttl must be 30m"));
+    }
+
+    #[test]
+    fn prompt_cache_config_rejects_empty_key() {
+        let mut params = serde_json::json!({"prompt_cache_key": "  "});
+        let error = PromptCacheConfig::take_from_additional_params(&mut params)
+            .expect_err("empty cache key must fail");
+        assert!(error.contains("must not be empty"));
+    }
 
     #[test]
     fn lowering_keeps_contract_layers_distinct() {

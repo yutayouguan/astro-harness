@@ -260,6 +260,9 @@ pub struct ProviderConfig {
     /// 音乐生成模型（空=内置默认；主要 Google）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub music_model: String,
+    /// 文本嵌入模型（空=内置默认）。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub embedding_model: String,
 }
 
 impl ProviderConfig {
@@ -278,6 +281,7 @@ impl ProviderConfig {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
+            embedding_model: String::new(),
         }
     }
 
@@ -523,6 +527,8 @@ pub struct ProviderConfigInput {
     pub vision_model: String,
     #[serde(default)]
     pub music_model: String,
+    #[serde(default)]
+    pub embedding_model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -780,6 +786,7 @@ fn merge_toml_custom_providers(state: &mut ProvidersState) {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
+            embedding_model: String::new(),
         });
     }
 }
@@ -869,7 +876,11 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
             p.music_model.clone()
         },
         asr_model: profile.default_asr_model.to_string(),
-        embedding_model: profile.default_embedding_model.to_string(),
+        embedding_model: if p.embedding_model.is_empty() {
+            profile.default_embedding_model.to_string()
+        } else {
+            p.embedding_model.clone()
+        },
         supports_image: profile.supports_image_gen,
         supports_video: profile.supports_video(),
         supports_tts: profile.supports_tts(),
@@ -1000,6 +1011,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             tts_model: provider.tts_model.trim().to_string(),
             vision_model: provider.vision_model.trim().to_string(),
             music_model: provider.music_model.trim().to_string(),
+            embedding_model: provider.embedding_model.trim().to_string(),
         };
         if s.active_image_provider_id.as_deref() == Some(s.providers[idx].id.as_str())
             && (!s.providers[idx].enabled
@@ -2150,6 +2162,7 @@ mod tests {
         }"#;
         let provider: ProviderConfig = serde_json::from_str(json).unwrap();
         assert_eq!(provider.music_model, "");
+        assert_eq!(provider.embedding_model, "");
     }
 
     #[test]
@@ -2176,6 +2189,10 @@ mod tests {
             "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1"
         );
         assert_eq!(ProviderKind::Azure.default_model(), "gpt-5.6-sol");
+        let provider = ProviderConfig::new(ProviderKind::Azure);
+        let dto = to_dto(&provider);
+        assert!(dto.supports_embedding);
+        assert_eq!(dto.embedding_model, "text-embedding-3-small");
     }
 
     #[test]
@@ -2251,6 +2268,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
+                    embedding_model: String::new(),
                 },
                 ProviderConfig {
                     id: "v1".into(),
@@ -2265,6 +2283,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
+                    embedding_model: String::new(),
                 },
                 ProviderConfig {
                     id: "x1".into(),
@@ -2279,6 +2298,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
+                    embedding_model: String::new(),
                 },
                 ProviderConfig {
                     id: "g1".into(),
@@ -2293,6 +2313,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
+                    embedding_model: String::new(),
                 },
             ],
         };

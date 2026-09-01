@@ -191,6 +191,7 @@ type Draft = {
   tts_model: string;
   music_model: string;
   vision_model: string;
+  embedding_model: string;
 };
 
 type DetailTab = "chat" | "models" | "media" | "voice" | "embedding";
@@ -261,6 +262,7 @@ function draftFromProvider(p: ProviderDto): Draft {
     tts_model: p.tts_model?.trim() ?? "",
     music_model: p.music_model?.trim() ?? "",
     vision_model: p.vision_model?.trim() ?? "",
+    embedding_model: p.embedding_model?.trim() ?? "",
   };
 }
 
@@ -282,6 +284,7 @@ function providerSaveInput(
     tts_model: draft.tts_model.trim(),
     music_model: draft.music_model.trim(),
     vision_model: draft.vision_model.trim(),
+    embedding_model: draft.embedding_model.trim(),
   };
 }
 
@@ -660,6 +663,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     selected?.tts_model,
     selected?.music_model,
     selected?.vision_model,
+    selected?.embedding_model,
   ]);
 
   const mediaOptions = useCallback(
@@ -3138,11 +3142,14 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                         </span>
                         <input
                           className="providers-input"
-                          value={draft.model}
+                          value={draft.embedding_model}
                           onChange={(e) =>
                             setDraft((current) =>
                               current
-                                ? { ...current, model: e.target.value }
+                                ? {
+                                    ...current,
+                                    embedding_model: e.target.value,
+                                  }
                                 : current,
                             )
                           }

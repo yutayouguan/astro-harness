@@ -116,13 +116,24 @@ impl Registry {
         self.providers.insert("openai".to_string(), provider);
     }
 
-    /// 注册 Azure provider（Chat + Azure AI Foundry OpenAI v1 ImageGen）。
+    /// 注册 Azure provider（Chat + Embedding + Azure AI Foundry OpenAI v1 ImageGen）。
     pub fn register_azure(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::azure::Azure;
-        let normalized_base = base_url.map(crate::impls::azure::azure_openai_v1_base);
-        let client = self.make_client(api_key, normalized_base.as_deref(), Azure);
+        let endpoint = base_url
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| crate::profile::default_base_for("azure"));
+        let normalized_base = crate::impls::azure::azure_openai_v1_base(endpoint);
+        let client = self.make_client(api_key, Some(&normalized_base), Azure);
         let provider = DynProvider::new("azure", "azure")
             .with_chat_completion(client.chat_completion_model(model))
+            .with_embedding(
+                client.embedding_model(
+                    crate::profile::resolve("azure")
+                        .expect("built-in Azure profile")
+                        .default_embedding_model,
+                ),
+            )
             .with_image_gen(client.image_model(crate::image_gen::default_image_model("azure")));
         self.providers.insert("azure".to_string(), provider);
     }
@@ -301,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn azure_has_chat_and_image_capabilities() {
+    fn azure_has_chat_embedding_and_image_capabilities() {
         let mut reg = Registry::new();
         reg.register_azure(
             "test-key",
@@ -311,7 +322,7 @@ mod tests {
         let provider = reg.get("azure").expect("azure should be registered");
         assert!(provider.chat_completion_model().is_some());
         assert!(provider.image_gen_model().is_some());
-        assert!(provider.embedding_model().is_none());
+        assert!(provider.embedding_model().is_some());
         assert!(provider.tts_model().is_none());
     }
 
