@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use agent_protocol::{
     ContentItem, ControlRequestEvent, Event, EventMsg, ItemEvent, ResponseItem, ToolExecutionMode,
-    ToolStatus, TurnInput, UserInputCommittedEvent,
+    ToolStatus, TurnInput, TurnItem, UserInputCommittedEvent,
 };
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
@@ -24,8 +24,8 @@ use tokio_util::sync::CancellationToken;
 use types::ChatTarget;
 
 use super::lifecycle::{
-    emit, emit_delta, emit_hook_completed, emit_hook_started, emit_response_items_completed,
-    emit_text_item_started, emit_usage, tool_turn_item_with_execution, ToolExecutionMetadata,
+    emit, emit_delta, emit_response_items_completed, emit_text_item_started, emit_usage,
+    tool_turn_item_with_execution, ToolExecutionMetadata,
 };
 use super::maintenance::{
     emit_context_usage, emit_provider_context_usage, post_tool_maintenance, pre_llm_maintenance,
@@ -733,7 +733,6 @@ pub(crate) async fn run_turn(
 
         let sampling = match run_sampling_request(
             &session,
-            &turn_context,
             &streamer,
             &prompt,
             &prompt_context,
@@ -785,7 +784,6 @@ pub(crate) async fn run_turn(
                 pause.clear_abort();
                 emit_post_llm_telemetry(
                     &session,
-                    &turn_context,
                     sampling_provider.clone(),
                     sampling_model.clone(),
                     sampling_attempt,
@@ -811,7 +809,6 @@ pub(crate) async fn run_turn(
                     pause.clear_abort();
                     emit_post_llm_telemetry(
                         &session,
-                        &turn_context,
                         sampling_provider.clone(),
                         sampling_model.clone(),
                         sampling_attempt,
@@ -832,7 +829,6 @@ pub(crate) async fn run_turn(
                     pause.clear_abort();
                     emit_post_llm_telemetry(
                         &session,
-                        &turn_context,
                         sampling_provider.clone(),
                         sampling_model.clone(),
                         sampling_attempt,
@@ -948,7 +944,6 @@ pub(crate) async fn run_turn(
                     pause.clear_abort();
                     emit_post_llm_telemetry(
                         &session,
-                        &turn_context,
                         sampling_provider.clone(),
                         sampling_model.clone(),
                         sampling_attempt,
@@ -979,7 +974,6 @@ pub(crate) async fn run_turn(
         if pause.is_cancelled() {
             emit_post_llm_telemetry(
                 &session,
-                &turn_context,
                 sampling_provider.clone(),
                 sampling_model.clone(),
                 sampling_attempt,
@@ -1009,7 +1003,6 @@ pub(crate) async fn run_turn(
 
         emit_post_llm_telemetry(
             &session,
-            &turn_context,
             sampling_provider.clone(),
             sampling_model.clone(),
             sampling_attempt,
@@ -1119,63 +1112,66 @@ pub(crate) async fn run_turn(
 
         // `Stop` 钩子。
         if calls.is_empty() {
-            let verify_outcome = {
-                let agent = session.as_ref();
-                let turn_id = agent.current_turn_id().await;
-                let event_name = if agent.subagent_hook_context().is_some() {
-                    ::hooks::SUBAGENT_STOP
-                } else {
-                    ::hooks::STOP
-                };
-                let hook_item = emit_hook_started(&session, &turn_context, event_name).await;
-                let outcome =
-                    agent.run_stop_hook(turn_id, verify_attempt > 0, Some(full_response.clone()));
-                emit_hook_completed(&session, &turn_context, hook_item, event_name).await;
-                outcome
-            };
-            if verify_outcome.should_block && verify_attempt < MAX_VERIFY_ATTEMPTS {
-                if let Some(prompt) = (!verify_outcome.continuation_fragments.is_empty())
-                    .then(|| verify_outcome.continuation_fragments.join("\n\n"))
+            let agent = session.as_ref();
+            let verify_outcome = agent.run_stop_hook(
+                agent.current_turn_id().await,
+                verify_attempt > 0,
+                Some(full_response.clone()),
+            );
+            if verify_outcome.should_block
+                && verify_attempt < MAX_VERIFY_ATTEMPTS
+                && !verify_outcome.continuation_fragments.is_empty()
+            {
+                verify_attempt += 1;
+                let details = types::message::merge_google_thought_signature(
+                    Some(timeline.reasoning_details_snapshot()),
+                    thought_signature.as_deref(),
+                );
+                if let Err(err) = record_assistant_output(
+                    agent,
+                    &full_response,
+                    &[],
+                    (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                    details,
+                    &completed_response_items,
+                )
+                .await
                 {
-                    verify_attempt += 1;
-                    let agent = session.as_ref();
-                    let details = types::message::merge_google_thought_signature(
-                        Some(timeline.reasoning_details_snapshot()),
-                        thought_signature.as_deref(),
-                    );
-                    if let Err(err) = record_assistant_output(
-                        agent,
-                        &full_response,
-                        &[],
-                        (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                        details,
-                        &completed_response_items,
-                    )
-                    .await
-                    {
-                        return finish_task_error(
-                            &session,
-                            &turn_context,
-                            &streamer,
-                            err.to_string(),
-                            saw_usage.then_some(total_usage),
-                        )
-                        .await;
-                    }
-                    emit_response_items_completed(
+                    return finish_task_error(
                         &session,
                         &turn_context,
-                        assistant_started,
-                        assistant_item_id,
-                        full_response.clone(),
-                        reasoning_item_id,
-                        full_reasoning.clone(),
+                        &streamer,
+                        err.to_string(),
+                        saw_usage.then_some(total_usage),
                     )
                     .await;
-                    if let Err(err) = agent
-                        .record_user_message(&format!("[astro:hook-context]\n{prompt}"))
-                        .await
-                    {
+                }
+                emit_response_items_completed(
+                    &session,
+                    &turn_context,
+                    assistant_started,
+                    assistant_item_id,
+                    full_response.clone(),
+                    reasoning_item_id,
+                    full_reasoning.clone(),
+                )
+                .await;
+                let hook_prompt = match agent
+                    .record_hook_prompt(verify_outcome.continuation_fragments)
+                    .await
+                {
+                    Ok(Some(item)) => item,
+                    Ok(None) => {
+                        return finish_task_error(
+                            &session,
+                            &turn_context,
+                            &streamer,
+                            "Stop hook blocked completion without attributed feedback.",
+                            saw_usage.then_some(total_usage),
+                        )
+                        .await;
+                    }
+                    Err(err) => {
                         return finish_task_error(
                             &session,
                             &turn_context,
@@ -1185,8 +1181,17 @@ pub(crate) async fn run_turn(
                         )
                         .await;
                     }
-                    continue;
-                }
+                };
+                emit(
+                    &session,
+                    &turn_context,
+                    EventMsg::ItemCompleted(ItemEvent {
+                        turn_id: turn_context.sub_id().to_string(),
+                        item: TurnItem::HookPrompt(hook_prompt),
+                    }),
+                )
+                .await;
+                continue;
             }
         }
 
@@ -1194,9 +1199,6 @@ pub(crate) async fn run_turn(
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
-            let transform_hook =
-                emit_hook_started(&session, &turn_context, ::hooks::TRANSFORM_FINAL_LLM_OUTPUT)
-                    .await;
             let transformed = agent.fire_hook(
                 ::hooks::TRANSFORM_FINAL_LLM_OUTPUT,
                 ::hooks::HookPayload {
@@ -1208,13 +1210,6 @@ pub(crate) async fn run_turn(
                     ..Default::default()
                 },
             );
-            emit_hook_completed(
-                &session,
-                &turn_context,
-                transform_hook,
-                ::hooks::TRANSFORM_FINAL_LLM_OUTPUT,
-            )
-            .await;
             if let ::hooks::HookOutcome::ReplaceText(s) = transformed {
                 full_response = s;
             }

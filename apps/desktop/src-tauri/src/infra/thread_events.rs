@@ -2178,9 +2178,14 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
             execution_mode: None,
             media: Vec::new(),
         }],
-        Ok(TurnItem::HookPrompt(text)) => vec![ChatStreamEvent::Hook {
+        Ok(TurnItem::HookPrompt(prompt)) => vec![ChatStreamEvent::Hook {
             name: "hook_prompt".into(),
-            detail: text.content,
+            detail: prompt
+                .fragments
+                .into_iter()
+                .map(|fragment| fragment.text)
+                .collect::<Vec<_>>()
+                .join("\n\n"),
             outcome: if started { "started" } else { "completed" }.into(),
         }],
         Ok(TurnItem::Extension(extension)) if extension.namespace == "astro.memory" => {
@@ -2945,6 +2950,39 @@ mod tests {
                 && name == "plan"
                 && result == "1. inspect\n"
                 && phase == "started"
+        ));
+    }
+
+    #[test]
+    fn hook_prompt_item_projects_attributed_feedback_text() {
+        let item = proto::ThreadItem {
+            id: "msg-1".into(),
+            item_type: "hook_prompt".into(),
+            status: "completed".into(),
+            payload_json: serde_json::to_string(&TurnItem::HookPrompt(
+                agent_protocol::HookPromptItem::from_fragments(
+                    Some("msg-1"),
+                    vec![
+                        agent_protocol::HookPromptFragment::from_single_hook(
+                            "retry one",
+                            "hook-run-1",
+                        ),
+                        agent_protocol::HookPromptFragment::from_single_hook(
+                            "retry two",
+                            "hook-run-2",
+                        ),
+                    ],
+                ),
+            ))
+            .unwrap(),
+        };
+
+        assert!(matches!(
+            map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
+            [ChatStreamEvent::Hook { name, detail, outcome }]
+                if name == "hook_prompt"
+                    && detail == "retry one\n\nretry two"
+                    && outcome == "completed"
         ));
     }
 

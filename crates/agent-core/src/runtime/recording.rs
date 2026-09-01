@@ -1,6 +1,9 @@
 //! AgentLoop 消息记录方法：assistant / user / tool 角色消息的持久化与会话镜像维护。
 
-use agent_protocol::{ContentItem, ResponseItem};
+use agent_protocol::{
+    build_hook_prompt_message, parse_hook_prompt_message, ContentItem, HookPromptFragment,
+    HookPromptItem, ResponseItem,
+};
 use session::{ConversationStore, NewMessage};
 
 use super::AgentLoop;
@@ -245,6 +248,55 @@ impl AgentLoop {
             .await?;
         self.record_response_items_unlocked(vec![item]);
         Ok(())
+    }
+
+    /// Persist Stop-hook feedback as the native Responses user item used by Codex.
+    ///
+    /// The relational session mirror keeps the legacy readable text projection for UI/history
+    /// compatibility, while canonical provider history retains one attributed XML fragment per
+    /// hook run so the next Responses request can correlate feedback to its handler.
+    pub(crate) async fn record_hook_prompt(
+        &self,
+        fragments: Vec<HookPromptFragment>,
+    ) -> anyhow::Result<Option<HookPromptItem>> {
+        let Some(item) = build_hook_prompt_message(&fragments) else {
+            return Ok(None);
+        };
+        let (hook_prompt, compatibility_content) = match &item {
+            ResponseItem::Message { id, content, .. } => {
+                let prompt =
+                    parse_hook_prompt_message(id.as_deref(), content).ok_or_else(|| {
+                        anyhow::anyhow!("failed to parse the generated hook prompt message")
+                    })?;
+                let text = content
+                    .iter()
+                    .filter_map(|item| match item {
+                        ContentItem::InputText { text } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+                (prompt, text)
+            }
+            _ => unreachable!("hook prompt builder must return a message"),
+        };
+
+        let _write_guard = self.conversation_write_lock.lock().await;
+        self.services
+            .sessions
+            .ensure_session(&self.session_id, "tauri")
+            .await?;
+        self.services
+            .sessions
+            .append_message(NewMessage {
+                content: Some(&compatibility_content),
+                ..NewMessage::empty(&self.session_id, "user")
+            })
+            .await?;
+        self.persist_response_items(std::slice::from_ref(&item))
+            .await?;
+        self.record_response_items_unlocked(vec![item]);
+        Ok(Some(hook_prompt))
     }
 
     /// 将 tool 角色结果写入记忆与会话镜像（无 tool_call_id / tool_name）。

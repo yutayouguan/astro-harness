@@ -7,6 +7,7 @@ edition = "2021"
 types = { path = "../agent-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+quick-xml = { workspace = true, features = ["serialize"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 uuid = { version = "1", features = ["v5", "v7"] }

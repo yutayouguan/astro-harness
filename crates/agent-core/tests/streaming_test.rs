@@ -2133,28 +2133,46 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
             .collect::<Vec<_>>()
     );
 
-    let bridge_users: Vec<&types::message::Message> = history
+    let hook_prompt_users: Vec<&types::message::Message> = history
         .iter()
         .filter(|m| {
             m.role == types::message::Role::User
-                && m.content_str().starts_with("[astro:hook-context]")
+                && m.content_str().starts_with("<hook_prompt hook_run_id=")
         })
         .collect();
     assert_eq!(
-        bridge_users.len(),
+        hook_prompt_users.len(),
         2,
-        "expect one persisted bridging user message per KeepGoing attempt (capped at 2), messages={:?}",
+        "expect one native hook prompt per KeepGoing attempt (capped at 2), messages={:?}",
         history
             .iter()
             .map(|m| (m.role.clone(), m.content_str().to_string()))
             .collect::<Vec<_>>()
     );
-    for m in &bridge_users {
-        assert_eq!(
-            m.content_str(),
-            "[astro:hook-context]\n请再检查一下你的改动",
-            "persisted bridging message text must match the inject format used at multi_turn.rs"
-        );
+    for message in &hook_prompt_users {
+        assert!(message.content_str().contains("请再检查一下你的改动"));
+        assert!(message.content_str().contains("plugin-hook-run-"));
+    }
+
+    let response_history = agent.clone_response_history().await;
+    let hook_prompts = response_history
+        .iter()
+        .filter_map(|item| match item {
+            agent_protocol::ResponseItem::Message {
+                id, role, content, ..
+            } if role == "user" => {
+                agent_protocol::parse_hook_prompt_message(id.as_deref(), content)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(hook_prompts.len(), 2);
+    for prompt in hook_prompts {
+        assert_eq!(prompt.fragments.len(), 1);
+        assert_eq!(prompt.fragments[0].text, "请再检查一下你的改动");
+        assert!(prompt.fragments[0]
+            .hook_run_id
+            .starts_with("plugin-hook-run-"));
     }
 
     let provider_messages = agent::prompt::messages::to_provider_messages("sys", &history);

@@ -507,47 +507,6 @@ pub(crate) async fn emit_extension_completed(
     .await;
 }
 
-pub(crate) async fn emit_hook_started(
-    session: &Session,
-    turn_context: &TurnContext,
-    hook_name: &str,
-) -> String {
-    let item_id = format!("hook-{}", uuid::Uuid::new_v4());
-    emit(
-        session,
-        turn_context,
-        EventMsg::ItemStarted(ItemEvent {
-            turn_id: turn_context.sub_id().to_string(),
-            item: TurnItem::HookPrompt(TextItem {
-                id: item_id.clone(),
-                content: hook_name.to_string(),
-            }),
-        }),
-    )
-    .await;
-    item_id
-}
-
-pub(crate) async fn emit_hook_completed(
-    session: &Session,
-    turn_context: &TurnContext,
-    item_id: String,
-    hook_name: &str,
-) {
-    emit(
-        session,
-        turn_context,
-        EventMsg::ItemCompleted(ItemEvent {
-            turn_id: turn_context.sub_id().to_string(),
-            item: TurnItem::HookPrompt(TextItem {
-                id: item_id,
-                content: hook_name.to_string(),
-            }),
-        }),
-    )
-    .await;
-}
-
 pub(crate) async fn emit_context_compacted(
     session: &Session,
     turn_context: &TurnContext,
@@ -844,31 +803,6 @@ mod tests {
             event.msg,
             EventMsg::TurnComplete(agent_protocol::TurnCompleteEvent { turn_id, .. })
                 if turn_id == event.id
-        ));
-    }
-
-    #[tokio::test]
-    async fn hook_started_and_completed_share_stable_item_id() {
-        let (_dir, session, context) = session().await;
-        let rx = session.subscribe_turn_events("turn-1").await;
-        let item_id = emit_hook_started(&session, &context, ::hooks::PRE_API_REQUEST).await;
-        emit_hook_completed(
-            &session,
-            &context,
-            item_id.clone(),
-            ::hooks::PRE_API_REQUEST,
-        )
-        .await;
-
-        let started = rx.recv().await.unwrap();
-        let completed = rx.recv().await.unwrap();
-        assert!(matches!(
-            started.msg,
-            EventMsg::ItemStarted(ItemEvent { item, .. }) if item.id() == item_id
-        ));
-        assert!(matches!(
-            completed.msg,
-            EventMsg::ItemCompleted(ItemEvent { item, .. }) if item.id() == item_id
         ));
     }
 

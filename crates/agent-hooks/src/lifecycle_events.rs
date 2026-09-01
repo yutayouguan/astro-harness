@@ -1,6 +1,12 @@
 //! Codex-style typed contracts for session and turn lifecycle hooks.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use agent_protocol::HookPromptFragment;
+
 use crate::{CommandHookDecision, HookInput, HookOutcome, HookRuntime};
+
+static NEXT_PLUGIN_HOOK_RUN_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionStartSource {
@@ -137,7 +143,7 @@ pub struct StopOutcome {
     pub stop_reason: Option<String>,
     pub should_block: bool,
     pub block_reason: Option<String>,
-    pub continuation_fragments: Vec<String>,
+    pub continuation_fragments: Vec<HookPromptFragment>,
 }
 
 #[derive(Debug, Clone)]
@@ -388,7 +394,13 @@ fn stop_outcome(plugin: HookOutcome, commands: Vec<CommandHookDecision>) -> Stop
     match plugin {
         HookOutcome::Block(reason) | HookOutcome::KeepGoing(reason) => {
             blocking_reasons.push(reason.clone());
-            continuation_fragments.push(reason);
+            continuation_fragments.push(HookPromptFragment::from_single_hook(
+                reason,
+                format!(
+                    "plugin-hook-run-{}",
+                    NEXT_PLUGIN_HOOK_RUN_ID.fetch_add(1, Ordering::Relaxed)
+                ),
+            ));
         }
         _ => {}
     }
@@ -398,7 +410,10 @@ fn stop_outcome(plugin: HookOutcome, commands: Vec<CommandHookDecision>) -> Stop
         }
         if let Some(reason) = command.keep_going.or(command.block_reason) {
             blocking_reasons.push(reason.clone());
-            continuation_fragments.push(reason);
+            if let Some(hook_run_id) = command.hook_run_id {
+                continuation_fragments
+                    .push(HookPromptFragment::from_single_hook(reason, hook_run_id));
+            }
         }
     }
     if let Some(stop_reason) = stop_reason {
@@ -542,7 +557,11 @@ mod tests {
             },
         });
 
-        assert_eq!(outcome.continuation_fragments, ["verify tests"]);
+        assert_eq!(outcome.continuation_fragments.len(), 1);
+        assert_eq!(outcome.continuation_fragments[0].text, "verify tests");
+        assert!(outcome.continuation_fragments[0]
+            .hook_run_id
+            .starts_with("plugin-hook-run-"));
         assert!(outcome.should_block);
         assert_eq!(outcome.block_reason.as_deref(), Some("verify tests"));
     }
@@ -600,6 +619,10 @@ mod tests {
         assert!(!outcome.should_stop);
         assert!(outcome.should_block);
         assert_eq!(outcome.block_reason.as_deref(), Some("keep working"));
-        assert_eq!(outcome.continuation_fragments, ["keep working"]);
+        assert_eq!(outcome.continuation_fragments.len(), 1);
+        assert_eq!(outcome.continuation_fragments[0].text, "keep working");
+        let runs = runtime.command.recent_runs();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(outcome.continuation_fragments[0].hook_run_id, runs[0].id);
     }
 }

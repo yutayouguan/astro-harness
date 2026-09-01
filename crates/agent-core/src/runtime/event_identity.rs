@@ -55,13 +55,13 @@ fn normalize_text_item(item: &mut TextItem) {
 fn normalize_turn_item(item: &mut TurnItem) {
     match item {
         TurnItem::UserMessage(item)
-        | TurnItem::HookPrompt(item)
         | TurnItem::Plan(item)
         | TurnItem::Reasoning(item)
         | TurnItem::SubAgentActivity(item)
         | TurnItem::ContextCompaction(item)
         | TurnItem::EnteredReviewMode(item)
         | TurnItem::ExitedReviewMode(item) => normalize_text_item(item),
+        TurnItem::HookPrompt(item) => item.id = event_item_id(&item.id),
         TurnItem::AgentMessage(item) => item.id = event_item_id(&item.id),
         TurnItem::CommandExecution(item)
         | TurnItem::DynamicToolCall(item)

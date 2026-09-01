@@ -12,8 +12,8 @@ use providers::Usage;
 
 use super::lifecycle::{
     bounded_tool_completed_event, bounded_tool_completed_event_with_execution, emit,
-    emit_context_compacted, emit_extension_completed, emit_hook_completed, emit_hook_started,
-    emit_prepared, emit_subagent_activity, is_subagent_tool, ToolExecutionMetadata,
+    emit_context_compacted, emit_extension_completed, emit_prepared, emit_subagent_activity,
+    is_subagent_tool, ToolExecutionMetadata,
 };
 use super::provider::ProviderStreamer;
 use crate::runtime::{AgentLoop, TurnContext};
@@ -467,7 +467,6 @@ pub(super) struct SamplingRequest {
 /// 为每次普通主循环 sampling 派发一次完整的 LLM telemetry。
 pub(super) async fn emit_post_llm_telemetry(
     session: &Arc<AgentLoop>,
-    turn_context: &TurnContext,
     provider: Option<String>,
     model: String,
     attempt: usize,
@@ -478,7 +477,6 @@ pub(super) async fn emit_post_llm_telemetry(
 ) {
     let duration_ms = started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
     let agent = session.as_ref();
-    let hook_item = emit_hook_started(session, turn_context, ::hooks::POST_LLM_CALL).await;
     let _ = agent.fire_hook(
         ::hooks::POST_LLM_CALL,
         ::hooks::HookPayload {
@@ -503,7 +501,6 @@ pub(super) async fn emit_post_llm_telemetry(
             ..Default::default()
         },
     );
-    emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_LLM_CALL).await;
 }
 
 fn primary_sampling_identity(streamer: &ProviderStreamer) -> (Option<String>, String) {
@@ -521,7 +518,6 @@ fn primary_sampling_identity(streamer: &ProviderStreamer) -> (Option<String>, St
 /// 成功返回 stream 与本次 sampling telemetry；失败返回错误并已在 hook 中记录。
 pub(super) async fn run_sampling_request(
     session: &Arc<AgentLoop>,
-    turn_context: &TurnContext,
     streamer: &ProviderStreamer,
     prompt: &crate::prompt::PromptContract,
     prompt_context: &[crate::prompt::context_state::PromptContextEvent],
@@ -535,7 +531,6 @@ pub(super) async fn run_sampling_request(
         let agent = session.as_ref();
         let sid = agent.session_id().to_string();
         let turn_id = agent.current_turn_id().await;
-        let hook_item = emit_hook_started(session, turn_context, ::hooks::PRE_API_REQUEST).await;
         let _ = agent.fire_hook(
             ::hooks::PRE_API_REQUEST,
             ::hooks::HookPayload {
@@ -555,7 +550,6 @@ pub(super) async fn run_sampling_request(
                 ..Default::default()
             },
         );
-        emit_hook_completed(session, turn_context, hook_item, ::hooks::PRE_API_REQUEST).await;
     }
     match streamer
         .stream_chat_with_contract(prompt, prompt_context, history, tool_specs)
@@ -570,8 +564,6 @@ pub(super) async fn run_sampling_request(
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
-            let hook_item =
-                emit_hook_started(session, turn_context, ::hooks::POST_API_REQUEST).await;
             let _ = agent.fire_hook(
                 ::hooks::POST_API_REQUEST,
                 ::hooks::HookPayload {
@@ -592,7 +584,6 @@ pub(super) async fn run_sampling_request(
                     ..Default::default()
                 },
             );
-            emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_API_REQUEST).await;
             Ok(SamplingRequest {
                 stream: s,
                 provider,
@@ -610,8 +601,6 @@ pub(super) async fn run_sampling_request(
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
-            let hook_item =
-                emit_hook_started(session, turn_context, ::hooks::POST_API_REQUEST).await;
             let _ = agent.fire_hook(
                 ::hooks::POST_API_REQUEST,
                 ::hooks::HookPayload {
@@ -633,10 +622,8 @@ pub(super) async fn run_sampling_request(
                     ..Default::default()
                 },
             );
-            emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_API_REQUEST).await;
             emit_post_llm_telemetry(
                 session,
-                turn_context,
                 failed_provider,
                 failed_model,
                 attempt,

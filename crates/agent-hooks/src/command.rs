@@ -124,6 +124,7 @@ pub struct CommandHookDecision {
     pub stop_reason: Option<String>,
     pub warnings: Vec<String>,
     pub error: Option<String>,
+    pub(crate) hook_run_id: Option<String>,
     pub(crate) completion_order: Option<usize>,
 }
 
@@ -748,6 +749,7 @@ impl CommandHookRunner {
                             .await,
                         );
                     }
+                    decision.hook_run_id = Some(run_id.clone());
                     decision.completion_order = Some(completed.len());
                     finish_run(
                         &self.runs,

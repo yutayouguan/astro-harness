@@ -6,6 +6,7 @@ description = "Astro 三套 Hook 体系：Plugin / Gateway / Shell"
 
 [dependencies]
 agent-config = { path = "../agent-config" }
+agent-protocol = { path = "../agent-protocol" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
