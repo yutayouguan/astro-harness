@@ -1112,9 +1112,13 @@ impl AstroServiceImpl {
             let projection = open_sessions(&self.memory_dir)
                 .await
                 .map_err(Status::internal)?;
-            session::store::rebuild_messages_from_rollout(&projection, thread_id, &existing_items)
-                .await
-                .map_err(|error| Status::internal(error.to_string()))?;
+            session::store::rebuild_response_items_from_rollout(
+                &projection,
+                thread_id,
+                &existing_items,
+            )
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
         }
         let session = self.get_session(thread_id).await?;
         session.restore_prompt_context_from_rollout(&existing_items);
@@ -3331,7 +3335,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::Duration;
 
-    use agent::streaming::{run_multi_turn_events_with_chat_fn, ChatOverride};
+    use agent::streaming::{run_multi_turn_events_with_responses_fn, ResponsesOverride};
     use providers::CompletionStream;
     use tempfile::TempDir;
 
@@ -3714,11 +3718,11 @@ mod tests {
         tokio::task::JoinHandle<()>,
         tokio::sync::mpsc::Receiver<anyhow::Result<agent_protocol::Event>>,
     ) {
-        let chat: ChatOverride = Arc::new(|_, _, _| {
+        let chat: ResponsesOverride = Arc::new(|_, _, _| {
             Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
         });
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
-        let handle = tokio::spawn(run_multi_turn_events_with_chat_fn(
+        let handle = tokio::spawn(run_multi_turn_events_with_responses_fn(
             session,
             chat,
             ProviderConfig {

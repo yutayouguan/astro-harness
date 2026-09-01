@@ -42,7 +42,7 @@ import {
   saveEphemeralSessionMeta,
 } from "../../lib/chat/chatSessionStore";
 import {
-  mapHistoryMessages,
+  mapHistoryItems,
   settleRestoredActivities,
 } from "../../lib/chat/mapHistoryMessages";
 import { findLastUserMessageIndex } from "../../lib/chat/messageEditing";
@@ -78,7 +78,7 @@ type NavId = "chat" | "cron" | "loop" | "skills" | "settings";
 const MAX_ATTACHMENTS = 8;
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
 
-export { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
+export { mapHistoryItems } from "../../lib/chat/mapHistoryMessages";
 
 function countChatBubbles(msgs: ChatMessage[]): number {
   return msgs.filter(
@@ -1079,8 +1079,8 @@ export function useChatSession({
           history.excludedTurnCount ?? 0,
         );
       }
-      if (!history.messages?.length) return;
-      const restored = mapHistoryMessages(history.messages);
+      if (!history.items?.length) return;
+      const restored = mapHistoryItems(history.items);
       if (restored.length === 0) return;
       applyRestoredHistory(history.sessionId, restored, [], history.endReason);
     } catch {
@@ -1261,7 +1261,7 @@ export function useChatSession({
           sessionId: res.newSessionId,
           limit: 200,
         });
-        const restored = mapHistoryMessages(history.messages ?? []);
+        const restored = mapHistoryItems(history.items ?? []);
         if (!applyRestoredHistory(res.newSessionId, restored, [], null)) {
           setMessages(restored);
           if (persistClientState)
@@ -1904,7 +1904,7 @@ export function useChatSession({
           sessionId: targetSessionId,
           limit: 200,
         });
-        const restored = mapHistoryMessages(hist.messages ?? []);
+        const restored = mapHistoryItems(hist.items ?? []);
         const endReason = hist.endReason ?? null;
         const resolvedSessionId = hist.sessionId ?? targetSessionId;
         if (restored.length > 0) {

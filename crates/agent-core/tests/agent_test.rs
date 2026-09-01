@@ -1,8 +1,8 @@
 //! Agent 主循环（`AgentLoop`）回合与工具调用测试。
 
 use agent::runtime::*;
+use agent_protocol::ResponseItem;
 use tempfile::TempDir;
-use types::message::*;
 
 fn test_config(dir: &TempDir) -> AgentConfig {
     AgentConfig::with_defaults(dir.path().to_path_buf())
@@ -32,12 +32,15 @@ async fn test_turn_budget_enforcement() {
 #[tokio::test]
 async fn test_message_alternation_validation() {
     let messages = vec![
-        Message::system("You are an assistant"),
-        Message::user("Hello"),
-        Message::assistant("Hi there!"),
+        ResponseItem::developer_text("You are an assistant"),
+        ResponseItem::user_text("Hello"),
+        ResponseItem::assistant_text("Hi there!"),
     ];
     assert!(validate_message_order(&messages));
-    let invalid = vec![Message::user("First"), Message::user("Second")];
+    let invalid = vec![
+        ResponseItem::user_text("First"),
+        ResponseItem::user_text("Second"),
+    ];
     assert!(!validate_message_order(&invalid));
 }
 
@@ -105,7 +108,7 @@ async fn test_agent_loop_fts_does_not_duplicate_visible_history() {
             assert!(!system_prompt.contains("[Recalled Context]"));
             assert!(agent.recalled_context().await.is_empty());
             assert!(agent
-                .provider_history()
+                .provider_response_history()
                 .await
                 .iter()
                 .any(|message| message.content_str().contains("Aurora")));
@@ -286,16 +289,10 @@ async fn prompt_contract_separates_base_developer_and_user_context() {
     assert!(!prompt.base_instructions.contains("PROJECT_INSTRUCTIONS"));
     assert!(!prompt.base_instructions.contains("MEMORY_CONTEXT"));
     assert_eq!(prompt.context.len(), 2);
-    assert_eq!(
-        prompt.context[0].role(),
-        providers::types::message::Role::Developer
-    );
+    assert_eq!(prompt.context[0].role(), Some("developer"));
     assert!(prompt.base_instructions.contains("# 工具使用"));
     assert!(!prompt.context[0].text_content().contains("# 工具使用"));
-    assert_eq!(
-        prompt.context[1].role(),
-        providers::types::message::Role::User
-    );
+    assert_eq!(prompt.context[1].role(), Some("user"));
     assert!(prompt.context[1]
         .text_content()
         .contains("LOCAL_TOOL_INSTRUCTIONS"));

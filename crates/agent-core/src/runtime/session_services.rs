@@ -6,8 +6,36 @@ use std::sync::{Arc, Mutex, RwLock};
 use anyhow::Result;
 use serde_json::Value;
 use session::{
-    BillingDelta, ConversationStore, NewMessage, ScrolledMessage, SearchHit, StoredMessage,
+    BillingDelta, ConversationStore, NewResponseItem, ScrolledResponseItem, SearchHit,
+    StoredResponseItem,
 };
+
+fn patch_item_metadata(
+    item: &mut agent_protocol::ResponseItem,
+    key: &str,
+    value: Option<Value>,
+) -> Result<()> {
+    let mut encoded = serde_json::to_value(&*item)?;
+    let object = encoded
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("response item must serialize as an object"))?;
+    let metadata = object
+        .entry("internal_chat_message_metadata_passthrough")
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    let metadata = metadata
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("response item metadata must be an object"))?;
+    match value {
+        Some(value) => {
+            metadata.insert(key.to_string(), value);
+        }
+        None => {
+            metadata.remove(key);
+        }
+    }
+    *item = serde_json::from_value(encoded)?;
+    Ok(())
+}
 
 #[cfg(test)]
 pub(crate) type TurnInputDbWriteHook = Arc<dyn Fn() -> anyhow::Result<()> + Send + Sync>;
@@ -71,31 +99,35 @@ impl SharedConversationStore {
 
 #[async_trait::async_trait]
 impl ConversationStore for SharedConversationStore {
-    async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
-        self.inner.append_message(msg).await
+    async fn append_response_item(&self, msg: NewResponseItem<'_>) -> Result<i64> {
+        self.inner.append_response_item(msg).await
     }
 
-    async fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
-        self.inner.get_messages(session_id).await
+    async fn append_response_items(
+        &self,
+        session_id: &str,
+        items: &[agent_protocol::ResponseItem],
+    ) -> Result<Vec<i64>> {
+        self.inner.append_response_items(session_id, items).await
     }
 
-    async fn update_message_compressed_content(
+    async fn get_response_items(&self, session_id: &str) -> Result<Vec<StoredResponseItem>> {
+        self.inner.get_response_items(session_id).await
+    }
+
+    async fn update_response_item_compressed_content(
         &self,
         message_id: i64,
         compressed: Option<&str>,
     ) -> Result<()> {
         self.inner
-            .update_message_compressed_content(message_id, compressed)
+            .update_response_item_compressed_content(message_id, compressed)
             .await
     }
 
-    async fn patch_last_assistant_reasoning_details(
-        &self,
-        session_id: &str,
-        details: &Value,
-    ) -> Result<()> {
+    async fn patch_last_assistant_metadata(&self, session_id: &str, details: &Value) -> Result<()> {
         self.inner
-            .patch_last_assistant_reasoning_details(session_id, details)
+            .patch_last_assistant_metadata(session_id, details)
             .await
     }
 
@@ -111,7 +143,7 @@ impl ConversationStore for SharedConversationStore {
         &self,
         session_id: &str,
         limit: usize,
-    ) -> Result<Vec<ScrolledMessage>> {
+    ) -> Result<Vec<ScrolledResponseItem>> {
         self.inner.recent_messages(session_id, limit).await
     }
 
@@ -131,7 +163,7 @@ impl ConversationStore for SharedConversationStore {
         session_id: &str,
         around_message_id: i64,
         window_size: i64,
-    ) -> Result<Vec<ScrolledMessage>> {
+    ) -> Result<Vec<ScrolledResponseItem>> {
         self.inner
             .scroll_context_window(session_id, around_message_id, window_size)
             .await
@@ -158,36 +190,28 @@ impl ConversationStore for SharedConversationStore {
 #[derive(Default)]
 pub(crate) struct EphemeralConversationStore {
     next_id: AtomicI64,
-    messages: Mutex<Vec<StoredMessage>>,
+    messages: Mutex<Vec<StoredResponseItem>>,
 }
 
 #[async_trait::async_trait]
 impl ConversationStore for EphemeralConversationStore {
-    async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
+    async fn append_response_item(&self, msg: NewResponseItem<'_>) -> Result<i64> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         self.messages
             .lock()
             .expect("ephemeral conversation mutex poisoned")
-            .push(StoredMessage {
+            .push(StoredResponseItem {
                 id,
                 session_id: msg.session_id.to_string(),
-                role: msg.role.to_string(),
-                content: msg.content.map(str::to_string),
-                compressed_content: msg.compressed_content.map(str::to_string),
-                tool_call_id: msg.tool_call_id.map(str::to_string),
-                tool_calls: msg.tool_calls,
-                tool_name: msg.tool_name.map(str::to_string),
+                item: msg.item.clone(),
                 timestamp: chrono::Utc::now().timestamp_millis() as f64 / 1_000.0,
                 token_count: msg.token_count,
                 finish_reason: msg.finish_reason.map(str::to_string),
-                reasoning: msg.reasoning.map(str::to_string),
-                reasoning_details: msg.reasoning_details,
-                media_json: msg.media_json.map(str::to_string),
             });
         Ok(id)
     }
 
-    async fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
+    async fn get_response_items(&self, session_id: &str) -> Result<Vec<StoredResponseItem>> {
         Ok(self
             .messages
             .lock()
@@ -198,7 +222,7 @@ impl ConversationStore for EphemeralConversationStore {
             .collect())
     }
 
-    async fn update_message_compressed_content(
+    async fn update_response_item_compressed_content(
         &self,
         message_id: i64,
         compressed: Option<&str>,
@@ -210,25 +234,29 @@ impl ConversationStore for EphemeralConversationStore {
             .iter_mut()
             .find(|message| message.id == message_id)
         {
-            message.compressed_content = compressed.map(str::to_string);
+            patch_item_metadata(
+                &mut message.item,
+                "astro_compressed_output",
+                compressed.map(Value::from),
+            )?;
         }
         Ok(())
     }
 
-    async fn patch_last_assistant_reasoning_details(
-        &self,
-        session_id: &str,
-        details: &Value,
-    ) -> Result<()> {
+    async fn patch_last_assistant_metadata(&self, session_id: &str, details: &Value) -> Result<()> {
         if let Some(message) = self
             .messages
             .lock()
             .expect("ephemeral conversation mutex poisoned")
             .iter_mut()
             .rev()
-            .find(|message| message.session_id == session_id && message.role == "assistant")
+            .find(|message| message.session_id == session_id && message.role() == Some("assistant"))
         {
-            message.reasoning_details = Some(details.clone());
+            if let Value::Object(values) = details {
+                for (key, value) in values {
+                    patch_item_metadata(&mut message.item, key, Some(value.clone()))?;
+                }
+            }
         }
         Ok(())
     }
@@ -245,7 +273,7 @@ impl ConversationStore for EphemeralConversationStore {
         &self,
         session_id: &str,
         limit: usize,
-    ) -> Result<Vec<ScrolledMessage>> {
+    ) -> Result<Vec<ScrolledResponseItem>> {
         let messages = self
             .messages
             .lock()
@@ -261,10 +289,9 @@ impl ConversationStore for EphemeralConversationStore {
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
-            .map(|message| ScrolledMessage {
+            .map(|message| ScrolledResponseItem {
                 id: message.id,
-                role: message.role.clone(),
-                content: message.content.clone().unwrap_or_default(),
+                item: message.item.clone(),
                 is_anchor: false,
             })
             .collect())
@@ -284,7 +311,7 @@ impl ConversationStore for EphemeralConversationStore {
         session_id: &str,
         around_message_id: i64,
         window_size: i64,
-    ) -> Result<Vec<ScrolledMessage>> {
+    ) -> Result<Vec<ScrolledResponseItem>> {
         Ok(self
             .messages
             .lock()
@@ -294,10 +321,9 @@ impl ConversationStore for EphemeralConversationStore {
                 message.session_id == session_id
                     && (message.id - around_message_id).abs() <= window_size
             })
-            .map(|message| ScrolledMessage {
+            .map(|message| ScrolledResponseItem {
                 id: message.id,
-                role: message.role.clone(),
-                content: message.content.clone().unwrap_or_default(),
+                item: message.item.clone(),
                 is_anchor: message.id == around_message_id,
             })
             .collect())

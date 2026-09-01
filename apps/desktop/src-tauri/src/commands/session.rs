@@ -25,85 +25,19 @@ pub struct RecentSessionDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatHistoryActivityDto {
+pub struct StoredResponseItemDto {
     pub id: String,
-    pub kind: String,
-    pub title: String,
-    pub input: Option<String>,
-    pub output: Option<String>,
-    pub status: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub media: Vec<ChatHistoryMediaDto>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatHistoryMediaDto {
-    pub kind: String,
-    pub path: String,
-}
-
-/// 从 `messages.media_json`（MediaAsset 数组）提取 UI 预览用 kind/path。
-fn history_media_from_json(media: Option<&serde_json::Value>) -> Vec<ChatHistoryMediaDto> {
-    let Some(serde_json::Value::Array(arr)) = media else {
-        return Vec::new();
-    };
-    arr.iter()
-        .filter_map(|item| {
-            let kind = item.get("kind")?.as_str()?;
-            let kind =
-                match kind {
-                    "image" | "video" | "audio" | "html" => kind,
-                    "file" => {
-                        // 文件类：仅 html 进入内嵌预览
-                        let path = media_ref_path(item.get("reference")?)?;
-                        if path.rsplit('.').next().is_some_and(|e| {
-                            matches!(e.to_ascii_lowercase().as_str(), "html" | "htm")
-                        }) {
-                            "html"
-                        } else {
-                            return None;
-                        }
-                    }
-                    _ => return None,
-                };
-            let path = media_ref_path(item.get("reference")?)?;
-            if path.is_empty() {
-                return None;
-            }
-            Some(ChatHistoryMediaDto {
-                kind: kind.to_string(),
-                path: path.to_string(),
-            })
-        })
-        .collect()
-}
-
-fn media_ref_path(reference: &serde_json::Value) -> Option<&str> {
-    reference
-        .get("workspace_path")
-        .or_else(|| reference.get("data_url"))
-        .or_else(|| reference.get("remote_uri"))
-        .and_then(|v| v.as_str())
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatHistoryMessageDto {
-    pub id: String,
-    pub role: String,
-    pub content: String,
-    pub reasoning: Option<String>,
-    pub activities: Vec<ChatHistoryActivityDto>,
-    pub segments: Option<serde_json::Value>,
-    pub ui_surfaces: Option<serde_json::Value>,
+    pub item: agent_protocol::ResponseItem,
+    pub timestamp: f64,
+    pub token_count: Option<i64>,
+    pub finish_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatHistoryDto {
     pub session_id: Option<String>,
-    pub messages: Vec<ChatHistoryMessageDto>,
+    pub items: Vec<StoredResponseItemDto>,
     /// 会话结束原因（如 `compacted`）；未结束为 `None`
     pub end_reason: Option<String>,
     /// 结束时间（epoch 秒）；未结束为 `None`
@@ -116,22 +50,22 @@ pub struct ChatHistoryDto {
 }
 
 fn exclude_inherited_turns(
-    messages: Vec<ChatHistoryMessageDto>,
+    items: Vec<StoredResponseItemDto>,
     inherited_turn_count: i64,
-) -> Vec<ChatHistoryMessageDto> {
+) -> Vec<StoredResponseItemDto> {
     let inherited_turn_count = inherited_turn_count.max(0) as usize;
     if inherited_turn_count == 0 {
-        return messages;
+        return items;
     }
     let mut seen_users = 0usize;
-    let first_local = messages.iter().position(|message| {
-        if message.role == "user" {
+    let first_local = items.iter().position(|stored| {
+        if stored.item.role() == Some("user") {
             seen_users += 1;
         }
         seen_users > inherited_turn_count
     });
     first_local
-        .map(|index| messages.into_iter().skip(index).collect())
+        .map(|index| items.into_iter().skip(index).collect())
         .unwrap_or_default()
 }
 
@@ -217,7 +151,7 @@ pub async fn get_chat_history(
             None => {
                 return Ok(ChatHistoryDto {
                     session_id: None,
-                    messages: vec![],
+                    items: vec![],
                     end_reason: None,
                     ended_at: None,
                     ephemeral: false,
@@ -249,43 +183,29 @@ pub async fn get_chat_history(
         0
     };
 
-    let mut messages = store
-        .build_chat_history(&sid, usize::MAX)
+    let mut items = store
+        .get_response_items(&sid)
         .await
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|m| ChatHistoryMessageDto {
-            id: format!("db-{}", m.id),
-            role: m.role,
-            content: m.content,
-            reasoning: m.reasoning,
-            activities: m
-                .activities
-                .into_iter()
-                .map(|a| ChatHistoryActivityDto {
-                    id: a.id,
-                    kind: a.kind,
-                    title: a.title,
-                    input: a.input,
-                    output: a.output,
-                    status: a.status,
-                    media: history_media_from_json(a.media.as_ref()),
-                })
-                .collect(),
-            segments: m.segments,
-            ui_surfaces: m.ui_surfaces,
+        .map(|stored| StoredResponseItemDto {
+            id: format!("db-{}", stored.id),
+            item: stored.item,
+            timestamp: stored.timestamp,
+            token_count: stored.token_count,
+            finish_reason: stored.finish_reason,
         })
         .collect();
     if ephemeral {
-        messages = exclude_inherited_turns(messages, excluded_turn_count);
+        items = exclude_inherited_turns(items, excluded_turn_count);
     }
-    if messages.len() > limit {
-        messages = messages.split_off(messages.len() - limit);
+    if items.len() > limit {
+        items = items.split_off(items.len() - limit);
     }
 
     Ok(ChatHistoryDto {
         session_id: Some(sid),
-        messages,
+        items,
         end_reason,
         ended_at,
         ephemeral,
@@ -359,12 +279,12 @@ pub async fn fork_chat_session(
         .map_err(|e| e.to_string())?;
     } else if is_ephemeral {
         let message_id = store
-            .get_messages(source)
+            .get_response_items(source)
             .await
             .map_err(|e| e.to_string())?
             .into_iter()
             .rev()
-            .find(|message| message.role == "user")
+            .find(|message| message.role() == Some("user"))
             .map(|message| message.id)
             .ok_or_else(|| "cannot fork an empty session".to_string())?;
         store
@@ -375,11 +295,11 @@ pub async fn fork_chat_session(
         let keep = match keep_chat_bubbles {
             Some(keep) => keep.max(0) as usize,
             None => store
-                .get_messages(source)
+                .get_response_items(source)
                 .await
                 .map_err(|e| e.to_string())?
                 .into_iter()
-                .filter(|message| matches!(message.role.as_str(), "user" | "assistant"))
+                .filter(|message| matches!(message.role(), Some("user" | "assistant")))
                 .count(),
         };
         store
@@ -872,36 +792,34 @@ pub async fn cleanup_stale_side_sessions() -> Result<usize, String> {
 mod tests {
     use super::{
         exclude_inherited_turns, parse_session_filter, parse_session_placement,
-        validate_session_title, ChatHistoryMessageDto,
+        validate_session_title, StoredResponseItemDto,
     };
     use session::{SessionListFilter, SessionPlacementFilter};
 
-    fn history_message(id: &str, role: &str) -> ChatHistoryMessageDto {
-        ChatHistoryMessageDto {
+    fn history_item(id: &str, role: &str) -> StoredResponseItemDto {
+        StoredResponseItemDto {
             id: id.into(),
-            role: role.into(),
-            content: id.into(),
-            reasoning: None,
-            activities: Vec::new(),
-            segments: None,
-            ui_surfaces: None,
+            item: agent_protocol::ResponseItem::text_message(role, id),
+            timestamp: 0.0,
+            token_count: None,
+            finish_reason: None,
         }
     }
 
     #[test]
     fn excludes_only_inherited_turns_from_side_history() {
-        let messages = vec![
-            history_message("u1", "user"),
-            history_message("a1", "assistant"),
-            history_message("u2", "user"),
-            history_message("a2", "assistant"),
+        let items = vec![
+            history_item("u1", "user"),
+            history_item("a1", "assistant"),
+            history_item("u2", "user"),
+            history_item("a2", "assistant"),
         ];
 
-        let visible = exclude_inherited_turns(messages, 1);
+        let visible = exclude_inherited_turns(items, 1);
         assert_eq!(
             visible
                 .iter()
-                .map(|message| message.id.as_str())
+                .map(|item| item.id.as_str())
                 .collect::<Vec<_>>(),
             vec!["u2", "a2"]
         );
@@ -909,11 +827,8 @@ mod tests {
 
     #[test]
     fn inherited_only_side_history_is_empty() {
-        let messages = vec![
-            history_message("u1", "user"),
-            history_message("a1", "assistant"),
-        ];
-        assert!(exclude_inherited_turns(messages, 1).is_empty());
+        let items = vec![history_item("u1", "user"), history_item("a1", "assistant")];
+        assert!(exclude_inherited_turns(items, 1).is_empty());
     }
 
     #[test]

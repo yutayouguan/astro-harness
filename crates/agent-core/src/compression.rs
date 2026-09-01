@@ -1,14 +1,14 @@
 //! 运行中工具结果压缩，灵感来自 Agno 的 `CompressionManager`。
 //!
-//! 关键不变量：`Message::content` 和数据库 `content` 列始终保留原始工具输出，
-//! 而 `compressed_content` 仅作为后续模型调用时的 Provider 视图。
+//! 关键不变量：原生 `ResponseItem` 始终保留完整工具输出，
+//! 而 metadata 中的压缩视图仅供后续模型调用。
 //!
 //! 主路径（异步，在 `AgentLoop::maintain_tool_context` 中）：prune → 通过
 //! `tool_llm_compress` 进行逐条 LLM 摘要 → head/tail 兜底。本模块拥有分阶段
 //! 阈值、抖动防护和 head/tail 截断启发式逻辑。
 
+use agent_protocol::ResponseItem;
 use memory::CompressionConfig;
-use types::message::{Message, Role};
 
 use crate::prompt::context_usage::{estimate_tokens, DEFAULT_CONTEXT_WINDOW};
 
@@ -156,14 +156,14 @@ impl ToolCompressionManager {
     }
 
     /// 当前消息估算占用比例（0.0–∞，通常 < 1.0）。
-    pub fn occupancy_ratio(&self, messages: &[Message]) -> f32 {
+    pub fn occupancy_ratio(&self, items: &[ResponseItem]) -> f32 {
         let window = self.effective_context_window().max(1) as f32;
-        estimate_messages_tokens(messages) as f32 / window
+        estimate_response_items_tokens(items) as f32 / window
     }
 
     /// 按占用选择最高匹配阶段；未达 Soft 则 `None`。
-    pub fn active_stage(&self, messages: &[Message]) -> Option<CompressionStage> {
-        let ratio = self.occupancy_ratio(messages);
+    pub fn active_stage(&self, items: &[ResponseItem]) -> Option<CompressionStage> {
+        let ratio = self.occupancy_ratio(items);
         self.stages
             .iter()
             .rev()
@@ -172,14 +172,14 @@ impl ToolCompressionManager {
     }
 
     /// 本次应使用的截断参数：优先窗口阶段，否则条数兜底用 Soft 级。
-    pub fn stage_for_compress(&self, messages: &[Message]) -> Option<CompressionStage> {
+    pub fn stage_for_compress(&self, items: &[ResponseItem]) -> Option<CompressionStage> {
         if !self.enabled {
             return None;
         }
-        if let Some(stage) = self.active_stage(messages) {
+        if let Some(stage) = self.active_stage(items) {
             return Some(stage);
         }
-        let uncompressed = uncompressed_tool_result_count(messages);
+        let uncompressed = uncompressed_tool_result_count(items);
         if self.tool_results_limit > 0 && uncompressed >= self.tool_results_limit {
             return Some(self.count_fallback_stage());
         }
@@ -187,8 +187,8 @@ impl ToolCompressionManager {
     }
 
     /// 是否应压缩：有未压缩 tool，且（条数超限 **或** 已进入任一窗口阶段）。
-    pub fn should_compress(&self, messages: &[Message]) -> bool {
-        self.enabled && self.stage_for_compress(messages).is_some()
+    pub fn should_compress(&self, items: &[ResponseItem]) -> bool {
+        self.enabled && self.stage_for_compress(items).is_some()
     }
 
     pub fn compress_content(
@@ -228,33 +228,19 @@ impl ToolCompressionManager {
     }
 }
 
-pub fn uncompressed_tool_result_count(messages: &[Message]) -> usize {
-    messages
+pub fn uncompressed_tool_result_count(items: &[ResponseItem]) -> usize {
+    items
         .iter()
-        .filter(|m| m.role == Role::Tool && m.compressed_content.is_none())
+        .filter(|item| item.is_tool_output() && item.compressed_text().is_none())
         .count()
 }
 
-/// 估算会话消息发给模型时的 token 量（ceil(chars/4)）。
-///
-/// tool 角色优先计 `compressed_content`；assistant 的 tool_calls JSON 一并计入。
-pub fn estimate_messages_tokens(messages: &[Message]) -> u32 {
-    let mut total_chars = 0usize;
-    for m in messages {
-        total_chars = total_chars.saturating_add(provider_facing_chars(m));
-    }
+/// 估算原生 Responses 历史发给模型时的 token 量（ceil(chars/4)）。
+pub fn estimate_response_items_tokens(items: &[ResponseItem]) -> u32 {
+    let total_chars = items.iter().fold(0usize, |total, item| {
+        total.saturating_add(item.provider_view_text().chars().count())
+    });
     estimate_tokens(total_chars)
-}
-
-fn provider_facing_chars(m: &Message) -> usize {
-    let body = m.provider_view_text().chars().count();
-    let tool_calls = m
-        .tool_calls
-        .as_ref()
-        .and_then(|tc| serde_json::to_string(tc).ok())
-        .map(|s| s.chars().count())
-        .unwrap_or(0);
-    body.saturating_add(tool_calls)
 }
 
 #[derive(Debug, Clone)]
@@ -393,12 +379,12 @@ pub trait CompressionPolicy: Send {
     /// 分析当前消息状态，生成压缩计划。
     ///
     /// `stored_messages` 为 DB 中的完整消息列表；
-    /// `history` 为内存镜像（含 `compressed_content`，用于占用率估算）；
+    /// `history` 为原生 Responses 内存镜像（metadata 可含压缩视图）；
     /// `protect_last_n` 为尾部保护消息数。
     fn plan(
         &self,
-        stored_messages: &[::session::StoredMessage],
-        history: &[Message],
+        stored_messages: &[::session::StoredResponseItem],
+        history: &[ResponseItem],
         memory_dir: &std::path::Path,
         session_id: &str,
         protect_last_n: usize,
@@ -439,8 +425,8 @@ impl StagedCompressionPolicy {
 impl CompressionPolicy for StagedCompressionPolicy {
     fn plan(
         &self,
-        stored_messages: &[::session::StoredMessage],
-        history: &[Message],
+        stored_messages: &[::session::StoredResponseItem],
+        history: &[ResponseItem],
         memory_dir: &std::path::Path,
         session_id: &str,
         protect_last_n: usize,
@@ -459,12 +445,10 @@ impl CompressionPolicy for StagedCompressionPolicy {
         let protect_start = protect_tail_start_index(stored_messages.len(), protect_last_n.max(1));
 
         for (idx, stored_msg) in stored_messages.iter().enumerate() {
-            if stored_msg.role != "tool" {
+            if !stored_msg.is_tool_output() {
                 continue;
             }
-            let Some(content) = stored_msg.content.as_deref() else {
-                continue;
-            };
+            let content = stored_msg.text();
             if content.trim().is_empty() {
                 continue;
             }
@@ -483,7 +467,7 @@ impl CompressionPolicy for StagedCompressionPolicy {
                     self.manager.hard_ratio,
                 )
             {
-                let current = stored_msg.compressed_content.as_deref().unwrap_or(content);
+                let current = stored_msg.compressed_text().unwrap_or(&content);
                 if types::is_externalized_view(current)
                     && current.chars().count() <= stage.max_compressed_chars
                 {
@@ -491,13 +475,13 @@ impl CompressionPolicy for StagedCompressionPolicy {
                 }
                 plan.prune.push(PruneTarget {
                     message_id: stored_msg.id,
-                    tool_name: stored_msg.tool_name.clone(),
+                    tool_name: stored_msg.tool_name().map(str::to_string),
                     spill_rel,
                 });
                 continue;
             }
 
-            let needs_compress = match stored_msg.compressed_content.as_deref() {
+            let needs_compress = match stored_msg.compressed_text() {
                 None => true,
                 Some(c) => {
                     !types::is_externalized_view(c)
@@ -511,8 +495,8 @@ impl CompressionPolicy for StagedCompressionPolicy {
             if content.chars().count() <= stage.max_compressed_chars {
                 plan.compress.push(CompressTarget {
                     message_id: stored_msg.id,
-                    tool_name: stored_msg.tool_name.clone(),
-                    content: content.to_string(),
+                    tool_name: stored_msg.tool_name().map(str::to_string),
+                    content: content.clone(),
                     max_chars: stage.max_compressed_chars,
                     head_chars: stage.head_chars,
                     tail_chars: stage.tail_chars,
@@ -522,8 +506,8 @@ impl CompressionPolicy for StagedCompressionPolicy {
 
             plan.compress.push(CompressTarget {
                 message_id: stored_msg.id,
-                tool_name: stored_msg.tool_name.clone(),
-                content: content.to_string(),
+                tool_name: stored_msg.tool_name().map(str::to_string),
+                content,
                 max_chars: stage.max_compressed_chars,
                 head_chars: stage.head_chars,
                 tail_chars: stage.tail_chars,
@@ -557,10 +541,26 @@ impl CompressionPolicy for StagedCompressionPolicy {
 mod tests {
     use super::*;
 
+    fn tool(text: &str) -> ResponseItem {
+        ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: None,
+            name: Some("test".into()),
+            namespace: None,
+            output: agent_protocol::FunctionCallOutputPayload::from_text(text.into()),
+            internal_chat_message_metadata_passthrough: None,
+        }
+    }
+
+    fn mark_compressed(item: &mut ResponseItem, text: &str) {
+        *item.metadata_mut().expect("tool output metadata") =
+            Some(serde_json::json!({"astro_compressed_output": text}));
+    }
+
     #[test]
     fn threshold_counts_uncompressed_tool_results() {
         let messages: Vec<_> = (0..DEFAULT_TOOL_RESULTS_LIMIT)
-            .map(|i| Message::tool(&format!("tool-{i}")))
+            .map(|i| tool(&format!("tool-{i}")))
             .collect();
         let mgr = ToolCompressionManager::default();
         assert!(mgr.should_compress(&messages));
@@ -569,9 +569,9 @@ mod tests {
         almost.pop();
         assert!(!mgr.should_compress(&almost));
 
-        let mut marked = vec![Message::tool("a"), Message::tool("b"), Message::tool("c")];
-        for m in &mut marked {
-            m.compressed_content = Some("done".into());
+        let mut marked = vec![tool("a"), tool("b"), tool("c")];
+        for item in &mut marked {
+            mark_compressed(item, "done");
         }
         assert!(!mgr.should_compress(&marked));
     }
@@ -584,13 +584,13 @@ mod tests {
             .with_count_disabled();
         // ~800 chars → ~200 tokens → 20% of 1000 — below soft
         let mid = "x".repeat(800);
-        let below = vec![Message::tool(&mid)];
+        let below = vec![tool(&mid)];
         assert!(mgr.occupancy_ratio(&below) < 0.40);
         assert!(!mgr.should_compress(&below));
 
         // ~2000 chars → ~500 tokens → 50% of 1000 — soft
         let big = "x".repeat(2_000);
-        let above = vec![Message::tool(&big)];
+        let above = vec![tool(&big)];
         assert!(mgr.occupancy_ratio(&above) >= 0.40);
         assert_eq!(mgr.active_stage(&above).map(|s| s.min_ratio), Some(0.40));
         assert!(mgr.should_compress(&above));
@@ -603,7 +603,7 @@ mod tests {
             .with_count_disabled();
         // ~3600 chars → ~900 tokens → 90%
         let huge = "x".repeat(3_600);
-        let messages = vec![Message::tool(&huge)];
+        let messages = vec![tool(&huge)];
         assert_eq!(mgr.active_stage(&messages).map(|s| s.min_ratio), Some(0.80));
         let stage = mgr.stage_for_compress(&messages).unwrap();
         let out = mgr.compress_content(Some("search"), &huge, stage).unwrap();
@@ -626,7 +626,7 @@ mod tests {
         let mgr = ToolCompressionManager::from_config(&cfg).with_context_window(1_000);
         // ~1600 chars → ~400 tokens → 40% → Soft (30%)
         let mid = "x".repeat(1_600);
-        let messages = vec![Message::tool(&mid)];
+        let messages = vec![tool(&mid)];
         let stage = mgr.active_stage(&messages).unwrap();
         assert!((stage.min_ratio - 0.30).abs() < 1e-6);
         assert_eq!(stage.max_compressed_chars, 1_000);
@@ -640,14 +640,14 @@ mod tests {
         };
         let mgr = ToolCompressionManager::from_config(&cfg).with_context_window(100);
         let huge = "x".repeat(10_000);
-        assert!(!mgr.should_compress(&[Message::tool(&huge)]));
+        assert!(!mgr.should_compress(&[tool(&huge)]));
     }
 
     #[test]
     fn no_uncompressed_tools_never_triggers() {
-        let mut messages = vec![Message::tool("a"), Message::tool("b"), Message::tool("c")];
-        for m in &mut messages {
-            m.compressed_content = Some("done".into());
+        let mut messages = vec![tool("a"), tool("b"), tool("c")];
+        for item in &mut messages {
+            mark_compressed(item, "done");
         }
         let mgr = ToolCompressionManager::default().with_context_window(100);
         assert!(!mgr.should_compress(&messages));
@@ -656,22 +656,24 @@ mod tests {
     #[test]
     fn estimate_prefers_compressed_view() {
         let big = "x".repeat(400);
-        let mut m = Message::tool(&big);
-        let before = estimate_messages_tokens(std::slice::from_ref(&m));
-        m.compressed_content = Some("short".into());
-        let after = estimate_messages_tokens(std::slice::from_ref(&m));
+        let mut m = tool(&big);
+        let before = estimate_response_items_tokens(std::slice::from_ref(&m));
+        mark_compressed(&mut m, "short");
+        let after = estimate_response_items_tokens(std::slice::from_ref(&m));
         assert!(after < before);
     }
 
     #[test]
     fn estimate_ignores_user_delivery_marker() {
         let content = "follow the complete durable instruction ".repeat(20);
-        let mut user = Message::user(&content);
-        let expected = estimate_messages_tokens(std::slice::from_ref(&user));
-        user.compressed_content = Some("agent-mailbox-through:42".into());
+        let mut user = ResponseItem::user_text(&content);
+        let expected = estimate_response_items_tokens(std::slice::from_ref(&user));
+        *user.metadata_mut().unwrap() = Some(serde_json::json!({
+            "astro_memory_marker": "agent-mailbox-through:42"
+        }));
 
         assert_eq!(
-            estimate_messages_tokens(std::slice::from_ref(&user)),
+            estimate_response_items_tokens(std::slice::from_ref(&user)),
             expected
         );
     }

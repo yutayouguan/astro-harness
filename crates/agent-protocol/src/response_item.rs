@@ -251,6 +251,254 @@ pub enum ResponseItem {
     Other,
 }
 
+impl ResponseItem {
+    pub fn text_message(role: impl Into<String>, text: impl Into<String>) -> Self {
+        let role = role.into();
+        let content = if role == "assistant" {
+            vec![ContentItem::OutputText { text: text.into() }]
+        } else {
+            vec![ContentItem::InputText { text: text.into() }]
+        };
+        Self::Message {
+            id: None,
+            role,
+            content,
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }
+    }
+
+    pub fn user_text(text: impl Into<String>) -> Self {
+        Self::text_message("user", text)
+    }
+
+    pub fn assistant_text(text: impl Into<String>) -> Self {
+        Self::text_message("assistant", text)
+    }
+
+    pub fn developer_text(text: impl Into<String>) -> Self {
+        Self::text_message("developer", text)
+    }
+
+    pub fn role(&self) -> Option<&str> {
+        match self {
+            Self::Message { role, .. } => Some(role),
+            _ => None,
+        }
+    }
+
+    pub fn text(&self) -> String {
+        match self {
+            Self::Message { content, .. } => content
+                .iter()
+                .filter_map(|part| match part {
+                    ContentItem::InputText { text } | ContentItem::OutputText { text } => {
+                        Some(text.as_str())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Self::FunctionCallOutput { output, .. } | Self::CustomToolCallOutput { output, .. } => {
+                output.to_text().unwrap_or_default()
+            }
+            Self::ToolSearchOutput { tools, .. } => {
+                serde_json::to_string(tools).unwrap_or_default()
+            }
+            Self::Reasoning {
+                content, summary, ..
+            } => content
+                .as_ref()
+                .into_iter()
+                .flatten()
+                .chain(summary.iter())
+                .filter_map(|value| value.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Self::FunctionCall {
+                name, arguments, ..
+            } => format!("{name}: {arguments}"),
+            Self::CustomToolCall { name, input, .. } => format!("{name}: {input}"),
+            Self::ToolSearchCall { arguments, .. } => arguments.to_string(),
+            _ => String::new(),
+        }
+    }
+
+    pub fn text_content(&self) -> String {
+        self.text()
+    }
+
+    pub fn content_str(&self) -> String {
+        self.text()
+    }
+
+    pub fn compressed_text(&self) -> Option<&str> {
+        self.metadata()?.get("astro_compressed_output")?.as_str()
+    }
+
+    pub fn provider_view_text(&self) -> String {
+        self.compressed_text()
+            .map(str::to_owned)
+            .unwrap_or_else(|| self.text())
+    }
+
+    pub fn is_tool_output(&self) -> bool {
+        matches!(
+            self,
+            Self::FunctionCallOutput { .. }
+                | Self::CustomToolCallOutput { .. }
+                | Self::ToolSearchOutput { .. }
+        )
+    }
+
+    pub fn tool_name(&self) -> Option<&str> {
+        match self {
+            Self::FunctionCall { name, .. } | Self::CustomToolCall { name, .. } => Some(name),
+            Self::FunctionCallOutput { name, .. } | Self::CustomToolCallOutput { name, .. } => {
+                name.as_deref()
+            }
+            Self::ToolSearchCall { .. } | Self::ToolSearchOutput { .. } => Some("tool_search"),
+            _ => None,
+        }
+    }
+
+    pub fn call_id(&self) -> Option<&str> {
+        match self {
+            Self::FunctionCall { call_id, .. }
+            | Self::CustomToolCall { call_id, .. }
+            | Self::CustomToolCallOutput { call_id, .. } => Some(call_id),
+            Self::FunctionCallOutput { call_id, .. }
+            | Self::ToolSearchCall { call_id, .. }
+            | Self::ToolSearchOutput { call_id, .. } => call_id.as_deref(),
+            _ => None,
+        }
+    }
+
+    pub fn metadata(&self) -> Option<&Value> {
+        match self {
+            Self::Message {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::AgentMessage {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::Reasoning {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::LocalShellCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::FunctionCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::ToolSearchCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::FunctionCallOutput {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::CustomToolCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::CustomToolCallOutput {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::ToolSearchOutput {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::WebSearchCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::ImageGenerationCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::Compaction {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::ContextCompaction {
+                internal_chat_message_metadata_passthrough,
+                ..
+            } => internal_chat_message_metadata_passthrough.as_ref(),
+            Self::AdditionalTools { .. } | Self::CompactionTrigger {} | Self::Other => None,
+        }
+    }
+
+    pub fn metadata_mut(&mut self) -> Option<&mut Option<Value>> {
+        match self {
+            Self::Message {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::AgentMessage {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::Reasoning {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::LocalShellCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::FunctionCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::ToolSearchCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::FunctionCallOutput {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::CustomToolCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::CustomToolCallOutput {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::ToolSearchOutput {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::WebSearchCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::ImageGenerationCall {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::Compaction {
+                internal_chat_message_metadata_passthrough,
+                ..
+            }
+            | Self::ContextCompaction {
+                internal_chat_message_metadata_passthrough,
+                ..
+            } => Some(internal_chat_message_metadata_passthrough),
+            Self::AdditionalTools { .. } | Self::CompactionTrigger {} | Self::Other => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentItem {

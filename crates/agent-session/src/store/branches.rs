@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 
 use super::{
     is_unique_constraint, now_epoch_secs, truncate_chars, BranchKind, ForkBoundary, ForkedSession,
-    SessionLineageGraph, SessionLineageNode, SessionStore, SessionTurnNode, StoredMessage,
+    SessionLineageGraph, SessionLineageNode, SessionStore, SessionTurnNode, StoredResponseItem,
     StoredSession,
 };
 
@@ -133,7 +133,7 @@ impl SessionStore {
         );
 
         let anchor_row = sqlx::query(
-            "SELECT timestamp, id, role FROM messages
+            "SELECT timestamp, id, role FROM response_items
              WHERE id = ?1 AND session_id = ?2",
         )
         .bind(parent_user_message_id)
@@ -150,7 +150,7 @@ impl SessionStore {
         );
 
         let next_user = sqlx::query(
-            "SELECT timestamp, id FROM messages
+            "SELECT timestamp, id FROM response_items
              WHERE session_id = ?1 AND role = 'user'
                AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
              ORDER BY timestamp ASC, id ASC LIMIT 1",
@@ -171,7 +171,7 @@ impl SessionStore {
             let completed = match next_user {
                 Some((next_timestamp, next_id)) => sqlx::query(
                     "SELECT EXISTS(
-                            SELECT 1 FROM messages
+                            SELECT 1 FROM response_items
                             WHERE session_id = ?1 AND role = 'assistant'
                               AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
                               AND (timestamp < ?4 OR (timestamp = ?4 AND id < ?5))
@@ -187,7 +187,7 @@ impl SessionStore {
                 .get::<bool, _>(0),
                 None => sqlx::query(
                     "SELECT EXISTS(
-                            SELECT 1 FROM messages
+                            SELECT 1 FROM response_items
                             WHERE session_id = ?1 AND role = 'assistant'
                               AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
                          )",
@@ -205,7 +205,7 @@ impl SessionStore {
         let anchor = match boundary {
             ForkBoundary::ThroughTurn => {
                 let turn_index: i64 = sqlx::query(
-                    "SELECT COUNT(*) FROM messages
+                    "SELECT COUNT(*) FROM response_items
                      WHERE session_id = ?1 AND role = 'user'
                        AND (timestamp < ?2 OR (timestamp = ?2 AND id <= ?3))",
                 )
@@ -219,12 +219,12 @@ impl SessionStore {
             }
             ForkBoundary::BeforeTurn => sqlx::query(
                 "SELECT id, (
-                        SELECT COUNT(*) FROM messages inner_m
+                        SELECT COUNT(*) FROM response_items inner_m
                         WHERE inner_m.session_id = outer_m.session_id AND inner_m.role = 'user'
                           AND (inner_m.timestamp < outer_m.timestamp
                                OR (inner_m.timestamp = outer_m.timestamp
                                    AND inner_m.id <= outer_m.id))
-                     ) FROM messages outer_m
+                     ) FROM response_items outer_m
                      WHERE outer_m.session_id = ?1 AND outer_m.role = 'user'
                        AND (outer_m.timestamp < ?2 OR (outer_m.timestamp = ?2 AND outer_m.id < ?3))
                      ORDER BY outer_m.timestamp DESC, outer_m.id DESC LIMIT 1",
@@ -264,7 +264,7 @@ impl SessionStore {
         let counts_row = sqlx::query(
             "SELECT SUM(CASE WHEN role = 'tool' THEN 1 ELSE 0 END),
                     SUM(CASE WHEN role = 'user' THEN 1 ELSE 0 END)
-             FROM messages WHERE session_id = ?1",
+             FROM response_items WHERE session_id = ?1",
         )
         .bind(new_id)
         .fetch_one(&mut *tx)
@@ -305,7 +305,7 @@ impl SessionStore {
         .execute(&mut *tx)
         .await?;
         sqlx::query(
-            "DELETE FROM messages WHERE session_id IN (
+            "DELETE FROM response_items WHERE session_id IN (
                  SELECT id FROM sessions WHERE branch_kind = 'side'
              )",
         )
@@ -404,7 +404,7 @@ impl SessionStore {
         let mut nodes = Vec::with_capacity(included.len());
         for id in included {
             let session = &sessions[&id];
-            let mut turns = turn_spans(&self.get_messages(&id).await?)
+            let mut turns = turn_spans(&self.get_response_items(&id).await?)
                 .into_iter()
                 .map(|turn| SessionTurnNode {
                     turn_index: turn.index,
@@ -460,14 +460,14 @@ impl SessionStore {
         })
     }
 
-    pub(crate) async fn write_fork_metadata_from_messages(
+    pub(crate) async fn write_fork_metadata_from_response_items(
         &self,
         source_id: &str,
         target_id: &str,
-        copied_source_messages: &[StoredMessage],
+        copied_source_items: &[StoredResponseItem],
         kind: BranchKind,
     ) -> Result<()> {
-        let turns = turn_spans(copied_source_messages);
+        let turns = turn_spans(copied_source_items);
         let completed = turns
             .iter()
             .filter(|turn| turn.completed)
@@ -493,8 +493,8 @@ impl SessionStore {
         kind: BranchKind,
     ) -> Result<()> {
         let inferred = infer_branch_metadata(
-            &self.get_messages(source_id).await?,
-            &self.get_messages(target_id).await?,
+            &self.get_response_items(source_id).await?,
+            &self.get_response_items(target_id).await?,
         );
         self.write_branch_metadata(source_id, target_id, kind, &inferred)
             .await
@@ -587,43 +587,39 @@ async fn copy_prefix_through_turn(
     next_user: Option<(f64, i64)>,
 ) -> Result<i64> {
     let copied = match next_user {
-        Some((timestamp, id)) => {
-            sqlx::query(
-                "INSERT INTO messages (
-                    session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                    timestamp, token_count, finish_reason, reasoning, reasoning_details, media_json
+        Some((timestamp, id)) => sqlx::query(
+            "INSERT INTO response_items (
+                    session_id, item_json, role, search_text, tool_name,
+                    timestamp, token_count, finish_reason
                  )
-                 SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                        timestamp, token_count, finish_reason, reasoning, reasoning_details, media_json
-                 FROM messages WHERE session_id = ?2
+                 SELECT ?1, item_json, role, search_text, tool_name,
+                        timestamp, token_count, finish_reason
+                 FROM response_items WHERE session_id = ?2
                  AND (timestamp < ?3 OR (timestamp = ?3 AND id < ?4))
                  ORDER BY timestamp ASC, id ASC",
-            )
-            .bind(new_id)
-            .bind(source_id)
-            .bind(timestamp)
-            .bind(id)
-            .execute(&mut **tx)
-            .await?
-            .rows_affected()
-        }
-        None => {
-            sqlx::query(
-                "INSERT INTO messages (
-                    session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                    timestamp, token_count, finish_reason, reasoning, reasoning_details, media_json
+        )
+        .bind(new_id)
+        .bind(source_id)
+        .bind(timestamp)
+        .bind(id)
+        .execute(&mut **tx)
+        .await?
+        .rows_affected(),
+        None => sqlx::query(
+            "INSERT INTO response_items (
+                    session_id, item_json, role, search_text, tool_name,
+                    timestamp, token_count, finish_reason
                  )
-                 SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
-                        timestamp, token_count, finish_reason, reasoning, reasoning_details, media_json
-                 FROM messages WHERE session_id = ?2
+                 SELECT ?1, item_json, role, search_text, tool_name,
+                        timestamp, token_count, finish_reason
+                 FROM response_items WHERE session_id = ?2
                  ORDER BY timestamp ASC, id ASC",
-            )
-            .bind(new_id)
-            .bind(source_id)
-            .execute(&mut **tx)
-            .await?
-            .rows_affected()
-        }
+        )
+        .bind(new_id)
+        .bind(source_id)
+        .execute(&mut **tx)
+        .await?
+        .rows_affected(),
     };
     Ok(i64::try_from(copied).unwrap_or(i64::MAX))
 }
@@ -636,7 +632,7 @@ async fn completed_turn_count_before_boundary(
     let roles: Vec<(String,)> = match boundary {
         Some((timestamp, id)) => {
             sqlx::query_as(
-                "SELECT role FROM messages
+                "SELECT role FROM response_items
                  WHERE session_id = ?1
                    AND (timestamp < ?2 OR (timestamp = ?2 AND id < ?3))
                  ORDER BY timestamp ASC, id ASC",
@@ -649,7 +645,7 @@ async fn completed_turn_count_before_boundary(
         }
         None => {
             sqlx::query_as(
-                "SELECT role FROM messages WHERE session_id = ?1
+                "SELECT role FROM response_items WHERE session_id = ?1
                  ORDER BY timestamp ASC, id ASC",
             )
             .bind(source_id)
@@ -707,11 +703,11 @@ async fn set_branch_title(
     Ok(())
 }
 
-fn turn_spans(messages: &[StoredMessage]) -> Vec<TurnSpan> {
-    let user_positions = messages
+fn turn_spans(items: &[StoredResponseItem]) -> Vec<TurnSpan> {
+    let user_positions = items
         .iter()
         .enumerate()
-        .filter(|(_, message)| message.role == "user")
+        .filter(|(_, item)| matches!(&item.item, agent_protocol::ResponseItem::Message { role, .. } if role == "user"))
         .map(|(position, _)| position)
         .collect::<Vec<_>>();
     user_positions
@@ -721,14 +717,14 @@ fn turn_spans(messages: &[StoredMessage]) -> Vec<TurnSpan> {
             let end = user_positions
                 .get(turn + 1)
                 .copied()
-                .unwrap_or(messages.len());
+                .unwrap_or(items.len());
             TurnSpan {
                 index: i64::try_from(turn + 1).unwrap_or(i64::MAX),
-                user_message_id: messages[*start].id,
-                content: messages[*start].content.clone(),
-                completed: messages[*start + 1..end]
+                user_message_id: items[*start].id,
+                content: Some(super::messages::response_item_text(&items[*start].item)),
+                completed: items[*start + 1..end]
                     .iter()
-                    .any(|message| message.role == "assistant"),
+                    .any(|item| matches!(&item.item, agent_protocol::ResponseItem::Message { role, .. } if role == "assistant")),
                 start: *start,
                 end,
             }
@@ -737,8 +733,8 @@ fn turn_spans(messages: &[StoredMessage]) -> Vec<TurnSpan> {
 }
 
 fn infer_branch_metadata(
-    parent_messages: &[StoredMessage],
-    child_messages: &[StoredMessage],
+    parent_messages: &[StoredResponseItem],
+    child_messages: &[StoredResponseItem],
 ) -> ResolvedBranchMetadata {
     let parent_turns = turn_spans(parent_messages);
     let child_turns = turn_spans(child_messages);
@@ -779,19 +775,16 @@ fn infer_branch_metadata(
 }
 
 fn same_turn(
-    left_messages: &[StoredMessage],
+    left_messages: &[StoredResponseItem],
     left: &TurnSpan,
-    right_messages: &[StoredMessage],
+    right_messages: &[StoredResponseItem],
     right: &TurnSpan,
 ) -> bool {
     let left_rows = &left_messages[left.start..left.end];
     let right_rows = &right_messages[right.start..right.end];
     left_rows.len() == right_rows.len()
-        && left_rows.iter().zip(right_rows).all(|(left, right)| {
-            left.role == right.role
-                && left.content == right.content
-                && left.tool_call_id == right.tool_call_id
-                && left.tool_name == right.tool_name
-                && left.timestamp == right.timestamp
-        })
+        && left_rows
+            .iter()
+            .zip(right_rows)
+            .all(|(left, right)| left.item == right.item && left.timestamp == right.timestamp)
 }

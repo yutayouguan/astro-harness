@@ -1,6 +1,8 @@
 //! Session turn 生命周期：输入持久化、记忆召回、prompt 组装与 hooks。
 
-use session::{build_conversation_context, format_recalled_context, ConversationStore, NewMessage};
+use session::{
+    build_conversation_context, format_recalled_context, ConversationStore, NewResponseItem,
+};
 
 use std::sync::Arc;
 
@@ -31,6 +33,34 @@ where
         image_data_urls,
         client_message_id: None,
     })
+}
+
+fn response_item_for_turn_input(
+    content: &str,
+    image_data_urls: &[String],
+    marker: Option<&str>,
+) -> agent_protocol::ResponseItem {
+    let mut response_content = vec![agent_protocol::ContentItem::InputText {
+        text: content.to_string(),
+    }];
+    response_content.extend(image_data_urls.iter().map(|image_url| {
+        agent_protocol::ContentItem::InputImage {
+            image_url: image_url.clone(),
+            detail: None,
+        }
+    }));
+    agent_protocol::ResponseItem::Message {
+        id: None,
+        role: "user".into(),
+        content: response_content,
+        phase: None,
+        internal_chat_message_metadata_passthrough: marker
+            .map(|value| serde_json::json!({ "astro_memory_marker": value })),
+    }
+}
+
+fn response_item_memory_marker(item: &agent_protocol::ResponseItem) -> Option<&str> {
+    item.metadata()?.get("astro_memory_marker")?.as_str()
 }
 
 impl Session {
@@ -124,7 +154,7 @@ impl Session {
         submission_id: String,
         request: TurnInputRequest,
         mode: TurnInputMode,
-        chat_override: Option<crate::streaming::ChatOverride>,
+        responses_override: Option<crate::streaming::ResponsesOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         let TurnInputRequest {
             input,
@@ -158,7 +188,7 @@ impl Session {
                         .await
                 }
                 None => {
-                    self.start_turn(submission_id, input, thread_settings, chat_override)
+                    self.start_turn(submission_id, input, thread_settings, responses_override)
                         .await
                 }
             },
@@ -167,7 +197,7 @@ impl Session {
                     reason: "not_idle".into(),
                 }),
                 None => {
-                    self.start_turn(submission_id, input, thread_settings, chat_override)
+                    self.start_turn(submission_id, input, thread_settings, responses_override)
                         .await
                 }
             },
@@ -183,7 +213,7 @@ impl Session {
         }
     }
 
-    async fn active_turn_id(&self) -> Option<String> {
+    pub(crate) async fn active_turn_id(&self) -> Option<String> {
         let active_turn = self.active_turn.lock().await;
         active_turn
             .as_ref()?
@@ -198,7 +228,7 @@ impl Session {
         turn_id: String,
         input: Vec<TurnInput>,
         thread_settings: agent_protocol::ThreadSettingsOverrides,
-        chat_override: Option<crate::streaming::ChatOverride>,
+        responses_override: Option<crate::streaming::ResponsesOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         let has_settings = !thread_settings.is_empty();
         let previous_settings = has_settings.then(|| self.snapshot_request_settings());
@@ -214,7 +244,7 @@ impl Session {
         let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
             Arc::clone(self),
             Arc::clone(&context),
-            chat_override,
+            responses_override,
         );
         let applied_event = async {
             if let Some(thread_settings) = applied_settings {
@@ -242,7 +272,7 @@ impl Session {
     pub(crate) async fn recover_turn(
         self: &Arc<Self>,
         turn_id: String,
-        chat_override: Option<crate::streaming::ChatOverride>,
+        responses_override: Option<crate::streaming::ResponsesOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         if self.active_turn_id().await.is_some() || self.terminating_turn_id().await.is_some() {
             return Ok(TurnInputSubmission::NotSubmitted {
@@ -262,7 +292,7 @@ impl Session {
         let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
             Arc::clone(self),
             Arc::clone(&context),
-            chat_override,
+            responses_override,
         );
         self.spawn_task(context, Vec::new(), RegularTask::recovery(args))
             .await
@@ -374,7 +404,7 @@ impl Session {
                 .clone_history()
                 .await
                 .iter()
-                .any(|m| matches!(m.role, types::message::Role::Assistant))
+                .any(|item| item.role() == Some("assistant"))
             && self.config.thread_memory_mode == types::ThreadMemoryMode::Enabled
         {
             memory::try_append_decision(
@@ -456,13 +486,13 @@ impl Session {
             .await
             .iter()
             .rev()
-            .find(|message| {
-                matches!(message.role, types::message::Role::User)
-                    && message.compressed_content.as_deref().is_some_and(|marker| {
+            .find(|item| {
+                item.role() == Some("user")
+                    && response_item_memory_marker(item).is_some_and(|marker| {
                         marker.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
                     })
             })
-            .map(|message| message.content_text())
+            .map(agent_protocol::ResponseItem::text)
             .ok_or_else(|| {
                 anyhow::anyhow!("follow-up mailbox input is missing from runtime history")
             })?;
@@ -483,17 +513,18 @@ impl Session {
         let recalled = if let Some(keywords) = fts_keywords.filter(|value| !value.trim().is_empty())
         {
             let visible_history = self
-                .provider_history()
+                .provider_response_history()
                 .await
                 .into_iter()
-                .map(|message| {
-                    let role = match message.role {
-                        types::message::Role::System => "system",
-                        types::message::Role::User => "user",
-                        types::message::Role::Assistant => "assistant",
-                        types::message::Role::Tool => "tool",
-                    };
-                    (role.to_string(), message.provider_view_text().into_owned())
+                .map(|item| {
+                    let role = item.role().unwrap_or_else(|| {
+                        if item.is_tool_output() {
+                            "tool"
+                        } else {
+                            "assistant"
+                        }
+                    });
+                    (role.to_string(), item.provider_view_text())
                 })
                 .collect::<std::collections::HashSet<_>>();
             let mut recalled = build_conversation_context(
@@ -503,8 +534,11 @@ impl Session {
                 Some(keywords),
             )
             .await?;
-            recalled.retain(|message| {
-                !visible_history.contains(&(message.role.clone(), message.content.clone()))
+            recalled.retain(|entry| {
+                !visible_history.contains(&(
+                    entry.item.role().unwrap_or("item").to_string(),
+                    entry.item.text(),
+                ))
             });
             recalled
         } else {
@@ -757,7 +791,7 @@ impl Session {
 
     pub(crate) async fn record_turn_input(&self, input: TurnInput) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.persist_turn_input(&input, None, None).await?;
+        self.persist_turn_input(&input, None).await?;
         self.record_turn_input_in_memory_unlocked(&input, None)
             .await;
         Ok(())
@@ -766,7 +800,6 @@ impl Session {
     pub(crate) async fn persist_turn_input(
         &self,
         input: &TurnInput,
-        finish_reason: Option<&str>,
         memory_marker: Option<&str>,
     ) -> anyhow::Result<()> {
         let TurnInput {
@@ -778,32 +811,14 @@ impl Session {
             .sessions
             .ensure_session(&self.session_id, "tauri")
             .await?;
-        let media_assets: Vec<types::MediaAsset> = image_data_urls
-            .iter()
-            .map(|url| url.trim())
-            .filter(|url| !url.is_empty())
-            .map(|url| {
-                let mime = url
-                    .strip_prefix("data:")
-                    .and_then(|rest| rest.split(';').next())
-                    .unwrap_or("image/*")
-                    .to_string();
-                types::MediaAsset::data_url(types::MediaKind::Image, url, mime)
-            })
-            .collect();
-        let media_json = if media_assets.is_empty() {
-            None
-        } else {
-            Some(serde_json::to_string(&media_assets)?)
-        };
+        let item = response_item_for_turn_input(content, image_data_urls, memory_marker);
         self.services
             .sessions
-            .append_message(NewMessage {
-                content: Some(content),
-                compressed_content: memory_marker,
-                media_json: media_json.as_deref(),
-                finish_reason,
-                ..NewMessage::empty(&self.session_id, "user")
+            .append_response_item(NewResponseItem {
+                session_id: &self.session_id,
+                item: &item,
+                token_count: None,
+                finish_reason: None,
             })
             .await?;
         #[cfg(test)]
@@ -835,25 +850,9 @@ impl Session {
             image_data_urls,
             client_message_id: _,
         } = input;
-        let mut response_content = vec![agent_protocol::ContentItem::InputText {
-            text: content.clone(),
-        }];
-        response_content.extend(image_data_urls.iter().map(|image_url| {
-            agent_protocol::ContentItem::InputImage {
-                image_url: image_url.clone(),
-                detail: None,
-            }
-        }));
-        let item = agent_protocol::ResponseItem::Message {
-            id: None,
-            role: "user".into(),
-            content: response_content,
-            phase: None,
-            internal_chat_message_metadata_passthrough: marker
-                .map(|value| serde_json::json!({ "astro_memory_marker": value })),
-        };
+        let item = response_item_for_turn_input(content, image_data_urls, marker);
         if let Err(error) = self
-            .persist_response_items(std::slice::from_ref(&item))
+            .persist_rollout_items(std::slice::from_ref(&item))
             .await
         {
             tracing::warn!(%error, "failed to persist turn input response item");
@@ -878,21 +877,14 @@ impl Session {
         let messages = self
             .services
             .sessions
-            .get_messages(&self.session_id)
+            .get_response_items(&self.session_id)
             .await?;
-        let Some(message) = messages.iter().find(|message| {
-            message.role == "user"
-                && (message.finish_reason.as_deref() == Some(marker)
-                    || message.compressed_content.as_deref() == Some(marker))
+        let Some(_message) = messages.iter().find(|message| {
+            matches!(&message.item, agent_protocol::ResponseItem::Message { role, .. } if role == "user")
+                && response_item_memory_marker(&message.item) == Some(marker)
         }) else {
             return Ok(false);
         };
-        if message.compressed_content.as_deref() != Some(marker) {
-            self.services
-                .sessions
-                .update_message_compressed_content(message.id, Some(marker))
-                .await?;
-        }
         Ok(true)
     }
 

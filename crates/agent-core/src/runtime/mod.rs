@@ -26,7 +26,6 @@ use mcp::{McpExecutionContext, McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
 use serde_json::Value;
 use tools::{register_all, ToolRegistry};
-use types::message::Message;
 use types::ToolEntry;
 
 use crate::prompt::context::StaticContext;
@@ -2347,21 +2346,6 @@ impl Session {
     }
 
     /// 将对话条目追加到会话拥有的历史记录中。
-    pub async fn record_items(&self, items: Vec<Message>) {
-        let _write_guard = self.conversation_write_lock.lock().await;
-        let response_items = items
-            .iter()
-            .flat_map(|message| {
-                agent_rollout::response_items_from_message(message, None)
-                    .expect("serializing runtime message as response item cannot fail")
-            })
-            .collect::<Vec<_>>();
-        if let Err(error) = self.persist_response_items(&response_items).await {
-            tracing::warn!(%error, "failed to persist response items");
-        }
-        self.record_response_items_unlocked(response_items);
-    }
-
     pub(crate) async fn record_response_items(
         &self,
         items: Vec<agent_protocol::ResponseItem>,
@@ -2370,6 +2354,12 @@ impl Session {
         self.persist_response_items(&items).await?;
         self.record_response_items_unlocked(items);
         Ok(())
+    }
+
+    pub async fn record_items(&self, items: Vec<agent_protocol::ResponseItem>) {
+        self.record_response_items(items)
+            .await
+            .expect("persist test response items");
     }
 
     pub(crate) async fn record_realtime_items(&self, items: Vec<agent_protocol::RealtimeItem>) {
@@ -2390,8 +2380,8 @@ impl Session {
     }
 
     /// 返回当前对话历史的拥有式快照。
-    pub async fn clone_history(&self) -> Vec<Message> {
-        self.lock_state().clone_message_projection()
+    pub async fn clone_history(&self) -> Vec<agent_protocol::ResponseItem> {
+        self.lock_state().clone_response_history()
     }
 
     /// Canonical Responses history used for model sampling and rollout replay.
@@ -2508,9 +2498,9 @@ impl Session {
     }
 
     /// 返回对话历史中最后 `n` 条消息。
-    pub fn tail_history(&self, n: usize) -> Vec<types::message::Message> {
+    pub fn tail_history(&self, n: usize) -> Vec<agent_protocol::ResponseItem> {
         let state = self.lock_state();
-        let history = state.clone_message_projection();
+        let history = state.clone_response_history();
         let start = history.len().saturating_sub(n);
         history[start..].to_vec()
     }
@@ -2782,7 +2772,9 @@ mod tests {
             let write_complete = Arc::clone(&write_complete);
             tokio::spawn(async move {
                 barrier.wait().await;
-                session.record_items(vec![Message::user("first")]).await;
+                session
+                    .record_items(vec![agent_protocol::ResponseItem::user_text("first")])
+                    .await;
                 write_complete.store(true, Ordering::Release);
             })
         };
@@ -2917,7 +2909,7 @@ mod tests {
             drop(session.record_assistant_message("assistant"));
             drop(session.record_user_message("user"));
             drop(session.record_tool_result("tool"));
-            drop(session.provider_history());
+            drop(session.provider_response_history());
             drop(session.maintain_tool_context());
             drop(session.compress_tool_results_if_needed());
             drop(session.record_turn_input(agent_protocol::TurnInput {
@@ -2934,10 +2926,14 @@ mod tests {
     async fn clone_history_returns_an_owned_snapshot_through_arc() {
         let dir = TempDir::new().unwrap();
         let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
-        session.record_items(vec![Message::user("original")]).await;
+        session
+            .record_items(vec![agent_protocol::ResponseItem::user_text("original")])
+            .await;
 
         let mut snapshot = session.clone_history().await;
-        snapshot.push(Message::assistant("snapshot-only"));
+        snapshot.push(agent_protocol::ResponseItem::assistant_text(
+            "snapshot-only",
+        ));
 
         let current = session.clone_history().await;
         assert_eq!(current.len(), 1);
@@ -2980,7 +2976,7 @@ mod tests {
         assert!(session
             .services
             .sessions
-            .get_messages(session.session_id())
+            .get_response_items(session.session_id())
             .await
             .unwrap()
             .is_empty());
@@ -2992,7 +2988,7 @@ mod tests {
             session
                 .services
                 .sessions
-                .get_messages(session.session_id())
+                .get_response_items(session.session_id())
                 .await
                 .unwrap()
                 .len(),

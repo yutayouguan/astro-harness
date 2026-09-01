@@ -44,14 +44,19 @@ pub async fn job_from_agent(agent: &AgentLoop) -> BackgroundReviewJob {
     let history = agent.clone_history().await;
     let messages = history
         .iter()
-        .filter_map(|m| {
-            let role = match m.role {
-                types::message::Role::User => "user",
-                types::message::Role::Assistant => "assistant",
-                types::message::Role::Tool => "tool",
-                types::message::Role::System => return None,
-            };
-            let content = m.content_str().trim();
+        .filter_map(|item| {
+            let role = item.role().unwrap_or_else(|| {
+                if item.is_tool_output() {
+                    "tool"
+                } else {
+                    "assistant"
+                }
+            });
+            if matches!(role, "system" | "developer") {
+                return None;
+            }
+            let content = item.text();
+            let content = content.trim();
             if content.is_empty() {
                 return None;
             }

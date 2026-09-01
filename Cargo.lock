@@ -123,7 +123,6 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
- "types",
 ]
 
 [[package]]
@@ -6196,6 +6195,7 @@ dependencies = [
  "agent",
  "agent-config",
  "agent-db",
+ "agent-protocol",
  "anyhow",
  "chrono",
  "home",

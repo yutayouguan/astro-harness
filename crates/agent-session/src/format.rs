@@ -1,4 +1,4 @@
-use crate::{ScrolledMessage, SearchHit};
+use crate::{ScrolledResponseItem, SearchHit};
 
 /// 将 [`SearchHit`] 列表格式化为「相关历史消息」Markdown。
 pub(crate) fn format_session_search_hits(hits: &[SearchHit]) -> String {
@@ -34,16 +34,22 @@ pub(crate) fn format_session_search_hits(hits: &[SearchHit]) -> String {
 /// 将召回消息列表格式化为 `[id] role: content [anchor]` 多行文本。
 ///
 /// `is_anchor` 为 true 时在行尾附加 ` [anchor]` 标记，供 LLM 识别 FTS 锚点。
-pub fn format_recalled_context(messages: &[ScrolledMessage]) -> String {
-    if messages.is_empty() {
+pub fn format_recalled_context(items: &[ScrolledResponseItem]) -> String {
+    if items.is_empty() {
         return String::new();
     }
 
-    messages
+    items
         .iter()
-        .map(|m| {
-            let marker = if m.is_anchor { " [anchor]" } else { "" };
-            format!("[{}] {}: {}{}", m.id, m.role, m.content, marker)
+        .map(|entry| {
+            let marker = if entry.is_anchor { " [anchor]" } else { "" };
+            format!(
+                "[{}] {}: {}{}",
+                entry.id,
+                entry.item.role().unwrap_or("item"),
+                entry.item.text(),
+                marker
+            )
         })
         .collect::<Vec<_>>()
         .join("\n")

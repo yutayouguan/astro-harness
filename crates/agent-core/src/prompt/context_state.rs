@@ -16,7 +16,7 @@ const PROMPT_CONTEXT_KEY: &str = "astro.prompt_context.v1";
 #[derive(Serialize)]
 struct PromptContextSnapshot<'a> {
     version: u32,
-    messages: &'a [providers::types::message::Message],
+    messages: &'a [agent_protocol::ResponseItem],
     sections: &'a [PromptContextSection],
     usage: PromptContextUsage<'a>,
 }
@@ -49,14 +49,11 @@ pub(crate) struct RestoredPromptContext {
 #[derive(Debug, Clone)]
 pub(crate) struct PromptContextEvent {
     pub(crate) before_user: usize,
-    pub(crate) messages: Vec<providers::types::message::Message>,
+    pub(crate) messages: Vec<agent_protocol::ResponseItem>,
 }
 
 impl PromptContextEvent {
-    pub(crate) fn new(
-        before_user: usize,
-        messages: Vec<providers::types::message::Message>,
-    ) -> Self {
+    pub(crate) fn new(before_user: usize, messages: Vec<agent_protocol::ResponseItem>) -> Self {
         Self {
             before_user,
             messages,
@@ -64,9 +61,7 @@ impl PromptContextEvent {
     }
 }
 
-pub(crate) fn snapshot_messages(
-    snapshot: &Value,
-) -> Option<Vec<providers::types::message::Message>> {
+pub(crate) fn snapshot_messages(snapshot: &Value) -> Option<Vec<agent_protocol::ResponseItem>> {
     serde_json::from_value(snapshot.get("messages")?.clone()).ok()
 }
 
@@ -93,21 +88,18 @@ fn context_update(id: &str, content: Option<&str>) -> String {
 fn role_message(
     role: PromptContextRole,
     updates: impl IntoIterator<Item = String>,
-) -> Option<providers::types::message::Message> {
+) -> Option<agent_protocol::ResponseItem> {
     let body = updates.into_iter().collect::<Vec<_>>().join("\n\n");
     if body.is_empty() {
         return None;
     }
     Some(match role {
-        PromptContextRole::Developer => providers::types::message::Message::developer(body),
-        PromptContextRole::User => providers::types::message::Message::user_text(body),
+        PromptContextRole::Developer => agent_protocol::ResponseItem::developer_text(body),
+        PromptContextRole::User => agent_protocol::ResponseItem::user_text(body),
     })
 }
 
-fn section_updates(
-    previous: &Value,
-    current: &Value,
-) -> Option<Vec<providers::types::message::Message>> {
+fn section_updates(previous: &Value, current: &Value) -> Option<Vec<agent_protocol::ResponseItem>> {
     let previous_messages = snapshot_messages(previous).unwrap_or_default();
     let current_messages = snapshot_messages(current).unwrap_or_default();
     let previous = snapshot_sections(previous)?;
@@ -152,14 +144,11 @@ fn section_updates(
     Some(updates)
 }
 
-fn role_text(
-    messages: &[providers::types::message::Message],
-    role: providers::types::message::Role,
-) -> Option<String> {
+fn role_text(messages: &[agent_protocol::ResponseItem], role: &str) -> Option<String> {
     let body = messages
         .iter()
-        .filter(|message| message.role() == role)
-        .map(providers::types::message::Message::text_content)
+        .filter(|message| message.role() == Some(role))
+        .map(agent_protocol::ResponseItem::text)
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join("\n\n");
@@ -173,7 +162,7 @@ fn role_text(
 pub(crate) fn model_updates(
     previous: Option<&Value>,
     current: &Value,
-) -> Vec<providers::types::message::Message> {
+) -> Vec<agent_protocol::ResponseItem> {
     let Some(previous) = previous else {
         return snapshot_messages(current).unwrap_or_default();
     };
@@ -185,22 +174,15 @@ pub(crate) fn model_updates(
     let new = snapshot_messages(current).unwrap_or_default();
     let mut updates = Vec::new();
     for (role, context_role) in [
-        (
-            providers::types::message::Role::Developer,
-            PromptContextRole::Developer,
-        ),
-        (
-            providers::types::message::Role::User,
-            PromptContextRole::User,
-        ),
+        ("developer", PromptContextRole::Developer),
+        ("user", PromptContextRole::User),
     ] {
         let old_text = role_text(&old, role);
         let new_text = role_text(&new, role);
         if old_text != new_text {
-            if let Some(message) = role_message(
-                context_role,
-                [context_update(role.as_str(), new_text.as_deref())],
-            ) {
+            if let Some(message) =
+                role_message(context_role, [context_update(role, new_text.as_deref())])
+            {
                 updates.push(message);
             }
         }
@@ -295,14 +277,12 @@ pub(crate) fn restore(items: &[RolloutItem]) -> RestoredPromptContext {
 
 #[cfg(test)]
 mod tests {
-    use providers::types::message::Message;
-
     use super::*;
 
     fn prompt(text: &str) -> PromptContract {
         PromptContract {
             base_instructions: "stable base".into(),
-            context: vec![Message::developer(text)],
+            context: vec![agent_protocol::ResponseItem::developer_text(text)],
             context_sections: vec![PromptContextSection {
                 id: "mode".into(),
                 role: PromptContextRole::Developer,
@@ -340,13 +320,8 @@ mod tests {
         assert_eq!(restored.history.len(), 2);
         assert_eq!(restored.history[0].before_user, 0);
         assert_eq!(restored.history[1].before_user, 1);
-        assert_eq!(
-            restored.history[1].messages[0].role(),
-            providers::types::message::Role::Developer
-        );
-        assert!(restored.history[1].messages[0]
-            .text_content()
-            .contains("second"));
+        assert_eq!(restored.history[1].messages[0].role(), Some("developer"));
+        assert!(restored.history[1].messages[0].text().contains("second"));
     }
 
     #[test]
@@ -363,7 +338,9 @@ mod tests {
             });
 
         assert_eq!(snapshot(&first).unwrap(), snapshot(&second).unwrap());
-        first.context.push(Message::user_text("changed context"));
+        first
+            .context
+            .push(agent_protocol::ResponseItem::user_text("changed context"));
         assert_ne!(snapshot(&first).unwrap(), snapshot(&second).unwrap());
     }
 
@@ -386,9 +363,9 @@ mod tests {
     #[test]
     fn diffs_only_the_changed_source_and_resets_after_compaction() {
         let mut first = prompt("mode-one");
-        first
-            .context
-            .push(Message::user_text("time-one\n\nproject"));
+        first.context.push(agent_protocol::ResponseItem::user_text(
+            "time-one\n\nproject",
+        ));
         first.context_sections.push(PromptContextSection {
             id: "timestamp".into(),
             role: PromptContextRole::User,
@@ -400,16 +377,16 @@ mod tests {
             content: "project".into(),
         });
         let mut second = first.clone();
-        second.context[1] = Message::user_text("time-two\n\nproject");
+        second.context[1] = agent_protocol::ResponseItem::user_text("time-two\n\nproject");
         second.context_sections[1].content = "time-two".into();
 
         let first = snapshot(&first).unwrap();
         let second = snapshot(&second).unwrap();
         let updates = model_updates(Some(&first), &second);
         assert_eq!(updates.len(), 1);
-        assert_eq!(updates[0].role(), providers::types::message::Role::User);
-        assert!(updates[0].text_content().contains("time-two"));
-        assert!(!updates[0].text_content().contains("project"));
+        assert_eq!(updates[0].role(), Some("user"));
+        assert!(updates[0].text().contains("time-two"));
+        assert!(!updates[0].text().contains("project"));
 
         let restored = restore(&[
             rollout_update(None, &first, 0).unwrap(),
@@ -431,11 +408,8 @@ mod tests {
 
         let updates = model_updates(Some(&first), &second);
         assert_eq!(updates.len(), 1);
-        assert_eq!(
-            updates[0].role(),
-            providers::types::message::Role::Developer
-        );
-        assert!(updates[0].text_content().contains("second"));
+        assert_eq!(updates[0].role(), Some("developer"));
+        assert!(updates[0].text().contains("second"));
     }
 
     #[test]
@@ -451,20 +425,12 @@ mod tests {
             value.as_object_mut().unwrap().remove("before_user");
         }
 
-        let response = |message: types::message::Message| {
-            RolloutItem::ResponseItem(
-                agent_rollout::response_items_from_message(&message, None)
-                    .unwrap()
-                    .into_iter()
-                    .next()
-                    .unwrap(),
-            )
-        };
+        let response = |item| RolloutItem::ResponseItem(item);
         let restored = restore(&[
-            response(types::message::Message::user("first")),
+            response(agent_protocol::ResponseItem::user_text("first")),
             full,
-            response(types::message::Message::assistant("answer")),
-            response(types::message::Message::user("second")),
+            response(agent_protocol::ResponseItem::assistant_text("answer")),
+            response(agent_protocol::ResponseItem::user_text("second")),
             patch,
         ]);
 

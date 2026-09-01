@@ -1,12 +1,8 @@
 //! 消息检索、聊天历史与 FTS。
 
-use super::{
-    activities_from_tool_calls, attach_tool_output, coalesce_consecutive_assistants,
-    escape_fts5_query, truncate_chars, ChatHistoryMessage, RecentSession, SearchHit, SessionStore,
-};
+use super::{escape_fts5_query, truncate_chars, RecentSession, SearchHit, SessionStore};
 use agent_db::sqlx::{self, AssertSqlSafe, Row};
 use anyhow::Result;
-use serde_json::Value;
 use std::collections::HashSet;
 
 type RecentSessionRow = (
@@ -58,7 +54,7 @@ fn add_placement_conditions(
 }
 
 impl SessionStore {
-    /// 跨会话消息 FTS：优先 `messages_fts`，再合并 `messages_fts_trigram`（CJK / 子串）。
+    /// 跨会话 item FTS：优先 unicode61 索引，再合并 trigram（CJK / 子串）。
     pub async fn search_messages(
         &self,
         query: &str,
@@ -75,7 +71,7 @@ impl SessionStore {
         let mut seen = HashSet::new();
 
         self.collect_fts_hits(FtsCollect {
-            fts_table: "messages_fts",
+            fts_table: "response_items_fts",
             fts_query: &fts_query,
             source_filter,
             role_filter,
@@ -86,7 +82,7 @@ impl SessionStore {
         .await?;
         if (hits.len() as i64) < limit {
             self.collect_fts_hits(FtsCollect {
-                fts_table: "messages_fts_trigram",
+                fts_table: "response_items_fts_trigram",
                 fts_query: &fts_query,
                 source_filter,
                 role_filter,
@@ -105,90 +101,15 @@ impl SessionStore {
         Ok(hits)
     }
 
-    /// 按时间扫描并折叠为 UI 气泡：user / assistant（含 activities）；tool 不单独成泡。
-    pub async fn build_chat_history(
-        &self,
-        session_id: &str,
-        limit: usize,
-    ) -> Result<Vec<ChatHistoryMessage>> {
-        let messages = self.get_messages(session_id).await?;
-        let mut out: Vec<ChatHistoryMessage> = Vec::new();
-
-        for m in messages {
-            match m.role.as_str() {
-                "user" => {
-                    out.push(ChatHistoryMessage {
-                        id: m.id.to_string(),
-                        role: "user".into(),
-                        content: m.content.unwrap_or_default(),
-                        reasoning: None,
-                        activities: Vec::new(),
-                        segments: None,
-                        ui_surfaces: None,
-                    });
-                }
-                "assistant" => {
-                    let activities = activities_from_tool_calls(m.tool_calls.as_ref());
-                    let (segments, ui_surfaces) = match &m.reasoning_details {
-                        Some(Value::Object(map)) => (
-                            map.get("astro_timeline_v1").cloned(),
-                            map.get("astro_surfaces_v1").cloned(),
-                        ),
-                        _ => (None, None),
-                    };
-                    out.push(ChatHistoryMessage {
-                        id: m.id.to_string(),
-                        role: "assistant".into(),
-                        content: m.content.unwrap_or_default(),
-                        reasoning: m.reasoning,
-                        activities,
-                        segments,
-                        ui_surfaces,
-                    });
-                }
-                "tool" => {
-                    let call_id = m.tool_call_id.as_deref();
-                    let output = m.content.clone();
-                    let media = m
-                        .media_json
-                        .as_deref()
-                        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
-                        .filter(|v| matches!(v, Value::Array(a) if !a.is_empty()));
-                    if let Some(assistant) =
-                        out.iter_mut().rev().find(|msg| msg.role == "assistant")
-                    {
-                        attach_tool_output(
-                            assistant,
-                            call_id,
-                            output,
-                            m.tool_name.as_deref(),
-                            media,
-                        );
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        // 同轮工具循环会落多条 assistant；UI 期望合并为一条气泡。
-        out = coalesce_consecutive_assistants(out);
-
-        if out.len() > limit {
-            let skip = out.len() - limit;
-            out = out.into_iter().skip(skip).collect();
-        }
-        Ok(out)
-    }
-
     /// 取指定会话最近 `limit` 条消息，按时间正序返回（`is_anchor` 均为 false）。
     pub async fn recent_messages(
         &self,
         session_id: &str,
         limit: usize,
-    ) -> Result<Vec<crate::message_db::ScrolledMessage>> {
+    ) -> Result<Vec<crate::context_recall::ScrolledResponseItem>> {
         let rows = sqlx::query(
-            "SELECT id, role, COALESCE(content, '')
-             FROM messages
+            "SELECT id, item_json
+             FROM response_items
              WHERE session_id = ?1
              ORDER BY id DESC
              LIMIT ?2",
@@ -198,25 +119,24 @@ impl SessionStore {
         .fetch_all(&self.pool)
         .await?;
 
-        let mut result: Vec<crate::message_db::ScrolledMessage> = rows
+        let mut result: Vec<crate::context_recall::ScrolledResponseItem> = rows
             .iter()
-            .map(|row| {
+            .map(|row| -> Result<_> {
                 let id: i64 = row.get::<i64, _>(0);
-                crate::message_db::ScrolledMessage {
+                Ok(crate::context_recall::ScrolledResponseItem {
                     id,
-                    role: row.get::<String, _>(1),
-                    content: row.get::<String, _>(2),
+                    item: serde_json::from_str(&row.get::<String, _>(1))?,
                     is_anchor: false,
-                }
+                })
             })
-            .collect();
+            .collect::<Result<_>>()?;
         result.reverse();
         Ok(result)
     }
 
     /// 返回全局最近一条消息所属的 `session_id`；无消息时返回 `None`。
     pub async fn latest_session_id(&self) -> Result<Option<String>> {
-        let row = sqlx::query("SELECT session_id FROM messages ORDER BY id DESC LIMIT 1")
+        let row = sqlx::query("SELECT session_id FROM response_items ORDER BY id DESC LIMIT 1")
             .fetch_optional(&self.pool)
             .await?;
         Ok(row.map(|r| r.get::<String, _>(0)))
@@ -237,7 +157,7 @@ impl SessionStore {
         let mut ids = Vec::new();
         let mut seen = HashSet::new();
         self.collect_session_fts_ids(
-            "messages_fts",
+            "response_items_fts",
             session_id,
             &fts_query,
             limit,
@@ -247,7 +167,7 @@ impl SessionStore {
         .await?;
         if ids.len() < limit {
             self.collect_session_fts_ids(
-                "messages_fts_trigram",
+                "response_items_fts_trigram",
                 session_id,
                 &fts_query,
                 limit,
@@ -265,10 +185,10 @@ impl SessionStore {
         session_id: &str,
         around_message_id: i64,
         window_size: i64,
-    ) -> Result<Vec<crate::message_db::ScrolledMessage>> {
+    ) -> Result<Vec<crate::context_recall::ScrolledResponseItem>> {
         let rows = sqlx::query(
-            "SELECT id, role, COALESCE(content, '')
-             FROM messages
+            "SELECT id, item_json
+             FROM response_items
              WHERE session_id = ?1
                AND id BETWEEN (?2 - ?3) AND (?2 + ?3)
              ORDER BY id ASC",
@@ -279,18 +199,17 @@ impl SessionStore {
         .fetch_all(&self.pool)
         .await?;
 
-        let result: Vec<crate::message_db::ScrolledMessage> = rows
+        let result: Vec<crate::context_recall::ScrolledResponseItem> = rows
             .iter()
-            .map(|row| {
+            .map(|row| -> Result<_> {
                 let id: i64 = row.get::<i64, _>(0);
-                crate::message_db::ScrolledMessage {
+                Ok(crate::context_recall::ScrolledResponseItem {
                     id,
-                    role: row.get::<String, _>(1),
-                    content: row.get::<String, _>(2),
+                    item: serde_json::from_str(&row.get::<String, _>(1))?,
                     is_anchor: id == around_message_id,
-                }
+                })
             })
-            .collect();
+            .collect::<Result<_>>()?;
         Ok(result)
     }
 
@@ -381,11 +300,10 @@ impl SessionStore {
         let where_clause = format!("WHERE {}", conditions.join(" AND "));
         let sql = format!(
             "SELECT s.id, s.title, s.started_at,
-                    (SELECT m.content FROM messages m
+                    (SELECT m.search_text FROM response_items m
                      WHERE m.session_id = s.id
                        AND m.role = 'user'
-                       AND m.content IS NOT NULL
-                       AND TRIM(m.content) != ''
+                       AND TRIM(m.search_text) != ''
                      ORDER BY m.timestamp ASC, m.id ASC
                      LIMIT 1) AS preview,
                     s.ended_at, s.end_reason, s.archived_at, s.pinned_at, s.project_id,
@@ -453,11 +371,10 @@ impl SessionStore {
         };
         let sql = format!(
             "SELECT s.id, s.title, s.started_at,
-                    (SELECT m.content FROM messages m
+                    (SELECT m.search_text FROM response_items m
                      WHERE m.session_id = s.id
                        AND m.role = 'user'
-                       AND m.content IS NOT NULL
-                       AND TRIM(m.content) != ''
+                       AND TRIM(m.search_text) != ''
                      ORDER BY m.timestamp ASC, m.id ASC
                      LIMIT 1) AS preview,
                     s.ended_at, s.end_reason, s.archived_at, s.pinned_at, s.project_id,
@@ -553,7 +470,7 @@ impl SessionStore {
         let sql = format!(
             "SELECT m.id
              FROM {fts} AS f
-             JOIN messages AS m ON m.id = f.rowid
+             JOIN response_items AS m ON m.id = f.rowid
              WHERE m.session_id = ?1 AND {fts} MATCH ?2
              ORDER BY rank
              LIMIT ?3",
@@ -583,13 +500,13 @@ impl SessionStore {
             return Ok(());
         }
 
-        // fts_table 仅内部常量 "messages_fts" | "messages_fts_trigram"。
+        // fts_table 仅内部常量 `response_items_fts*`。
         let sql = format!(
             "SELECT m.id, m.session_id, m.role,
-                    COALESCE(snippet({fts}, 0, '', '', '…', 32), m.content, ''),
+                    COALESCE(snippet({fts}, 0, '', '', '…', 32), m.search_text, ''),
                     m.tool_name
              FROM {fts} AS f
-             JOIN messages AS m ON m.id = f.rowid
+             JOIN response_items AS m ON m.id = f.rowid
              JOIN sessions AS s ON s.id = m.session_id
              WHERE {fts} MATCH ?1
                AND (?2 IS NULL OR s.source = ?2)
@@ -634,7 +551,7 @@ impl SessionStore {
     async fn neighbor_context(&self, session_id: &str, message_id: i64) -> Result<String> {
         let mut parts = Vec::new();
         let prev = sqlx::query(
-            "SELECT role, content FROM messages
+            "SELECT COALESCE(role, ''), search_text FROM response_items
              WHERE session_id = ?1 AND id < ?2
              ORDER BY id DESC LIMIT 1",
         )
@@ -644,14 +561,11 @@ impl SessionStore {
         .await?;
         if let Some(row) = prev {
             let role: String = row.get::<String, _>(0);
-            let content: Option<String> = row.get::<Option<String>, _>(1);
-            parts.push(format!(
-                "[prev:{role}] {}",
-                truncate_chars(content.as_deref().unwrap_or(""), 80)
-            ));
+            let content: String = row.get::<String, _>(1);
+            parts.push(format!("[prev:{role}] {}", truncate_chars(&content, 80)));
         }
         let next = sqlx::query(
-            "SELECT role, content FROM messages
+            "SELECT COALESCE(role, ''), search_text FROM response_items
              WHERE session_id = ?1 AND id > ?2
              ORDER BY id ASC LIMIT 1",
         )
@@ -661,11 +575,8 @@ impl SessionStore {
         .await?;
         if let Some(row) = next {
             let role: String = row.get::<String, _>(0);
-            let content: Option<String> = row.get::<Option<String>, _>(1);
-            parts.push(format!(
-                "[next:{role}] {}",
-                truncate_chars(content.as_deref().unwrap_or(""), 80)
-            ));
+            let content: String = row.get::<String, _>(1);
+            parts.push(format!("[next:{role}] {}", truncate_chars(&content, 80)));
         }
         Ok(parts.join(" | "))
     }

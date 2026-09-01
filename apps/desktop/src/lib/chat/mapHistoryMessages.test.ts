@@ -3,12 +3,112 @@ import test from "node:test";
 import {
   coalesceConsecutiveAssistants,
   enrichTimelineDurations,
-  mapHistoryMessages,
+  mapHistoryItems,
+  normalizeHistoryBubbles,
   settleRestoredActivities,
 } from "./mapHistoryMessages.ts";
 
-test("mapHistoryMessages restores activity media from history DTO", () => {
-  const msgs = mapHistoryMessages([
+test("mapHistoryItems folds native call and output items at render time", () => {
+  const messages = mapHistoryItems([
+    {
+      id: "1",
+      timestamp: 1,
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "run it" }],
+      },
+    },
+    {
+      id: "2",
+      timestamp: 2,
+      item: {
+        type: "function_call",
+        call_id: "call_1",
+        name: "terminal",
+        arguments: '{"command":"pwd"}',
+      },
+    },
+    {
+      id: "3",
+      timestamp: 3,
+      item: {
+        type: "function_call_output",
+        call_id: "call_1",
+        name: "terminal",
+        output: "ok",
+      },
+    },
+  ]);
+
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0]?.content, "run it");
+  const activity = messages[1]?.activities?.[0];
+  assert.equal(activity?.id, "call_1");
+  assert.equal(activity?.title, "terminal");
+  assert.equal(activity?.input, '{"command":"pwd"}');
+  assert.equal(activity?.output, "ok");
+  assert.equal(activity?.status, "done");
+});
+
+test("mapHistoryItems renders native shell, web, image, and agent items", () => {
+  const messages = mapHistoryItems([
+    {
+      id: "1",
+      timestamp: 1,
+      item: {
+        type: "local_shell_call",
+        call_id: "shell_1",
+        status: "completed",
+        action: { command: "pwd" },
+      },
+    },
+    {
+      id: "2",
+      timestamp: 2,
+      item: {
+        type: "web_search_call",
+        id: "web_1",
+        status: "completed",
+        action: { query: "weather" },
+      },
+    },
+    {
+      id: "3",
+      timestamp: 3,
+      item: {
+        type: "image_generation_call",
+        id: "image_1",
+        status: "completed",
+        revised_prompt: "a blue sky",
+        result: "aW1hZ2U=",
+      },
+    },
+    {
+      id: "4",
+      timestamp: 4,
+      item: {
+        type: "agent_message",
+        author: "worker",
+        recipient: "root",
+        content: [{ type: "input_text", text: "done" }],
+      },
+    },
+  ]);
+
+  assert.equal(messages.length, 1);
+  assert.deepEqual(
+    messages[0]?.activities?.map((activity) => activity.title),
+    ["local_shell", "web_search", "image_generation"],
+  );
+  assert.deepEqual(messages[0]?.activities?.[2]?.media, [
+    { kind: "image", path: "data:image/png;base64,aW1hZ2U=" },
+  ]);
+  assert.equal(messages[0]?.content, "done");
+});
+
+test("normalizeHistoryBubbles restores activity media", () => {
+  const msgs = normalizeHistoryBubbles([
     {
       id: "db-1",
       role: "assistant",
@@ -31,8 +131,8 @@ test("mapHistoryMessages restores activity media from history DTO", () => {
   ]);
 });
 
-test("mapHistoryMessages restores interleaved text timeline segments", () => {
-  const [message] = mapHistoryMessages([
+test("normalizeHistoryBubbles restores interleaved text timeline segments", () => {
+  const [message] = normalizeHistoryBubbles([
     {
       id: "a1",
       role: "assistant",
@@ -51,8 +151,8 @@ test("mapHistoryMessages restores interleaved text timeline segments", () => {
   );
 });
 
-test("mapHistoryMessages drops invalid media entries", () => {
-  const msgs = mapHistoryMessages([
+test("normalizeHistoryBubbles drops invalid media entries", () => {
+  const msgs = normalizeHistoryBubbles([
     {
       id: "db-1",
       role: "assistant",
@@ -137,8 +237,8 @@ test("coalesceConsecutiveAssistants merges same-turn assistant bubbles", () => {
   assert.equal(merged[1]!.uiSurfaces?.length, 1);
 });
 
-test("mapHistoryMessages restores durationSec from segment timestamps", () => {
-  const msgs = mapHistoryMessages([
+test("normalizeHistoryBubbles restores durationSec from segment timestamps", () => {
+  const msgs = normalizeHistoryBubbles([
     {
       id: "a1",
       role: "assistant",
@@ -165,7 +265,7 @@ test("mapHistoryMessages restores durationSec from segment timestamps", () => {
 
 test("restored history settles orphaned live activity after restart", () => {
   const msgs = settleRestoredActivities(
-    mapHistoryMessages([
+    normalizeHistoryBubbles([
       {
         id: "a1",
         role: "assistant",
@@ -184,7 +284,7 @@ test("restored history settles orphaned live activity after restart", () => {
 });
 
 test("restored history recognizes extended activity states", () => {
-  const [message] = mapHistoryMessages([
+  const [message] = normalizeHistoryBubbles([
     {
       id: "a1",
       role: "assistant",
@@ -264,8 +364,8 @@ test("enrichTimelineDurations keeps existing durationSec", () => {
   }
 });
 
-test("mapHistoryMessages restores tool batch execution metadata", () => {
-  const [message] = mapHistoryMessages([
+test("normalizeHistoryBubbles restores tool batch execution metadata", () => {
+  const [message] = normalizeHistoryBubbles([
     {
       id: "a1",
       role: "assistant",

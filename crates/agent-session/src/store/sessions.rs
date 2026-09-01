@@ -258,7 +258,7 @@ impl SessionStore {
         }
     }
 
-    /// 永久删除会话与其消息。
+    /// 永久删除会话与其 Responses items。
     ///
     /// 若存在以本会话为 `parent_session_id` 的分支，先断开引用再删，
     /// 避免外键拦住父会话删除（子分支会话本身保留）。
@@ -268,7 +268,7 @@ impl SessionStore {
             .bind(id)
             .execute(&mut *tx)
             .await?;
-        sqlx::query("DELETE FROM messages WHERE session_id = ?1")
+        sqlx::query("DELETE FROM response_items WHERE session_id = ?1")
             .bind(id)
             .execute(&mut *tx)
             .await?;
@@ -284,15 +284,14 @@ impl SessionStore {
         Ok(())
     }
 
-    /// 按消息顺序读取最早可完成的非空 user → assistant 文本配对。
+    /// 按 item 顺序读取最早可完成的非空 user → assistant 文本配对。
     pub async fn first_turn_text(&self, session_id: &str) -> Result<Option<(String, String)>> {
         let rows = sqlx::query(
-            "SELECT role, content
-             FROM messages
+            "SELECT role, search_text
+             FROM response_items
              WHERE session_id = ?1
                AND role IN ('user', 'assistant')
-               AND content IS NOT NULL
-               AND TRIM(content) != ''
+               AND TRIM(search_text) != ''
              ORDER BY timestamp ASC, id ASC",
         )
         .bind(session_id)

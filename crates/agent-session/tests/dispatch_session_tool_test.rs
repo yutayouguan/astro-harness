@@ -1,42 +1,39 @@
 use serde_json::json;
 use session::{
-    dispatch_session_tool, format_recalled_context, record_message, NewMessage, ScrolledMessage,
-    SessionStore,
+    dispatch_session_tool, format_recalled_context, record_message, NewResponseItem,
+    ScrolledResponseItem, SessionStore,
 };
-use tempfile::TempDir;
 
 #[test]
 fn format_recalled_marks_anchors() {
-    let msgs = vec![
-        ScrolledMessage {
+    let items = vec![
+        ScrolledResponseItem {
             id: 1,
-            role: "user".into(),
-            content: "hi".into(),
+            item: agent_protocol::ResponseItem::user_text("hi"),
             is_anchor: false,
         },
-        ScrolledMessage {
+        ScrolledResponseItem {
             id: 2,
-            role: "assistant".into(),
-            content: "yo".into(),
+            item: agent_protocol::ResponseItem::assistant_text("yo"),
             is_anchor: true,
         },
     ];
-    let s = format_recalled_context(&msgs);
-    assert_eq!(s, "[1] user: hi\n[2] assistant: yo [anchor]");
+    assert_eq!(
+        format_recalled_context(&items),
+        "[1] user: hi\n[2] assistant: yo [anchor]"
+    );
 }
 
 #[tokio::test]
-async fn dispatch_session_search_and_record_message() {
-    let dir = TempDir::new().unwrap();
+async fn dispatch_session_search_and_record_native_item() {
+    let dir = tempfile::tempdir().unwrap();
     let store = SessionStore::open_sessions_dir(&dir.path().join("sessions"))
         .await
         .unwrap();
     store.ensure_session("s1", "test").await.unwrap();
+    let item = agent_protocol::ResponseItem::user_text("alpha fact");
     store
-        .append_message(NewMessage {
-            content: Some("alpha fact"),
-            ..NewMessage::empty("s1", "user")
-        })
+        .append_response_item(NewResponseItem::new("s1", &item))
         .await
         .unwrap();
 
@@ -54,4 +51,8 @@ async fn dispatch_session_search_and_record_message() {
         .await
         .unwrap();
     assert!(id > 0);
+    assert_eq!(
+        store.get_response_items("s1").await.unwrap()[1].item,
+        agent_protocol::ResponseItem::assistant_text("reply")
+    );
 }

@@ -8,7 +8,6 @@ use agent_protocol::ResponseItem;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
-use types::message::Message;
 
 use super::{
     compression_state, model_ctx, turn_budget, StepContext, ThreadProviderOptions, TurnContext,
@@ -16,8 +15,7 @@ use super::{
 
 /// 此前直接存储在 [`super::Session`] 上的持久化可变状态。
 pub(crate) struct SessionState {
-    /// Canonical model history. Chat-shaped [`Message`] values are only
-    /// compatibility projections for storage/search/UI consumers.
+    /// Canonical model history, retained exactly as Responses items.
     pub(crate) history: Vec<ResponseItem>,
     pub(crate) pending_session_start_source: Option<String>,
     pub(crate) model_ctx: model_ctx::ModelContext,
@@ -90,14 +88,6 @@ impl SessionState {
 
     pub(crate) fn clone_response_history(&self) -> Vec<ResponseItem> {
         self.history.clone()
-    }
-
-    pub(crate) fn clone_message_projection(&self) -> Vec<Message> {
-        agent_rollout::reconstruct_response_items(self.history.clone())
-            .expect("projecting response items as messages cannot fail")
-            .into_iter()
-            .map(|item| item.message)
-            .collect()
     }
 }
 

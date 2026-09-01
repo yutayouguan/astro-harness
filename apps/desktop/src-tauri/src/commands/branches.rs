@@ -160,7 +160,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                 .and_then(|session| session.title.clone())
                 .unwrap_or_else(|| "Branch".into());
             let messages = store
-                .get_messages(&session_node.session_id)
+                .get_response_items(&session_node.session_id)
                 .await
                 .map_err(|error| error.to_string())?;
             let message_by_id = messages
@@ -197,9 +197,9 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                     .iter()
                     .skip_while(|message| message.id != turn.user_message_id)
                     .skip(1)
-                    .take_while(|message| message.role != "user")
-                    .filter(|message| message.role == "assistant")
-                    .filter_map(|message| message.content.as_deref())
+                    .take_while(|message| message.role() != Some("user"))
+                    .filter(|message| message.role() == Some("assistant"))
+                    .map(|message| message.text())
                     .find(|content| !content.trim().is_empty())
                     .unwrap_or_default();
                 let user = turn.content.as_deref().unwrap_or_default();
@@ -214,7 +214,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                     } else {
                         truncate(user, 42)
                     },
-                    preview: truncate(assistant, 96),
+                    preview: truncate(&assistant, 96),
                     status: if turn.completed {
                         "completed".into()
                     } else {

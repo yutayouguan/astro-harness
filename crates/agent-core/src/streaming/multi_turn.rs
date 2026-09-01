@@ -206,7 +206,7 @@ pub(crate) struct ThreadTurnTaskArgs {
     pub(crate) prompt: Option<crate::prompt::PromptContract>,
     pub(crate) pause: Arc<PauseControl>,
     pub(crate) hitl_gate: Option<Arc<HitlGate>>,
-    pub(crate) chat_override: Option<super::provider::ChatOverride>,
+    pub(crate) responses_override: Option<super::provider::ResponsesOverride>,
 }
 
 pub(crate) struct InstalledMultiTurn {
@@ -231,7 +231,7 @@ pub struct ThreadTurnEventArgs {
     pub pause: Arc<PauseControl>,
     pub hitl_gate: Option<Arc<HitlGate>>,
     pub tx: mpsc::Sender<anyhow::Result<Event>>,
-    pub chat_override: Option<super::provider::ChatOverride>,
+    pub responses_override: Option<super::provider::ResponsesOverride>,
 }
 
 pub(crate) async fn install_multi_turn_task(
@@ -246,7 +246,7 @@ pub(crate) async fn install_multi_turn_task(
         prompt,
         pause,
         hitl_gate,
-        chat_override,
+        responses_override,
     } = args;
     let session_id = session.session_id().to_string();
     let sub_id = uuid::Uuid::new_v4().to_string();
@@ -262,7 +262,7 @@ pub(crate) async fn install_multi_turn_task(
         prompt,
         pause,
         hitl_gate,
-        chat_override,
+        responses_override,
         drain_mailbox: true,
     });
     tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
@@ -292,7 +292,7 @@ pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
         pause,
         hitl_gate,
         tx,
-        chat_override,
+        responses_override,
     } = args;
     match install_multi_turn_task(ThreadTurnTaskArgs {
         session: Arc::clone(&session),
@@ -303,7 +303,7 @@ pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
         prompt: None,
         pause,
         hitl_gate,
-        chat_override,
+        responses_override,
     })
     .await
     {
@@ -337,9 +337,9 @@ pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
 
 /// 为现有生命周期测试提供的预构建 turn 便捷接缝。
 #[doc(hidden)]
-pub async fn run_multi_turn_events_with_chat_fn(
+pub async fn run_multi_turn_events_with_responses_fn(
     session: Arc<Session>,
-    chat_fn: super::provider::ChatOverride,
+    responses_fn: super::provider::ResponsesOverride,
     config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
@@ -362,20 +362,20 @@ pub async fn run_multi_turn_events_with_chat_fn(
         pause,
         hitl_gate,
         tx,
-        chat_override: Some(chat_fn),
+        responses_override: Some(responses_fn),
     })
     .await;
 }
-pub async fn run_multi_turn_stream_with_chat_fn(
+pub async fn run_multi_turn_stream_with_responses_fn(
     session: Arc<Session>,
     turn_context: Arc<TurnContext>,
     input: Vec<TurnInput>,
-    chat_fn: super::provider::ChatOverride,
+    responses_fn: super::provider::ResponsesOverride,
 ) -> anyhow::Result<()> {
     let args = RunTurnArgs::submitted(
         Arc::clone(&session),
         Arc::clone(&turn_context),
-        Some(chat_fn),
+        Some(responses_fn),
     );
     let turn_id = turn_context.sub_id().to_string();
     session
@@ -395,7 +395,7 @@ pub(crate) struct RunTurnArgs {
     prompt: Option<crate::prompt::PromptContract>,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
-    chat_override: Option<super::provider::ChatOverride>,
+    responses_override: Option<super::provider::ResponsesOverride>,
     drain_mailbox: bool,
 }
 
@@ -403,7 +403,7 @@ impl RunTurnArgs {
     pub(crate) fn submitted(
         session: Arc<Session>,
         turn_context: Arc<TurnContext>,
-        chat_override: Option<super::provider::ChatOverride>,
+        responses_override: Option<super::provider::ResponsesOverride>,
     ) -> Self {
         let mut targets = session.chat_targets();
         let provider = session.chat_provider();
@@ -442,7 +442,7 @@ impl RunTurnArgs {
             prompt: None,
             pause,
             hitl_gate: Some(hitl_gate),
-            chat_override,
+            responses_override,
             drain_mailbox: true,
         }
     }
@@ -475,7 +475,7 @@ impl RunTurnArgs {
         session: Arc<Session>,
         turn_context: Arc<TurnContext>,
     ) -> Self {
-        let mut args = Self::submitted(session, turn_context, self.chat_override.clone());
+        let mut args = Self::submitted(session, turn_context, self.responses_override.clone());
         args.drain_mailbox = false;
         args
     }
@@ -582,7 +582,7 @@ pub(crate) async fn run_turn(
         prompt,
         pause,
         hitl_gate,
-        chat_override,
+        responses_override,
         drain_mailbox,
     } = args;
     debug_assert!(
@@ -595,8 +595,8 @@ pub(crate) async fn run_turn(
         .provider_settings()
         .expect("turn provider settings initialized above");
     let mut settings_generation = initial_settings.generation;
-    let mut streamer = match chat_override.clone() {
-        Some(f) => ProviderStreamer::with_chat_override(
+    let mut streamer = match responses_override.clone() {
+        Some(f) => ProviderStreamer::with_responses_override(
             initial_settings.targets,
             initial_settings.base_config,
             f,
@@ -704,27 +704,6 @@ pub(crate) async fn run_turn(
             "step context captured"
         );
         let history = step_context.history.clone();
-        let history_projection = agent_rollout::reconstruct_response_items(history.clone())
-            .map_err(anyhow::Error::from)
-            .map(|items| {
-                items
-                    .into_iter()
-                    .map(|item| item.message)
-                    .collect::<Vec<_>>()
-            });
-        let history_projection = match history_projection {
-            Ok(history) => history,
-            Err(error) => {
-                return finish_task_error(
-                    &session,
-                    &turn_context,
-                    &streamer,
-                    error.to_string(),
-                    saw_usage.then_some(total_usage),
-                )
-                .await;
-            }
-        };
         let prompt_context = step_context.prompt_context.clone();
         let tool_specs = step_context.tool_router.model_visible_specs().to_vec();
 
@@ -733,7 +712,7 @@ pub(crate) async fn run_turn(
             &turn_context,
             &prompt,
             &prompt_context,
-            &history_projection,
+            &history,
             &tool_specs,
         )
         .await;
@@ -743,8 +722,8 @@ pub(crate) async fn run_turn(
         if let Some(settings) = turn_context.provider_settings() {
             if settings.generation != settings_generation {
                 settings_generation = settings.generation;
-                streamer = match chat_override.clone() {
-                    Some(f) => ProviderStreamer::with_chat_override(
+                streamer = match responses_override.clone() {
+                    Some(f) => ProviderStreamer::with_responses_override(
                         settings.targets,
                         settings.base_config,
                         f,

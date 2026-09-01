@@ -18,7 +18,7 @@ Astro 的 Agent 对话链路只接受 Responses API。`agent_protocol::ResponseI
 
 1. Agent target 必须通过 `supports_agent_responses()`，否则在发请求前拒绝。
 2. Agent 请求必须使用 `ResponsesRequest.input: Vec<ResponseItem>`；`ChatCompletionRequest.input: Vec<Message>` 仅属于非 Agent 兼容入口。
-3. Session 与 rollout 保存原生 `ResponseItem`；UI、搜索或旧接口所需的 `Message` 只能是派生投影，不能反向成为模型历史事实源。
+3. Session SQLite 与 rollout 都保存原生 `ResponseItem`；Desktop RPC 也直接返回 item。UI 只在渲染边界临时组合气泡，不定义、持久化或回传 `Message` 历史 DTO。
 4. Function、custom、tool search 等 call/output 项必须保持原始类型、标识和顺序；output 紧邻对应 call，不能跨轮重排。
 5. 标题、压缩、记忆回顾、智能审批等 Agent 自有辅助任务同样走 Responses-only 入口。
 6. Provider 的显式 `api_mode` 不能绕过 Agent capability gate。
@@ -52,7 +52,9 @@ TurnInput
 - **执行关联**：使用 call id 将工具输出与模型发出的调用精确配对。
 - **持久恢复**：`RolloutItem::ResponseItem` 直接写入 append-only rollout，重启后按原类型重建。
 
-`Message` 仍可存在于数据库查询、UI 兼容和非 Agent provider API，但属于 read model 或兼容 DTO。任何投影都不得丢失 canonical history，也不得用于重新构造工具链的权威输入。
+`Message` 只留在非 Agent provider 兼容边界。Session DB、rollout、Desktop history RPC
+和 Agent prompt 不包含 `Message` 路径；搜索所需的 role/text/tool name 是由 `ResponseItem`
+生成的可重建索引列，不是另一份历史模型。
 
 ### 3.1 工具结果配对
 
@@ -119,6 +121,9 @@ canonical state transition
 ```
 
 `event_dispatch` 串行化持久化与 live 投递。`ItemCompleted`、turn 终态、usage、settings、rollback 与原生 `ResponseItem` 可恢复；delta、approval prompt、Hook run 状态和诊断错误是瞬态。Server 使用 rollout snapshot + live boundary 重建客户端，不使用 Core EventBus 或最后一条 SQLite message 猜测执行状态。
+
+SQLite schema v22 的 `response_items.item_json` 是唯一会话内容列。升级时不迁移旧
+`messages` 表：直接重建会话表和 FTS 索引，再由 rollout 回填可恢复历史。
 
 ## 8. 代码事实源
 

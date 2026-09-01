@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
-use session::StoredMessage;
+use session::StoredResponseItem;
 
 use crate::meta::auxiliary_resolver::{
     primary_chat_target_for_session, resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget,
@@ -76,19 +76,20 @@ pub struct CompactChatResultDto {
 }
 
 /// 无模型时的启发式摘要（最近若干条 user/assistant 截断拼接）。
-fn heuristic_summary(messages: &[StoredMessage], max_chars: usize) -> String {
+fn heuristic_summary(messages: &[StoredResponseItem], max_chars: usize) -> String {
     let mut parts = Vec::new();
     for m in messages.iter().rev() {
-        if m.role != "user" && m.role != "assistant" {
+        if !matches!(m.role(), Some("user" | "assistant")) {
             continue;
         }
-        let text = m.content.as_deref().unwrap_or("").trim();
+        let text = m.text();
+        let text = text.trim();
         if text.is_empty() {
             continue;
         }
         parts.push(format!(
             "{}: {}",
-            m.role,
+            m.role().unwrap_or("unknown"),
             text.chars().take(400).collect::<String>()
         ));
         if parts.len() >= 8 {
@@ -211,10 +212,13 @@ pub async fn compact_chat_session(
             return Err("会话已结束，无法压实".into());
         }
 
-        let messages = store.get_messages(sid).await.map_err(|e| e.to_string())?;
+        let messages = store
+            .get_response_items(sid)
+            .await
+            .map_err(|e| e.to_string())?;
         let bubble_count = messages
             .iter()
-            .filter(|m| m.role == "user" || m.role == "assistant")
+            .filter(|m| matches!(m.role(), Some("user" | "assistant")))
             .count();
         if bubble_count < 2 {
             return Err("消息过少，无需压实".into());
@@ -222,17 +226,12 @@ pub async fn compact_chat_session(
 
         let transcript: String = messages
             .iter()
-            .filter(|m| m.role == "user" || m.role == "assistant")
+            .filter(|m| matches!(m.role(), Some("user" | "assistant")))
             .map(|m| {
                 format!(
                     "{}: {}",
-                    m.role,
-                    m.content
-                        .as_deref()
-                        .unwrap_or("")
-                        .chars()
-                        .take(2000)
-                        .collect::<String>()
+                    m.role().unwrap_or("unknown"),
+                    m.text().chars().take(2000).collect::<String>()
                 )
             })
             .collect::<Vec<_>>()

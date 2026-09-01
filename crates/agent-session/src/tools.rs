@@ -2,7 +2,9 @@ use anyhow::anyhow;
 use serde_json::Value;
 
 use crate::format::format_session_search_hits;
-use crate::{ConversationStore, NewMessage};
+use agent_protocol::{ContentItem, ResponseItem};
+
+use crate::{ConversationStore, NewResponseItem};
 
 pub async fn record_message(
     store: &impl ConversationStore,
@@ -11,11 +13,23 @@ pub async fn record_message(
     content: &str,
 ) -> anyhow::Result<i64> {
     store.ensure_session(session_id, "tauri").await?;
+    let content = match role {
+        "assistant" => vec![ContentItem::OutputText {
+            text: content.to_string(),
+        }],
+        _ => vec![ContentItem::InputText {
+            text: content.to_string(),
+        }],
+    };
+    let item = ResponseItem::Message {
+        id: None,
+        role: role.to_string(),
+        content,
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
     store
-        .append_message(NewMessage {
-            content: Some(content),
-            ..NewMessage::empty(session_id, role)
-        })
+        .append_response_item(NewResponseItem::new(session_id, &item))
         .await
 }
 

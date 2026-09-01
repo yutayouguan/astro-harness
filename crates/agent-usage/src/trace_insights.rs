@@ -206,14 +206,14 @@ fn usage_rows_to_events(
 
 /// 从原始会话消息构建 LangSmith 风格 span 链；返回 (events, title)。
 ///
-/// 不使用 `build_chat_history`，因为它会合并连续 assistant 气泡，导致工具循环中的
+/// 直接遍历原生 `ResponseItem`，不使用 UI 气泡折叠，避免工具循环中的
 /// 多次 LLM 调用被压成一条，输入、输出和耗时也无法逐次对应。
 async fn spans_from_chat_history(
     store: &SessionStore,
     session_id: &str,
     agent_id: &str,
 ) -> anyhow::Result<(Vec<TraceEvent>, String)> {
-    let messages = store.get_messages(session_id).await?;
+    let messages = store.get_response_items(session_id).await?;
     if messages.is_empty() {
         return Ok((Vec::new(), String::new()));
     }
@@ -225,18 +225,20 @@ async fn spans_from_chat_history(
     let mut last_llm_input: Option<String> = None;
     let mut last_input_at: Option<f64> = None;
 
-    for msg in messages {
-        let ts = epoch_to_rfc3339(msg.timestamp);
-        match msg.role.as_str() {
-            "user" => {
-                let content = msg.content.unwrap_or_default();
+    for stored in messages {
+        use session::ResponseItem;
+
+        let ts = epoch_to_rfc3339(stored.timestamp);
+        match &stored.item {
+            ResponseItem::Message { role, .. } if role == "user" => {
+                let content = stored.text();
                 if title.is_empty() && !content.trim().is_empty() {
                     title = truncate_chars(&content, 80);
                 }
                 last_llm_input = nonempty_truncated(&content);
-                last_input_at = Some(msg.timestamp);
+                last_input_at = Some(stored.timestamp);
                 events.push(TraceEvent {
-                    id: format!("user-{}", msg.id),
+                    id: format!("user-{}", stored.id),
                     ts,
                     kind: "user".into(),
                     name: "user".into(),
@@ -253,106 +255,138 @@ async fn spans_from_chat_history(
                     turn_id: None,
                 });
             }
-            "assistant" => {
-                let parent = format!("llm-{}", msg.id);
-                let output = msg.content.as_deref().and_then(nonempty_truncated);
-                let has_tool_calls = matches!(msg.tool_calls.as_ref(), Some(serde_json::Value::Array(a)) if !a.is_empty());
-                let reasoning = msg.reasoning.as_deref().and_then(nonempty_truncated);
-
-                if has_tool_calls || output.is_some() || reasoning.is_some() {
-                    events.push(TraceEvent {
-                        id: parent.clone(),
-                        ts: ts.clone(),
-                        kind: "llm".into(),
-                        name: "assistant".into(),
-                        agent_id: agent_id.to_string(),
-                        input_tokens: 0,
-                        output_tokens: 0,
-                        total_tokens: 0,
-                        cost_usd: 0.0,
-                        duration_ms: last_input_at
-                            .and_then(|start| elapsed_ms(start, msg.timestamp)),
-                        parent_id: None,
-                        status: Some("ok".into()),
-                        input: last_llm_input.clone(),
-                        output,
-                        turn_id: None,
-                    });
-                }
-
-                if let Some(serde_json::Value::Array(calls)) = msg.tool_calls.as_ref() {
-                    for call in calls {
-                        let Some((id, tool_name, input)) = parse_tool_call(call) else {
-                            continue;
-                        };
-                        let (kind, name) = classify_activity(&tool_name, input.as_deref());
-                        let idx = events.len();
-                        pending_tools.insert(id.clone(), (idx, msg.timestamp));
-                        events.push(TraceEvent {
-                            id: format!("act-{id}"),
-                            ts: ts.clone(),
-                            kind: kind.into(),
-                            name,
-                            agent_id: agent_id.to_string(),
-                            input_tokens: 0,
-                            output_tokens: 0,
-                            total_tokens: 0,
-                            cost_usd: 0.0,
-                            duration_ms: None,
-                            parent_id: Some(parent.clone()),
-                            status: Some("running".into()),
-                            input: input.as_deref().and_then(nonempty_truncated),
-                            output: None,
-                            turn_id: None,
-                        });
-                    }
-                }
+            ResponseItem::Message { role, .. } if role == "assistant" => {
+                let output = nonempty_truncated(&stored.text());
+                events.push(TraceEvent {
+                    id: format!("llm-{}", stored.id),
+                    ts,
+                    kind: "llm".into(),
+                    name: "assistant".into(),
+                    agent_id: agent_id.to_string(),
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    total_tokens: 0,
+                    cost_usd: 0.0,
+                    duration_ms: last_input_at
+                        .and_then(|start| elapsed_ms(start, stored.timestamp)),
+                    parent_id: None,
+                    status: Some("ok".into()),
+                    input: last_llm_input.clone(),
+                    output,
+                    turn_id: None,
+                });
                 last_llm_input = None;
                 last_input_at = None;
             }
-            "tool" => {
-                let output = msg.content.as_deref().and_then(nonempty_truncated);
-                let is_error = msg
-                    .content
-                    .as_deref()
-                    .map(|s| s.starts_with("工具错误") || s.starts_with("Tool error"))
-                    .unwrap_or(false);
-                let status = if is_error { "error" } else { "done" };
-                let call_id = msg.tool_call_id.as_deref().unwrap_or("");
-                if let Some((idx, started_at)) = pending_tools.remove(call_id) {
-                    if let Some(event) = events.get_mut(idx) {
-                        event.output = output.clone();
-                        event.status = Some(status.into());
-                        event.duration_ms = elapsed_ms(started_at, msg.timestamp);
-                        if event.name == "tool" {
-                            if let Some(name) = msg.tool_name.as_deref() {
-                                event.name = name.to_string();
-                            }
-                        }
-                    }
-                } else {
-                    let tool_name = msg.tool_name.as_deref().unwrap_or("tool");
-                    let (kind, name) = classify_activity(tool_name, None);
-                    events.push(TraceEvent {
-                        id: format!("tool-{}", msg.id),
-                        ts,
-                        kind: kind.into(),
-                        name,
-                        agent_id: agent_id.to_string(),
-                        input_tokens: 0,
-                        output_tokens: 0,
-                        total_tokens: 0,
-                        cost_usd: 0.0,
-                        duration_ms: None,
-                        parent_id: None,
-                        status: Some(status.into()),
-                        input: None,
-                        output,
-                        turn_id: None,
-                    });
-                }
-                last_llm_input = msg.content.as_deref().and_then(nonempty_truncated);
-                last_input_at = Some(msg.timestamp);
+            ResponseItem::FunctionCall {
+                call_id,
+                name,
+                arguments,
+                ..
+            } => {
+                push_tool_trace(
+                    &mut events,
+                    &mut pending_tools,
+                    &ts,
+                    stored.timestamp,
+                    stored.id,
+                    call_id,
+                    name,
+                    Some(arguments.clone()),
+                    agent_id,
+                );
+            }
+            ResponseItem::CustomToolCall {
+                call_id,
+                name,
+                input,
+                ..
+            } => {
+                push_tool_trace(
+                    &mut events,
+                    &mut pending_tools,
+                    &ts,
+                    stored.timestamp,
+                    stored.id,
+                    call_id,
+                    name,
+                    Some(input.clone()),
+                    agent_id,
+                );
+            }
+            ResponseItem::ToolSearchCall {
+                call_id, arguments, ..
+            } => {
+                let id = call_id.clone().unwrap_or_else(|| stored.id.to_string());
+                push_tool_trace(
+                    &mut events,
+                    &mut pending_tools,
+                    &ts,
+                    stored.timestamp,
+                    stored.id,
+                    &id,
+                    "tool_search",
+                    Some(arguments.to_string()),
+                    agent_id,
+                );
+            }
+            ResponseItem::FunctionCallOutput {
+                call_id,
+                name,
+                output,
+                ..
+            } => {
+                let output = output.to_text();
+                finish_tool_trace(
+                    &mut events,
+                    &mut pending_tools,
+                    &ts,
+                    stored.timestamp,
+                    stored.id,
+                    call_id.as_deref(),
+                    name.as_deref(),
+                    output.clone(),
+                    agent_id,
+                );
+                last_llm_input = output.as_deref().and_then(nonempty_truncated);
+                last_input_at = Some(stored.timestamp);
+            }
+            ResponseItem::CustomToolCallOutput {
+                call_id,
+                name,
+                output,
+                ..
+            } => {
+                let output = output.to_text();
+                finish_tool_trace(
+                    &mut events,
+                    &mut pending_tools,
+                    &ts,
+                    stored.timestamp,
+                    stored.id,
+                    Some(call_id),
+                    name.as_deref(),
+                    output.clone(),
+                    agent_id,
+                );
+                last_llm_input = output.as_deref().and_then(nonempty_truncated);
+                last_input_at = Some(stored.timestamp);
+            }
+            ResponseItem::ToolSearchOutput { call_id, tools, .. } => {
+                let output = serde_json::to_string(tools).ok();
+                finish_tool_trace(
+                    &mut events,
+                    &mut pending_tools,
+                    &ts,
+                    stored.timestamp,
+                    stored.id,
+                    call_id.as_deref(),
+                    Some("tool_search"),
+                    output.clone(),
+                    agent_id,
+                );
+                last_llm_input = output.as_deref().and_then(nonempty_truncated);
+                last_input_at = Some(stored.timestamp);
             }
             _ => {}
         }
@@ -364,39 +398,88 @@ async fn spans_from_chat_history(
     Ok((events, title))
 }
 
+fn push_tool_trace(
+    events: &mut Vec<TraceEvent>,
+    pending: &mut std::collections::HashMap<String, (usize, f64)>,
+    ts: &str,
+    timestamp: f64,
+    item_id: i64,
+    call_id: &str,
+    tool_name: &str,
+    input: Option<String>,
+    agent_id: &str,
+) {
+    let (kind, name) = classify_activity(tool_name, input.as_deref());
+    pending.insert(call_id.to_string(), (events.len(), timestamp));
+    events.push(TraceEvent {
+        id: format!("act-{call_id}-{item_id}"),
+        ts: ts.to_string(),
+        kind: kind.into(),
+        name,
+        agent_id: agent_id.to_string(),
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        cost_usd: 0.0,
+        duration_ms: None,
+        parent_id: None,
+        status: Some("running".into()),
+        input: input.as_deref().and_then(nonempty_truncated),
+        output: None,
+        turn_id: None,
+    });
+}
+
+fn finish_tool_trace(
+    events: &mut Vec<TraceEvent>,
+    pending: &mut std::collections::HashMap<String, (usize, f64)>,
+    ts: &str,
+    timestamp: f64,
+    item_id: i64,
+    call_id: Option<&str>,
+    tool_name: Option<&str>,
+    output: Option<String>,
+    agent_id: &str,
+) {
+    let output = output.as_deref().and_then(nonempty_truncated);
+    let is_error = output
+        .as_deref()
+        .is_some_and(|text| text.starts_with("工具错误") || text.starts_with("Tool error"));
+    let status = if is_error { "error" } else { "done" };
+    if let Some((index, started_at)) = call_id.and_then(|id| pending.remove(id)) {
+        if let Some(event) = events.get_mut(index) {
+            event.output = output;
+            event.status = Some(status.into());
+            event.duration_ms = elapsed_ms(started_at, timestamp);
+            if event.name == "tool" {
+                event.name = tool_name.unwrap_or("tool").to_string();
+            }
+        }
+        return;
+    }
+    let (kind, name) = classify_activity(tool_name.unwrap_or("tool"), None);
+    events.push(TraceEvent {
+        id: format!("tool-{item_id}"),
+        ts: ts.to_string(),
+        kind: kind.into(),
+        name,
+        agent_id: agent_id.to_string(),
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        cost_usd: 0.0,
+        duration_ms: None,
+        parent_id: None,
+        status: Some(status.into()),
+        input: None,
+        output,
+        turn_id: None,
+    });
+}
+
 fn elapsed_ms(start: f64, end: f64) -> Option<i64> {
     let ms = ((end - start) * 1000.0).round() as i64;
     (ms >= 0).then_some(ms)
-}
-
-fn parse_tool_call(call: &serde_json::Value) -> Option<(String, String, Option<String>)> {
-    let id = call.get("id")?.as_str()?.trim().to_string();
-    if id.is_empty() {
-        return None;
-    }
-    let name = call
-        .get("name")
-        .and_then(|v| v.as_str())
-        .or_else(|| {
-            call.get("function")
-                .and_then(|f| f.get("name"))
-                .and_then(|v| v.as_str())
-        })
-        .unwrap_or("tool")
-        .to_string();
-    let input = call
-        .get("arguments")
-        .cloned()
-        .or_else(|| {
-            call.get("function")
-                .and_then(|f| f.get("arguments"))
-                .cloned()
-        })
-        .map(|v| match v {
-            serde_json::Value::String(s) => s,
-            other => other.to_string(),
-        });
-    Some((id, name, input))
 }
 
 fn classify_activity(title: &str, input: Option<&str>) -> (&'static str, String) {
@@ -521,8 +604,7 @@ fn unique_kinds(events: &[TraceEvent]) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::db::{NewUsageEvent, UsageDb};
-    use serde_json::json;
-    use session::{NewMessage, SessionStore};
+    use session::SessionStore;
     use tempfile::TempDir;
 
     use home::test_env::AstroMemoryDirGuard;
@@ -762,43 +844,30 @@ mod tests {
             .set_session_title("s-io", "云南采菌子女孩")
             .await
             .unwrap();
+        let response_items = vec![
+            session::ResponseItem::user_text("帮我查天气"),
+            session::ResponseItem::assistant_text("好的"),
+            session::ResponseItem::FunctionCall {
+                id: None,
+                name: "web_search".into(),
+                namespace: None,
+                arguments: r#"{"query":"weather"}"#.into(),
+                encrypted_function_args: None,
+                call_id: "call_1".into(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            session::ResponseItem::FunctionCallOutput {
+                id: None,
+                call_id: Some("call_1".into()),
+                name: Some("web_search".into()),
+                namespace: None,
+                output: session::FunctionCallOutputPayload::from_text("晴天 25°C".into()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            session::ResponseItem::assistant_text("今天晴，约 25°C。"),
+        ];
         store
-            .append_message(NewMessage {
-                content: Some("帮我查天气"),
-                ..NewMessage::empty("s-io", "user")
-            })
-            .await
-            .unwrap();
-        store
-            .append_message(NewMessage {
-                content: Some("好的"),
-                tool_calls: Some(json!([{
-                    "id": "call_1",
-                    "type": "function",
-                    "function": {
-                        "name": "web_search",
-                        "arguments": "{\"query\":\"weather\"}"
-                    }
-                }])),
-                ..NewMessage::empty("s-io", "assistant")
-            })
-            .await
-            .unwrap();
-        store
-            .append_message(NewMessage {
-                content: Some("晴天 25°C"),
-                tool_call_id: Some("call_1"),
-                tool_name: Some("web_search"),
-                ..NewMessage::empty("s-io", "tool")
-            })
-            .await
-            .unwrap();
-        store
-            .append_message(NewMessage {
-                content: Some("今天晴，约 25°C。"),
-                reasoning: Some("先搜索再回答"),
-                ..NewMessage::empty("s-io", "assistant")
-            })
+            .append_response_items("s-io", &response_items)
             .await
             .unwrap();
 

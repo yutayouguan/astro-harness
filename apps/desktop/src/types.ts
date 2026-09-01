@@ -194,7 +194,7 @@ export type ChatTimelineSegment =
       at: number;
     };
 
-/** `get_chat_history` 返回的活动条（已折叠进助手消息） */
+/** UI 内部的历史活动投影，不是持久化协议。 */
 export type ChatHistoryActivityDto = {
   id: string;
   kind: string;
@@ -202,25 +202,27 @@ export type ChatHistoryActivityDto = {
   input?: string | null;
   output?: string | null;
   status?: string | null;
-  /** 结构化媒体（来自 messages.media_json）；缺省时前端可从 output 解析 */
+  /** 结构化媒体（来自 ResponseItem metadata）；缺省时前端可从 output 解析 */
   media?: Array<{ kind: string; path: string }> | null;
 };
 
-/** `get_chat_history` 单条气泡（user / assistant，含 reasoning + activities） */
-export type ChatHistoryMessageDto = {
-  id: string;
-  role: string;
-  content: string;
-  reasoning?: string | null;
-  activities?: ChatHistoryActivityDto[];
-  segments?: ChatTimelineSegment[] | null;
-  uiSurfaces?: UiSurface[] | null;
+export type ResponseItemDto = {
+  type: string;
+  [key: string]: unknown;
 };
 
-/** `get_chat_history` 整包响应 */
+export type StoredResponseItemDto = {
+  id: string;
+  item: ResponseItemDto;
+  timestamp: number;
+  tokenCount?: number | null;
+  finishReason?: string | null;
+};
+
+/** `get_chat_history` 直接返回原生 Responses items。 */
 export type ChatHistoryDto = {
   sessionId: string | null;
-  messages: ChatHistoryMessageDto[];
+  items: StoredResponseItemDto[];
   /** 会话结束原因，如 `compacted`；未结束为 null */
   endReason?: string | null;
   /** 结束时间（epoch 秒）；未结束为 null */

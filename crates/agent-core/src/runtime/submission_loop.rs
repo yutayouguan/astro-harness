@@ -9,7 +9,7 @@ use futures::FutureExt;
 use serde_json::Value;
 
 use super::Session;
-use crate::streaming::ChatOverride;
+use crate::streaming::ResponsesOverride;
 use realtime::{
     bem_presentations, BemChannelParser, BemPhase, RealtimeConnectionConfig, RealtimeHistory,
     RealtimeTransportEvent,
@@ -18,7 +18,7 @@ use realtime::{
 pub(crate) async fn submission_loop(
     session: Arc<Session>,
     rx_sub: Receiver<Submission>,
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 ) {
     let mut shutdown_received = false;
     while let Ok(submission) = rx_sub.recv().await {
@@ -29,13 +29,15 @@ pub(crate) async fn submission_loop(
                 reply,
             } => {
                 let result = session
-                    .submit_turn_input(submission.id, request, mode, chat_override.clone())
+                    .submit_turn_input(submission.id, request, mode, responses_override.clone())
                     .await;
                 let _ = reply.send(result);
                 false
             }
             Op::RecoverTurn { turn_id, reply } => {
-                let result = session.recover_turn(turn_id, chat_override.clone()).await;
+                let result = session
+                    .recover_turn(turn_id, responses_override.clone())
+                    .await;
                 let _ = reply.send(result);
                 false
             }
@@ -91,7 +93,7 @@ pub(crate) async fn submission_loop(
             }
             op => {
                 session
-                    .dispatch_control_op(submission.id, op, chat_override.clone())
+                    .dispatch_control_op(submission.id, op, responses_override.clone())
                     .await;
                 false
             }
@@ -170,7 +172,7 @@ impl Session {
         self: &Arc<Self>,
         submission_id: String,
         op: Op,
-        chat_override: Option<ChatOverride>,
+        responses_override: Option<ResponsesOverride>,
     ) {
         match op {
             Op::RealtimeConversationStart {
@@ -202,17 +204,13 @@ impl Session {
                         .await
                         .into_iter()
                         .rev()
-                        .filter_map(|message| {
-                            let role = match &message.role {
-                                types::message::Role::User => {
-                                    agent_protocol::ConversationTextRole::User
-                                }
-                                types::message::Role::Assistant => {
-                                    agent_protocol::ConversationTextRole::Assistant
-                                }
+                        .filter_map(|item| {
+                            let role = match item.role()? {
+                                "user" => agent_protocol::ConversationTextRole::User,
+                                "assistant" => agent_protocol::ConversationTextRole::Assistant,
                                 _ => return None,
                             };
-                            let text = message.content_text();
+                            let text = item.text();
                             (!text.trim().is_empty()).then_some(
                                 agent_protocol::ConversationTextParams {
                                     text: truncate_realtime_text(&text, 8_000),
@@ -505,7 +503,7 @@ impl Session {
                 let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
                     Arc::clone(self),
                     Arc::clone(&context),
-                    chat_override,
+                    responses_override,
                 );
                 if let Err(error) = self
                     .spawn_task(
@@ -526,8 +524,12 @@ impl Session {
                 }
             }
             Op::InterAgentCommunication { communication } => {
-                self.handle_inter_agent_communication(submission_id, communication, chat_override)
-                    .await;
+                self.handle_inter_agent_communication(
+                    submission_id,
+                    communication,
+                    responses_override,
+                )
+                .await;
             }
             Op::TurnInput { .. }
             | Op::RecoverTurn { .. }
@@ -559,7 +561,7 @@ impl Session {
         self: &Arc<Self>,
         submission_id: String,
         mut communication: InterAgentCommunication,
-        chat_override: Option<ChatOverride>,
+        responses_override: Option<ResponsesOverride>,
     ) {
         let Some(bindings) = self.runtime_io.get() else {
             self.emit_control_error(
@@ -605,7 +607,7 @@ impl Session {
                             thread_settings: Default::default(),
                         },
                         TurnInputMode::StartOrSteer,
-                        chat_override,
+                        responses_override,
                     )
                     .await;
                 if matches!(

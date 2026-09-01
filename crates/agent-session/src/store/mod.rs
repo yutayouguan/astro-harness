@@ -10,6 +10,7 @@ mod sessions;
 
 use agent_db::sqlx::{self, Row};
 use agent_db::{AstroDb, DbSpec, SqlitePool};
+pub use agent_protocol::ResponseItem;
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -17,7 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const DB_SPEC: DbSpec = DbSpec::new("session", "state.db");
 
-pub use rollout_projection::rebuild_messages_from_rollout;
+pub use rollout_projection::rebuild_response_items_from_rollout;
 pub use schema::SCHEMA_VERSION;
 
 /// 单次 LLM 调用的账单增量（累加到 sessions 行）。
@@ -60,61 +61,73 @@ pub struct SessionBillingRow {
 }
 
 #[derive(Debug, Clone)]
-pub struct NewMessage<'a> {
+pub struct NewResponseItem<'a> {
     pub session_id: &'a str,
-    pub role: &'a str,
-    pub content: Option<&'a str>,
-    /// 初次 INSERT 时持久化的 Provider 侧/内部交付视图。
-    pub compressed_content: Option<&'a str>,
-    pub tool_calls: Option<Value>,
-    pub tool_call_id: Option<&'a str>,
-    pub tool_name: Option<&'a str>,
+    pub item: &'a ResponseItem,
     pub token_count: Option<i64>,
     pub finish_reason: Option<&'a str>,
-    pub reasoning: Option<&'a str>,
-    pub reasoning_details: Option<Value>,
-    /// 结构化媒体 JSON 数组（`MediaAsset[]`）；空则不写列。
-    pub media_json: Option<&'a str>,
 }
 
-impl<'a> NewMessage<'a> {
-    /// 仅填 `session_id` / `role`，其余 Option 字段为 `None`（便于 struct update）。
-    pub fn empty(session_id: &'a str, role: &'a str) -> Self {
+impl<'a> NewResponseItem<'a> {
+    pub fn new(session_id: &'a str, item: &'a ResponseItem) -> Self {
         Self {
             session_id,
-            role,
-            content: None,
-            compressed_content: None,
-            tool_calls: None,
-            tool_call_id: None,
-            tool_name: None,
+            item,
             token_count: None,
             finish_reason: None,
-            reasoning: None,
-            reasoning_details: None,
-            media_json: None,
         }
     }
 }
 
-/// 从库中读出的富消息行。
+/// 从库中读出的原生 Responses item。
 #[derive(Debug, Clone)]
-pub struct StoredMessage {
+pub struct StoredResponseItem {
     pub id: i64,
     pub session_id: String,
-    pub role: String,
-    pub content: Option<String>,
-    pub compressed_content: Option<String>,
-    pub tool_call_id: Option<String>,
-    pub tool_calls: Option<Value>,
-    pub tool_name: Option<String>,
+    pub item: ResponseItem,
     pub timestamp: f64,
     pub token_count: Option<i64>,
     pub finish_reason: Option<String>,
-    pub reasoning: Option<String>,
-    pub reasoning_details: Option<Value>,
-    /// 结构化媒体 JSON 数组字符串。
-    pub media_json: Option<String>,
+}
+
+impl StoredResponseItem {
+    pub fn role(&self) -> Option<&str> {
+        self.item.role().or_else(|| {
+            if self.item.is_tool_output() {
+                Some("tool")
+            } else if matches!(
+                self.item,
+                ResponseItem::FunctionCall { .. }
+                    | ResponseItem::CustomToolCall { .. }
+                    | ResponseItem::ToolSearchCall { .. }
+                    | ResponseItem::Reasoning { .. }
+            ) {
+                Some("assistant")
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn text(&self) -> String {
+        self.item.text()
+    }
+
+    pub fn tool_name(&self) -> Option<&str> {
+        self.item.tool_name()
+    }
+
+    pub fn call_id(&self) -> Option<&str> {
+        self.item.call_id()
+    }
+
+    pub fn compressed_text(&self) -> Option<&str> {
+        self.item.compressed_text()
+    }
+
+    pub fn is_tool_output(&self) -> bool {
+        self.item.is_tool_output()
+    }
 }
 
 /// 从库中读出的会话元数据行。
@@ -153,20 +166,6 @@ pub struct SearchHit {
     pub tool_name: Option<String>,
 }
 
-/// UI 恢复用的折叠后聊天气泡。
-#[derive(Debug, Clone)]
-pub struct ChatHistoryMessage {
-    pub id: String,
-    pub role: String,
-    pub content: String,
-    pub reasoning: Option<String>,
-    pub activities: Vec<ChatActivityStored>,
-    /// `reasoning_details.astro_timeline_v1`（JSON array）
-    pub segments: Option<Value>,
-    /// `reasoning_details.astro_surfaces_v1`（JSON array）
-    pub ui_surfaces: Option<Value>,
-}
-
 /// 侧栏「近期会话」列表项：`title` 优先，否则用首条 user `content` 截断作 preview。
 #[derive(Debug, Clone)]
 pub struct RecentSession {
@@ -200,38 +199,11 @@ pub enum SessionPlacementFilter {
     Recent,
 }
 
-/// 助手气泡上的工具/活动条（由 `tool_calls` + 后续 `tool` 行折叠）。
-#[derive(Debug, Clone)]
-pub struct ChatActivityStored {
-    pub id: String,
-    pub kind: String,
-    pub title: String,
-    pub input: Option<String>,
-    pub output: Option<String>,
-    pub status: Option<String>,
-    /// 工具结果结构化媒体（`messages.media_json` 解析后的 JSON 数组）。
-    pub media: Option<Value>,
-}
-
 pub(crate) fn now_epoch_secs() -> Result<f64> {
     Ok(SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system clock before unix epoch")?
         .as_secs_f64())
-}
-
-pub(crate) fn json_to_db(value: &Option<Value>) -> Result<Option<String>> {
-    match value {
-        Some(v) => Ok(Some(serde_json::to_string(v)?)),
-        None => Ok(None),
-    }
-}
-
-pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
-    match raw {
-        Some(s) => Ok(Some(serde_json::from_str(&s)?)),
-        None => Ok(None),
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -357,31 +329,27 @@ impl SessionStore {
 #[async_trait::async_trait]
 impl crate::ConversationStore for SessionStore {
     #[allow(refining_impl_trait)]
-    async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
-        SessionStore::append_message(self, msg).await
+    async fn append_response_item(&self, item: NewResponseItem<'_>) -> Result<i64> {
+        SessionStore::append_response_item(self, item).await
     }
 
     #[allow(refining_impl_trait)]
-    async fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
-        SessionStore::get_messages(self, session_id).await
+    async fn get_response_items(&self, session_id: &str) -> Result<Vec<StoredResponseItem>> {
+        SessionStore::get_response_items(self, session_id).await
     }
 
     #[allow(refining_impl_trait)]
-    async fn update_message_compressed_content(
+    async fn update_response_item_compressed_content(
         &self,
         message_id: i64,
         compressed: Option<&str>,
     ) -> Result<()> {
-        SessionStore::update_message_compressed_content(self, message_id, compressed).await
+        SessionStore::update_response_item_compressed_content(self, message_id, compressed).await
     }
 
     #[allow(refining_impl_trait)]
-    async fn patch_last_assistant_reasoning_details(
-        &self,
-        session_id: &str,
-        details: &Value,
-    ) -> Result<()> {
-        SessionStore::patch_last_assistant_reasoning_details(self, session_id, details).await
+    async fn patch_last_assistant_metadata(&self, session_id: &str, details: &Value) -> Result<()> {
+        SessionStore::patch_last_assistant_metadata(self, session_id, details).await
     }
 
     #[allow(refining_impl_trait)]
@@ -399,7 +367,7 @@ impl crate::ConversationStore for SessionStore {
         &self,
         session_id: &str,
         limit: usize,
-    ) -> Result<Vec<crate::ScrolledMessage>> {
+    ) -> Result<Vec<crate::ScrolledResponseItem>> {
         SessionStore::recent_messages(self, session_id, limit).await
     }
 
@@ -419,7 +387,7 @@ impl crate::ConversationStore for SessionStore {
         session_id: &str,
         around_message_id: i64,
         window_size: i64,
-    ) -> Result<Vec<crate::ScrolledMessage>> {
+    ) -> Result<Vec<crate::ScrolledResponseItem>> {
         SessionStore::scroll_context_window(self, session_id, around_message_id, window_size).await
     }
 
@@ -455,177 +423,3 @@ pub(crate) fn escape_fts5_query(query: &str) -> String {
 }
 
 pub(crate) use types::truncate_chars;
-
-pub(crate) fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<ChatActivityStored> {
-    let Some(Value::Array(arr)) = tool_calls else {
-        return Vec::new();
-    };
-    arr.iter()
-        .filter_map(|tc| {
-            let id = tc
-                .get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            if id.is_empty() {
-                return None;
-            }
-            let title = tc
-                .get("name")
-                .and_then(|v| v.as_str())
-                .or_else(|| {
-                    tc.get("function")
-                        .and_then(|f| f.get("name"))
-                        .and_then(|v| v.as_str())
-                })
-                .unwrap_or("tool")
-                .to_string();
-            let input = tc
-                .get("arguments")
-                .cloned()
-                .or_else(|| tc.get("function").and_then(|f| f.get("arguments")).cloned())
-                .map(|args| match args {
-                    Value::String(s) => s,
-                    other => other.to_string(),
-                });
-            Some(ChatActivityStored {
-                id,
-                kind: "tool".into(),
-                title,
-                input,
-                output: None,
-                status: Some("running".into()),
-                media: None,
-            })
-        })
-        .collect()
-}
-
-/// 将同轮连续 assistant 气泡合并为一条（工具循环落盘会产生多条）。
-pub(crate) fn coalesce_consecutive_assistants(
-    messages: Vec<ChatHistoryMessage>,
-) -> Vec<ChatHistoryMessage> {
-    let mut out: Vec<ChatHistoryMessage> = Vec::with_capacity(messages.len());
-    for m in messages {
-        if m.role != "assistant" {
-            out.push(m);
-            continue;
-        }
-        let Some(prev) = out.last_mut().filter(|p| p.role == "assistant") else {
-            out.push(m);
-            continue;
-        };
-        let contents = [prev.content.as_str(), m.content.as_str()]
-            .into_iter()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>();
-        prev.content = contents.join("\n\n");
-        merge_history_activities(&mut prev.activities, m.activities);
-        let prev_seg_len = prev
-            .segments
-            .as_ref()
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        let next_seg_len = m
-            .segments
-            .as_ref()
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        if next_seg_len >= prev_seg_len && next_seg_len > 0 {
-            prev.segments = m.segments;
-        }
-        let prev_surf_len = prev
-            .ui_surfaces
-            .as_ref()
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        let next_surf_len = m
-            .ui_surfaces
-            .as_ref()
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        if next_surf_len >= prev_surf_len && next_surf_len > 0 {
-            prev.ui_surfaces = m.ui_surfaces;
-        }
-        if let Some(r) = m.reasoning.filter(|s| !s.trim().is_empty()) {
-            prev.reasoning = Some(r);
-        }
-    }
-    out
-}
-
-fn merge_history_activities(dest: &mut Vec<ChatActivityStored>, incoming: Vec<ChatActivityStored>) {
-    for act in incoming {
-        if let Some(prev) = dest.iter_mut().find(|a| a.id == act.id) {
-            if act.output.is_some() {
-                prev.output = act.output;
-            }
-            if act.input.is_some() {
-                prev.input = act.input;
-            }
-            if act.media.is_some() {
-                prev.media = act.media;
-            }
-            if act.status.is_some() {
-                prev.status = act.status;
-            }
-            if prev.title == "tool" && act.title != "tool" {
-                prev.title = act.title;
-            }
-        } else {
-            dest.push(act);
-        }
-    }
-}
-
-pub(crate) fn attach_tool_output(
-    assistant: &mut ChatHistoryMessage,
-    call_id: Option<&str>,
-    output: Option<String>,
-    tool_name: Option<&str>,
-    media: Option<Value>,
-) {
-    if let Some(cid) = call_id {
-        if let Some(act) = assistant.activities.iter_mut().find(|a| a.id == cid) {
-            act.output = output;
-            act.status = Some("done".into());
-            if media.is_some() {
-                act.media = media;
-            }
-            if act.title == "tool" {
-                if let Some(name) = tool_name {
-                    act.title = name.to_string();
-                }
-            }
-            return;
-        }
-    }
-    if let Some(act) = assistant.activities.iter_mut().find(|a| a.output.is_none()) {
-        if let Some(cid) = call_id {
-            act.id = cid.to_string();
-        }
-        if let Some(name) = tool_name {
-            act.title = name.to_string();
-        }
-        act.output = output;
-        act.status = Some("done".into());
-        if media.is_some() {
-            act.media = media;
-        }
-        return;
-    }
-    assistant.activities.push(ChatActivityStored {
-        id: call_id.unwrap_or("unknown").to_string(),
-        kind: "tool".into(),
-        title: tool_name.unwrap_or("tool").to_string(),
-        input: None,
-        output,
-        status: Some("done".into()),
-        media,
-    });
-}

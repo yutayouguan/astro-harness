@@ -91,7 +91,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-protocol` | `agent-protocol` | 统一 Thread 提交与事件协议：`Op`、`EventMsg`、`TurnItem`、approval/control 与扩展事件。 |
 | `crates/agent-rollout` | `agent-rollout` | append-only rollout 持久化、记录策略与 Thread 历史重建；是稳定事件恢复的事实源。 |
 | `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。定义 `AstroService` 的 Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、Files、Token 与 Batch RPC。 |
-| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回。 |
+| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v22，FTS5）— 原生 `ResponseItem`、会话、billing、FTS 召回。 |
 | `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源（agent_write/user_upload/reconcile）注册文件，MIME 分类。 |
 | `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
 
@@ -231,7 +231,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
     config.json        # AgentRuntimeConfig
     tools_enabled.json # tool gate 热加载
   data/
-    state.db           # 消息、会话、FTS5（schema v17）
+    state.db           # ResponseItem、会话、FTS5（schema v22）
     artifacts.db       # 文件空间索引
     knowledge.db       # 知识内容 FTS
     subagents-v2.db    # Agent Graph、mailbox、状态事件与恢复元数据
@@ -244,19 +244,19 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 ## Key Invariants
 
-1. **角色顺序**：`session_messages` 中相邻消息不得连续出现相同 role（user/user 或 assistant/assistant）。由 `validate_message_order()` 强制。
+1. **原生历史**：Agent、rollout、SQLite 和 Desktop history RPC 都使用 `ResponseItem`。其中相邻的 user/assistant message item 不得重复角色，由 `validate_message_order()` 强制。
 
 2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零（`begin_user_turn`）；单条用户消息内上限 `multi_turn`（默认 90，对齐 Hermes）。`increment_tool_round()` 在耗尽时返回 `MaxDepthError`。
 
-3. **streaming 不变量**：每轮 assistant 回复必须先写入 `session_messages`（含 `tool_calls` 字段）再执行工具；`code_exec` 独占轮可退还预算；usage 覆盖式累加（兼容 Google 累计式 usageMetadata）。
+3. **streaming 不变量**：模型产生的 assistant/call items 必须先写入 `response_items`，再执行工具并写入 matching output item；`code_exec` 独占轮可退还预算；usage 覆盖式累加（兼容 Google 累计式 usageMetadata）。
 
-4. **Tool spill**：tool 结果 ≥ `DEFAULT_SPILL_THRESHOLD_BYTES` 时落盘，`compressed_content` 存 stub view，provider history 用 stub 而非原文。
+4. **Tool spill**：tool 结果 ≥ `DEFAULT_SPILL_THRESHOLD_BYTES` 时落盘，item metadata 的 `astro_compressed_output` 存 stub view，provider history 用 stub 而非原文。
 
 5. **Skill soft-alias**：模型把 skill 名当工具调用时，若工具注册表中不存在但 skill 已安装且 enabled，自动改写为 `skills(action=load, skill_id=…)`。
 
 6. **MCP 工具名**：`mcp__{server_id}__{tool_name}` 前缀，`is_mcp_tool_name()` 检测。
 
-7. **交互模式**：`interaction_mode` 经 ChatRequest 下传；行为说明只进 system（`system_guidance`），用户消息不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。schema v17 起剥离历史 Mode 后缀。
+7. **交互模式**：`interaction_mode` 经 Agent turn 下传；行为说明只进 Responses `instructions`，用户 item 不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。
 
 8. **网络默认放开**：沙箱策略一律 `network_access = true`，进程内 HTTP 工具只保留 SSRF 防护。开启 managed proxy 后，proxy listener 只归属单个 tool attempt，沙箱只放行其精确端口；terminal 后台模式在 spawn 前拒绝，code_exec 先 scrub secrets 再注入 proxy env，结构化网络拒绝不得触发文件系统提权。
 

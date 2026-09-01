@@ -5,14 +5,12 @@ mod path;
 mod policy;
 mod reconstruction;
 mod recorder;
-mod response_items;
 
 pub use fork::*;
 pub use path::*;
 pub use policy::*;
 pub use reconstruction::*;
 pub use recorder::*;
-pub use response_items::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RolloutItem {

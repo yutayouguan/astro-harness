@@ -109,21 +109,20 @@ async fn load_session_previews(session_id: &str) -> (String, Vec<EvalMessagePrev
     let Ok(store) = SessionStore::open_sessions_dir(&sessions_dir).await else {
         return (String::new(), Vec::new());
     };
-    let Ok(msgs) = store.get_messages(session_id).await else {
+    let Ok(msgs) = store.get_response_items(session_id).await else {
         return (String::new(), Vec::new());
     };
     let title = msgs
         .iter()
-        .find(|m| m.role == "user")
-        .and_then(|m| m.content.as_deref())
-        .map(|c| truncate_chars(c, 120))
+        .find(|item| item.role() == Some("user"))
+        .map(|item| truncate_chars(&item.text(), 120))
         .unwrap_or_default();
     let previews: Vec<EvalMessagePreview> = msgs
         .iter()
         .take(50)
-        .map(|m| EvalMessagePreview {
-            role: m.role.clone(),
-            content: truncate_chars(m.content.as_deref().unwrap_or(""), MSG_TRUNCATE),
+        .map(|item| EvalMessagePreview {
+            role: item.role().unwrap_or("item").to_string(),
+            content: truncate_chars(&item.text(), MSG_TRUNCATE),
         })
         .collect();
     (title, previews)

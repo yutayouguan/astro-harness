@@ -187,7 +187,7 @@ import {
   type ProviderOpt,
 } from "../schedule/CreateCronDialog";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
-import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
+import { mapHistoryItems } from "../../lib/chat/mapHistoryMessages";
 import {
   groupConsecutiveActivities,
   isConsecutiveActivityGroup,
@@ -1112,7 +1112,7 @@ export default function ChatView({
             limit: 200,
           });
           if (cancelled) return;
-          setSelectedCronMessages(mapHistoryMessages(history.messages ?? []));
+          setSelectedCronMessages(mapHistoryItems(history.items ?? []));
         }
 
         if (cronRunStatusKind(resolved.status) === "running") {

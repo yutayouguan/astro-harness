@@ -39,7 +39,8 @@ pub struct ChatCompletionRequest {
 | `ChatCompletionRequest.input` | 非 Agent | `Message` 兼容输入，类型上无法进入 Agent 模型 |
 | `tools` | 独立 schema | 保留 function/custom/namespace/tool_search/web_search 类型 |
 
-Agent 内部可以为了 UI、搜索或特定辅助计算生成 `Message` 视图，但该视图不回写 canonical history，也不用于发送下一次 Agent 请求。
+Agent 内部、Session DB 和 Desktop history RPC 均不生成 `Message` 历史视图。
+`Message` 只是非 Agent `ChatCompletionRequest` 的局部输入类型。
 
 ## 3. Agent 路径
 

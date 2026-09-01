@@ -103,13 +103,15 @@ async fn drain_mailbox_batch_at_safe_boundary(
     let persisted_through = session
         .services
         .sessions
-        .get_messages(session.session_id())
+        .get_response_items(session.session_id())
         .await?
         .iter()
-        .filter_map(|message| {
-            message
-                .finish_reason
-                .as_deref()?
+        .filter_map(|stored| {
+            stored
+                .item
+                .metadata()?
+                .get("astro_memory_marker")?
+                .as_str()?
                 .strip_prefix(MAILBOX_FINISH_PREFIX)?
                 .parse::<i64>()
                 .ok()
@@ -118,10 +120,10 @@ async fn drain_mailbox_batch_at_safe_boundary(
     let runtime_history = session.clone_history().await;
     let in_memory_through = runtime_history
         .iter()
-        .filter_map(|message| {
-            message
-                .compressed_content
-                .as_deref()?
+        .filter_map(|item| {
+            item.metadata()?
+                .get("astro_memory_marker")?
+                .as_str()?
                 .strip_prefix(MAILBOX_FINISH_PREFIX)?
                 .parse::<i64>()
                 .ok()
@@ -139,13 +141,16 @@ async fn drain_mailbox_batch_at_safe_boundary(
         .count();
     let marker = format!("{MAILBOX_FINISH_PREFIX}{through_sequence}");
     let durable = session.ensure_durable_turn_input_marker(&marker).await?;
-    let in_memory = runtime_history
-        .iter()
-        .any(|message| message.compressed_content.as_deref() == Some(marker.as_str()));
+    let in_memory = runtime_history.iter().any(|item| {
+        item.metadata()
+            .and_then(|metadata| metadata.get("astro_memory_marker"))
+            .and_then(serde_json::Value::as_str)
+            == Some(marker.as_str())
+    });
     if !in_memory
         && runtime_history
             .last()
-            .is_some_and(|message| message.role == types::message::Role::User)
+            .is_some_and(|item| item.role() == Some("user"))
     {
         return Ok(MailboxDrainOutcome {
             deferred: true,
@@ -178,9 +183,7 @@ async fn drain_mailbox_batch_at_safe_boundary(
         client_message_id: None,
     };
     if !durable {
-        session
-            .persist_turn_input(&input, Some(&marker), Some(&marker))
-            .await?;
+        session.persist_turn_input(&input, Some(&marker)).await?;
     }
     if session.cancel_signal().is_cancelled() {
         anyhow::bail!("agent turn interrupted after durable mailbox history write");
@@ -301,7 +304,7 @@ mod tests {
         );
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
-        assert_eq!(history[0].role, types::message::Role::User);
+        assert_eq!(history[0].role(), Some("user"));
         assert_eq!(
             history[0].content_str(),
             "follow up safely\n\nand keep tool rows"
@@ -367,11 +370,18 @@ mod tests {
         })));
 
         assert!(drain_mailbox_at_safe_boundary(&retry).await.is_err());
-        let stored = sessions.get_messages(&thread.session_id).await.unwrap();
+        let stored = sessions
+            .get_response_items(&thread.session_id)
+            .await
+            .unwrap();
         assert_eq!(stored.len(), 1);
-        assert_eq!(stored[0].finish_reason.as_deref(), Some(marker.as_str()));
+        assert!(stored[0].finish_reason.is_none());
         assert_eq!(
-            stored[0].compressed_content.as_deref(),
+            stored[0]
+                .item
+                .metadata()
+                .and_then(|value| value.get("astro_memory_marker"))
+                .and_then(serde_json::Value::as_str),
             Some(marker.as_str())
         );
         assert!(retry.clone_history().await.is_empty());
@@ -406,7 +416,7 @@ mod tests {
             .is_empty());
         assert_eq!(
             sessions
-                .get_messages(&thread.session_id)
+                .get_response_items(&thread.session_id)
                 .await
                 .unwrap()
                 .len(),
@@ -459,17 +469,32 @@ mod tests {
                 .create_session(&thread.session_id, "tauri", None, None, None)
                 .await
                 .unwrap();
+            let item = agent_protocol::ResponseItem::Message {
+                id: None,
+                role: "user".into(),
+                content: vec![agent_protocol::ContentItem::InputText {
+                    text: "committed before marker update".into(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: Some(serde_json::json!({
+                    "astro_memory_marker": marker,
+                })),
+            };
             sessions
-                .append_message(session::NewMessage {
-                    content: Some("committed before marker update"),
-                    finish_reason: Some(&marker),
-                    ..session::NewMessage::empty(&thread.session_id, "user")
+                .append_response_item(session::NewResponseItem {
+                    session_id: &thread.session_id,
+                    item: &item,
+                    token_count: None,
+                    finish_reason: None,
                 })
                 .await
                 .unwrap();
-            let stored = sessions.get_messages(&thread.session_id).await.unwrap();
+            let stored = sessions
+                .get_response_items(&thread.session_id)
+                .await
+                .unwrap();
             assert_eq!(stored.len(), 1);
-            assert!(stored[0].compressed_content.is_none());
+            assert!(stored[0].compressed_text().is_none());
         }
 
         let retry = Session::with_session_id_for_agent_thread(
@@ -505,23 +530,29 @@ mod tests {
         let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
             .await
             .unwrap()
-            .get_messages(&thread.session_id)
+            .get_response_items(&thread.session_id)
             .await
             .unwrap();
         assert_eq!(stored.len(), 1);
         assert_eq!(
-            stored[0].compressed_content.as_deref(),
+            stored[0]
+                .item
+                .metadata()
+                .and_then(|value| value.get("astro_memory_marker"))
+                .and_then(serde_json::Value::as_str),
             Some(marker.as_str())
         );
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(
-            history[0].compressed_content.as_deref(),
+            history[0]
+                .metadata()
+                .and_then(|value| value.get("astro_memory_marker"))
+                .and_then(serde_json::Value::as_str),
             Some(marker.as_str())
         );
-        let provider = crate::prompt::messages::to_provider_messages("", &history);
         assert_eq!(
-            serde_json::to_string(&provider)
+            serde_json::to_string(&history)
                 .unwrap()
                 .matches("committed before marker update")
                 .count(),
@@ -530,7 +561,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn main_steer_recovers_a_finish_only_row_with_media() {
+    async fn main_steer_recovers_a_native_response_item_with_media() {
         let temp = tempfile::tempdir().unwrap();
         let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db"))
             .await
@@ -560,12 +591,6 @@ mod tests {
         .unwrap();
         let sequence = graph.pending_for("root-v2", 0).await.unwrap()[0].sequence;
         let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
-        let media_json = serde_json::to_string(&vec![types::MediaAsset::data_url(
-            types::MediaKind::Image,
-            image,
-            "image/png",
-        )])
-        .unwrap();
         let memory_dir = temp.path().join("memory");
         {
             let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
@@ -575,13 +600,25 @@ mod tests {
                 .create_session("root-v2", "tauri", None, None, None)
                 .await
                 .unwrap();
+            let item = agent_protocol::ResponseItem::Message {
+                id: None,
+                role: "user".into(),
+                content: vec![
+                    agent_protocol::ContentItem::InputText {
+                        text: "legacy steer".into(),
+                    },
+                    agent_protocol::ContentItem::InputImage {
+                        image_url: image.into(),
+                        detail: None,
+                    },
+                ],
+                phase: None,
+                internal_chat_message_metadata_passthrough: Some(serde_json::json!({
+                    "astro_memory_marker": marker,
+                })),
+            };
             sessions
-                .append_message(session::NewMessage {
-                    content: Some("legacy steer"),
-                    finish_reason: Some(&marker),
-                    media_json: Some(&media_json),
-                    ..session::NewMessage::empty("root-v2", "user")
-                })
+                .append_response_item(session::NewResponseItem::new("root-v2", &item))
                 .await
                 .unwrap();
         }
@@ -613,25 +650,39 @@ mod tests {
         let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
             .await
             .unwrap()
-            .get_messages("root-v2")
+            .get_response_items("root-v2")
             .await
             .unwrap();
         assert_eq!(stored.len(), 1);
         assert_eq!(
-            stored[0].compressed_content.as_deref(),
+            stored[0]
+                .item
+                .metadata()
+                .and_then(|value| value.get("astro_memory_marker"))
+                .and_then(serde_json::Value::as_str),
             Some(marker.as_str())
         );
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content_str(), "legacy steer");
-        assert_eq!(history[0].media.len(), 1);
+        assert!(matches!(
+            &history[0],
+            agent_protocol::ResponseItem::Message { content, .. }
+                if content.iter().any(|item| matches!(
+                    item,
+                    agent_protocol::ContentItem::InputImage { image_url, .. }
+                        if image_url == image
+                ))
+        ));
         assert_eq!(
-            history[0].compressed_content.as_deref(),
+            history[0]
+                .metadata()
+                .and_then(|value| value.get("astro_memory_marker"))
+                .and_then(serde_json::Value::as_str),
             Some(marker.as_str())
         );
-        let provider = crate::prompt::messages::to_provider_messages("", &history);
         assert_eq!(
-            serde_json::to_string(&provider)
+            serde_json::to_string(&history)
                 .unwrap()
                 .matches("legacy steer")
                 .count(),
@@ -691,8 +742,10 @@ mod tests {
         )
         .await
         .unwrap();
-        let mut memory_only = types::message::Message::user("memory only follow up");
-        memory_only.compressed_content = Some(marker);
+        let mut memory_only = agent_protocol::ResponseItem::user_text("memory only follow up");
+        *memory_only.metadata_mut().unwrap() = Some(serde_json::json!({
+            "astro_memory_marker": marker
+        }));
         retry.record_items(vec![memory_only]).await;
         root.enqueue_message(
             &subagents::AgentPath::root(),
@@ -718,7 +771,7 @@ mod tests {
         );
         assert_eq!(
             sessions
-                .get_messages(&thread.session_id)
+                .get_response_items(&thread.session_id)
                 .await
                 .unwrap()
                 .len(),
@@ -726,9 +779,8 @@ mod tests {
         );
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
-        let provider = crate::prompt::messages::to_provider_messages("", &history);
         assert_eq!(
-            serde_json::to_string(&provider)
+            serde_json::to_string(&history)
                 .unwrap()
                 .matches("memory only follow up")
                 .count(),
@@ -803,7 +855,7 @@ mod tests {
         assert!(drain_mailbox_at_safe_boundary(&retry).await.is_err());
         assert_eq!(
             sessions
-                .get_messages(&thread.session_id)
+                .get_response_items(&thread.session_id)
                 .await
                 .unwrap()
                 .len(),
@@ -831,7 +883,7 @@ mod tests {
             .is_empty());
         assert_eq!(
             sessions
-                .get_messages(&thread.session_id)
+                .get_response_items(&thread.session_id)
                 .await
                 .unwrap()
                 .len(),
@@ -840,7 +892,7 @@ mod tests {
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(
-            serde_json::to_string(&crate::prompt::messages::to_provider_messages("", &history))
+            serde_json::to_string(&history)
                 .unwrap()
                 .matches("already on both sides")
                 .count(),
@@ -907,7 +959,10 @@ mod tests {
         })));
 
         assert!(drain_mailbox_at_safe_boundary(&retry).await.is_err());
-        assert_eq!(sessions.get_messages("root-v2").await.unwrap().len(), 1);
+        assert_eq!(
+            sessions.get_response_items("root-v2").await.unwrap().len(),
+            1
+        );
         assert!(retry.clone_history().await.is_empty());
         assert_eq!(graph.pending_for("root-v2", 0).await.unwrap().len(), 1);
         retry.set_turn_input_after_db_write_hook(None);
@@ -924,7 +979,15 @@ mod tests {
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content_str(), "steer through failure");
-        assert_eq!(history[0].media.len(), 1);
+        assert!(matches!(
+            &history[0],
+            agent_protocol::ResponseItem::Message { content, .. }
+                if content.iter().any(|item| matches!(
+                    item,
+                    agent_protocol::ContentItem::InputImage { image_url, .. }
+                        if image_url == "data:image/png;base64,c3RlZXI="
+                ))
+        ));
         assert_eq!(
             drain_mailbox_at_safe_boundary(&retry)
                 .await
@@ -972,7 +1035,7 @@ mod tests {
         .await
         .unwrap();
         session
-            .record_items(vec![types::message::Message::user("initial")])
+            .record_items(vec![agent_protocol::ResponseItem::user_text("initial")])
             .await;
 
         let deferred = drain_mailbox_at_safe_boundary(&session).await.unwrap();
@@ -981,7 +1044,9 @@ mod tests {
         assert_eq!(graph.pending_for("root-v2", 0).await.unwrap().len(), 1);
 
         session
-            .record_items(vec![types::message::Message::assistant("first answer")])
+            .record_items(vec![agent_protocol::ResponseItem::assistant_text(
+                "first answer",
+            )])
             .await;
         let delivered = drain_mailbox_at_safe_boundary(&session).await.unwrap();
         assert_eq!(delivered.delivered, 1);

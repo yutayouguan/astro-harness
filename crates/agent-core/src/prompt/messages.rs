@@ -1,19 +1,14 @@
-//! 会话消息 → Provider 消息转换。
-//!
-//! 将应用内 `types::message::Message` 序列转为统一的 `providers::types::message::Message`。
+//! Assemble the exact native Responses input used by the Agent runtime.
 
-use providers::types::message::{
-    AssistantContent, Message as ProviderMessage, ToolCall as ProviderToolCall, UserContent,
-};
-use types::message::{Message, MessageContent, Role};
+use agent_protocol::ResponseItem;
 
 /// Merge role-bearing prompt context with canonical Responses history.
 /// Conversation items are cloned verbatim; only Astro-authored context is
-/// constructed here.
+/// inserted at its recorded user boundary.
 pub(crate) fn to_response_items_with_context_history(
     prompt_context: &[crate::prompt::context_state::PromptContextEvent],
-    session: &[agent_protocol::ResponseItem],
-) -> Vec<agent_protocol::ResponseItem> {
+    session: &[ResponseItem],
+) -> Vec<ResponseItem> {
     let session = super::sanitize::sanitized_response_items(session);
     let mut context_events = prompt_context.iter().peekable();
     let context_count = prompt_context
@@ -23,10 +18,7 @@ pub(crate) fn to_response_items_with_context_history(
     let mut input = Vec::with_capacity(session.len() + context_count);
     let mut user_ordinal = 0usize;
     for item in &session {
-        if matches!(
-            item,
-            agent_protocol::ResponseItem::Message { role, .. } if role == "user"
-        ) {
+        if matches!(item, ResponseItem::Message { role, .. } if role == "user") {
             while context_events
                 .peek()
                 .is_some_and(|event| event.before_user <= user_ordinal)
@@ -37,7 +29,8 @@ pub(crate) fn to_response_items_with_context_history(
                         .expect("peeked context event")
                         .messages
                         .iter()
-                        .filter_map(provider_context_to_response_item),
+                        .filter(|item| matches!(item.role(), Some("developer" | "user")))
+                        .cloned(),
                 );
             }
             user_ordinal += 1;
@@ -49,511 +42,36 @@ pub(crate) fn to_response_items_with_context_history(
             event
                 .messages
                 .iter()
-                .filter_map(provider_context_to_response_item),
+                .filter(|item| matches!(item.role(), Some("developer" | "user")))
+                .cloned(),
         );
     }
     input
 }
 
-fn provider_context_to_response_item(
-    message: &ProviderMessage,
-) -> Option<agent_protocol::ResponseItem> {
-    let (role, text) = match message {
-        ProviderMessage::Developer { content } => ("developer", content.clone()),
-        ProviderMessage::User { .. } => ("user", message.text_content().to_string()),
-        ProviderMessage::System { content } => ("developer", content.clone()),
-        _ => return None,
-    };
-    Some(agent_protocol::ResponseItem::Message {
-        id: None,
-        role: role.into(),
-        content: vec![agent_protocol::ContentItem::InputText { text }],
-        phase: None,
-        internal_chat_message_metadata_passthrough: None,
-    })
-}
-
-/// 将会话历史与 system prompt 转为 Provider 可消费的聊天消息列表。
-///
-/// 首条固定为 `system` 角色；tool 消息会从历史中反向查找对应 `tool_call_id` 以填充 `name`。
-/// 发送前会 [`sanitize_tool_pairs`](super::sanitize::sanitize_tool_pairs)：为悬挂
-/// `tool_calls` 补齐 aborted 结果并去掉孤儿 tool 消息，避免上游 400。
-pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<ProviderMessage> {
-    to_provider_messages_with_context(
-        &crate::prompt::PromptContract::from_base_instructions(system_prompt),
-        session,
-    )
-}
-
-/// 将三层 prompt 契约加持久化历史转换为 Provider 输入。
-///
-/// 稳定基础指令作为专用 system/instructions 条目发出，随后是带角色的动态上下文。
-/// 原生工具 schema 由调用方单独提供。
-pub fn to_provider_messages_with_context(
-    prompt: &crate::prompt::PromptContract,
-    session: &[Message],
-) -> Vec<ProviderMessage> {
-    let history = (!prompt.context.is_empty())
-        .then(|| crate::prompt::context_state::PromptContextEvent::new(0, prompt.context.clone()))
-        .into_iter()
-        .collect::<Vec<_>>();
-    to_provider_messages_with_context_history(prompt, &history, session)
-}
-
-/// 转换稳定指令、持久化的 Provider 专用上下文历史和聊天历史。
-pub(crate) fn to_provider_messages_with_context_history(
-    prompt: &crate::prompt::PromptContract,
-    prompt_context: &[crate::prompt::context_state::PromptContextEvent],
-    session: &[Message],
-) -> Vec<ProviderMessage> {
-    let session = super::sanitize::sanitized_tool_pairs(session);
-    let context_message_count = prompt_context
-        .iter()
-        .map(|event| event.messages.len())
-        .sum::<usize>();
-    let mut messages = Vec::with_capacity(session.len() + context_message_count + 1);
-    if !prompt.base_instructions.trim().is_empty() {
-        messages.push(ProviderMessage::system(&prompt.base_instructions));
-    }
-
-    let mut context_events = prompt_context.iter().peekable();
-    let mut user_ordinal = 0usize;
-    for message in &session {
-        if message.role == Role::User {
-            while context_events
-                .peek()
-                .is_some_and(|event| event.before_user <= user_ordinal)
-            {
-                messages.extend(context_events.next().unwrap().messages.iter().cloned());
-            }
-            user_ordinal += 1;
-        }
-        if message.role == Role::Tool {
-            let ok = message
-                .tool_call_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .is_some();
-            if !ok {
-                tracing::warn!("skip tool message without tool_call_id");
-                continue;
-            }
-        }
-
-        match message.role {
-            Role::System => {
-                messages.push(ProviderMessage::system(message.content_text()));
-            }
-            Role::Tool => {
-                let content = message.provider_view_text().into_owned();
-                let is_error = content.starts_with("Error");
-                messages.push(ProviderMessage::Tool {
-                    tool_call_id: message.tool_call_id.clone().unwrap_or_default(),
-                    content,
-                    is_error,
-                });
-            }
-            Role::Assistant => {
-                let mut content_parts = Vec::new();
-
-                // 推理 / reasoning
-                if let Some(reasoning) = &message.reasoning {
-                    content_parts.push(AssistantContent::Thinking {
-                        text: reasoning.clone(),
-                        signature: message.thought_signature.clone(),
-                    });
-                } else if let Some(sig) = &message.thought_signature {
-                    content_parts.push(AssistantContent::Thinking {
-                        text: String::new(),
-                        signature: Some(sig.clone()),
-                    });
-                }
-
-                // 文本内容
-                let text = message.content_text();
-                if !text.is_empty() {
-                    content_parts.push(AssistantContent::Text { text });
-                }
-
-                // 工具调用
-                if let Some(ref calls) = message.tool_calls {
-                    for c in calls {
-                        content_parts.push(AssistantContent::ToolCall(ProviderToolCall {
-                            id: c.id.clone(),
-                            name: c.name.clone(),
-                            arguments: c.arguments.clone(),
-                            signature: c.signature.clone(),
-                        }));
-                    }
-                }
-
-                if content_parts.is_empty() {
-                    content_parts.push(AssistantContent::Text {
-                        text: String::new(),
-                    });
-                }
-                messages.push(ProviderMessage::Assistant {
-                    content: content_parts,
-                });
-            }
-            Role::User => {
-                let mut parts = build_user_parts(message);
-                // 合并媒体资产
-                parts = merge_media_user_parts(parts, &message.media);
-                messages.push(ProviderMessage::User { content: parts });
-            }
-        }
-    }
-
-    for event in context_events {
-        messages.extend(event.messages.iter().cloned());
-    }
-
-    messages
-}
-
-/// 从会话消息构建用户内容部分。
-fn build_user_parts(message: &Message) -> Vec<UserContent> {
-    match &message.content {
-        MessageContent::Text(s) => {
-            vec![UserContent::Text { text: s.clone() }]
-        }
-        MessageContent::Parts(ps) => {
-            let mut parts: Vec<UserContent> = ps.iter().filter_map(content_part_to_user).collect();
-            if parts.is_empty() {
-                parts.push(UserContent::Text {
-                    text: message.content_text(),
-                });
-            }
-            parts
-        }
-    }
-}
-
-fn content_part_to_user(p: &types::message::ContentPart) -> Option<UserContent> {
-    match p.kind.as_str() {
-        "text" => Some(UserContent::Text {
-            text: p.text.clone().unwrap_or_default(),
-        }),
-        "image_url" => p
-            .image_url
-            .as_ref()
-            .map(|u| UserContent::Image { url: u.url.clone() }),
-        "audio_url" => p.audio_url.as_ref().map(|u| UserContent::Audio {
-            url: u.url.clone(),
-            mime_type: u.mime_type.clone(),
-        }),
-        "video_url" => p.video_url.as_ref().map(|u| UserContent::Video {
-            url: u.url.clone(),
-            mime_type: u.mime_type.clone(),
-        }),
-        _ => None,
-    }
-}
-
-/// 将 `Message.media` 中可入模的 data/remote URI 并入 parts（workspace 路径跳过）。
-fn merge_media_user_parts(
-    mut parts: Vec<UserContent>,
-    media: &[types::MediaAsset],
-) -> Vec<UserContent> {
-    for asset in media {
-        if let Some(p) = media_asset_to_user_content(asset) {
-            // 避免与 Parts 里已有同 URL 重复
-            let url = match &p {
-                UserContent::Image { url }
-                | UserContent::Audio { url, .. }
-                | UserContent::Video { url, .. }
-                | UserContent::Document { url, .. } => Some(url.as_str()),
-                _ => None,
-            };
-            let dup = url.is_some_and(|u| {
-                parts.iter().any(|e| match e {
-                    UserContent::Image { url }
-                    | UserContent::Audio { url, .. }
-                    | UserContent::Video { url, .. }
-                    | UserContent::Document { url, .. } => url == u,
-                    _ => false,
-                })
-            });
-            if !dup {
-                parts.push(p);
-            }
-        }
-    }
-    parts
-}
-
-fn media_asset_to_user_content(asset: &types::MediaAsset) -> Option<UserContent> {
-    use types::{MediaKind, MediaRef};
-    let (url, mime_from_data) = match &asset.reference {
-        MediaRef::DataUrl(u) => {
-            let mime = u
-                .strip_prefix("data:")
-                .and_then(|rest| rest.split(';').next())
-                .map(str::to_string);
-            (u.clone(), mime)
-        }
-        MediaRef::RemoteUri(u) => (u.clone(), None),
-        MediaRef::WorkspacePath(_) => return None,
-    };
-    let mime = if asset.mime_type.trim().is_empty() {
-        mime_from_data.unwrap_or_default()
-    } else {
-        asset.mime_type.clone()
-    };
-    match asset.kind {
-        MediaKind::Image => Some(UserContent::Image { url }),
-        MediaKind::Audio => Some(UserContent::Audio {
-            url,
-            mime_type: mime,
-        }),
-        MediaKind::Video => Some(UserContent::Video {
-            url,
-            mime_type: mime,
-        }),
-        MediaKind::File if mime.contains("pdf") => Some(UserContent::Document {
-            url,
-            mime_type: mime,
-        }),
-        MediaKind::File => Some(UserContent::Text {
-            text: format!("[file attached: {mime}]"),
-        }),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-    use types::message::{Message, MessageContent, ToolCall};
-    use types::{MediaAsset, MediaKind, MediaRef};
 
     #[test]
-    fn multimodal_parts_map_to_provider_parts() {
-        let session = vec![Message::user_with_images(
-            "描述",
-            &["data:image/png;base64,xx".into()],
+    fn inserts_context_at_the_original_user_boundary_without_rewriting_history() {
+        let history = vec![
+            ResponseItem::user_text("first"),
+            ResponseItem::assistant_text("answer"),
+            ResponseItem::user_text("second"),
+        ];
+        let context = vec![crate::prompt::context_state::PromptContextEvent::new(
+            1,
+            vec![ResponseItem::developer_text("updated rules")],
         )];
-        let msgs = to_provider_messages("sys", &session);
-        assert_eq!(msgs.len(), 2);
-        let user = &msgs[1];
-        assert_eq!(user.role(), providers::types::message::Role::User);
-        if let ProviderMessage::User { content } = user {
-            assert!(content
-                .iter()
-                .any(|c| matches!(c, UserContent::Text { text } if text == "描述")));
-            assert!(content.iter().any(
-                |c| matches!(c, UserContent::Image { url } if url.starts_with("data:image/png"))
-            ));
-        } else {
-            panic!("expected User message");
-        }
-    }
 
-    #[test]
-    fn prompt_contract_keeps_dynamic_roles_ahead_of_conversation() {
-        let prompt = crate::prompt::PromptContract {
-            base_instructions: "stable base".into(),
-            context: vec![
-                ProviderMessage::developer("developer policy"),
-                ProviderMessage::user_text("contextual user data"),
-            ],
-            ..Default::default()
-        };
-        let messages = to_provider_messages_with_context(&prompt, &[Message::user("hello")]);
+        let input = to_response_items_with_context_history(&context, &history);
 
-        assert_eq!(messages.len(), 4);
-        assert_eq!(messages[0].role(), providers::types::message::Role::System);
-        assert_eq!(
-            messages[1].role(),
-            providers::types::message::Role::Developer
-        );
-        assert_eq!(messages[2].role(), providers::types::message::Role::User);
-        assert_eq!(messages[3].role(), providers::types::message::Role::User);
-        assert_eq!(messages[0].text_content(), "stable base");
-        assert_eq!(messages[1].text_content(), "developer policy");
-        assert_eq!(messages[2].text_content(), "contextual user data");
-        assert_eq!(messages[3].text_content(), "hello");
-    }
-
-    #[test]
-    fn explicit_context_history_replaces_the_current_prompt_context() {
-        let prompt = crate::prompt::PromptContract {
-            base_instructions: "stable base".into(),
-            context: vec![ProviderMessage::developer("current snapshot")],
-            ..Default::default()
-        };
-        let context_history = vec![
-            crate::prompt::context_state::PromptContextEvent::new(
-                0,
-                vec![ProviderMessage::developer("initial snapshot")],
-            ),
-            crate::prompt::context_state::PromptContextEvent::new(
-                1,
-                vec![ProviderMessage::developer("incremental update")],
-            ),
-        ];
-
-        let messages = to_provider_messages_with_context_history(
-            &prompt,
-            &context_history,
-            &[
-                Message::user("first"),
-                Message::assistant("answer"),
-                Message::user("second"),
-            ],
-        );
-
-        assert_eq!(messages.len(), 6);
-        assert_eq!(messages[0].text_content(), "stable base");
-        assert_eq!(messages[1].text_content(), "initial snapshot");
-        assert_eq!(messages[2].text_content(), "first");
-        assert_eq!(messages[3].text_content(), "answer");
-        assert_eq!(messages[4].text_content(), "incremental update");
-        assert_eq!(messages[5].text_content(), "second");
-        assert!(messages
-            .iter()
-            .all(|message| message.text_content() != "current snapshot"));
-    }
-
-    #[test]
-    fn audio_video_parts_and_media_field_map() {
-        let mut msg = Message::user("听这段并看视频");
-        msg.content = MessageContent::Parts(vec![
-            types::message::ContentPart::text("听这段并看视频"),
-            types::message::ContentPart::audio_url("data:audio/wav;base64,AQID", "audio/wav"),
-            types::message::ContentPart::video_url("data:video/mp4;base64,AQID", "video/mp4"),
-        ]);
-        msg.media.push(MediaAsset {
-            kind: MediaKind::Audio,
-            mime_type: "audio/mpeg".into(),
-            reference: MediaRef::DataUrl("data:audio/mpeg;base64,zzzz".into()),
-            label: None,
-            id: None,
-        });
-        let msgs = to_provider_messages("sys", &[msg]);
-        let user = msgs
-            .iter()
-            .find(|m| m.role() == providers::types::message::Role::User)
-            .unwrap();
-        if let ProviderMessage::User { content } = user {
-            assert!(content
-                .iter()
-                .any(|c| matches!(c, UserContent::Audio { .. })));
-            assert!(content
-                .iter()
-                .any(|c| matches!(c, UserContent::Video { .. })));
-            assert_eq!(
-                content
-                    .iter()
-                    .filter(|c| matches!(c, UserContent::Audio { .. }))
-                    .count(),
-                2
-            );
-        }
-    }
-
-    #[test]
-    fn tool_without_id_is_skipped() {
-        let session = vec![
-            Message::assistant_with_tools(
-                "",
-                vec![ToolCall {
-                    id: "c1".into(),
-                    name: "a".into(),
-                    arguments: json!({}),
-                    signature: None,
-                }],
-            ),
-            Message::tool("orphan"),
-            Message::tool_with_id("c1", "ok"),
-        ];
-        let msgs = to_provider_messages("sys", &session);
-        let tools: Vec<_> = msgs
-            .iter()
-            .filter(|m| m.role() == providers::types::message::Role::Tool)
-            .collect();
-        assert_eq!(tools.len(), 1);
-        if let ProviderMessage::Tool { tool_call_id, .. } = &tools[0] {
-            assert_eq!(tool_call_id, "c1");
-        }
-    }
-
-    #[test]
-    fn dangling_assistant_tool_calls_get_aborted_outputs() {
-        let session = vec![
-            Message::assistant_with_tools(
-                "partial",
-                vec![
-                    ToolCall {
-                        id: "c1".into(),
-                        name: "a".into(),
-                        arguments: json!({}),
-                        signature: None,
-                    },
-                    ToolCall {
-                        id: "c2".into(),
-                        name: "b".into(),
-                        arguments: json!({}),
-                        signature: None,
-                    },
-                ],
-            ),
-            Message::tool_with_id("c1", "ok"),
-        ];
-        let msgs = to_provider_messages("sys", &session);
-        let assistant = msgs
-            .iter()
-            .find(|m| m.role() == providers::types::message::Role::Assistant)
-            .unwrap();
-        if let ProviderMessage::Assistant { content } = assistant {
-            let calls: Vec<_> = content
-                .iter()
-                .filter_map(|c| match c {
-                    AssistantContent::ToolCall(tc) => Some(tc),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(calls.len(), 2);
-            assert_eq!(calls[0].id, "c1");
-            assert_eq!(calls[1].id, "c2");
-        }
-        let tools: Vec<_> = msgs
-            .iter()
-            .filter(|message| message.role() == providers::types::message::Role::Tool)
-            .collect();
-        assert_eq!(tools.len(), 2);
-        if let ProviderMessage::Tool {
-            tool_call_id,
-            content,
-            ..
-        } = &tools[0]
-        {
-            assert_eq!(tool_call_id, "c2");
-            assert_eq!(content, "aborted");
-        }
-    }
-
-    #[test]
-    fn tool_message_uses_compressed_content_for_provider() {
-        let assistant = Message::assistant_with_tools(
-            "",
-            vec![ToolCall {
-                id: "c1".into(),
-                name: "search".into(),
-                arguments: json!({}),
-                signature: None,
-            }],
-        );
-        let mut tool = Message::tool_with_id("c1", "original long result");
-        tool.compressed_content = Some("compressed result".into());
-
-        let msgs = to_provider_messages("sys", &[assistant, tool]);
-        let tool_msg = msgs
-            .iter()
-            .find(|m| m.role() == providers::types::message::Role::Tool)
-            .expect("tool");
-        assert_eq!(tool_msg.text_content(), "compressed result");
+        assert_eq!(input.len(), 4);
+        assert_eq!(input[0], history[0]);
+        assert_eq!(input[1], history[1]);
+        assert_eq!(input[2].role(), Some("developer"));
+        assert_eq!(input[2].text(), "updated rules");
+        assert_eq!(input[3], history[2]);
     }
 }

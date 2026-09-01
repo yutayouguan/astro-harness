@@ -1,7 +1,6 @@
 //! AgentLoop 上下文维护：tool 结果压缩、provider 历史折叠与上下文占用估算。
 
 use session::ConversationStore;
-use types::message::Message;
 
 use crate::compression::{prune_tool_view, ContextMaintenanceResult, ToolCompressionManager};
 
@@ -47,26 +46,6 @@ impl AgentLoop {
         out
     }
 
-    /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
-    pub async fn provider_history(&self) -> Vec<Message> {
-        let (handoff, history) = {
-            let state = self.lock_state();
-            (
-                state.compression.mid_run_handoff.clone(),
-                state.clone_message_projection(),
-            )
-        };
-        match handoff {
-            Some(handoff) => crate::exec::mid_run_summary::collapse_history_with_handoff(
-                &history,
-                &handoff,
-                self.config_protect_first_n(),
-                self.config_protect_last_n(),
-            ),
-            None => history,
-        }
-    }
-
     /// 当前会话占用比例（ceil chars/4 ÷ context_window）。
     pub async fn occupancy_ratio(&self) -> f32 {
         let history = self.clone_history().await;
@@ -77,7 +56,7 @@ impl AgentLoop {
 
     /// Run 内 tool 上下文维护：委托 [`CompressionPolicy`] 生成计划，执行 prune/LLM 摘要/head-tail。
     ///
-    /// 不变量：`content` 全文保留；仅改 `compressed_content`（Provider 视图）。
+    /// 不变量：item 原始内容保留；仅改 metadata 中的 Provider 视图。
     pub async fn maintain_tool_context(&self) -> anyhow::Result<ContextMaintenanceResult> {
         let mut result = ContextMaintenanceResult::default();
         if !self.compression_config().enabled {
@@ -89,13 +68,13 @@ impl AgentLoop {
                 result.thrashing_disabled = true;
                 return Ok(result);
             }
-            state.clone_message_projection()
+            state.clone_response_history()
         };
 
         let stored = self
             .services
             .sessions
-            .get_messages(&self.session_id)
+            .get_response_items(&self.session_id)
             .await?;
         let protect_last_n = self.compression_config().protect_last_n.max(1);
 
@@ -131,8 +110,8 @@ impl AgentLoop {
             let Some(stored_msg) = stored.iter().find(|m| m.id == target.message_id) else {
                 continue;
             };
-            let content = stored_msg.content.as_deref().unwrap_or_default();
-            self.apply_tool_compressed_view(stored_msg, content, &view)
+            let content = stored_msg.text();
+            self.apply_tool_compressed_view(stored_msg, &content, &view)
                 .await?;
             result.pruned += 1;
         }
@@ -181,7 +160,7 @@ impl AgentLoop {
             let stored_again = self
                 .services
                 .sessions
-                .get_messages(&self.session_id)
+                .get_response_items(&self.session_id)
                 .await?;
             let Some(stored_msg) = stored_again.iter().find(|m| m.id == job.message_id) else {
                 continue;
@@ -220,13 +199,13 @@ impl AgentLoop {
 
     async fn apply_tool_compressed_view(
         &self,
-        stored_msg: &::session::StoredMessage,
+        stored_msg: &::session::StoredResponseItem,
         content: &str,
         view: &str,
     ) -> anyhow::Result<()> {
         self.services
             .sessions
-            .update_message_compressed_content(stored_msg.id, Some(view))
+            .update_response_item_compressed_content(stored_msg.id, Some(view))
             .await?;
         let mut state = self.lock_state();
         if let Some(agent_protocol::ResponseItem::FunctionCallOutput {
@@ -236,7 +215,7 @@ impl AgentLoop {
             matches!(
                 item,
                 agent_protocol::ResponseItem::FunctionCallOutput { call_id, output, .. }
-                    if match (call_id, &stored_msg.tool_call_id) {
+                    if match (call_id, stored_msg.call_id()) {
                         (Some(a), Some(b)) => a == b,
                         (None, None) => output.text_content() == Some(content),
                         _ => false,

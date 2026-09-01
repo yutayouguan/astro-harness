@@ -90,19 +90,21 @@ Harness 负责构造 scaffold，但 scaffold 不等于 Harness。当前边界为
 ```text
 PromptContract {
   base_instructions,
-  context: Vec<developer messages>,
+  context: Vec<ResponseItem>,
   context_sections,
   usage,
 }
 
-CompletionRequest {
-  messages,
+ResponsesRequest {
+  instructions: base_instructions,
+  input: Vec<ResponseItem>,
   tools: Vec<ToolDefinition>,
   ...
 }
 ```
 
-稳定基础指令、带角色动态上下文和原生工具 schema 是三个边界，不应重新拼成一段无类型字符串。
+历史 `CompletionRequest` 已删除。稳定基础指令、带角色动态上下文和原生工具
+schema 是三个边界，不应重新拼成一段无类型字符串，也不应先降级为 `Message`。
 
 ## 6. Provider step
 

@@ -17,7 +17,7 @@ use chrono::Utc;
 use cron::{cron_db_path, CronJob, CronRunDb, NewCronRun};
 use home::default_memory_dir;
 use providers::Usage;
-use session::{SessionStore, StoredMessage};
+use session::{SessionStore, StoredResponseItem};
 use types::ChatTarget;
 use uuid::Uuid;
 
@@ -71,23 +71,12 @@ enum SessionRunOutcome {
     NoSession,
 }
 
-fn assistant_has_tool_calls(m: &StoredMessage) -> bool {
-    match &m.tool_calls {
-        Some(serde_json::Value::Array(arr)) => !arr.is_empty(),
-        Some(_) => true,
-        None => false,
-    }
-}
-
-fn outcome_from_messages(msgs: &[StoredMessage]) -> SessionRunOutcome {
+fn outcome_from_messages(msgs: &[StoredResponseItem]) -> SessionRunOutcome {
     for m in msgs.iter().rev() {
-        match m.role.as_str() {
-            "tool" => continue,
-            "assistant" => {
-                if assistant_has_tool_calls(m) {
-                    return SessionRunOutcome::Incomplete;
-                }
-                let text = m.content.as_deref().unwrap_or("").trim();
+        match &m.item {
+            agent_protocol::ResponseItem::Message { role, .. } if role == "assistant" => {
+                let content = m.text();
+                let text = content.trim();
                 if text.is_empty() {
                     continue;
                 }
@@ -95,7 +84,14 @@ fn outcome_from_messages(msgs: &[StoredMessage]) -> SessionRunOutcome {
                     output: text.to_string(),
                 };
             }
-            "user" => return SessionRunOutcome::Incomplete,
+            agent_protocol::ResponseItem::FunctionCall { .. }
+            | agent_protocol::ResponseItem::CustomToolCall { .. }
+            | agent_protocol::ResponseItem::ToolSearchCall { .. } => {
+                return SessionRunOutcome::Incomplete;
+            }
+            agent_protocol::ResponseItem::Message { role, .. } if role == "user" => {
+                return SessionRunOutcome::Incomplete;
+            }
             _ => continue,
         }
     }
@@ -112,7 +108,7 @@ async fn session_run_outcome(
     let Some(store) = sessions else {
         return SessionRunOutcome::NoSession;
     };
-    match store.get_messages(sid).await {
+    match store.get_response_items(sid).await {
         Ok(msgs) => outcome_from_messages(&msgs),
         Err(_) => SessionRunOutcome::NoSession,
     }
@@ -808,29 +804,45 @@ fn summary_from_output(output: &str) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
-    use session::NewMessage;
+    use session::NewResponseItem;
     use tempfile::TempDir;
 
     fn stored(
         role: &str,
         content: Option<&str>,
         tool_calls: Option<serde_json::Value>,
-    ) -> StoredMessage {
-        StoredMessage {
+    ) -> StoredResponseItem {
+        let item = if tool_calls.is_some() {
+            agent_protocol::ResponseItem::FunctionCall {
+                id: None,
+                name: "test".into(),
+                namespace: None,
+                arguments: "{}".into(),
+                encrypted_function_args: None,
+                call_id: "1".into(),
+                internal_chat_message_metadata_passthrough: None,
+            }
+        } else if role == "tool" {
+            agent_protocol::ResponseItem::FunctionCallOutput {
+                id: None,
+                call_id: None,
+                name: None,
+                namespace: None,
+                output: agent_protocol::FunctionCallOutputPayload::from_text(
+                    content.unwrap_or_default().into(),
+                ),
+                internal_chat_message_metadata_passthrough: None,
+            }
+        } else {
+            agent_protocol::ResponseItem::text_message(role, content.unwrap_or_default())
+        };
+        StoredResponseItem {
             id: 0,
             session_id: "s".into(),
-            role: role.into(),
-            content: content.map(str::to_string),
-            compressed_content: None,
-            tool_call_id: None,
-            tool_calls,
-            tool_name: None,
+            item,
             timestamp: 0.0,
             token_count: None,
             finish_reason: None,
-            reasoning: None,
-            reasoning_details: None,
-            media_json: None,
         }
     }
 
@@ -912,22 +924,14 @@ mod tests {
             .await
             .unwrap();
         store.ensure_session("sess-ok", "cron").await.unwrap();
+        let user = agent_protocol::ResponseItem::user_text("do it");
         store
-            .append_message(NewMessage {
-                session_id: "sess-ok",
-                role: "user",
-                content: Some("do it"),
-                ..NewMessage::empty("sess-ok", "user")
-            })
+            .append_response_item(NewResponseItem::new("sess-ok", &user))
             .await
             .unwrap();
+        let assistant = agent_protocol::ResponseItem::assistant_text("晨报完成");
         store
-            .append_message(NewMessage {
-                session_id: "sess-ok",
-                role: "assistant",
-                content: Some("晨报完成"),
-                ..NewMessage::empty("sess-ok", "assistant")
-            })
+            .append_response_item(NewResponseItem::new("sess-ok", &assistant))
             .await
             .unwrap();
 
@@ -1009,22 +1013,14 @@ mod tests {
         .await
         .unwrap();
 
+        let user = agent_protocol::ResponseItem::user_text("retry");
         store
-            .append_message(NewMessage {
-                session_id: "sess-later",
-                role: "user",
-                content: Some("retry"),
-                ..NewMessage::empty("sess-later", "user")
-            })
+            .append_response_item(NewResponseItem::new("sess-later", &user))
             .await
             .unwrap();
+        let assistant = agent_protocol::ResponseItem::assistant_text("重新生成后的结果");
         store
-            .append_message(NewMessage {
-                session_id: "sess-later",
-                role: "assistant",
-                content: Some("重新生成后的结果"),
-                ..NewMessage::empty("sess-later", "assistant")
-            })
+            .append_response_item(NewResponseItem::new("sess-later", &assistant))
             .await
             .unwrap();
 

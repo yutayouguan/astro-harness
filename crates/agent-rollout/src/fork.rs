@@ -156,19 +156,12 @@ fn fork_meta(
 mod tests {
     use chrono::TimeZone;
     use tempfile::TempDir;
-    use types::message::Message;
 
     use super::fork_rollout;
     use crate::{find_rollout, new_rollout_path, read_rollout, RolloutItem, RolloutRecorder};
 
-    fn response(message: Message) -> RolloutItem {
-        RolloutItem::ResponseItem(
-            crate::response_items_from_message(&message, None)
-                .unwrap()
-                .into_iter()
-                .next()
-                .unwrap(),
-        )
+    fn response(role: &str, text: &str) -> RolloutItem {
+        RolloutItem::ResponseItem(agent_protocol::ResponseItem::text_message(role, text))
     }
 
     fn now() -> chrono::DateTime<chrono::Utc> {
@@ -181,18 +174,18 @@ mod tests {
         recorder
             .record(vec![
                 RolloutItem::SessionMeta(serde_json::json!({"thread_id": "source"})),
-                response(Message::user("first")),
+                response("user", "first"),
                 RolloutItem::WorldState(serde_json::json!({
                     "full": true,
                     "state": {"astro.prompt_context.v1": {"version": 2, "messages": []}},
                 })),
-                response(Message::assistant("first answer")),
-                response(Message::user("second")),
+                response("assistant", "first answer"),
+                response("user", "second"),
                 RolloutItem::WorldState(serde_json::json!({
                     "full": false,
                     "state": {"astro.prompt_context.v1": {"version": 2, "messages": []}},
                 })),
-                response(Message::assistant("second answer")),
+                response("assistant", "second answer"),
             ])
             .await
             .unwrap();
@@ -222,11 +215,17 @@ mod tests {
         assert_eq!(meta["forked_from"]["thread_id"], "source");
         assert_eq!(meta["ephemeral"], true);
         assert_eq!(meta["exclude_turns"], true);
-        let copied_messages = crate::reconstruct_messages(&items).unwrap();
+        let copied_messages = items
+            .iter()
+            .filter_map(|item| match item {
+                RolloutItem::ResponseItem(item) if item.role().is_some() => Some(item),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
         assert_eq!(
             copied_messages
                 .iter()
-                .map(|entry| entry.message.content_text())
+                .map(|item| item.text())
                 .collect::<Vec<_>>(),
             vec!["first", "first answer"]
         );

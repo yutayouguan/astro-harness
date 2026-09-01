@@ -18,7 +18,7 @@ use crate::runtime::Session;
 use crate::streaming::multi_turn::{
     install_multi_turn_task, InstalledMultiTurn, ThreadTurnTaskArgs,
 };
-use crate::streaming::ChatOverride;
+use crate::streaming::ResponsesOverride;
 use agent_protocol::{Event, EventMsg, TurnInput};
 
 #[derive(Debug)]
@@ -44,55 +44,56 @@ pub async fn run_background_multi_turn_controlled(
     input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled_with_chat(session, targets, input, control, None).await
+    run_background_multi_turn_controlled_with_responses(session, targets, input, control, None)
+        .await
 }
 
-pub(crate) async fn run_background_multi_turn_controlled_with_chat(
+pub(crate) async fn run_background_multi_turn_controlled_with_responses(
     session: Arc<Session>,
     targets: Vec<ChatTarget>,
     input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled_with_chat_and_system(
+    run_background_multi_turn_controlled_with_responses_and_system(
         session,
         targets,
         input,
         None,
         None,
         control,
-        chat_override,
+        responses_override,
     )
     .await
 }
 
-pub(crate) async fn run_background_prepared_turn_controlled_with_chat(
+pub(crate) async fn run_background_prepared_turn_controlled_with_responses(
     session: Arc<Session>,
     targets: Vec<ChatTarget>,
     prompt: crate::prompt::PromptContract,
     control: Option<Arc<subagents::AgentThreadControl>>,
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled_with_chat_and_system(
+    run_background_multi_turn_controlled_with_responses_and_system(
         session,
         targets,
         Vec::new(),
         None,
         Some(prompt),
         control,
-        chat_override,
+        responses_override,
     )
     .await
 }
 
-async fn run_background_multi_turn_controlled_with_chat_and_system(
+async fn run_background_multi_turn_controlled_with_responses_and_system(
     session: Arc<Session>,
     targets: Vec<ChatTarget>,
     input: Vec<TurnInput>,
     system_prompt: Option<String>,
     prompt: Option<crate::prompt::PromptContract>,
     control: Option<Arc<subagents::AgentThreadControl>>,
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 ) -> anyhow::Result<(String, Usage)> {
     let (base_config, message_start) = {
         let agent = session.as_ref();
@@ -124,7 +125,7 @@ async fn run_background_multi_turn_controlled_with_chat_and_system(
         prompt,
         pause,
         hitl_gate: None,
-        chat_override,
+        responses_override,
     })
     .await;
     let InstalledMultiTurn {
@@ -292,13 +293,13 @@ async fn latest_assistant_text(session: &Arc<Session>, message_start: usize) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::run_multi_turn_events_with_chat_fn;
+    use crate::streaming::run_multi_turn_events_with_responses_fn;
     use agent_protocol::{
         ErrorEvent, Event, EventMsg, ItemEvent, TokenCountEvent, TurnCompleteEvent,
     };
     use agent_protocol::{ToolItem, ToolStatus, TurnItem};
 
-    fn pending_chat() -> ChatOverride {
+    fn pending_responses() -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(futures::stream::pending()) as providers::CompletionStream)
@@ -306,7 +307,7 @@ mod tests {
         })
     }
 
-    fn completed_chat() -> ChatOverride {
+    fn completed_responses() -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(futures::stream::iter(vec![
@@ -466,7 +467,7 @@ mod tests {
             base_url: "http://127.0.0.1.invalid".into(),
         };
 
-        let run = run_background_multi_turn_controlled_with_chat(
+        let run = run_background_multi_turn_controlled_with_responses(
             session,
             vec![target],
             vec![TurnInput {
@@ -475,7 +476,7 @@ mod tests {
                 client_message_id: None,
             }],
             Some(Arc::clone(&control)),
-            Some(pending_chat()),
+            Some(pending_responses()),
         );
         let interrupt = async {
             tokio::task::yield_now().await;
@@ -496,9 +497,9 @@ mod tests {
                 .unwrap(),
         );
         let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
-        let old_run = tokio::spawn(run_multi_turn_events_with_chat_fn(
+        let old_run = tokio::spawn(run_multi_turn_events_with_responses_fn(
             Arc::clone(&session),
-            pending_chat(),
+            pending_responses(),
             ProviderConfig::default(),
             "system".into(),
             PauseControl::new(),
@@ -523,7 +524,7 @@ mod tests {
 
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(2),
-            run_background_multi_turn_controlled_with_chat(
+            run_background_multi_turn_controlled_with_responses(
                 Arc::clone(&session),
                 vec![test_target()],
                 vec![TurnInput {
@@ -532,7 +533,7 @@ mod tests {
                     client_message_id: None,
                 }],
                 None,
-                Some(completed_chat()),
+                Some(completed_responses()),
             ),
         )
         .await
@@ -558,7 +559,7 @@ mod tests {
 
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(1),
-            run_background_multi_turn_controlled_with_chat(
+            run_background_multi_turn_controlled_with_responses(
                 session,
                 vec![test_target()],
                 vec![TurnInput {
@@ -567,7 +568,7 @@ mod tests {
                     client_message_id: None,
                 }],
                 None,
-                Some(completed_chat()),
+                Some(completed_responses()),
             ),
         )
         .await
@@ -600,7 +601,7 @@ mod tests {
             prompt: None,
             pause: PauseControl::new(),
             hitl_gate: None,
-            chat_override: Some(completed_chat()),
+            responses_override: Some(completed_responses()),
         })
         .await
         {

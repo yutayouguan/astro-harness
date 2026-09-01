@@ -110,23 +110,15 @@ pub struct AgentTreeSnapshotV2 {
     pub activity_sequence: u64,
 }
 
-/// 桌面控制面专用的完整 Session 时间线行（保留全部结构化字段）。
+/// 桌面控制面专用的原生 Responses 时间线项。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentThreadMessageV2 {
     pub id: i64,
     pub session_id: String,
-    pub role: String,
-    pub content: Option<String>,
-    pub compressed_content: Option<String>,
-    pub tool_call_id: Option<String>,
-    pub tool_calls: Option<serde_json::Value>,
-    pub tool_name: Option<String>,
+    pub item: agent_protocol::ResponseItem,
     pub timestamp: f64,
     pub token_count: Option<i64>,
     pub finish_reason: Option<String>,
-    pub reasoning: Option<String>,
-    pub reasoning_details: Option<serde_json::Value>,
-    pub media_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

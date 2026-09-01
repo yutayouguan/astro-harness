@@ -195,7 +195,7 @@ async fn backfill_artifact_sessions(db: &artifacts::ArtifactDb) {
         Ok(s) => s,
         Err(_) => return,
     };
-    let media_msgs = match sessions.media_messages().await {
+    let media_msgs = match sessions.media_response_items().await {
         Ok(v) => v,
         Err(_) => return,
     };

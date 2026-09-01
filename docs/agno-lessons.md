@@ -57,7 +57,7 @@
 - `ToolEntry.needs_confirmation` / `stop_after_tool_call`：对齐 Agno Function 元数据；HITL 工具默认 `needs_confirmation`
 - `ToolRegistry::any_needs_confirmation` / `any_stop_after`：`multi_turn` 串行门控与「执行后结束 run」
 - `agent::streaming::run_state::{RunPhase, RunRequirements, RunState}`：派生 `RunFinished.outcome_type`（含 HITL）
-- `prompt::sanitize::sanitize_tool_pairs`：发送 Provider / hydrate session 前清理悬挂 tool_calls 与孤儿 tool 消息
+- `prompt::sanitize::sanitized_response_items`：保持原生 call/output item 序列，发送 Provider 前仅清理悬挂的工具对
 - `is_interactive_tool` 已 deprecated；串行门控以 `needs_confirmation` 为准（§三）
 - **未做**：工具级 hooks 仍走现有 hooks crate（刻意保留）
 

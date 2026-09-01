@@ -4,12 +4,29 @@ use agent_protocol::{
     build_hook_prompt_message, parse_hook_prompt_message, ContentItem, HookPromptFragment,
     HookPromptItem, ResponseItem,
 };
-use session::{ConversationStore, NewMessage};
+use session::{ConversationStore, NewResponseItem};
 
 use super::AgentLoop;
 
 impl AgentLoop {
     pub(crate) async fn persist_response_items(
+        &self,
+        items: &[agent_protocol::ResponseItem],
+    ) -> anyhow::Result<Vec<i64>> {
+        self.services
+            .sessions
+            .ensure_session(&self.session_id, "tauri")
+            .await?;
+        let ids = self
+            .services
+            .sessions
+            .append_response_items(&self.session_id, items)
+            .await?;
+        self.persist_rollout_items(items).await?;
+        Ok(ids)
+    }
+
+    pub(crate) async fn persist_rollout_items(
         &self,
         items: &[agent_protocol::ResponseItem],
     ) -> anyhow::Result<()> {
@@ -47,9 +64,6 @@ impl AgentLoop {
     /// partially streamed assistant response may already exist, while the next model request
     /// still needs an unambiguous signal that the previous turn did not complete normally.
     pub(crate) async fn record_interrupted_turn_marker(&self) -> anyhow::Result<()> {
-        // Preserve Astro's alternating user/assistant projection invariant before adding the
-        // richer developer marker to the canonical provider history.
-        self.ensure_assistant_interrupted_boundary().await?;
         let item = ResponseItem::Message {
             id: None,
             role: "developer".into(),
@@ -77,27 +91,22 @@ impl AgentLoop {
         if self
             .services
             .sessions
-            .get_messages(&self.session_id)
+            .get_response_items(&self.session_id)
             .await?
             .last()
-            .is_some_and(|message| message.role == "user")
+            .is_some_and(|item| item.role() == Some("user"))
         {
-            self.services
-                .sessions
-                .append_message(NewMessage {
-                    content: Some(content),
-                    finish_reason: Some(finish_reason),
-                    ..NewMessage::empty(&self.session_id, "assistant")
-                })
-                .await?;
-        }
-        if self
-            .clone_history()
-            .await
-            .last()
-            .is_some_and(|message| message.role == types::message::Role::User)
-        {
-            let items = response_items_for_assistant(content, &[], None, None)?;
+            let items = vec![ResponseItem::Message {
+                id: None,
+                role: "assistant".into(),
+                content: vec![ContentItem::OutputText {
+                    text: content.to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: Some(serde_json::json!({
+                    "astro_finish_reason": finish_reason,
+                })),
+            }];
             self.persist_response_items(&items).await?;
             self.record_response_items_unlocked(items);
         }
@@ -120,7 +129,7 @@ impl AgentLoop {
 
     /// 将 assistant 回复（可含 tool_calls / reasoning / reasoning_details）写入记忆与会话镜像。
     ///
-    /// SQLite 仅保留 UI/检索投影；rollout 与运行时直接保存原生 ResponseItem。
+    /// SQLite 索引、rollout 与运行时均保存同一份原生 ResponseItem。
     pub async fn record_assistant_message_with_tools(
         &self,
         content: &str,
@@ -146,32 +155,13 @@ impl AgentLoop {
 
     pub(crate) async fn record_assistant_response_items(
         &self,
-        content: &str,
-        tool_calls: Option<Vec<types::message::ToolCall>>,
-        reasoning: Option<&str>,
-        reasoning_details: Option<serde_json::Value>,
+        _content: &str,
+        _tool_calls: Option<Vec<types::message::ToolCall>>,
+        _reasoning: Option<&str>,
+        _reasoning_details: Option<serde_json::Value>,
         response_items: Vec<ResponseItem>,
     ) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
-        let tool_calls_json = match &tool_calls {
-            Some(calls) if !calls.is_empty() => Some(serde_json::to_value(calls)?),
-            _ => None,
-        };
-        let reasoning = reasoning.filter(|r| !r.is_empty());
-        self.services
-            .sessions
-            .ensure_session(&self.session_id, "tauri")
-            .await?;
-        self.services
-            .sessions
-            .append_message(NewMessage {
-                content: Some(content),
-                tool_calls: tool_calls_json,
-                reasoning,
-                reasoning_details: reasoning_details.clone(),
-                ..NewMessage::empty(&self.session_id, "assistant")
-            })
-            .await?;
         self.persist_response_items(&response_items).await?;
         self.record_response_items_unlocked(response_items);
         Ok(())
@@ -213,7 +203,7 @@ impl AgentLoop {
     ) -> anyhow::Result<()> {
         self.services
             .sessions
-            .patch_last_assistant_reasoning_details(&self.session_id, &reasoning_details)
+            .patch_last_assistant_metadata(&self.session_id, &reasoning_details)
             .await
     }
 
@@ -224,17 +214,6 @@ impl AgentLoop {
     /// `SessionStore` 保持一致（角色交替），避免连续 assistant 触发 Provider 400。
     pub async fn record_user_message(&self, content: &str) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.services
-            .sessions
-            .ensure_session(&self.session_id, "tauri")
-            .await?;
-        self.services
-            .sessions
-            .append_message(NewMessage {
-                content: Some(content),
-                ..NewMessage::empty(&self.session_id, "user")
-            })
-            .await?;
         let item = ResponseItem::Message {
             id: None,
             role: "user".into(),
@@ -252,9 +231,7 @@ impl AgentLoop {
 
     /// Persist Stop-hook feedback as the native Responses user item used by Codex.
     ///
-    /// The relational session mirror keeps the legacy readable text projection for UI/history
-    /// compatibility, while canonical provider history retains one attributed XML fragment per
-    /// hook run so the next Responses request can correlate feedback to its handler.
+    /// The same attributed native item is written to the rollout and SQLite index.
     pub(crate) async fn record_hook_prompt(
         &self,
         fragments: Vec<HookPromptFragment>,
@@ -262,37 +239,18 @@ impl AgentLoop {
         let Some(item) = build_hook_prompt_message(&fragments) else {
             return Ok(None);
         };
-        let (hook_prompt, compatibility_content) = match &item {
+        let hook_prompt = match &item {
             ResponseItem::Message { id, content, .. } => {
                 let prompt =
                     parse_hook_prompt_message(id.as_deref(), content).ok_or_else(|| {
                         anyhow::anyhow!("failed to parse the generated hook prompt message")
                     })?;
-                let text = content
-                    .iter()
-                    .filter_map(|item| match item {
-                        ContentItem::InputText { text } => Some(text.as_str()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n\n");
-                (prompt, text)
+                prompt
             }
             _ => unreachable!("hook prompt builder must return a message"),
         };
 
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.services
-            .sessions
-            .ensure_session(&self.session_id, "tauri")
-            .await?;
-        self.services
-            .sessions
-            .append_message(NewMessage {
-                content: Some(&compatibility_content),
-                ..NewMessage::empty(&self.session_id, "user")
-            })
-            .await?;
         self.persist_response_items(std::slice::from_ref(&item))
             .await?;
         self.record_response_items_unlocked(vec![item]);
@@ -371,60 +329,13 @@ impl AgentLoop {
                 media.push(asset.clone());
             }
         }
-        let media_owned = if media.is_empty() {
-            None
-        } else {
-            Some(serde_json::to_string(&media)?)
-        };
         self.services
             .sessions
             .ensure_session(&self.session_id, "tauri")
             .await?;
-        let msg_id = self
-            .services
-            .sessions
-            .append_message(NewMessage {
-                content: Some(content),
-                tool_call_id,
-                tool_name,
-                media_json: media_owned.as_deref(),
-                ..NewMessage::empty(&self.session_id, "tool")
-            })
-            .await?;
-
-        self.register_media_artifacts(&media, msg_id).await;
-
-        let mut spill_view: Option<String> = None;
-        if content.len() >= types::DEFAULT_SPILL_THRESHOLD_BYTES {
-            match types::write_tool_spill(self.memory_dir(), &self.session_id, msg_id, content) {
-                Ok(path) => {
-                    let rel = types::spill_path_for_prompt(self.memory_dir(), &path);
-                    let view = types::make_spill_view(tool_name, &rel, content.len(), content);
-                    if self
-                        .services
-                        .sessions
-                        .update_message_compressed_content(msg_id, Some(&view))
-                        .await
-                        .is_ok()
-                    {
-                        spill_view = Some(view);
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "tool spill write failed; keeping inline content");
-                }
-            }
-        }
-
         let output = agent_protocol::FunctionCallOutputPayload::from_text(content.to_string());
-        let metadata = (!media.is_empty() || spill_view.is_some()).then(|| {
+        let metadata = (!media.is_empty()).then(|| {
             let mut metadata = serde_json::Map::new();
-            if let Some(view) = spill_view {
-                metadata.insert(
-                    "astro_compressed_output".into(),
-                    serde_json::Value::String(view),
-                );
-            }
             if !media.is_empty() {
                 metadata.insert(
                     "astro_media".into(),
@@ -433,7 +344,7 @@ impl AgentLoop {
             }
             serde_json::Value::Object(metadata)
         });
-        let item = match tool_name {
+        let mut item = match tool_name {
             Some("tool_search") => ResponseItem::ToolSearchOutput {
                 id: None,
                 call_id: tool_call_id.map(str::to_string),
@@ -460,11 +371,57 @@ impl AgentLoop {
                 internal_chat_message_metadata_passthrough: metadata,
             },
         };
-        self.persist_response_items(std::slice::from_ref(&item))
+        let item_id = self
+            .services
+            .sessions
+            .append_response_item(NewResponseItem::new(&self.session_id, &item))
+            .await?;
+        self.register_media_artifacts(&media, item_id).await;
+        if content.len() >= types::DEFAULT_SPILL_THRESHOLD_BYTES {
+            match types::write_tool_spill(self.memory_dir(), &self.session_id, item_id, content) {
+                Ok(path) => {
+                    let rel = types::spill_path_for_prompt(self.memory_dir(), &path);
+                    let view = types::make_spill_view(tool_name, &rel, content.len(), content);
+                    self.services
+                        .sessions
+                        .update_response_item_compressed_content(item_id, Some(&view))
+                        .await?;
+                    attach_response_item_metadata(
+                        &mut item,
+                        "astro_compressed_output",
+                        serde_json::Value::String(view),
+                    )?;
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "tool spill write failed; keeping inline content");
+                }
+            }
+        }
+        self.persist_rollout_items(std::slice::from_ref(&item))
             .await?;
         self.record_response_items_unlocked(vec![item]);
         Ok(())
     }
+}
+
+fn attach_response_item_metadata(
+    item: &mut ResponseItem,
+    key: &str,
+    value: serde_json::Value,
+) -> anyhow::Result<()> {
+    let mut encoded = serde_json::to_value(&*item)?;
+    let object = encoded
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("response item must serialize as an object"))?;
+    let metadata = object
+        .entry("internal_chat_message_metadata_passthrough")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    metadata
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("response item metadata must be an object"))?
+        .insert(key.to_string(), value);
+    *item = serde_json::from_value(encoded)?;
+    Ok(())
 }
 
 fn response_items_for_assistant(

@@ -5,7 +5,7 @@
 //! - 带角色的动态上下文；
 //! - 原生工具 schema（由请求管线持有，不在此处渲染）。
 
-use providers::types::message::Message as ProviderMessage;
+use agent_protocol::ResponseItem;
 use serde::{Deserialize, Serialize};
 
 use crate::prompt::context::{DynamicContext, StaticContext};
@@ -47,7 +47,7 @@ pub struct PromptContract {
     /// 通过 Provider 专用的 instructions/system 字段发送的稳定指令。
     pub base_instructions: String,
     /// 以显式 developer/user 消息保持的动态上下文。
-    pub context: Vec<ProviderMessage>,
+    pub context: Vec<ResponseItem>,
     /// 稳定的 source 标识，用于渲染模型可见的 world-state diff。
     pub context_sections: Vec<PromptContextSection>,
     /// 共享预算分配后各 source 的精确字符用量。
@@ -81,8 +81,9 @@ impl PromptContract {
         }
         for message in &self.context {
             let (role, content) = match message {
-                ProviderMessage::Developer { content } => ("developer", content.as_str()),
-                ProviderMessage::User { .. } => ("user", message.text_content()),
+                ResponseItem::Message { role, .. } if role == "developer" || role == "user" => {
+                    (role.as_str(), message.text())
+                }
                 _ => continue,
             };
             if !content.trim().is_empty() {
@@ -267,10 +268,10 @@ pub(crate) fn assemble_prompt_contract_with_usage(
 
     let mut context = Vec::with_capacity(2);
     if !developer.body.is_empty() {
-        context.push(ProviderMessage::developer(developer.body.clone()));
+        context.push(ResponseItem::developer_text(developer.body.clone()));
     }
     if !user.body.is_empty() {
-        context.push(ProviderMessage::user_text(user.body.clone()));
+        context.push(ResponseItem::user_text(user.body.clone()));
     }
     let context_sections = developer
         .sources
@@ -324,8 +325,6 @@ pub fn assemble_prompt_contract(
 mod tests {
     use super::*;
     use crate::prompt::prompt_builder::TOOL_GUIDANCE;
-    use providers::types::message::Role;
-
     fn runtime<'a>(mode: &'a str, mcp: &'a str) -> RuntimePromptLayers<'a> {
         RuntimePromptLayers {
             base_guidance: TOOL_GUIDANCE,
@@ -375,7 +374,7 @@ mod tests {
             assert!(!contract.base_instructions.contains(dynamic_text));
         }
         assert_eq!(contract.context.len(), 2);
-        assert_eq!(contract.context[0].role(), Role::Developer);
+        assert_eq!(contract.context[0].role(), Some("developer"));
         assert!(contract.context[0]
             .text_content()
             .contains("DEVELOPER_POLICY"));
@@ -392,7 +391,7 @@ mod tests {
             developer.find("MCP_INSTRUCTIONS").unwrap()
                 < developer.find("DEVELOPER_POLICY").unwrap()
         );
-        assert_eq!(contract.context[1].role(), Role::User);
+        assert_eq!(contract.context[1].role(), Some("user"));
         assert!(contract.context[1].text_content().contains("PROJECT_RULES"));
         assert!(contract.context[1]
             .text_content()

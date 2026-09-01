@@ -13,4 +13,3 @@ pub use context_source::{
     DEFAULT_CONTEXT_BUDGET_CHARS,
 };
 pub use contract::PromptContract;
-pub use sanitize::{sanitize_tool_pairs, sanitized_tool_pairs};

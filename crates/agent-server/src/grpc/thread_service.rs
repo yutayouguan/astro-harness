@@ -741,7 +741,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn first_load_migrates_legacy_sqlite_history_into_native_rollout_items() {
+    async fn first_load_seeds_an_empty_rollout_from_native_sqlite_history() {
         let dir = TempDir::new().expect("tempdir");
         memory::ensure_workspace(dir.path()).expect("workspace");
         let thread_id = "legacy-sqlite-history";
@@ -752,11 +752,9 @@ mod tests {
             .ensure_session(thread_id, "legacy")
             .await
             .expect("session");
+        let item = session::ResponseItem::user_text("persisted user message");
         store
-            .append_message(session::NewMessage {
-                content: Some("legacy user message"),
-                ..session::NewMessage::empty(thread_id, "user")
-            })
+            .append_response_item(session::NewResponseItem::new(thread_id, &item))
             .await
             .expect("message");
         drop(store);

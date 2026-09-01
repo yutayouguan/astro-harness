@@ -1,11 +1,11 @@
 //! SessionStore 当前 schema 与初始化。
 
 use agent_db::sqlx;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 21;
+pub const SCHEMA_VERSION: i32 = 22;
 
 const SCHEMA_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -73,62 +73,58 @@ CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_title_unique
     ON sessions(title) WHERE title IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS messages (
+CREATE TABLE IF NOT EXISTS response_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL REFERENCES sessions(id),
-    role TEXT NOT NULL,
-    content TEXT,
-    compressed_content TEXT,
-    media_json TEXT,
-    tool_call_id TEXT,
-    tool_calls TEXT,
+    item_json TEXT NOT NULL,
+    role TEXT,
+    search_text TEXT NOT NULL DEFAULT '',
     tool_name TEXT,
     timestamp REAL NOT NULL,
     token_count INTEGER,
-    finish_reason TEXT,
-    reasoning TEXT,
-    reasoning_details TEXT
+    finish_reason TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_response_items_session
+    ON response_items(session_id, timestamp, id);
 "#;
 
-const MESSAGES_FTS_DDL: &str = r#"
-CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-    content,
+const RESPONSE_ITEMS_FTS_DDL: &str = r#"
+CREATE VIRTUAL TABLE IF NOT EXISTS response_items_fts USING fts5(
+    search_text,
     tool_name,
-    tool_calls,
+    item_json,
     tokenize = 'unicode61'
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts_trigram USING fts5(
-    content,
+CREATE VIRTUAL TABLE IF NOT EXISTS response_items_fts_trigram USING fts5(
+    search_text,
     tool_name,
-    tool_calls,
+    item_json,
     tokenize = 'trigram'
 );
 
-CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
-    INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.tool_name, new.tool_calls);
-    INSERT INTO messages_fts_trigram(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.tool_name, new.tool_calls);
+CREATE TRIGGER IF NOT EXISTS response_items_fts_insert AFTER INSERT ON response_items BEGIN
+    INSERT INTO response_items_fts(rowid, search_text, tool_name, item_json)
+        VALUES (new.id, new.search_text, new.tool_name, new.item_json);
+    INSERT INTO response_items_fts_trigram(rowid, search_text, tool_name, item_json)
+        VALUES (new.id, new.search_text, new.tool_name, new.item_json);
 END;
 
 -- SQLite 3.43+ 上 contentful FTS5 的 INSERT … VALUES('delete', …) 会报 SQL logic error；
 -- 改用普通 DELETE（与 direct DELETE FROM fts 行为一致）。
-CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN
-    DELETE FROM messages_fts WHERE rowid = old.id;
-    DELETE FROM messages_fts_trigram WHERE rowid = old.id;
+CREATE TRIGGER IF NOT EXISTS response_items_fts_delete AFTER DELETE ON response_items BEGIN
+    DELETE FROM response_items_fts WHERE rowid = old.id;
+    DELETE FROM response_items_fts_trigram WHERE rowid = old.id;
 END;
 
-CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
-    DELETE FROM messages_fts WHERE rowid = old.id;
-    INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.tool_name, new.tool_calls);
-    DELETE FROM messages_fts_trigram WHERE rowid = old.id;
-    INSERT INTO messages_fts_trigram(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.tool_name, new.tool_calls);
+CREATE TRIGGER IF NOT EXISTS response_items_fts_update AFTER UPDATE ON response_items BEGIN
+    DELETE FROM response_items_fts WHERE rowid = old.id;
+    INSERT INTO response_items_fts(rowid, search_text, tool_name, item_json)
+        VALUES (new.id, new.search_text, new.tool_name, new.item_json);
+    DELETE FROM response_items_fts_trigram WHERE rowid = old.id;
+    INSERT INTO response_items_fts_trigram(rowid, search_text, tool_name, item_json)
+        VALUES (new.id, new.search_text, new.tool_name, new.item_json);
 END;
 "#;
 
@@ -139,19 +135,16 @@ impl SessionStore {
         if current == SCHEMA_VERSION {
             return self.validate_current_schema().await;
         }
-        if current == 20 {
-            self.migrate_v20_to_v21().await?;
-            return self.validate_current_schema().await;
-        }
         if current != 0 || self.has_user_tables().await? {
-            bail!(
-                "unsupported session database schema version {current}; expected {SCHEMA_VERSION}"
-            );
+            self.rebuild_schema().await?;
+            return self.validate_current_schema().await;
         }
 
         let mut tx = self.pool.begin().await?;
         sqlx::raw_sql(SCHEMA_DDL).execute(&mut *tx).await?;
-        sqlx::raw_sql(MESSAGES_FTS_DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(RESPONSE_ITEMS_FTS_DDL)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("DELETE FROM schema_version")
             .execute(&mut *tx)
             .await?;
@@ -183,39 +176,57 @@ impl SessionStore {
         .await
         .context("session database schema marker is current but sessions table is incomplete")?;
         sqlx::query(
-            "SELECT id, compressed_content, media_json, reasoning_details
-             FROM messages LIMIT 0",
+            "SELECT id, item_json, role, search_text, tool_name
+             FROM response_items LIMIT 0",
         )
         .execute(&self.pool)
         .await
-        .context("session database schema marker is current but messages table is incomplete")?;
-        sqlx::query("SELECT rowid FROM messages_fts LIMIT 0")
+        .context("session database schema marker is current but response_items table is incomplete")?;
+        sqlx::query("SELECT rowid FROM response_items_fts LIMIT 0")
             .execute(&self.pool)
             .await
             .context("session database schema marker is current but FTS tables are incomplete")?;
-        sqlx::query("SELECT rowid FROM messages_fts_trigram LIMIT 0")
+        sqlx::query("SELECT rowid FROM response_items_fts_trigram LIMIT 0")
             .execute(&self.pool)
             .await
             .context("session database schema marker is current but FTS tables are incomplete")?;
         Ok(())
     }
 
-    async fn migrate_v20_to_v21(&self) -> Result<()> {
+    async fn rebuild_schema(&self) -> Result<()> {
         let mut tx = self.pool.begin().await?;
-        sqlx::query("ALTER TABLE messages DROP COLUMN reasoning_content")
+        sqlx::query("PRAGMA foreign_keys=OFF")
             .execute(&mut *tx)
-            .await
-            .context("drop obsolete messages.reasoning_content")?;
-        sqlx::query("ALTER TABLE messages DROP COLUMN reasoning_items")
+            .await?;
+        sqlx::raw_sql(
+            "DROP TRIGGER IF EXISTS messages_fts_insert;
+             DROP TRIGGER IF EXISTS messages_fts_delete;
+             DROP TRIGGER IF EXISTS messages_fts_update;
+             DROP TRIGGER IF EXISTS response_items_fts_insert;
+             DROP TRIGGER IF EXISTS response_items_fts_delete;
+             DROP TRIGGER IF EXISTS response_items_fts_update;
+             DROP TABLE IF EXISTS messages_fts;
+             DROP TABLE IF EXISTS messages_fts_trigram;
+             DROP TABLE IF EXISTS response_items_fts;
+             DROP TABLE IF EXISTS response_items_fts_trigram;
+             DROP TABLE IF EXISTS messages;
+             DROP TABLE IF EXISTS response_items;
+             DROP TABLE IF EXISTS project_roots;
+             DROP TABLE IF EXISTS sessions;
+             DROP TABLE IF EXISTS projects;
+             DROP TABLE IF EXISTS schema_version;",
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::raw_sql(SCHEMA_DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(RESPONSE_ITEMS_FTS_DDL)
             .execute(&mut *tx)
-            .await
-            .context("drop obsolete messages.reasoning_items")?;
-        sqlx::query("ALTER TABLE messages DROP COLUMN message_items")
-            .execute(&mut *tx)
-            .await
-            .context("drop obsolete messages.message_items")?;
-        sqlx::query("UPDATE schema_version SET version = ?1")
+            .await?;
+        sqlx::query("INSERT INTO schema_version (version) VALUES (?1)")
             .bind(SCHEMA_VERSION)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("PRAGMA foreign_keys=ON")
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;

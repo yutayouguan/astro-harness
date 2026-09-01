@@ -2,11 +2,8 @@ use std::path::PathBuf;
 
 use ::session::ConversationStore;
 use agent_protocol::ResponseItem;
-use types::message::Message;
 
-/// 从 canonical rollout 直接恢复 Agent 历史。
-///
-/// 无 rollout 的老会话才从 SQLite Message 投影做一次性兼容转换。
+/// 从 canonical rollout 恢复 Agent 历史；无 rollout 时读取 SQLite 的原生 ResponseItem 索引。
 pub async fn hydrate_response_history(
     memory_dir: &std::path::Path,
     sessions: &dyn ConversationStore,
@@ -15,112 +12,26 @@ pub async fn hydrate_response_history(
     let rollout_root = memory_dir.join("sessions").join("rollouts");
     if let Some(path) = agent_rollout::find_rollout(&rollout_root, session_id)? {
         let items = agent_rollout::read_rollout(&path).await?;
-        let response_items = agent_rollout::effective_response_history(&items);
-        if !response_items.is_empty() {
-            return Ok(response_items);
+        let has_authoritative_history = items.iter().any(|item| {
+            matches!(
+                item,
+                agent_rollout::RolloutItem::ResponseItem(_)
+                    | agent_rollout::RolloutItem::Compacted(_)
+                    | agent_rollout::RolloutItem::EventMsg(
+                        agent_protocol::EventMsg::ThreadRolledBack(_)
+                    )
+            )
+        });
+        if has_authoritative_history {
+            return Ok(agent_rollout::effective_response_history(&items));
         }
     }
-
-    let stored = sessions.get_messages(session_id).await?;
-    let mut messages = Vec::with_capacity(stored.len());
-    for m in stored {
-        if let Some(msg) = stored_message_to_runtime(m)? {
-            messages.push(msg);
-        }
-    }
-    let mut response_items = Vec::new();
-    for message in &messages {
-        response_items.extend(agent_rollout::response_items_from_message(message, None)?);
-    }
-    Ok(response_items)
-}
-
-fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Option<Message>> {
-    let content = m.content.unwrap_or_default();
-    let mut msg = match m.role.as_str() {
-        "user" => {
-            // 优先从 media_json 还原附图；否则纯文本
-            let media = parse_media_json(m.media_json.as_deref());
-            if media.is_empty() {
-                Message::user(&content)
-            } else {
-                let image_urls: Vec<String> = media
-                    .iter()
-                    .filter_map(|asset| match (&asset.kind, &asset.reference) {
-                        (types::MediaKind::Image, types::MediaRef::DataUrl(url)) => {
-                            Some(url.clone())
-                        }
-                        _ => None,
-                    })
-                    .collect();
-                let mut msg = if image_urls.is_empty() {
-                    Message::user(&content)
-                } else {
-                    Message::user_with_images(&content, &image_urls)
-                };
-                // `user_with_images` 仅是兼容性 content-parts 适配器。
-                // 权威的 media 列保留了所有 kind/reference 及更丰富的元数据。
-                msg.media = media;
-                msg
-            }
-        }
-        "system" => Message::system(&content),
-        "assistant" => {
-            let tool_calls: Option<Vec<types::message::ToolCall>> = match m.tool_calls {
-                Some(v) => Some(serde_json::from_value(v)?),
-                None => None,
-            };
-            let mut msg = match tool_calls {
-                Some(calls) if !calls.is_empty() => Message::assistant_with_tools(&content, calls),
-                _ => Message::assistant(&content),
-            };
-            msg.reasoning = m.reasoning.filter(|r| !r.is_empty());
-            msg.thought_signature =
-                types::message::google_thought_signature_from_details(&m.reasoning_details);
-            msg
-        }
-        "tool" => {
-            let mut msg = match m.tool_call_id.as_deref() {
-                Some(id) => Message::tool_with_id(id, &content),
-                None => Message::tool(&content),
-            };
-            let from_col = parse_media_json(m.media_json.as_deref());
-            if !from_col.is_empty() {
-                msg.media = from_col;
-            } else {
-                let (_, media) = types::extract_tool_media(&content);
-                msg.media = media;
-            }
-            msg
-        }
-        other => {
-            tracing::warn!(role = other, "skip unknown role when hydrating session");
-            return Ok(None);
-        }
-    };
-    msg.compressed_content = m.compressed_content.or_else(|| {
-        m.finish_reason.filter(|reason| {
-            m.role == "user" && reason.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
-        })
-    });
-    // assistant 等角色若带 media_json 也还原
-    if msg.media.is_empty() {
-        let media = parse_media_json(m.media_json.as_deref());
-        if !media.is_empty() {
-            msg.media = media;
-        }
-    }
-    Ok(Some(msg))
-}
-
-fn parse_media_json(raw: Option<&str>) -> Vec<types::MediaAsset> {
-    let Some(s) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
-        return Vec::new();
-    };
-    serde_json::from_str(s).unwrap_or_else(|e| {
-        tracing::warn!(error = %e, "skip invalid media_json on hydrate");
-        Vec::new()
-    })
+    Ok(sessions
+        .get_response_items(session_id)
+        .await?
+        .into_iter()
+        .map(|stored| stored.item)
+        .collect())
 }
 
 /// 会话级项目根：`ASTRO_SESSION_WORKTREE=1` 且存在 `ASTRO_PROJECT_ROOT`（或 cwd git root）时启用。

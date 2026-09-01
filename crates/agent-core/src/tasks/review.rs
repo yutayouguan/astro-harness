@@ -82,7 +82,7 @@ impl ReviewTask {
         let history = session.clone_history().await;
         if !history
             .last()
-            .is_some_and(|message| message.role == types::message::Role::User)
+            .is_some_and(|item| item.role() == Some("user"))
         {
             session
                 .record_user_message(&format!("[astro:review]\n{request}"))
@@ -183,8 +183,8 @@ impl ReviewTask {
                 .await
                 .into_iter()
                 .rev()
-                .find(|message| message.role == types::message::Role::Assistant)
-                .map(|message| message.content_text())
+                .find(|item| item.role() == Some("assistant"))
+                .map(|item| item.text())
         } else {
             None
         };

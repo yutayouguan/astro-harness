@@ -21,15 +21,21 @@ async fn build_smart_approval_context(session: &Arc<AgentLoop>) -> Option<SmartA
     let recent: Vec<TurnSummary> = history
         .iter()
         .rev()
-        .filter_map(|msg| {
-            let role = format!("{:?}", msg.role).to_lowercase();
-            let text = msg.content_str();
+        .filter_map(|item| {
+            let role = item.role().unwrap_or_else(|| {
+                if item.is_tool_output() {
+                    "tool"
+                } else {
+                    "assistant"
+                }
+            });
+            let text = item.text();
             if text.is_empty() {
                 return None;
             }
             Some(TurnSummary {
-                role,
-                content_preview: crate::control::smart_approval::truncate_preview(text),
+                role: role.to_string(),
+                content_preview: crate::control::smart_approval::truncate_preview(&text),
             })
         })
         .collect();

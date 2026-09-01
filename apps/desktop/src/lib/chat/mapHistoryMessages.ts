@@ -4,13 +4,16 @@ import type {
   ChatActivityKind,
   ChatActivityStatus,
   ChatHistoryActivityDto,
-  ChatHistoryMessageDto,
   ChatMessage,
   ChatTimelineSegment,
+  StoredResponseItemDto,
   UiSurface,
 } from "../../types";
 import { elapsedSecSince } from "./elapsedSec.ts";
-import { isLiveActivityStatus } from "./toolActivityStatus.ts";
+import {
+  isLiveActivityStatus,
+  resolveToolActivityStatus,
+} from "./toolActivityStatus.ts";
 
 const ACTIVITY_KINDS = new Set<ChatActivityKind>([
   "tool",
@@ -30,6 +33,189 @@ const ACTIVITY_STATUSES = new Set<ChatActivityStatus>([
   "declined",
   "interrupted",
 ]);
+
+type JsonRecord = Record<string, unknown>;
+
+type HistoryBubble = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  reasoning?: string | null;
+  activities?: ChatHistoryActivityDto[];
+  segments?: ChatTimelineSegment[] | null;
+  uiSurfaces?: UiSurface[] | null;
+};
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : null;
+}
+
+function itemText(item: JsonRecord): string {
+  if ((item.type === "message" || item.type === "agent_message") && Array.isArray(item.content)) {
+    return item.content
+      .map((part) => asRecord(part)?.text)
+      .filter((text): text is string => typeof text === "string")
+      .join("\n");
+  }
+  if (item.type === "reasoning") {
+    return [...(Array.isArray(item.content) ? item.content : []), ...(Array.isArray(item.summary) ? item.summary : [])]
+      .map((part) => asRecord(part)?.text)
+      .filter((text): text is string => typeof text === "string")
+      .join("\n");
+  }
+  if (typeof item.output === "string") return item.output;
+  if (Array.isArray(item.output)) {
+    return item.output
+      .map((part) => asRecord(part)?.text)
+      .filter((text): text is string => typeof text === "string")
+      .join("\n");
+  }
+  if (item.type === "tool_search_output" && Array.isArray(item.tools)) {
+    return JSON.stringify(item.tools);
+  }
+  return "";
+}
+
+function itemMetadata(item: JsonRecord): JsonRecord | null {
+  return asRecord(item.internal_chat_message_metadata_passthrough);
+}
+
+function mediaFromMetadata(metadata: JsonRecord | null): ChatHistoryActivityDto["media"] {
+  const raw = metadata?.astro_media;
+  if (!Array.isArray(raw)) return undefined;
+  const media = raw.flatMap((entry) => {
+    const asset = asRecord(entry);
+    const reference = asRecord(asset?.reference);
+    const path = reference?.workspace_path ?? reference?.data_url ?? reference?.remote_uri;
+    let kind = asset?.kind;
+    if (kind === "file" && typeof path === "string" && /\.html?$/i.test(path)) kind = "html";
+    if (!(["image", "video", "audio", "html"] as unknown[]).includes(kind) || typeof path !== "string" || !path) return [];
+    return [{ kind: kind as "image" | "video" | "audio" | "html", path }];
+  });
+  return media.length > 0 ? media : undefined;
+}
+
+function responseItemsToBubbles(items: StoredResponseItemDto[]): HistoryBubble[] {
+  const bubbles: HistoryBubble[] = [];
+  const ensureAssistant = (id: string): HistoryBubble => {
+    const last = bubbles[bubbles.length - 1];
+    if (last?.role === "assistant") return last;
+    const next: HistoryBubble = { id, role: "assistant", content: "", activities: [] };
+    bubbles.push(next);
+    return next;
+  };
+  const attachOutput = (
+    id: string,
+    callId: string | undefined,
+    title: string | undefined,
+    output: string,
+    media: ChatHistoryActivityDto["media"],
+    status: ChatActivityStatus,
+  ) => {
+    const assistant = ensureAssistant(id);
+    const activity = callId
+      ? assistant.activities?.find((candidate) => candidate.id === callId)
+      : assistant.activities?.find((candidate) => candidate.output == null);
+    if (activity) {
+      if (callId) activity.id = callId;
+      if (title) activity.title = title;
+      activity.output = output;
+      activity.status = status;
+      if (media) activity.media = media;
+      return;
+    }
+    assistant.activities ??= [];
+    assistant.activities.push({
+      id: callId ?? "unknown",
+      kind: "tool",
+      title: title ?? "tool",
+      output,
+      status,
+      media,
+    });
+  };
+
+  for (const stored of items) {
+    const item = asRecord(stored.item);
+    if (!item) continue;
+    const metadata = itemMetadata(item);
+    const segments = metadata?.astro_timeline_v1 as ChatTimelineSegment[] | undefined;
+    const uiSurfaces = metadata?.astro_surfaces_v1 as UiSurface[] | undefined;
+    const media = mediaFromMetadata(metadata);
+    const type = item.type;
+    if (type === "message" && (item.role === "user" || item.role === "assistant")) {
+      bubbles.push({ id: stored.id, role: item.role, content: itemText(item), activities: [], segments, uiSurfaces });
+    } else if (type === "agent_message") {
+      bubbles.push({ id: stored.id, role: "assistant", content: itemText(item), activities: [], segments, uiSurfaces });
+    } else if (type === "reasoning") {
+      const assistant = ensureAssistant(stored.id);
+      assistant.reasoning = itemText(item) || assistant.reasoning;
+      if (segments) assistant.segments = segments;
+      if (uiSurfaces) assistant.uiSurfaces = uiSurfaces;
+    } else if (type === "function_call" || type === "custom_tool_call" || type === "tool_search_call") {
+      const assistant = ensureAssistant(stored.id);
+      const callId = typeof item.call_id === "string" ? item.call_id : stored.id;
+      const title = typeof item.name === "string" ? item.name : "tool_search";
+      const input = typeof item.arguments === "string" ? item.arguments : typeof item.input === "string" ? item.input : JSON.stringify(item.arguments ?? {});
+      assistant.activities ??= [];
+      assistant.activities.push({ id: callId, kind: "tool", title, input, status: "running" });
+    } else if (type === "local_shell_call" || type === "web_search_call") {
+      const assistant = ensureAssistant(stored.id);
+      const title = type === "local_shell_call" ? "local_shell" : "web_search";
+      const callId = typeof item.call_id === "string"
+        ? item.call_id
+        : typeof item.id === "string"
+          ? item.id
+          : stored.id;
+      const inputValue = item.action ?? {};
+      const input = typeof inputValue === "string" ? inputValue : JSON.stringify(inputValue);
+      const status = resolveToolActivityStatus(
+        typeof item.status === "string" ? item.status : "completed",
+        "",
+      );
+      assistant.activities ??= [];
+      assistant.activities.push({ id: callId, kind: "tool", title, input, status });
+    } else if (type === "image_generation_call") {
+      const result = typeof item.result === "string" ? item.result : "";
+      const imagePath = result
+        ? result.startsWith("data:")
+          ? result
+          : `data:image/png;base64,${result}`
+        : undefined;
+      attachOutput(
+        stored.id,
+        typeof item.id === "string" ? item.id : stored.id,
+        "image_generation",
+        typeof item.revised_prompt === "string" ? item.revised_prompt : "",
+        media ?? (imagePath ? [{ kind: "image", path: imagePath }] : undefined),
+        resolveToolActivityStatus(
+          typeof item.status === "string" ? item.status : "completed",
+          "",
+        ),
+      );
+    } else if (type === "function_call_output" || type === "custom_tool_call_output" || type === "tool_search_output") {
+      const output = itemText(item);
+      attachOutput(
+        stored.id,
+        typeof item.call_id === "string" ? item.call_id : undefined,
+        typeof item.name === "string"
+          ? item.name
+          : type === "tool_search_output"
+            ? "tool_search"
+            : undefined,
+        output,
+        media,
+        resolveToolActivityStatus(
+          typeof item.status === "string" ? item.status : "completed",
+          output,
+        ),
+      );
+    }
+  }
+  return bubbles;
+}
 
 function sumReasoningDurations(
   segments: ChatTimelineSegment[] | undefined,
@@ -52,9 +238,9 @@ function sumReasoningDurations(
 
 /** 同轮多段 assistant（工具循环）合并为一条气泡，取最完整 timeline。 */
 export function coalesceConsecutiveAssistants(
-  messages: ChatHistoryMessageDto[],
-): ChatHistoryMessageDto[] {
-  const out: ChatHistoryMessageDto[] = [];
+  messages: HistoryBubble[],
+): HistoryBubble[] {
+  const out: HistoryBubble[] = [];
   for (const m of messages) {
     if (m.role !== "assistant") {
       out.push(m);
@@ -293,8 +479,8 @@ export function settleRestoredActivities(
   });
 }
 
-export function mapHistoryMessages(
-  messages: ChatHistoryMessageDto[],
+export function normalizeHistoryBubbles(
+  messages: HistoryBubble[],
 ): ChatMessage[] {
   return coalesceConsecutiveAssistants(messages)
     .filter((m) => m.role === "user" || m.role === "assistant")
@@ -338,4 +524,8 @@ export function mapHistoryMessages(
         reasoningDurationSec,
       };
     });
+}
+
+export function mapHistoryItems(items: StoredResponseItemDto[]): ChatMessage[] {
+  return normalizeHistoryBubbles(responseItemsToBubbles(items));
 }

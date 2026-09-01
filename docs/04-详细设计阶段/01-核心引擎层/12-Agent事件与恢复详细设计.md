@@ -152,22 +152,15 @@ lifecycle RPC 与新 activation 使用 per-thread terminal gate：forget 在 gat
 RPC，activate 只能在 RPC 完成后建立新代。RPC 成功和错误都会释放 gate；旧代 event 在无 active
 窗口不进入新 projection。永久 delete 可以清除所有本地恢复目标。
 
-## 7. SQLite projection 与冷启动
+## 7. SQLite 索引与冷启动
 
-`SessionStore::rebuild_messages_from_rollout` 先在事务外完成过滤与角色顺序验证，再在单个 SQLite
-事务中：创建缺失目标 session、删除该 session 的 message rows、按 rollout 顺序插入投影、更新
-目标计数并 commit。它不会全库删除；验证/插入失败会 rollback，其他 session 永不受影响；重复
-rebuild 结果幂等。
+`SessionStore::rebuild_response_items_from_rollout` 在单个 SQLite 事务中删除目标
+session 的 `response_items` rows，再按 rollout 顺序插入原生 item 并更新计数。重复
+rebuild 结果幂等；失败时 rollback，不影响其他 session。
 
-投影完整保留 user/assistant/tool、content、compressed content、tool_call_id、assistant
-tool_calls、reasoning 和 reasoning details。tool name 使用 per-id FIFO 队列按 rollout 单遍归属，
-重复 id 的 A/tool/B/tool 仍分别匹配 A/B。Message Parts 中 image/audio/video URL 转成
-`MediaAsset`，与 `message.media` 合并并按稳定 identity 去重；data URL 保留 MIME，HTTP(S)
-使用 `RemoteUri`，无法表达的 URL 显式报错。
-
-冷启动 `hydrate_history` 从 `media_json` 恢复完整 `Vec<MediaAsset>`。只有 Image + DataUrl 同时
-构造 legacy image content parts；Audio/Video 的 kind、reference、MIME、label 和 id 保持原值，
-不会被 `user_with_images` 降格。
+SQLite 保存完整 `ResponseItem` JSON，不将 call/output、reasoning 或多模态 content 压成
+`Message`。冷启动直接恢复这些 items；Desktop RPC 也直接返回 items，React 在渲染时
+临时关联 call/output 和气泡。schema v22 不兼容迁移旧 `messages` 表，旧库直接重建。
 
 ## 8. 故障与清理不变量
 

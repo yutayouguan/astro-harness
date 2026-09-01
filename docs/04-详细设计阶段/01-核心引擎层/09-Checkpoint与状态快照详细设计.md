@@ -1,6 +1,6 @@
 # Checkpoint 与状态快照详细设计
 
-> **Harness 当前基线（2026-08-29）**：当前恢复使用 `agent-rollout` append-only 事实源、稳定 item identity 和 snapshot + live boundary。SessionStore 是可重建投影。本文其余 checkpoint 表、快照覆盖和工作流断点方案若无当前源码对应，属于目标设计。
+> **Harness 当前基线（2026-09-01）**：当前恢复使用 `agent-rollout` append-only 事实源、稳定 item identity 和 snapshot + live boundary。SessionStore 是可销毁重建的原生 `ResponseItem` 索引，不再以 `StoredMessage` 作为恢复合同。本文其余 checkpoint 表、快照覆盖和工作流断点方案若无当前源码对应，属于目标设计。
 
 > 版本：v1.0 | 日期：2026-08-11 | 状态：草稿
 > 对应需求：F-12 对话分支、F-01 Agent 核心执行（崩溃恢复/回滚）、F-22 工作流暂停恢复

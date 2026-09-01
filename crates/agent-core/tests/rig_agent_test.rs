@@ -6,9 +6,9 @@ use agent::builder::AgentBuilder;
 use agent::prompt::context::{DynamicContext, StaticContext};
 use agent::prompt::prompt_builder::PromptBuilder;
 use agent::runtime::{AgentConfig, AgentLoop, MaxDepthError};
+use agent_protocol::ResponseItem;
 use home::AgentRuntimeConfig;
 use tempfile::TempDir;
-use types::message::Message;
 
 #[tokio::test]
 async fn session_fire_hook_preserves_shared_transports_and_common_payload() {
@@ -158,12 +158,15 @@ async fn test_multi_turn_max_depth() {
 async fn test_message_alternation_validation() {
     use agent::runtime::validate_message_order;
     let messages = vec![
-        Message::system("You are an assistant"),
-        Message::user("Hello"),
-        Message::assistant("Hi there!"),
+        ResponseItem::developer_text("You are an assistant"),
+        ResponseItem::user_text("Hello"),
+        ResponseItem::assistant_text("Hi there!"),
     ];
     assert!(validate_message_order(&messages));
-    let invalid = vec![Message::user("First"), Message::user("Second")];
+    let invalid = vec![
+        ResponseItem::user_text("First"),
+        ResponseItem::user_text("Second"),
+    ];
     assert!(!validate_message_order(&invalid));
 }
 

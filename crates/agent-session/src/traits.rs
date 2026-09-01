@@ -1,9 +1,10 @@
 //! Agent 运行时与会话存储之间的抽象接口。
 
+use agent_protocol::ResponseItem;
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::{BillingDelta, NewMessage, ScrolledMessage, SearchHit, StoredMessage};
+use crate::{BillingDelta, NewResponseItem, ScrolledResponseItem, SearchHit, StoredResponseItem};
 
 /// Agent 运行时与会话存储之间的抽象接口。
 ///
@@ -16,27 +17,38 @@ pub trait ConversationStore: Send + Sync {
     // ── 消息 CRUD ──
 
     /// 追加一条消息到会话。返回新消息的自增 id。
-    async fn append_message(&self, msg: NewMessage<'_>) -> Result<i64>;
+    async fn append_response_item(&self, item: NewResponseItem<'_>) -> Result<i64>;
+
+    async fn append_response_items(
+        &self,
+        session_id: &str,
+        items: &[ResponseItem],
+    ) -> Result<Vec<i64>> {
+        let mut ids = Vec::with_capacity(items.len());
+        for item in items {
+            ids.push(
+                self.append_response_item(NewResponseItem::new(session_id, item))
+                    .await?,
+            );
+        }
+        Ok(ids)
+    }
 
     /// 获取指定会话的全部消息（按时间 + id 升序）。
-    async fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>>;
+    async fn get_response_items(&self, session_id: &str) -> Result<Vec<StoredResponseItem>>;
 
     /// 更新消息的 provider-facing 压缩视图或内部交付标记。
     ///
     /// `compressed` 为 `None` 时清除压缩视图（恢复原文）。
     /// 不修改原始 `content` 列和 FTS 索引。
-    async fn update_message_compressed_content(
+    async fn update_response_item_compressed_content(
         &self,
         message_id: i64,
         compressed: Option<&str>,
     ) -> Result<()>;
 
     /// 回写本会话最近一条 assistant 的 reasoning_details。
-    async fn patch_last_assistant_reasoning_details(
-        &self,
-        session_id: &str,
-        details: &Value,
-    ) -> Result<()>;
+    async fn patch_last_assistant_metadata(&self, session_id: &str, details: &Value) -> Result<()>;
 
     // ── 会话生命周期 ──
 
@@ -51,8 +63,11 @@ pub trait ConversationStore: Send + Sync {
     // ── 上下文召回 ──
 
     /// 获取最近 `limit` 条消息（按 id 升序返回）。
-    async fn recent_messages(&self, session_id: &str, limit: usize)
-        -> Result<Vec<ScrolledMessage>>;
+    async fn recent_messages(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<ScrolledResponseItem>>;
 
     /// FTS 召回：返回与 `query` 相关的消息 id（最多 `limit` 个）。
     async fn recall_message_ids(
@@ -68,7 +83,7 @@ pub trait ConversationStore: Send + Sync {
         session_id: &str,
         around_message_id: i64,
         window_size: i64,
-    ) -> Result<Vec<ScrolledMessage>>;
+    ) -> Result<Vec<ScrolledResponseItem>>;
 
     // ── 跨会话搜索 ──
 

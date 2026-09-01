@@ -7,7 +7,6 @@ use agent_protocol::{
     ContextUsageBreakdown, ContextUsageEvent, ContextUsageItem, ContextUsageSegment,
     ContextUsageSource, DeltaEvent, EventMsg, ToolStatus,
 };
-use providers::types::message::Role as ProviderRole;
 use providers::Usage;
 
 use super::lifecycle::{
@@ -78,7 +77,7 @@ pub(super) async fn emit_context_usage(
     turn_context: &TurnContext,
     prompt: &crate::prompt::PromptContract,
     prompt_context: &[crate::prompt::context_state::PromptContextEvent],
-    history: &[types::message::Message],
+    history: &[agent_protocol::ResponseItem],
     tools: &[serde_json::Value],
 ) -> crate::prompt::context_usage::ContextUsageSnapshot {
     let agent = session.as_ref();
@@ -86,14 +85,14 @@ pub(super) async fn emit_context_usage(
     let actual_developer_chars = prompt_context
         .iter()
         .flat_map(|event| &event.messages)
-        .filter(|message| message.role() == ProviderRole::Developer)
-        .map(|message| message.text_content().chars().count())
+        .filter(|item| item.role() == Some("developer"))
+        .map(|item| item.text().chars().count())
         .sum::<usize>();
     let actual_user_chars = prompt_context
         .iter()
         .flat_map(|event| &event.messages)
-        .filter(|message| message.role() == ProviderRole::User)
-        .map(|message| message.text_content().chars().count())
+        .filter(|item| item.role() == Some("user"))
+        .map(|item| item.text().chars().count())
         .sum::<usize>();
     let current_developer_chars =
         layers.developer_chars + layers.skills_chars + layers.mcp_instruction_chars;

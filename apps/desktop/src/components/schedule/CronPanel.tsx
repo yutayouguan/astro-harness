@@ -44,7 +44,7 @@ import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
-import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
+import { mapHistoryItems } from "../../lib/chat/mapHistoryMessages";
 import type { ChatHistoryDto, ChatMessage } from "../../types";
 import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
@@ -987,7 +987,7 @@ export default function CronPanel({
             limit: 200,
           });
           if (cancelled) return;
-          setDrawerMessages(mapHistoryMessages(hist.messages ?? []));
+          setDrawerMessages(mapHistoryItems(hist.items ?? []));
           setDrawerTraceLoading(false);
         }
 

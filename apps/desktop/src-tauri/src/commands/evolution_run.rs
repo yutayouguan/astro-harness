@@ -237,18 +237,19 @@ async fn build_transcripts(
     };
     let mut out = Vec::new();
     for sid in session_ids {
-        let Ok(msgs) = store.get_messages(&sid).await else {
+        let Ok(msgs) = store.get_response_items(&sid).await else {
             continue;
         };
         let start = msgs.len().saturating_sub(10);
         let mut text = String::new();
         for m in &msgs[start..] {
-            let content = m.content.as_deref().unwrap_or("").trim();
+            let content = m.text();
+            let content = content.trim();
             if content.is_empty() {
                 continue;
             }
             let clipped: String = content.chars().take(300).collect();
-            text.push_str(&format!("{}: {}\n", m.role, clipped));
+            text.push_str(&format!("{}: {}\n", m.role().unwrap_or("unknown"), clipped));
             if text.len() > 1500 {
                 text.push_str("…(截断)\n");
                 break;
@@ -283,12 +284,13 @@ fn truncate_task(text: &str, max_chars: usize) -> String {
 }
 
 async fn session_user_task(store: &session::SessionStore, session_id: &str) -> Option<String> {
-    let msgs = store.get_messages(session_id).await.ok()?;
+    let msgs = store.get_response_items(session_id).await.ok()?;
     for m in msgs {
-        if m.role != "user" {
+        if m.role() != Some("user") {
             continue;
         }
-        let content = m.content.as_deref()?.trim();
+        let content = m.text();
+        let content = content.trim();
         if !content.is_empty() {
             return Some(truncate_task(content, 500));
         }
