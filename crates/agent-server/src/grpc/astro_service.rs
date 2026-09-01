@@ -2327,7 +2327,6 @@ impl AstroService for AstroServiceImpl {
                     initial_items: Vec::new(),
                     turn_detection,
                     noise_reduction,
-                    input_audio_transcription_model: nonempty(req.transcription_model),
                     transport,
                     version,
                     client_managed_handoffs: req.client_managed_handoffs,

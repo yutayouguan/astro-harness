@@ -224,8 +224,7 @@ message RealtimeConversationStartRequest {
   optional bool include_startup_context = 9;
   string turn_detection = 10; // disabled | server_vad | semantic_vad
   string noise_reduction = 11; // empty | near_field | far_field
-  string transcription_model = 12;
-  reserved 13;
+  reserved 12, 13;
   string connection_id = 14;
   string transport = 15; // websocket | webrtc | existing_call
   string sdp = 16; // browser offer for webrtc

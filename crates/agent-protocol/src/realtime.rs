@@ -94,8 +94,6 @@ pub struct ConversationStartParams {
     pub turn_detection: RealtimeTurnDetection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub noise_reduction: Option<RealtimeNoiseReduction>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub input_audio_transcription_model: Option<String>,
     #[serde(default)]
     pub transport: ConversationStartTransport,
     #[serde(default)]
@@ -125,7 +123,6 @@ impl Default for ConversationStartParams {
             initial_items: Vec::new(),
             turn_detection: RealtimeTurnDetection::ServerVad,
             noise_reduction: None,
-            input_audio_transcription_model: Some("gpt-4o-mini-transcribe".into()),
             transport: ConversationStartTransport::Websocket,
             version: RealtimeConversationVersion::V2,
             client_managed_handoffs: false,

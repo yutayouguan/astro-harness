@@ -7,6 +7,12 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use serde_json::{json, Value};
 
+pub const BACKGROUND_AGENT_TOOL: &str = "background_agent";
+pub const REMAIN_SILENT_TOOL: &str = "remain_silent";
+
+const BACKGROUND_AGENT_TOOL_DESCRIPTION: &str = "Send a user request to the background agent. Use this as the default action. Do not rephrase the user's ask or rewrite it in your own words; pass along the user's own words. If the background agent is idle, this starts a new task and returns the final result to the user. If the background agent is already working on a task, this sends the request as guidance to steer that previous task.";
+const REMAIN_SILENT_TOOL_DESCRIPTION: &str = "Call this when the best response is to say nothing. Use it instead of speaking after hidden system or control messages, after background agent updates, or whenever acknowledging aloud would be distracting. This tool has no user-visible effect.";
+
 pub fn session_config(model: &str, params: &ConversationStartParams) -> Value {
     match params.version {
         RealtimeConversationVersion::V2 => v2_session(model, params),
@@ -41,24 +47,23 @@ fn v2_session(model: &str, params: &ConversationStartParams) -> Value {
         RealtimeNoiseReduction::NearField => json!({"type": "near_field"}),
         RealtimeNoiseReduction::FarField => json!({"type": "far_field"}),
     });
-    let transcription = params
-        .input_audio_transcription_model
-        .as_ref()
-        .map(|model| json!({"model": model}));
     let tools = if params.client_managed_handoffs {
         Vec::new()
     } else {
         vec![
             json!({
-                "type": "function", "name": "background_agent",
-                "description": "Delegate a task that needs the full agent runtime or tools.",
+                "type": "function", "name": BACKGROUND_AGENT_TOOL,
+                "description": BACKGROUND_AGENT_TOOL_DESCRIPTION,
                 "parameters": {"type": "object", "properties": {
-                    "input_transcript": {"type": "string"}
-                }, "required": ["input_transcript"], "additionalProperties": false}
+                    "prompt": {
+                        "type": "string",
+                        "description": "The user's request to delegate to the background agent."
+                    }
+                }, "required": ["prompt"], "additionalProperties": false}
             }),
             json!({
-                "type": "function", "name": "remain_silent",
-                "description": "Finish without speaking when no response is useful.",
+                "type": "function", "name": REMAIN_SILENT_TOOL,
+                "description": REMAIN_SILENT_TOOL_DESCRIPTION,
                 "parameters": {"type": "object", "properties": {}, "additionalProperties": false}
             }),
         ]
@@ -69,7 +74,6 @@ fn v2_session(model: &str, params: &ConversationStartParams) -> Value {
         "audio": {
             "input": {
                 "format": {"type": "audio/pcm", "rate": 24_000},
-                "transcription": transcription,
                 "noise_reduction": noise_reduction,
                 "turn_detection": turn_detection
             },
@@ -195,6 +199,17 @@ pub fn handoff_complete(version: RealtimeConversationVersion, handoff_id: &str) 
     }
 }
 
+pub fn function_call_output(call_id: &str, output: &str) -> Value {
+    json!({
+        "type": "conversation.item.create",
+        "item": {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": output
+        }
+    })
+}
+
 fn context_append(handoff_id: Option<&str>, text: &str, channel: Option<&str>) -> Value {
     let mut value = if let Some(handoff_id) = handoff_id {
         json!({
@@ -234,7 +249,39 @@ mod tests {
     #[test]
     fn v2_session_exposes_handoff_tools() {
         let session = session_config("gpt-realtime", &ConversationStartParams::default());
-        assert_eq!(session["tools"][0]["name"], "background_agent");
+        assert_eq!(session["tools"][0]["name"], BACKGROUND_AGENT_TOOL);
+        assert_eq!(session["tools"][1]["name"], REMAIN_SILENT_TOOL);
+        assert!(session["audio"]["input"].get("transcription").is_none());
+        assert_eq!(
+            session["tools"][0]["parameters"]["required"],
+            json!(["prompt"])
+        );
+    }
+
+    #[test]
+    fn v3_session_uses_native_client_delegation_without_sidecar_transcription() {
+        let params = ConversationStartParams {
+            version: RealtimeConversationVersion::V3,
+            ..ConversationStartParams::default()
+        };
+        let session = session_config("gpt-live-1-codex", &params);
+        assert_eq!(session["delegation"]["type"], "client");
+        assert!(session.pointer("/audio/input/transcription").is_none());
+    }
+
+    #[test]
+    fn remain_silent_completes_with_an_empty_function_output() {
+        assert_eq!(
+            function_call_output("call-1", ""),
+            json!({
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": "call-1",
+                    "output": ""
+                }
+            })
+        );
     }
 
     #[test]

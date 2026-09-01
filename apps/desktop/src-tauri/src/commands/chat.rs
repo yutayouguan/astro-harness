@@ -427,7 +427,6 @@ pub struct StartRealtimeConversationRequest {
     pub output_modality: Option<String>,
     pub turn_detection: Option<String>,
     pub noise_reduction: Option<String>,
-    pub transcription_model: Option<String>,
     pub include_startup_context: Option<bool>,
     pub transport: Option<String>,
     pub sdp: Option<String>,
@@ -491,9 +490,6 @@ pub async fn start_realtime_conversation(
                 .turn_detection
                 .unwrap_or_else(|| "server_vad".into()),
             noise_reduction: request.noise_reduction.unwrap_or_default(),
-            transcription_model: request
-                .transcription_model
-                .unwrap_or_else(|| "gpt-4o-mini-transcribe".into()),
             connection_id: bridge.connection_id().into(),
             transport,
             sdp: request.sdp.unwrap_or_default(),

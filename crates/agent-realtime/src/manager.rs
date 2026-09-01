@@ -23,8 +23,8 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::{
-    audio_append, handoff_append, handoff_complete, parse_realtime_event, session_config,
-    session_update, speech_event, text_events,
+    audio_append, function_call_output, handoff_append, handoff_complete, parse_realtime_event,
+    session_config, session_update, speech_event, text_events,
 };
 
 type RealtimeSocket =
@@ -663,6 +663,19 @@ where
             message = websocket.next() => match message {
                 Some(Ok(Message::Text(text))) => match parse_realtime_event(task.params.version, &text) {
                     Ok(Some(event)) => {
+                        if task.params.version == RealtimeConversationVersion::V2 {
+                            if let RealtimeEvent::NoopRequested { call_id, .. } = &event {
+                                let payload = function_call_output(call_id, "");
+                                if let Err(error) = websocket
+                                    .send(Message::Text(payload.to_string().into()))
+                                    .await
+                                {
+                                    return SocketExit::Lost(format!(
+                                        "failed to acknowledge remain_silent: {error}"
+                                    ));
+                                }
+                            }
+                        }
                         if task.event_tx.send(RealtimeTransportEvent::Event(event)).await.is_err() {
                             return SocketExit::Requested(Some("event receiver closed".into()));
                         }
@@ -1117,6 +1130,86 @@ mod tests {
         ));
         manager.close().await;
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn remain_silent_is_acknowledged_without_creating_a_response() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = accept_async(stream).await.unwrap();
+            socket
+                .send(Message::Text(
+                    serde_json::json!({
+                        "type": "session.created",
+                        "session": {"id": "rt-silent"}
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .await
+                .unwrap();
+
+            let update = socket.next().await.unwrap().unwrap();
+            assert!(update.into_text().unwrap().contains("session.update"));
+            socket
+                .send(Message::Text(
+                    serde_json::json!({
+                        "type": "conversation.item.done",
+                        "item": {
+                            "id": "item-silent",
+                            "call_id": "call-silent",
+                            "type": "function_call",
+                            "name": "remain_silent",
+                            "arguments": "{}"
+                        }
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .await
+                .unwrap();
+
+            let acknowledgement = socket.next().await.unwrap().unwrap();
+            let acknowledgement: Value =
+                serde_json::from_str(&acknowledgement.into_text().unwrap()).unwrap();
+            assert_eq!(acknowledgement["type"], "conversation.item.create");
+            assert_eq!(acknowledgement["item"]["type"], "function_call_output");
+            assert_eq!(acknowledgement["item"]["call_id"], "call-silent");
+            assert_eq!(acknowledgement["item"]["output"], "");
+
+            assert!(
+                tokio::time::timeout(Duration::from_millis(100), socket.next())
+                    .await
+                    .is_err()
+            );
+        });
+        let manager = RealtimeConversationManager::default();
+        let mut connection = manager
+            .start(RealtimeConnectionConfig {
+                api_key: "test-key".into(),
+                base_url: format!("http://{address}/v1"),
+                model: "gpt-realtime".into(),
+                api_flavor: RealtimeApiFlavor::OpenAi,
+                params: ConversationStartParams::default(),
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            connection.events.recv().await,
+            Some(RealtimeTransportEvent::Event(
+                RealtimeEvent::SessionUpdated { .. }
+            ))
+        ));
+        assert!(matches!(
+            connection.events.recv().await,
+            Some(RealtimeTransportEvent::Event(
+                RealtimeEvent::NoopRequested { ref call_id, .. }
+            )) if call_id == "call-silent"
+        ));
+        server.await.unwrap();
+        manager.close().await;
     }
 
     #[tokio::test]

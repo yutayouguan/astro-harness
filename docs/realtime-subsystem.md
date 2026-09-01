@@ -78,6 +78,10 @@ Microsoft Learn 离线快照及逐项实现映射见
   `session.context.append`、delegation 事件与 BEM channel，不会对公开模型暗中升级。
 - V3 context append 以 500 UTF-8 字节为上限分片，不在多字节字符中间切断。
 
+`gpt-realtime` 原生接收文字或音频并可输出文字或音频。Astro 不要求、也不公开
+`realtime_transcription_model`：独立输入转写只是字幕旁路，不是模型理解音频的前置条件。
+V3 按 Codex 的原生 delegation 协议工作；公开 GA 会话则通过等价的内部函数工具桥接。
+
 ## Typed events
 
 Provider 事件在 parser 层收敛为 `RealtimeEvent`：
@@ -106,6 +110,15 @@ Astro turn，避免丢失首个 delta。turn 的 assistant delta 以 200 ms 窗�
 V2 用 `[BACKEND]` user message 和 function output 完成 handoff；V3 用
 `delegation.context.append` / `delegation.complete`。turn 进入终态后只发送一次
 completion。
+
+Realtime 会话只暴露两个窄范围内部动作：
+
+- `background_agent`：把用户原始请求交给普通 Agent。V2 将其注册为 function tool，
+  V3 将同一语义编码为 `delegation: { type: "client" }` 与 `delegation.created`；Core
+  统一使用 `TurnInputMode::StartOrSteer`，空闲时启动任务，忙碌时 steering 当前任务。
+- `remain_silent`：无需语音反馈时保持安静。V2 收到调用后返回空的
+  `function_call_output`，但不发送 `response.create`；V3 原生允许不产生输出，不伪造
+  `/live` 协议没有定义的 function tool。
 
 ## Transcript 持久化
 

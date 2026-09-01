@@ -506,7 +506,6 @@ export function useRealtimeConversation({
           outputModality: "audio",
           turnDetection: "server_vad",
           noiseReduction: "near_field",
-          transcriptionModel: "gpt-4o-mini-transcribe",
           includeStartupContext: transport !== "existing_call",
           transport,
           sdp: offerSdp ?? null,
