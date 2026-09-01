@@ -1,6 +1,9 @@
 //! Command hook configuration and execution.
 
 use std::collections::HashMap;
+#[cfg(not(windows))]
+use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::future::Future;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -35,6 +38,13 @@ const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 const MAX_ENV_VALUE_BYTES: usize = 8 * 1024;
 const DEFAULT_ADDITIONAL_CONTEXT_TOKEN_LIMIT: usize = 2_500;
 const MAX_CONCURRENT_ASYNC_HOOKS: usize = 8;
+const NON_INHERITABLE_ENV_VARS: &[&str] = &[
+    "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN",
+    "NODE_REPL_AUTH_TOKEN",
+    "OPENAI_FEDERATION_RULE_ID",
+    "OPENAI_IDENTITY_TOKEN_FILE",
+    "OPENAI_WORKLOAD_IDENTITY_CONTEXT",
+];
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
 
 struct AsyncHookRuntimeState {
@@ -355,6 +365,7 @@ pub struct CommandHookRunner {
     sources: Vec<CommandHookSourceSummary>,
     mcp_executor: Arc<dyn HookMcpExecutor>,
     async_runtime: Arc<AsyncHookRuntime>,
+    environment: Arc<Vec<(OsString, OsString)>>,
 }
 
 impl std::fmt::Debug for CommandHookRunner {
@@ -376,6 +387,7 @@ impl Default for CommandHookRunner {
             sources: Vec::new(),
             mcp_executor: unavailable_executor(),
             async_runtime: Arc::new(AsyncHookRuntime::default()),
+            environment: Arc::new(std::env::vars_os().collect()),
         }
     }
 }
@@ -736,6 +748,7 @@ impl CommandHookRunner {
         // `with_mcp_executor` is the session-binding boundary. Configured hooks and their
         // run store may be shared, but asynchronous task ownership must remain per session.
         self.async_runtime = Arc::new(AsyncHookRuntime::default());
+        self.environment = Arc::new(std::env::vars_os().collect());
         self
     }
 
@@ -759,7 +772,7 @@ impl CommandHookRunner {
             }
         };
         let cwd = PathBuf::from(&payload.cwd);
-        let environment = hook_environment(event, payload);
+        let hook_environment = hook_environment(event, payload);
         let ignore_matcher = matches!(
             event_name,
             HookEvent::UserPromptSubmit | HookEvent::Stop | HookEvent::Interrupt
@@ -806,7 +819,8 @@ impl CommandHookRunner {
             );
             let input = input.clone();
             let cwd = cwd.clone();
-            let environment = environment.clone();
+            let hook_environment = hook_environment.clone();
+            let session_environment = Arc::clone(&self.environment);
             let mcp_executor = Arc::clone(&self.mcp_executor);
             if handler.asynchronous {
                 let additional_context_limit = handler.additional_context_limit;
@@ -824,7 +838,8 @@ impl CommandHookRunner {
                             &handler,
                             &input,
                             &cwd,
-                            &environment,
+                            &session_environment,
+                            &hook_environment,
                             mcp_executor.as_ref(),
                         )
                         .await;
@@ -878,9 +893,15 @@ impl CommandHookRunner {
                 synchronous.spawn(async move {
                     let started = Instant::now();
                     let additional_context_limit = handler.additional_context_limit;
-                    let result =
-                        run_handler(&handler, &input, &cwd, &environment, mcp_executor.as_ref())
-                            .await;
+                    let result = run_handler(
+                        &handler,
+                        &input,
+                        &cwd,
+                        &session_environment,
+                        &hook_environment,
+                        mcp_executor.as_ref(),
+                    )
+                    .await;
                     (
                         configured_order,
                         run_id,
@@ -1365,12 +1386,21 @@ async fn run_handler(
     handler: &ConfiguredHandler,
     hook_input: &[u8],
     cwd: &Path,
+    session_environment: &[(OsString, OsString)],
     hook_environment: &[(String, String)],
     mcp_executor: &dyn HookMcpExecutor,
 ) -> anyhow::Result<HandlerOutput> {
     match &handler.kind {
         ConfiguredHandlerKind::Command { command } => {
-            run_command(handler, command, hook_input, cwd, hook_environment).await
+            run_command(
+                handler,
+                command,
+                hook_input,
+                cwd,
+                session_environment,
+                hook_environment,
+            )
+            .await
         }
         ConfiguredHandlerKind::McpTool {
             server,
@@ -1408,23 +1438,21 @@ async fn run_command(
     command_text: &str,
     input: &[u8],
     cwd: &Path,
+    session_environment: &[(OsString, OsString)],
     hook_environment: &[(String, String)],
 ) -> anyhow::Result<HandlerOutput> {
-    let mut command = Command::new(if cfg!(windows) { "cmd" } else { "sh" });
-    if cfg!(windows) {
-        command.args(["/C", command_text]);
-    } else {
-        command.args(["-c", command_text]);
-    }
+    let mut command = default_shell_command(session_environment);
+    command.arg(command_text);
     command
         .env_clear()
-        .envs(minimal_environment())
+        .envs(session_environment.iter().cloned())
         .envs(hook_environment.iter().cloned())
         .current_dir(if cwd.is_dir() { cwd } else { Path::new(".") })
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    scrub_non_inheritable_env_vars(command.as_std_mut());
     #[cfg(unix)]
     command.process_group(0);
     let mut child = command.spawn()?;
@@ -1512,11 +1540,56 @@ async fn read_capped(reader: impl AsyncRead + Unpin) -> anyhow::Result<Vec<u8>> 
     Ok(output)
 }
 
-fn minimal_environment() -> impl Iterator<Item = (String, String)> {
-    const ALLOWED: &[&str] = &["PATH", "HOME", "USER", "TMPDIR", "LANG", "LC_ALL", "SHELL"];
-    ALLOWED
+fn default_shell_command(environment: &[(OsString, OsString)]) -> Command {
+    #[cfg(windows)]
+    let (environment_variable, fallback_program, argument) = ("COMSPEC", "cmd.exe", "/C");
+
+    #[cfg(not(windows))]
+    let (environment_variable, fallback_program, argument) = ("SHELL", "/bin/sh", "-lc");
+
+    let program = environment
         .iter()
-        .filter_map(|key| std::env::var(key).ok().map(|value| ((*key).into(), value)))
+        .find(|(key, _)| {
+            #[cfg(windows)]
+            {
+                key.to_str()
+                    .is_some_and(|key| key.eq_ignore_ascii_case(environment_variable))
+            }
+
+            #[cfg(not(windows))]
+            {
+                key == OsStr::new(environment_variable)
+            }
+        })
+        .map(|(_, value)| value.clone())
+        .unwrap_or_else(|| OsString::from(fallback_program));
+
+    let mut command = Command::new(program);
+    command.arg(argument);
+    command
+}
+
+fn scrub_non_inheritable_env_vars(command: &mut std::process::Command) {
+    let configured_names = command
+        .get_envs()
+        .map(|(name, _)| name.to_os_string())
+        .collect::<Vec<_>>();
+
+    for name in NON_INHERITABLE_ENV_VARS {
+        command.env_remove(name);
+    }
+    for name in std::env::vars_os()
+        .map(|(name, _)| name)
+        .chain(configured_names)
+    {
+        if name.to_str().is_some_and(|name| {
+            NON_INHERITABLE_ENV_VARS
+                .iter()
+                .any(|restricted| restricted.eq_ignore_ascii_case(name))
+        }) {
+            command.env_remove(name);
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -2493,6 +2566,62 @@ mod tests {
         assert_eq!(value("ASTRO_HOOK_ATTEMPT"), Some("3"));
         assert_eq!(value("ASTRO_HOOK_DURATION_MS"), Some("42"));
         assert_eq!(value("ASTRO_HOOK_STATUS"), Some("succeeded"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn default_shell_uses_the_session_snapshot_and_login_mode() {
+        let environment = vec![(OsString::from("SHELL"), OsString::from("/bin/zsh"))];
+        let command = default_shell_command(&environment);
+
+        assert_eq!(command.as_std().get_program(), OsStr::new("/bin/zsh"));
+        assert_eq!(
+            command.as_std().get_args().collect::<Vec<_>>(),
+            vec![OsStr::new("-lc")]
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn command_replays_session_environment_and_scrubs_internal_tokens() {
+        let command =
+            r#"test "$ASTRO_HOOK_SNAPSHOT_TEST" = "captured" && test -z "$NODE_REPL_AUTH_TOKEN""#;
+        let mut runner = CommandHookRunner::from_file(
+            file(command.into(), Some("^Bash$"), false),
+            Path::new("hooks.json"),
+        )
+        .unwrap();
+        runner.environment = Arc::new(vec![
+            (OsString::from("SHELL"), OsString::from("/bin/sh")),
+            (
+                OsString::from("ASTRO_HOOK_SNAPSHOT_TEST"),
+                OsString::from("captured"),
+            ),
+            (
+                OsString::from("NODE_REPL_AUTH_TOKEN"),
+                OsString::from("secret"),
+            ),
+        ]);
+
+        let decisions = runner
+            .run(
+                crate::PRE_TOOL_USE,
+                &HookPayload {
+                    session_id: "session-1".into(),
+                    turn_id: Some("turn-1".into()),
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    tool_name: Some("Bash".into()),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert_eq!(decisions.len(), 1);
+        assert!(decisions[0].error.is_none());
+        assert_eq!(runner.recent_runs()[0].status, HookRunStatus::Completed);
     }
 
     #[tokio::test]
