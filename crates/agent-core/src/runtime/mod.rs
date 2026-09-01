@@ -197,6 +197,7 @@ pub struct Session {
 pub(crate) struct SubagentHookContext {
     pub(crate) agent_id: String,
     pub(crate) agent_type: String,
+    pub(crate) canonical_path: String,
 }
 
 struct SessionHookMcpExecutor {
@@ -1112,6 +1113,7 @@ impl Session {
         &self,
         agent_id: String,
         agent_type: String,
+        canonical_path: String,
     ) {
         *self
             .subagent_hook_context
@@ -1119,6 +1121,7 @@ impl Session {
             .expect("subagent hook context mutex poisoned") = Some(SubagentHookContext {
             agent_id,
             agent_type,
+            canonical_path,
         });
     }
 
@@ -1198,6 +1201,7 @@ impl Session {
                 turn_id: turn_id.unwrap_or_default(),
                 agent_id: context.agent_id,
                 agent_type: context.agent_type,
+                canonical_path: context.canonical_path,
             },
         );
         let transcript_path = if matches!(&target, ::hooks::StartHookTarget::SubagentStart { .. }) {
@@ -1301,6 +1305,7 @@ impl Session {
                     ::hooks::StopHookTarget::SubagentStop {
                         agent_id: context.agent_id,
                         agent_type: context.agent_type,
+                        canonical_path: context.canonical_path,
                         agent_transcript_path: payload.agent_transcript_path.clone(),
                     }
                 });

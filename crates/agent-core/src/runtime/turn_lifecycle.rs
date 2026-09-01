@@ -1212,6 +1212,7 @@ mod tests {
         session.set_subagent_hook_context(
             "thread-child".into(),
             "researcher".into(),
+            "/root/child".into(),
         );
         session.hook_bus().register(::hooks::SUBAGENT_START, |_| {
             ::hooks::HookOutcome::Block("must not cancel child admission".into())

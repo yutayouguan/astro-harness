@@ -30,6 +30,7 @@ pub enum StartHookTarget {
         turn_id: String,
         agent_id: String,
         agent_type: String,
+        canonical_path: String,
     },
 }
 
@@ -112,6 +113,7 @@ pub enum StopHookTarget {
     SubagentStop {
         agent_id: String,
         agent_type: String,
+        canonical_path: String,
         agent_transcript_path: Option<String>,
     },
 }
@@ -163,11 +165,13 @@ impl HookRuntime {
                 turn_id,
                 agent_id,
                 agent_type,
+                canonical_path,
             } => {
                 let mut payload = session_payload(&request);
                 payload.turn_id = Some(turn_id);
                 payload.agent_id = Some(agent_id);
                 payload.agent_type = Some(agent_type);
+                payload.detail = format!("path={canonical_path}");
                 (crate::SUBAGENT_START, payload)
             }
         };
@@ -254,10 +258,12 @@ impl HookRuntime {
             StopHookTarget::SubagentStop {
                 agent_id,
                 agent_type,
+                canonical_path,
                 agent_transcript_path,
             } => {
                 payload.agent_id = Some(agent_id);
                 payload.agent_type = Some(agent_type);
+                payload.detail = format!("path={canonical_path}");
                 payload.agent_transcript_path = agent_transcript_path;
                 self.dispatch_subagent_stop_parts(&payload)
             }
@@ -531,6 +537,7 @@ mod tests {
             target: StopHookTarget::SubagentStop {
                 agent_id: "child".into(),
                 agent_type: "worker".into(),
+                canonical_path: "/root/child".into(),
                 agent_transcript_path: None,
             },
         });

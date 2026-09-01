@@ -1647,6 +1647,7 @@ async fn run_request(
     session.set_subagent_hook_context(
         request.thread.thread_id.clone(),
         request.thread.agent_type.clone(),
+        request.thread.canonical_path.to_string(),
     );
     session.set_pending_session_start_source(if request.consume_mailbox {
         "resume"
