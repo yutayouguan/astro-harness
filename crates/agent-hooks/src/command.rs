@@ -207,13 +207,28 @@ pub enum HookHandlerConfig {
     McpTool {
         server: String,
         tool: String,
-        #[serde(default)]
+        #[serde(default, deserialize_with = "deserialize_mcp_tool_input")]
         input: serde_json::Map<String, Value>,
         #[serde(default, rename = "timeout")]
         timeout_sec: Option<u64>,
         #[serde(default, rename = "statusMessage")]
         status_message: Option<String>,
     },
+}
+
+fn deserialize_mcp_tool_input<'de, D>(
+    deserializer: D,
+) -> Result<serde_json::Map<String, Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let input = serde_json::Map::deserialize(deserializer)?;
+    toml::Value::try_from(&input).map_err(|error| {
+        serde::de::Error::custom(format!(
+            "MCP hook input must be representable as TOML: {error}"
+        ))
+    })?;
+    Ok(input)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1979,6 +1994,18 @@ mod tests {
         )
         .unwrap();
         assert!(invalid.is_empty());
+    }
+
+    #[test]
+    fn mcp_hook_input_must_have_a_stable_toml_representation() {
+        let error = serde_json::from_str::<HooksFile>(
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"type":"mcp_tool","server":"policy","tool":"authorize","input":{"value":null}}]}]}}"#,
+        )
+        .unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("MCP hook input must be representable as TOML"));
     }
 
     #[tokio::test]
