@@ -154,6 +154,8 @@ handoff mode、BEM prefixes 和 transcript-tail 策略。
 
 ## 实现索引
 
+- OpenAI 官方协议快照：`docs/openai/realtime/`
+- Azure 官方资料与实现映射：`docs/azure/realtime/`
 - 协议类型：`crates/agent-protocol/src/realtime.rs`
 - 传输与重连：`crates/agent-realtime/src/manager.rs`
 - V2/V3 解码：`crates/agent-realtime/src/parser.rs`
