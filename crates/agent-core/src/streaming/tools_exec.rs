@@ -457,18 +457,17 @@ async fn review_once_permission(
     );
     let permission_hook = {
         let agent = session.as_ref();
-        agent.fire_permission_request_hook(hooks::HookPayload {
-            session_id: request.session_id.clone(),
-            turn_id: request.turn_id.clone(),
-            tool_name: Some(request.tool_name.clone()),
-            tool_input: Some(serde_json::json!({ "summary": request.summary })),
-            detail: hook_detail.to_string(),
-            ..Default::default()
-        })
+        let hook_request = agent.permission_request_hook(
+            request.turn_id.clone(),
+            request.tool_name.clone(),
+            request.tool_call_id.clone(),
+            serde_json::json!({ "summary": request.summary, "detail": hook_detail }),
+        );
+        agent.run_permission_request_hook(hook_request)
     };
 
-    match permission_hook {
-        hooks::PermissionRequestDecision::Deny(reason) => {
+    match permission_hook.decision {
+        Some(hooks::PermissionHookDecision::Deny { message }) => {
             fire_post_permission_response(
                 session,
                 &request.session_id,
@@ -484,10 +483,10 @@ async fn review_once_permission(
                 review_started.elapsed().as_millis() as u64,
             );
             return Some(PermissionPreflight::Denied(format!(
-                "Permission denied by hook: {reason}"
+                "Permission denied by hook: {message}"
             )));
         }
-        hooks::PermissionRequestDecision::Allow => {
+        Some(hooks::PermissionHookDecision::Allow) => {
             fire_post_permission_response(
                 session,
                 &request.session_id,
@@ -504,7 +503,7 @@ async fn review_once_permission(
             );
             return Some(PermissionPreflight::Granted(Box::new(audit)));
         }
-        hooks::PermissionRequestDecision::Abstain => {}
+        None => {}
     }
 
     if selection.approval_policy == types::ApprovalPolicy::Never {
@@ -1142,22 +1141,21 @@ async fn execute_code_mode_tool(
     session.increment_tool_round().await?;
     let mut arguments = call.arguments.clone();
     if call.name == "exec" {
-        match session.fire_hook(
-            hooks::PRE_TOOL_USE,
-            hooks::HookPayload {
-                session_id: session.session_id().to_string(),
-                turn_id: session.current_turn_id().await,
-                tool_name: Some(call.name.clone()),
-                tool_input: Some(arguments.clone()),
-                detail: format!("{} {}", call.name, arguments),
-                ..Default::default()
-            },
-        ) {
-            hooks::HookOutcome::Block(reason) => {
-                return Ok(format!("[blocked by hook] {reason}").into());
-            }
-            hooks::HookOutcome::Modify(value) => arguments = value,
-            _ => {}
+        let request = session.pre_tool_use_request(
+            session.current_turn_id().await,
+            call.name.clone(),
+            call.id.clone(),
+            arguments.clone(),
+        );
+        let outcome = session.run_pre_tool_use_hook(request);
+        if outcome.should_block {
+            let reason = outcome
+                .block_reason
+                .unwrap_or_else(|| "PreToolUse hook blocked tool execution".into());
+            return Ok(format!("[blocked by hook] {reason}").into());
+        }
+        if let Some(updated_input) = outcome.updated_input {
+            arguments = updated_input;
         }
     }
     if let Err(message) = tools::check_tool_call(turn_context.mode(), &call.name, &arguments) {
@@ -1342,15 +1340,18 @@ async fn preflight_browser_action(
         None,
         None,
     );
-    let permission_hook = session.fire_permission_request_hook(hooks::HookPayload {
-        session_id: audit.request.session_id.clone(),
-        turn_id: audit.request.turn_id.clone(),
-        tool_name: Some(call.name.clone()),
-        tool_input: Some(call.arguments.clone()),
-        detail: format!("surface=browser origin={origin} class={}", class.as_str()),
-        ..Default::default()
-    });
-    if let hooks::PermissionRequestDecision::Deny(reason) = permission_hook {
+    let hook_request = session.permission_request_hook(
+        audit.request.turn_id.clone(),
+        call.name.clone(),
+        call.id.clone(),
+        serde_json::json!({
+            "arguments": call.arguments,
+            "detail": format!("surface=browser origin={origin} class={}", class.as_str()),
+        }),
+    );
+    let permission_hook = session.run_permission_request_hook(hook_request);
+    if let Some(hooks::PermissionHookDecision::Deny { message }) = permission_hook.decision.as_ref()
+    {
         fire_post_permission_response(
             session,
             &audit.request.session_id,
@@ -1366,10 +1367,10 @@ async fn preflight_browser_action(
             started.elapsed().as_millis() as u64,
         );
         return Some(PermissionPreflight::Denied(format!(
-            "Browser action denied by hook: {reason}"
+            "Browser action denied by hook: {message}"
         )));
     }
-    if permission_hook == hooks::PermissionRequestDecision::Allow {
+    if permission_hook.decision == Some(hooks::PermissionHookDecision::Allow) {
         fire_post_permission_response(
             session,
             &audit.request.session_id,
@@ -1702,16 +1703,19 @@ async fn execute_tools_serial_inner(
                             }),
                             None,
                         );
-                        let permission_hook =
-                            session.fire_permission_request_hook(hooks::HookPayload {
-                                session_id: approval_session_id.clone(),
-                                turn_id: approval_turn_id.clone(),
-                                tool_name: Some("Bash".to_string()),
-                                tool_input: Some(serde_json::json!({ "command": cmd })),
-                                detail: format!("surface=terminal ask={}", decision.description),
-                                ..Default::default()
-                            });
-                        if let hooks::PermissionRequestDecision::Deny(reason) = &permission_hook {
+                        let hook_request = session.permission_request_hook(
+                            approval_turn_id.clone(),
+                            "Bash",
+                            call.id.clone(),
+                            serde_json::json!({
+                                "command": cmd,
+                                "detail": format!("surface=terminal ask={}", decision.description),
+                            }),
+                        );
+                        let permission_hook = session.run_permission_request_hook(hook_request);
+                        if let Some(hooks::PermissionHookDecision::Deny { message }) =
+                            &permission_hook.decision
+                        {
                             fire_post_approval_response(
                                 session,
                                 &approval_session_id,
@@ -1727,7 +1731,7 @@ async fn execute_tools_serial_inner(
                                 approval_started.elapsed().as_millis() as u64,
                             );
                             out.push(
-                                format!("Command denied by PermissionRequest hook: {reason}")
+                                format!("Command denied by PermissionRequest hook: {message}")
                                     .into(),
                             );
                             continue;
@@ -1753,7 +1757,9 @@ async fn execute_tools_serial_inner(
                                     .into(),
                             );
                             continue;
-                        } else if permission_hook == hooks::PermissionRequestDecision::Allow {
+                        } else if permission_hook.decision
+                            == Some(hooks::PermissionHookDecision::Allow)
+                        {
                             fire_post_approval_response(
                                 session,
                                 &approval_session_id,

@@ -349,27 +349,18 @@ impl AgentLoop {
         }
         self.increment_tool_round().await?;
         let turn_id = self.current_turn_id().await;
-        // 可拦截：PluginHookBus 优先
-        let bus_out = self.fire_hook(
-            ::hooks::PRE_TOOL_USE,
-            ::hooks::HookPayload {
-                session_id: self.session_id.clone(),
-                turn_id,
-                tool_name: Some(name.into()),
-                tool_input: Some(args.clone()),
-                detail: format!("{name} {args}"),
-                ..Default::default()
-            },
-        );
+        let pre_tool_use =
+            self.pre_tool_use_request(turn_id, name, format!("direct:{name}"), args.clone());
+        let pre_tool_use = self.run_pre_tool_use_hook(pre_tool_use);
         let mut args_owned = args.clone();
-        match bus_out {
-            ::hooks::HookOutcome::Block(reason) => {
-                return Ok(format!("[blocked by hook] {reason}").into());
-            }
-            ::hooks::HookOutcome::Modify(v) => {
-                args_owned = v;
-            }
-            _ => {}
+        if pre_tool_use.should_block {
+            let reason = pre_tool_use
+                .block_reason
+                .unwrap_or_else(|| "PreToolUse hook blocked tool execution".into());
+            return Ok(format!("[blocked by hook] {reason}").into());
+        }
+        if let Some(updated_input) = pre_tool_use.updated_input {
+            args_owned = updated_input;
         }
         if self.cancel.is_cancelled() || cancellation_token.is_cancelled() {
             return Err(ToolCallError::Cancelled);
@@ -520,29 +511,32 @@ impl AgentLoop {
             },
             _ => raw_result,
         };
-        let post = self.fire_post_tool_use_hook(::hooks::HookPayload {
-            session_id: self.session_id.clone(),
+        let post = self.post_tool_use_request(
             turn_id,
-            tool_name: Some(name.into()),
-            tool_input: Some(args_owned.clone()),
-            tool_response: Some(serde_json::Value::String(result.text().to_string())),
-            detail: {
-                let preview: String = result.text().chars().take(200).collect();
-                format!("{name} → {preview}")
-            },
-            ..Default::default()
-        });
+            name,
+            format!("direct:{name}"),
+            args_owned.clone(),
+            serde_json::Value::String(result.text().to_string()),
+        );
+        let post = self.run_post_tool_use_hook(post);
         let mut model_text = result.text().to_string();
-        if let Some(reason) = post.block_reason {
-            model_text = format!("Tool result blocked by PostToolUse hook: {reason}");
+        if post.should_block {
+            model_text = format!(
+                "Tool result blocked by PostToolUse hook: {}",
+                post.feedback_message
+                    .as_deref()
+                    .unwrap_or("hook requested blocking")
+            );
         }
         if !post.additional_contexts.is_empty() {
             model_text.push_str("\n\n[PostToolUse additional context]\n");
             model_text.push_str(&post.additional_contexts.join("\n\n"));
         }
-        if !post.feedback_messages.is_empty() {
-            model_text.push_str("\n\n[PostToolUse feedback]\n");
-            model_text.push_str(&post.feedback_messages.join("\n\n"));
+        if !post.should_block {
+            if let Some(feedback) = post.feedback_message {
+                model_text.push_str("\n\n[PostToolUse feedback]\n");
+                model_text.push_str(&feedback);
+            }
         }
         if model_text == result.text() {
             result

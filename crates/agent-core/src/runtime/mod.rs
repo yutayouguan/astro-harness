@@ -204,6 +204,15 @@ struct SessionHookMcpExecutor {
     hub: Arc<TokioMutex<McpHub>>,
 }
 
+fn hook_subagent_context(payload: &::hooks::HookPayload) -> Option<::hooks::SubagentHookContext> {
+    let agent_id = payload.agent_id.as_ref()?;
+    Some(::hooks::SubagentHookContext {
+        agent_id: agent_id.clone(),
+        agent_type: payload.agent_type.clone().unwrap_or_default(),
+        agent_transcript_path: payload.agent_transcript_path.clone(),
+    })
+}
+
 fn hook_run_protocol_event(
     session_id: &str,
     event: ::hooks::HookRunLifecycleEvent,
@@ -1051,12 +1060,78 @@ impl Session {
         self.hook_runtime().dispatch(name, &payload)
     }
 
-    pub(crate) fn fire_permission_request_hook(
+    pub(crate) fn pre_tool_use_request(
         &self,
-        payload: ::hooks::HookPayload,
-    ) -> ::hooks::PermissionRequestDecision {
-        let payload = self.enrich_hook_payload(payload);
-        self.hook_runtime().dispatch_permission_request(&payload)
+        turn_id: Option<String>,
+        tool_name: impl Into<String>,
+        tool_use_id: impl Into<String>,
+        tool_input: serde_json::Value,
+    ) -> ::hooks::PreToolUseRequest {
+        let payload = self.enrich_hook_payload(::hooks::HookPayload {
+            turn_id,
+            tool_name: Some(tool_name.into()),
+            tool_use_id: Some(tool_use_id.into()),
+            tool_input: Some(tool_input),
+            ..Default::default()
+        });
+        let subagent = hook_subagent_context(&payload);
+        ::hooks::PreToolUseRequest {
+            session_id: payload.session_id,
+            turn_id: payload.turn_id.clone().unwrap_or_default(),
+            subagent,
+            cwd: payload.cwd,
+            transcript_path: payload.transcript_path,
+            model: payload.model,
+            permission_mode: payload.permission_mode.unwrap_or_default(),
+            tool_name: payload.tool_name.unwrap_or_default(),
+            matcher_aliases: Vec::new(),
+            tool_use_id: payload.tool_use_id.unwrap_or_default(),
+            tool_input: payload.tool_input.unwrap_or(serde_json::Value::Null),
+        }
+    }
+
+    pub(crate) fn run_pre_tool_use_hook(
+        &self,
+        request: ::hooks::PreToolUseRequest,
+    ) -> ::hooks::PreToolUseOutcome {
+        self.hook_runtime().run_pre_tool_use(request)
+    }
+
+    pub(crate) fn permission_request_hook(
+        &self,
+        turn_id: Option<String>,
+        tool_name: impl Into<String>,
+        run_id_suffix: impl Into<String>,
+        tool_input: serde_json::Value,
+    ) -> ::hooks::PermissionRequestRequest {
+        let payload = self.enrich_hook_payload(::hooks::HookPayload {
+            turn_id,
+            tool_name: Some(tool_name.into()),
+            tool_use_id: Some(run_id_suffix.into()),
+            tool_input: Some(tool_input),
+            ..Default::default()
+        });
+        let subagent = hook_subagent_context(&payload);
+        ::hooks::PermissionRequestRequest {
+            session_id: payload.session_id,
+            turn_id: payload.turn_id.clone().unwrap_or_default(),
+            subagent,
+            cwd: payload.cwd,
+            transcript_path: payload.transcript_path,
+            model: payload.model,
+            permission_mode: payload.permission_mode.unwrap_or_default(),
+            tool_name: payload.tool_name.unwrap_or_default(),
+            matcher_aliases: Vec::new(),
+            run_id_suffix: payload.tool_use_id.unwrap_or_default(),
+            tool_input: payload.tool_input.unwrap_or(serde_json::Value::Null),
+        }
+    }
+
+    pub(crate) fn run_permission_request_hook(
+        &self,
+        request: ::hooks::PermissionRequestRequest,
+    ) -> ::hooks::PermissionRequestOutcome {
+        self.hook_runtime().run_permission_request(request)
     }
 
     pub(crate) fn fire_subagent_start_hook(&self, payload: ::hooks::HookPayload) -> Option<String> {
@@ -1064,12 +1139,44 @@ impl Session {
         self.hook_runtime().dispatch_subagent_start(&payload)
     }
 
-    pub(crate) fn fire_post_tool_use_hook(
+    pub(crate) fn post_tool_use_request(
         &self,
-        payload: ::hooks::HookPayload,
-    ) -> ::hooks::PostToolUseDecision {
-        let payload = self.enrich_hook_payload(payload);
-        self.hook_runtime().dispatch_post_tool_use(&payload)
+        turn_id: Option<String>,
+        tool_name: impl Into<String>,
+        tool_use_id: impl Into<String>,
+        tool_input: serde_json::Value,
+        tool_response: serde_json::Value,
+    ) -> ::hooks::PostToolUseRequest {
+        let payload = self.enrich_hook_payload(::hooks::HookPayload {
+            turn_id,
+            tool_name: Some(tool_name.into()),
+            tool_use_id: Some(tool_use_id.into()),
+            tool_input: Some(tool_input),
+            tool_response: Some(tool_response),
+            ..Default::default()
+        });
+        let subagent = hook_subagent_context(&payload);
+        ::hooks::PostToolUseRequest {
+            session_id: payload.session_id,
+            turn_id: payload.turn_id.clone().unwrap_or_default(),
+            subagent,
+            cwd: payload.cwd,
+            transcript_path: payload.transcript_path,
+            model: payload.model,
+            permission_mode: payload.permission_mode.unwrap_or_default(),
+            tool_name: payload.tool_name.unwrap_or_default(),
+            matcher_aliases: Vec::new(),
+            tool_use_id: payload.tool_use_id.unwrap_or_default(),
+            tool_input: payload.tool_input.unwrap_or(serde_json::Value::Null),
+            tool_response: payload.tool_response.unwrap_or(serde_json::Value::Null),
+        }
+    }
+
+    pub(crate) fn run_post_tool_use_hook(
+        &self,
+        request: ::hooks::PostToolUseRequest,
+    ) -> ::hooks::PostToolUseOutcome {
+        self.hook_runtime().run_post_tool_use(request)
     }
 
     /// 取出并清空本轮 `PreLlmCall` 注入上下文。
