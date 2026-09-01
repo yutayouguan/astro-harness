@@ -159,13 +159,23 @@ impl HookRuntime {
 
     /// 统一向 Plugin、Gateway、Shell 三套 transport 投递事件。
     pub fn dispatch(&self, name: &str, payload: &HookPayload) -> HookOutcome {
+        let (plugin, commands) = self.dispatch_parts(name, payload);
+        aggregate_outcomes(plugin, commands)
+    }
+
+    pub(crate) fn dispatch_parts(
+        &self,
+        name: &str,
+        payload: &HookPayload,
+    ) -> (HookOutcome, Vec<CommandHookDecision>) {
         let payload = payload.for_event(name);
         let plugin = self.plugin.fire(name, &payload);
         self.gateway.fire(name, &payload);
         if let Ok(sh) = self.shell.lock() {
             sh.fire_async(name, &payload);
         }
-        aggregate_outcomes(plugin, run_command_hooks(&self.command, name, &payload))
+        let commands = run_command_hooks(&self.command, name, &payload);
+        (plugin, commands)
     }
 
     pub fn dispatch_permission_request(&self, payload: &HookPayload) -> PermissionRequestDecision {
@@ -216,35 +226,47 @@ impl HookRuntime {
     }
 
     pub fn dispatch_subagent_start(&self, payload: &HookPayload) -> Option<String> {
-        let payload = payload.for_event(SUBAGENT_START);
-        let mut contexts = self
-            .plugin
-            .fire_subagent_start(&payload)
-            .into_iter()
-            .collect::<Vec<_>>();
-        self.gateway.fire(SUBAGENT_START, &payload);
-        if let Ok(shell) = self.shell.lock() {
-            shell.fire_async(SUBAGENT_START, &payload);
-        }
+        let (plugin, commands) = self.dispatch_subagent_start_parts(payload);
+        let mut contexts = plugin.into_iter().collect::<Vec<_>>();
         contexts.extend(
-            run_command_hooks(&self.command, SUBAGENT_START, &payload)
+            commands
                 .into_iter()
                 .filter_map(|decision| decision.additional_context),
         );
         (!contexts.is_empty()).then(|| contexts.join("\n\n"))
     }
 
+    pub(crate) fn dispatch_subagent_start_parts(
+        &self,
+        payload: &HookPayload,
+    ) -> (Option<String>, Vec<CommandHookDecision>) {
+        let payload = payload.for_event(SUBAGENT_START);
+        let plugin = self.plugin.fire_subagent_start(&payload);
+        self.gateway.fire(SUBAGENT_START, &payload);
+        if let Ok(shell) = self.shell.lock() {
+            shell.fire_async(SUBAGENT_START, &payload);
+        }
+        let commands = run_command_hooks(&self.command, SUBAGENT_START, &payload);
+        (plugin, commands)
+    }
+
     pub fn dispatch_subagent_stop(&self, payload: &HookPayload) -> HookOutcome {
+        let (plugin, commands) = self.dispatch_subagent_stop_parts(payload);
+        aggregate_outcomes(plugin, commands)
+    }
+
+    pub(crate) fn dispatch_subagent_stop_parts(
+        &self,
+        payload: &HookPayload,
+    ) -> (HookOutcome, Vec<CommandHookDecision>) {
         let payload = payload.for_event(SUBAGENT_STOP);
         let plugin = self.plugin.fire_subagent_stop(&payload);
         self.gateway.fire(SUBAGENT_STOP, &payload);
         if let Ok(shell) = self.shell.lock() {
             shell.fire_async(SUBAGENT_STOP, &payload);
         }
-        aggregate_outcomes(
-            plugin,
-            run_command_hooks(&self.command, SUBAGENT_STOP, &payload),
-        )
+        let commands = run_command_hooks(&self.command, SUBAGENT_STOP, &payload);
+        (plugin, commands)
     }
 
     /// 兼容包装：统一向三套 transport 投递事件。
