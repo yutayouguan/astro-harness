@@ -9,6 +9,19 @@ use anyhow::Result;
 use serde_json::Value;
 use std::collections::HashSet;
 
+type RecentSessionRow = (
+    String,
+    Option<String>,
+    f64,
+    Option<String>,
+    Option<f64>,
+    Option<String>,
+    Option<f64>,
+    Option<f64>,
+    Option<String>,
+    String,
+);
+
 /// FTS 命中收集参数（一次查询的表、过滤与输出缓冲）。
 struct FtsCollect<'a> {
     fts_table: &'a str,
@@ -486,20 +499,7 @@ impl SessionStore {
         Ok(Self::to_recent_sessions(tuples))
     }
 
-    fn to_recent_sessions(
-        rows: Vec<(
-            String,
-            Option<String>,
-            f64,
-            Option<String>,
-            Option<f64>,
-            Option<String>,
-            Option<f64>,
-            Option<f64>,
-            Option<String>,
-            String,
-        )>,
-    ) -> Vec<RecentSession> {
+    fn to_recent_sessions(rows: Vec<RecentSessionRow>) -> Vec<RecentSession> {
         rows.into_iter()
             .map(
                 |(

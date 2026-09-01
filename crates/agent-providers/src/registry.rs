@@ -169,10 +169,7 @@ impl Registry {
         use crate::traits::FromClient;
         let ext = Ext::default();
         let responses_base = base_url.map(|b| ext.responses_base_url(b));
-        let effective_base = responses_base
-            .as_deref()
-            .map(|cow| cow.as_ref())
-            .or(base_url);
+        let effective_base = responses_base.as_deref().or(base_url);
         let client = self.make_client(api_key, effective_base, ext);
         let completion = crate::compat::OpenAIResponsesModel::<Ext>::from_client(&client, model);
         if let Some(provider) = self.providers.get_mut(id) {

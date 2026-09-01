@@ -19,7 +19,7 @@ pub struct ScrolledMessage {
 ///
 /// 合并后按 `id` 排序并去重。`fts_keywords` 为 `None` 时仅返回最近消息。
 pub async fn build_conversation_context(
-    store: &(impl ConversationStore + Sync),
+    store: &impl ConversationStore,
     session_id: &str,
     recent_turns: usize,
     fts_keywords: Option<&str>,

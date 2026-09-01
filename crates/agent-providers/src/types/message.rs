@@ -197,13 +197,13 @@ impl ToolDefinition {
             Self::Namespace(namespace) => namespace
                 .tools
                 .iter()
-                .filter_map(|tool| match tool {
+                .map(|tool| match tool {
                     NamespaceToolDefinition::Function(tool) => {
                         let mut tool = tool.clone();
                         tool.name = legacy_namespace_function_name(&namespace.name, &tool.name);
-                        Some(tool)
+                        tool
                     }
-                    NamespaceToolDefinition::Freeform(tool) => Some(FunctionToolDefinition {
+                    NamespaceToolDefinition::Freeform(tool) => FunctionToolDefinition {
                         name: legacy_namespace_function_name(&namespace.name, &tool.name),
                         description: tool.description.clone(),
                         parameters: serde_json::json!({
@@ -219,7 +219,7 @@ impl ToolDefinition {
                         }),
                         strict: false,
                         defer_loading: None,
-                    }),
+                    },
                 })
                 .collect(),
             Self::Freeform(tool) => vec![FunctionToolDefinition {

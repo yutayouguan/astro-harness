@@ -1174,7 +1174,8 @@ async fn execute_code_mode_tool(
         &arguments,
         Some(session.session_id()),
         turn_id.as_deref(),
-    );
+    )
+    .await;
 
     let output = match call.name.as_str() {
         "exec" => {

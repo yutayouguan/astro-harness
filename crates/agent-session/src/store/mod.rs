@@ -443,7 +443,7 @@ impl types::SqliteStore for SessionStore {
 
 pub(crate) fn is_unique_constraint(err: &sqlx::Error) -> bool {
     match err {
-        sqlx::Error::Database(e) => e.code().map_or(false, |c| c == "2067"),
+        sqlx::Error::Database(e) => e.code().is_some_and(|c| c == "2067"),
         _ => false,
     }
 }

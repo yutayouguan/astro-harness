@@ -59,7 +59,8 @@ pub async fn dispatch_tool(
         args,
         Some(ctx.session_id.as_str()),
         ctx.turn_id.as_deref(),
-    );
+    )
+    .await;
     enforce_in_process_write_policy(ctx, name, args)?;
 
     // 1. 内置 handler（静态 inventory 注册）

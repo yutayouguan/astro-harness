@@ -285,6 +285,7 @@ pub(super) async fn post_tool_maintenance(
 /// 处理工具执行结果：推送事件、解析 A2UI、记录到会话历史。
 ///
 /// 返回 `false` 表示取消或 channel 关闭，主循环应提前退出。
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn record_tool_outcomes(
     session: &Arc<AgentLoop>,
     calls: &[types::ParsedToolCall],
@@ -465,6 +466,7 @@ pub(super) struct SamplingRequest {
 }
 
 /// 为每次普通主循环 sampling 派发一次完整的 LLM telemetry。
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn emit_post_llm_telemetry(
     session: &Arc<AgentLoop>,
     provider: Option<String>,

@@ -5,7 +5,7 @@ use crate::format::format_session_search_hits;
 use crate::{ConversationStore, NewMessage};
 
 pub async fn record_message(
-    store: &(impl ConversationStore + Sync),
+    store: &impl ConversationStore,
     session_id: &str,
     role: &str,
     content: &str,
@@ -20,7 +20,7 @@ pub async fn record_message(
 }
 
 pub async fn dispatch_session_tool(
-    store: &(impl ConversationStore + Sync),
+    store: &impl ConversationStore,
     name: &str,
     args: &Value,
 ) -> anyhow::Result<String> {

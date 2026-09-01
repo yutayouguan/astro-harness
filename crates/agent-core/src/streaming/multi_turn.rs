@@ -595,10 +595,6 @@ pub(crate) async fn run_turn(
     let mut total_usage = Usage::default();
     let mut saw_usage = false;
 
-    {
-        let agent = session.as_ref();
-        let _ = agent.ensure_session("tauri");
-    }
     let max_rounds = {
         let agent = session.as_ref();
         let n = agent.multi_turn();

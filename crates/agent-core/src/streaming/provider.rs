@@ -184,10 +184,7 @@ impl StreamingResponses for ProviderStreamer {
 
         let tracked: CompletionStream =
             Box::pin(futures::stream::unfold(stream, |mut stream| async move {
-                match stream.next().await {
-                    Some(item) => Some((item, stream)),
-                    None => None,
-                }
+                stream.next().await.map(|item| (item, stream))
             }));
 
         if let Ok(mut guard) = self.last_hit.lock() {

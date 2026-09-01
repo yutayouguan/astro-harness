@@ -39,14 +39,14 @@ impl UpdateFileChunk {
 /// 解析后的单个文件操作。
 #[derive(Debug, Clone, PartialEq)]
 enum Hunk {
-    AddFile {
+    Add {
         path: PathBuf,
         contents: String,
     },
-    DeleteFile {
+    Delete {
         path: PathBuf,
     },
-    UpdateFile {
+    Update {
         path: PathBuf,
         move_path: Option<PathBuf>,
         chunks: Vec<UpdateFileChunk>,
@@ -164,7 +164,7 @@ impl PatchParser {
     }
 
     fn ensure_update_hunk_not_empty(&self, _line: &str) -> Result<(), ParseError> {
-        if let Some(Hunk::UpdateFile { path, chunks, .. }) = self.hunks.last() {
+        if let Some(Hunk::Update { path, chunks, .. }) = self.hunks.last() {
             if chunks.is_empty() {
                 if let ParserMode::UpdateFile { hunk_line_number } = self.mode {
                     return Err(ParseError::InvalidHunk {
@@ -186,7 +186,7 @@ impl PatchParser {
         }
         if let Some(path) = trimmed.strip_prefix(ADD_FILE_MARKER) {
             self.ensure_update_hunk_not_empty(trimmed)?;
-            self.hunks.push(Hunk::AddFile {
+            self.hunks.push(Hunk::Add {
                 path: PathBuf::from(path),
                 contents: String::new(),
             });
@@ -195,7 +195,7 @@ impl PatchParser {
         }
         if let Some(path) = trimmed.strip_prefix(DELETE_FILE_MARKER) {
             self.ensure_update_hunk_not_empty(trimmed)?;
-            self.hunks.push(Hunk::DeleteFile {
+            self.hunks.push(Hunk::Delete {
                 path: PathBuf::from(path),
             });
             self.mode = ParserMode::DeleteFile;
@@ -203,7 +203,7 @@ impl PatchParser {
         }
         if let Some(path) = trimmed.strip_prefix(UPDATE_FILE_MARKER) {
             self.ensure_update_hunk_not_empty(trimmed)?;
-            self.hunks.push(Hunk::UpdateFile {
+            self.hunks.push(Hunk::Update {
                 path: PathBuf::from(path),
                 move_path: None,
                 chunks: Vec::new(),
@@ -246,7 +246,7 @@ impl PatchParser {
                     return Ok(());
                 }
                 if let Some(content_line) = line.strip_prefix('+') {
-                    if let Some(Hunk::AddFile { contents, .. }) = self.hunks.last_mut() {
+                    if let Some(Hunk::Add { contents, .. }) = self.hunks.last_mut() {
                         contents.push_str(content_line);
                         contents.push('\n');
                         return Ok(());
@@ -263,15 +263,13 @@ impl PatchParser {
                     return Ok(());
                 }
 
-                if let Some(Hunk::UpdateFile {
+                if let Some(Hunk::Update {
                     move_path, chunks, ..
                 }) = self.hunks.last_mut()
                 {
                     // End of File 后忽略空行，但要求下一个 @@ 开始新 chunk
-                    if chunks.last().is_some_and(|c| c.is_end_of_file) {
-                        if update_line.is_empty() {
-                            return Ok(());
-                        }
+                    if chunks.last().is_some_and(|c| c.is_end_of_file) && update_line.is_empty() {
+                        return Ok(());
                     }
 
                     // Move to（仅在第一个 chunk 前允许）
@@ -471,7 +469,7 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<String> {
 
     for hunk in hunks {
         match hunk {
-            Hunk::AddFile { path, contents } => {
+            Hunk::Add { path, contents } => {
                 let full = resolve_path(workspace, path);
                 if let Some(parent) = full.parent() {
                     std::fs::create_dir_all(parent)?;
@@ -479,13 +477,13 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<String> {
                 std::fs::write(&full, contents)?;
                 affected.added.push(path.clone());
             }
-            Hunk::DeleteFile { path } => {
+            Hunk::Delete { path } => {
                 let full = resolve_path(workspace, path);
                 std::fs::remove_file(&full)
                     .map_err(|e| anyhow::anyhow!("Failed to delete {}: {e}", full.display()))?;
                 affected.deleted.push(path.clone());
             }
-            Hunk::UpdateFile {
+            Hunk::Update {
                 path,
                 move_path,
                 chunks,
@@ -737,7 +735,7 @@ mod tests {
         assert_eq!(hunks.len(), 1);
         assert_eq!(
             hunks[0],
-            Hunk::AddFile {
+            Hunk::Add {
                 path: PathBuf::from("foo.txt"),
                 contents: "hello\nworld\n".to_string()
             }
@@ -751,7 +749,7 @@ mod tests {
         assert_eq!(hunks.len(), 1);
         assert_eq!(
             hunks[0],
-            Hunk::DeleteFile {
+            Hunk::Delete {
                 path: PathBuf::from("gone.txt"),
             }
         );
@@ -768,7 +766,7 @@ mod tests {
         let hunks = PatchParser::parse(&patch).unwrap();
         assert_eq!(hunks.len(), 1);
         match &hunks[0] {
-            Hunk::UpdateFile { path, chunks, .. } => {
+            Hunk::Update { path, chunks, .. } => {
                 assert_eq!(path, &PathBuf::from("main.rs"));
                 assert_eq!(chunks.len(), 1);
                 assert_eq!(chunks[0].change_context, Some("fn main()".to_string()));
@@ -790,7 +788,7 @@ mod tests {
         );
         let hunks = PatchParser::parse(&patch).unwrap();
         match &hunks[0] {
-            Hunk::UpdateFile {
+            Hunk::Update {
                 path, move_path, ..
             } => {
                 assert_eq!(path, &PathBuf::from("old.rs"));
@@ -826,7 +824,7 @@ mod tests {
         );
         let hunks = PatchParser::parse(&patch).unwrap();
         match &hunks[0] {
-            Hunk::UpdateFile { chunks, .. } => {
+            Hunk::Update { chunks, .. } => {
                 assert_eq!(chunks[0].old_lines, vec!["context", "old"]);
                 assert_eq!(chunks[0].new_lines, vec!["context", "new"]);
             }
@@ -844,7 +842,7 @@ mod tests {
         );
         let hunks = PatchParser::parse(&patch).unwrap();
         match &hunks[0] {
-            Hunk::UpdateFile { chunks, .. } => {
+            Hunk::Update { chunks, .. } => {
                 assert!(chunks[0].is_end_of_file);
             }
             _ => panic!("expected UpdateFile"),

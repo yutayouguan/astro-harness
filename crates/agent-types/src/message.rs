@@ -411,6 +411,19 @@ pub fn merge_google_thought_signature(
     Some(serde_json::Value::Object(obj))
 }
 
+/// 从 `reasoning_details` 读出 Google `thought.signature`。
+pub fn google_thought_signature_from_details(
+    details: &Option<serde_json::Value>,
+) -> Option<String> {
+    details
+        .as_ref()?
+        .get(GOOGLE_THOUGHT_SIGNATURE_KEY)?
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Message, ToolCall};
@@ -433,17 +446,4 @@ mod tests {
         assert_eq!(message, equal);
         assert_ne!(message, changed);
     }
-}
-
-/// 从 `reasoning_details` 读出 Google `thought.signature`。
-pub fn google_thought_signature_from_details(
-    details: &Option<serde_json::Value>,
-) -> Option<String> {
-    details
-        .as_ref()?
-        .get(GOOGLE_THOUGHT_SIGNATURE_KEY)?
-        .as_str()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
 }

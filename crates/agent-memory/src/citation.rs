@@ -116,7 +116,7 @@ pub fn sort_by_usage(entries: &[String], workspace: &Path) -> Vec<String> {
             (count, e)
         })
         .collect();
-    with_score.sort_by(|a, b| b.0.cmp(&a.0));
+    with_score.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     with_score.into_iter().map(|(_, e)| e.clone()).collect()
 }
 

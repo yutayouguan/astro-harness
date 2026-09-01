@@ -77,11 +77,11 @@ pub(crate) async fn enqueue_in_transaction(
 
     let stored = if result.rows_affected() == 1 {
         let sequence = result.last_insert_rowid();
-        load_by_sequence(&mut **tx, sequence)
+        load_by_sequence(tx, sequence)
             .await?
             .context("inserted mailbox row is missing")?
     } else {
-        load_by_idempotency_key(&mut **tx, &message.idempotency_key)
+        load_by_idempotency_key(tx, &message.idempotency_key)
             .await?
             .context("idempotent mailbox row is missing")?
     };
