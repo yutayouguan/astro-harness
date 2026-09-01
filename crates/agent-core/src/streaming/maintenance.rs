@@ -667,6 +667,7 @@ fn tool_status_from_result(result: &str) -> ToolStatus {
         || result.starts_with("Command denied")
         || result.starts_with("Command blocked")
         || result.starts_with("Browser action denied")
+        || result.starts_with("Browser action blocked")
         || result.contains("\n\nSandbox retry denied:")
     {
         ToolStatus::Declined
@@ -693,7 +694,15 @@ mod tool_status_tests {
             ToolStatus::Failed
         );
         assert_eq!(
+            tool_status_from_result("Tool error: permission approval request timed out"),
+            ToolStatus::Failed
+        );
+        assert_eq!(
             tool_status_from_result("Permission denied by user. Do not retry."),
+            ToolStatus::Declined
+        );
+        assert_eq!(
+            tool_status_from_result("Browser action blocked: user approval is unavailable"),
             ToolStatus::Declined
         );
         assert_eq!(

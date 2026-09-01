@@ -625,6 +625,10 @@ async fn review_once_permission(
     );
     if confirm.approved {
         Some(PermissionPreflight::Granted(Box::new(audit)))
+    } else if confirm.status == "timeout" {
+        Some(PermissionPreflight::Denied(
+            "Tool error: permission approval request timed out".to_string(),
+        ))
     } else {
         Some(PermissionPreflight::Denied(
             "Permission denied by user".to_string(),
@@ -1505,6 +1509,11 @@ async fn preflight_browser_action(
         confirm.approved,
         started.elapsed().as_millis() as u64,
     );
+    if confirm.status == "timeout" {
+        return Some(PermissionPreflight::Denied(
+            "Tool error: browser approval request timed out".to_string(),
+        ));
+    }
     if !confirm.approved {
         return Some(PermissionPreflight::Denied(
             "Browser action denied by user".to_string(),
@@ -2015,9 +2024,12 @@ async fn execute_tools_serial_inner(
                                     approval_started.elapsed().as_millis() as u64,
                                 );
                                 if !confirm.approved {
-                                    out.push(
-                                        "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".into(),
-                                    );
+                                    out.push(if confirm.status == "timeout" {
+                                        "Tool error: dangerous-command approval request timed out"
+                                            .into()
+                                    } else {
+                                        "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".into()
+                                    });
                                     continue;
                                 }
                                 // 永久许可按用户选择写入精确命令或受限的命令类型规则。
