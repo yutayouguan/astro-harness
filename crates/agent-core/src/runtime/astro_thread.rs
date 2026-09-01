@@ -639,11 +639,13 @@ mod tests {
         .expect("configured turn should complete");
 
         assert!(settings_index.is_some_and(|index| index < started_index.unwrap()));
-        let config = observed_config.lock().unwrap();
-        let config = config.as_ref().expect("model call should observe settings");
-        assert_eq!(config.model, "new-model");
-        assert_eq!(config.temperature, 0.2);
-        assert_eq!(config.max_tokens, 1234);
+        {
+            let config = observed_config.lock().unwrap();
+            let config = config.as_ref().expect("model call should observe settings");
+            assert_eq!(config.model, "new-model");
+            assert_eq!(config.temperature, 0.2);
+            assert_eq!(config.max_tokens, 1234);
+        }
 
         thread.submit(Op::Shutdown).await.unwrap();
         timeout(Duration::from_secs(1), thread.wait_terminated())

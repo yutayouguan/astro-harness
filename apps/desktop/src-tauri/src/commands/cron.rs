@@ -436,7 +436,7 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
 #[tauri::command]
 pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
     bootstrap_workspace()?;
-    let _ = agent::exec::cron::reconcile_orphaned_runs();
+    let _ = agent::exec::cron::reconcile_orphaned_runs().await;
     let db = cron::CronRunDb::open_default()
         .await
         .map_err(|e| e.to_string())?;
@@ -448,7 +448,7 @@ pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
 #[tauri::command]
 pub async fn get_cron_run_by_session(session_id: String) -> Result<Option<CronRunDto>, String> {
     bootstrap_workspace()?;
-    let _ = agent::exec::cron::reconcile_orphaned_runs();
+    let _ = agent::exec::cron::reconcile_orphaned_runs().await;
     let db = cron::CronRunDb::open_default()
         .await
         .map_err(|e| e.to_string())?;
@@ -473,7 +473,7 @@ pub async fn delete_cron_run(id: String) -> Result<bool, String> {
 #[tauri::command]
 pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, String> {
     bootstrap_workspace()?;
-    let _ = agent::exec::cron::reconcile_orphaned_runs();
+    let _ = agent::exec::cron::reconcile_orphaned_runs().await;
     let db = cron::CronRunDb::open_default()
         .await
         .map_err(|e| e.to_string())?;

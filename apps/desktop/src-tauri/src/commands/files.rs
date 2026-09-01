@@ -1075,7 +1075,7 @@ pub async fn write_file(
                 session_id.as_deref(),
                 None,
                 None,
-            );
+            ).await;
         }
     }
     Ok(())

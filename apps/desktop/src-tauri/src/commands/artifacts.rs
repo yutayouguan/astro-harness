@@ -235,7 +235,7 @@ async fn backfill_artifact_sessions(db: &artifacts::ArtifactDb) {
             });
             if let Some(path) = hit {
                 let mid = msg_id.to_string();
-                let _ = db.link_session_by_path(path, &session_id, Some(&mid));
+                let _ = db.link_session_by_path(path, &session_id, Some(&mid)).await;
             }
         }
     }

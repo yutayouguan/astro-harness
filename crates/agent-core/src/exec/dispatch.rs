@@ -4944,10 +4944,11 @@ mod tests {
             tokio::task::yield_now().await;
         }
 
-        let configs = captured.lock().unwrap();
-        assert_eq!(configs.len(), 1);
-        assert_eq!(configs[0].additional_params["reasoning_effort"], "max");
-        drop(configs);
+        {
+            let configs = captured.lock().unwrap();
+            assert_eq!(configs.len(), 1);
+            assert_eq!(configs[0].additional_params["reasoning_effort"], "max");
+        }
         let stored = recovered
             .runtime_requests
             .get(&child.thread_id)
