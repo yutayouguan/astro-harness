@@ -4,7 +4,7 @@
 >
 > 对应 crate：`crates/agent-realtime`
 >
-> 适用版本：V2 GA / V3 live
+> 适用 wire 协议：Astro `v2`（OpenAI/Azure GA）/ Astro `v3`（Codex live）
 
 ## 目标与边界
 
@@ -72,11 +72,28 @@ Microsoft Learn 离线快照及逐项实现映射见
 
 ## 版本契约
 
-- V2 是默认公开 GA 协议，使用 `session.update`、conversation item、
+这里的 V2/V3 是 Astro `RealtimeVersion` 的 **wire 协议代号**，不是模型名称、模型代际，
+也不是 OpenAI Realtime 产品的 GA/Beta 版本号。三层配置彼此独立：
+
+| 层级 | 示例 | 决定什么 |
+| --- | --- | --- |
+| 模型 | `gpt-realtime`、Azure deployment name | 由哪个模型处理文字/音频 |
+| 传输 | `websocket`、`webrtc`、`existing_call` | 媒体和控制事件如何连接 |
+| Astro wire 协议 | `v2`、`v3` | endpoint、事件结构和 delegation 编码 |
+
+例如 `model = "gpt-realtime"`、`transport = "webrtc"`、`version = "v2"` 表示通过
+WebRTC 使用公开 GA Realtime 契约调用该模型。更换模型不会自动切换 wire 协议；选择
+`v3` 必须是显式操作，并且只允许走 Codex `/live` 能力。
+
+- Astro V2 是默认公开 GA 协议映射，使用 `session.update`、conversation item、
   `response.create` 与 GA transcript/audio 事件。
-- V3 必须显式选择，使用 frameless `/live/{call_id}` sideband、
+- Astro V3 必须显式选择，使用 frameless `/live/{call_id}` sideband、
   `session.context.append`、delegation 事件与 BEM channel，不会对公开模型暗中升级。
 - V3 context append 以 500 UTF-8 字节为上限分片，不在多字节字符中间切断。
+
+OpenAI 官方公开语音 Agent 会话使用 `/v1/realtime`；参见
+[OpenAI Realtime 指南](https://developers.openai.com/api/docs/guides/realtime)。文档中出现的
+OpenAI 产品或模型代际名称与 Astro 的 `RealtimeVersion::{V2,V3}` 没有枚举对应关系。
 
 `gpt-realtime` 原生接收文字或音频并可输出文字或音频。Astro 不要求、也不公开
 `realtime_transcription_model`：独立输入转写只是字幕旁路，不是模型理解音频的前置条件。

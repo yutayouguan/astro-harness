@@ -149,7 +149,8 @@ Realtime 已拆分为独立 `agent-realtime` crate，并通过统一 Thread 协�
 - 支持 WebSocket 兼容传输、WebRTC SDP offer/answer，以及 ExistingCall sideband 接管；
 - Azure OpenAI 使用 GA `/openai/v1`：WebSocket/sideband 采用 `api-key`，WebRTC 通过
   `client_secrets` 临时凭据与原始 `application/sdp` 协商；
-- 支持 V2 GA 与显式 V3 `/live/{call_id}` 协议，Provider JSON 在 crate 内转换为 typed events；
+- 支持 Astro wire 协议 `v2`（OpenAI/Azure GA `/v1/realtime` 事件族）与显式 `v3`
+  （Codex 专用 `/live/{call_id}`）；这里的 V2/V3 不是模型版本，也不是 GA/Beta 代际；
 - `gpt-realtime` 原生处理文字/音频输入输出，不要求独立转写模型；Realtime 仅暴露
   `background_agent` 与 `remain_silent` 两个内部控制动作；
 - 完整 transcript、会话边界和 BEM promotion 以 `RealtimeItem` 持久化到 rollout，原始音频和 delta 不落盘；

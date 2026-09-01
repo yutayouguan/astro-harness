@@ -228,7 +228,10 @@ Realtime 是 Thread 所有的会话级连接，并非一个普通 sampling step�
 - Realtime `ModelTarget` 和 API credential 仅属于该连接，不改写普通文本回合的 primary/fallback targets。
 - `include_startup_context` 默认为 `true`：注入截断后的 system prompt，并取最近 32 条 user/assistant 文本项；显式关闭时不注入。
 - transport 支持 `websocket`、`webrtc { sdp }` 和 `existing_call { call_id }`。WebRTC 使用 unified SDP 交换媒体并以 call id 建立 server sideband；ExistingCall 只附加 sideband，不发送 session update。
-- V2 是 OpenAI GA 默认协议，V3 是显式选择的 frameless/live 协议。V3 sideband 支持有界指数退避重连；V2 断开即关闭，避免自动重放非幂等音频或 response request。
+- V2/V3 是 Astro `RealtimeVersion` 的 wire 协议代号，不是模型版本或 OpenAI 产品代际。
+  V2 映射 OpenAI/Azure GA `/v1/realtime` 事件族；V3 是仅用于 Codex `/live` 的显式
+  frameless/live 协议。V3 sideband 支持有界指数退避重连；V2 断开即关闭，避免自动
+  重放非幂等音频或 response request。
 - `HandoffRequested` 可 start/steer 普通 Agent turn，并把 assistant delta 按 `thinking`、`commentary` 或 `bem_tags` 模式回传。BEM 识别 `[ANALYSIS]`、`[COMMENTARY]`、`[FINAL]` 及配置前缀，区分 commentary 和 speakable output；turn terminal 后 handoff 只完成一次。
 - `RealtimeHistory` 只持久 session started、完整转录段、BEM item promotion 和 session closed outcome；原始 delta 与音频不落盘，并通过 `RolloutItem::RealtimeItem` 参与确定性恢复。
 - Desktop WebRTC 路径使用 browser media/data channel 和 unified SDP；ExistingCall 只要求 call id，不创建重复的本地采集链。
