@@ -34,21 +34,13 @@ impl SessionTask for CompactTask {
                 }),
             )
             .await;
-        let pre = session.fire_hook(
-            ::hooks::PRE_COMPACT,
-            ::hooks::HookPayload {
-                session_id: session.session_id().to_string(),
-                turn_id: Some(ctx.sub_id().to_string()),
-                trigger: Some("manual".into()),
-                detail: "manual session compaction".into(),
-                ..Default::default()
-            },
-        );
-        if matches!(
-            pre,
-            ::hooks::HookOutcome::Block(_) | ::hooks::HookOutcome::Skip(_)
-        ) {
-            anyhow::bail!("manual compaction blocked by hook");
+        let pre = session.run_pre_compact_hook(Some(ctx.sub_id().to_string()), "manual");
+        if pre.should_stop {
+            anyhow::bail!(
+                "manual compaction blocked by hook: {}",
+                pre.stop_reason
+                    .unwrap_or_else(|| "hook requested stop".into())
+            );
         }
         let summary = tokio::select! {
             _ = cancellation_token.cancelled() => return Err(TurnCancelled.into()),
@@ -76,16 +68,7 @@ impl SessionTask for CompactTask {
                 }),
             )
             .await;
-        let _ = session.fire_hook(
-            ::hooks::POST_COMPACT,
-            ::hooks::HookPayload {
-                session_id: session.session_id().to_string(),
-                turn_id: Some(ctx.sub_id().to_string()),
-                trigger: Some("manual".into()),
-                detail: "manual session compaction completed".into(),
-                ..Default::default()
-            },
-        );
+        let _ = session.run_post_compact_hook(Some(ctx.sub_id().to_string()), "manual");
         Ok(Some(summary))
     }
 }

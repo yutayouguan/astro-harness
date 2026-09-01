@@ -648,15 +648,7 @@ impl Session {
             if let Err(error) = self.flush_rollout().await {
                 tracing::warn!(%error, %turn_id, "failed to flush rollout before interrupt hook");
             }
-            let _ = self.fire_hook(
-                ::hooks::INTERRUPT,
-                ::hooks::HookPayload {
-                    turn_id: Some(turn_id.clone()),
-                    reason: Some("interrupted".into()),
-                    detail: format!("turn={turn_id}"),
-                    ..Default::default()
-                },
-            );
+            let _ = self.run_interrupt_hook(turn_id.clone());
         }
         self.send_event(
             &turn_id,
@@ -1144,7 +1136,7 @@ mod tests {
             &[(
                 hooks::INTERRUPT.to_string(),
                 Some(turn_id.to_string()),
-                Some("interrupted".to_string()),
+                None,
             )]
         );
     }

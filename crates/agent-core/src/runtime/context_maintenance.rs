@@ -116,23 +116,8 @@ impl AgentLoop {
             return Ok(result);
         }
 
-        let pre = self.fire_hook(
-            ::hooks::PRE_COMPACT,
-            ::hooks::HookPayload {
-                turn_id: self.current_turn_id().await,
-                trigger: Some("auto".into()),
-                detail: format!(
-                    "prune={} compress={}",
-                    plan.prune.len(),
-                    plan.compress.len()
-                ),
-                ..Default::default()
-            },
-        );
-        if matches!(
-            pre,
-            ::hooks::HookOutcome::Block(_) | ::hooks::HookOutcome::Skip(_)
-        ) {
+        let pre = self.run_pre_compact_hook(self.current_turn_id().await, "auto");
+        if pre.should_stop {
             result.hook_stopped = true;
             return Ok(result);
         }
@@ -228,22 +213,8 @@ impl AgentLoop {
                 state.compression.pending_recommend_compact = true;
             }
         }
-        let post = self.fire_hook(
-            ::hooks::POST_COMPACT,
-            ::hooks::HookPayload {
-                turn_id: self.current_turn_id().await,
-                trigger: Some("auto".into()),
-                detail: format!(
-                    "pruned={} compressed={} llm_summarized={}",
-                    result.pruned, result.compressed, result.llm_summarized
-                ),
-                ..Default::default()
-            },
-        );
-        result.hook_stopped = matches!(
-            post,
-            ::hooks::HookOutcome::Block(_) | ::hooks::HookOutcome::Skip(_)
-        );
+        let post = self.run_post_compact_hook(self.current_turn_id().await, "auto");
+        result.hook_stopped = post.should_stop;
         Ok(result)
     }
 

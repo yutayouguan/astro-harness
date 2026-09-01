@@ -468,16 +468,7 @@ impl Session {
         if let Some((_, task_completion)) = task_lifecycle {
             task_completion.cancelled().await;
         }
-        let _ = self.fire_hook(
-            ::hooks::SESSION_END,
-            ::hooks::HookPayload {
-                session_id: self.session_id().to_string(),
-                turn_id,
-                reason: Some("other".into()),
-                detail: format!("session={}", self.session_id()),
-                ..Default::default()
-            },
-        );
+        let _ = self.run_session_end_hook(turn_id);
         if let Err(error) = self
             .mcp_hub
             .lock()

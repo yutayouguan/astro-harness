@@ -30,8 +30,8 @@ pub use gateway::{DiscoveredHook, GatewayHookRegistry, HookManifest};
 pub use lifecycle_events::{
     InterruptOutcome, InterruptRequest, PostCompactRequest, PreCompactOutcome, PreCompactRequest,
     SessionEndOutcome, SessionEndRequest, SessionStartOutcome, SessionStartRequest,
-    SessionStartSource, StatelessHookOutcome, StopHookTarget, StopOutcome, StopRequest,
-    UserPromptSubmitOutcome, UserPromptSubmitRequest,
+    SessionStartSource, StartHookTarget, StatelessHookOutcome, StopHookTarget, StopOutcome,
+    StopRequest, UserPromptSubmitOutcome, UserPromptSubmitRequest,
 };
 pub use mcp::{HookMcpCall, HookMcpExecutor};
 pub use names::*;

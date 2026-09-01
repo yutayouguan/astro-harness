@@ -196,7 +196,6 @@ pub struct Session {
 pub(crate) struct SubagentHookContext {
     pub(crate) agent_id: String,
     pub(crate) agent_type: String,
-    pub(crate) canonical_path: String,
 }
 
 struct SessionHookMcpExecutor {
@@ -1058,7 +1057,6 @@ impl Session {
         &self,
         agent_id: String,
         agent_type: String,
-        canonical_path: String,
     ) {
         *self
             .subagent_hook_context
@@ -1066,7 +1064,6 @@ impl Session {
             .expect("subagent hook context mutex poisoned") = Some(SubagentHookContext {
             agent_id,
             agent_type,
-            canonical_path,
         });
     }
 
@@ -1085,40 +1082,6 @@ impl Session {
 
     pub(crate) fn set_pending_session_start_source(&self, source: &str) {
         self.lock_state().pending_session_start_source = Some(source.to_string());
-    }
-
-    pub(crate) fn fire_subagent_stop_once(
-        &self,
-        mut payload: ::hooks::HookPayload,
-    ) -> ::hooks::HookOutcome {
-        let key = payload
-            .turn_id
-            .clone()
-            .unwrap_or_else(|| "unbound-turn".to_string());
-        if self
-            .subagent_stop_turns
-            .lock()
-            .expect("subagent stop mutex poisoned")
-            .contains(&key)
-        {
-            return ::hooks::HookOutcome::Continue;
-        }
-        if let Some(context) = self.subagent_hook_context() {
-            payload.agent_id.get_or_insert(context.agent_id);
-            payload.agent_type.get_or_insert(context.agent_type);
-            if payload.detail.is_empty() {
-                payload.detail = format!("path={}", context.canonical_path);
-            }
-        }
-        let payload = self.enrich_hook_payload(payload);
-        let outcome = self.hook_runtime().dispatch_subagent_stop(&payload);
-        if !matches!(outcome, ::hooks::HookOutcome::KeepGoing(_)) {
-            self.subagent_stop_turns
-                .lock()
-                .expect("subagent stop mutex poisoned")
-                .insert(key);
-        }
-        outcome
     }
 
     fn enrich_hook_payload(&self, mut payload: ::hooks::HookPayload) -> ::hooks::HookPayload {
@@ -1163,6 +1126,193 @@ impl Session {
     pub fn fire_hook(&self, name: &str, payload: ::hooks::HookPayload) -> ::hooks::HookOutcome {
         let payload = self.enrich_hook_payload(payload);
         self.hook_runtime().dispatch(name, &payload)
+    }
+
+    pub(crate) fn run_session_start_hook(
+        &self,
+        source: ::hooks::SessionStartSource,
+        turn_id: Option<String>,
+    ) -> ::hooks::SessionStartOutcome {
+        let payload = self.enrich_hook_payload(::hooks::HookPayload {
+            turn_id: turn_id.clone(),
+            ..Default::default()
+        });
+        let target = self.subagent_hook_context().map_or(
+            ::hooks::StartHookTarget::SessionStart { source },
+            |context| ::hooks::StartHookTarget::SubagentStart {
+                turn_id: turn_id.unwrap_or_default(),
+                agent_id: context.agent_id,
+                agent_type: context.agent_type,
+            },
+        );
+        let transcript_path = if matches!(&target, ::hooks::StartHookTarget::SubagentStart { .. }) {
+            payload
+                .agent_transcript_path
+                .clone()
+                .or(payload.transcript_path)
+        } else {
+            payload.transcript_path
+        };
+        self.hook_runtime()
+            .run_session_start(::hooks::SessionStartRequest {
+                session_id: payload.session_id,
+                cwd: payload.cwd,
+                transcript_path,
+                model: payload.model,
+                permission_mode: payload.permission_mode.unwrap_or_default(),
+                target,
+            })
+    }
+
+    pub(crate) fn run_user_prompt_submit_hook(
+        &self,
+        turn_id: Option<String>,
+        prompt: String,
+    ) -> ::hooks::UserPromptSubmitOutcome {
+        let payload = self.enrich_hook_payload(::hooks::HookPayload {
+            turn_id,
+            ..Default::default()
+        });
+        let subagent = hook_subagent_context(&payload);
+        self.hook_runtime()
+            .run_user_prompt_submit(::hooks::UserPromptSubmitRequest {
+                session_id: payload.session_id,
+                turn_id: payload.turn_id.unwrap_or_default(),
+                subagent,
+                cwd: payload.cwd,
+                transcript_path: payload.transcript_path,
+                model: payload.model,
+                permission_mode: payload.permission_mode.unwrap_or_default(),
+                prompt,
+            })
+    }
+
+    pub(crate) fn run_pre_compact_hook(
+        &self,
+        turn_id: Option<String>,
+        trigger: impl Into<String>,
+    ) -> ::hooks::PreCompactOutcome {
+        self.hook_runtime()
+            .run_pre_compact(self.compact_hook_request(turn_id, trigger.into()))
+    }
+
+    pub(crate) fn run_post_compact_hook(
+        &self,
+        turn_id: Option<String>,
+        trigger: impl Into<String>,
+    ) -> ::hooks::StatelessHookOutcome {
+        self.hook_runtime()
+            .run_post_compact(self.compact_hook_request(turn_id, trigger.into()))
+    }
+
+    fn compact_hook_request(
+        &self,
+        turn_id: Option<String>,
+        trigger: String,
+    ) -> ::hooks::PreCompactRequest {
+        let payload = self.enrich_hook_payload(::hooks::HookPayload {
+            turn_id,
+            ..Default::default()
+        });
+        let subagent = hook_subagent_context(&payload);
+        ::hooks::PreCompactRequest {
+            session_id: payload.session_id,
+            turn_id: payload.turn_id.unwrap_or_default(),
+            subagent,
+            cwd: payload.cwd,
+            transcript_path: payload.transcript_path,
+            model: payload.model,
+            trigger,
+        }
+    }
+
+    pub(crate) fn run_stop_hook(
+        &self,
+        turn_id: Option<String>,
+        stop_hook_active: bool,
+        last_assistant_message: Option<String>,
+    ) -> ::hooks::StopOutcome {
+        let payload = self.enrich_hook_payload(::hooks::HookPayload {
+            turn_id,
+            ..Default::default()
+        });
+        let key = payload
+            .turn_id
+            .clone()
+            .unwrap_or_else(|| "unbound-turn".to_string());
+        let target =
+            self.subagent_hook_context()
+                .map_or(::hooks::StopHookTarget::Stop, |context| {
+                    ::hooks::StopHookTarget::SubagentStop {
+                        agent_id: context.agent_id,
+                        agent_type: context.agent_type,
+                        agent_transcript_path: payload.agent_transcript_path.clone(),
+                    }
+                });
+        let is_subagent = matches!(&target, ::hooks::StopHookTarget::SubagentStop { .. });
+        if is_subagent
+            && self
+                .subagent_stop_turns
+                .lock()
+                .expect("subagent stop mutex poisoned")
+                .contains(&key)
+        {
+            return ::hooks::StopOutcome::default();
+        }
+        let outcome = self.hook_runtime().run_stop(::hooks::StopRequest {
+            session_id: payload.session_id,
+            turn_id: payload.turn_id.unwrap_or_default(),
+            cwd: payload.cwd,
+            transcript_path: payload.transcript_path,
+            model: payload.model,
+            permission_mode: payload.permission_mode.unwrap_or_default(),
+            stop_hook_active,
+            last_assistant_message,
+            target,
+        });
+        if is_subagent && !outcome.should_block {
+            self.subagent_stop_turns
+                .lock()
+                .expect("subagent stop mutex poisoned")
+                .insert(key);
+        }
+        outcome
+    }
+
+    pub(crate) fn run_interrupt_hook(&self, turn_id: String) -> ::hooks::InterruptOutcome {
+        let payload = self.enrich_hook_payload(::hooks::HookPayload {
+            turn_id: Some(turn_id),
+            ..Default::default()
+        });
+        self.hook_runtime()
+            .run_interrupt(::hooks::InterruptRequest {
+                session_id: payload.session_id,
+                turn_id: payload.turn_id.unwrap_or_default(),
+                cwd: payload.cwd,
+                transcript_path: payload.transcript_path,
+                model: payload.model,
+                permission_mode: payload.permission_mode.unwrap_or_default(),
+            })
+    }
+
+    pub(crate) fn run_session_end_hook(
+        &self,
+        turn_id: Option<String>,
+    ) -> ::hooks::SessionEndOutcome {
+        if self.subagent_hook_context().is_some() {
+            return ::hooks::SessionEndOutcome;
+        }
+        let payload = self.enrich_hook_payload(::hooks::HookPayload {
+            turn_id,
+            ..Default::default()
+        });
+        self.hook_runtime()
+            .run_session_end(::hooks::SessionEndRequest {
+                session_id: payload.session_id,
+                turn_id: payload.turn_id.unwrap_or_default(),
+                cwd: payload.cwd,
+                transcript_path: payload.transcript_path,
+            })
     }
 
     pub(crate) fn pre_tool_use_request(
@@ -1237,11 +1387,6 @@ impl Session {
         request: ::hooks::PermissionRequestRequest,
     ) -> ::hooks::PermissionRequestOutcome {
         self.hook_runtime().run_permission_request(request)
-    }
-
-    pub(crate) fn fire_subagent_start_hook(&self, payload: ::hooks::HookPayload) -> Option<String> {
-        let payload = self.enrich_hook_payload(payload);
-        self.hook_runtime().dispatch_subagent_start(&payload)
     }
 
     pub(crate) fn post_tool_use_request(

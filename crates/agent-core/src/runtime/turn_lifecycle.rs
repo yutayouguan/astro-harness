@@ -551,15 +551,17 @@ impl Session {
 
     fn apply_admission_outcome(
         event_name: &str,
-        outcome: ::hooks::HookOutcome,
+        should_stop: bool,
+        stop_reason: Option<String>,
+        additional_contexts: Vec<String>,
     ) -> anyhow::Result<Option<String>> {
-        match outcome {
-            ::hooks::HookOutcome::Block(reason) => {
-                anyhow::bail!("{event_name} blocked by hook: {reason}")
-            }
-            ::hooks::HookOutcome::InjectContext(context) => Ok(Some(context)),
-            _ => Ok(None),
+        if should_stop {
+            anyhow::bail!(
+                "{event_name} blocked by hook: {}",
+                stop_reason.unwrap_or_else(|| "hook requested stop".into())
+            );
         }
+        Ok((!additional_contexts.is_empty()).then(|| additional_contexts.join("\n\n")))
     }
 
     async fn admit_initial_input(
@@ -569,7 +571,7 @@ impl Session {
     ) -> anyhow::Result<Option<String>> {
         let _admission_guard = self.admission_lock.lock().await;
         let mut contexts = Vec::new();
-        if let Some(context) = self.admit_session_start_locked().await? {
+        if let Some(context) = self.admit_session_start_locked(turn_id.clone()).await? {
             contexts.push(context);
         }
         for item in input {
@@ -583,10 +585,14 @@ impl Session {
     #[cfg(test)]
     async fn admit_session_start(&self) -> anyhow::Result<Option<String>> {
         let _admission_guard = self.admission_lock.lock().await;
-        self.admit_session_start_locked().await
+        self.admit_session_start_locked(self.current_turn_id().await)
+            .await
     }
 
-    async fn admit_session_start_locked(&self) -> anyhow::Result<Option<String>> {
+    async fn admit_session_start_locked(
+        &self,
+        turn_id: Option<String>,
+    ) -> anyhow::Result<Option<String>> {
         let Some(source) = self.lock_state().pending_session_start_source.clone() else {
             return Ok(None);
         };
@@ -600,42 +606,21 @@ impl Session {
         // 由各自的 SubagentStop 表示。
         let context = if subagent.is_some() && source != "startup" {
             None
-        } else if subagent.is_some() {
-            self.fire_subagent_start_hook(::hooks::HookPayload {
-                source: Some(source.clone()),
-                agent_id: subagent.as_ref().map(|context| context.agent_id.clone()),
-                agent_type: subagent.as_ref().map(|context| context.agent_type.clone()),
-                agent_transcript_path: self.hook_transcript_path(),
-                detail: format!(
-                    "session={} path={}",
-                    self.session_id,
-                    subagent
-                        .as_ref()
-                        .map(|context| context.canonical_path.as_str())
-                        .unwrap_or("/root")
-                ),
-                ..Default::default()
-            })
         } else {
-            let outcome = self.fire_hook(
+            let source_kind = match source.as_str() {
+                "startup" => ::hooks::SessionStartSource::Startup,
+                "resume" => ::hooks::SessionStartSource::Resume,
+                "clear" => ::hooks::SessionStartSource::Clear,
+                "compact" => ::hooks::SessionStartSource::Compact,
+                other => anyhow::bail!("unsupported SessionStart source: {other}"),
+            };
+            let outcome = self.run_session_start_hook(source_kind, turn_id);
+            Self::apply_admission_outcome(
                 event_name,
-                ::hooks::HookPayload {
-                    source: Some(source.clone()),
-                    agent_id: subagent.as_ref().map(|context| context.agent_id.clone()),
-                    agent_type: subagent.as_ref().map(|context| context.agent_type.clone()),
-                    agent_transcript_path: self.hook_transcript_path(),
-                    detail: format!(
-                        "session={} path={}",
-                        self.session_id,
-                        subagent
-                            .as_ref()
-                            .map(|context| context.canonical_path.as_str())
-                            .unwrap_or("/root")
-                    ),
-                    ..Default::default()
-                },
-            );
-            Self::apply_admission_outcome(event_name, outcome)?
+                outcome.should_stop,
+                outcome.stop_reason,
+                outcome.additional_contexts,
+            )?
         };
         let mut state = self.lock_state();
         if state.pending_session_start_source.as_deref() == Some(source.as_str()) {
@@ -649,16 +634,13 @@ impl Session {
         prompt: &str,
         turn_id: Option<String>,
     ) -> anyhow::Result<Option<String>> {
-        let outcome = self.fire_hook(
+        let outcome = self.run_user_prompt_submit_hook(turn_id, prompt.to_string());
+        Self::apply_admission_outcome(
             ::hooks::USER_PROMPT_SUBMIT,
-            ::hooks::HookPayload {
-                turn_id,
-                prompt: Some(prompt.to_string()),
-                detail: prompt.chars().take(200).collect(),
-                ..Default::default()
-            },
-        );
-        Self::apply_admission_outcome(::hooks::USER_PROMPT_SUBMIT, outcome)
+            outcome.should_stop,
+            outcome.stop_reason,
+            outcome.additional_contexts,
+        )
     }
 
     /// 将用户输入排入活跃的常规任务队列。
@@ -1230,7 +1212,6 @@ mod tests {
         session.set_subagent_hook_context(
             "thread-child".into(),
             "researcher".into(),
-            "/root/researcher".into(),
         );
         session.hook_bus().register(::hooks::SUBAGENT_START, |_| {
             ::hooks::HookOutcome::Block("must not cancel child admission".into())

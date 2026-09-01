@@ -1105,43 +1105,22 @@ pub(crate) async fn run_turn(
         if calls.is_empty() {
             let verify_outcome = {
                 let agent = session.as_ref();
-                let sid = agent.session_id().to_string();
                 let turn_id = agent.current_turn_id().await;
-                let subagent = agent.subagent_hook_context();
-                let event_name = if subagent.is_some() {
+                let event_name = if agent.subagent_hook_context().is_some() {
                     ::hooks::SUBAGENT_STOP
                 } else {
                     ::hooks::STOP
                 };
                 let hook_item = emit_hook_started(&session, &turn_context, event_name).await;
-                let payload = ::hooks::HookPayload {
-                    session_id: sid,
-                    turn_id,
-                    agent_id: subagent.as_ref().map(|context| context.agent_id.clone()),
-                    agent_type: subagent.as_ref().map(|context| context.agent_type.clone()),
-                    agent_transcript_path: agent.hook_transcript_path(),
-                    stop_hook_active: Some(verify_attempt > 0),
-                    last_assistant_message: Some(full_response.clone()),
-                    detail: format!(
-                        "attempt={} path={}",
-                        verify_attempt + 1,
-                        subagent
-                            .as_ref()
-                            .map(|context| context.canonical_path.as_str())
-                            .unwrap_or("/root")
-                    ),
-                    ..Default::default()
-                };
-                let outcome = if subagent.is_some() {
-                    agent.fire_subagent_stop_once(payload)
-                } else {
-                    agent.fire_hook(event_name, payload)
-                };
+                let outcome =
+                    agent.run_stop_hook(turn_id, verify_attempt > 0, Some(full_response.clone()));
                 emit_hook_completed(&session, &turn_context, hook_item, event_name).await;
                 outcome
             };
-            if verify_attempt < MAX_VERIFY_ATTEMPTS {
-                if let ::hooks::HookOutcome::KeepGoing(prompt) = verify_outcome {
+            if verify_outcome.should_block && verify_attempt < MAX_VERIFY_ATTEMPTS {
+                if let Some(prompt) = (!verify_outcome.continuation_fragments.is_empty())
+                    .then(|| verify_outcome.continuation_fragments.join("\n\n"))
+                {
                     verify_attempt += 1;
                     let agent = session.as_ref();
                     let details = types::message::merge_google_thought_signature(
