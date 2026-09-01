@@ -1,8 +1,9 @@
 export type ChatRightDock =
-  "project-files" | "side-chat" | "inspector" | "review";
+  "project-files" | "browser" | "side-chat" | "inspector" | "review";
 
 type ChatRightDockState = {
   projectFilesOpen: boolean;
+  browserOpen: boolean;
   sideSessionOpen: boolean;
   inspectorOpen: boolean;
   reviewOpen: boolean;
@@ -14,11 +15,13 @@ type ChatRightDockState = {
  */
 export function resolveChatRightDock({
   projectFilesOpen,
+  browserOpen,
   sideSessionOpen,
   inspectorOpen,
   reviewOpen,
 }: ChatRightDockState): ChatRightDock | null {
   if (reviewOpen) return "review";
+  if (browserOpen) return "browser";
   if (projectFilesOpen) return "project-files";
   if (sideSessionOpen) return "side-chat";
   if (inspectorOpen) return "inspector";

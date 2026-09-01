@@ -27,6 +27,7 @@ import SidebarSessionList from "./components/chat/SidebarSessionList";
 import SessionActionsMenu from "./components/chat/SessionActionsMenu";
 import { resolveSessionStatus } from "./components/chat/SessionStatusIcon";
 import ChatView from "./components/chat/ChatView";
+import BrowserDock from "./components/chat/BrowserDock";
 import ProjectFileEditor, {
   ProjectFileTabs,
 } from "./components/chat/ProjectFileEditor";
@@ -58,7 +59,10 @@ import {
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
 import { useActiveSessionMetadata } from "./hooks/chat/useActiveSessionTitle";
 import { useChatSession } from "./hooks/chat/useChatSession";
-import { useProjectFileWorkbench } from "./hooks/chat/useProjectFileWorkbench";
+import {
+  useProjectFileWorkbench,
+  type ProjectFileTab,
+} from "./hooks/chat/useProjectFileWorkbench";
 import { useSessionStatusMap } from "./hooks/chat/useSessionStatusMap";
 import { useSubagentThreads } from "./hooks/chat/useSubagentThreads";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
@@ -116,6 +120,7 @@ import {
   Archive,
   ChevronRight,
   FolderTree,
+  Globe2,
   MessageSquare,
   MoreHorizontal,
 } from "lucide-react";
@@ -358,6 +363,7 @@ export default function App() {
     writeWorkspaceMdMode(mode);
   }, []);
   const [projectFilesWidth, setProjectFilesWidth] = useState(264);
+  const [browserDockOpen, setBrowserDockOpen] = useState(false);
   const [sideSessionId, setSideSessionId] = useState<string | null>(null);
   const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(
     null,
@@ -381,6 +387,7 @@ export default function App() {
 
   const openChatRightDock = useCallback(
     (tab?: ChatRightTab) => {
+      setBrowserDockOpen(false);
       setReviewState(null);
       projectFiles.setPanelOpen(false);
       if (sideSessionId) void closeSideChat();
@@ -415,6 +422,7 @@ export default function App() {
       return;
     }
     setChatRightOpen(false);
+    setBrowserDockOpen(false);
     setReviewState(null);
     if (sideSessionId) void closeSideChat();
     projectFiles.setPanelOpen(true);
@@ -444,6 +452,7 @@ export default function App() {
         newSessionId: null,
       });
       projectFiles.setPanelOpen(false);
+      setBrowserDockOpen(false);
       setReviewState(null);
       setSideSessionId(id);
       setSideHostSessionId(chat.sessionId);
@@ -465,6 +474,7 @@ export default function App() {
   const openFileReview = useCallback(
     (file: FileChangeItem, files: FileChangeItem[]) => {
       projectFiles.setPanelOpen(false);
+      setBrowserDockOpen(false);
       setChatRightOpen(false);
       if (sideSessionId) void closeSideChat();
       setReviewState({ files, selectedPath: file.path });
@@ -482,9 +492,80 @@ export default function App() {
       projectFiles.panelOpen && !projectPanelWasOpenRef.current;
     projectPanelWasOpenRef.current = projectFiles.panelOpen;
     if (!justOpened) return;
+    setBrowserDockOpen(false);
     setChatRightOpen(false);
     if (sideSessionId) void closeSideChat();
   }, [closeSideChat, projectFiles.panelOpen, setChatRightOpen, sideSessionId]);
+
+  const toggleBrowserDock = useCallback(() => {
+    if (browserDockOpen) {
+      setBrowserDockOpen(false);
+      return;
+    }
+    projectFiles.setPanelOpen(false);
+    setChatRightOpen(false);
+    setReviewState(null);
+    if (sideSessionId) void closeSideChat();
+    setBrowserDockOpen(true);
+  }, [
+    browserDockOpen,
+    closeSideChat,
+    projectFiles.setPanelOpen,
+    setChatRightOpen,
+    sideSessionId,
+  ]);
+
+  const previewProjectFileInBrowser = useCallback(
+    async (tab: ProjectFileTab) => {
+      if (!chat.sessionId || !activeProjectId || !tab.path) return;
+      try {
+        const result = await invoke<Record<string, unknown>>(
+          "browser_preview_project_file",
+          {
+            request: {
+              sessionId: chat.sessionId,
+              projectId: activeProjectId,
+              path: tab.path,
+              content: tab.content,
+            },
+          },
+        );
+        chat.applyBrowserResult(result, "preview_file");
+        projectFiles.setPanelOpen(false);
+        setChatRightOpen(false);
+        setReviewState(null);
+        if (sideSessionId) void closeSideChat();
+        setBrowserDockOpen(true);
+      } catch (error) {
+        showTransientToast(String(error), { tone: "error" });
+      }
+    },
+    [
+      activeProjectId,
+      chat.applyBrowserResult,
+      chat.sessionId,
+      closeSideChat,
+      projectFiles.setPanelOpen,
+      setChatRightOpen,
+      showTransientToast,
+      sideSessionId,
+    ],
+  );
+
+  useEffect(() => {
+    if (!chat.browserPreview || chat.browserPreview.status === "closed") return;
+    projectFiles.setPanelOpen(false);
+    setChatRightOpen(false);
+    setReviewState(null);
+    if (sideSessionId) void closeSideChat();
+    setBrowserDockOpen(true);
+  }, [
+    chat.browserPreview?.updatedAt,
+    closeSideChat,
+    projectFiles.setPanelOpen,
+    setChatRightOpen,
+    sideSessionId,
+  ]);
 
   useEffect(() => {
     if (
@@ -983,6 +1064,7 @@ export default function App() {
     settingsTabMeta(settingsTab);
   const activeChatRightDock = resolveChatRightDock({
     projectFilesOpen: projectFiles.panelOpen,
+    browserOpen: browserDockOpen,
     sideSessionOpen: Boolean(sideSessionId),
     inspectorOpen: chat.chatRightOpen,
     reviewOpen: reviewState != null,
@@ -1719,6 +1801,7 @@ export default function App() {
                       workbench={projectFiles}
                       mdMode={projectMdMode}
                       onMdModeChange={changeProjectMdMode}
+                      onPreviewInBrowser={previewProjectFileInBrowser}
                     />
                   ) : conversationTitle ? (
                     <>
@@ -1848,6 +1931,16 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      className={`header-icon-btn ${activeChatRightDock === "browser" ? "is-active" : ""}`}
+                      onClick={toggleBrowserDock}
+                      title="打开内置浏览器"
+                      aria-label="打开内置浏览器"
+                      aria-pressed={activeChatRightDock === "browser"}
+                    >
+                      <Globe2 width={16} height={16} />
+                    </button>
+                    <button
+                      type="button"
                       className={`header-icon-btn ${activeChatRightDock === "side-chat" ? "is-active" : ""}`}
                       onClick={() =>
                         void (sideSessionId ? closeSideChat() : startSideChat())
@@ -1898,7 +1991,7 @@ export default function App() {
                 className={`page-body page-body--chat${projectFiles.tabs.length > 0 ? " has-project-file" : ""}`}
               >
                 <div
-                  className={`chat-layout-with-right${activeChatRightDock === "project-files" ? " has-project-files" : ""}${activeChatRightDock === "side-chat" ? " has-side-chat" : ""}${activeChatRightDock === "inspector" ? " has-chat-right" : ""}${activeChatRightDock === "review" ? " has-review" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
+                  className={`chat-layout-with-right${activeChatRightDock === "project-files" ? " has-project-files" : ""}${activeChatRightDock === "browser" ? " has-browser" : ""}${activeChatRightDock === "side-chat" ? " has-side-chat" : ""}${activeChatRightDock === "inspector" ? " has-chat-right" : ""}${activeChatRightDock === "review" ? " has-review" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
                   style={
                     {
                       "--project-files-current-width": `${projectFilesWidth}px`,
@@ -2029,8 +2122,6 @@ export default function App() {
                         activeProvider?.backend_id === "openai" &&
                         activeProvider.has_api_key,
                       )}
-                      browserPreview={chat.browserPreview}
-                      onCloseBrowserPreview={chat.dismissBrowserPreview}
                       cronProviders={providers.map((provider) => ({
                         id: provider.id,
                         name: provider.display_name,
@@ -2061,6 +2152,14 @@ export default function App() {
                     workbench={projectFiles}
                     onWidthChange={setProjectFilesWidth}
                   />
+                  {activeChatRightDock === "browser" ? (
+                    <BrowserDock
+                      sessionId={chat.sessionId}
+                      preview={chat.browserPreview}
+                      onControl={chat.controlBrowser}
+                      onClose={() => setBrowserDockOpen(false)}
+                    />
+                  ) : null}
                   <div
                     className={`side-chat-dock${activeChatRightDock === "side-chat" ? " is-open" : ""}`}
                     aria-hidden={activeChatRightDock !== "side-chat"}

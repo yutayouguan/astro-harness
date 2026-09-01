@@ -45,6 +45,16 @@ const meta = {
       status: "connected",
       action: "snapshot",
       updatedAt: Date.now(),
+      activeTabId: "tab-1",
+      tabs: [
+        {
+          id: "tab-1",
+          title: "Astro Preview",
+          url: "http://127.0.0.1:1420/dashboard",
+          active: true,
+        },
+      ],
+      downloads: [],
     },
     onClose: () => undefined,
   },
@@ -65,6 +75,16 @@ export const Disconnected: Story = {
       status: "disconnected",
       action: "snapshot",
       updatedAt: Date.now(),
+      activeTabId: "tab-1",
+      tabs: [
+        {
+          id: "tab-1",
+          title: "Astro Preview",
+          url: "http://127.0.0.1:1420/dashboard",
+          active: true,
+        },
+      ],
+      downloads: [],
     },
   },
 };

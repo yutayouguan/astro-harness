@@ -15,6 +15,14 @@ const READONLY_ALLOW: &[&str] = &[
     "browser_scroll",
     "browser_wait",
     "browser_screenshot",
+    "browser_tabs",
+    "browser_tab_open",
+    "browser_tab_switch",
+    "browser_tab_close",
+    "browser_back",
+    "browser_forward",
+    "browser_reload",
+    "browser_downloads",
     "browser_close",
     "context_search",
     "skills", // action 级仅 list/load/view/curate
@@ -199,6 +207,15 @@ mod tests {
     fn plan_hides_terminal_in_schema() {
         assert!(!tool_visible_in_mode(InteractionMode::Plan, "exec_command"));
         assert!(tool_visible_in_mode(InteractionMode::Plan, "web_search"));
+        assert!(tool_visible_in_mode(InteractionMode::Plan, "browser_tabs"));
+        assert!(tool_visible_in_mode(
+            InteractionMode::Plan,
+            "browser_tab_switch"
+        ));
+        assert!(tool_visible_in_mode(
+            InteractionMode::Plan,
+            "browser_downloads"
+        ));
         assert!(tool_visible_in_mode(InteractionMode::Plan, "switch_mode"));
         assert!(!tool_visible_in_mode(InteractionMode::Plan, "memory"));
     }

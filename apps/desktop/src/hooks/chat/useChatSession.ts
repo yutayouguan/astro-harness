@@ -251,6 +251,8 @@ export function useChatSession({
   const {
     preview: browserPreview,
     api: browserPreviewApi,
+    control: controlBrowser,
+    applyResult: applyBrowserResult,
     dismiss: dismissBrowserPreview,
   } = useBrowserPreview(sessionId);
 
@@ -2095,6 +2097,8 @@ export function useChatSession({
     chatRightTab,
     generatingPreview,
     browserPreview,
+    controlBrowser,
+    applyBrowserResult,
     // setters needed by App
     setInput,
     setAttachments,

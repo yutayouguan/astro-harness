@@ -1,7 +1,7 @@
 //! 任务绑定的 Chromium 浏览器自动化。
 //!
-//! 每个聊天会话最多拥有一个隔离的无头 Chromium 进程。工具返回结构化 JSON，
-//! 桌面端可渲染实时预览，同时模型接收相同的 DOM 快照和操作结果。
+//! 每个聊天会话拥有一个隔离的浏览器工作区，可包含多个标签页。工具返回结构化 JSON，
+//! 桌面端渲染可交互预览，同时模型接收同一活动标签页的 DOM 快照和操作结果。
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -15,7 +15,8 @@ use futures::{SinkExt, StreamExt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
@@ -37,6 +38,47 @@ pub struct BrowserOpenArgs {
     /// 等待 DOM 就绪的最大时间。
     #[serde(default)]
     pub wait_ms: Option<u64>,
+    /// 在新标签页打开；默认在当前标签页导航。
+    #[serde(default)]
+    pub new_tab: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct BrowserTabArgs {
+    /// 标签页 id；由 browser_tabs 或任一浏览器结果返回。
+    pub tab_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema, Default)]
+pub struct BrowserHistoryArgs {
+    /// 导航后等待 DOM 就绪的最大时间。
+    #[serde(default)]
+    pub wait_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct BrowserPointArgs {
+    /// 截图坐标系中的横坐标。
+    pub x: f64,
+    /// 截图坐标系中的纵坐标。
+    pub y: f64,
+    /// 点击后等待多久再获取下一次快照。
+    #[serde(default)]
+    pub wait_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct BrowserKeyArgs {
+    /// 键值，例如 Enter、Backspace、ArrowLeft，或单个可打印字符。
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct BrowserViewportArgs {
+    /// Browser viewport width in CSS pixels.
+    pub width: u32,
+    /// Browser viewport height in CSS pixels.
+    pub height: u32,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Default)]
@@ -206,7 +248,7 @@ pub async fn effective_approval_class(
     if base == BrowserApprovalClass::Sensitive {
         return Some(base);
     }
-    let session = browser_session(session_id).await.ok()?;
+    let (_, session) = browser_session(session_id).await.ok()?;
     let mut session = session.lock().await;
     let selector = serde_json::to_string(&args.get("selector").and_then(Value::as_str))
         .unwrap_or_else(|_| "null".to_string());
@@ -320,10 +362,7 @@ pub fn remove_approval_rule(
 }
 
 pub async fn current_origin(session_id: &str) -> Option<String> {
-    let session = {
-        let manager = manager().lock().await;
-        manager.sessions.get(session_id).cloned()
-    }?;
+    let (_, session) = browser_session(session_id).await.ok()?;
     let mut session = session.lock().await;
     session
         .evaluate("location.origin")
@@ -378,6 +417,54 @@ pub fn register(registry: &mut ToolRegistry) {
             "camera",
         ),
         (
+            "browser_tabs",
+            "List the task-bound browser tabs and identify the active tab.",
+            json!({"type":"object","properties":{},"additionalProperties":false}),
+            "panels-top-left",
+        ),
+        (
+            "browser_tab_open",
+            "Open a URL in a new tab in the task-bound browser and make it active.",
+            schema_for_args::<BrowserOpenArgs>(),
+            "square-plus",
+        ),
+        (
+            "browser_tab_switch",
+            "Switch the active task-bound browser tab by tab_id and return a fresh snapshot.",
+            schema_for_args::<BrowserTabArgs>(),
+            "panel-top",
+        ),
+        (
+            "browser_tab_close",
+            "Close a task-bound browser tab by tab_id.",
+            schema_for_args::<BrowserTabArgs>(),
+            "square-x",
+        ),
+        (
+            "browser_back",
+            "Navigate the active browser tab backward and return a fresh snapshot.",
+            schema_for_args::<BrowserHistoryArgs>(),
+            "arrow-left",
+        ),
+        (
+            "browser_forward",
+            "Navigate the active browser tab forward and return a fresh snapshot.",
+            schema_for_args::<BrowserHistoryArgs>(),
+            "arrow-right",
+        ),
+        (
+            "browser_reload",
+            "Reload the active browser tab and return a fresh snapshot.",
+            schema_for_args::<BrowserHistoryArgs>(),
+            "refresh-cw",
+        ),
+        (
+            "browser_downloads",
+            "List files downloaded by the task-bound browser.",
+            json!({"type":"object","properties":{},"additionalProperties":false}),
+            "download",
+        ),
+        (
             "browser_close",
             "Close the task-bound browser session and release its isolated profile.",
             json!({"type":"object","properties":{},"additionalProperties":false}),
@@ -399,7 +486,7 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["browser_open", "browser_snapshot", "browser_click", "browser_type", "browser_scroll", "browser_wait", "browser_screenshot", "browser_close"],
+    names: ["browser_open", "browser_snapshot", "browser_click", "browser_type", "browser_scroll", "browser_wait", "browser_screenshot", "browser_tabs", "browser_tab_open", "browser_tab_switch", "browser_tab_close", "browser_back", "browser_forward", "browser_reload", "browser_downloads", "browser_close"],
     async_named: dispatch,
 }
 
@@ -444,6 +531,33 @@ pub async fn dispatch(
             )
             .await
         }
+        "browser_tabs" => tabs(ctx).await,
+        "browser_tab_open" => {
+            let mut parsed: BrowserOpenArgs = serde_json::from_value(args.clone())?;
+            parsed.new_tab = true;
+            open(ctx, parsed).await
+        }
+        "browser_tab_switch" => {
+            let parsed: BrowserTabArgs = serde_json::from_value(args.clone())?;
+            switch_tab(ctx, parsed).await
+        }
+        "browser_tab_close" => {
+            let parsed: BrowserTabArgs = serde_json::from_value(args.clone())?;
+            close_tab(ctx, parsed).await
+        }
+        "browser_back" => {
+            let parsed: BrowserHistoryArgs = serde_json::from_value(args.clone())?;
+            history(ctx, -1, parsed.wait_ms).await
+        }
+        "browser_forward" => {
+            let parsed: BrowserHistoryArgs = serde_json::from_value(args.clone())?;
+            history(ctx, 1, parsed.wait_ms).await
+        }
+        "browser_reload" => {
+            let parsed: BrowserHistoryArgs = serde_json::from_value(args.clone())?;
+            reload(ctx, parsed.wait_ms).await
+        }
+        "browser_downloads" => downloads(ctx).await,
         "browser_close" => close(ctx).await,
         _ => anyhow::bail!("unsupported browser tool: {name}"),
     }
@@ -451,7 +565,31 @@ pub async fn dispatch(
 
 #[derive(Default)]
 struct BrowserManager {
-    sessions: HashMap<String, Arc<Mutex<BrowserSession>>>,
+    sessions: HashMap<String, BrowserWorkspace>,
+}
+
+struct BrowserWorkspace {
+    tabs: Vec<BrowserTab>,
+    active_tab_id: String,
+    output_dir: PathBuf,
+    preview_server: Option<PreviewServer>,
+}
+
+struct PreviewServer {
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for PreviewServer {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+struct BrowserTab {
+    id: String,
+    title: String,
+    url: String,
+    session: Arc<Mutex<BrowserSession>>,
 }
 
 struct BrowserSession {
@@ -460,6 +598,8 @@ struct BrowserSession {
     next_id: u64,
     output_dir: PathBuf,
     allow_loopback: bool,
+    viewport_width: u32,
+    viewport_height: u32,
 }
 
 impl Drop for BrowserSession {
@@ -473,16 +613,17 @@ fn manager() -> &'static Mutex<BrowserManager> {
     MANAGER.get_or_init(|| Mutex::new(BrowserManager::default()))
 }
 
-async fn browser_session(session_id: &str) -> anyhow::Result<Arc<Mutex<BrowserSession>>> {
-    manager()
-        .lock()
-        .await
-        .sessions
-        .get(session_id)
-        .cloned()
-        .ok_or_else(|| {
-            anyhow::anyhow!("browser session is disconnected; call browser_open to restore it")
-        })
+async fn browser_session(session_id: &str) -> anyhow::Result<(String, Arc<Mutex<BrowserSession>>)> {
+    let manager = manager().lock().await;
+    let workspace = manager.sessions.get(session_id).ok_or_else(|| {
+        anyhow::anyhow!("browser session is disconnected; call browser_open to restore it")
+    })?;
+    let tab = workspace
+        .tabs
+        .iter()
+        .find(|tab| tab.id == workspace.active_tab_id)
+        .ok_or_else(|| anyhow::anyhow!("browser session has no active tab"))?;
+    Ok((tab.id.clone(), tab.session.clone()))
 }
 
 fn browser_available() -> bool {
@@ -566,9 +707,8 @@ fn find_playwright_browser() -> Option<PathBuf> {
     roots.iter().find_map(|root| visit(root, 6))
 }
 
-fn session_dir(ctx: &ToolContext<'_>) -> PathBuf {
-    let safe = ctx
-        .session_id
+fn session_dir_for(memory_dir: &Path, session_id: &str) -> PathBuf {
+    let safe = session_id
         .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
@@ -578,17 +718,27 @@ fn session_dir(ctx: &ToolContext<'_>) -> PathBuf {
             }
         })
         .collect::<String>();
-    ctx.memory_dir.join("browser").join(safe)
+    memory_dir.join("browser").join(safe)
 }
 
 fn validate_url(raw: &str) -> anyhow::Result<String> {
     let trimmed = raw.trim();
-    let parsed = reqwest::Url::parse(trimmed).map_err(|e| anyhow::anyhow!("invalid URL: {e}"))?;
+    let mut parsed =
+        reqwest::Url::parse(trimmed).map_err(|e| anyhow::anyhow!("invalid URL: {e}"))?;
     if !matches!(parsed.scheme(), "http" | "https") {
         anyhow::bail!("browser only supports http(s) URLs");
     }
     if !parsed.username().is_empty() || parsed.password().is_some() {
         anyhow::bail!("browser URLs must not contain embedded credentials");
+    }
+    if parsed
+        .host_str()
+        .and_then(|host| host.parse::<IpAddr>().ok())
+        .is_some_and(|ip| ip.is_unspecified())
+    {
+        parsed
+            .set_host(Some("127.0.0.1"))
+            .map_err(|_| anyhow::anyhow!("failed to normalize local development URL"))?;
     }
     let host = parsed
         .host_str()
@@ -596,7 +746,7 @@ fn validate_url(raw: &str) -> anyhow::Result<String> {
     let loopback = host.eq_ignore_ascii_case("localhost")
         || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
     if !loopback {
-        crate::engine::network::assert_public_http_url(trimmed)?;
+        crate::engine::network::assert_public_http_url(parsed.as_str())?;
     }
     Ok(parsed.to_string())
 }
@@ -611,35 +761,168 @@ fn is_loopback_url(raw: &str) -> bool {
         })
 }
 
-async fn open(ctx: &ToolContext<'_>, args: BrowserOpenArgs) -> anyhow::Result<String> {
-    let url = validate_url(&args.url)?;
-    let output_dir = session_dir(ctx);
-    tokio::fs::create_dir_all(&output_dir).await?;
+fn download_entries(output_dir: &Path) -> Vec<Value> {
+    let directory = output_dir.join("downloads");
+    let mut entries = std::fs::read_dir(directory)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            let metadata = entry.metadata().ok()?;
+            if !metadata.is_file() {
+                return None;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let downloading = name.ends_with(".crdownload");
+            let modified_at = metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_millis() as u64)
+                .unwrap_or(0);
+            Some(json!({
+                "name": name,
+                "path": path.to_string_lossy(),
+                "size": metadata.len(),
+                "status": if downloading { "downloading" } else { "complete" },
+                "updated_at": modified_at,
+            }))
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry["updated_at"].as_u64().unwrap_or(0)));
+    entries
+}
 
-    let old = manager().lock().await.sessions.remove(&ctx.session_id);
-    if let Some(old) = old {
-        let mut old = old.lock().await;
-        let _ = old.child.kill().await;
-    }
-    let mut session = BrowserSession::launch(&url, output_dir).await?;
-    session.wait_ready(args.wait_ms).await?;
-    let result = session.snapshot(true).await?;
-    manager()
-        .lock()
-        .await
+async fn decorate_result(
+    session_id: &str,
+    tab_id: &str,
+    mut result: Value,
+) -> anyhow::Result<String> {
+    let mut manager = manager().lock().await;
+    let workspace = manager
         .sessions
-        .insert(ctx.session_id.clone(), Arc::new(Mutex::new(session)));
+        .get_mut(session_id)
+        .ok_or_else(|| anyhow::anyhow!("browser session was closed"))?;
+    if let Some(tab) = workspace.tabs.iter_mut().find(|tab| tab.id == tab_id) {
+        if let Some(url) = result.get("url").and_then(Value::as_str) {
+            tab.url = url.to_string();
+        }
+        if let Some(title) = result.get("title").and_then(Value::as_str) {
+            tab.title = title.to_string();
+        }
+    }
+    result["session_id"] = Value::String(session_id.to_string());
+    result["active_tab_id"] = Value::String(workspace.active_tab_id.clone());
+    result["tabs"] = Value::Array(
+        workspace
+            .tabs
+            .iter()
+            .map(|tab| {
+                json!({
+                    "id": tab.id,
+                    "title": tab.title,
+                    "url": tab.url,
+                    "active": tab.id == workspace.active_tab_id,
+                })
+            })
+            .collect(),
+    );
+    result["downloads"] = Value::Array(download_entries(&workspace.output_dir));
     Ok(result.to_string())
 }
 
-async fn snapshot(ctx: &ToolContext<'_>, args: BrowserSnapshotArgs) -> anyhow::Result<String> {
-    let session = browser_session(&ctx.session_id).await?;
-    let mut session = session.lock().await;
+async fn open_for_session(
+    session_id: &str,
+    memory_dir: &Path,
+    args: BrowserOpenArgs,
+) -> anyhow::Result<String> {
+    let url = validate_url(&args.url)?;
+    let existing = {
+        let manager = manager().lock().await;
+        manager.sessions.get(session_id).and_then(|workspace| {
+            workspace
+                .tabs
+                .iter()
+                .find(|tab| tab.id == workspace.active_tab_id)
+                .map(|tab| (tab.id.clone(), tab.session.clone()))
+        })
+    };
+
+    if !args.new_tab {
+        if let Some((tab_id, session)) = existing {
+            let mut session = session.lock().await;
+            session.navigate(&url).await?;
+            session.wait_ready(args.wait_ms).await?;
+            let result = session.snapshot(true).await?;
+            drop(session);
+            return decorate_result(session_id, &tab_id, result).await;
+        }
+    }
+
+    let output_dir = session_dir_for(memory_dir, session_id);
+    tokio::fs::create_dir_all(output_dir.join("downloads")).await?;
+    let tab_id = uuid::Uuid::new_v4().to_string();
+    let tab_dir = output_dir.join("tabs").join(&tab_id);
+    let mut session = BrowserSession::launch(&url, tab_dir, output_dir.join("downloads")).await?;
     session.wait_ready(args.wait_ms).await?;
-    Ok(session
-        .snapshot(args.screenshot.unwrap_or(true))
-        .await?
-        .to_string())
+    let result = session.snapshot(true).await?;
+    let session = Arc::new(Mutex::new(session));
+    {
+        let mut manager = manager().lock().await;
+        let workspace = manager
+            .sessions
+            .entry(session_id.to_string())
+            .or_insert_with(|| BrowserWorkspace {
+                tabs: Vec::new(),
+                active_tab_id: tab_id.clone(),
+                output_dir: output_dir.clone(),
+                preview_server: None,
+            });
+        workspace.tabs.push(BrowserTab {
+            id: tab_id.clone(),
+            title: result
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            url: result
+                .get("url")
+                .and_then(Value::as_str)
+                .unwrap_or(&url)
+                .to_string(),
+            session,
+        });
+        workspace.active_tab_id = tab_id.clone();
+    }
+    decorate_result(session_id, &tab_id, result).await
+}
+
+async fn open(ctx: &ToolContext<'_>, args: BrowserOpenArgs) -> anyhow::Result<String> {
+    open_for_session(&ctx.session_id, &ctx.memory_dir, args).await
+}
+
+async fn snapshot(ctx: &ToolContext<'_>, args: BrowserSnapshotArgs) -> anyhow::Result<String> {
+    snapshot_for_session(
+        &ctx.session_id,
+        args.screenshot.unwrap_or(true),
+        args.wait_ms,
+    )
+    .await
+}
+
+async fn snapshot_for_session(
+    session_id: &str,
+    screenshot: bool,
+    wait_ms: Option<u64>,
+) -> anyhow::Result<String> {
+    let (tab_id, session) = browser_session(session_id).await?;
+    let mut session = session.lock().await;
+    session.wait_ready(wait_ms).await?;
+    let result = session.snapshot(screenshot).await?;
+    drop(session);
+    decorate_result(session_id, &tab_id, result).await
 }
 
 async fn click(ctx: &ToolContext<'_>, args: BrowserClickArgs) -> anyhow::Result<String> {
@@ -648,7 +931,7 @@ async fn click(ctx: &ToolContext<'_>, args: BrowserClickArgs) -> anyhow::Result<
     {
         anyhow::bail!("browser_click requires selector or text");
     }
-    let session = browser_session(&ctx.session_id).await?;
+    let (tab_id, session) = browser_session(&ctx.session_id).await?;
     let mut session = session.lock().await;
     let selector = serde_json::to_string(&args.selector)?;
     let text = serde_json::to_string(&args.text)?;
@@ -688,14 +971,15 @@ async fn click(ctx: &ToolContext<'_>, args: BrowserClickArgs) -> anyhow::Result<
     session.wait_ready(Some(DEFAULT_WAIT_MS)).await?;
     let mut result = session.snapshot(true).await?;
     result["action"] = json!({"kind":"click","intent":args.intent.as_str(),"result":action});
-    Ok(result.to_string())
+    drop(session);
+    decorate_result(&ctx.session_id, &tab_id, result).await
 }
 
 async fn type_text(ctx: &ToolContext<'_>, args: BrowserTypeArgs) -> anyhow::Result<String> {
     if args.text.len() > 10_000 {
         anyhow::bail!("browser_type text exceeds 10000 characters");
     }
-    let session = browser_session(&ctx.session_id).await?;
+    let (tab_id, session) = browser_session(&ctx.session_id).await?;
     let mut session = session.lock().await;
     let selector = serde_json::to_string(&args.selector)?;
     let text = serde_json::to_string(&args.text)?;
@@ -734,11 +1018,12 @@ async fn type_text(ctx: &ToolContext<'_>, args: BrowserTypeArgs) -> anyhow::Resu
     }
     let mut result = session.snapshot(true).await?;
     result["action"] = json!({"kind":"type","intent":args.intent.as_str(),"result":action});
-    Ok(result.to_string())
+    drop(session);
+    decorate_result(&ctx.session_id, &tab_id, result).await
 }
 
 async fn scroll(ctx: &ToolContext<'_>, args: BrowserScrollArgs) -> anyhow::Result<String> {
-    let session = browser_session(&ctx.session_id).await?;
+    let (tab_id, session) = browser_session(&ctx.session_id).await?;
     let mut session = session.lock().await;
     let x = args.x.unwrap_or(0).clamp(-10_000, 10_000);
     let y = args.y.unwrap_or(600).clamp(-10_000, 10_000);
@@ -749,7 +1034,8 @@ async fn scroll(ctx: &ToolContext<'_>, args: BrowserScrollArgs) -> anyhow::Resul
         .await?;
     let mut result = session.snapshot(true).await?;
     result["action"] = json!({"kind":"scroll","x":x,"y":y});
-    Ok(result.to_string())
+    drop(session);
+    decorate_result(&ctx.session_id, &tab_id, result).await
 }
 
 async fn wait_for(ctx: &ToolContext<'_>, args: BrowserWaitArgs) -> anyhow::Result<String> {
@@ -758,7 +1044,7 @@ async fn wait_for(ctx: &ToolContext<'_>, args: BrowserWaitArgs) -> anyhow::Resul
     {
         anyhow::bail!("browser_wait requires selector or text");
     }
-    let session = browser_session(&ctx.session_id).await?;
+    let (tab_id, session) = browser_session(&ctx.session_id).await?;
     let mut session = session.lock().await;
     let selector = serde_json::to_string(&args.selector)?;
     let text = serde_json::to_string(&args.text)?;
@@ -783,7 +1069,8 @@ async fn wait_for(ctx: &ToolContext<'_>, args: BrowserWaitArgs) -> anyhow::Resul
         if session.evaluate(&expression).await?.as_bool() == Some(true) {
             let mut result = session.snapshot(true).await?;
             result["action"] = json!({"kind":"wait","matched":true});
-            return Ok(result.to_string());
+            drop(session);
+            return decorate_result(&ctx.session_id, &tab_id, result).await;
         }
         if tokio::time::Instant::now() >= deadline {
             anyhow::bail!("browser_wait timed out");
@@ -792,22 +1079,470 @@ async fn wait_for(ctx: &ToolContext<'_>, args: BrowserWaitArgs) -> anyhow::Resul
     }
 }
 
+async fn tabs(ctx: &ToolContext<'_>) -> anyhow::Result<String> {
+    snapshot_for_session(&ctx.session_id, false, None).await
+}
+
+async fn switch_tab(ctx: &ToolContext<'_>, args: BrowserTabArgs) -> anyhow::Result<String> {
+    switch_tab_for_session(&ctx.session_id, &args.tab_id).await
+}
+
+async fn switch_tab_for_session(session_id: &str, tab_id: &str) -> anyhow::Result<String> {
+    {
+        let mut manager = manager().lock().await;
+        let workspace = manager
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| anyhow::anyhow!("browser session is disconnected"))?;
+        if !workspace.tabs.iter().any(|tab| tab.id == tab_id) {
+            anyhow::bail!("browser tab not found");
+        }
+        workspace.active_tab_id = tab_id.to_string();
+    }
+    snapshot_for_session(session_id, true, None).await
+}
+
+async fn close_tab(ctx: &ToolContext<'_>, args: BrowserTabArgs) -> anyhow::Result<String> {
+    close_tab_for_session(&ctx.session_id, &args.tab_id).await
+}
+
+async fn close_tab_for_session(session_id: &str, tab_id: &str) -> anyhow::Result<String> {
+    let (removed, next_tab_id) = {
+        let mut manager = manager().lock().await;
+        let workspace = manager
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| anyhow::anyhow!("browser session is disconnected"))?;
+        let index = workspace
+            .tabs
+            .iter()
+            .position(|tab| tab.id == tab_id)
+            .ok_or_else(|| anyhow::anyhow!("browser tab not found"))?;
+        let removed = workspace.tabs.remove(index);
+        if workspace.tabs.is_empty() {
+            manager.sessions.remove(session_id);
+            (removed, None)
+        } else {
+            if workspace.active_tab_id == tab_id {
+                workspace.active_tab_id = workspace.tabs[index.saturating_sub(1)].id.clone();
+            }
+            (removed, Some(workspace.active_tab_id.clone()))
+        }
+    };
+    let mut session = removed.session.lock().await;
+    let _ = session.child.kill().await;
+    drop(session);
+    if let Some(next_tab_id) = next_tab_id {
+        switch_tab_for_session(session_id, &next_tab_id).await
+    } else {
+        Ok(json!({
+            "astro_browser": true,
+            "session_id": session_id,
+            "status": "closed",
+            "tabs": [],
+            "downloads": [],
+        })
+        .to_string())
+    }
+}
+
+async fn history(
+    ctx: &ToolContext<'_>,
+    delta: i64,
+    wait_ms: Option<u64>,
+) -> anyhow::Result<String> {
+    history_for_session(&ctx.session_id, delta, wait_ms).await
+}
+
+async fn history_for_session(
+    session_id: &str,
+    delta: i64,
+    wait_ms: Option<u64>,
+) -> anyhow::Result<String> {
+    let (tab_id, session) = browser_session(session_id).await?;
+    let mut session = session.lock().await;
+    session.navigate_history(delta).await?;
+    tokio::time::sleep(Duration::from_millis(120)).await;
+    session.wait_ready(wait_ms).await?;
+    let result = session.snapshot(true).await?;
+    drop(session);
+    decorate_result(session_id, &tab_id, result).await
+}
+
+async fn reload(ctx: &ToolContext<'_>, wait_ms: Option<u64>) -> anyhow::Result<String> {
+    reload_for_session(&ctx.session_id, wait_ms).await
+}
+
+async fn reload_for_session(session_id: &str, wait_ms: Option<u64>) -> anyhow::Result<String> {
+    let (tab_id, session) = browser_session(session_id).await?;
+    let mut session = session.lock().await;
+    session.command("Page.reload", json!({})).await?;
+    tokio::time::sleep(Duration::from_millis(120)).await;
+    session.wait_ready(wait_ms).await?;
+    let result = session.snapshot(true).await?;
+    drop(session);
+    decorate_result(session_id, &tab_id, result).await
+}
+
+async fn downloads(ctx: &ToolContext<'_>) -> anyhow::Result<String> {
+    downloads_for_session(&ctx.session_id).await
+}
+
+async fn downloads_for_session(session_id: &str) -> anyhow::Result<String> {
+    let manager = manager().lock().await;
+    let workspace = manager
+        .sessions
+        .get(session_id)
+        .ok_or_else(|| anyhow::anyhow!("browser session is disconnected"))?;
+    Ok(json!({
+        "astro_browser": true,
+        "session_id": session_id,
+        "status": "connected",
+        "active_tab_id": workspace.active_tab_id,
+        "tabs": workspace.tabs.iter().map(|tab| json!({
+            "id": tab.id,
+            "title": tab.title,
+            "url": tab.url,
+            "active": tab.id == workspace.active_tab_id,
+        })).collect::<Vec<_>>(),
+        "downloads": download_entries(&workspace.output_dir),
+    })
+    .to_string())
+}
+
+pub async fn desktop_control(
+    session_id: &str,
+    memory_dir: &Path,
+    action: &str,
+    args: Value,
+) -> anyhow::Result<String> {
+    match action {
+        "open" => open_for_session(session_id, memory_dir, serde_json::from_value(args)?).await,
+        "snapshot" => {
+            let args: BrowserSnapshotArgs = serde_json::from_value(args)?;
+            snapshot_for_session(session_id, args.screenshot.unwrap_or(true), args.wait_ms).await
+        }
+        "new_tab" => {
+            let mut args: BrowserOpenArgs = serde_json::from_value(args)?;
+            args.new_tab = true;
+            open_for_session(session_id, memory_dir, args).await
+        }
+        "switch_tab" => {
+            let args: BrowserTabArgs = serde_json::from_value(args)?;
+            switch_tab_for_session(session_id, &args.tab_id).await
+        }
+        "close_tab" => {
+            let args: BrowserTabArgs = serde_json::from_value(args)?;
+            close_tab_for_session(session_id, &args.tab_id).await
+        }
+        "back" => history_for_session(session_id, -1, None).await,
+        "forward" => history_for_session(session_id, 1, None).await,
+        "reload" => reload_for_session(session_id, None).await,
+        "downloads" => downloads_for_session(session_id).await,
+        "click_point" => {
+            let args: BrowserPointArgs = serde_json::from_value(args)?;
+            let (tab_id, session) = browser_session(session_id).await?;
+            let mut session = session.lock().await;
+            session.click_point(args.x, args.y).await?;
+            tokio::time::sleep(Duration::from_millis(
+                args.wait_ms.unwrap_or(350).min(5_000),
+            ))
+            .await;
+            let result = session.snapshot(true).await?;
+            drop(session);
+            decorate_result(session_id, &tab_id, result).await
+        }
+        "key" => {
+            let args: BrowserKeyArgs = serde_json::from_value(args)?;
+            let (tab_id, session) = browser_session(session_id).await?;
+            let mut session = session.lock().await;
+            session.press_key(&args.key).await?;
+            let result = session.snapshot(true).await?;
+            drop(session);
+            decorate_result(session_id, &tab_id, result).await
+        }
+        "scroll" => {
+            let args: BrowserScrollArgs = serde_json::from_value(args)?;
+            let (tab_id, session) = browser_session(session_id).await?;
+            let mut session = session.lock().await;
+            let x = args.x.unwrap_or(0).clamp(-10_000, 10_000);
+            let y = args.y.unwrap_or(600).clamp(-10_000, 10_000);
+            session
+                .evaluate(&format!(
+                    "window.scrollBy({{left:{x},top:{y},behavior:'auto'}}); true"
+                ))
+                .await?;
+            let result = session.snapshot(true).await?;
+            drop(session);
+            decorate_result(session_id, &tab_id, result).await
+        }
+        "resize" => {
+            let args: BrowserViewportArgs = serde_json::from_value(args)?;
+            let (tab_id, session) = browser_session(session_id).await?;
+            let mut session = session.lock().await;
+            session.resize_viewport(args.width, args.height).await?;
+            let result = session.snapshot(true).await?;
+            drop(session);
+            decorate_result(session_id, &tab_id, result).await
+        }
+        "close" => close_for_session(session_id).await,
+        _ => anyhow::bail!("unsupported browser panel action: {action}"),
+    }
+}
+
+/// Serve a trusted project HTML file through an ephemeral loopback server and
+/// open it in the same browser workspace used by the Agent browser tools.
+/// `html_override` lets the editor preview an unsaved or still-streaming draft
+/// while relative assets continue to resolve from the file's directory.
+pub async fn desktop_preview_file(
+    session_id: &str,
+    memory_dir: &Path,
+    file_path: &Path,
+    html_override: Option<String>,
+) -> anyhow::Result<String> {
+    let extension = file_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    if !matches!(extension.to_ascii_lowercase().as_str(), "html" | "htm") {
+        anyhow::bail!("browser preview only supports HTML files");
+    }
+    let root = file_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("HTML file has no parent directory"))?
+        .canonicalize()?;
+    let file_name = file_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| anyhow::anyhow!("HTML filename is not valid UTF-8"))?
+        .to_string();
+    let (server, url) = start_preview_server(root, file_name, html_override).await?;
+    let result = open_for_session(
+        session_id,
+        memory_dir,
+        BrowserOpenArgs {
+            url,
+            wait_ms: Some(DEFAULT_WAIT_MS),
+            new_tab: false,
+        },
+    )
+    .await;
+    match result {
+        Ok(result) => {
+            let mut manager = manager().lock().await;
+            let workspace = manager
+                .sessions
+                .get_mut(session_id)
+                .ok_or_else(|| anyhow::anyhow!("browser session was closed"))?;
+            workspace.preview_server = Some(server);
+            Ok(result)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+async fn start_preview_server(
+    root: PathBuf,
+    entry_name: String,
+    html_override: Option<String>,
+) -> anyhow::Result<(PreviewServer, String)> {
+    let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
+    let address = listener.local_addr()?;
+    let encoded_entry = urlencoding::encode(&entry_name);
+    let url = format!("http://127.0.0.1:{}/{encoded_entry}", address.port());
+    let task = tokio::spawn(async move {
+        loop {
+            let Ok((stream, _)) = listener.accept().await else {
+                break;
+            };
+            let root = root.clone();
+            let entry_name = entry_name.clone();
+            let html_override = html_override.clone();
+            tokio::spawn(async move {
+                let _ = serve_preview_request(stream, root, entry_name, html_override).await;
+            });
+        }
+    });
+    Ok((PreviewServer { task }, url))
+}
+
+async fn serve_preview_request(
+    mut stream: TcpStream,
+    root: PathBuf,
+    entry_name: String,
+    html_override: Option<String>,
+) -> anyhow::Result<()> {
+    let mut request = vec![0_u8; 16 * 1024];
+    let read = tokio::time::timeout(Duration::from_secs(3), stream.read(&mut request)).await??;
+    let first_line = String::from_utf8_lossy(&request[..read])
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    let mut parts = first_line.split_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let target = parts.next().unwrap_or("/");
+    if !matches!(method, "GET" | "HEAD") {
+        return write_preview_response(
+            &mut stream,
+            405,
+            "text/plain",
+            b"method not allowed",
+            method,
+        )
+        .await;
+    }
+
+    let raw_path = target.split(['?', '#']).next().unwrap_or("/");
+    let decoded = urlencoding::decode(raw_path.trim_start_matches('/'))?.into_owned();
+    let relative = if decoded.is_empty() {
+        PathBuf::from(&entry_name)
+    } else {
+        PathBuf::from(&decoded)
+    };
+    if relative.is_absolute()
+        || relative.components().any(|component| {
+            !matches!(
+                component,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        })
+    {
+        return write_preview_response(&mut stream, 403, "text/plain", b"forbidden", method).await;
+    }
+
+    if relative == Path::new(&entry_name) {
+        if let Some(html) = html_override.as_deref() {
+            return write_preview_response(
+                &mut stream,
+                200,
+                "text/html; charset=utf-8",
+                html.as_bytes(),
+                method,
+            )
+            .await;
+        }
+    }
+
+    let requested = root.join(relative);
+    let canonical = match requested.canonicalize() {
+        Ok(path) if path.starts_with(&root) && path.is_file() => path,
+        _ => {
+            if requested.extension().is_none() {
+                let fallback = if let Some(html) = html_override.as_deref() {
+                    html.as_bytes().to_vec()
+                } else {
+                    tokio::fs::read(root.join(&entry_name)).await?
+                };
+                return write_preview_response(
+                    &mut stream,
+                    200,
+                    "text/html; charset=utf-8",
+                    &fallback,
+                    method,
+                )
+                .await;
+            }
+            return write_preview_response(&mut stream, 404, "text/plain", b"not found", method)
+                .await;
+        }
+    };
+    let content = tokio::fs::read(&canonical).await?;
+    write_preview_response(
+        &mut stream,
+        200,
+        preview_content_type(&canonical),
+        &content,
+        method,
+    )
+    .await
+}
+
+async fn write_preview_response(
+    stream: &mut TcpStream,
+    status: u16,
+    content_type: &str,
+    body: &[u8],
+    method: &str,
+) -> anyhow::Result<()> {
+    let reason = match status {
+        200 => "OK",
+        403 => "Forbidden",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        _ => "Error",
+    };
+    let header = format!(
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(header.as_bytes()).await?;
+    if method != "HEAD" {
+        stream.write_all(body).await?;
+    }
+    stream.shutdown().await?;
+    Ok(())
+}
+
+fn preview_content_type(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "json" => "application/json; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        "ico" => "image/x-icon",
+        "txt" => "text/plain; charset=utf-8",
+        "xml" => "application/xml; charset=utf-8",
+        "webmanifest" => "application/manifest+json",
+        "wasm" => "application/wasm",
+        "pdf" => "application/pdf",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
+        _ => "application/octet-stream",
+    }
+}
+
 async fn close(ctx: &ToolContext<'_>) -> anyhow::Result<String> {
-    let session = manager().lock().await.sessions.remove(&ctx.session_id);
-    if let Some(session) = session {
-        let mut session = session.lock().await;
-        let _ = session.child.kill().await;
+    close_for_session(&ctx.session_id).await
+}
+
+async fn close_for_session(session_id: &str) -> anyhow::Result<String> {
+    let workspace = manager().lock().await.sessions.remove(session_id);
+    if let Some(workspace) = workspace {
+        for tab in workspace.tabs {
+            let mut session = tab.session.lock().await;
+            let _ = session.child.kill().await;
+        }
     }
     Ok(json!({
         "astro_browser": true,
-        "session_id": ctx.session_id,
+        "session_id": session_id,
         "status": "closed"
     })
     .to_string())
 }
 
 impl BrowserSession {
-    async fn launch(url: &str, output_dir: PathBuf) -> anyhow::Result<Self> {
+    async fn launch(url: &str, output_dir: PathBuf, download_dir: PathBuf) -> anyhow::Result<Self> {
         let executable = find_browser_executable().ok_or_else(|| {
             anyhow::anyhow!(
                 "no Chromium browser found; install Chrome, Chromium, Edge, Brave, or set ASTRO_BROWSER_EXECUTABLE"
@@ -815,6 +1550,7 @@ impl BrowserSession {
         })?;
         let profile_dir = output_dir.join("profile");
         tokio::fs::create_dir_all(&profile_dir).await?;
+        tokio::fs::create_dir_all(&download_dir).await?;
         let mut child = Command::new(executable)
             .arg("--headless=new")
             .arg("--remote-debugging-address=127.0.0.1")
@@ -826,6 +1562,7 @@ impl BrowserSession {
             .arg("--disable-component-update")
             .arg("--disable-sync")
             .arg("--metrics-recording-only")
+            .arg("--window-size=1280,800")
             .arg("about:blank")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -873,10 +1610,28 @@ impl BrowserSession {
             next_id: 0,
             output_dir,
             allow_loopback: is_loopback_url(url),
+            viewport_width: 1280,
+            viewport_height: 800,
         };
         session.command("Page.enable", json!({})).await?;
         session.command("Runtime.enable", json!({})).await?;
         session.command("DOM.enable", json!({})).await?;
+        session
+            .command(
+                "Browser.setDownloadBehavior",
+                json!({
+                    "behavior":"allow",
+                    "downloadPath":download_dir.to_string_lossy(),
+                    "eventsEnabled":true
+                }),
+            )
+            .await?;
+        session
+            .command(
+                "Emulation.setDeviceMetricsOverride",
+                json!({"width":1280,"height":800,"deviceScaleFactor":1,"mobile":false}),
+            )
+            .await?;
         session
             .command(
                 "Fetch.enable",
@@ -890,6 +1645,100 @@ impl BrowserSession {
             }
         }
         Ok(session)
+    }
+
+    async fn navigate(&mut self, url: &str) -> anyhow::Result<()> {
+        let url = validate_url(url)?;
+        self.allow_loopback = is_loopback_url(&url);
+        let navigation = self.command("Page.navigate", json!({"url":url})).await?;
+        if let Some(error) = navigation.get("errorText").and_then(Value::as_str) {
+            if !error.is_empty() {
+                anyhow::bail!("browser navigation failed: {error}");
+            }
+        }
+        Ok(())
+    }
+
+    async fn navigate_history(&mut self, delta: i64) -> anyhow::Result<()> {
+        let history = self.command("Page.getNavigationHistory", json!({})).await?;
+        let current = history
+            .get("currentIndex")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+        let entries = history
+            .get("entries")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow::anyhow!("browser navigation history unavailable"))?;
+        let target_index = current + delta;
+        if target_index < 0 || target_index >= entries.len() as i64 {
+            return Ok(());
+        }
+        let entry_id = entries[target_index as usize]
+            .get("id")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| anyhow::anyhow!("browser history entry has no id"))?;
+        self.command("Page.navigateToHistoryEntry", json!({"entryId":entry_id}))
+            .await?;
+        Ok(())
+    }
+
+    async fn click_point(&mut self, x: f64, y: f64) -> anyhow::Result<()> {
+        let x = x.clamp(0.0, f64::from(self.viewport_width));
+        let y = y.clamp(0.0, f64::from(self.viewport_height));
+        self.command(
+            "Input.dispatchMouseEvent",
+            json!({"type":"mousePressed","x":x,"y":y,"button":"left","clickCount":1}),
+        )
+        .await?;
+        self.command(
+            "Input.dispatchMouseEvent",
+            json!({"type":"mouseReleased","x":x,"y":y,"button":"left","clickCount":1}),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn resize_viewport(&mut self, width: u32, height: u32) -> anyhow::Result<()> {
+        let width = width.clamp(320, 1_600);
+        let height = height.clamp(240, 1_400);
+        self.command(
+            "Emulation.setDeviceMetricsOverride",
+            json!({"width":width,"height":height,"deviceScaleFactor":1,"mobile":false}),
+        )
+        .await?;
+        self.viewport_width = width;
+        self.viewport_height = height;
+        Ok(())
+    }
+
+    async fn press_key(&mut self, key: &str) -> anyhow::Result<()> {
+        if key.chars().count() == 1 {
+            self.command("Input.insertText", json!({"text":key}))
+                .await?;
+            return Ok(());
+        }
+        let code = match key {
+            "Enter" => 13,
+            "Backspace" => 8,
+            "Tab" => 9,
+            "Escape" => 27,
+            "ArrowLeft" => 37,
+            "ArrowUp" => 38,
+            "ArrowRight" => 39,
+            "ArrowDown" => 40,
+            _ => anyhow::bail!("unsupported browser key"),
+        };
+        self.command(
+            "Input.dispatchKeyEvent",
+            json!({"type":"keyDown","key":key,"windowsVirtualKeyCode":code,"nativeVirtualKeyCode":code}),
+        )
+        .await?;
+        self.command(
+            "Input.dispatchKeyEvent",
+            json!({"type":"keyUp","key":key,"windowsVirtualKeyCode":code,"nativeVirtualKeyCode":code}),
+        )
+        .await?;
+        Ok(())
     }
 
     async fn command(&mut self, method: &str, params: Value) -> anyhow::Result<Value> {
@@ -1098,6 +1947,10 @@ mod tests {
         assert!(validate_url("https://1.1.1.1/a").is_ok());
         assert!(validate_url("http://127.0.0.1:1420").is_ok());
         assert!(validate_url("http://localhost:5173").is_ok());
+        assert_eq!(
+            validate_url("http://0.0.0.0:3000/app").unwrap(),
+            "http://127.0.0.1:3000/app"
+        );
     }
 
     #[test]
@@ -1169,6 +2022,37 @@ mod tests {
         assert!(load_approval_rules(dir.path()).is_empty());
     }
 
+    #[tokio::test]
+    async fn preview_server_serves_draft_and_relative_asset() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("index.html"), "stale").unwrap();
+        std::fs::write(temp.path().join("app.css"), "body{color:red}").unwrap();
+        let (server, url) = start_preview_server(
+            temp.path().canonicalize().unwrap(),
+            "index.html".into(),
+            Some("<!doctype html><link rel='stylesheet' href='app.css'><h1>draft</h1>".into()),
+        )
+        .await
+        .unwrap();
+        let html = reqwest::get(&url).await.unwrap().text().await.unwrap();
+        assert!(html.contains("<h1>draft</h1>"));
+        let css = reqwest::get(format!("{}/app.css", url.trim_end_matches("index.html")))
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert_eq!(css, "body{color:red}");
+        let route = reqwest::get(format!("{}/settings", url.trim_end_matches("index.html")))
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(route.contains("<h1>draft</h1>"));
+        drop(server);
+    }
+
     #[tokio::test(flavor = "current_thread")]
     #[ignore = "requires an installed Chromium-family browser"]
     async fn browser_live_round_trip() {
@@ -1197,11 +2081,20 @@ mod tests {
             }
         });
         let temp = tempfile::tempdir().unwrap();
-        let mut session =
-            BrowserSession::launch(&format!("http://{addr}"), temp.path().to_path_buf())
-                .await
-                .unwrap();
+        let mut session = BrowserSession::launch(
+            &format!("http://{addr}"),
+            temp.path().join("tab"),
+            temp.path().join("downloads"),
+        )
+        .await
+        .unwrap();
         session.wait_ready(Some(8_000)).await.unwrap();
+        session.resize_viewport(640, 720).await.unwrap();
+        let viewport = session
+            .evaluate_json("JSON.stringify({width:innerWidth,height:innerHeight})")
+            .await
+            .unwrap();
+        assert_eq!(viewport, json!({"width":640,"height":720}));
         let snapshot = session.snapshot(true).await.unwrap();
         assert_eq!(snapshot["title"], "Astro Browser Test");
         assert!(snapshot["screenshot_path"]
@@ -1210,11 +2103,21 @@ mod tests {
         assert!(!snapshot.to_string().contains("secret-token"));
 
         let session_id = format!("browser-live-{}", std::process::id());
-        manager()
-            .lock()
-            .await
-            .sessions
-            .insert(session_id.clone(), Arc::new(Mutex::new(session)));
+        let tab_id = "live-tab".to_string();
+        manager().lock().await.sessions.insert(
+            session_id.clone(),
+            BrowserWorkspace {
+                tabs: vec![BrowserTab {
+                    id: tab_id.clone(),
+                    title: "Astro Browser Test".into(),
+                    url: format!("http://{addr}"),
+                    session: Arc::new(Mutex::new(session)),
+                }],
+                active_tab_id: tab_id,
+                output_dir: temp.path().to_path_buf(),
+                preview_server: None,
+            },
+        );
         assert_eq!(
             effective_approval_class(
                 &session_id,
@@ -1224,8 +2127,53 @@ mod tests {
             .await,
             Some(BrowserApprovalClass::Sensitive)
         );
-        let session = manager().lock().await.sessions.remove(&session_id).unwrap();
-        let mut session = session.lock().await;
-        let _ = session.child.kill().await;
+        close_for_session(&session_id).await.unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    #[ignore = "requires an installed Chromium-family browser"]
+    async fn browser_workspace_multi_tab_round_trip() {
+        if !browser_available() {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("index.html");
+        std::fs::write(
+            &file,
+            "<!doctype html><title>Local Preview</title><h1>draft</h1>",
+        )
+        .unwrap();
+        let session_id = format!("browser-tabs-{}", std::process::id());
+        let first = desktop_preview_file(&session_id, temp.path(), &file, None)
+            .await
+            .unwrap();
+        let first: Value = serde_json::from_str(&first).unwrap();
+        let first_tab = first["active_tab_id"].as_str().unwrap().to_string();
+        assert_eq!(first["tabs"].as_array().unwrap().len(), 1);
+
+        let second = desktop_control(
+            &session_id,
+            temp.path(),
+            "new_tab",
+            json!({"url":first["url"],"new_tab":true}),
+        )
+        .await
+        .unwrap();
+        let second: Value = serde_json::from_str(&second).unwrap();
+        let second_tab = second["active_tab_id"].as_str().unwrap().to_string();
+        assert_ne!(first_tab, second_tab);
+        assert_eq!(second["tabs"].as_array().unwrap().len(), 2);
+
+        let switched = switch_tab_for_session(&session_id, &first_tab)
+            .await
+            .unwrap();
+        let switched: Value = serde_json::from_str(&switched).unwrap();
+        assert_eq!(switched["active_tab_id"], first_tab);
+        let closed = close_tab_for_session(&session_id, &second_tab)
+            .await
+            .unwrap();
+        let closed: Value = serde_json::from_str(&closed).unwrap();
+        assert_eq!(closed["tabs"].as_array().unwrap().len(), 1);
+        close_for_session(&session_id).await.unwrap();
     }
 }

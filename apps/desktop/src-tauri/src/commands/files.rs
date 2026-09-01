@@ -63,7 +63,7 @@ fn resolve_memory_path(path: &str) -> Result<std::path::PathBuf, String> {
 }
 
 /// 读取项目 roots。项目文件 API 仅使用这些 roots，不复用记忆沙箱边界。
-async fn project_roots(project_id: &str) -> Result<Vec<std::path::PathBuf>, String> {
+pub(super) async fn project_roots(project_id: &str) -> Result<Vec<std::path::PathBuf>, String> {
     let project_id = project_id.trim();
     if project_id.is_empty() {
         return Err("project_id 不能为空".into());
@@ -84,7 +84,7 @@ async fn project_roots(project_id: &str) -> Result<Vec<std::path::PathBuf>, Stri
 ///
 /// 已存在路径必须在 canonicalize 后仍位于某个 root 内；不存在路径则验证
 /// 最近存在祖先，阻止通过目录 symlink 把后续写入导向 root 外。
-fn resolve_project_path(
+pub(super) fn resolve_project_path(
     roots: &[std::path::PathBuf],
     path: &str,
 ) -> Result<std::path::PathBuf, String> {

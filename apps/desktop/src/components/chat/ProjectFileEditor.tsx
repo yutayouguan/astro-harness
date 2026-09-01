@@ -4,12 +4,14 @@ import {
   Eye,
   FileCode2,
   FileQuestion,
+  Globe2,
   LoaderCircle,
   Save,
   X,
 } from "lucide-react";
 import type { ResolvedTheme } from "../../hooks/app/useTheme";
 import type { ProjectFileWorkbench } from "../../hooks/chat/useProjectFileWorkbench";
+import type { ProjectFileTab } from "../../hooks/chat/useProjectFileWorkbench";
 import {
   isMarkdownFilename,
   type MdMode,
@@ -23,12 +25,14 @@ type ProjectFileTabsProps = {
   workbench: ProjectFileWorkbench;
   mdMode: MdMode;
   onMdModeChange: (mode: MdMode) => void;
+  onPreviewInBrowser?: (tab: ProjectFileTab) => void;
 };
 
 export function ProjectFileTabs({
   workbench,
   mdMode,
   onMdModeChange,
+  onPreviewInBrowser,
 }: ProjectFileTabsProps) {
   const { activeTab } = workbench;
   const isMarkdown = Boolean(activeTab && isMarkdownFilename(activeTab.name));
@@ -98,6 +102,17 @@ export function ProjectFileTabs({
         })}
       </div>
       <div className="project-file-tab-actions">
+        {activeTab?.previewKind === "html" && onPreviewInBrowser ? (
+          <button
+            type="button"
+            onClick={() => onPreviewInBrowser(activeTab)}
+            disabled={!activeTab.path || activeTab.loading}
+            title="在内置浏览器中预览"
+            aria-label="在内置浏览器中预览当前网页"
+          >
+            <Globe2 size={14} aria-hidden />
+          </button>
+        ) : null}
         {opensExternally ? (
           <button
             type="button"

@@ -62,6 +62,7 @@
 @import "./features/chat/side-chat.css" layer(features);
 @import "./features/chat/project-files.css" layer(features);
 @import "./features/chat/browser-preview.css" layer(features);
+@import "./features/chat/browser-dock.css" layer(features);
 @import "./features/chat/subagents.css" layer(features);
 @import "./features/chat/branch-graph.css" layer(features);
 /* cards / media / agent-picker / select-menu / illustrations 的容器类被各功能页
