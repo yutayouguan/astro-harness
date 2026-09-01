@@ -1,9 +1,9 @@
 # Agent 生命周期详细设计
 
-> 版本：v3.1
+> 版本：v3.2
 > 日期：2026-09-01
 > 状态：当前实现基线
-> 适用范围：`agent-core`、`agent-protocol`、`agent-rollout`、`agent-subagents`、`agent-hooks`、`agent-mcp`、`agent-server`、Desktop shell
+> 适用范围：`agent-core`、`agent-protocol`、`agent-realtime`、`agent-rollout`、`agent-subagents`、`agent-hooks`、`agent-mcp`、`agent-server`、Desktop shell
 
 ## 1. 生命周期层级
 
@@ -222,11 +222,16 @@ denied assessment
 
 ### 10.5 Realtime 会话
 
-Realtime 是 Thread 所有的会话级连接，并非一个普通 sampling step。它通过独立 `Op` 处理 start、audio、text、speech、voice listing 和 close，并将 Provider 事件投影为统一 `EventMsg`。
+Realtime 是 Thread 所有的会话级连接，并非一个普通 sampling step。`agent-realtime` 独立拥有 transport negotiation、Provider wire decoding、typed event、history reducer 和 handoff wire；`agent-core` 只负责把 handoff 转换为普通 Agent turn，并将完整历史写入 rollout。Provider 原始 JSON 不跨越 crate 边界。
 
-- `RealtimeConversationStart` 的 reply 在 Provider handshake 成功或失败后才完成，不把“已入队”当成“已连接”。
+- `RealtimeConversationStart` 的 reply 在 transport-specific readiness 成功或失败后才完成：WebSocket 等待 session handshake，WebRTC 等待 call 创建与 SDP answer，ExistingCall 启动 sideband 生命周期。
 - Realtime `ChatTarget` 和 API credential 仅属于该连接，不改写普通文本回合的 primary/fallback targets。
 - `include_startup_context` 默认为 `true`：注入截断后的 system prompt，并取最近 32 条 user/assistant 文本项；显式关闭时不注入。
+- transport 支持 `websocket`、`webrtc { sdp }` 和 `existing_call { call_id }`。WebRTC 使用 unified SDP 交换媒体并以 call id 建立 server sideband；ExistingCall 只附加 sideband，不发送 session update。
+- V2 是 OpenAI GA 默认协议，V3 是显式选择的 frameless/live 协议。V3 sideband 支持有界指数退避重连；V2 断开即关闭，避免自动重放非幂等音频或 response request。
+- `HandoffRequested` 可 start/steer 普通 Agent turn，并把 assistant delta 按 `thinking`、`commentary` 或 `bem_tags` 模式回传。BEM 识别 `[ANALYSIS]`、`[COMMENTARY]`、`[FINAL]` 及配置前缀，区分 commentary 和 speakable output；turn terminal 后 handoff 只完成一次。
+- `RealtimeHistory` 只持久 session started、完整转录段、BEM item promotion 和 session closed outcome；原始 delta 与音频不落盘，并通过 `RolloutItem::RealtimeItem` 参与确定性恢复。
+- Desktop WebRTC 路径使用 browser media/data channel 和 unified SDP；ExistingCall 只要求 call id，不创建重复的本地采集链。
 - 连接和媒体通道必须有界；启动、传输或关闭失败通过 typed error/closed event 收敛，不留下伪活跃会话。
 
 ## 11. 事件与持久化
@@ -244,6 +249,8 @@ normalize event identity
 
 SessionStore 是查询、FTS 和 UI read model，不是工具执行事实源。其消息可从 rollout 重建。
 
+Realtime 使用独立 `RealtimeItem` 持久化语义：会话启动、完整 transcript、BEM promotion 与关闭 outcome 是 durable；音频和逐字 delta 仍是 transient。
+
 ## 12. 核心不变量
 
 1. 一个 Session 同时最多一个 active task。
@@ -259,6 +266,8 @@ SessionStore 是查询、FTS 和 UI read model，不是工具执行事实源。�
 11. `TurnSettings` 只修改命中 turn 的下一 sampling step，Realtime target 只修改当前连接。
 12. Elicitation 和 Guardian 授权都是可定位、有界的人在回路状态；Elicitation 可取消，解决和重试授权都只能消费一次。
 13. 独立用户 Shell 不是模型工具；虽不进入 Agent sandbox，仍必须有任务归属、取消与输出上限。
+14. Realtime Provider wire JSON 不跨越 `agent-realtime` 边界，持久化只记录经 reducer 归并的 `RealtimeItem`。
+15. ExistingCall 不改写已建立会话的 session 配置；V3 可恢复 sideband，V2 不自动重放非幂等输入。
 
 ## 13. 验证
 
@@ -270,7 +279,7 @@ cargo test -p subagents
 cargo test -p hooks
 ```
 
-重点覆盖：task replacement、steer turn identity、interrupt terminal、suspend/recover、compact replacement、rollback replay、review cleanup、tool call/output pairing、Hook shutdown、rollout-before-live ordering、Realtime handshake 边界、Elicitation 重复/取消、TurnSettings 原子替换、Guardian 重复操作 FIFO 和 UserShell 输出截断。
+重点覆盖：task replacement、steer turn identity、interrupt terminal、suspend/recover、compact replacement、rollback replay、review cleanup、tool call/output pairing、Hook shutdown、rollout-before-live ordering、Realtime transport/version/parser/history/handoff/reconnect、Elicitation 重复/取消、TurnSettings 原子替换、Guardian 重复操作 FIFO 和 UserShell 输出截断。
 
 ## 14. 相关设计
 
@@ -279,4 +288,5 @@ cargo test -p hooks
 - [Hooks 系统详细设计](08-Hooks系统详细设计.md)
 - [Agent Harness 执行外壳详细设计](14-Agent-Harness执行外壳详细设计.md)
 - [工具系统详细设计](../04-工具与扩展生态/02-工具系统详细设计.md)
+- [Realtime 子系统](../../realtime-subsystem.md)
 - [2026-09-01 Codex 生命周期对齐更新说明](../../更新说明/2026-09-01-Codex生命周期对齐.md)
