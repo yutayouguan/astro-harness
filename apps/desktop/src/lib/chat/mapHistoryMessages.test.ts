@@ -51,6 +51,36 @@ test("mapHistoryItems folds native call and output items at render time", () => 
   assert.equal(activity?.status, "done");
 });
 
+test("mapHistoryItems restores persisted terminal tool status", () => {
+  const messages = mapHistoryItems([
+    {
+      id: "1",
+      timestamp: 1,
+      item: {
+        type: "function_call",
+        call_id: "call_1",
+        name: "exec_command",
+        arguments: '{"cmd":"dangerous"}',
+      },
+    },
+    {
+      id: "2",
+      timestamp: 2,
+      item: {
+        type: "function_call_output",
+        call_id: "call_1",
+        name: "exec_command",
+        output: "Permission denied by user",
+        internal_chat_message_metadata_passthrough: {
+          astro_tool_status: "declined",
+        },
+      },
+    },
+  ]);
+
+  assert.equal(messages[0]?.activities?.[0]?.status, "declined");
+});
+
 test("mapHistoryItems renders native shell, web, image, and agent items", () => {
   const messages = mapHistoryItems([
     {

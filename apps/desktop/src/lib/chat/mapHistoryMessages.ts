@@ -197,6 +197,12 @@ function responseItemsToBubbles(items: StoredResponseItemDto[]): HistoryBubble[]
       );
     } else if (type === "function_call_output" || type === "custom_tool_call_output" || type === "tool_search_output") {
       const output = itemText(item);
+      const persistedStatus =
+        typeof metadata?.astro_tool_status === "string"
+          ? metadata.astro_tool_status
+          : typeof item.status === "string"
+            ? item.status
+            : "completed";
       attachOutput(
         stored.id,
         typeof item.call_id === "string" ? item.call_id : undefined,
@@ -207,10 +213,7 @@ function responseItemsToBubbles(items: StoredResponseItemDto[]): HistoryBubble[]
             : undefined,
         output,
         media,
-        resolveToolActivityStatus(
-          typeof item.status === "string" ? item.status : "completed",
-          output,
-        ),
+        resolveToolActivityStatus(persistedStatus, output),
       );
     }
   }

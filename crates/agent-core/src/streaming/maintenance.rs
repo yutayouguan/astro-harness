@@ -333,6 +333,7 @@ pub(super) async fn record_tool_outcomes(
                     Some(&call.name),
                     &result_for_history,
                     &tool_media,
+                    Some(&tool_status),
                 )
                 .await
         };

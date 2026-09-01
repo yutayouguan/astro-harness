@@ -1094,6 +1094,13 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
         &asset.reference,
         types::MediaRef::DataUrl(value) if value == &large_data_url
     )));
+    assert_eq!(
+        recorded_tool
+            .metadata()
+            .and_then(|metadata| metadata.get("astro_tool_status"))
+            .and_then(serde_json::Value::as_str),
+        Some("completed")
+    );
     let rollout = agent_rollout::read_rollout(&path).await.unwrap();
     let persisted = rollout
         .iter()
