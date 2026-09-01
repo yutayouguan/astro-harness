@@ -1064,6 +1064,7 @@ fn matcher_values(event: HookEvent, payload: &HookPayload) -> Vec<String> {
         event,
         HookEvent::PreToolUse | HookEvent::PermissionRequest | HookEvent::PostToolUse
     ) {
+        values.extend(payload.matcher_aliases.iter().cloned());
         if values.iter().any(|value| value == "terminal") {
             values.push("Bash".into());
         }

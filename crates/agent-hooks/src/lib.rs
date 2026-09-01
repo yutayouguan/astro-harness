@@ -14,6 +14,7 @@ pub mod outcome;
 pub mod plugin;
 pub mod run;
 pub mod shell;
+pub mod tool_events;
 pub mod ui;
 
 pub use command::{
@@ -37,6 +38,10 @@ pub use run::{
     HookSource, HookTrustStatus,
 };
 pub use shell::{load_shell_runner, ShellHookRunner};
+pub use tool_events::{
+    PermissionHookDecision, PermissionRequestOutcome, PermissionRequestRequest, PostToolUseOutcome,
+    PostToolUseRequest, PreToolUseOutcome, PreToolUseRequest, SubagentHookContext,
+};
 pub use ui::{
     install_recording, install_ui_timeline, UiHookEvent, UiTimelineGeneration, UiTimelineSlot,
 };
