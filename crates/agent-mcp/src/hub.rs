@@ -45,6 +45,7 @@ pub const MAX_TOTAL_MCP_INSTRUCTIONS_CHARS: usize = 65_536;
 pub struct McpExecutionContext {
     sandbox_policy: sandbox::SandboxPolicy,
     working_dir: PathBuf,
+    allowed_working_roots: Vec<PathBuf>,
     sandbox_audit: Option<sandbox::SandboxAuditMetadata>,
 }
 
@@ -67,9 +68,35 @@ impl McpExecutionContext {
         }
         Ok(Self {
             sandbox_policy,
+            allowed_working_roots: vec![working_dir.clone()],
             working_dir,
             sandbox_audit: None,
         })
+    }
+
+    /// 允许受信任扩展包中的 MCP Server 使用其包目录作为 cwd。
+    ///
+    /// 这里只扩大 cwd 校验边界，不增加沙箱写权限；扩展目录仍受当前 profile 约束。
+    pub fn with_additional_working_roots(
+        mut self,
+        roots: impl IntoIterator<Item = PathBuf>,
+    ) -> anyhow::Result<Self> {
+        for root in roots {
+            let root = root
+                .canonicalize()
+                .with_context(|| format!("resolve MCP allowed working root: {}", root.display()))?;
+            if !root.is_dir() {
+                anyhow::bail!(
+                    "MCP allowed working root is not a directory: {}",
+                    root.display()
+                );
+            }
+            if !self.allowed_working_roots.contains(&root) {
+                self.allowed_working_roots.push(root);
+            }
+        }
+        self.allowed_working_roots.sort();
+        Ok(self)
     }
 
     pub fn with_sandbox_audit(mut self, audit: sandbox::SandboxAuditMetadata) -> Self {
@@ -85,9 +112,14 @@ impl McpExecutionContext {
 
     fn fingerprint(&self) -> String {
         format!(
-            "{}|{}",
+            "{}|{}|{}",
             self.sandbox_policy.profile_hash_material(),
-            self.working_dir.to_string_lossy()
+            self.working_dir.to_string_lossy(),
+            self.allowed_working_roots
+                .iter()
+                .map(|root| root.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(";")
         )
     }
 }
@@ -1642,11 +1674,20 @@ fn resolve_server_working_dir(
     if !candidate.is_dir() {
         anyhow::bail!("MCP server cwd is not a directory: {}", candidate.display());
     }
-    if !candidate.starts_with(&execution_context.working_dir) {
+    if !execution_context
+        .allowed_working_roots
+        .iter()
+        .any(|root| candidate.starts_with(root))
+    {
         anyhow::bail!(
-            "MCP server cwd escapes the execution root: {} (root: {})",
+            "MCP server cwd escapes the execution root and allowed extension roots: {} (roots: {})",
             candidate.display(),
-            execution_context.working_dir.display()
+            execution_context
+                .allowed_working_roots
+                .iter()
+                .map(|root| root.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
     Ok(candidate)
@@ -2123,6 +2164,14 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("escapes the execution root"), "{error}");
+
+        let context = context
+            .with_additional_working_roots([outside.path().to_path_buf()])
+            .unwrap();
+        assert_eq!(
+            resolve_server_working_dir(&server, &context).unwrap(),
+            outside.path().canonicalize().unwrap()
+        );
     }
 
     #[tokio::test]

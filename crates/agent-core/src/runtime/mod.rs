@@ -1139,6 +1139,16 @@ impl Session {
         self.lock_state().current_turn_context.clone()
     }
 
+    /// 当前 turn 已发布的扩展快照；尚未进入准备边界时返回 `None`。
+    pub async fn current_extension_snapshot(
+        &self,
+    ) -> Option<Arc<crate::extensions::ExtensionSnapshot>> {
+        self.lock_state()
+            .current_turn_context
+            .as_ref()
+            .and_then(|turn| turn.extension_snapshot())
+    }
+
     /// 子 Agent 执行调度器。
     pub fn execution(&self) -> Arc<dyn tools::AgentThreadDispatch> {
         Arc::clone(&self.execution)
@@ -1995,6 +2005,53 @@ impl Session {
         self.lock_state().skill_config_overrides.clone()
     }
 
+    /// 返回当前 turn 的扩展快照；首个调用在 turn 边界完成发现并原子发布。
+    pub(crate) async fn extension_snapshot_for_current_turn(
+        &self,
+    ) -> anyhow::Result<Arc<crate::extensions::ExtensionSnapshot>> {
+        let (turn_context, project_root, mcp_overrides, skill_overrides) = {
+            let state = self.lock_state();
+            if let Some(snapshot) = state
+                .current_turn_context
+                .as_ref()
+                .and_then(|turn| turn.extension_snapshot())
+            {
+                return Ok(snapshot);
+            }
+            let turn_context = state.current_turn_context.clone();
+            let project_root = turn_context
+                .as_ref()
+                .and_then(|turn| turn.project_root().map(ToOwned::to_owned))
+                .or_else(|| state.project_root.clone());
+            (
+                turn_context,
+                project_root,
+                state.mcp_config_override.clone(),
+                state.skill_config_overrides.clone(),
+            )
+        };
+        let working_dir = project_root.unwrap_or_else(|| self.workspace_dir.clone());
+        let mut options = crate::extensions::ExtensionDiscoveryOptions::new(
+            self.config.memory_dir.clone(),
+            working_dir,
+        );
+        options.mcp_overrides = mcp_overrides;
+        options.skill_overrides = skill_overrides;
+        let snapshot = Arc::new(crate::extensions::discover_extension_snapshot(&options)?);
+        for diagnostic in snapshot.diagnostics() {
+            tracing::warn!(
+                manifest = %diagnostic.manifest_path.display(),
+                extension_id = ?diagnostic.extension_id,
+                error = %diagnostic.message,
+                "extension manifest skipped"
+            );
+        }
+        Ok(match turn_context {
+            Some(turn) => turn.publish_extension_snapshot(snapshot),
+            None => snapshot,
+        })
+    }
+
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
     pub async fn reload_tool_gates(&self) {
         self.services
@@ -2009,6 +2066,14 @@ impl Session {
     /// optional Server 失败仅降级；required Server 失败向调用方传播。
     /// 无论是否存在 required 失败，已成功连接的工具都会同步到 `MCP_TOOLSET`。
     pub async fn reload_mcp(&self) -> anyhow::Result<()> {
+        let snapshot = self.extension_snapshot_for_current_turn().await?;
+        self.reload_mcp_from_snapshot(&snapshot).await
+    }
+
+    async fn reload_mcp_from_snapshot(
+        &self,
+        snapshot: &crate::extensions::ExtensionSnapshot,
+    ) -> anyhow::Result<()> {
         if !self.lock_state().mcp_enabled {
             self.services
                 .tool_registry
@@ -2019,15 +2084,15 @@ impl Session {
             return Ok(());
         }
         let agent_id = self.agent_id.clone();
-        let (project_root, permission_profile, mcp_config_override) = {
+        let permission_profile = {
             let state = self.lock_state();
-            (
-                state.project_root.clone(),
-                state.permission_profile.clone(),
-                state.mcp_config_override.clone(),
-            )
+            state
+                .current_turn_context
+                .as_ref()
+                .and_then(|turn| turn.permission_profile().map(str::to_string))
+                .or_else(|| state.permission_profile.clone())
         };
-        let execution_root = project_root.unwrap_or_else(|| self.workspace_dir.clone());
+        let execution_root = snapshot.working_dir().to_path_buf();
         let permission_settings = memory::load_permission_settings(&self.config.memory_dir);
         let profile_id = permission_profile
             .clone()
@@ -2057,6 +2122,9 @@ impl Session {
         })
         .and_then(|policy| {
             McpExecutionContext::new(policy, &execution_root)
+                .and_then(|context| {
+                    context.with_additional_working_roots(snapshot.extension_roots())
+                })
                 .map(|context| context.with_sandbox_audit(sandbox_audit))
         })
         .inspect_err(|error| {
@@ -2066,18 +2134,10 @@ impl Session {
         let (reload_result, mcp_instructions) = {
             let mut hub = self.mcp_hub.lock().await;
             hub.set_execution_context(execution_context);
-            let reload_result = if mcp_config_override.is_empty() {
-                hub.reload_from_disk(Some(&agent_id)).await
-            } else {
-                let mut configs = mcp::load_mcp_servers_layered(Some(&execution_root))?;
-                for overlay in &mcp_config_override {
-                    let id = mcp::sanitize_server_id(&overlay.id);
-                    configs.retain(|config| mcp::sanitize_server_id(&config.id) != id);
-                    configs.push(overlay.clone());
-                }
-                hub.set_agent_id(Some(agent_id.clone()));
-                hub.reload_with_configs(configs).await
-            };
+            hub.set_agent_id(Some(agent_id.clone()));
+            let reload_result = hub
+                .reload_with_configs(snapshot.mcp_servers().to_vec())
+                .await;
             let instructions = hub.server_instructions();
             (reload_result, instructions)
         };
@@ -2100,8 +2160,14 @@ impl Session {
 
     /// 同时重载工具 gate 与 MCP 配置，通常在每轮用户输入开始时调用。
     pub async fn reload_tools_and_mcp(&self) -> anyhow::Result<()> {
+        let snapshot = self.extension_snapshot_for_current_turn().await?;
         self.reload_tool_gates().await;
-        self.reload_mcp().await
+        self.services
+            .tool_registry
+            .write()
+            .expect("tool registry lock poisoned")
+            .set_extension_toolsets(snapshot.toolsets());
+        self.reload_mcp_from_snapshot(&snapshot).await
     }
 
     /// 将 MCP Hub 中已启用的工具条目同步到 [`ToolRegistry`]。

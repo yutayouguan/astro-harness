@@ -132,8 +132,17 @@ impl AgentLoop {
         };
         let (project_memory, user_profile, daily) = self.memory().prompt_snapshot_with_daily();
         let skill_pairs = if self.tool_registry().await.is_toolset_enabled("skills") {
-            let skill_config_overrides = self.skill_config_overrides();
-            skills::list_enabled_for_prompt_with_config(&skill_config_overrides)
+            match self
+                .current_turn_context()
+                .await
+                .and_then(|turn| turn.extension_snapshot())
+            {
+                Some(snapshot) => snapshot.skill_index().to_vec(),
+                None => {
+                    let skill_config_overrides = self.skill_config_overrides();
+                    skills::list_enabled_for_prompt_with_config(&skill_config_overrides)
+                }
+            }
         } else {
             Vec::new()
         };
@@ -197,8 +206,8 @@ impl AgentLoop {
         &self,
         inject: Option<&str>,
     ) -> crate::prompt::PromptContract {
-        let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
         skills::set_workspace_override(&self.workspace_dir());
+        let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
         let skill_index: Vec<(&str, &str)> = skill_pairs
             .iter()
             .map(|(name, desc)| (name.as_str(), desc.as_str()))

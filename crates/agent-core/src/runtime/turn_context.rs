@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tokio::sync::Notify;
 
@@ -91,6 +91,8 @@ pub struct TurnContext {
     input_state: Mutex<TurnInputState>,
     input_notify: Notify,
     provider_settings: Mutex<Option<TurnProviderSettings>>,
+    /// 在 turn 首个准备边界发现，此后所有 sampling step 共享同一不可变版本。
+    extension_snapshot: OnceLock<Arc<crate::extensions::ExtensionSnapshot>>,
     child_tracker: Arc<ChildTracker>,
     #[cfg(test)]
     preparing_reservation_notify: Notify,
@@ -148,6 +150,7 @@ impl TurnContext {
             }),
             input_notify: Notify::new(),
             provider_settings: Mutex::new(None),
+            extension_snapshot: OnceLock::new(),
             child_tracker: Arc::new(ChildTracker::default()),
             #[cfg(test)]
             preparing_reservation_notify: Notify::new(),
@@ -173,6 +176,19 @@ impl TurnContext {
 
     pub fn requested_tool_mode(&self) -> types::ToolMode {
         self.requested_tool_mode
+    }
+
+    /// 获取当前 turn 已冻结的扩展快照。
+    pub fn extension_snapshot(&self) -> Option<Arc<crate::extensions::ExtensionSnapshot>> {
+        self.extension_snapshot.get().cloned()
+    }
+
+    /// 首个调用方发布快照；并发发现时所有调用方最终使用同一个值。
+    pub(crate) fn publish_extension_snapshot(
+        &self,
+        snapshot: Arc<crate::extensions::ExtensionSnapshot>,
+    ) -> Arc<crate::extensions::ExtensionSnapshot> {
+        Arc::clone(self.extension_snapshot.get_or_init(|| snapshot))
     }
 
     pub(crate) fn initialize_provider_settings(

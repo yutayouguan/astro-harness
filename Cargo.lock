@@ -22,6 +22,7 @@ name = "agent"
 version = "0.1.0"
 dependencies = [
  "a2ui",
+ "agent-config",
  "agent-db",
  "agent-protocol",
  "agent-rollout",
@@ -52,6 +53,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
+ "toml 0.8.2",
  "tools",
  "tracing",
  "types",

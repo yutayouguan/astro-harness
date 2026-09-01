@@ -65,6 +65,8 @@ pub struct ToolRegistry {
     enabled: HashMap<String, bool>,
     /// Skill 加载后 additive 放宽的 toolset（即使 enabled 映射为 false 也允许）。
     skill_override_enabled: std::collections::HashSet<String>,
+    /// 当前 turn 的 ExtensionSnapshot 声明的 toolset；每次发布 snapshot 时整体替换。
+    extension_override_enabled: std::collections::HashSet<String>,
 }
 
 fn namespace_child_name(entry: &ToolEntry) -> String {
@@ -152,6 +154,7 @@ impl ToolRegistry {
             dynamic_handlers: HashMap::new(),
             enabled: HashMap::new(),
             skill_override_enabled: std::collections::HashSet::new(),
+            extension_override_enabled: std::collections::HashSet::new(),
         }
     }
 
@@ -190,7 +193,9 @@ impl ToolRegistry {
     ///
     /// Skill 激活的 `skill_override_enabled` 可 additive 放宽被禁用的 toolset。
     pub fn is_toolset_enabled(&self, toolset: &str) -> bool {
-        if self.skill_override_enabled.contains(toolset) {
+        if self.skill_override_enabled.contains(toolset)
+            || self.extension_override_enabled.contains(toolset)
+        {
             return true;
         }
         self.enabled.get(toolset).copied().unwrap_or(true)
@@ -211,6 +216,30 @@ impl ToolRegistry {
         let mut v: Vec<_> = self.skill_override_enabled.iter().cloned().collect();
         v.sort();
         v
+    }
+
+    /// 原子替换当前 turn 的扩展 toolset 贡献。
+    ///
+    /// Skill 激活集合是会话级 additive 状态；扩展集合则跟随
+    /// `ExtensionSnapshot`，因此必须可在下一 turn 撤销。
+    pub fn set_extension_toolsets(&mut self, toolsets: &[String]) {
+        self.extension_override_enabled = toolsets
+            .iter()
+            .map(|toolset| toolset.trim())
+            .filter(|toolset| !toolset.is_empty())
+            .map(str::to_string)
+            .collect();
+    }
+
+    /// 当前 ExtensionSnapshot 放宽的 toolset 列表（测试 / 观测）。
+    pub fn extension_toolsets(&self) -> Vec<String> {
+        let mut values = self
+            .extension_override_enabled
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        values.sort();
+        values
     }
 
     /// 判断指定工具名当前是否允许调用。
@@ -540,6 +569,31 @@ mod tests {
         reg.activate_skill_toolsets(&["memory".into()]);
         assert!(reg.is_tool_allowed("memory"));
         assert_eq!(reg.skill_override_toolsets(), vec!["memory".to_string()]);
+    }
+
+    #[test]
+    fn extension_toolsets_are_replaceable_at_turn_boundary() {
+        let mut reg = ToolRegistry::new();
+        reg.register(ToolEntry {
+            name: "image_gen".into(),
+            toolset: "image_gen".into(),
+            description: "generate".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "palette",
+            ..ToolEntry::lifecycle_defaults().deferred()
+        });
+        let mut enabled = HashMap::new();
+        enabled.insert("image_gen".into(), false);
+        reg.set_enabled_map(enabled);
+
+        reg.set_extension_toolsets(&["image_gen".into()]);
+        assert!(reg.is_tool_allowed("image_gen"));
+        assert_eq!(reg.extension_toolsets(), vec!["image_gen".to_string()]);
+
+        reg.set_extension_toolsets(&[]);
+        assert!(!reg.is_tool_allowed("image_gen"));
+        assert!(reg.extension_toolsets().is_empty());
     }
 
     #[test]

@@ -175,6 +175,10 @@ impl AgentLoop {
                 state.skill_config_overrides.clone(),
             )
         };
+        let skill_config_overrides = step_context
+            .and_then(|step| step.turn.extension_snapshot())
+            .map(|snapshot| snapshot.skill_configs().to_vec())
+            .unwrap_or(skill_config_overrides);
         let mut ctx = ToolContext {
             memory: &self.services.memory,
             sessions,
@@ -391,24 +395,35 @@ impl AgentLoop {
                 )
             },
         );
-        let (exec_name, exec_args) = if !is_mcp_tool_name(name)
-            && !has_tool
-            && skills_allowed
-            && skills::list_installed()
-                .into_iter()
-                .any(|s| s.name == name && s.enabled)
-        {
-            (
-                "skills",
-                serde_json::json!({
-                    "action": "load",
-                    "skill_id": name,
-                    "input": args_owned,
-                }),
-            )
-        } else {
-            (name, args_owned)
-        };
+        let skill_is_enabled = step_context
+            .as_ref()
+            .and_then(|step| step.turn.extension_snapshot())
+            .map_or_else(
+                || {
+                    skills::list_installed()
+                        .into_iter()
+                        .any(|skill| skill.name == name && skill.enabled)
+                },
+                |snapshot| {
+                    snapshot
+                        .skill_index()
+                        .iter()
+                        .any(|(skill, _)| skill == name)
+                },
+            );
+        let (exec_name, exec_args) =
+            if !is_mcp_tool_name(name) && !has_tool && skills_allowed && skill_is_enabled {
+                (
+                    "skills",
+                    serde_json::json!({
+                        "action": "load",
+                        "skill_id": name,
+                        "input": args_owned,
+                    }),
+                )
+            } else {
+                (name, args_owned)
+            };
         if let Err(msg) = tools::check_tool_call(interaction_mode, exec_name, &exec_args) {
             return Ok(msg.into());
         }
@@ -416,7 +431,7 @@ impl AgentLoop {
             .dispatch_named_tool(exec_name, &exec_args, grants, step_context.as_deref())
             .await?;
         if exec_name == "skills" {
-            self.activate_skill_toolsets_from_args(&exec_args);
+            self.activate_skill_toolsets_from_args(&exec_args, step_context.as_deref());
         }
         // KeyChoice：`confirm` 是关键决策闸口，记一笔供学习闭环。
         if exec_name == "confirm"
@@ -451,7 +466,11 @@ impl AgentLoop {
     }
 
     /// `skills` 工具成功加载后：按 frontmatter `astro_tools` additive 放宽 toolset。
-    fn activate_skill_toolsets_from_args(&self, args: &serde_json::Value) {
+    fn activate_skill_toolsets_from_args(
+        &self,
+        args: &serde_json::Value,
+        step_context: Option<&StepContext>,
+    ) {
         let Some(skill_id) = args
             .get("skill_id")
             .and_then(|v| v.as_str())
@@ -463,7 +482,14 @@ impl AgentLoop {
         // 优先复用 skills 工具刚加载过的结果，避免二次扫描 + 读盘。
         let astro_tools = match skills::recent_astro_tools(skill_id) {
             Some(tools) => tools,
-            None => match skills::load_skill_by_name(skill_id) {
+            None => match step_context
+                .and_then(|step| step.turn.extension_snapshot())
+                .map_or_else(
+                    || skills::load_skill_by_name(skill_id),
+                    |snapshot| {
+                        skills::load_skill_by_name_with_config(skill_id, snapshot.skill_configs())
+                    },
+                ) {
                 Ok(loaded) => loaded.metadata.astro_tools,
                 Err(_) => return,
             },

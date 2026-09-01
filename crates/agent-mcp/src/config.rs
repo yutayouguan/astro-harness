@@ -609,6 +609,20 @@ pub fn decode_inline_mcp_servers(
     Ok(decoded.into_values().collect())
 }
 
+/// 从已经完成分层解析的配置快照解码 MCP Server。
+///
+/// 与 [`load_mcp_servers_layered`] 不同，本函数不再访问文件系统，供 turn/request
+/// 级不可变配置快照复用，避免在同一边界内二次读盘产生 TOCTOU 漂移。
+pub fn decode_mcp_servers_from_value(config: &toml::Value) -> anyhow::Result<Vec<McpServerConfig>> {
+    let root: McpTomlRoot = config
+        .clone()
+        .try_into()
+        .context("decode MCP servers from effective config")?;
+    let mut decoded = BTreeMap::new();
+    merge_servers(&mut decoded, root.mcp_servers)?;
+    Ok(decoded.into_values().collect())
+}
+
 /// 按 `系统 → 全局 → 可信项目` 读取并以 Server 为单位整体覆盖。
 pub fn load_mcp_servers_layered(
     project_root: Option<&Path>,
@@ -807,6 +821,25 @@ enabled_tools = ["search"]
             decoded[0].enabled_tools.as_ref().unwrap(),
             &vec!["search".to_string()]
         );
+    }
+
+    #[test]
+    fn decodes_servers_from_an_effective_config_snapshot() {
+        let value: toml::Value = r#"
+model = "gpt"
+[extensions.demo]
+enabled = true
+[mcp_servers.docs]
+url = "https://example.invalid/mcp"
+"#
+        .parse()
+        .unwrap();
+
+        let decoded = decode_mcp_servers_from_value(&value).unwrap();
+
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].id, "docs");
+        assert_eq!(decoded[0].url, "https://example.invalid/mcp");
     }
 
     #[test]

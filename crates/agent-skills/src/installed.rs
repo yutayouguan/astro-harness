@@ -585,7 +585,12 @@ pub fn list_enabled_for_prompt_with_config(config: &[(PathBuf, bool)]) -> Vec<(S
             out.push((skill.name, skill.description));
         }
     }
-    for (path, enabled) in config {
+    for (index, (path, enabled)) in config.iter().enumerate() {
+        if config[index + 1..].iter().any(|(later, _)| {
+            same_skill_path(&configured_skill_md(later), &configured_skill_md(path))
+        }) {
+            continue;
+        }
         if !enabled {
             continue;
         }
@@ -1259,6 +1264,27 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("禁用"));
+    }
+
+    #[test]
+    fn later_config_entry_can_disable_an_external_skill() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path().join("astro"));
+        std::env::remove_var("ASTRO_WORKSPACE");
+        let skill_dir = dir.path().join("external/reviewer");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: configured-reviewer\ndescription: child only\n---\n",
+        )
+        .unwrap();
+
+        let config = vec![(skill_dir.clone(), true), (skill_dir, false)];
+
+        assert!(list_enabled_for_prompt_with_config(&config)
+            .iter()
+            .all(|(name, _)| name != "configured-reviewer"));
     }
 
     #[test]
