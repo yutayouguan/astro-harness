@@ -194,6 +194,7 @@ impl ReviewTask {
         } else {
             None
         };
+        child.shutdown_runtime().await;
         child.close_event_stream();
         let _ = forwarder.await;
         child.clear_current_turn_id().await;
