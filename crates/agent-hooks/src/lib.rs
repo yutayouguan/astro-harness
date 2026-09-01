@@ -8,6 +8,7 @@ pub mod config;
 pub mod context;
 pub mod event;
 pub mod gateway;
+pub mod lifecycle_events;
 pub mod mcp;
 pub mod names;
 pub mod outcome;
@@ -26,6 +27,12 @@ pub use config::{default_astro_root, load_config, load_config_or_default, AstroC
 pub use context::PluginContext;
 pub use event::HookEvent;
 pub use gateway::{DiscoveredHook, GatewayHookRegistry, HookManifest};
+pub use lifecycle_events::{
+    InterruptOutcome, InterruptRequest, PostCompactRequest, PreCompactOutcome, PreCompactRequest,
+    SessionEndOutcome, SessionEndRequest, SessionStartOutcome, SessionStartRequest,
+    SessionStartSource, StatelessHookOutcome, StopHookTarget, StopOutcome, StopRequest,
+    UserPromptSubmitOutcome, UserPromptSubmitRequest,
+};
 pub use mcp::{HookMcpCall, HookMcpExecutor};
 pub use names::*;
 pub use outcome::{
