@@ -14,6 +14,7 @@ import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import {
   buildElicitationContent,
   elicitationRequestId,
+  resolveElicitationAction,
 } from "../../lib/chat/elicitation";
 import {
   type ChatInteractionMode,
@@ -1724,7 +1725,7 @@ export function useChatSession({
       const elicitation = interrupts.find((item) => item.reason === "elicitation");
       if (elicitation) {
         if (parallelTask) {
-          await resumeParallelHitl(messageId, payload);
+          await resumeParallelHitl(messageId, payload, name);
           return;
         }
         const metadataPayload = elicitation.metadata?.payload;
@@ -1744,26 +1745,27 @@ export function useChatSession({
           return;
         }
         try {
+          const action = resolveElicitationAction(name);
           await invoke("resolve_elicitation", {
             sessionId: targetSessionId,
             serverName,
             requestId: elicitationRequestId(elicitation),
-            action:
-              name === "cancel"
-                ? "cancel"
-                : name === "deny"
-                  ? "decline"
-                  : "accept",
+            action,
             contentJson:
-              name === "deny" || name === "cancel"
+              action !== "accept"
                 ? null
                 : JSON.stringify(buildElicitationContent(elicitation, payload)),
             metaJson: null,
           });
-          setSessionPendingInterrupts([]);
-          setStreaming(true);
-          setStatus("busy");
-          setStatusPhase("generating");
+          const remaining = sessionPendingInterrupts.filter(
+            (interrupt) => interrupt.id !== elicitation.id,
+          );
+          setSessionPendingInterrupts(remaining);
+          if (remaining.length === 0) {
+            setStreaming(true);
+            setStatus("busy");
+            setStatusPhase("generating");
+          }
         } catch (error) {
           showTransientToast(
             error instanceof Error ? error.message : String(error),
@@ -1774,7 +1776,7 @@ export function useChatSession({
       }
 
       if (parallelTask) {
-        await resumeParallelHitl(messageId, payload);
+        await resumeParallelHitl(messageId, payload, name);
         return;
       }
 

@@ -221,7 +221,7 @@ message RealtimeConversationStartRequest {
   string output_modality = 6; // audio | text
   string voice = 7;
   string instructions = 8;
-  bool include_startup_context = 9;
+  optional bool include_startup_context = 9;
   string turn_detection = 10; // disabled | server_vad | semantic_vad
   string noise_reduction = 11; // empty | near_field | far_field
   string transcription_model = 12;

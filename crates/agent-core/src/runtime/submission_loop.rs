@@ -170,8 +170,11 @@ impl Session {
         chat_override: Option<ChatOverride>,
     ) {
         match op {
-            Op::RealtimeConversationStart(mut params) => {
-                let target = self.lock_state().model_ctx.primary_chat_target();
+            Op::RealtimeConversationStart {
+                mut params,
+                target,
+                reply,
+            } => {
                 let model = params
                     .model
                     .clone()
@@ -231,6 +234,7 @@ impl Session {
                     .await
                 {
                     Ok(connection) => {
+                        let _ = reply.send(Ok(()));
                         self.send_event(
                             &submission_id,
                             EventMsg::RealtimeConversationStarted(
@@ -245,6 +249,7 @@ impl Session {
                     }
                     Err(error) => {
                         let reason = error.to_string();
+                        let _ = reply.send(Err(reason.clone()));
                         self.emit_control_error(submission_id.clone(), "realtime_start", &reason)
                             .await;
                         self.send_event(

@@ -24,6 +24,14 @@ function coerceSchemaValue(value: unknown, schema: unknown): unknown {
   return value;
 }
 
+export type ElicitationAction = "accept" | "decline" | "cancel";
+
+export function resolveElicitationAction(actionName: string): ElicitationAction {
+  if (actionName === "cancel") return "cancel";
+  if (actionName === "deny") return "decline";
+  return "accept";
+}
+
 /** Convert ClarifyWizard output back into the MCP elicitation schema object. */
 export function buildElicitationContent(
   interrupt: PendingInterrupt,

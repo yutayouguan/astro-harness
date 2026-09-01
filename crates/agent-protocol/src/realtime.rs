@@ -55,7 +55,7 @@ pub struct ConversationStartParams {
     pub voice: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
-    #[serde(default)]
+    #[serde(default = "default_include_startup_context")]
     pub include_startup_context: bool,
     #[serde(default)]
     pub initial_items: Vec<ConversationTextParams>,
@@ -65,6 +65,10 @@ pub struct ConversationStartParams {
     pub noise_reduction: Option<RealtimeNoiseReduction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_audio_transcription_model: Option<String>,
+}
+
+const fn default_include_startup_context() -> bool {
+    true
 }
 
 impl Default for ConversationStartParams {
@@ -180,6 +184,12 @@ mod tests {
         let params = ConversationStartParams::default();
         assert_eq!(params.output_modality, RealtimeOutputModality::Audio);
         assert_eq!(params.turn_detection, RealtimeTurnDetection::ServerVad);
+        assert!(params.include_startup_context);
+    }
+
+    #[test]
+    fn omitted_startup_context_preserves_the_public_default() {
+        let params: ConversationStartParams = serde_json::from_str("{}").unwrap();
         assert!(params.include_startup_context);
     }
 

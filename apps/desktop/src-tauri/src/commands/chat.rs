@@ -474,7 +474,7 @@ pub async fn start_realtime_conversation(
             output_modality: request.output_modality.unwrap_or_else(|| "audio".into()),
             voice: request.voice.unwrap_or_default(),
             instructions: request.instructions.unwrap_or_default(),
-            include_startup_context: request.include_startup_context.unwrap_or(true),
+            include_startup_context: Some(request.include_startup_context.unwrap_or(true)),
             turn_detection: request
                 .turn_detection
                 .unwrap_or_else(|| "server_vad".into()),

@@ -1,6 +1,7 @@
 use rmcp::model::{ElicitResult, ElicitationAction, ErrorData, Meta};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
@@ -28,17 +29,28 @@ pub struct McpElicitationResponse {
 
 type PendingKey = (String, String);
 
+const MAX_PENDING_ELICITATIONS: usize = 128;
+
+struct PendingEntry {
+    token: u64,
+    sender: oneshot::Sender<McpElicitationResponse>,
+}
+
 struct PendingCleanup<'a> {
-    pending: &'a Mutex<HashMap<PendingKey, oneshot::Sender<McpElicitationResponse>>>,
+    pending: &'a Mutex<HashMap<PendingKey, PendingEntry>>,
     key: PendingKey,
+    token: u64,
 }
 
 impl Drop for PendingCleanup<'_> {
     fn drop(&mut self) {
-        self.pending
-            .lock()
-            .expect("MCP elicitation mutex poisoned")
-            .remove(&self.key);
+        let mut pending = self.pending.lock().expect("MCP elicitation mutex poisoned");
+        if pending
+            .get(&self.key)
+            .is_some_and(|entry| entry.token == self.token)
+        {
+            pending.remove(&self.key);
+        }
     }
 }
 
@@ -46,7 +58,8 @@ impl Drop for PendingCleanup<'_> {
 pub struct McpElicitationBroker {
     request_tx: async_channel::Sender<McpElicitationRequest>,
     request_rx: async_channel::Receiver<McpElicitationRequest>,
-    pending: Mutex<HashMap<PendingKey, oneshot::Sender<McpElicitationResponse>>>,
+    pending: Mutex<HashMap<PendingKey, PendingEntry>>,
+    next_token: AtomicU64,
 }
 
 impl Default for McpElicitationBroker {
@@ -57,11 +70,16 @@ impl Default for McpElicitationBroker {
 
 impl McpElicitationBroker {
     pub fn new() -> Self {
-        let (request_tx, request_rx) = async_channel::unbounded();
+        Self::with_capacity(MAX_PENDING_ELICITATIONS)
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
+        let (request_tx, request_rx) = async_channel::bounded(capacity);
         Self {
             request_tx,
             request_rx,
             pending: Mutex::new(HashMap::new()),
+            next_token: AtomicU64::new(1),
         }
     }
 
@@ -78,6 +96,7 @@ impl McpElicitationBroker {
     ) -> Result<ElicitResult, ErrorData> {
         let key = (server_name.clone(), request_id.clone());
         let (tx, rx) = oneshot::channel();
+        let token = self.next_token.fetch_add(1, Ordering::Relaxed);
         {
             let mut pending = self.pending.lock().expect("MCP elicitation mutex poisoned");
             if pending.contains_key(&key) {
@@ -86,24 +105,30 @@ impl McpElicitationBroker {
                     None,
                 ));
             }
-            pending.insert(key.clone(), tx);
+            if pending.len() >= self.request_tx.capacity().unwrap_or(0) {
+                return Err(ErrorData::internal_error(
+                    "too many pending MCP elicitation requests",
+                    None,
+                ));
+            }
+            pending.insert(key.clone(), PendingEntry { token, sender: tx });
         }
         let _cleanup = PendingCleanup {
             pending: &self.pending,
             key: key.clone(),
+            token,
         };
         if self
             .request_tx
-            .send(McpElicitationRequest {
+            .try_send(McpElicitationRequest {
                 server_name,
                 request_id,
                 params,
             })
-            .await
             .is_err()
         {
             return Err(ErrorData::internal_error(
-                "MCP elicitation UI channel is closed",
+                "MCP elicitation UI channel is closed or full",
                 None,
             ));
         }
@@ -151,7 +176,7 @@ impl McpElicitationBroker {
             .lock()
             .expect("MCP elicitation mutex poisoned")
             .remove(&(server_name.to_string(), request_id.to_string()))
-            .is_some_and(|sender| sender.send(response).is_ok())
+            .is_some_and(|entry| entry.sender.send(response).is_ok())
     }
 }
 
@@ -240,5 +265,83 @@ mod tests {
             first.await.unwrap().unwrap().action,
             ElicitationAction::Decline
         );
+    }
+
+    #[tokio::test]
+    async fn pending_requests_are_bounded_even_after_the_ui_receives_them() {
+        let broker = Arc::new(McpElicitationBroker::with_capacity(1));
+        let requests = broker.requests();
+        let first = {
+            let broker = Arc::clone(&broker);
+            tokio::spawn(async move {
+                broker
+                    .request(
+                        "server".into(),
+                        "first".into(),
+                        serde_json::json!({}),
+                        CancellationToken::new(),
+                    )
+                    .await
+            })
+        };
+        requests.recv().await.unwrap();
+
+        let second = broker
+            .request(
+                "server".into(),
+                "second".into(),
+                serde_json::json!({}),
+                CancellationToken::new(),
+            )
+            .await;
+        assert!(second.is_err());
+        assert!(
+            broker
+                .resolve(
+                    "server",
+                    "first",
+                    McpElicitationResponse {
+                        action: McpElicitationAction::Cancel,
+                        content: None,
+                        meta: None,
+                    },
+                )
+                .await
+        );
+        assert_eq!(
+            first.await.unwrap().unwrap().action,
+            ElicitationAction::Cancel
+        );
+    }
+
+    #[test]
+    fn stale_cleanup_does_not_remove_a_reused_request_id() {
+        let pending = Mutex::new(HashMap::new());
+        let key = ("server".to_string(), "request".to_string());
+        let (old_sender, _old_receiver) = oneshot::channel();
+        pending.lock().unwrap().insert(
+            key.clone(),
+            PendingEntry {
+                token: 1,
+                sender: old_sender,
+            },
+        );
+        let cleanup = PendingCleanup {
+            pending: &pending,
+            key: key.clone(),
+            token: 1,
+        };
+        let (new_sender, _new_receiver) = oneshot::channel();
+        pending.lock().unwrap().insert(
+            key.clone(),
+            PendingEntry {
+                token: 2,
+                sender: new_sender,
+            },
+        );
+
+        drop(cleanup);
+
+        assert_eq!(pending.lock().unwrap().get(&key).unwrap().token, 2);
     }
 }

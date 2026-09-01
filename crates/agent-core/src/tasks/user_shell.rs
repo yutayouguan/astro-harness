@@ -12,6 +12,19 @@ use crate::runtime::{Session, TurnContext};
 
 use super::{SessionTask, SessionTaskResult, TaskKind, TurnCancelled, TurnInput};
 
+const MAX_SHELL_CAPTURE_BYTES: usize = 1024 * 1024;
+const OUTPUT_TRUNCATED_MARKER: &str = "\n[output truncated after 1048576 bytes]\n";
+
+#[derive(Default)]
+struct ShellStreamOutput {
+    bytes: Vec<u8>,
+    truncated: bool,
+}
+
+fn accepted_output_bytes(captured: usize, incoming: usize) -> usize {
+    incoming.min(MAX_SHELL_CAPTURE_BYTES.saturating_sub(captured))
+}
+
 pub(crate) struct UserShellTask {
     pub(crate) command: String,
     pub(crate) cwd: Option<PathBuf>,
@@ -188,8 +201,10 @@ pub(crate) async fn run_user_shell_process(
     let code = status.code().unwrap_or(-1);
     let output = serde_json::json!({
         "exit_code": code,
-        "stdout": String::from_utf8_lossy(&stdout),
-        "stderr": String::from_utf8_lossy(&stderr),
+        "stdout": String::from_utf8_lossy(&stdout.bytes),
+        "stderr": String::from_utf8_lossy(&stderr.bytes),
+        "stdout_truncated": stdout.truncated,
+        "stderr_truncated": stderr.truncated,
     });
     emit_shell_completion(
         &session,
@@ -212,29 +227,47 @@ async fn read_shell_stream<R: tokio::io::AsyncRead + Unpin>(
     turn_context: Arc<TurnContext>,
     item_id: String,
     mut reader: R,
-) -> Vec<u8> {
-    const MAX_CAPTURE_BYTES: usize = 1024 * 1024;
+) -> ShellStreamOutput {
     let mut captured = Vec::new();
+    let mut truncated = false;
     let mut buffer = vec![0_u8; 4096];
     loop {
         let count = match reader.read(&mut buffer).await {
             Ok(0) | Err(_) => break,
             Ok(count) => count,
         };
-        let remaining = MAX_CAPTURE_BYTES.saturating_sub(captured.len());
-        captured.extend_from_slice(&buffer[..count.min(remaining)]);
-        session
-            .send_event(
-                turn_context.sub_id(),
-                EventMsg::ExecCommandOutputDelta(DeltaEvent {
-                    turn_id: turn_context.sub_id().to_string(),
-                    item_id: item_id.clone(),
-                    delta: String::from_utf8_lossy(&buffer[..count]).into_owned(),
-                }),
-            )
-            .await;
+        let accepted = accepted_output_bytes(captured.len(), count);
+        if accepted > 0 {
+            captured.extend_from_slice(&buffer[..accepted]);
+            session
+                .send_event(
+                    turn_context.sub_id(),
+                    EventMsg::ExecCommandOutputDelta(DeltaEvent {
+                        turn_id: turn_context.sub_id().to_string(),
+                        item_id: item_id.clone(),
+                        delta: String::from_utf8_lossy(&buffer[..accepted]).into_owned(),
+                    }),
+                )
+                .await;
+        }
+        if accepted < count && !truncated {
+            truncated = true;
+            session
+                .send_event(
+                    turn_context.sub_id(),
+                    EventMsg::ExecCommandOutputDelta(DeltaEvent {
+                        turn_id: turn_context.sub_id().to_string(),
+                        item_id: item_id.clone(),
+                        delta: OUTPUT_TRUNCATED_MARKER.into(),
+                    }),
+                )
+                .await;
+        }
     }
-    captured
+    ShellStreamOutput {
+        bytes: captured,
+        truncated,
+    }
 }
 
 async fn emit_shell_completion(
@@ -263,4 +296,16 @@ async fn emit_shell_completion(
             }),
         )
         .await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_budget_accepts_only_the_remaining_capacity() {
+        assert_eq!(accepted_output_bytes(0, 10), 10);
+        assert_eq!(accepted_output_bytes(MAX_SHELL_CAPTURE_BYTES - 3, 10), 3);
+        assert_eq!(accepted_output_bytes(MAX_SHELL_CAPTURE_BYTES, 10), 0);
+    }
 }

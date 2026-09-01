@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   buildElicitationContent,
   elicitationRequestId,
+  resolveElicitationAction,
 } from "./elicitation.ts";
 
 const interrupt = {
@@ -33,4 +34,10 @@ test("MCP elicitation returns schema-shaped and typed content", () => {
 
 test("MCP elicitation uses the original request id", () => {
   assert.equal(elicitationRequestId(interrupt), "raw-id");
+});
+
+test("MCP elicitation preserves accept, decline, and cancel semantics", () => {
+  assert.equal(resolveElicitationAction("choose"), "accept");
+  assert.equal(resolveElicitationAction("deny"), "decline");
+  assert.equal(resolveElicitationAction("cancel"), "cancel");
 });

@@ -32,6 +32,7 @@ import { parseHitlRunFinished } from "../../lib/chat/hitlRunFinished";
 import {
   buildElicitationContent,
   elicitationRequestId,
+  resolveElicitationAction,
 } from "../../lib/chat/elicitation";
 import {
   countRunningParallel,
@@ -235,6 +236,7 @@ export function useParallelTasks(deps: Deps) {
     async (
       assistantMessageId: string,
       payload: Record<string, unknown>,
+      actionName: string,
     ): Promise<boolean> => {
       const task = parallelTasksRef.current.find(
         (t) =>
@@ -248,6 +250,7 @@ export function useParallelTasks(deps: Deps) {
         (item) => item.reason === "elicitation",
       );
       if (elicitation) {
+        const action = resolveElicitationAction(actionName);
         const metadataPayload = elicitation.metadata?.payload;
         const metadata =
           metadataPayload &&
@@ -269,19 +272,25 @@ export function useParallelTasks(deps: Deps) {
             sessionId: task.sessionId,
             serverName,
             requestId: elicitationRequestId(elicitation),
-            action: payload.approved === false ? "decline" : "accept",
+            action,
             contentJson:
-              payload.approved === false
+              action !== "accept"
                 ? null
                 : JSON.stringify(buildElicitationContent(elicitation, payload)),
             metaJson: null,
           });
           setParallelTasks((prev) =>
-            prev.map((entry) =>
-              entry.id === task.id
-                ? { ...entry, status: "running", pendingInterrupts: undefined }
-                : entry,
-            ),
+            prev.map((entry) => {
+              if (entry.id !== task.id) return entry;
+              const remaining = entry.pendingInterrupts?.filter(
+                (interrupt) => interrupt.id !== elicitation.id,
+              );
+              return {
+                ...entry,
+                status: remaining?.length ? "waiting" : "running",
+                pendingInterrupts: remaining?.length ? remaining : undefined,
+              };
+            }),
           );
         } catch (error) {
           depsRef.current.showTransientToast(

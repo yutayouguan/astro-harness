@@ -2246,33 +2246,37 @@ impl AstroService for AstroServiceImpl {
             .await
             .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
         super::thread_service::resume(&managed, subscription, false).await?;
-        managed
-            .runtime
-            .session()
-            .set_chat_targets(vec![types::ChatTarget {
-                provider_id: req.provider.clone(),
-                backend_id: req.provider,
-                model: model.clone(),
-                api_key: req.api_key,
-                base_url: req.base_url,
-            }]);
+        let target = types::ChatTarget {
+            provider_id: req.provider.clone(),
+            backend_id: req.provider,
+            model: model.clone(),
+            api_key: req.api_key,
+            base_url: req.base_url,
+        };
+        let (reply, result) = tokio::sync::oneshot::channel();
         let submission_id = managed
             .runtime
-            .submit(agent_protocol::Op::RealtimeConversationStart(
-                agent_protocol::ConversationStartParams {
+            .submit(agent_protocol::Op::RealtimeConversationStart {
+                params: agent_protocol::ConversationStartParams {
                     model: Some(model),
                     output_modality,
                     voice: nonempty(req.voice),
                     instructions: nonempty(req.instructions),
-                    include_startup_context: req.include_startup_context,
+                    include_startup_context: req.include_startup_context.unwrap_or(true),
                     initial_items: Vec::new(),
                     turn_detection,
                     noise_reduction,
                     input_audio_transcription_model: nonempty(req.transcription_model),
                 },
-            ))
+                target,
+                reply,
+            })
             .await
             .map_err(|error| Status::internal(error.to_string()))?;
+        result
+            .await
+            .map_err(|_| Status::internal("realtime start reply channel closed"))?
+            .map_err(Status::failed_precondition)?;
         Ok(Response::new(RealtimeOperationResponse { submission_id }))
     }
 

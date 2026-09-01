@@ -76,7 +76,13 @@ pub enum SuspendTurnOutcome {
 #[non_exhaustive]
 pub enum Op {
     /// Start a realtime conversation stream for this thread.
-    RealtimeConversationStart(ConversationStartParams),
+    RealtimeConversationStart {
+        params: ConversationStartParams,
+        /// Realtime credentials and routing stay scoped to this connection.
+        target: types::ChatTarget,
+        /// Completes only after the provider handshake succeeds or fails.
+        reply: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
     /// Append an audio frame to the running realtime conversation.
     RealtimeConversationAudio(ConversationAudioParams),
     /// Append a role-bearing text item to the running realtime conversation.
