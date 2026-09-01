@@ -18,6 +18,7 @@ pub use response_items::*;
 pub enum RolloutItem {
     SessionMeta(serde_json::Value),
     ResponseItem(agent_protocol::ResponseItem),
+    RealtimeItem(agent_protocol::RealtimeItem),
     EventMsg(agent_protocol::EventMsg),
     TurnContext(serde_json::Value),
     WorldState(serde_json::Value),
@@ -33,6 +34,9 @@ enum RolloutItemWire {
     },
     ResponseItem {
         payload: agent_protocol::ResponseItem,
+    },
+    RealtimeItem {
+        payload: agent_protocol::RealtimeItem,
     },
     EventMsg {
         payload: agent_protocol::EventMsg,
@@ -63,6 +67,9 @@ impl Serialize for RolloutItem {
             Self::ResponseItem(payload) => RolloutItemWire::ResponseItem {
                 payload: payload.clone(),
             },
+            Self::RealtimeItem(payload) => RolloutItemWire::RealtimeItem {
+                payload: payload.clone(),
+            },
             Self::EventMsg(payload) => RolloutItemWire::EventMsg {
                 payload: payload.clone(),
             },
@@ -91,6 +98,7 @@ impl<'de> Deserialize<'de> for RolloutItem {
         Ok(match RolloutItemWire::deserialize(deserializer)? {
             RolloutItemWire::SessionMeta { payload } => Self::SessionMeta(payload),
             RolloutItemWire::ResponseItem { payload } => Self::ResponseItem(payload),
+            RolloutItemWire::RealtimeItem { payload } => Self::RealtimeItem(payload),
             RolloutItemWire::EventMsg { payload } => Self::EventMsg(payload),
             RolloutItemWire::TurnContext { payload } => Self::TurnContext(payload),
             RolloutItemWire::WorldState { payload } => Self::WorldState(payload),

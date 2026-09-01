@@ -17,7 +17,8 @@ pub fn should_persist_event_msg(event: &EventMsg) -> bool {
         | EventMsg::ContextUsage(_)
         | EventMsg::ThreadSettingsApplied(_)
         | EventMsg::ThreadRolledBack(_) => true,
-        EventMsg::RealtimeConversationRealtime(_)
+        EventMsg::RealtimeConversationSdp(_)
+        | EventMsg::RealtimeConversationRealtime(_)
         | EventMsg::RealtimeConversationListVoicesResponse(_)
         | EventMsg::ItemStarted(_)
         | EventMsg::AgentMessageContentDelta(_)
@@ -51,6 +52,7 @@ pub fn is_persisted_rollout_item(item: &RolloutItem) -> bool {
         RolloutItem::EventMsg(event) => should_persist_event_msg(event),
         RolloutItem::SessionMeta(_)
         | RolloutItem::ResponseItem(_)
+        | RolloutItem::RealtimeItem(_)
         | RolloutItem::TurnContext(_)
         | RolloutItem::WorldState(_)
         | RolloutItem::Compacted(_)
@@ -135,12 +137,21 @@ mod tests {
         let started = EventMsg::RealtimeConversationStarted(
             agent_protocol::RealtimeConversationStartedEvent {
                 realtime_session_id: Some("rt-1".into()),
+                call_id: None,
                 model: "gpt-realtime".into(),
+                version: agent_protocol::RealtimeConversationVersion::V2,
             },
         );
         let payload = EventMsg::RealtimeConversationRealtime(
             agent_protocol::RealtimeConversationRealtimeEvent {
-                payload: serde_json::json!({"type": "response.audio.delta", "delta": "AA=="}),
+                payload: agent_protocol::RealtimeEvent::AudioOut(
+                    agent_protocol::RealtimeAudioFrame {
+                        data: vec![0],
+                        sample_rate: 24_000,
+                        num_channels: 1,
+                        format: agent_protocol::RealtimeAudioFormat::Pcm16,
+                    },
+                ),
             },
         );
         let closed =

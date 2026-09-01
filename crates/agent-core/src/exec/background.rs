@@ -233,6 +233,7 @@ async fn collect_background_events(
             }
             EventMsg::Warning(_)
             | EventMsg::RealtimeConversationStarted(_)
+            | EventMsg::RealtimeConversationSdp(_)
             | EventMsg::RealtimeConversationRealtime(_)
             | EventMsg::RealtimeConversationClosed(_)
             | EventMsg::RealtimeConversationListVoicesResponse(_)

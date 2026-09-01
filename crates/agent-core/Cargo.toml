@@ -25,6 +25,7 @@ sandbox = { path = "../agent-sandbox" }
 network-proxy = { path = "../agent-network-proxy" }
 agent-protocol = { path = "../agent-protocol" }
 agent-rollout = { path = "../agent-rollout" }
+realtime = { path = "../agent-realtime" }
 agent-config = { path = "../agent-config" }
 tracing = { workspace = true }
 tokio = { workspace = true }

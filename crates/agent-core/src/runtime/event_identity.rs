@@ -84,6 +84,7 @@ pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> Stri
     let turn_id = event_turn_id(raw_turn_id);
     match msg {
         EventMsg::RealtimeConversationStarted(_)
+        | EventMsg::RealtimeConversationSdp(_)
         | EventMsg::RealtimeConversationRealtime(_)
         | EventMsg::RealtimeConversationClosed(_)
         | EventMsg::RealtimeConversationListVoicesResponse(_) => {}

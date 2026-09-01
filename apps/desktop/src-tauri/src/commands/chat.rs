@@ -429,6 +429,14 @@ pub struct StartRealtimeConversationRequest {
     pub noise_reduction: Option<String>,
     pub transcription_model: Option<String>,
     pub include_startup_context: Option<bool>,
+    pub transport: Option<String>,
+    pub sdp: Option<String>,
+    pub call_id: Option<String>,
+    pub version: Option<String>,
+    pub client_managed_handoffs: Option<bool>,
+    pub handoff_mode: Option<String>,
+    pub handoff_channel_prefixes: Option<serde_json::Value>,
+    pub flush_transcript_tail_on_session_end: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -464,6 +472,10 @@ pub async fn start_realtime_conversation(
     let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
         .await
         .map_err(|error| error.to_string())?;
+    let transport = request.transport.unwrap_or_else(|| "websocket".into());
+    let include_startup_context = request
+        .include_startup_context
+        .unwrap_or(transport != "existing_call");
     let response = client
         .realtime_conversation_start(RealtimeConversationStartRequest {
             session_id: session_id.to_string(),
@@ -474,7 +486,7 @@ pub async fn start_realtime_conversation(
             output_modality: request.output_modality.unwrap_or_else(|| "audio".into()),
             voice: request.voice.unwrap_or_default(),
             instructions: request.instructions.unwrap_or_default(),
-            include_startup_context: Some(request.include_startup_context.unwrap_or(true)),
+            include_startup_context: Some(include_startup_context),
             turn_detection: request
                 .turn_detection
                 .unwrap_or_else(|| "server_vad".into()),
@@ -483,6 +495,19 @@ pub async fn start_realtime_conversation(
                 .transcription_model
                 .unwrap_or_else(|| "gpt-4o-mini-transcribe".into()),
             connection_id: bridge.connection_id().into(),
+            transport,
+            sdp: request.sdp.unwrap_or_default(),
+            call_id: request.call_id.unwrap_or_default(),
+            version: request.version.unwrap_or_else(|| "v2".into()),
+            client_managed_handoffs: request.client_managed_handoffs.unwrap_or(false),
+            handoff_mode: request.handoff_mode.unwrap_or_else(|| "thinking".into()),
+            handoff_channel_prefixes_json: request
+                .handoff_channel_prefixes
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+            flush_transcript_tail_on_session_end: request
+                .flush_transcript_tail_on_session_end
+                .unwrap_or(true),
         })
         .await
         .map_err(|error| friendly_error(&error.to_string()))?

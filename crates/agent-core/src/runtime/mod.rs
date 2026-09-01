@@ -43,7 +43,6 @@ mod context_maintenance;
 pub(crate) mod event_identity;
 mod history_control;
 pub(crate) mod model_ctx;
-pub(crate) mod realtime;
 mod recording;
 mod session;
 pub(crate) mod session_io;
@@ -174,7 +173,7 @@ pub struct Session {
     /// 一等公民子 Agent 线程分发器。
     pub(crate) execution: Arc<dyn tools::AgentThreadDispatch>,
     /// 与普通采样任务相互独立的实时语音会话。
-    pub(crate) realtime: realtime::RealtimeConversationManager,
+    pub(crate) realtime: ::realtime::RealtimeConversationManager,
 
     // ── 轻量状态 ───────────────────────────────────────────
     pub(crate) cancel: CancelSignal,
@@ -629,7 +628,7 @@ impl Session {
             subagent_hook_context: StdMutex::new(None),
             subagent_stop_turns: StdMutex::new(HashSet::new()),
             execution,
-            realtime: realtime::RealtimeConversationManager::default(),
+            realtime: ::realtime::RealtimeConversationManager::default(),
             cancel: CancelSignal::new(),
             thread_controls: StdMutex::new(None),
             active_turn: TokioMutex::new(None),
@@ -2362,6 +2361,19 @@ impl Session {
         self.persist_response_items(&items).await?;
         self.record_response_items_unlocked(items);
         Ok(())
+    }
+
+    pub(crate) async fn record_realtime_items(&self, items: Vec<agent_protocol::RealtimeItem>) {
+        if items.is_empty() {
+            return;
+        }
+        let Some(bindings) = self.runtime_io.get() else {
+            return;
+        };
+        let items = items.into_iter().map(RolloutItem::RealtimeItem).collect();
+        if let Err(error) = bindings.rollout.record(items).await {
+            tracing::warn!(%error, "failed to persist realtime history");
+        }
     }
 
     fn record_response_items_unlocked(&self, items: Vec<agent_protocol::ResponseItem>) {

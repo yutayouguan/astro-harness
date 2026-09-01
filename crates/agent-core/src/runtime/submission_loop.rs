@@ -8,9 +8,12 @@ use async_channel::Receiver;
 use futures::FutureExt;
 use serde_json::Value;
 
-use super::realtime::{RealtimeConnectionConfig, RealtimeTransportEvent};
 use super::Session;
 use crate::streaming::ChatOverride;
+use realtime::{
+    bem_presentations, BemChannelParser, BemPhase, RealtimeConnectionConfig, RealtimeHistory,
+    RealtimeTransportEvent,
+};
 
 pub(crate) async fn submission_loop(
     session: Arc<Session>,
@@ -223,6 +226,15 @@ impl Session {
                     history.append(&mut params.initial_items);
                     params.initial_items = history;
                 }
+                let handoff_settings = (
+                    params.client_managed_handoffs,
+                    params.codex_response_handoff_mode,
+                    params
+                        .codex_response_handoff_channel_prefixes
+                        .clone()
+                        .unwrap_or_default(),
+                    params.flush_transcript_tail_on_session_end,
+                );
                 match self
                     .realtime
                     .start(RealtimeConnectionConfig {
@@ -235,17 +247,35 @@ impl Session {
                 {
                     Ok(connection) => {
                         let _ = reply.send(Ok(()));
+                        let version = connection.version;
+                        let call_id = connection.call_id.clone();
                         self.send_event(
                             &submission_id,
                             EventMsg::RealtimeConversationStarted(
                                 agent_protocol::RealtimeConversationStartedEvent {
-                                    realtime_session_id: connection.provider_session_id,
+                                    realtime_session_id: connection.provider_session_id.clone(),
+                                    call_id,
                                     model,
+                                    version,
                                 },
                             ),
                         )
                         .await;
-                        self.spawn_realtime_event_fanout(submission_id, connection.events);
+                        if let Some(sdp) = connection.sdp {
+                            self.send_event(
+                                &submission_id,
+                                EventMsg::RealtimeConversationSdp(
+                                    agent_protocol::RealtimeConversationSdpEvent { sdp },
+                                ),
+                            )
+                            .await;
+                        }
+                        self.spawn_realtime_event_fanout(
+                            submission_id,
+                            connection.provider_session_id,
+                            handoff_settings,
+                            connection.events,
+                        );
                     }
                     Err(error) => {
                         let reason = error.to_string();
@@ -286,11 +316,17 @@ impl Session {
                 self.realtime.close().await;
             }
             Op::RealtimeConversationListVoices => {
+                let version = self
+                    .realtime
+                    .version_and_handoff_mode()
+                    .await
+                    .map(|(version, _)| version)
+                    .unwrap_or(agent_protocol::RealtimeConversationVersion::V2);
                 self.send_event(
                     &submission_id,
                     EventMsg::RealtimeConversationListVoicesResponse(
                         agent_protocol::RealtimeConversationListVoicesResponseEvent {
-                            voices: agent_protocol::RealtimeVoicesList::builtin(),
+                            voices: agent_protocol::RealtimeVoicesList::builtin(version),
                         },
                     ),
                 )
@@ -646,13 +682,36 @@ impl Session {
     fn spawn_realtime_event_fanout(
         self: &Arc<Self>,
         route_id: String,
+        realtime_session_id: Option<String>,
+        handoff_settings: (
+            bool,
+            agent_protocol::CodexResponseHandoffMode,
+            std::collections::BTreeMap<String, Vec<String>>,
+            bool,
+        ),
         mut events: tokio::sync::mpsc::Receiver<RealtimeTransportEvent>,
     ) {
         let session = Arc::clone(self);
         tokio::spawn(async move {
+            let history = Arc::new(tokio::sync::Mutex::new(RealtimeHistory::default()));
+            let history_session_id = realtime_session_id.unwrap_or_else(|| route_id.clone());
+            let started = history.lock().await.start(history_session_id);
+            session.record_realtime_items(started).await;
             while let Some(event) = events.recv().await {
                 match event {
-                    RealtimeTransportEvent::Payload(payload) => {
+                    RealtimeTransportEvent::Event(payload) => {
+                        let items = history.lock().await.observe(&payload);
+                        session.record_realtime_items(items).await;
+                        if let agent_protocol::RealtimeEvent::HandoffRequested(request) = &payload {
+                            if !handoff_settings.0 {
+                                session.spawn_realtime_handoff(
+                                    request.clone(),
+                                    handoff_settings.1,
+                                    handoff_settings.2.clone(),
+                                    Arc::clone(&history),
+                                );
+                            }
+                        }
                         session
                             .send_event(
                                 &route_id,
@@ -663,6 +722,12 @@ impl Session {
                             .await;
                     }
                     RealtimeTransportEvent::Closed(reason) => {
+                        let items = if handoff_settings.3 {
+                            history.lock().await.close()
+                        } else {
+                            history.lock().await.close_discarding_tail()
+                        };
+                        session.record_realtime_items(items).await;
                         session
                             .send_event(
                                 &route_id,
@@ -675,6 +740,126 @@ impl Session {
                     }
                 }
             }
+        });
+    }
+
+    fn spawn_realtime_handoff(
+        self: &Arc<Self>,
+        request: agent_protocol::RealtimeHandoffRequested,
+        mode: agent_protocol::CodexResponseHandoffMode,
+        prefixes: std::collections::BTreeMap<String, Vec<String>>,
+        history: Arc<tokio::sync::Mutex<RealtimeHistory>>,
+    ) {
+        let session = Arc::clone(self);
+        tokio::spawn(async move {
+            let input = if request.input_transcript.trim().is_empty() {
+                request
+                    .active_transcript
+                    .iter()
+                    .map(|entry| format!("{}: {}", entry.role, entry.text))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            } else {
+                request.input_transcript.clone()
+            };
+            if input.trim().is_empty() {
+                let _ = session.realtime.complete_handoff(request.handoff_id).await;
+                return;
+            }
+            let result = session
+                .submit_turn_input(
+                    uuid::Uuid::new_v4().to_string(),
+                    agent_protocol::TurnInputRequest {
+                        input: vec![agent_protocol::TurnInput {
+                            content: format!(
+                                "<realtime_delegation>\n{}\n</realtime_delegation>",
+                                input
+                            ),
+                            image_data_urls: Vec::new(),
+                            client_message_id: None,
+                        }],
+                        thread_settings: Default::default(),
+                    },
+                    agent_protocol::TurnInputMode::StartOrSteer,
+                    None,
+                )
+                .await;
+            let Some(turn_id) = result
+                .ok()
+                .and_then(|result| result.turn_id().map(str::to_string))
+            else {
+                let _ = session.realtime.complete_handoff(request.handoff_id).await;
+                return;
+            };
+            let receiver = session.subscribe_turn_events(&turn_id).await;
+            let mut bem = BemChannelParser::new(Arc::new(prefixes));
+            let mut promoted_item = None;
+            let mut pending = String::new();
+            let mut flush = tokio::time::interval(std::time::Duration::from_millis(200));
+            flush.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            flush.tick().await;
+            loop {
+                tokio::select! {
+                    event = receiver.recv() => {
+                        let Ok(event) = event else { break };
+                        match event.msg {
+                            EventMsg::AgentMessageContentDelta(delta) => match mode {
+                                agent_protocol::CodexResponseHandoffMode::BemTags => {
+                                    if let Some(chunk) = bem.push(&delta.delta) {
+                                        pending.push_str(&chunk);
+                                    }
+                                }
+                                agent_protocol::CodexResponseHandoffMode::Thinking
+                                | agent_protocol::CodexResponseHandoffMode::Commentary => {
+                                    pending.push_str(&delta.delta);
+                                }
+                            },
+                            EventMsg::ItemCompleted(item) => {
+                                if let TurnItem::AgentMessage(message) = item.item {
+                                    promoted_item = Some((
+                                        message.id,
+                                        bem_presentations(&message.content),
+                                    ));
+                                }
+                            }
+                            EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_) => break,
+                            _ => {}
+                        }
+                    }
+                    _ = flush.tick() => {
+                        if !pending.is_empty() {
+                            let chunk = std::mem::take(&mut pending);
+                            let final_answer = mode == agent_protocol::CodexResponseHandoffMode::BemTags
+                                && bem.phase() == Some(BemPhase::Final);
+                            let _ = session.realtime.send_handoff_delta(
+                                request.handoff_id.clone(), chunk, final_answer,
+                            ).await;
+                        }
+                    }
+                }
+            }
+            if mode == agent_protocol::CodexResponseHandoffMode::BemTags {
+                pending.push_str(&bem.finish());
+            }
+            if !pending.is_empty() {
+                let final_answer = mode == agent_protocol::CodexResponseHandoffMode::BemTags
+                    && bem.phase().is_none_or(|phase| phase == BemPhase::Final);
+                let _ = session
+                    .realtime
+                    .send_handoff_delta(request.handoff_id.clone(), pending, final_answer)
+                    .await;
+            }
+            if let Some((item_id, presentations)) = promoted_item {
+                for presentation in presentations {
+                    let items = history.lock().await.promote(
+                        turn_id.clone(),
+                        item_id.clone(),
+                        presentation,
+                    );
+                    session.record_realtime_items(items).await;
+                }
+            }
+            let _ = session.realtime.complete_handoff(request.handoff_id).await;
         });
     }
 

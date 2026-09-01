@@ -227,6 +227,14 @@ message RealtimeConversationStartRequest {
   string transcription_model = 12;
   reserved 13;
   string connection_id = 14;
+  string transport = 15; // websocket | webrtc | existing_call
+  string sdp = 16; // browser offer for webrtc
+  string call_id = 17; // required for existing_call
+  string version = 18; // v2 | v3
+  bool client_managed_handoffs = 19;
+  string handoff_mode = 20; // thinking | commentary | bem_tags
+  string handoff_channel_prefixes_json = 21;
+  bool flush_transcript_tail_on_session_end = 22;
 }
 
 message RealtimeConversationAudioRequest {

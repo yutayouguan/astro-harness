@@ -52,6 +52,7 @@ fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
     use agent_protocol::EventMsg;
     match msg {
         EventMsg::RealtimeConversationStarted(_)
+        | EventMsg::RealtimeConversationSdp(_)
         | EventMsg::RealtimeConversationRealtime(_)
         | EventMsg::RealtimeConversationClosed(_)
         | EventMsg::RealtimeConversationListVoicesResponse(_) => None,
@@ -2239,6 +2240,62 @@ impl AstroService for AstroServiceImpl {
                 )))
             }
         };
+        let version = match req.version.as_str() {
+            "" | "v2" => agent_protocol::RealtimeConversationVersion::V2,
+            "v3" => agent_protocol::RealtimeConversationVersion::V3,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime version {value}"
+                )))
+            }
+        };
+        let transport = match req.transport.as_str() {
+            "" | "websocket" => agent_protocol::ConversationStartTransport::Websocket,
+            "webrtc" if !req.sdp.trim().is_empty() => {
+                agent_protocol::ConversationStartTransport::Webrtc {
+                    sdp: req.sdp.clone(),
+                }
+            }
+            "webrtc" => return Err(Status::invalid_argument("WebRTC requires an SDP offer")),
+            "existing_call" if !req.call_id.trim().is_empty() => {
+                agent_protocol::ConversationStartTransport::ExistingCall {
+                    call_id: req.call_id.clone(),
+                }
+            }
+            "existing_call" => {
+                return Err(Status::invalid_argument("existing_call requires a call id"))
+            }
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime transport {value}"
+                )))
+            }
+        };
+        let handoff_mode = match req.handoff_mode.as_str() {
+            "" | "thinking" => agent_protocol::CodexResponseHandoffMode::Thinking,
+            "commentary" => agent_protocol::CodexResponseHandoffMode::Commentary,
+            "bem_tags" => agent_protocol::CodexResponseHandoffMode::BemTags,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime handoff mode {value}"
+                )))
+            }
+        };
+        let handoff_channel_prefixes = if req.handoff_channel_prefixes_json.trim().is_empty() {
+            None
+        } else {
+            Some(
+                serde_json::from_str(&req.handoff_channel_prefixes_json).map_err(|error| {
+                    Status::invalid_argument(format!(
+                        "invalid realtime handoff channel prefixes: {error}"
+                    ))
+                })?,
+            )
+        };
+        let include_startup_context = req.include_startup_context.unwrap_or(!matches!(
+            &transport,
+            agent_protocol::ConversationStartTransport::ExistingCall { .. }
+        ));
         let managed = self.get_or_create_thread(session_id).await?;
         let subscription = self
             .connections
@@ -2262,11 +2319,18 @@ impl AstroService for AstroServiceImpl {
                     output_modality,
                     voice: nonempty(req.voice),
                     instructions: nonempty(req.instructions),
-                    include_startup_context: req.include_startup_context.unwrap_or(true),
+                    include_startup_context,
                     initial_items: Vec::new(),
                     turn_detection,
                     noise_reduction,
                     input_audio_transcription_model: nonempty(req.transcription_model),
+                    transport,
+                    version,
+                    client_managed_handoffs: req.client_managed_handoffs,
+                    codex_response_handoff_mode: handoff_mode,
+                    codex_response_handoff_channel_prefixes: handoff_channel_prefixes,
+                    flush_transcript_tail_on_session_end: req.flush_transcript_tail_on_session_end,
+                    ..agent_protocol::ConversationStartParams::default()
                 },
                 target,
                 reply,
@@ -2384,7 +2448,9 @@ impl AstroService for AstroServiceImpl {
     ) -> Result<Response<RealtimeVoicesResponse>, Status> {
         let req = request.into_inner();
         let session_id = require_realtime_session_id(&req.session_id)?;
-        let voices = agent_protocol::RealtimeVoicesList::builtin();
+        let voices = agent_protocol::RealtimeVoicesList::builtin(
+            agent_protocol::RealtimeConversationVersion::V2,
+        );
         if let Some(managed) = self.threads.get(session_id).await {
             managed
                 .runtime

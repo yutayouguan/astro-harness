@@ -95,6 +95,13 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
                 payload_json: serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
             }),
         ),
+        EventMsg::RealtimeConversationSdp(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "sdp".into(),
+                payload_json: serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
+            }),
+        ),
         EventMsg::RealtimeConversationRealtime(value) => (
             event.id.clone(),
             Payload::Realtime(proto::ThreadRealtimeEvent {

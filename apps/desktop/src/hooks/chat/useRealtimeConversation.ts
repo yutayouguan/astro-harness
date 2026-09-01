@@ -11,7 +11,7 @@ export type RealtimeConversationStatus =
 
 type RealtimeConversationEvent = {
   sessionId: string;
-  kind: "started" | "event" | "closed" | "voices";
+  kind: "started" | "sdp" | "event" | "closed" | "voices";
   payload: Record<string, unknown>;
 };
 
@@ -21,6 +21,7 @@ type Options = {
   backendId: string | null;
   model?: string;
   voice?: string;
+  transport?: "webrtc" | "websocket";
 };
 
 type CaptureHandle = {
@@ -31,6 +32,63 @@ type CaptureHandle = {
   sink: GainNode;
   objectUrl?: string;
 };
+
+type WebRtcHandle = {
+  peer: RTCPeerConnection;
+  stream: MediaStream;
+  audio: HTMLAudioElement;
+  events: RTCDataChannel;
+};
+
+async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
+  if (peer.iceGatheringState === "complete") return;
+  await new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(() => {
+      peer.removeEventListener("icegatheringstatechange", onChange);
+      resolve();
+    }, 5_000);
+    const onChange = () => {
+      if (peer.iceGatheringState !== "complete") return;
+      window.clearTimeout(timeout);
+      peer.removeEventListener("icegatheringstatechange", onChange);
+      resolve();
+    };
+    peer.addEventListener("icegatheringstatechange", onChange);
+  });
+}
+
+async function createWebRtc(): Promise<WebRtcHandle> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+  });
+  const peer = new RTCPeerConnection();
+  stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+  const events = peer.createDataChannel("oai-events");
+  const audio = new Audio();
+  audio.autoplay = true;
+  peer.ontrack = ({ streams }) => {
+    audio.srcObject = streams[0] ?? new MediaStream();
+    void audio.play().catch(() => undefined);
+  };
+  const offer = await peer.createOffer();
+  await peer.setLocalDescription(offer);
+  await waitForIceGathering(peer);
+  return { peer, stream, audio, events };
+}
+
+function stopWebRtc(handle: WebRtcHandle | null): void {
+  if (!handle) return;
+  handle.events.close();
+  handle.peer.close();
+  handle.stream.getTracks().forEach((track) => track.stop());
+  handle.audio.pause();
+  handle.audio.srcObject = null;
+}
 
 export function resampleFloat32ToPcm16(
   input: Float32Array,
@@ -149,11 +207,14 @@ export function useRealtimeConversation({
   backendId,
   model = "gpt-realtime",
   voice = "marin",
+  transport = "webrtc",
 }: Options) {
   const [status, setStatus] = useState<RealtimeConversationStatus>("idle");
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   const captureRef = useRef<CaptureHandle | null>(null);
+  const webRtcRef = useRef<WebRtcHandle | null>(null);
+  const sdpResolverRef = useRef<((sdp: string) => void) | null>(null);
   const playbackContextRef = useRef<AudioContext | null>(null);
   const playbackCursorRef = useRef(0);
   const pendingAudioRef = useRef(new Uint8Array());
@@ -177,6 +238,10 @@ export function useRealtimeConversation({
     const capture = captureRef.current;
     captureRef.current = null;
     pendingAudioRef.current = new Uint8Array();
+    const webRtc = webRtcRef.current;
+    webRtcRef.current = null;
+    sdpResolverRef.current = null;
+    stopWebRtc(webRtc);
     await stopCapture(capture);
     await stopPlayback();
   }, [stopPlayback]);
@@ -214,8 +279,14 @@ export function useRealtimeConversation({
             return;
           }
           activeSessionRef.current = payload.sessionId;
-          setStatus("active");
+          if (!webRtcRef.current) setStatus("active");
           setError(null);
+          return;
+        }
+        if (payload.kind === "sdp") {
+          const sdp =
+            typeof payload.payload.sdp === "string" ? payload.payload.sdp : "";
+          if (sdp) sdpResolverRef.current?.(sdp);
           return;
         }
         if (payload.kind === "closed") {
@@ -245,36 +316,40 @@ export function useRealtimeConversation({
         if (payload.kind !== "event") return;
         const type =
           typeof payload.payload.type === "string" ? payload.payload.type : "";
+        const data =
+          payload.payload.data && typeof payload.payload.data === "object"
+            ? (payload.payload.data as Record<string, unknown>)
+            : {};
         const delta =
-          typeof payload.payload.delta === "string"
-            ? payload.payload.delta
+          typeof data.delta === "string"
+            ? data.delta
             : "";
-        if (type === "input_audio_buffer.speech_started") {
+        if (type === "input_audio_speech_started") {
           void stopPlayback();
         }
-        if (
-          delta &&
-          (type === "response.audio.delta" ||
-            type === "response.output_audio.delta")
-        ) {
-          void playPcm(delta).catch(() => undefined);
+        if (type === "audio_out" && !webRtcRef.current) {
+          const bytes = Array.isArray(data.data)
+            ? new Uint8Array(data.data as number[])
+            : null;
+          if (bytes) {
+            let binary = "";
+            bytes.forEach((byte) => {
+              binary += String.fromCharCode(byte);
+            });
+            void playPcm(btoa(binary)).catch(() => undefined);
+          }
         }
         if (
           delta &&
-          (type === "response.text.delta" ||
-            type === "response.output_text.delta" ||
-            type === "response.audio_transcript.delta" ||
-            type === "response.output_audio_transcript.delta" ||
-            type === "conversation.item.input_audio_transcription.delta")
+          (type === "input_transcript_delta" ||
+            type === "output_transcript_delta")
         ) {
           setTranscript((current) => current + delta);
         }
         if (type === "error") {
-          const nested = payload.payload.error;
-          const message =
-            nested && typeof nested === "object" && "message" in nested
-              ? String((nested as { message: unknown }).message)
-              : "Realtime 会话发生错误";
+          const message = typeof payload.payload.data === "string"
+            ? payload.payload.data
+            : "Realtime 会话发生错误";
           setError(message);
           setStatus("error");
           attemptRef.current += 1;
@@ -388,6 +463,27 @@ export function useRealtimeConversation({
     const attempt = ++attemptRef.current;
     activeSessionRef.current = sessionId;
     try {
+      const webRtc = transport === "webrtc" ? await createWebRtc() : null;
+      if (attempt !== attemptRef.current) {
+        stopWebRtc(webRtc);
+        return;
+      }
+      webRtcRef.current = webRtc;
+      const offerSdp = webRtc?.peer.localDescription?.sdp;
+      if (webRtc && !offerSdp) throw new Error("WebRTC 未生成 SDP offer");
+      const answer = webRtc
+        ? new Promise<string>((resolve, reject) => {
+            const timeout = window.setTimeout(() => {
+              sdpResolverRef.current = null;
+              reject(new Error("等待 Realtime SDP answer 超时"));
+            }, 20_000);
+            sdpResolverRef.current = (sdp) => {
+              window.clearTimeout(timeout);
+              sdpResolverRef.current = null;
+              resolve(sdp);
+            };
+          })
+        : null;
       await invoke("start_realtime_conversation", {
         request: {
           sessionId,
@@ -400,6 +496,12 @@ export function useRealtimeConversation({
           noiseReduction: "near_field",
           transcriptionModel: "gpt-4o-mini-transcribe",
           includeStartupContext: true,
+          transport,
+          sdp: offerSdp ?? null,
+          version: "v2",
+          clientManagedHandoffs: false,
+          handoffMode: "thinking",
+          flushTranscriptTailOnSessionEnd: true,
         },
       });
       if (attempt !== attemptRef.current) {
@@ -408,12 +510,18 @@ export function useRealtimeConversation({
         );
         return;
       }
-      const capture = await createCapture(enqueueAudio);
-      if (attempt !== attemptRef.current) {
-        await stopCapture(capture);
-        return;
+      if (webRtc && answer) {
+        const answerSdp = await answer;
+        if (attempt !== attemptRef.current) return;
+        await webRtc.peer.setRemoteDescription({ type: "answer", sdp: answerSdp });
+      } else {
+        const capture = await createCapture(enqueueAudio);
+        if (attempt !== attemptRef.current) {
+          await stopCapture(capture);
+          return;
+        }
+        captureRef.current = capture;
       }
-      captureRef.current = capture;
       setStatus("active");
     } catch (cause) {
       desiredActiveRef.current = false;
@@ -433,6 +541,7 @@ export function useRealtimeConversation({
     providerId,
     releaseMedia,
     sessionId,
+    transport,
     voice,
   ]);
 

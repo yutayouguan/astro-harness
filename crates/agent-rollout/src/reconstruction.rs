@@ -49,6 +49,17 @@ pub async fn read_rollout_with_diagnostics(path: &Path) -> io::Result<RolloutRea
     })
 }
 
+/// Returns the durable realtime timeline in append order.
+pub fn realtime_history(items: &[RolloutItem]) -> Vec<agent_protocol::RealtimeItem> {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            RolloutItem::RealtimeItem(item) => Some(item.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Rebuild the effective model history after applying append-only compaction and rollback markers.
 pub fn effective_response_history(items: &[RolloutItem]) -> Vec<ResponseItem> {
     let mut history = Vec::new();
@@ -149,6 +160,7 @@ mod tests {
 
     use super::{
         drop_last_n_user_turns, effective_response_history, read_rollout_with_diagnostics,
+        realtime_history,
     };
     use crate::RolloutItem;
 
@@ -160,6 +172,23 @@ mod tests {
             phase: None,
             internal_chat_message_metadata_passthrough: None,
         }
+    }
+
+    #[test]
+    fn realtime_history_keeps_only_durable_realtime_items() {
+        let realtime = agent_protocol::RealtimeItem {
+            id: "rt-item-1".into(),
+            realtime_session_id: "rt-1".into(),
+            content: agent_protocol::RealtimeItemContent::TranscriptSegment {
+                role: agent_protocol::RealtimeTranscriptRole::User,
+                text: "hello".into(),
+            },
+        };
+        let items = vec![
+            RolloutItem::SessionMeta(serde_json::json!({"thread_id": "thread-1"})),
+            RolloutItem::RealtimeItem(realtime.clone()),
+        ];
+        assert_eq!(realtime_history(&items), vec![realtime]);
     }
 
     #[tokio::test]
