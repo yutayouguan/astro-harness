@@ -77,22 +77,26 @@ test("chat header chrome stays anchored while project files animate", () => {
   assert.equal(projectFileActions, undefined);
 });
 
-test("chat header stays flush with the chat background while messages scroll underneath", () => {
+test("chat header is invisible at rest and adds glass only above scrolling content", () => {
   const header = rule(headerStyles, ".content-header--chat");
+  const underlay = rule(
+    headerStyles,
+    ".content-header--chat.has-content-underlay",
+  );
   const chatPane = rule(headerStyles, ".content-pane--chat");
 
   assert.ok(header, "missing chat header rule");
+  assert.ok(underlay, "missing chat header underlay rule");
   assert.ok(chatPane, "missing chat content pane rule");
   assert.match(chatPane, /position:\s*relative;/);
   assert.match(
     headerStyles,
     /> \.chat-layout-with-right\s*\{\s*--chat-header-overlay-height:\s*50px;/,
   );
-  assert.match(
-    header,
-    /--chat-header-surface-base:\s*color-mix\(in srgb, var\(--bg1\) 92%, transparent\);/,
-  );
+  assert.match(header, /--chat-header-surface-base:\s*transparent;/);
   assert.match(header, /--chat-header-surface-sheen:\s*none;/);
+  assert.match(header, /--chat-header-divider:\s*transparent;/);
+  assert.match(header, /--chat-header-filter:\s*none;/);
   assert.match(
     header,
     /background:[\s\S]*var\(--chat-header-surface-sheen\)[\s\S]*var\(--chat-header-surface-base\);/,
@@ -100,16 +104,23 @@ test("chat header stays flush with the chat background while messages scroll und
   assert.match(header, /border:\s*0;/);
   assert.match(
     header,
-    /border-bottom:\s*0\.5px solid color-mix\(in srgb, var\(--ink\) 6%, transparent\);/,
+    /border-bottom:\s*0\.5px solid var\(--chat-header-divider\);/,
   );
   assert.doesNotMatch(header, /border-top:/);
   assert.doesNotMatch(header, /border-left:/);
   assert.doesNotMatch(header, /border-right:/);
   assert.match(header, /box-shadow:\s*none;/);
+  assert.match(header, /backdrop-filter:\s*var\(--chat-header-filter\);/);
   assert.match(
-    header,
-    /backdrop-filter:\s*blur\(\s*calc\(\s*var\(--blur-glass, 20px\)/,
+    underlay,
+    /--chat-header-surface-base:\s*color-mix\(in srgb, var\(--bg1\) 72%, transparent\);/,
   );
+  assert.match(
+    underlay,
+    /--chat-header-divider:\s*color-mix\(in srgb, var\(--ink\) 6%, transparent\);/,
+  );
+  assert.match(underlay, /--chat-header-filter:\s*blur\(/);
+  assert.match(underlay, /saturate\(1\.05\);/);
   assert.match(header, /pointer-events:\s*none;/);
   assert.match(
     headerStyles,
@@ -120,6 +131,13 @@ test("chat header stays flush with the chat background while messages scroll und
     /pointer-events:\s*auto;/,
   );
   assert.match(app, /content-pane--chat/);
+  assert.match(app, /chat\.emptyMode \? " is-welcome"/);
+  assert.match(
+    app,
+    /chatHeaderHasUnderlay \|\| projectFiles\.tabs\.length > 0\s*\? " has-content-underlay"/,
+  );
+  assert.match(app, /onHeaderUnderlayChange=\{setChatHeaderHasUnderlay\}/);
+  assert.match(chatView, /notifyHeaderUnderlay\(list\.scrollTop > 8\);/);
   assert.match(
     coreStyles,
     /\.content-pane--chat[\s\S]*?> \.message-list\s*\{[\s\S]*?padding-top:\s*var\(--chat-header-overlay-height, 50px\);[\s\S]*?scroll-padding-block-start:/,

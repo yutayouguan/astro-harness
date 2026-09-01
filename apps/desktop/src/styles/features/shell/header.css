@@ -11,7 +11,7 @@
   app-region: no-drag;
 }
 
-/* 对话页标题栏使用贴底的轻薄玻璃材质，避免与聊天背景产生明显色差。
+/* 对话页标题栏默认只是无形的拖拽与控件层；消息滚到其下方时才增加可读性玻璃。
    标题栏不参与 content-pane 的 flex 高度分配，消息滚动视口因此可以延伸到窗顶；
    空白区域透传滚轮和窗口拖动，只有标题与操作控件恢复命中。 */
 .content-pane--chat {
@@ -23,8 +23,10 @@
 }
 
 .content-header--chat {
-  --chat-header-surface-base: color-mix(in srgb, var(--bg1) 92%, transparent);
+  --chat-header-surface-base: transparent;
   --chat-header-surface-sheen: none;
+  --chat-header-divider: transparent;
+  --chat-header-filter: none;
   position: absolute;
   z-index: 42;
   top: 0;
@@ -35,19 +37,22 @@
   box-sizing: border-box;
   padding: 4px 16px;
   border: 0;
-  border-bottom: 0.5px solid color-mix(in srgb, var(--ink) 6%, transparent);
+  border-bottom: 0.5px solid var(--chat-header-divider);
   border-radius: 0;
   background: var(--chat-header-surface-sheen), var(--chat-header-surface-base);
   box-shadow: none;
-  backdrop-filter: blur(
-      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
-    )
-    saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(
-      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
-    )
-    saturate(var(--glass-saturate, 1.25));
+  backdrop-filter: var(--chat-header-filter);
+  -webkit-backdrop-filter: var(--chat-header-filter);
   pointer-events: none;
+}
+
+.content-header--chat.has-content-underlay {
+  --chat-header-surface-base: color-mix(in srgb, var(--bg1) 72%, transparent);
+  --chat-header-divider: color-mix(in srgb, var(--ink) 6%, transparent);
+  --chat-header-filter: blur(
+      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
+    )
+    saturate(1.05);
 }
 
 .content-header--chat .page-title-block,
@@ -140,22 +145,21 @@
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .content-header--chat {
+  .content-header--chat.has-content-underlay {
     --chat-header-surface-base: var(--surface-panel-background);
     --chat-header-surface-sheen: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    --chat-header-filter: none;
   }
 }
 
 @media (prefers-contrast: more) {
-  .content-header--chat {
+  .content-header--chat.has-content-underlay {
     --chat-header-surface-base: color-mix(
       in srgb,
       var(--surface-panel-background) 94%,
       transparent
     );
-    border-color: color-mix(in srgb, var(--ink) 28%, transparent);
+    --chat-header-divider: color-mix(in srgb, var(--ink) 28%, transparent);
   }
 }
 

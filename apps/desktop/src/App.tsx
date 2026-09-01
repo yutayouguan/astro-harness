@@ -264,6 +264,7 @@ export default function App() {
     useState<ModelReasoningMeta | null>(null);
   const [activeModelPricing, setActiveModelPricing] =
     useState<ModelPricingMeta | null>(null);
+  const [chatHeaderHasUnderlay, setChatHeaderHasUnderlay] = useState(false);
   // ── Extracted hooks ───────────────────────────────────────────────────────
   const sidebar = useSidebar();
   const winChrome = useWindowChrome();
@@ -1697,7 +1698,7 @@ export default function App() {
           ) : (
             <>
               <div
-                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}`}
+                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}${chat.emptyMode ? " is-welcome" : chatHeaderHasUnderlay || projectFiles.tabs.length > 0 ? " has-content-underlay" : ""}`}
               >
                 <div className="content-heading">
                   {conversationTitle && (
@@ -1949,6 +1950,7 @@ export default function App() {
                       displayPrefs={chatDisplayPrefs}
                       onDefaultAnswerLayoutChange={setAnswerLayout}
                       emptyMode={chat.emptyMode}
+                      onHeaderUnderlayChange={setChatHeaderHasUnderlay}
                       focusMessageId={chat.focusMessageId}
                       onFocusConsumed={() => setFocusMessageId(null)}
                       onInputChange={setInput}
