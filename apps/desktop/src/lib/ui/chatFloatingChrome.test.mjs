@@ -134,7 +134,9 @@ test("chat header is invisible at rest and adds glass only above scrolling conte
   assert.match(underlay, /--chat-header-filter:\s*blur\(/);
   assert.match(underlay, /saturate\(1\.05\);/);
   assert.ok(fileHeader, "missing project file header material rule");
+  assert.match(fileHeader, /--chat-header-divider:\s*transparent;/);
   assert.match(fileHeader, /background:\s*var\(--sidebar-chrome-background\);/);
+  assert.match(fileHeader, /box-shadow:\s*none;/);
   assert.match(
     fileHeader,
     /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/,

@@ -57,8 +57,9 @@
 
 /* 文件编辑态与左侧栏共用同一套玻璃材质。 */
 .content-header--chat.has-project-file {
-  --chat-header-divider: color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  --chat-header-divider: transparent;
   background: var(--sidebar-chrome-background);
+  box-shadow: none;
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }
