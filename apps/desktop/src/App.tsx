@@ -27,7 +27,9 @@ import SidebarSessionList from "./components/chat/SidebarSessionList";
 import SessionActionsMenu from "./components/chat/SessionActionsMenu";
 import { resolveSessionStatus } from "./components/chat/SessionStatusIcon";
 import ChatView from "./components/chat/ChatView";
-import ProjectFileEditor from "./components/chat/ProjectFileEditor";
+import ProjectFileEditor, {
+  ProjectFileTabs,
+} from "./components/chat/ProjectFileEditor";
 import ProjectFilesPanel from "./components/chat/ProjectFilesPanel";
 import LoopPanel from "./components/loop/LoopPanel";
 import CronPanel from "./components/schedule/CronPanel";
@@ -100,6 +102,11 @@ import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import { dispatchSessionsChanged } from "./lib/chat/sessionManagement";
 import { resolveContextWindow, usagePercent } from "./lib/chat/contextUsage";
+import {
+  readWorkspaceMdMode,
+  writeWorkspaceMdMode,
+  type MdMode,
+} from "./lib/filespace/workspaceMdMode";
 import { NAV, type NavId, type SettingsTabId } from "./lib/ui/navConfig";
 import { SETTINGS_TAB_GROUPS, settingsTabMeta } from "./lib/ui/settingsTabs";
 import { resolveChatRightDock } from "./lib/ui/chatRightDock";
@@ -344,6 +351,12 @@ export default function App() {
     activeProject,
     chat.generatingPreview,
   );
+  const [projectMdMode, setProjectMdMode] =
+    useState<MdMode>(readWorkspaceMdMode);
+  const changeProjectMdMode = useCallback((mode: MdMode) => {
+    setProjectMdMode(mode);
+    writeWorkspaceMdMode(mode);
+  }, []);
   const [projectFilesWidth, setProjectFilesWidth] = useState(264);
   const [sideSessionId, setSideSessionId] = useState<string | null>(null);
   const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(
@@ -1701,7 +1714,13 @@ export default function App() {
                 className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}${projectFiles.tabs.length > 0 ? " has-project-file" : ""}${chat.emptyMode ? " is-welcome" : chatHeaderHasUnderlay || projectFiles.tabs.length > 0 ? " has-content-underlay" : ""}`}
               >
                 <div className="content-heading">
-                  {conversationTitle && (
+                  {projectFiles.tabs.length > 0 ? (
+                    <ProjectFileTabs
+                      workbench={projectFiles}
+                      mdMode={projectMdMode}
+                      onMdModeChange={changeProjectMdMode}
+                    />
+                  ) : conversationTitle ? (
                     <>
                       <div className="page-title-block">
                         <div
@@ -1775,7 +1794,7 @@ export default function App() {
                         )}
                       </div>
                     </>
-                  )}
+                  ) : null}
                 </div>
                 <div className="header-actions">
                   {showHeaderStatus && (
@@ -1925,6 +1944,7 @@ export default function App() {
                           <ProjectFileEditor
                             workbench={projectFiles}
                             theme={resolved}
+                            mdMode={projectMdMode}
                           />
                         ) : null
                       }

@@ -297,34 +297,39 @@ function ProjectFilesDockPreview({ open }: { open: boolean }) {
   );
 }
 
+function ProjectFileTabsPreview() {
+  return (
+    <div className="project-file-tabs">
+      <div className="project-file-tabs-scroll">
+        <div className="project-file-tab">
+          <FileText size={14} />
+          <span>20260829-2db8a3.md</span>
+          <span className="project-file-tab-close">×</span>
+        </div>
+        <div className="project-file-tab is-active">
+          <FileText size={14} />
+          <span>20260830-f28f42.md</span>
+          <span className="project-file-tab-close">×</span>
+        </div>
+      </div>
+      <div className="project-file-tab-actions">
+        <button type="button" aria-label="预览">
+          <Eye size={15} />
+        </button>
+        <button type="button" aria-label="保存">
+          <Save size={15} />
+        </button>
+        <button type="button" aria-label="关闭">
+          <X size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProjectFileWorkbenchPreview() {
   return (
     <section className="project-file-workbench">
-      <div className="project-file-tabs">
-        <div className="project-file-tabs-scroll">
-          <div className="project-file-tab">
-            <FileText size={14} />
-            <span>20260829-2db8a3.md</span>
-            <span className="project-file-tab-close">×</span>
-          </div>
-          <div className="project-file-tab is-active">
-            <FileText size={14} />
-            <span>20260830-f28f42.md</span>
-            <span className="project-file-tab-close">×</span>
-          </div>
-        </div>
-        <div className="project-file-tab-actions">
-          <button type="button" aria-label="预览">
-            <Eye size={15} />
-          </button>
-          <button type="button" aria-label="保存">
-            <Save size={15} />
-          </button>
-          <button type="button" aria-label="关闭">
-            <X size={15} />
-          </button>
-        </div>
-      </div>
       <div className="project-file-editor-body">
         <div
           aria-label="Markdown 编辑器预览"
@@ -400,23 +405,27 @@ function ChatDockLayout({
           className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}${kind === "files" ? " has-project-file has-content-underlay" : ""}`}
         >
           <div className="content-heading">
-            <div className="page-title-block">
-              <div className="page-title-icon" data-tone="blue" aria-hidden>
-                <MessageSquare size={15} />
+            {kind === "files" ? (
+              <ProjectFileTabsPreview />
+            ) : (
+              <div className="page-title-block">
+                <div className="page-title-icon" data-tone="blue" aria-hidden>
+                  <MessageSquare size={15} />
+                </div>
+                <div className="page-title-text">
+                  <h1
+                    className="content-title conversation-title"
+                    data-tone="blue"
+                  >
+                    <ConversationTitle
+                      title="请用 Python 写一个简单的 Web 爬虫，抓取页面标题并整理运行结果"
+                      renameLabel="重命名"
+                      onRename={() => {}}
+                    />
+                  </h1>
+                </div>
               </div>
-              <div className="page-title-text">
-                <h1
-                  className="content-title conversation-title"
-                  data-tone="blue"
-                >
-                  <ConversationTitle
-                    title="请用 Python 写一个简单的 Web 爬虫，抓取页面标题并整理运行结果"
-                    renameLabel="重命名"
-                    onRename={() => {}}
-                  />
-                </h1>
-              </div>
-            </div>
+            )}
           </div>
           <HeaderActions kind={kind} onSelect={onSelect} />
         </div>

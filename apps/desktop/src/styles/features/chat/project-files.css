@@ -287,24 +287,21 @@
   flex-direction: column;
   overflow: hidden;
   isolation: isolate;
-  border: var(--chat-dock-surface-border);
+  border: 0;
   border-radius: 0;
-  background: var(--chat-dock-surface-background);
-  box-shadow: var(--chat-dock-surface-shadow);
+  background: transparent;
+  box-shadow: none;
 }
 
 .project-file-tabs {
-  height: 44px;
-  flex: 0 0 44px;
+  height: 34px;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   min-width: 0;
-  padding: 0 6px;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--glass-edge) 46%, transparent);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent),
-    color-mix(in srgb, var(--glass-panel) 30%, transparent);
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .project-file-tabs-scroll {
@@ -422,7 +419,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: color-mix(in srgb, var(--glass-panel) 16%, transparent);
+  background: transparent;
 }
 
 .project-file-markdown-preview {
@@ -546,9 +543,13 @@
   pointer-events: none;
 }
 
-/* 文件打开时收窄悬浮输入框，使它与编辑器正文列对齐。 */
-.chat-pane.has-project-file {
+/* 文件打开时，顶栏与内容共享同一层玻璃，底边保持直角。 */
+html .chat-pane.has-project-file {
   position: relative;
+  border-radius: 0;
+  background: var(--sidebar-chrome-background);
+  backdrop-filter: var(--sidebar-chrome-filter);
+  -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }
 
 .chat-pane.has-project-file .composer-shell {

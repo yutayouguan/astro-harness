@@ -26,6 +26,10 @@ const projectFilesPanel = await readFile(
   new URL("../../components/chat/ProjectFilesPanel.tsx", import.meta.url),
   "utf8",
 );
+const projectFileEditor = await readFile(
+  new URL("../../components/chat/ProjectFileEditor.tsx", import.meta.url),
+  "utf8",
+);
 const sideChatStyles = await readFile(
   new URL("../../styles/features/chat/side-chat.css", import.meta.url),
   "utf8",
@@ -130,10 +134,7 @@ test("chat header is invisible at rest and adds glass only above scrolling conte
   assert.match(underlay, /--chat-header-filter:\s*blur\(/);
   assert.match(underlay, /saturate\(1\.05\);/);
   assert.ok(fileHeader, "missing project file header material rule");
-  assert.match(
-    fileHeader,
-    /background:\s*var\(--sidebar-chrome-background\);/,
-  );
+  assert.match(fileHeader, /background:\s*var\(--sidebar-chrome-background\);/);
   assert.match(
     fileHeader,
     /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/,
@@ -153,10 +154,7 @@ test("chat header is invisible at rest and adds glass only above scrolling conte
     app,
     /chatHeaderHasUnderlay \|\| projectFiles\.tabs\.length > 0\s*\? " has-content-underlay"/,
   );
-  assert.match(
-    app,
-    /projectFiles\.tabs\.length > 0 \? " has-project-file"/,
-  );
+  assert.match(app, /projectFiles\.tabs\.length > 0 \? " has-project-file"/);
   assert.match(app, /onHeaderUnderlayChange=\{setChatHeaderHasUnderlay\}/);
   assert.match(chatView, /notifyHeaderUnderlay\(list\.scrollTop > 8\);/);
   assert.match(
@@ -184,7 +182,7 @@ test("conversation title keeps a compact optical type scale", () => {
   assert.match(title, /letter-spacing:\s*0\.01em;/);
 });
 
-test("file workspace aligns edge to edge without changing dock surfaces", () => {
+test("file workspace shares the titlebar material and keeps square edges", () => {
   const layout = rule(
     rightPanelStyles,
     ".chat-layout-with-right.has-right-dock",
@@ -197,6 +195,12 @@ test("file workspace aligns edge to edge without changing dock surfaces", () => 
     ".project-files-panel.is-open",
   );
   const projectWorkbench = rule(projectFilesStyles, ".project-file-workbench");
+  const fileChatPane = rule(
+    projectFilesStyles,
+    "html .chat-pane.has-project-file",
+  );
+  const editorBody = rule(projectFilesStyles, ".project-file-editor-body");
+  const titlebarTabs = rule(projectFilesStyles, ".project-file-tabs");
   const sidePanel = rule(sideChatStyles, ".side-chat-panel");
   const reviewPanel = rule(reviewPanelStyles, ".chat-review-panel");
   const filePageBody = rule(
@@ -228,6 +232,9 @@ test("file workspace aligns edge to edge without changing dock surfaces", () => 
   assert.ok(projectPanel, "missing project files panel rule");
   assert.ok(openProjectPanel, "missing open project files panel rule");
   assert.ok(projectWorkbench, "missing project file workbench rule");
+  assert.ok(fileChatPane, "missing square file chat surface rule");
+  assert.ok(editorBody, "missing project file editor body rule");
+  assert.ok(titlebarTabs, "missing project file titlebar tabs rule");
   assert.ok(sidePanel, "missing side chat panel rule");
   assert.ok(reviewPanel, "missing review panel rule");
   assert.ok(filePageBody, "missing edge-aligned file workspace rule");
@@ -254,20 +261,34 @@ test("file workspace aligns edge to edge without changing dock surfaces", () => 
     /margin:\s*var\(--chat-header-overlay-height, 50px\) 0 0;/,
   );
   assert.match(projectWorkbench, /border-radius:\s*0;/);
+  assert.match(projectWorkbench, /background:\s*transparent;/);
+  assert.match(projectWorkbench, /box-shadow:\s*none;/);
+  assert.match(fileChatPane, /border-radius:\s*0;/);
   assert.match(
-    projectWorkbench,
-    /background:\s*var\(--chat-dock-surface-background\);/,
+    fileChatPane,
+    /background:\s*var\(--sidebar-chrome-background\);/,
   );
   assert.match(
-    projectWorkbench,
-    /box-shadow:\s*var\(--chat-dock-surface-shadow\);/,
+    fileChatPane,
+    /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/,
   );
+  assert.match(editorBody, /background:\s*transparent;/);
+  assert.match(titlebarTabs, /background:\s*transparent;/);
   assert.match(openProjectPanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(openProjectPanel, /border-width:\s*0\.5px;/);
   assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(
     app,
     /page-body page-body--chat.*projectFiles\.tabs\.length > 0 \? " has-project-file"/,
+  );
+  assert.match(
+    app,
+    /projectFiles\.tabs\.length > 0 \? \([\s\S]*?<ProjectFileTabs/,
+  );
+  assert.match(projectFileEditor, /export function ProjectFileTabs/);
+  assert.doesNotMatch(
+    projectFileEditor,
+    /<section className="project-file-workbench"[^>]*>[\s\S]*?<div className="project-file-tabs"/,
   );
   assert.match(
     rightPanelStyles,

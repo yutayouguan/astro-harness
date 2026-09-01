@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   ExternalLink,
   Eye,
@@ -12,8 +12,6 @@ import type { ResolvedTheme } from "../../hooks/app/useTheme";
 import type { ProjectFileWorkbench } from "../../hooks/chat/useProjectFileWorkbench";
 import {
   isMarkdownFilename,
-  readWorkspaceMdMode,
-  writeWorkspaceMdMode,
   type MdMode,
 } from "../../lib/filespace/workspaceMdMode";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -21,15 +19,18 @@ import FileTypeIcon from "../filespace/FileTypeIcon";
 import FilePreviewContent from "../filespace/FilePreviewContent";
 import WorkspaceEditor from "../workspace/WorkspaceEditor";
 
-export default function ProjectFileEditor({
-  workbench,
-  theme,
-}: {
+type ProjectFileTabsProps = {
   workbench: ProjectFileWorkbench;
-  theme: ResolvedTheme;
-}) {
+  mdMode: MdMode;
+  onMdModeChange: (mode: MdMode) => void;
+};
+
+export function ProjectFileTabs({
+  workbench,
+  mdMode,
+  onMdModeChange,
+}: ProjectFileTabsProps) {
   const { activeTab } = workbench;
-  const [mdMode, setMdMode] = useState<MdMode>(readWorkspaceMdMode);
   const isMarkdown = Boolean(activeTab && isMarkdownFilename(activeTab.name));
   const showMarkdownPreview = isMarkdown && mdMode === "preview";
   const isMediaPreview =
@@ -41,11 +42,145 @@ export default function ProjectFileEditor({
     isMediaPreview || activeTab?.previewKind === "external";
 
   const toggleMarkdownMode = () => {
-    const next = mdMode === "preview" ? "source" : "preview";
-    setMdMode(next);
-    writeWorkspaceMdMode(next);
+    onMdModeChange(mdMode === "preview" ? "source" : "preview");
   };
 
+  return (
+    <div className="project-file-tabs" role="tablist" aria-label="打开的文件">
+      <div className="project-file-tabs-scroll">
+        {workbench.tabs.map((tab) => {
+          const dirty = !tab.readonly && tab.content !== tab.savedContent;
+          return (
+            <div
+              key={tab.key}
+              role="tab"
+              tabIndex={0}
+              aria-selected={workbench.activeKey === tab.key}
+              className={`project-file-tab${workbench.activeKey === tab.key ? " is-active" : ""}`}
+              onClick={() => workbench.setActiveKey(tab.key)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  workbench.setActiveKey(tab.key);
+                }
+              }}
+              title={tab.path ?? tab.name}
+            >
+              <FileTypeIcon
+                className="project-file-icon"
+                name={tab.name}
+                size={15}
+              />
+              <span>{tab.name}</span>
+              {dirty ? (
+                <i className="project-file-dirty" aria-label="未保存" />
+              ) : null}
+              <button
+                type="button"
+                className="project-file-tab-close"
+                aria-label={`关闭 ${tab.name}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  workbench.closeTab(tab.key);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    workbench.closeTab(tab.key);
+                  }
+                }}
+              >
+                <X size={12} aria-hidden />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <div className="project-file-tab-actions">
+        {opensExternally ? (
+          <button
+            type="button"
+            onClick={() => void workbench.openActiveExternally()}
+            title="使用系统默认应用打开"
+            aria-label="使用系统默认应用打开当前文件"
+          >
+            <ExternalLink size={14} aria-hidden />
+          </button>
+        ) : null}
+        {isMarkdown ? (
+          <button
+            type="button"
+            className={showMarkdownPreview ? "is-active" : undefined}
+            onClick={toggleMarkdownMode}
+            title={showMarkdownPreview ? "显示源码" : "预览 Markdown"}
+            aria-label={
+              showMarkdownPreview ? "显示 Markdown 源码" : "预览 Markdown"
+            }
+            aria-pressed={showMarkdownPreview}
+          >
+            {showMarkdownPreview ? (
+              <FileCode2 size={14} aria-hidden />
+            ) : (
+              <Eye size={14} aria-hidden />
+            )}
+          </button>
+        ) : null}
+        {!opensExternally ? (
+          <button
+            type="button"
+            onClick={() => void workbench.saveActive()}
+            disabled={
+              !activeTab ||
+              activeTab.readonly ||
+              activeTab.loading ||
+              activeTab.saving ||
+              activeTab.content === activeTab.savedContent
+            }
+            title={activeTab?.readonly ? "生成中，完成后可编辑" : "保存 (⌘S)"}
+            aria-label="保存当前文件"
+          >
+            {activeTab?.saving ? (
+              <LoaderCircle
+                className="project-file-spin"
+                size={14}
+                aria-hidden
+              />
+            ) : (
+              <Save size={14} aria-hidden />
+            )}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={workbench.closeAll}
+          title="关闭全部文件"
+          aria-label="关闭全部文件"
+        >
+          <X size={14} aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function ProjectFileEditor({
+  workbench,
+  theme,
+  mdMode,
+}: {
+  workbench: ProjectFileWorkbench;
+  theme: ResolvedTheme;
+  mdMode: MdMode;
+}) {
+  const { activeTab } = workbench;
+  const isMarkdown = Boolean(activeTab && isMarkdownFilename(activeTab.name));
+  const showMarkdownPreview = isMarkdown && mdMode === "preview";
+  const isMediaPreview =
+    activeTab?.previewKind === "image" ||
+    activeTab?.previewKind === "video" ||
+    activeTab?.previewKind === "audio" ||
+    activeTab?.previewKind === "pdf";
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (
@@ -65,121 +200,6 @@ export default function ProjectFileEditor({
 
   return (
     <section className="project-file-workbench" aria-label="文件编辑器">
-      <div className="project-file-tabs" role="tablist" aria-label="打开的文件">
-        <div className="project-file-tabs-scroll">
-          {workbench.tabs.map((tab) => {
-            const dirty = !tab.readonly && tab.content !== tab.savedContent;
-            return (
-              <div
-                key={tab.key}
-                role="tab"
-                tabIndex={0}
-                aria-selected={workbench.activeKey === tab.key}
-                className={`project-file-tab${workbench.activeKey === tab.key ? " is-active" : ""}`}
-                onClick={() => workbench.setActiveKey(tab.key)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    workbench.setActiveKey(tab.key);
-                  }
-                }}
-                title={tab.path ?? tab.name}
-              >
-                <FileTypeIcon
-                  className="project-file-icon"
-                  name={tab.name}
-                  size={15}
-                />
-                <span>{tab.name}</span>
-                {dirty ? (
-                  <i className="project-file-dirty" aria-label="未保存" />
-                ) : null}
-                <button
-                  type="button"
-                  className="project-file-tab-close"
-                  aria-label={`关闭 ${tab.name}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    workbench.closeTab(tab.key);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      workbench.closeTab(tab.key);
-                    }
-                  }}
-                >
-                  <X size={12} aria-hidden />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        <div className="project-file-tab-actions">
-          {opensExternally ? (
-            <button
-              type="button"
-              onClick={() => void workbench.openActiveExternally()}
-              title="使用系统默认应用打开"
-              aria-label="使用系统默认应用打开当前文件"
-            >
-              <ExternalLink size={14} aria-hidden />
-            </button>
-          ) : null}
-          {isMarkdown ? (
-            <button
-              type="button"
-              className={showMarkdownPreview ? "is-active" : undefined}
-              onClick={toggleMarkdownMode}
-              title={showMarkdownPreview ? "显示源码" : "预览 Markdown"}
-              aria-label={
-                showMarkdownPreview ? "显示 Markdown 源码" : "预览 Markdown"
-              }
-              aria-pressed={showMarkdownPreview}
-            >
-              {showMarkdownPreview ? (
-                <FileCode2 size={14} aria-hidden />
-              ) : (
-                <Eye size={14} aria-hidden />
-              )}
-            </button>
-          ) : null}
-          {!opensExternally ? (
-            <button
-              type="button"
-              onClick={() => void workbench.saveActive()}
-              disabled={
-                !activeTab ||
-                activeTab.readonly ||
-                activeTab.loading ||
-                activeTab.saving ||
-                activeTab.content === activeTab.savedContent
-              }
-              title={activeTab?.readonly ? "生成中，完成后可编辑" : "保存 (⌘S)"}
-              aria-label="保存当前文件"
-            >
-              {activeTab?.saving ? (
-                <LoaderCircle
-                  className="project-file-spin"
-                  size={14}
-                  aria-hidden
-                />
-              ) : (
-                <Save size={14} aria-hidden />
-              )}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={workbench.closeAll}
-            title="关闭全部文件"
-            aria-label="关闭全部文件"
-          >
-            <X size={14} aria-hidden />
-          </button>
-        </div>
-      </div>
       <div className="project-file-editor-body">
         {activeTab?.loading ? (
           <div className="project-file-editor-state" role="status">
