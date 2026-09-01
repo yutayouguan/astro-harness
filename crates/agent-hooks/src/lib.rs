@@ -185,6 +185,20 @@ impl HookRuntime {
         (plugin, commands)
     }
 
+    pub(crate) fn dispatch_memory_consolidation_stop_parts(
+        &self,
+        payload: &HookPayload,
+    ) -> (HookOutcome, Vec<CommandHookDecision>) {
+        let payload = payload.for_event(STOP);
+        let commands = run_command_hooks_for(
+            &self.command,
+            STOP,
+            &payload,
+            CommandHookSelection::MemoryConsolidation,
+        );
+        (HookOutcome::Continue, commands)
+    }
+
     pub fn dispatch_permission_request(&self, payload: &HookPayload) -> PermissionRequestDecision {
         let payload = payload.for_event(PERMISSION_REQUEST);
         let mut decision = self.plugin.fire_permission_request(&payload);
@@ -292,6 +306,21 @@ fn run_command_hooks(
     event: &str,
     payload: &HookPayload,
 ) -> Vec<CommandHookDecision> {
+    run_command_hooks_for(runner, event, payload, CommandHookSelection::All)
+}
+
+#[derive(Clone, Copy)]
+enum CommandHookSelection {
+    All,
+    MemoryConsolidation,
+}
+
+fn run_command_hooks_for(
+    runner: &Arc<CommandHookRunner>,
+    event: &str,
+    payload: &HookPayload,
+    selection: CommandHookSelection,
+) -> Vec<CommandHookDecision> {
     if runner.is_empty() {
         return Vec::new();
     }
@@ -302,7 +331,16 @@ fn run_command_hooks(
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .map(|runtime| runtime.block_on(runner.run(&event, &payload)))
+            .map(|runtime| {
+                runtime.block_on(async {
+                    match selection {
+                        CommandHookSelection::All => runner.run(&event, &payload).await,
+                        CommandHookSelection::MemoryConsolidation => {
+                            runner.run_memory_consolidation(&event, &payload).await
+                        }
+                    }
+                })
+            })
     })
     .join()
     {

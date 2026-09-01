@@ -760,6 +760,23 @@ impl CommandHookRunner {
     }
 
     pub async fn run(&self, event: &str, payload: &HookPayload) -> Vec<CommandHookDecision> {
+        self.run_selected(event, payload, false).await
+    }
+
+    pub(crate) async fn run_memory_consolidation(
+        &self,
+        event: &str,
+        payload: &HookPayload,
+    ) -> Vec<CommandHookDecision> {
+        self.run_selected(event, payload, true).await
+    }
+
+    async fn run_selected(
+        &self,
+        event: &str,
+        payload: &HookPayload,
+        memory_consolidation: bool,
+    ) -> Vec<CommandHookDecision> {
         let Some(event_name) = HookEvent::from_command_name(event) else {
             return Vec::new();
         };
@@ -785,6 +802,8 @@ impl CommandHookRunner {
             .iter()
             .filter(|handler| {
                 handler.enabled
+                    && (!memory_consolidation
+                        || memory_consolidation_source_allowed(handler.source_kind))
                     && (ignore_matcher
                         || matcher_matches(handler.matcher.as_ref(), &matcher_values))
             })
@@ -958,6 +977,13 @@ impl CommandHookRunner {
             .map(|(_, decision)| decision)
             .collect()
     }
+}
+
+fn memory_consolidation_source_allowed(source: HookSource) -> bool {
+    !matches!(
+        source,
+        HookSource::User | HookSource::Project | HookSource::SessionFlags | HookSource::Plugin
+    )
 }
 
 fn handler_id(
@@ -3057,6 +3083,53 @@ mod tests {
             .recent_runs()
             .iter()
             .all(|run| run.status == HookRunStatus::Stopped));
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn memory_consolidation_runs_only_policy_sources() {
+        let mut runner = CommandHookRunner::from_file(
+            HooksFile {
+                hooks: HashMap::from([(
+                    crate::STOP.into(),
+                    vec![MatcherGroup {
+                        matcher: None,
+                        hooks: vec![HookHandlerConfig::Command {
+                            command: r#"printf '%s' '{"decision":"block","reason":"policy"}'"#
+                                .into(),
+                            command_windows: None,
+                            timeout_sec: Some(2),
+                            r#async: false,
+                            status_message: None,
+                            additional_context_limit: None,
+                        }],
+                    }],
+                )]),
+                ..Default::default()
+            },
+            Path::new("hooks.json"),
+        )
+        .unwrap();
+        runner.handlers.get_mut(&HookEvent::Stop).unwrap()[0].source_kind = HookSource::System;
+
+        let decisions = runner
+            .run_memory_consolidation(
+                crate::STOP,
+                &HookPayload {
+                    session_id: "session-1".into(),
+                    turn_id: Some("turn-1".into()),
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert_eq!(decisions.len(), 1);
+        assert_eq!(decisions[0].keep_going.as_deref(), Some("policy"));
+        assert_eq!(runner.recent_runs().len(), 1);
     }
 
     #[tokio::test]

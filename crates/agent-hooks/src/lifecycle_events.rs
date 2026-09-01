@@ -273,8 +273,9 @@ impl HookRuntime {
                 payload.agent_transcript_path = agent_transcript_path;
                 self.dispatch_subagent_stop_parts(&payload)
             }
-            StopHookTarget::Stop | StopHookTarget::MemoryConsolidation => {
-                self.dispatch_parts(crate::STOP, &payload)
+            StopHookTarget::Stop => self.dispatch_parts(crate::STOP, &payload),
+            StopHookTarget::MemoryConsolidation => {
+                self.dispatch_memory_consolidation_stop_parts(&payload)
             }
         };
         stop_outcome(plugin, commands)
@@ -624,5 +625,34 @@ mod tests {
         let runs = runtime.command.recent_runs();
         assert_eq!(runs.len(), 1);
         assert_eq!(outcome.continuation_fragments[0].hook_run_id, runs[0].id);
+    }
+
+    #[test]
+    fn memory_consolidation_skips_local_completion_hooks() {
+        let runtime = runtime_with_command(
+            crate::STOP,
+            r#"printf '%s' '{"decision":"block","reason":"local completion check"}'"#,
+        );
+        runtime.plugin.register(crate::STOP, |_| {
+            HookOutcome::Block("plugin completion check".into())
+        });
+
+        let outcome = runtime.run_stop(StopRequest {
+            session_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            cwd: std::env::current_dir()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+            transcript_path: None,
+            model: "openai/gpt-5".into(),
+            permission_mode: "workspace-write".into(),
+            stop_hook_active: false,
+            last_assistant_message: Some("done".into()),
+            target: StopHookTarget::MemoryConsolidation,
+        });
+
+        assert_eq!(outcome, StopOutcome::default());
+        assert!(runtime.command.recent_runs().is_empty());
     }
 }
