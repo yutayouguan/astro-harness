@@ -215,6 +215,13 @@ const MEDIA_MODEL_DEFAULTS: Record<
     music: "",
     vision: "gpt-4o",
   },
+  azure: {
+    image: "gpt-image-2",
+    video: "",
+    tts: "",
+    music: "",
+    vision: "",
+  },
   minimax: {
     image: "image-01",
     video: "MiniMax-H3",

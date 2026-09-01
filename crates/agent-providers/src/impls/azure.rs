@@ -1,4 +1,4 @@
-//! Azure OpenAI — deployment URL + `api-key` header 认证 + 连通性探测。
+//! Azure OpenAI — Chat/Responses 使用 deployment 协议，Foundry OpenAI v1 图片使用 Bearer 认证。
 
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
@@ -8,7 +8,11 @@ use crate::compat::{
     apply_thinking_compat, OpenAICompatible, OpenAICompletionModel, OpenAIResponsesCompatible,
     ThinkingFormat,
 };
-use crate::traits::{Capabilities, Capable, Nothing, ProviderExt};
+use crate::traits::{
+    Capabilities, Capable, FromClient, ImageGenModel, ModelBase, Nothing, ProviderClient,
+    ProviderExt,
+};
+use crate::types::media::{GeneratedImage, ImageGenConfig};
 
 const API_VERSION: &str = "2024-06-01";
 
@@ -61,10 +65,32 @@ impl OpenAIResponsesCompatible for Azure {
 impl Capabilities for Azure {
     type Chat = Capable<OpenAICompletionModel<Self>>;
     type Embedding = Nothing;
-    type ImageGen = Nothing;
+    type ImageGen = Capable<AzureImageModel>;
     type VideoGen = Nothing;
     type TTS = Nothing;
     type MusicGen = Nothing;
+}
+
+/// Azure AI Foundry OpenAI v1 image generation model.
+#[derive(Clone)]
+pub struct AzureImageModel(ModelBase);
+
+impl FromClient<Azure> for AzureImageModel {
+    fn from_client(client: &ProviderClient<Azure>, model: &str) -> Self {
+        Self(ModelBase::from_client(client, model))
+    }
+}
+
+#[async_trait::async_trait]
+impl ImageGenModel for AzureImageModel {
+    async fn generate(
+        &self,
+        prompt: &str,
+        _config: &ImageGenConfig,
+    ) -> anyhow::Result<Vec<GeneratedImage>> {
+        let cfg = self.0.to_provider_config();
+        crate::openai::image_http::azure_foundry_generate_image(self.0.http(), prompt, &cfg).await
+    }
 }
 
 /// 从 Azure endpoint 提取资源根路径。

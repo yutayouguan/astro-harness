@@ -236,6 +236,9 @@ pub async fn generate_image(
         crate::profile::ImageGenMode::OpenAi => {
             Ok(crate::openai::image_http::openai_generate_image(&client, prompt, &cfg).await?)
         }
+        crate::profile::ImageGenMode::AzureOpenAiV1 => Ok(
+            crate::openai::image_http::azure_foundry_generate_image(&client, prompt, &cfg).await?,
+        ),
         crate::profile::ImageGenMode::GoogleInteractions => {
             let req = crate::google::interactions_http::InteractionImageRequest {
                 prompt: prompt.to_string(),
@@ -583,7 +586,7 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         "google" => reg.register_google(key, base, model),
         "openai" => reg.register_openai(key, base, model),
         "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
-        "azure" => register_compat::<crate::impls::azure::Azure>(reg, key, base, model),
+        "azure" => reg.register_azure(key, base, model),
         "zhipu" => register_media::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
         "moonshot" => register_compat::<crate::impls::moonshot::Moonshot>(reg, key, base, model),
         "ollama" => register_compat::<crate::impls::ollama::Ollama>(reg, key, base, model),

@@ -18,8 +18,10 @@ pub enum ApiMode {
 /// 图片生成协议路由。新厂商走 OpenAI 兼容 API 只需设 `OpenAi`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageGenMode {
-    /// OpenAI `POST /images/generations`（OpenAI / Azure / 兼容网关）。
+    /// OpenAI `POST /images/generations`（OpenAI / 兼容网关）。
     OpenAi,
+    /// Azure AI Foundry OpenAI v1 `POST /openai/v1/images/generations`。
+    AzureOpenAiV1,
     /// Google Interactions `POST /v1beta/interactions` with generateImage。
     GoogleInteractions,
     /// MiniMax T2I `POST /v1/text/image`。
@@ -215,10 +217,10 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["AZURE_OPENAI_API_KEY", "AZURE_API_KEY"],
         azure_deployment_style: true,
         default_model: "gpt-5.6",
-        supports_image_gen: false,
+        supports_image_gen: true,
         supports_embedding: false,
-        image_mode: None,
-        default_image_model: "",
+        image_mode: Some(ImageGenMode::AzureOpenAiV1),
+        default_image_model: "gpt-image-2",
         default_vision_model: "",
         supports_stream_usage: true,
         default_tts_model: "",
@@ -728,6 +730,9 @@ mod tests {
         assert_eq!(p.api_mode, ApiMode::Responses);
         assert!(p.azure_deployment_style);
         assert_eq!(p.auth, AuthKind::AzureHeader);
+        assert!(p.supports_image_gen);
+        assert_eq!(p.image_mode, Some(ImageGenMode::AzureOpenAiV1));
+        assert_eq!(p.default_image_model, "gpt-image-2");
     }
 
     #[test]

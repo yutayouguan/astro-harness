@@ -1213,7 +1213,7 @@ pub fn resolve_chat_targets(
     Ok(chain)
 }
 
-/// 图片生成目标（已开启 + 有 API Key 的 Google / OpenAI）
+/// 图片生成目标（已开启 + 有 API Key 的 Google / OpenAI / Azure / MiniMax）
 #[derive(Debug, Clone, Serialize)]
 pub struct ImageGenTarget {
     pub provider: String,
@@ -1228,7 +1228,7 @@ pub struct ImageGenTarget {
 }
 
 const IMAGE_GEN_NO_PROVIDER_MSG: &str =
-    "未找到可用的图片生成提供商。请在「模型提供商」中开启 Google 或 OpenAI，并配置 API Key。";
+    "未找到可用的图片生成提供商。请在「模型提供商」中开启 Google、OpenAI、Azure 或 MiniMax，并配置 API Key。";
 
 /// 按供应商类型选择默认图片模型（动态优先，硬编码 fallback）。
 fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
@@ -1236,6 +1236,7 @@ fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
     match kind {
         ProviderKind::Google => Some("nano-banana-pro-preview"),
         ProviderKind::Openai => Some("gpt-image-2"),
+        ProviderKind::Azure => Some("gpt-image-2"),
         ProviderKind::Minimax => Some("image-01"),
         _ => None,
     }
@@ -1329,11 +1330,13 @@ pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
         .unwrap_or_else(|| kind.default_model().to_string())
 }
 
-/// 从 providers 面板解析图片生成候选：Google 优先，OpenAI 备用。
+/// 从 providers 面板解析图片生成候选：当前活动 Provider 优先，再按 Google → OpenAI → Azure → MiniMax。
 pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
     with_state(|s| {
+        let mut active: Option<ImageGenTarget> = None;
         let mut google: Option<ImageGenTarget> = None;
         let mut openai: Option<ImageGenTarget> = None;
+        let mut azure: Option<ImageGenTarget> = None;
         let mut minimax: Option<ImageGenTarget> = None;
 
         for p in &s.providers {
@@ -1370,20 +1373,31 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
                     default_music_model_for_kind(&p.kind),
                 ),
             };
+            if s.active_provider_id.as_deref() == Some(p.id.as_str()) {
+                active = Some(target);
+                continue;
+            }
             match p.kind {
                 ProviderKind::Google if google.is_none() => google = Some(target),
                 ProviderKind::Openai if openai.is_none() => openai = Some(target),
+                ProviderKind::Azure if azure.is_none() => azure = Some(target),
                 ProviderKind::Minimax if minimax.is_none() => minimax = Some(target),
                 _ => {}
             }
         }
 
         let mut targets = Vec::new();
+        if let Some(a) = active {
+            targets.push(a);
+        }
         if let Some(g) = google {
             targets.push(g);
         }
         if let Some(o) = openai {
             targets.push(o);
+        }
+        if let Some(a) = azure {
+            targets.push(a);
         }
         if let Some(m) = minimax {
             targets.push(m);
@@ -2096,6 +2110,14 @@ mod tests {
             "lyria-3-pro"
         );
         assert_eq!(default_music_model_for_kind(&ProviderKind::Openai), "");
+    }
+
+    #[test]
+    fn azure_image_model_defaults_to_gpt_image_2() {
+        assert_eq!(
+            default_image_model_for_kind(&ProviderKind::Azure),
+            Some("gpt-image-2")
+        );
     }
 
     #[test]
