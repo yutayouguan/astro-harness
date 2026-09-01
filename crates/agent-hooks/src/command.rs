@@ -622,7 +622,7 @@ impl CommandHookRunner {
             return Vec::new();
         };
         let matcher_values = matcher_values(event_name, payload);
-        let input = match serde_json::to_vec(&payload.for_event(event)) {
+        let input = match serde_json::to_vec(&payload.command_input_for_event(event_name)) {
             Ok(input) => input,
             Err(error) => {
                 warn!(%event, %error, "failed to serialize command hook input");
