@@ -83,6 +83,8 @@ pub(crate) fn tool_turn_item_with_execution(
     };
     if name == "exec_command" || name == "code_exec" {
         TurnItem::CommandExecution(item)
+    } else if name == "image_gen" {
+        TurnItem::ImageGeneration(item)
     } else if name.starts_with("mcp__") {
         TurnItem::McpToolCall(item)
     } else if matches!(
@@ -670,6 +672,25 @@ mod tests {
         };
         assert_eq!(item.batch_id.as_deref(), Some("batch-1"));
         assert_eq!(item.execution_mode, Some(ToolExecutionMode::Parallel));
+    }
+
+    #[test]
+    fn image_gen_is_a_first_class_business_item() {
+        let TurnItem::ImageGeneration(item) = tool_turn_item_with_execution(
+            "call-image-1",
+            "image_gen",
+            serde_json::json!({"prompt": "A polar bear"}),
+            None,
+            Vec::new(),
+            ToolStatus::InProgress,
+            None,
+        ) else {
+            panic!("expected image generation item");
+        };
+
+        assert_eq!(item.id, "call-image-1");
+        assert_eq!(item.name, "image_gen");
+        assert_eq!(item.status, ToolStatus::InProgress);
     }
 
     async fn session() -> (tempfile::TempDir, Arc<Session>, Arc<TurnContext>) {
