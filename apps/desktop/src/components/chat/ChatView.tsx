@@ -108,16 +108,16 @@ import { groupAssistantAnswer } from "../../lib/chat/groupAssistantAnswer";
 import {
   assistantAnswerPlainText,
   assistantProcessMarkdown,
-} from "../../lib/chat/assistantMessageClipboard";
+} from "../../lib/chat/assistantTurnClipboard";
 import type {
   ChatActivity,
   ChatAttachment,
   ChatAttachmentKind,
   ChatEmptyMode,
-  ChatHistoryDto,
-  ChatMessage,
+  ResponseItemHistoryDto,
+  ConversationEntry,
   InstalledSkill,
-  MessageTokenUsage,
+  TurnTokenUsage,
   ModelCapabilities,
   ModelPricingMeta,
   ModelReasoningMeta,
@@ -132,7 +132,7 @@ import {
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import AgentAvatar from "../agents/AgentAvatar";
-import ChatMessageNav from "./ChatMessageNav";
+import TurnNavigator from "./TurnNavigator";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWelcome } from "./ChatWelcome";
 import {
@@ -187,12 +187,12 @@ import {
   type ProviderOpt,
 } from "../schedule/CreateCronDialog";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
-import { mapHistoryItems } from "../../lib/chat/mapHistoryMessages";
+import { projectResponseItemsToEntries } from "../../lib/chat/projectResponseItemsToEntries";
 import {
   groupConsecutiveActivities,
   isConsecutiveActivityGroup,
 } from "../../lib/chat/groupActivities";
-import { findLastUserMessageId } from "../../lib/chat/messageEditing";
+import { findLastUserEntryId } from "../../lib/chat/turnEditing";
 import { isLocationRequiredSurface } from "../../lib/chat/locationSurface";
 import {
   findComposerClarifySurface,
@@ -229,7 +229,7 @@ function MessageTokenStats({
   tokensPerSec,
   generationDurationSec,
 }: {
-  usage?: MessageTokenUsage;
+  usage?: TurnTokenUsage;
   tokensPerSec?: number;
   generationDurationSec?: number;
 }) {
@@ -304,7 +304,7 @@ type Props = {
   /** 当前父会话 id，用于展示其 Agent Threads。 */
   sessionId?: string | null;
   /** 当前会话消息（含欢迎占位） */
-  messages: ChatMessage[];
+  messages: ConversationEntry[];
   /** 项目文件打开时替换消息滚动区；输入框与任务条仍保留。 */
   workspaceContent?: ReactNode;
   /** 输入框文本 */
@@ -896,7 +896,7 @@ export default function ChatView({
   }, [realtime.error, showToast]);
   const confirm = useConfirm();
   const lastUserMessageId = useMemo(
-    () => findLastUserMessageId(messages),
+    () => findLastUserEntryId(messages),
     [messages],
   );
   const [editingUserMessageId, setEditingUserMessageId] = useState<
@@ -968,7 +968,7 @@ export default function ChatView({
     null,
   );
   const [selectedCronMessages, setSelectedCronMessages] = useState<
-    ChatMessage[]
+    ConversationEntry[]
   >([]);
   const [selectedCronTraceLoading, setSelectedCronTraceLoading] =
     useState(false);
@@ -1107,12 +1107,17 @@ export default function ChatView({
 
         if (resolved.session_id && resolved.session_id !== sessionId) {
           setSelectedCronTraceLoading(true);
-          const history = await invoke<ChatHistoryDto>("get_chat_history", {
-            sessionId: resolved.session_id,
-            limit: 200,
-          });
+          const history = await invoke<ResponseItemHistoryDto>(
+            "get_chat_history",
+            {
+              sessionId: resolved.session_id,
+              limit: 200,
+            },
+          );
           if (cancelled) return;
-          setSelectedCronMessages(mapHistoryItems(history.items ?? []));
+          setSelectedCronMessages(
+            projectResponseItemsToEntries(history.items ?? []),
+          );
         }
 
         if (cronRunStatusKind(resolved.status) === "running") {
@@ -2443,7 +2448,7 @@ export default function ChatView({
   }, [editingUserMessageId, lastUserMessageId, onEditUserMessage]);
 
   const beginUserMessageEdit = useCallback(
-    (message: ChatMessage) => {
+    (message: ConversationEntry) => {
       if (
         message.id !== lastUserMessageId ||
         streaming ||
@@ -2819,7 +2824,7 @@ export default function ChatView({
                             };
                             const pushSurface = (
                               surface: NonNullable<
-                                ChatMessage["uiSurfaces"]
+                                ConversationEntry["uiSurfaces"]
                               >[number],
                             ) => {
                               // Clarify is an input interaction: it belongs in the composer,
@@ -3279,7 +3284,7 @@ export default function ChatView({
               })}
               <div ref={bottomRef} />
             </div>
-            <ChatMessageNav
+            <TurnNavigator
               messages={messages}
               listRef={messageListRef}
               bottomRef={bottomRef}

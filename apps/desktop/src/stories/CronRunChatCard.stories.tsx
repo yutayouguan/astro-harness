@@ -10,7 +10,7 @@ import {
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import { DialogProvider, useConfirm } from "../hooks/ui/DialogContext";
 import { LocaleProvider } from "../i18n/LocaleContext";
-import type { ChatMessage } from "../types";
+import type { ConversationEntry } from "../types";
 import { ChatMarkdown } from "../components/chat/ChatMarkdown";
 
 const run: CronRunDto = {
@@ -45,7 +45,7 @@ const job: CronJobDto = {
   show_in_chat: true,
 };
 
-const messages: ChatMessage[] = [
+const messages: ConversationEntry[] = [
   { id: "user", role: "user", content: run.task },
   {
     id: "assistant",

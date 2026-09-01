@@ -45,12 +45,12 @@ test("hover actions exclude deletion and only the latest user question can be ed
     assert.ok(messageActions.includes(`t("${label}")`), label);
   }
   assert.doesNotMatch(messageActions, /onDelete|chat\.delete|Trash2/);
-  assert.match(source, /findLastUserMessageId\(messages\)/);
+  assert.match(source, /findLastUserEntryId\(messages\)/);
   assert.match(source, /m\.id === lastUserMessageId/);
   assert.match(source, /<InlineUserMessageEditor/);
   assert.match(source, /event\.key === "Escape"/);
   assert.match(source, /event\.metaKey \|\| event\.ctrlKey/);
-  assert.match(session, /findLastUserMessageIndex\(messages\)/);
+  assert.match(session, /findLastUserEntryIndex\(messages\)/);
   assert.match(
     session,
     /await sendImmediate\(\{[\s\S]*?truncateTo: idx,[\s\S]*?reuseUserId: userMsg\.id/,

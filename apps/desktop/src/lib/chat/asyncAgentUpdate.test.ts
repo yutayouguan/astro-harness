@@ -1,22 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { upsertAsyncAssistantMessage } from "./asyncMessage.ts";
-import type { ChatMessage } from "../../types.ts";
+import { upsertAsyncAgentUpdate } from "./asyncAgentUpdate.ts";
+import type { ConversationEntry } from "../../types.ts";
 
 test("async message is inserted before the active response and deduplicated", () => {
-  const messages: ChatMessage[] = [
+  const messages: ConversationEntry[] = [
     { id: "user-1", role: "user", content: "go" },
     { id: "assistant-final", role: "assistant", content: "" },
   ];
 
-  const inserted = upsertAsyncAssistantMessage(
+  const inserted = upsertAsyncAgentUpdate(
     messages,
     "assistant-final",
     "call-1:async-message",
     "Still working",
     42,
   );
-  const replayed = upsertAsyncAssistantMessage(
+  const replayed = upsertAsyncAgentUpdate(
     inserted,
     "assistant-final",
     "call-1:async-message",

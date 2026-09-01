@@ -1,4 +1,4 @@
-import type { ChatActivity, ChatMessage } from "../../types";
+import type { ChatActivity, ConversationEntry } from "../../types";
 
 export type TodoPlanItem = {
   text: string;
@@ -190,7 +190,7 @@ export function isTodoActivity(activity: ChatActivity): boolean {
 }
 
 /** 仅承载 TODO 更新的助手消息可以从回答列表完全省略。 */
-export function isTodoOnlyActivityMessage(message: ChatMessage): boolean {
+export function isTodoOnlyActivityMessage(message: ConversationEntry): boolean {
   return (
     message.role === "assistant" &&
     !message.content.trim() &&
@@ -210,7 +210,7 @@ function isNewTodoPlan(activity: ChatActivity): boolean {
 
 // 扫描助手消息的 activities，提取最后一个 todo 工具调用的计划状态。
 export function extractLatestTodoPlan(
-  messages: ChatMessage[],
+  messages: ConversationEntry[],
 ): TodoPlan | null {
   let latest: TodoPlan | null = null;
 
@@ -244,7 +244,7 @@ export function extractLatestTodoPlan(
 
 /** 聚合最近一次新建 TODO 后的显式文件写入记录。 */
 export function extractFileChangeSummary(
-  messages: ChatMessage[],
+  messages: ConversationEntry[],
 ): FileChangeSummary {
   const changes = new Map<string, FileChangeItem>();
 

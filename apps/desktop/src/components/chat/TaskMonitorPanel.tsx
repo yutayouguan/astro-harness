@@ -13,14 +13,14 @@ import {
   XCircle,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 import {
   extractLatestTodoPlan,
   type TodoPlan,
 } from "../../lib/chat/taskProgress";
 
 type Props = {
-  messages: ChatMessage[];
+  messages: ConversationEntry[];
   streaming: boolean;
   /** 当前 turn 工具轮次 */
   toolRound?: number;
@@ -37,7 +37,7 @@ type ActivitySummary = {
   error: number;
 };
 
-function summarizeActivities(messages: ChatMessage[]): ActivitySummary {
+function summarizeActivities(messages: ConversationEntry[]): ActivitySummary {
   let total = 0;
   let running = 0;
   let done = 0;
@@ -54,7 +54,7 @@ function summarizeActivities(messages: ChatMessage[]): ActivitySummary {
   return { total, running, done, error };
 }
 
-function recentActivities(messages: ChatMessage[], limit = 8) {
+function recentActivities(messages: ConversationEntry[], limit = 8) {
   const result: Array<{
     id: string;
     title: string;

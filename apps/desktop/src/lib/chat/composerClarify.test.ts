@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ChatMessage, PendingInterrupt, UiSurface } from "../../types.ts";
+import type {
+  ConversationEntry,
+  PendingInterrupt,
+  UiSurface,
+} from "../../types.ts";
 import {
   findComposerClarifySurface,
   isClarifySurface,
@@ -37,7 +41,7 @@ test("selects the active clarify surface linked to the pending interrupt", () =>
     ...surface("surface-current", "ClarifyWizard"),
     interrupts: [{ id: "interrupt-current", reason: "input_required" }],
   };
-  const messages: ChatMessage[] = [
+  const messages: ConversationEntry[] = [
     {
       id: "assistant-old",
       role: "assistant",
@@ -66,7 +70,7 @@ test("selects the active clarify surface linked to the pending interrupt", () =>
 });
 
 test("does not move resolved clarify surfaces or non-clarify HITL into composer", () => {
-  const messages: ChatMessage[] = [
+  const messages: ConversationEntry[] = [
     {
       id: "assistant",
       role: "assistant",
@@ -87,7 +91,7 @@ test("does not move resolved clarify surfaces or non-clarify HITL into composer"
 });
 
 test("does not use a stale clarify surface when an explicit interrupt targets another message", () => {
-  const messages: ChatMessage[] = [
+  const messages: ConversationEntry[] = [
     {
       id: "assistant-old",
       role: "assistant",

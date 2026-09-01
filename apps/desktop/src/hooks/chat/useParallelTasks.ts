@@ -21,7 +21,7 @@ import {
   sealOpenReasoning,
 } from "../../lib/chat/chatTimeline";
 import { consumeBufferedTextReconcile } from "../../lib/chat/streamReconcile";
-import { upsertAsyncAssistantMessage } from "../../lib/chat/asyncMessage";
+import { upsertAsyncAgentUpdate } from "../../lib/chat/asyncAgentUpdate";
 import { resolveParallelTaskCompletion } from "../../lib/chat/taskCompletion";
 import {
   isLiveActivityStatus,
@@ -51,7 +51,7 @@ import { dispatchSessionsChanged } from "../../lib/chat/sessionManagement";
 import type {
   ChatActivity,
   ChatAttachment,
-  ChatMessage,
+  ConversationEntry,
   ProviderDto,
   UiSurface,
 } from "../../types";
@@ -70,7 +70,7 @@ export type StartParallelTaskOpts = {
 
 type Deps = {
   activeProvider: ProviderDto | undefined;
-  setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
+  setMessages: Dispatch<SetStateAction<ConversationEntry[]>>;
   setEmptyMode: Dispatch<SetStateAction<"chat" | "agent" | null>>;
   setInput: Dispatch<SetStateAction<string>>;
   setAttachments: Dispatch<SetStateAction<ChatAttachment[]>>;
@@ -547,7 +547,7 @@ export function useParallelTasks(deps: Deps) {
             payload.content
           ) {
             setMessages((prev) =>
-              upsertAsyncAssistantMessage(
+              upsertAsyncAgentUpdate(
                 prev,
                 assistantId,
                 payload.id!,
@@ -645,7 +645,7 @@ export function useParallelTasks(deps: Deps) {
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== assistantId) return m;
-                let next: ChatMessage = {
+                let next: ConversationEntry = {
                   ...m,
                   turnStatus:
                     payload.outcome_type === "interrupt"

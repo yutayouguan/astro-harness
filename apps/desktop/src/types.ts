@@ -50,7 +50,7 @@ export type ChatActivityStatus =
   | "error"
   | "declined"
   | "interrupted";
-export type ChatTurnStatus =
+export type TurnStatus =
   "waiting" | "running" | "done" | "error" | "interrupted";
 
 /** 助手气泡旁的活动记录 */
@@ -111,7 +111,7 @@ export type PendingInterrupt = {
 };
 
 /** 单条助手回复的 token 用量（来自流式 usage 事件） */
-export type MessageTokenUsage = {
+export type TurnTokenUsage = {
   /** Provider 语义的总输入，包含 cache read/write。 */
   promptTokens: number;
   uncachedInputTokens: number;
@@ -127,8 +127,8 @@ export type MessageTokenUsage = {
   reasoningReported: boolean;
 };
 
-/** 聊天列表中的用户或助手消息 */
-export type ChatMessage = {
+/** UI 会话时间线中的用户或助手展示条目。 */
+export type ConversationEntry = {
   id: string;
   role: "user" | "assistant";
   content: string;
@@ -143,7 +143,7 @@ export type ChatMessage = {
   /** 本轮墙钟耗时（秒）：发起→结束，对齐 Hermes TUI 回合计时 */
   generationDurationSec?: number;
   /** 本轮流式 usage，挂在助手消息上供气泡角标展示 */
-  usage?: MessageTokenUsage;
+  usage?: TurnTokenUsage;
   /**
    * 生成速度（tokens/秒）：completion_tokens / 生成耗时。
    * 耗时优先取首 token→结束，否则取开始流式→结束。
@@ -151,7 +151,7 @@ export type ChatMessage = {
   tokensPerSec?: number;
   error?: boolean;
   /** 当前助手回合的终态，供思考与过程摘要展示。 */
-  turnStatus?: ChatTurnStatus;
+  turnStatus?: TurnStatus;
   attachments?: ChatAttachment[];
   activities?: ChatActivity[];
   /** Anthropic citations（引用信息） */
@@ -195,7 +195,7 @@ export type ChatTimelineSegment =
     };
 
 /** UI 内部的历史活动投影，不是持久化协议。 */
-export type ChatHistoryActivityDto = {
+export type HistoryActivityProjection = {
   id: string;
   kind: string;
   title: string;
@@ -219,8 +219,8 @@ export type StoredResponseItemDto = {
   finishReason?: string | null;
 };
 
-/** `get_chat_history` 直接返回原生 Responses items。 */
-export type ChatHistoryDto = {
+/** `get_chat_history` 直接返回原生 Responses items，不持久化 UI 投影。 */
+export type ResponseItemHistoryDto = {
   sessionId: string | null;
   items: StoredResponseItemDto[];
   /** 会话结束原因，如 `compacted`；未结束为 null */

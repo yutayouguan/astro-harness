@@ -7,9 +7,9 @@ import ChatReviewPanel, {
 } from "../components/chat/ChatReviewPanel";
 import TodoProgress from "../components/chat/TodoProgress";
 import type { FileChangeItem } from "../lib/chat/taskProgress";
-import type { ChatMessage } from "../types";
+import type { ConversationEntry } from "../types";
 
-const messages: ChatMessage[] = [
+const messages: ConversationEntry[] = [
   {
     id: "task-progress-user",
     role: "user",

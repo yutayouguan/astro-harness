@@ -2,7 +2,7 @@
  * 聊天会话本地持久化：消息列表写入 localStorage，附件重字段剥离以免撑爆配额。
  */
 
-import type { ChatMessage, PendingInterrupt } from "../../types";
+import type { ConversationEntry, PendingInterrupt } from "../../types";
 import type { ContextUsageSnapshot } from "./contextUsage";
 
 const STORAGE_KEY = "astro.chat.session";
@@ -66,7 +66,7 @@ export function saveContextUsageForSession(
 /** 持久化的会话快照 */
 export type StoredChatSession = {
   sessionId: string | null;
-  messages: ChatMessage[];
+  messages: ConversationEntry[];
   /** 未决 HITL interrupt（重载后仍禁用普通发送） */
   pendingInterrupts?: PendingInterrupt[];
   /** 最近一次后端 context_usage 快照（真实窗口与分层占用） */
@@ -78,7 +78,7 @@ export type StoredChatSession = {
 };
 
 /** 去掉 previewUrl / dataBase64 等大字段后再存储 */
-function stripHeavyFields(messages: ChatMessage[]): ChatMessage[] {
+function stripHeavyFields(messages: ConversationEntry[]): ConversationEntry[] {
   return messages.map((m) => ({
     ...m,
     attachments: m.attachments?.map((a) => ({
@@ -93,7 +93,7 @@ function stripHeavyFields(messages: ChatMessage[]): ChatMessage[] {
 }
 
 /** 是否仅为欢迎占位（不应落盘） */
-export function isWelcomeOnly(messages: ChatMessage[]): boolean {
+export function isWelcomeOnly(messages: ConversationEntry[]): boolean {
   return (
     messages.length === 0 ||
     (messages.length === 1 && messages[0].id === "welcome")
@@ -160,7 +160,7 @@ function peekStoredSession(): StoredChatSession | null {
  */
 export function saveChatSession(
   sessionId: string | null,
-  messages: ChatMessage[],
+  messages: ConversationEntry[],
   pendingInterrupts: PendingInterrupt[] = [],
   contextUsage?: ContextUsageSnapshot | null,
 ): void {

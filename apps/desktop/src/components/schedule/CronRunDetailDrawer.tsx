@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 import { CopyMorphIcon } from "../icons/MorphIcon";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
 import MsgActivity from "../chat/MsgActivity";
@@ -359,7 +359,7 @@ export function CronTaskDetailDrawer({
 
 type DrawerProps = {
   run: CronRunDto;
-  messages: ChatMessage[];
+  messages: ConversationEntry[];
   traceLoading?: boolean;
   onClose: () => void;
   onDelete: () => void;

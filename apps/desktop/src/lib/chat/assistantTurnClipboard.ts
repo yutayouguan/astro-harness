@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 import { resolveActivityIO } from "./resolveActivityIO.ts";
 
 /** Lightweight Markdown-to-text conversion for clipboard convenience. */
@@ -19,7 +19,7 @@ export function assistantAnswerPlainText(markdown: string): string {
 }
 
 /** Export the complete reasoning/tool/answer trace as readable Markdown. */
-export function assistantProcessMarkdown(message: ChatMessage): string {
+export function assistantProcessMarkdown(message: ConversationEntry): string {
   const sections: string[] = [];
   if (message.reasoning?.trim()) {
     sections.push(`## 思考\n\n${message.reasoning.trim()}`);

@@ -28,7 +28,7 @@
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
-  /* 与 ChatMessageNav GAP 一致 */
+  /* 与 TurnNavigator GAP 一致 */
   gap: 2px;
   /* 右侧扩大命中区，横线视觉轴贴左。 */
   padding: 8px 28px 8px 0;

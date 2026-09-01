@@ -1,13 +1,13 @@
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 
-/** Upsert a durable async assistant message immediately before the active response bubble. */
-export function upsertAsyncAssistantMessage(
-  messages: ChatMessage[],
+/** Upsert a durable asynchronous agent update before the active response entry. */
+export function upsertAsyncAgentUpdate(
+  messages: ConversationEntry[],
   activeAssistantId: string,
   id: string,
   content: string,
   createdAt = Date.now(),
-): ChatMessage[] {
+): ConversationEntry[] {
   const existing = messages.findIndex((message) => message.id === id);
   if (existing >= 0) {
     return messages.map((message, index) =>
@@ -15,7 +15,7 @@ export function upsertAsyncAssistantMessage(
     );
   }
 
-  const message: ChatMessage = {
+  const message: ConversationEntry = {
     id,
     role: "assistant",
     content,

@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 
 export type GroupedAssistantAnswer = {
   reasoning: string;
@@ -13,7 +13,7 @@ export type GroupedAssistantAnswer = {
  */
 export function groupAssistantAnswer(
   message: Pick<
-    ChatMessage,
+    ConversationEntry,
     "content" | "reasoning" | "reasoningDurationSec" | "segments"
   >,
 ): GroupedAssistantAnswer {

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type CSSProperties, type FocusEvent } from "react";
 import { CheckCircle2, Circle, Files, ListTodo } from "lucide-react";
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 import {
   displayFileName,
   extractFileChangeSummary,
@@ -11,7 +11,7 @@ import {
 } from "../../lib/chat/taskProgress";
 
 type Props = {
-  messages: ChatMessage[];
+  messages: ConversationEntry[];
   onOpenFileReview?: (file: FileChangeItem, files: FileChangeItem[]) => void;
 };
 

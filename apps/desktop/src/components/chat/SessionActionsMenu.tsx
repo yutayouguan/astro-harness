@@ -37,7 +37,13 @@ import {
   pointAnchor,
   resolveClipBoundsAt,
 } from "../../lib/ui/clampPopover";
-import type { ProjectDto, RecentSessionDto } from "../../types";
+import { projectResponseItemsToEntries } from "../../lib/chat/projectResponseItemsToEntries";
+import type {
+  ResponseItemHistoryDto,
+  ConversationEntry,
+  ProjectDto,
+  RecentSessionDto,
+} from "../../types";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import type { SessionActivityStatus } from "./SessionStatusIcon";
 
@@ -80,7 +86,7 @@ function utf8ToBase64(text: string): string {
 function historyToMarkdown(
   title: string,
   sessionId: string,
-  messages: ChatHistoryExportDto["messages"],
+  messages: Pick<ConversationEntry, "role" | "content">[],
 ): string {
   const lines = [`# ${title}`, "", `> session: \`${sessionId}\``, ""];
   for (const message of messages) {
@@ -194,7 +200,7 @@ export default function SessionActionsMenu({
 
   const handleExport = useCallback(() => {
     void runSessionAction(async () => {
-      const history = await invoke<ChatHistoryExportDto>("get_chat_history", {
+      const history = await invoke<ResponseItemHistoryDto>("get_chat_history", {
         sessionId: session.sessionId,
         limit: 500,
       });
@@ -202,7 +208,7 @@ export default function SessionActionsMenu({
       const markdown = historyToMarkdown(
         title,
         session.sessionId,
-        history.messages ?? [],
+        projectResponseItemsToEntries(history.items ?? []),
       );
       if (!markdown.replace(/^#.*$/m, "").trim()) {
         throw new Error(t("sessions.exportEmpty"));
@@ -219,14 +225,11 @@ export default function SessionActionsMenu({
 
   const handleBranch = useCallback(() => {
     void runSessionAction(async () => {
-      const history = await invoke<ChatHistoryExportDto>("get_chat_history", {
+      const history = await invoke<ResponseItemHistoryDto>("get_chat_history", {
         sessionId: session.sessionId,
         limit: 500,
       });
-      const bubbles = (history.messages ?? []).filter((message) => {
-        const role = message.role.trim().toLowerCase();
-        return role === "user" || role === "assistant";
-      });
+      const bubbles = projectResponseItemsToEntries(history.items ?? []);
       if (bubbles.length === 0) throw new Error(t("sessions.branchEmpty"));
       const newId = await invoke<string>("fork_chat_session", {
         sourceSessionId: session.sessionId,

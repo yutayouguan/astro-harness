@@ -18,7 +18,7 @@ import {
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
 import { saveContextUsageForSession } from "../../lib/chat/chatSessionStore";
-import { upsertAsyncAssistantMessage } from "../../lib/chat/asyncMessage";
+import { upsertAsyncAgentUpdate } from "../../lib/chat/asyncAgentUpdate";
 import {
   parseModeSwitchResult,
   type ChatInteractionMode,
@@ -46,8 +46,8 @@ import type {
   ChatActivity,
   ChatAttachment,
   ChatEmptyMode,
-  ChatMessage,
-  MessageTokenUsage,
+  ConversationEntry,
+  TurnTokenUsage,
   PendingInterrupt,
   ProviderDto,
   UiSurface,
@@ -118,7 +118,7 @@ export interface UseSendDeps {
   activeAssistantIdRef: MutableRefObject<string | null>;
   streamStartRef: MutableRefObject<Map<string, number>>;
   firstTokenRef: MutableRefObject<Map<string, number>>;
-  pendingUsageRef: MutableRefObject<Map<string, MessageTokenUsage>>;
+  pendingUsageRef: MutableRefObject<Map<string, TurnTokenUsage>>;
   streamPendingRef: MutableRefObject<Map<string, string>>;
   toolDeltaIdsRef: MutableRefObject<Map<string, string>>;
   toolDeltaRafRef: MutableRefObject<number | null>;
@@ -130,11 +130,11 @@ export interface UseSendDeps {
   /** recommendCompact toast 冷却（ms epoch） */
   lastRecommendCompactToastAtRef: MutableRefObject<number>;
   // setters
-  setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
+  setMessages: Dispatch<SetStateAction<ConversationEntry[]>>;
   setSessionId: Dispatch<SetStateAction<string | null>>;
   setStreaming: Dispatch<SetStateAction<boolean>>;
   setStreamPaused: Dispatch<SetStateAction<boolean>>;
-  setTokenUsage: Dispatch<SetStateAction<MessageTokenUsage | null>>;
+  setTokenUsage: Dispatch<SetStateAction<TurnTokenUsage | null>>;
   setContextUsage: Dispatch<SetStateAction<ContextUsageSnapshot | null>>;
   setStatus: Dispatch<SetStateAction<"ready" | "busy" | "error">>;
   setStatusPhase: Dispatch<SetStateAction<StatusPhase>>;
@@ -503,7 +503,7 @@ export function useSend(deps: UseSendDeps) {
             payload.content
           ) {
             setMessages((prev) =>
-              upsertAsyncAssistantMessage(
+              upsertAsyncAgentUpdate(
                 prev,
                 assistantId,
                 payload.id!,
@@ -571,7 +571,7 @@ export function useSend(deps: UseSendDeps) {
               );
             } catch {}
           } else if (payload.type === "usage") {
-            const usage: MessageTokenUsage = {
+            const usage: TurnTokenUsage = {
               promptTokens: payload.prompt_tokens ?? 0,
               uncachedInputTokens:
                 payload.uncached_input_tokens ?? payload.prompt_tokens ?? 0,
@@ -665,7 +665,7 @@ export function useSend(deps: UseSendDeps) {
               setMessages((prev) =>
                 prev.map((m) => {
                   if (m.id !== assistantId) return m;
-                  let next: ChatMessage = {
+                  let next: ConversationEntry = {
                     ...m,
                     turnStatus:
                       payload.outcome_type === "interrupt"

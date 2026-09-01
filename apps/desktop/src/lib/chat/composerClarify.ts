@@ -1,4 +1,8 @@
-import type { ChatMessage, PendingInterrupt, UiSurface } from "../../types.ts";
+import type {
+  ConversationEntry,
+  PendingInterrupt,
+  UiSurface,
+} from "../../types.ts";
 
 export type ComposerClarifySurface = {
   messageId: string;
@@ -38,7 +42,7 @@ function surfaceMatchesInterrupts(
 }
 
 export function findComposerClarifySurface(
-  messages: ChatMessage[],
+  messages: ConversationEntry[],
   pendingInterrupts: PendingInterrupt[],
 ): ComposerClarifySurface | null {
   if (pendingInterrupts.length === 0) return null;

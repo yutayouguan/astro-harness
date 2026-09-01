@@ -4,14 +4,14 @@
 
 import type {
   ChatActivity,
-  ChatMessage,
+  ConversationEntry,
   ChatTimelineSegment,
   UiSurface,
 } from "../../types";
 import { elapsedSecSince } from "./elapsedSec.ts";
 import { isSettledActivityStatus } from "./toolActivityStatus.ts";
 
-function ensureSegments(m: ChatMessage): ChatTimelineSegment[] {
+function ensureSegments(m: ConversationEntry): ChatTimelineSegment[] {
   return [...(m.segments ?? [])];
 }
 
@@ -41,10 +41,10 @@ export function sumReasoningDurations(
  * @param durationSec 可选显式耗时；缺省用 endedAt - seg.at
  */
 export function sealOpenReasoning(
-  m: ChatMessage,
+  m: ConversationEntry,
   endedAt: number = Date.now(),
   durationSec?: number,
-): ChatMessage {
+): ConversationEntry {
   const segments = ensureSegments(m);
   let target = -1;
   for (let i = segments.length - 1; i >= 0; i -= 1) {
@@ -78,10 +78,10 @@ export function sealOpenReasoning(
 
 /** 追加 reasoning；新开段前封口上一段；同步拼接 m.reasoning */
 export function applyReasoningDelta(
-  m: ChatMessage,
+  m: ConversationEntry,
   delta: string,
   at: number = Date.now(),
-): ChatMessage {
+): ConversationEntry {
   if (!delta) return m;
   let segments = ensureSegments(m);
   const last = segments[segments.length - 1];
@@ -113,10 +113,10 @@ export function applyReasoningDelta(
 
 /** 追加正文；只合并相邻正文，跨思考或工具后新开一段。 */
 export function applyTextDelta(
-  m: ChatMessage,
+  m: ConversationEntry,
   delta: string,
   at: number = Date.now(),
-): ChatMessage {
+): ConversationEntry {
   if (!delta) return m;
   let segments = ensureSegments(m);
   const last = segments[segments.length - 1];
@@ -202,10 +202,10 @@ function reconcileTextualSegments(
 
 /** 用恢复快照校正文案，同时尽可能保留既有事件边界。 */
 export function reconcileText(
-  m: ChatMessage,
+  m: ConversationEntry,
   canonical: string,
   at: number = Date.now(),
-): ChatMessage {
+): ConversationEntry {
   return {
     ...m,
     content: canonical,
@@ -225,7 +225,7 @@ export function reconcileText(
  * answer; rendering the raw segments would then truncate timeline view.
  */
 export function projectCanonicalTimelineSegments(
-  message: ChatMessage,
+  message: ConversationEntry,
 ): ChatTimelineSegment[] {
   const segments = ensureSegments(message);
   const canonicalText = message.content;
@@ -269,10 +269,10 @@ export function projectCanonicalTimelineSegments(
 
 /** Replace recovered reasoning with one canonical segment while preserving non-reasoning order. */
 export function reconcileReasoning(
-  m: ChatMessage,
+  m: ConversationEntry,
   canonical: string,
   at: number = Date.now(),
-): ChatMessage {
+): ConversationEntry {
   const segments = reconcileTextualSegments(
     ensureSegments(m),
     "reasoning",
@@ -289,9 +289,9 @@ export function reconcileReasoning(
 
 /** 工具活动 upsert；新 id 入列前封口当前 reasoning；完成态写 durationSec */
 export function applyActivityUpsert(
-  m: ChatMessage,
+  m: ConversationEntry,
   activity: ChatActivity,
-): ChatMessage {
+): ConversationEntry {
   const at = activity.at ?? Date.now();
   const isNew = !(m.activities ?? []).some((a) => a.id === activity.id);
   const base = isNew ? sealOpenReasoning(m, at) : m;
@@ -339,10 +339,10 @@ export function applyActivityUpsert(
 
 /** A2UI surface upsert；新 messageId 时 push surface 段 */
 export function applySurfaceUpsert(
-  m: ChatMessage,
+  m: ConversationEntry,
   surface: UiSurface,
   at: number = Date.now(),
-): ChatMessage {
+): ConversationEntry {
   const surfaces = [...(m.uiSurfaces ?? [])];
   const idx = surfaces.findIndex((s) => s.messageId === surface.messageId);
   if (idx >= 0) surfaces[idx] = surface;

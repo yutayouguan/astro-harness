@@ -1,10 +1,10 @@
 import { useRef } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import ChatMessageNav from "../components/chat/ChatMessageNav";
+import TurnNavigator from "../components/chat/TurnNavigator";
 import { LocaleProvider } from "../i18n/LocaleContext";
-import type { ChatMessage } from "../types";
+import type { ConversationEntry } from "../types";
 
-const messages: ChatMessage[] = [
+const messages: ConversationEntry[] = [
   { id: "q1", role: "user", content: "帮我检查这次聊天界面重构" },
   {
     id: "a1",
@@ -28,7 +28,7 @@ const messages: ChatMessage[] = [
   },
 ];
 
-function ChatMessageNavPreview() {
+function TurnNavigatorPreview() {
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -64,7 +64,7 @@ function ChatMessageNavPreview() {
             ))}
             <div ref={bottomRef} />
           </div>
-          <ChatMessageNav
+          <TurnNavigator
             messages={messages}
             listRef={listRef}
             bottomRef={bottomRef}
@@ -76,11 +76,11 @@ function ChatMessageNavPreview() {
 }
 
 const meta = {
-  id: "chat-message-nav",
-  title: "Chat/Message Navigator",
-  component: ChatMessageNavPreview,
+  id: "turn-navigator",
+  title: "Conversation/Turn Navigator",
+  component: TurnNavigatorPreview,
   parameters: { controls: { disable: true } },
-} satisfies Meta<typeof ChatMessageNavPreview>;
+} satisfies Meta<typeof TurnNavigatorPreview>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

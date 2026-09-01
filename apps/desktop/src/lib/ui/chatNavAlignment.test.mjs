@@ -9,7 +9,7 @@ test("chat turn anchors reserve a left-side hit area", async () => {
       "utf8",
     ),
     readFile(
-      new URL("../../components/chat/ChatMessageNav.tsx", import.meta.url),
+      new URL("../../components/chat/TurnNavigator.tsx", import.meta.url),
       "utf8",
     ),
   ]);

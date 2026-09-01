@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, before, test } from "node:test";
-import type { ChatMessage } from "../../types.ts";
+import type { ConversationEntry } from "../../types.ts";
 import {
   loadChatSession,
   loadContextUsageForSession,
@@ -33,7 +33,7 @@ function msg(
   id: string,
   role: "user" | "assistant",
   content: string,
-): ChatMessage {
+): ConversationEntry {
   return { id, role, content, createdAt: 1 };
 }
 

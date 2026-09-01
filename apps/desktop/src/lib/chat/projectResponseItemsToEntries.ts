@@ -1,10 +1,10 @@
-/** 将 `get_chat_history` DTO 映射为 UI `ChatMessage[]`。 */
+/** 将原生 Responses 历史投影为 UI `ConversationEntry[]`。 */
 import type {
   ChatActivity,
   ChatActivityKind,
   ChatActivityStatus,
-  ChatHistoryActivityDto,
-  ChatMessage,
+  HistoryActivityProjection,
+  ConversationEntry,
   ChatTimelineSegment,
   StoredResponseItemDto,
   UiSurface,
@@ -36,12 +36,12 @@ const ACTIVITY_STATUSES = new Set<ChatActivityStatus>([
 
 type JsonRecord = Record<string, unknown>;
 
-type HistoryBubble = {
+type ProjectedEntry = {
   id: string;
   role: "user" | "assistant";
   content: string;
   reasoning?: string | null;
-  activities?: ChatHistoryActivityDto[];
+  activities?: HistoryActivityProjection[];
   segments?: ChatTimelineSegment[] | null;
   uiSurfaces?: UiSurface[] | null;
 };
@@ -53,14 +53,20 @@ function asRecord(value: unknown): JsonRecord | null {
 }
 
 function itemText(item: JsonRecord): string {
-  if ((item.type === "message" || item.type === "agent_message") && Array.isArray(item.content)) {
+  if (
+    (item.type === "message" || item.type === "agent_message") &&
+    Array.isArray(item.content)
+  ) {
     return item.content
       .map((part) => asRecord(part)?.text)
       .filter((text): text is string => typeof text === "string")
       .join("\n");
   }
   if (item.type === "reasoning") {
-    return [...(Array.isArray(item.content) ? item.content : []), ...(Array.isArray(item.summary) ? item.summary : [])]
+    return [
+      ...(Array.isArray(item.content) ? item.content : []),
+      ...(Array.isArray(item.summary) ? item.summary : []),
+    ]
       .map((part) => asRecord(part)?.text)
       .filter((text): text is string => typeof text === "string")
       .join("\n");
@@ -82,27 +88,43 @@ function itemMetadata(item: JsonRecord): JsonRecord | null {
   return asRecord(item.internal_chat_message_metadata_passthrough);
 }
 
-function mediaFromMetadata(metadata: JsonRecord | null): ChatHistoryActivityDto["media"] {
+function mediaFromMetadata(
+  metadata: JsonRecord | null,
+): HistoryActivityProjection["media"] {
   const raw = metadata?.astro_media;
   if (!Array.isArray(raw)) return undefined;
   const media = raw.flatMap((entry) => {
     const asset = asRecord(entry);
     const reference = asRecord(asset?.reference);
-    const path = reference?.workspace_path ?? reference?.data_url ?? reference?.remote_uri;
+    const path =
+      reference?.workspace_path ?? reference?.data_url ?? reference?.remote_uri;
     let kind = asset?.kind;
-    if (kind === "file" && typeof path === "string" && /\.html?$/i.test(path)) kind = "html";
-    if (!(["image", "video", "audio", "html"] as unknown[]).includes(kind) || typeof path !== "string" || !path) return [];
+    if (kind === "file" && typeof path === "string" && /\.html?$/i.test(path))
+      kind = "html";
+    if (
+      !(["image", "video", "audio", "html"] as unknown[]).includes(kind) ||
+      typeof path !== "string" ||
+      !path
+    )
+      return [];
     return [{ kind: kind as "image" | "video" | "audio" | "html", path }];
   });
   return media.length > 0 ? media : undefined;
 }
 
-function responseItemsToBubbles(items: StoredResponseItemDto[]): HistoryBubble[] {
-  const bubbles: HistoryBubble[] = [];
-  const ensureAssistant = (id: string): HistoryBubble => {
+function projectResponseItems(
+  items: StoredResponseItemDto[],
+): ProjectedEntry[] {
+  const bubbles: ProjectedEntry[] = [];
+  const ensureAssistant = (id: string): ProjectedEntry => {
     const last = bubbles[bubbles.length - 1];
     if (last?.role === "assistant") return last;
-    const next: HistoryBubble = { id, role: "assistant", content: "", activities: [] };
+    const next: ProjectedEntry = {
+      id,
+      role: "assistant",
+      content: "",
+      activities: [],
+    };
     bubbles.push(next);
     return next;
   };
@@ -111,7 +133,7 @@ function responseItemsToBubbles(items: StoredResponseItemDto[]): HistoryBubble[]
     callId: string | undefined,
     title: string | undefined,
     output: string,
-    media: ChatHistoryActivityDto["media"],
+    media: HistoryActivityProjection["media"],
     status: ChatActivityStatus,
   ) => {
     const assistant = ensureAssistant(id);
@@ -141,42 +163,86 @@ function responseItemsToBubbles(items: StoredResponseItemDto[]): HistoryBubble[]
     const item = asRecord(stored.item);
     if (!item) continue;
     const metadata = itemMetadata(item);
-    const segments = metadata?.astro_timeline_v1 as ChatTimelineSegment[] | undefined;
+    const segments = metadata?.astro_timeline_v1 as
+      ChatTimelineSegment[] | undefined;
     const uiSurfaces = metadata?.astro_surfaces_v1 as UiSurface[] | undefined;
     const media = mediaFromMetadata(metadata);
     const type = item.type;
-    if (type === "message" && (item.role === "user" || item.role === "assistant")) {
-      bubbles.push({ id: stored.id, role: item.role, content: itemText(item), activities: [], segments, uiSurfaces });
+    if (
+      type === "message" &&
+      (item.role === "user" || item.role === "assistant")
+    ) {
+      bubbles.push({
+        id: stored.id,
+        role: item.role,
+        content: itemText(item),
+        activities: [],
+        segments,
+        uiSurfaces,
+      });
     } else if (type === "agent_message") {
-      bubbles.push({ id: stored.id, role: "assistant", content: itemText(item), activities: [], segments, uiSurfaces });
+      bubbles.push({
+        id: stored.id,
+        role: "assistant",
+        content: itemText(item),
+        activities: [],
+        segments,
+        uiSurfaces,
+      });
     } else if (type === "reasoning") {
       const assistant = ensureAssistant(stored.id);
       assistant.reasoning = itemText(item) || assistant.reasoning;
       if (segments) assistant.segments = segments;
       if (uiSurfaces) assistant.uiSurfaces = uiSurfaces;
-    } else if (type === "function_call" || type === "custom_tool_call" || type === "tool_search_call") {
+    } else if (
+      type === "function_call" ||
+      type === "custom_tool_call" ||
+      type === "tool_search_call"
+    ) {
       const assistant = ensureAssistant(stored.id);
-      const callId = typeof item.call_id === "string" ? item.call_id : stored.id;
+      const callId =
+        typeof item.call_id === "string" ? item.call_id : stored.id;
       const title = typeof item.name === "string" ? item.name : "tool_search";
-      const input = typeof item.arguments === "string" ? item.arguments : typeof item.input === "string" ? item.input : JSON.stringify(item.arguments ?? {});
+      const input =
+        typeof item.arguments === "string"
+          ? item.arguments
+          : typeof item.input === "string"
+            ? item.input
+            : JSON.stringify(item.arguments ?? {});
       assistant.activities ??= [];
-      assistant.activities.push({ id: callId, kind: "tool", title, input, status: "running" });
+      assistant.activities.push({
+        id: callId,
+        kind: "tool",
+        title,
+        input,
+        status: "running",
+      });
     } else if (type === "local_shell_call" || type === "web_search_call") {
       const assistant = ensureAssistant(stored.id);
       const title = type === "local_shell_call" ? "local_shell" : "web_search";
-      const callId = typeof item.call_id === "string"
-        ? item.call_id
-        : typeof item.id === "string"
-          ? item.id
-          : stored.id;
+      const callId =
+        typeof item.call_id === "string"
+          ? item.call_id
+          : typeof item.id === "string"
+            ? item.id
+            : stored.id;
       const inputValue = item.action ?? {};
-      const input = typeof inputValue === "string" ? inputValue : JSON.stringify(inputValue);
+      const input =
+        typeof inputValue === "string"
+          ? inputValue
+          : JSON.stringify(inputValue);
       const status = resolveToolActivityStatus(
         typeof item.status === "string" ? item.status : "completed",
         "",
       );
       assistant.activities ??= [];
-      assistant.activities.push({ id: callId, kind: "tool", title, input, status });
+      assistant.activities.push({
+        id: callId,
+        kind: "tool",
+        title,
+        input,
+        status,
+      });
     } else if (type === "image_generation_call") {
       const result = typeof item.result === "string" ? item.result : "";
       const imagePath = result
@@ -195,7 +261,11 @@ function responseItemsToBubbles(items: StoredResponseItemDto[]): HistoryBubble[]
           "",
         ),
       );
-    } else if (type === "function_call_output" || type === "custom_tool_call_output" || type === "tool_search_output") {
+    } else if (
+      type === "function_call_output" ||
+      type === "custom_tool_call_output" ||
+      type === "tool_search_output"
+    ) {
       const output = itemText(item);
       const persistedStatus =
         typeof metadata?.astro_tool_status === "string"
@@ -241,9 +311,9 @@ function sumReasoningDurations(
 
 /** 同轮多段 assistant（工具循环）合并为一条气泡，取最完整 timeline。 */
 export function coalesceConsecutiveAssistants(
-  messages: HistoryBubble[],
-): HistoryBubble[] {
-  const out: HistoryBubble[] = [];
+  messages: ProjectedEntry[],
+): ProjectedEntry[] {
+  const out: ProjectedEntry[] = [];
   for (const m of messages) {
     if (m.role !== "assistant") {
       out.push(m);
@@ -286,10 +356,10 @@ export function coalesceConsecutiveAssistants(
 }
 
 function mergeActivities(
-  a: ChatHistoryActivityDto[],
-  b: ChatHistoryActivityDto[],
-): ChatHistoryActivityDto[] {
-  const byId = new Map<string, ChatHistoryActivityDto>();
+  a: HistoryActivityProjection[],
+  b: HistoryActivityProjection[],
+): HistoryActivityProjection[] {
+  const byId = new Map<string, HistoryActivityProjection>();
   const order: string[] = [];
   for (const act of [...a, ...b]) {
     const id = act.id || `${act.title}-${order.length}`;
@@ -413,7 +483,7 @@ function enrichActivityDurations(
   });
 }
 
-function mapActivity(a: ChatHistoryActivityDto): ChatActivity {
+function mapActivity(a: HistoryActivityProjection): ChatActivity {
   const kind = ACTIVITY_KINDS.has(a.kind as ChatActivityKind)
     ? (a.kind as ChatActivityKind)
     : "tool";
@@ -452,9 +522,9 @@ function mapActivity(a: ChatHistoryActivityDto): ChatActivity {
  * 将其收敛为终态并冻结耗时，避免应用重启后继续显示和累计“运行中”。
  */
 export function settleRestoredActivities(
-  messages: ChatMessage[],
+  messages: ConversationEntry[],
   settledAt = Date.now(),
-): ChatMessage[] {
+): ConversationEntry[] {
   return messages.map((message) => {
     if (
       !message.activities?.some((activity) =>
@@ -482,9 +552,9 @@ export function settleRestoredActivities(
   });
 }
 
-export function normalizeHistoryBubbles(
-  messages: HistoryBubble[],
-): ChatMessage[] {
+export function normalizeProjectedEntries(
+  messages: ProjectedEntry[],
+): ConversationEntry[] {
   return coalesceConsecutiveAssistants(messages)
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => {
@@ -529,6 +599,8 @@ export function normalizeHistoryBubbles(
     });
 }
 
-export function mapHistoryItems(items: StoredResponseItemDto[]): ChatMessage[] {
-  return normalizeHistoryBubbles(responseItemsToBubbles(items));
+export function projectResponseItemsToEntries(
+  items: StoredResponseItemDto[],
+): ConversationEntry[] {
+  return normalizeProjectedEntries(projectResponseItems(items));
 }

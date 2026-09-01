@@ -11,9 +11,9 @@ import {
   sumReasoningDurations,
   applyTextDelta,
 } from "./chatTimeline.ts";
-import type { ChatMessage } from "../../types.ts";
+import type { ConversationEntry } from "../../types.ts";
 
-function emptyAssistant(id = "a1"): ChatMessage {
+function emptyAssistant(id = "a1"): ConversationEntry {
   return { id, role: "assistant", content: "" };
 }
 
@@ -190,7 +190,7 @@ test("text reconciliation preserves prior interleaving when only the tail change
 });
 
 test("timeline projection restores a missing canonical answer tail without reordering tools", () => {
-  const original: ChatMessage = {
+  const original: ConversationEntry = {
     id: "a1",
     role: "assistant",
     content: "先写脚本。\n\n脚本已写好。\n\n最终答案。",
@@ -256,7 +256,7 @@ test("timeline projection appends a missing final answer after a trailing tool",
 });
 
 test("timeline projection never collapses interleaved events on divergent text", () => {
-  const segments: ChatMessage["segments"] = [
+  const segments: ConversationEntry["segments"] = [
     { type: "reasoning", id: "r1", text: "第一次思考", at: 1 },
     { type: "text", id: "txt1", text: "中间说明", at: 2 },
     { type: "activity", id: "t1", at: 3 },

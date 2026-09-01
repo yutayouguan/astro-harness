@@ -20,7 +20,7 @@ import {
 import { motion, useReducedMotion } from "framer-motion";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import {
   CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
@@ -59,7 +59,7 @@ type Props = {
   /** 模型上下文窗口；未知时回落 128000 */
   contextWindow?: number;
   /** 聊天消息列表（任务监控 Tab 使用） */
-  messages?: ChatMessage[];
+  messages?: ConversationEntry[];
   /** 是否正在流式输出 */
   streaming?: boolean;
   subagentRoots: AgentTreeNode[];

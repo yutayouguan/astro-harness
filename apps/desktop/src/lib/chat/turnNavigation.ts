@@ -1,14 +1,14 @@
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 
-export type ChatTurnPreview = {
+export type TurnPreview = {
   id: string;
-  targetMessageId: string;
-  messageIds: string[];
+  targetEntryId: string;
+  entryIds: string[];
   question: string;
   answer: string;
 };
 
-export function compactMessagePreview(content: string, limit = 180): string {
+export function compactEntryPreview(content: string, limit = 180): string {
   const plain = content
     .replace(
       /<tool(?:_|\s+)call\b[^>]*>[\s\S]*?<\/tool(?:_|\s+)call\s*>/gi,
@@ -27,21 +27,20 @@ export function compactMessagePreview(content: string, limit = 180): string {
 }
 
 /** Group the transcript into user-question / assistant-answer turns for navigation. */
-export function buildChatTurnPreviews(
-  messages: ChatMessage[],
+export function buildTurnPreviews(
+  entries: ConversationEntry[],
   fallbackQuestion: string,
   fallbackAnswer: string,
-): ChatTurnPreview[] {
-  const turns: ChatTurnPreview[] = [];
+): TurnPreview[] {
+  const turns: TurnPreview[] = [];
 
-  for (const message of messages) {
-    if (message.role === "user") {
+  for (const entry of entries) {
+    if (entry.role === "user") {
       turns.push({
-        id: message.id,
-        targetMessageId: message.id,
-        messageIds: [message.id],
-        question:
-          compactMessagePreview(message.content, 72) || fallbackQuestion,
+        id: entry.id,
+        targetEntryId: entry.id,
+        entryIds: [entry.id],
+        question: compactEntryPreview(entry.content, 72) || fallbackQuestion,
         answer: "",
       });
       continue;
@@ -49,10 +48,8 @@ export function buildChatTurnPreviews(
 
     const turn = turns[turns.length - 1];
     if (!turn) continue;
-    turn.messageIds.push(message.id);
-    const answer = compactMessagePreview(
-      message.content || message.reasoning || "",
-    );
+    turn.entryIds.push(entry.id);
+    const answer = compactEntryPreview(entry.content || entry.reasoning || "");
     if (answer) turn.answer = answer;
   }
 

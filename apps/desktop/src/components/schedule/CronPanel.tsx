@@ -44,8 +44,8 @@ import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
-import { mapHistoryItems } from "../../lib/chat/mapHistoryMessages";
-import type { ChatHistoryDto, ChatMessage } from "../../types";
+import { projectResponseItemsToEntries } from "../../lib/chat/projectResponseItemsToEntries";
+import type { ResponseItemHistoryDto, ConversationEntry } from "../../types";
 import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import {
@@ -557,7 +557,7 @@ export default function CronPanel({
   const [historyRuns, setHistoryRuns] = useState<CronRunDto[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [drawerRun, setDrawerRun] = useState<CronRunDto | null>(null);
-  const [drawerMessages, setDrawerMessages] = useState<ChatMessage[]>([]);
+  const [drawerMessages, setDrawerMessages] = useState<ConversationEntry[]>([]);
   const [drawerTraceLoading, setDrawerTraceLoading] = useState(false);
 
   const pageRef = useRef<HTMLDivElement | null>(null);
@@ -982,12 +982,15 @@ export default function CronPanel({
         const sessionId = latest?.session_id ?? sid;
         if (sessionId) {
           setDrawerTraceLoading(true);
-          const hist = await invoke<ChatHistoryDto>("get_chat_history", {
-            sessionId,
-            limit: 200,
-          });
+          const hist = await invoke<ResponseItemHistoryDto>(
+            "get_chat_history",
+            {
+              sessionId,
+              limit: 200,
+            },
+          );
           if (cancelled) return;
-          setDrawerMessages(mapHistoryItems(hist.items ?? []));
+          setDrawerMessages(projectResponseItemsToEntries(hist.items ?? []));
           setDrawerTraceLoading(false);
         }
 

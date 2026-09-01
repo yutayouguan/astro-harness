@@ -6,7 +6,11 @@ import {
   applyTextDelta,
 } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
-import type { ChatActivity, ChatMessage, MessageTokenUsage } from "../../types";
+import type {
+  ChatActivity,
+  ConversationEntry,
+  TurnTokenUsage,
+} from "../../types";
 
 function calcTokensPerSec(
   completionTokens: number,
@@ -18,7 +22,7 @@ function calcTokensPerSec(
 }
 
 export function useChatStreamBuffers(
-  setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
+  setMessages: Dispatch<SetStateAction<ConversationEntry[]>>,
 ) {
   const streamSegmentPendingRef = useRef<
     Map<string, Array<{ type: "text" | "reasoning"; content: string }>>
@@ -26,7 +30,7 @@ export function useChatStreamBuffers(
   const streamPendingRef = useRef<Map<string, string>>(new Map());
   const streamStartRef = useRef<Map<string, number>>(new Map());
   const firstTokenRef = useRef<Map<string, number>>(new Map());
-  const pendingUsageRef = useRef<Map<string, MessageTokenUsage>>(new Map());
+  const pendingUsageRef = useRef<Map<string, TurnTokenUsage>>(new Map());
   const activeAssistantIdRef = useRef<string | null>(null);
   const streamRafRef = useRef<number | null>(null);
   const toolDeltaPendingRef = useRef<

@@ -9,7 +9,7 @@ import MsgActivityGroup from "../components/chat/MsgActivityGroup";
 import MsgReasoning from "../components/chat/MsgReasoning";
 import { MsgTimeline, MsgTimelineStep } from "../components/chat/MsgTimeline";
 import ChatView, { MessageActions } from "../components/chat/ChatView";
-import type { ChatActivity, ChatMessage } from "../types";
+import type { ChatActivity, ConversationEntry } from "../types";
 
 const terminalActivity: ChatActivity = {
   id: "storybook-terminal",
@@ -200,7 +200,7 @@ function CodeBlockShowcase() {
 
 function GroupedAnswerLayoutPreview() {
   const activities = groupedActivities.slice(0, 2);
-  const messages: ChatMessage[] = [
+  const messages: ConversationEntry[] = [
     {
       id: "grouped-answer",
       role: "assistant",
@@ -272,7 +272,7 @@ function GroupedAnswerLayoutPreview() {
 }
 
 function InlineUserEditPreview() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [messages, setMessages] = useState<ConversationEntry[]>([
     { id: "u-1", role: "user", content: "先给我解释一下这个模块。" },
     {
       id: "a-1",

@@ -86,13 +86,13 @@ import type {
 } from "../../types";
 
 /** 聊天后备链上限（与后端 / expand 一致） */
-const MAX_CHAT_FALLBACKS = 3;
+const MAX_MODEL_FALLBACKS = 3;
 
 /** 规范化草稿中的后备列表（截断 + 空 model → null） */
 function normalizeFallback(
   entries: ProviderFallbackEntry[] | undefined | null,
 ): ProviderFallbackEntry[] {
-  return (entries ?? []).slice(0, MAX_CHAT_FALLBACKS).map((e) => {
+  return (entries ?? []).slice(0, MAX_MODEL_FALLBACKS).map((e) => {
     const model = e.model?.trim();
     return {
       provider_id: e.provider_id,
@@ -1337,7 +1337,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     ) ?? [];
 
   const addFallback = (providerId: string) => {
-    if (!providerId || fallbackEntries.length >= MAX_CHAT_FALLBACKS) return;
+    if (!providerId || fallbackEntries.length >= MAX_MODEL_FALLBACKS) return;
     setDraft((d) =>
       d
         ? {
@@ -1345,7 +1345,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
             fallback: [
               ...d.fallback,
               { provider_id: providerId, model: null },
-            ].slice(0, MAX_CHAT_FALLBACKS),
+            ].slice(0, MAX_MODEL_FALLBACKS),
           }
         : d,
     );
@@ -1883,12 +1883,12 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                           聊天后备
                         </h4>
                         <span className="providers-fallback-count">
-                          {fallbackEntries.length}/{MAX_CHAT_FALLBACKS}
+                          {fallbackEntries.length}/{MAX_MODEL_FALLBACKS}
                         </span>
                       </div>
                       <p className="providers-fallback-hint">
                         {fallbackEntries.length === 0
-                          ? `失败时按序切换 · 最多 ${MAX_CHAT_FALLBACKS} 个`
+                          ? `失败时按序切换 · 最多 ${MAX_MODEL_FALLBACKS} 个`
                           : `失败时按序切换`}
                       </p>
                       {fallbackEntries.length > 0 && (
@@ -1989,7 +1989,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                           })}
                         </ul>
                       )}
-                      {fallbackEntries.length < MAX_CHAT_FALLBACKS && (
+                      {fallbackEntries.length < MAX_MODEL_FALLBACKS && (
                         <div className="providers-fallback-add">
                           <span
                             className="providers-fallback-add-icon"

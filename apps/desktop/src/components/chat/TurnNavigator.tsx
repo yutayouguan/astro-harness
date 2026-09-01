@@ -1,4 +1,4 @@
-/** 消息内导航 / 锚点：macOS Dock 式鱼眼跟随。 */
+/** 会话回合导航 / 锚点：macOS Dock 式鱼眼跟随。 */
 import {
   useCallback,
   useEffect,
@@ -13,19 +13,19 @@ import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
-  buildChatTurnPreviews,
-  type ChatTurnPreview,
-} from "../../lib/chat/chatMessageNav";
+  buildTurnPreviews,
+  type TurnPreview,
+} from "../../lib/chat/turnNavigation";
 import {
   clampFloatingTip,
   measurePopoverSize,
   resolveClipBounds,
   type TipSide,
 } from "../../lib/ui/clampPopover";
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 
 type Props = {
-  messages: ChatMessage[];
+  messages: ConversationEntry[];
   listRef: RefObject<HTMLElement | null>;
   bottomRef: RefObject<HTMLElement | null>;
 };
@@ -65,11 +65,7 @@ function dockScale(distance: number): number {
   return 1 + (MAX_SCALE - 1) * 0.5 * (1 + Math.cos(Math.PI * t));
 }
 
-export default function ChatMessageNav({
-  messages,
-  listRef,
-  bottomRef,
-}: Props) {
+export default function TurnNavigator({ messages, listRef, bottomRef }: Props) {
   const { t } = useI18n();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dockActive, setDockActive] = useState(false);
@@ -90,7 +86,7 @@ export default function ChatMessageNav({
   const hoverRafRef = useRef<number | null>(null);
   const focusIdRef = useRef<string | null>(null);
   const turns = useMemo(() => {
-    return buildChatTurnPreviews(
+    return buildTurnPreviews(
       messages,
       t("chat.navUser"),
       t("chat.navWaitingForAnswer"),
@@ -110,7 +106,7 @@ export default function ChatMessageNav({
       for (const turn of turns) {
         const ratio = Math.max(
           0,
-          ...turn.messageIds.map((id) => ratiosRef.current.get(id) ?? 0),
+          ...turn.entryIds.map((id) => ratiosRef.current.get(id) ?? 0),
         );
         if (ratio > bestRatio) {
           bestRatio = ratio;
@@ -145,8 +141,8 @@ export default function ChatMessageNav({
     return () => observer.disconnect();
   }, [listRef, turns]);
 
-  const scrollToMessage = useCallback((turn: ChatTurnPreview) => {
-    const el = document.getElementById(`msg-${turn.targetMessageId}`);
+  const scrollToMessage = useCallback((turn: TurnPreview) => {
+    const el = document.getElementById(`msg-${turn.targetEntryId}`);
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     setActiveId(turn.id);

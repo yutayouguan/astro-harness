@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ChatMessage } from "../../types.ts";
+import type { ConversationEntry } from "../../types.ts";
 import {
   displayFileName,
   extractFileChangeSummary,
@@ -23,7 +23,7 @@ const patch = `*** Begin Patch
 -also gone
 *** End Patch`;
 
-const messages: ChatMessage[] = [
+const messages: ConversationEntry[] = [
   { id: "u-1", role: "user", content: "实现状态条" },
   {
     id: "a-1",
@@ -94,7 +94,7 @@ test("aggregates per-file line changes from apply_patch", () => {
 });
 
 test("a newly created plan resets prior file records", () => {
-  const next: ChatMessage[] = [
+  const next: ConversationEntry[] = [
     ...messages,
     {
       id: "a-2",
@@ -134,7 +134,7 @@ test("uses the basename for compact file rows", () => {
 });
 
 test("accepts structured file_change records from the thread protocol", () => {
-  const structured: ChatMessage[] = [
+  const structured: ConversationEntry[] = [
     ...messages.slice(0, 1),
     {
       id: "a-file-change",

@@ -42,19 +42,19 @@ import {
   saveEphemeralSessionMeta,
 } from "../../lib/chat/chatSessionStore";
 import {
-  mapHistoryItems,
+  projectResponseItemsToEntries,
   settleRestoredActivities,
-} from "../../lib/chat/mapHistoryMessages";
-import { findLastUserMessageIndex } from "../../lib/chat/messageEditing";
+} from "../../lib/chat/projectResponseItemsToEntries";
+import { findLastUserEntryIndex } from "../../lib/chat/turnEditing";
 import { dispatchSessionsChanged } from "../../lib/chat/sessionManagement";
 import type {
   ArtifactDto,
   ChatAttachment,
   ChatAttachmentKind,
   ChatEmptyMode,
-  ChatHistoryDto,
-  ChatMessage,
-  MessageTokenUsage,
+  ResponseItemHistoryDto,
+  ConversationEntry,
+  TurnTokenUsage,
   PendingInterrupt,
   ProviderDto,
 } from "../../types";
@@ -78,9 +78,9 @@ type NavId = "chat" | "cron" | "loop" | "skills" | "settings";
 const MAX_ATTACHMENTS = 8;
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
 
-export { mapHistoryItems } from "../../lib/chat/mapHistoryMessages";
+export { projectResponseItemsToEntries } from "../../lib/chat/projectResponseItemsToEntries";
 
-function countChatBubbles(msgs: ChatMessage[]): number {
+function countChatBubbles(msgs: ConversationEntry[]): number {
   return msgs.filter(
     (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
   ).length;
@@ -153,7 +153,7 @@ export function useChatSession({
     };
   });
   // ── Core state ────────────────────────────────────────────────────────────
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+  const [messages, setMessages] = useState<ConversationEntry[]>(() => {
     if (initialStored?.messages?.length) return initialStored.messages;
     return [];
   });
@@ -184,7 +184,7 @@ export function useChatSession({
   const steeringQueueIdsRef = useRef(new Set<string>());
   const checkpointFiredForTurnRef = useRef(false);
   const [streamPaused, setStreamPaused] = useState(false);
-  const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TurnTokenUsage | null>(null);
   const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(
     () => initialStored?.contextUsage ?? null,
   );
@@ -984,7 +984,7 @@ export function useChatSession({
   const applyRestoredHistory = useCallback(
     (
       sid: string | null,
-      restored: ChatMessage[],
+      restored: ConversationEntry[],
       pendingInterrupts: PendingInterrupt[] = [],
       endReason?: string | null,
     ) => {
@@ -1029,7 +1029,7 @@ export function useChatSession({
         stored.pendingInterrupts ?? [],
       );
       if (stored.sessionId) {
-        void invoke<ChatHistoryDto>("get_chat_history", {
+        void invoke<ResponseItemHistoryDto>("get_chat_history", {
           sessionId: stored.sessionId,
           limit: 1,
         })
@@ -1061,7 +1061,7 @@ export function useChatSession({
     }
 
     try {
-      const history = await invoke<ChatHistoryDto>("get_chat_history", {
+      const history = await invoke<ResponseItemHistoryDto>("get_chat_history", {
         sessionId: sessionId ?? stored?.sessionId ?? null,
         limit: 200,
       });
@@ -1080,7 +1080,7 @@ export function useChatSession({
         );
       }
       if (!history.items?.length) return;
-      const restored = mapHistoryItems(history.items);
+      const restored = projectResponseItemsToEntries(history.items);
       if (restored.length === 0) return;
       applyRestoredHistory(history.sessionId, restored, [], history.endReason);
     } catch {
@@ -1257,11 +1257,14 @@ export function useChatSession({
       if (persistClientState) saveChatSession(res.newSessionId, [], []);
 
       try {
-        const history = await invoke<ChatHistoryDto>("get_chat_history", {
-          sessionId: res.newSessionId,
-          limit: 200,
-        });
-        const restored = mapHistoryItems(history.items ?? []);
+        const history = await invoke<ResponseItemHistoryDto>(
+          "get_chat_history",
+          {
+            sessionId: res.newSessionId,
+            limit: 200,
+          },
+        );
+        const restored = projectResponseItemsToEntries(history.items ?? []);
         if (!applyRestoredHistory(res.newSessionId, restored, [], null)) {
           setMessages(restored);
           if (persistClientState)
@@ -1526,7 +1529,7 @@ export function useChatSession({
   const editUserMessage = useCallback(
     async (messageId: string, content: string): Promise<boolean> => {
       if (streaming || turnInFlight) return false;
-      const idx = findLastUserMessageIndex(messages);
+      const idx = findLastUserEntryIndex(messages);
       if (idx < 0 || messages[idx]?.id !== messageId) return false;
       const userMsg = messages[idx];
       const nextText = content.trim();
@@ -1722,7 +1725,9 @@ export function useChatSession({
         payload = { ...context };
       }
 
-      const elicitation = interrupts.find((item) => item.reason === "elicitation");
+      const elicitation = interrupts.find(
+        (item) => item.reason === "elicitation",
+      );
       if (elicitation) {
         if (parallelTask) {
           await resumeParallelHitl(messageId, payload, name);
@@ -1900,11 +1905,11 @@ export function useChatSession({
       try {
         await discardCurrentSide(targetSessionId);
         resetSchedulingSurface();
-        const hist = await invoke<ChatHistoryDto>("get_chat_history", {
+        const hist = await invoke<ResponseItemHistoryDto>("get_chat_history", {
           sessionId: targetSessionId,
           limit: 200,
         });
-        const restored = mapHistoryItems(hist.items ?? []);
+        const restored = projectResponseItemsToEntries(hist.items ?? []);
         const endReason = hist.endReason ?? null;
         const resolvedSessionId = hist.sessionId ?? targetSessionId;
         if (restored.length > 0) {

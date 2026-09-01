@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   assistantAnswerPlainText,
   assistantProcessMarkdown,
-} from "./assistantMessageClipboard.ts";
+} from "./assistantTurnClipboard.ts";
 
 test("converts an answer to readable plain text", () => {
   assert.equal(

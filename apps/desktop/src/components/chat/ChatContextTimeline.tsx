@@ -2,10 +2,14 @@
 import { useMemo, useState } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import type { ChatActivity, ChatActivityKind, ChatMessage } from "../../types";
+import type {
+  ChatActivity,
+  ChatActivityKind,
+  ConversationEntry,
+} from "../../types";
 
 /** 上下文时间线入参 */
-type Props = { messages: ChatMessage[] };
+type Props = { messages: ConversationEntry[] };
 
 const CONTEXT_KINDS = new Set<ChatActivityKind>([
   "tool",

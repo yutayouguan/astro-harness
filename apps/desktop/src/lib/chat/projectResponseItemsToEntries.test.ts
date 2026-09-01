@@ -3,13 +3,13 @@ import test from "node:test";
 import {
   coalesceConsecutiveAssistants,
   enrichTimelineDurations,
-  mapHistoryItems,
-  normalizeHistoryBubbles,
+  projectResponseItemsToEntries,
+  normalizeProjectedEntries,
   settleRestoredActivities,
-} from "./mapHistoryMessages.ts";
+} from "./projectResponseItemsToEntries.ts";
 
-test("mapHistoryItems folds native call and output items at render time", () => {
-  const messages = mapHistoryItems([
+test("projectResponseItemsToEntries folds native call and output items at render time", () => {
+  const messages = projectResponseItemsToEntries([
     {
       id: "1",
       timestamp: 1,
@@ -51,8 +51,8 @@ test("mapHistoryItems folds native call and output items at render time", () => 
   assert.equal(activity?.status, "done");
 });
 
-test("mapHistoryItems restores persisted terminal tool status", () => {
-  const messages = mapHistoryItems([
+test("projectResponseItemsToEntries restores persisted terminal tool status", () => {
+  const messages = projectResponseItemsToEntries([
     {
       id: "1",
       timestamp: 1,
@@ -81,8 +81,8 @@ test("mapHistoryItems restores persisted terminal tool status", () => {
   assert.equal(messages[0]?.activities?.[0]?.status, "declined");
 });
 
-test("mapHistoryItems renders native shell, web, image, and agent items", () => {
-  const messages = mapHistoryItems([
+test("projectResponseItemsToEntries renders native shell, web, image, and agent items", () => {
+  const messages = projectResponseItemsToEntries([
     {
       id: "1",
       timestamp: 1,
@@ -137,8 +137,8 @@ test("mapHistoryItems renders native shell, web, image, and agent items", () => 
   assert.equal(messages[0]?.content, "done");
 });
 
-test("normalizeHistoryBubbles restores activity media", () => {
-  const msgs = normalizeHistoryBubbles([
+test("normalizeProjectedEntries restores activity media", () => {
+  const msgs = normalizeProjectedEntries([
     {
       id: "db-1",
       role: "assistant",
@@ -161,8 +161,8 @@ test("normalizeHistoryBubbles restores activity media", () => {
   ]);
 });
 
-test("normalizeHistoryBubbles restores interleaved text timeline segments", () => {
-  const [message] = normalizeHistoryBubbles([
+test("normalizeProjectedEntries restores interleaved text timeline segments", () => {
+  const [message] = normalizeProjectedEntries([
     {
       id: "a1",
       role: "assistant",
@@ -181,8 +181,8 @@ test("normalizeHistoryBubbles restores interleaved text timeline segments", () =
   );
 });
 
-test("normalizeHistoryBubbles drops invalid media entries", () => {
-  const msgs = normalizeHistoryBubbles([
+test("normalizeProjectedEntries drops invalid media entries", () => {
+  const msgs = normalizeProjectedEntries([
     {
       id: "db-1",
       role: "assistant",
@@ -267,8 +267,8 @@ test("coalesceConsecutiveAssistants merges same-turn assistant bubbles", () => {
   assert.equal(merged[1]!.uiSurfaces?.length, 1);
 });
 
-test("normalizeHistoryBubbles restores durationSec from segment timestamps", () => {
-  const msgs = normalizeHistoryBubbles([
+test("normalizeProjectedEntries restores durationSec from segment timestamps", () => {
+  const msgs = normalizeProjectedEntries([
     {
       id: "a1",
       role: "assistant",
@@ -295,7 +295,7 @@ test("normalizeHistoryBubbles restores durationSec from segment timestamps", () 
 
 test("restored history settles orphaned live activity after restart", () => {
   const msgs = settleRestoredActivities(
-    normalizeHistoryBubbles([
+    normalizeProjectedEntries([
       {
         id: "a1",
         role: "assistant",
@@ -314,7 +314,7 @@ test("restored history settles orphaned live activity after restart", () => {
 });
 
 test("restored history recognizes extended activity states", () => {
-  const [message] = normalizeHistoryBubbles([
+  const [message] = normalizeProjectedEntries([
     {
       id: "a1",
       role: "assistant",
@@ -394,8 +394,8 @@ test("enrichTimelineDurations keeps existing durationSec", () => {
   }
 });
 
-test("normalizeHistoryBubbles restores tool batch execution metadata", () => {
-  const [message] = normalizeHistoryBubbles([
+test("normalizeProjectedEntries restores tool batch execution metadata", () => {
+  const [message] = normalizeProjectedEntries([
     {
       id: "a1",
       role: "assistant",

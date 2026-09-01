@@ -32,7 +32,7 @@ interface AiResult {
   edges: AiGenEdge[];
 }
 
-interface ChatMessage {
+interface ConversationEntry {
   role: "user" | "assistant" | "error";
   content: string;
   result?: AiResult;
@@ -54,7 +54,7 @@ export default function LoopAiAssistant({
   onApply,
   onClose,
 }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ConversationEntry[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
