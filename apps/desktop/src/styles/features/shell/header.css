@@ -55,8 +55,7 @@
     saturate(1.05);
 }
 
-/* 文件工作台需要一条稳定的顶部 chrome；与左侧栏共用材质，
-   避免浅色主题下出现一条独立的亮白标题栏。 */
+/* 文件编辑态与左侧栏共用同一套玻璃材质。 */
 .content-header--chat.has-project-file {
   --chat-header-divider: color-mix(
     in srgb,

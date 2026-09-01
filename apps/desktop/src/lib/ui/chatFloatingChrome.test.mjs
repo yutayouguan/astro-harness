@@ -184,7 +184,7 @@ test("conversation title keeps a compact optical type scale", () => {
   assert.match(title, /letter-spacing:\s*0\.01em;/);
 });
 
-test("right-side chat surfaces stay flush while files use a continuous workbench", () => {
+test("file workspace aligns edge to edge without changing dock surfaces", () => {
   const layout = rule(
     rightPanelStyles,
     ".chat-layout-with-right.has-right-dock",
@@ -209,6 +209,7 @@ test("right-side chat surfaces stay flush while files use a continuous workbench
   assert.ok(layoutBase, "missing shared chat dock surface tokens");
   assert.match(layoutBase, /--chat-dock-inset:\s*0px;/);
   assert.match(layoutBase, /--chat-dock-radius:\s*0px;/);
+  assert.match(layoutBase, /--chat-workbench-radius:\s*18px;/);
   assert.match(layoutBase, /--chat-dock-surface-border:\s*0\.5px solid/);
   assert.match(layoutBase, /--chat-dock-surface-background:/);
   assert.match(layoutBase, /--chat-dock-surface-shadow:/);
@@ -232,7 +233,7 @@ test("right-side chat surfaces stay flush while files use a continuous workbench
   assert.ok(filePageBody, "missing edge-aligned file workspace rule");
   assert.match(filePageBody, /padding-left:\s*0;/);
 
-  for (const panel of [runtimePanel, sidePanel, reviewPanel]) {
+  for (const panel of [runtimePanel, projectPanel, sidePanel, reviewPanel]) {
     assert.match(panel, /border:\s*var\(--chat-dock-surface-border\);/);
     assert.match(panel, /border-radius:\s*var\(--chat-dock-radius\);/);
     assert.match(panel, /background:\s*var\(--chat-dock-surface-background\);/);
@@ -242,19 +243,12 @@ test("right-side chat surfaces stay flush while files use a continuous workbench
       /padding-top:\s*var\(--chat-header-overlay-height, 50px\);/,
     );
   }
-  for (const panel of [runtimePanel, sidePanel, reviewPanel]) {
+  for (const panel of [runtimePanel, projectPanel, sidePanel, reviewPanel]) {
     assert.match(
       panel,
       /backdrop-filter:\s*var\(--chat-dock-surface-filter\);/,
     );
   }
-  assert.match(
-    projectPanel,
-    /background:\s*var\(--project-workbench-surface\);/,
-  );
-  assert.match(projectPanel, /border-radius:\s*0;/);
-  assert.match(projectPanel, /box-shadow:\s*none;/);
-  assert.match(projectPanel, /backdrop-filter:\s*none;/);
   assert.match(
     projectWorkbench,
     /margin:\s*var\(--chat-header-overlay-height, 50px\) 0 0;/,
@@ -262,11 +256,14 @@ test("right-side chat surfaces stay flush while files use a continuous workbench
   assert.match(projectWorkbench, /border-radius:\s*0;/);
   assert.match(
     projectWorkbench,
-    /background:\s*var\(--project-workbench-surface\);/,
+    /background:\s*var\(--chat-dock-surface-background\);/,
   );
-  assert.match(projectWorkbench, /box-shadow:\s*none;/);
-  assert.match(openProjectPanel, /margin:\s*0;/);
-  assert.match(openProjectPanel, /border-left-width:\s*0\.5px;/);
+  assert.match(
+    projectWorkbench,
+    /box-shadow:\s*var\(--chat-dock-surface-shadow\);/,
+  );
+  assert.match(openProjectPanel, /margin:\s*var\(--chat-dock-inset\);/);
+  assert.match(openProjectPanel, /border-width:\s*0\.5px;/);
   assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(
     app,
@@ -298,42 +295,14 @@ test("project files dock animates layout in both directions", () => {
     openPanel,
     /flex-basis:\s*min\(var\(--project-files-width, 264px\), 42%\);/,
   );
-  assert.match(openPanel, /border-left-width:\s*0\.5px;/);
+  assert.match(openPanel, /border-width:\s*0\.5px;/);
   assert.match(openPanel, /visibility:\s*visible;/);
   assert.match(openPanel, /pointer-events:\s*auto;/);
   assert.match(projectFilesPanel, /new ResizeObserver\(reportRenderedWidth\)/);
   assert.match(projectFilesPanel, /getBoundingClientRect\(\)\.width/);
 });
 
-test("project file mode uses opaque editor chrome and a compact composer", () => {
-  const tabs = rule(projectFilesStyles, ".project-file-tabs");
-  const activeTab = rule(projectFilesStyles, ".project-file-tab.is-active");
-  const editor = rule(projectFilesStyles, ".project-file-editor-body");
-  const composer = rule(
-    projectFilesStyles,
-    ".chat-pane.has-project-file .composer",
-  );
-  const composerShell = rule(
-    projectFilesStyles,
-    ".chat-pane.has-project-file .composer-shell",
-  );
-
-  assert.ok(tabs, "missing project file tabs rule");
-  assert.match(tabs, /height:\s*42px;/);
-  assert.match(tabs, /background:\s*var\(--project-workbench-chrome\);/);
-  assert.ok(activeTab, "missing active project file tab rule");
-  assert.match(activeTab, /box-shadow:\s*inset 0 -2px 0/);
-  assert.ok(editor, "missing project file editor body rule");
-  assert.match(editor, /background:\s*var\(--project-workbench-surface\);/);
-  assert.match(
-    projectFilesStyles,
-    /padding-bottom:\s*calc\(var\(--composer-overlay-height, 72px\) \+ 12px\);/,
-  );
-  assert.ok(composerShell, "missing compact project composer shell rule");
-  assert.match(composerShell, /max-width:\s*720px;/);
-  assert.ok(composer, "missing compact project composer rule");
-  assert.match(composer, /border-radius:\s*16px;/);
-  assert.match(composer, /backdrop-filter:\s*none;/);
+test("project file mode keeps its contextual composer placeholder", () => {
   assert.match(
     chatView,
     /workspaceContent\s*\?\s*t\("chat\.placeholderFile"\)/,
