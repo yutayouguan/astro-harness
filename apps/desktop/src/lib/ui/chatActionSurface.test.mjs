@@ -95,6 +95,8 @@ test("chat surface exposes realtime voice without restoring legacy ASR or read-a
   assert.match(realtime, /createDataChannel\("oai-events"\)/);
   assert.match(realtime, /transport = "webrtc"/);
   assert.match(realtime, /transport,\n\s+sdp: offerSdp/);
+  assert.match(realtime, /transport !== "existing_call"/);
+  assert.match(realtime, /else if \(transport === "websocket"\)/);
   assert.match(realtime, /input_audio_speech_started/);
   assert.match(messages, /"chat\.realtimeStart": "开始实时语音"/);
   assert.match(messages, /"chat\.realtimeUnavailable"/);

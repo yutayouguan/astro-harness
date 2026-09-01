@@ -766,9 +766,14 @@ impl Session {
                 let _ = session.realtime.complete_handoff(request.handoff_id).await;
                 return;
             }
+            let prospective_turn_id = session
+                .active_turn_id()
+                .await
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let mut receiver = session.subscribe_turn_events(&prospective_turn_id).await;
             let result = session
                 .submit_turn_input(
-                    uuid::Uuid::new_v4().to_string(),
+                    prospective_turn_id.clone(),
                     agent_protocol::TurnInputRequest {
                         input: vec![agent_protocol::TurnInput {
                             content: format!(
@@ -791,7 +796,9 @@ impl Session {
                 let _ = session.realtime.complete_handoff(request.handoff_id).await;
                 return;
             };
-            let receiver = session.subscribe_turn_events(&turn_id).await;
+            if turn_id != prospective_turn_id {
+                receiver = session.subscribe_turn_events(&turn_id).await;
+            }
             let mut bem = BemChannelParser::new(Arc::new(prefixes));
             let mut promoted_item = None;
             let mut pending = String::new();

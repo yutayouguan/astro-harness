@@ -21,7 +21,13 @@ type Options = {
   backendId: string | null;
   model?: string;
   voice?: string;
-  transport?: "webrtc" | "websocket";
+  transport?: "webrtc" | "websocket" | "existing_call";
+  callId?: string;
+  version?: "v2" | "v3";
+  clientManagedHandoffs?: boolean;
+  handoffMode?: "thinking" | "commentary" | "bem_tags";
+  handoffChannelPrefixes?: Record<string, string[]>;
+  flushTranscriptTailOnSessionEnd?: boolean;
 };
 
 type CaptureHandle = {
@@ -208,6 +214,12 @@ export function useRealtimeConversation({
   model = "gpt-realtime",
   voice = "marin",
   transport = "webrtc",
+  callId,
+  version = "v2",
+  clientManagedHandoffs = false,
+  handoffMode = "thinking",
+  handoffChannelPrefixes,
+  flushTranscriptTailOnSessionEnd = true,
 }: Options) {
   const [status, setStatus] = useState<RealtimeConversationStatus>("idle");
   const [transcript, setTranscript] = useState("");
@@ -495,13 +507,15 @@ export function useRealtimeConversation({
           turnDetection: "server_vad",
           noiseReduction: "near_field",
           transcriptionModel: "gpt-4o-mini-transcribe",
-          includeStartupContext: true,
+          includeStartupContext: transport !== "existing_call",
           transport,
           sdp: offerSdp ?? null,
-          version: "v2",
-          clientManagedHandoffs: false,
-          handoffMode: "thinking",
-          flushTranscriptTailOnSessionEnd: true,
+          callId: callId ?? null,
+          version,
+          clientManagedHandoffs,
+          handoffMode,
+          handoffChannelPrefixes: handoffChannelPrefixes ?? null,
+          flushTranscriptTailOnSessionEnd,
         },
       });
       if (attempt !== attemptRef.current) {
@@ -514,7 +528,7 @@ export function useRealtimeConversation({
         const answerSdp = await answer;
         if (attempt !== attemptRef.current) return;
         await webRtc.peer.setRemoteDescription({ type: "answer", sdp: answerSdp });
-      } else {
+      } else if (transport === "websocket") {
         const capture = await createCapture(enqueueAudio);
         if (attempt !== attemptRef.current) {
           await stopCapture(capture);
@@ -536,12 +550,18 @@ export function useRealtimeConversation({
     }
   }, [
     backendId,
+    callId,
+    clientManagedHandoffs,
     enqueueAudio,
+    flushTranscriptTailOnSessionEnd,
+    handoffChannelPrefixes,
+    handoffMode,
     model,
     providerId,
     releaseMedia,
     sessionId,
     transport,
+    version,
     voice,
   ]);
 
