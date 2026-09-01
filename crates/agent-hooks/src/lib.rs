@@ -143,6 +143,11 @@ impl HookRuntime {
         self.command.sources()
     }
 
+    /// Abort and drain asynchronous command hooks owned by this session runtime.
+    pub async fn shutdown(&self) {
+        self.command.shutdown().await;
+    }
+
     pub fn with_project_commands(
         &self,
         astro_home: &std::path::Path,

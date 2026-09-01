@@ -1,11 +1,12 @@
 //! Command hook configuration and execution.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 use std::time::Instant;
 
@@ -16,6 +17,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
+use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::warn;
 
@@ -32,7 +34,114 @@ const MAX_SESSION_END_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 const MAX_ENV_VALUE_BYTES: usize = 8 * 1024;
 const DEFAULT_ADDITIONAL_CONTEXT_TOKEN_LIMIT: usize = 2_500;
+const MAX_CONCURRENT_ASYNC_HOOKS: usize = 8;
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
+
+struct AsyncHookRuntimeState {
+    concurrency_limit: Arc<Semaphore>,
+    tasks: JoinSet<()>,
+}
+
+impl Default for AsyncHookRuntimeState {
+    fn default() -> Self {
+        Self {
+            concurrency_limit: Arc::new(Semaphore::new(MAX_CONCURRENT_ASYNC_HOOKS)),
+            tasks: JoinSet::new(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct AsyncHookRuntime {
+    state: Mutex<AsyncHookRuntimeState>,
+}
+
+struct AsyncHookCancellation<F: FnOnce()> {
+    callback: Option<F>,
+}
+
+impl<F: FnOnce()> AsyncHookCancellation<F> {
+    fn disarm(&mut self) {
+        self.callback = None;
+    }
+}
+
+impl<F: FnOnce()> Drop for AsyncHookCancellation<F> {
+    fn drop(&mut self) {
+        if let Some(callback) = self.callback.take() {
+            callback();
+        }
+    }
+}
+
+impl AsyncHookRuntime {
+    fn lock_state(&self) -> MutexGuard<'_, AsyncHookRuntimeState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn schedule(
+        &self,
+        task: impl Future<Output = ()> + Send + 'static,
+        on_cancel: impl FnOnce() + Send + 'static,
+    ) -> anyhow::Result<()> {
+        let runtime = match async_hook_runtime() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                on_cancel();
+                return Err(error);
+            }
+        };
+        let mut state = self.lock_state();
+        if state.concurrency_limit.is_closed() {
+            on_cancel();
+            anyhow::bail!("asynchronous hook runtime is shut down");
+        }
+
+        while state.tasks.try_join_next().is_some() {}
+        let concurrency_limit = Arc::clone(&state.concurrency_limit);
+        let mut cancellation = AsyncHookCancellation {
+            callback: Some(on_cancel),
+        };
+        state.tasks.spawn_on(
+            async move {
+                let Ok(_permit) = concurrency_limit.acquire_owned().await else {
+                    return;
+                };
+                task.await;
+                cancellation.disarm();
+            },
+            runtime.handle(),
+        );
+        Ok(())
+    }
+
+    async fn shutdown(&self) {
+        let mut tasks = {
+            let mut state = self.lock_state();
+            state.concurrency_limit.close();
+            std::mem::take(&mut state.tasks)
+        };
+        tasks.abort_all();
+        while tasks.join_next().await.is_some() {}
+    }
+}
+
+fn async_hook_runtime() -> anyhow::Result<&'static tokio::runtime::Runtime> {
+    static RUNTIME: OnceLock<Result<tokio::runtime::Runtime, String>> = OnceLock::new();
+    RUNTIME
+        .get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_name("astro-async-hook")
+                .enable_all()
+                .build()
+                .map_err(|error| error.to_string())
+        })
+        .as_ref()
+        .map_err(|error| anyhow::anyhow!(error.clone()))
+}
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -230,6 +339,7 @@ pub struct CommandHookRunner {
     runs: HookRunStore,
     sources: Vec<CommandHookSourceSummary>,
     mcp_executor: Arc<dyn HookMcpExecutor>,
+    async_runtime: Arc<AsyncHookRuntime>,
 }
 
 impl std::fmt::Debug for CommandHookRunner {
@@ -250,6 +360,7 @@ impl Default for CommandHookRunner {
             runs: HookRunStore::default(),
             sources: Vec::new(),
             mcp_executor: unavailable_executor(),
+            async_runtime: Arc::new(AsyncHookRuntime::default()),
         }
     }
 }
@@ -611,7 +722,14 @@ impl CommandHookRunner {
 
     pub fn with_mcp_executor(mut self, executor: Arc<dyn HookMcpExecutor>) -> Self {
         self.mcp_executor = executor;
+        // `with_mcp_executor` is the session-binding boundary. Configured hooks and their
+        // run store may be shared, but asynchronous task ownership must remain per session.
+        self.async_runtime = Arc::new(AsyncHookRuntime::default());
         self
+    }
+
+    pub async fn shutdown(&self) {
+        self.async_runtime.shutdown().await;
     }
 
     pub async fn run(&self, event: &str, payload: &HookPayload) -> Vec<CommandHookDecision> {
@@ -682,37 +800,51 @@ impl CommandHookRunner {
             if handler.asynchronous {
                 let runs = self.runs.clone();
                 let run_event = event.to_string();
-                std::thread::spawn(move || {
-                    let started = Instant::now();
-                    let runtime = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build();
-                    let result = match runtime {
-                        Ok(runtime) => runtime.block_on(run_handler(
+                let started = Instant::now();
+                let task_run_id = run_id.clone();
+                let cancelled_runs = self.runs.clone();
+                let cancelled_run_id = run_id.clone();
+                let cancelled_event = event.to_string();
+                if let Err(error) = self.async_runtime.schedule(
+                    async move {
+                        let result = run_handler(
                             &handler,
                             &input,
                             &cwd,
                             &environment,
                             mcp_executor.as_ref(),
-                        )),
-                        Err(error) => Err(error.into()),
-                    };
-                    if let Err(error) = &result {
-                        warn!(%error, "asynchronous command hook failed");
-                    }
-                    let decision = result
-                        .as_ref()
-                        .ok()
-                        .map(|output| parse_output(&run_event, output, false));
-                    finish_run(
-                        &runs,
-                        &run_id,
-                        &run_event,
-                        started,
-                        result.as_ref(),
-                        decision.as_ref(),
-                    );
-                });
+                        )
+                        .await;
+                        if let Err(error) = &result {
+                            warn!(%error, "asynchronous command hook failed");
+                        }
+                        let decision = result
+                            .as_ref()
+                            .ok()
+                            .map(|output| parse_output(&run_event, output, false));
+                        finish_run(
+                            &runs,
+                            &task_run_id,
+                            &run_event,
+                            started,
+                            result.as_ref(),
+                            decision.as_ref(),
+                        );
+                    },
+                    move || {
+                        let cancellation_error = anyhow::anyhow!("asynchronous hook cancelled");
+                        finish_run(
+                            &cancelled_runs,
+                            &cancelled_run_id,
+                            &cancelled_event,
+                            started,
+                            Err(&cancellation_error),
+                            None,
+                        );
+                    },
+                ) {
+                    warn!(%event, %error, "failed to schedule asynchronous command hook");
+                }
             } else {
                 let run_event = event.to_string();
                 synchronous.spawn(async move {
@@ -1178,6 +1310,29 @@ struct HandlerOutput {
     stderr: String,
 }
 
+struct ProcessTreeGuard {
+    process_id: Option<u32>,
+}
+
+impl ProcessTreeGuard {
+    fn disarm(&mut self) {
+        self.process_id = None;
+    }
+}
+
+impl Drop for ProcessTreeGuard {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        if let Some(process_id) = self.process_id.and_then(|id| i32::try_from(id).ok()) {
+            // Command hooks run as process-group leaders. Cancellation must also terminate
+            // descendants that inherited stdout/stderr, otherwise their readers can leak.
+            unsafe {
+                libc::kill(-process_id, libc::SIGKILL);
+            }
+        }
+    }
+}
+
 async fn run_handler(
     handler: &ConfiguredHandler,
     hook_input: &[u8],
@@ -1245,6 +1400,9 @@ async fn run_command(
     #[cfg(unix)]
     command.process_group(0);
     let mut child = command.spawn()?;
+    let mut process_tree_guard = ProcessTreeGuard {
+        process_id: child.id(),
+    };
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
     let mut stdout_task = tokio::spawn(read_capped(stdout));
@@ -1281,15 +1439,20 @@ async fn run_command(
         })
     };
     match tokio::time::timeout(handler.timeout, execution).await {
-        Ok(Ok(output)) => Ok(output),
+        Ok(Ok(output)) => {
+            process_tree_guard.disarm();
+            Ok(output)
+        }
         Ok(Err(error)) => {
             terminate_child_tree(&mut child).await;
+            process_tree_guard.disarm();
             stdout_task.abort();
             stderr_task.abort();
             Err(error)
         }
         Err(_) => {
             terminate_child_tree(&mut child).await;
+            process_tree_guard.disarm();
             stdout_task.abort();
             stderr_task.abort();
             anyhow::bail!("timeout after {}s", handler.timeout.as_secs());
@@ -1717,6 +1880,7 @@ fn invalid_output_with_warnings(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
     use std::sync::Mutex;
 
     #[derive(Default)]
@@ -1735,6 +1899,16 @@ mod tests {
             let output = self.output.clone();
             Box::pin(async move { Ok(output) })
         }
+    }
+
+    async fn wait_for_count(counter: &AtomicUsize, expected: usize) {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while counter.load(AtomicOrdering::SeqCst) < expected {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
     }
 
     fn project_fixture(trust: &str, hooks: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
@@ -2443,5 +2617,88 @@ mod tests {
             .recent_runs()
             .iter()
             .all(|run| run.status == HookRunStatus::Stopped));
+    }
+
+    #[tokio::test]
+    async fn async_hook_runtime_bounds_concurrency_and_closes_on_shutdown() {
+        let runtime = AsyncHookRuntime::default();
+        let started = Arc::new(AtomicUsize::new(0));
+        let cancelled = Arc::new(AtomicUsize::new(0));
+        let gate = Arc::new(Semaphore::new(0));
+
+        for _ in 0..=MAX_CONCURRENT_ASYNC_HOOKS {
+            let started = Arc::clone(&started);
+            let cancelled = Arc::clone(&cancelled);
+            let gate = Arc::clone(&gate);
+            runtime
+                .schedule(
+                    async move {
+                        started.fetch_add(1, AtomicOrdering::SeqCst);
+                        gate.acquire_owned().await.unwrap().forget();
+                    },
+                    move || {
+                        cancelled.fetch_add(1, AtomicOrdering::SeqCst);
+                    },
+                )
+                .unwrap();
+        }
+
+        wait_for_count(&started, MAX_CONCURRENT_ASYNC_HOOKS).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(
+            started.load(AtomicOrdering::SeqCst),
+            MAX_CONCURRENT_ASYNC_HOOKS
+        );
+
+        gate.add_permits(1);
+        wait_for_count(&started, MAX_CONCURRENT_ASYNC_HOOKS + 1).await;
+        runtime.shutdown().await;
+        wait_for_count(&cancelled, MAX_CONCURRENT_ASYNC_HOOKS).await;
+        assert_eq!(
+            cancelled.load(AtomicOrdering::SeqCst),
+            MAX_CONCURRENT_ASYNC_HOOKS
+        );
+
+        let cancelled_after_shutdown = Arc::new(AtomicUsize::new(0));
+        let cancellation = Arc::clone(&cancelled_after_shutdown);
+        let scheduled_after_shutdown = runtime.schedule(async {}, move || {
+            cancellation.fetch_add(1, AtomicOrdering::SeqCst);
+        });
+        assert!(scheduled_after_shutdown.is_err());
+        assert_eq!(cancelled_after_shutdown.load(AtomicOrdering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn shutdown_marks_an_outstanding_async_command_hook_failed() {
+        let runner = CommandHookRunner::from_file(
+            file("sleep 30".into(), None, true),
+            Path::new("hooks.json"),
+        )
+        .unwrap();
+
+        let decisions = runner
+            .run(
+                crate::PRE_TOOL_USE,
+                &HookPayload {
+                    session_id: "session-1".into(),
+                    turn_id: Some("turn-1".into()),
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    tool_name: Some("terminal".into()),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert!(decisions.is_empty());
+        assert_eq!(runner.recent_runs()[0].status, HookRunStatus::Running);
+        runner.shutdown().await;
+
+        let runs = runner.recent_runs();
+        assert_eq!(runs[0].status, HookRunStatus::Failed);
+        assert_eq!(runs[0].summary, "asynchronous hook cancelled");
     }
 }

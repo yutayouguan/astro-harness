@@ -469,6 +469,7 @@ impl Session {
             task_completion.cancelled().await;
         }
         let _ = self.run_session_end_hook(turn_id);
+        self.hook_runtime().shutdown().await;
         if let Err(error) = self
             .mcp_hub
             .lock()
