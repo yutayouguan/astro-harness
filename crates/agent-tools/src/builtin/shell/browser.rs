@@ -30,6 +30,45 @@ type DevtoolsSocket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 const DEFAULT_WAIT_MS: u64 = 8_000;
 const MAX_WAIT_MS: u64 = 30_000;
 const MAX_SNAPSHOT_CHARS: usize = 20_000;
+const DEFAULT_BROWSER_HOME_PAGE: &str = "https://example.com/";
+const DEFAULT_VIEWPORT_WIDTH: u32 = 1280;
+const DEFAULT_VIEWPORT_HEIGHT: u32 = 800;
+
+/// Shared browser runtime preferences. These settings are global to the local
+/// Astro installation while browser tabs and profiles remain task-isolated.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct BrowserSettings {
+    pub home_page: String,
+    pub viewport_width: u32,
+    pub viewport_height: u32,
+    pub allow_loopback: bool,
+    pub downloads_enabled: bool,
+}
+
+impl Default for BrowserSettings {
+    fn default() -> Self {
+        Self {
+            home_page: DEFAULT_BROWSER_HOME_PAGE.to_string(),
+            viewport_width: DEFAULT_VIEWPORT_WIDTH,
+            viewport_height: DEFAULT_VIEWPORT_HEIGHT,
+            allow_loopback: true,
+            downloads_enabled: true,
+        }
+    }
+}
+
+impl BrowserSettings {
+    fn normalized(mut self) -> anyhow::Result<Self> {
+        self.home_page = normalize_http_url(&self.home_page)?;
+        if is_loopback_url(&self.home_page) && !self.allow_loopback {
+            anyhow::bail!("the configured home page requires local development access");
+        }
+        self.viewport_width = self.viewport_width.clamp(320, 1_600);
+        self.viewport_height = self.viewport_height.clamp(240, 1_400);
+        Ok(self)
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct BrowserOpenArgs {
@@ -41,6 +80,14 @@ pub struct BrowserOpenArgs {
     /// 在新标签页打开；默认在当前标签页导航。
     #[serde(default)]
     pub new_tab: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct BrowserDesktopNewTabArgs {
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    wait_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -361,6 +408,45 @@ pub fn remove_approval_rule(
     Ok(())
 }
 
+fn settings_path(memory_dir: &Path) -> PathBuf {
+    memory_dir.join("browser").join("settings.json")
+}
+
+fn browser_settings_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
+pub fn load_browser_settings(memory_dir: &Path) -> BrowserSettings {
+    std::fs::read_to_string(settings_path(memory_dir))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<BrowserSettings>(&raw).ok())
+        .and_then(|settings| settings.normalized().ok())
+        .unwrap_or_default()
+}
+
+pub fn save_browser_settings(
+    memory_dir: &Path,
+    settings: BrowserSettings,
+) -> anyhow::Result<BrowserSettings> {
+    let settings = settings.normalized()?;
+    let _guard = browser_settings_lock()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("browser settings lock is poisoned"))?;
+    let path = settings_path(memory_dir);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let temp = path.with_extension("json.tmp");
+    std::fs::write(&temp, serde_json::to_vec_pretty(&settings)?)?;
+    std::fs::rename(temp, path)?;
+    Ok(settings)
+}
+
+pub fn browser_data_dir(memory_dir: &Path) -> PathBuf {
+    memory_dir.join("browser")
+}
+
 pub async fn current_origin(session_id: &str) -> Option<String> {
     let (_, session) = browser_session(session_id).await.ok()?;
     let mut session = session.lock().await;
@@ -597,7 +683,10 @@ struct BrowserSession {
     socket: DevtoolsSocket,
     next_id: u64,
     output_dir: PathBuf,
-    allow_loopback: bool,
+    page_allows_loopback: bool,
+    loopback_enabled: bool,
+    download_dir: PathBuf,
+    downloads_enabled: bool,
     viewport_width: u32,
     viewport_height: u32,
 }
@@ -613,6 +702,29 @@ fn manager() -> &'static Mutex<BrowserManager> {
     MANAGER.get_or_init(|| Mutex::new(BrowserManager::default()))
 }
 
+pub async fn update_browser_settings(
+    memory_dir: &Path,
+    settings: BrowserSettings,
+) -> anyhow::Result<BrowserSettings> {
+    let settings = save_browser_settings(memory_dir, settings)?;
+    let sessions = {
+        let manager = manager().lock().await;
+        manager
+            .sessions
+            .values()
+            .flat_map(|workspace| workspace.tabs.iter().map(|tab| tab.session.clone()))
+            .collect::<Vec<_>>()
+    };
+    futures::future::join_all(sessions.into_iter().map(|session| {
+        let settings = settings.clone();
+        async move {
+            let _ = session.lock().await.apply_runtime_settings(&settings).await;
+        }
+    }))
+    .await;
+    Ok(settings)
+}
+
 async fn browser_session(session_id: &str) -> anyhow::Result<(String, Arc<Mutex<BrowserSession>>)> {
     let manager = manager().lock().await;
     let workspace = manager.sessions.get(session_id).ok_or_else(|| {
@@ -626,7 +738,7 @@ async fn browser_session(session_id: &str) -> anyhow::Result<(String, Arc<Mutex<
     Ok((tab.id.clone(), tab.session.clone()))
 }
 
-fn browser_available() -> bool {
+pub fn browser_available() -> bool {
     find_browser_executable().is_some()
 }
 
@@ -721,7 +833,7 @@ fn session_dir_for(memory_dir: &Path, session_id: &str) -> PathBuf {
     memory_dir.join("browser").join(safe)
 }
 
-fn validate_url(raw: &str) -> anyhow::Result<String> {
+fn normalize_http_url(raw: &str) -> anyhow::Result<String> {
     let trimmed = raw.trim();
     let mut parsed =
         reqwest::Url::parse(trimmed).map_err(|e| anyhow::anyhow!("invalid URL: {e}"))?;
@@ -743,12 +855,32 @@ fn validate_url(raw: &str) -> anyhow::Result<String> {
     let host = parsed
         .host_str()
         .ok_or_else(|| anyhow::anyhow!("URL is missing a host"))?;
+    if host.is_empty() {
+        anyhow::bail!("URL is missing a host");
+    }
+    Ok(parsed.to_string())
+}
+
+fn validate_url(raw: &str) -> anyhow::Result<String> {
+    let normalized = normalize_http_url(raw)?;
+    let parsed = reqwest::Url::parse(&normalized)?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("URL is missing a host"))?;
     let loopback = host.eq_ignore_ascii_case("localhost")
         || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
     if !loopback {
         crate::engine::network::assert_public_http_url(parsed.as_str())?;
     }
-    Ok(parsed.to_string())
+    Ok(normalized)
+}
+
+fn validate_url_for_settings(raw: &str, settings: &BrowserSettings) -> anyhow::Result<String> {
+    let url = validate_url(raw)?;
+    if is_loopback_url(&url) && !settings.allow_loopback {
+        anyhow::bail!("local development addresses are disabled in Browser settings");
+    }
+    Ok(url)
 }
 
 fn is_loopback_url(raw: &str) -> bool {
@@ -838,7 +970,8 @@ async fn open_for_session(
     memory_dir: &Path,
     args: BrowserOpenArgs,
 ) -> anyhow::Result<String> {
-    let url = validate_url(&args.url)?;
+    let settings = load_browser_settings(memory_dir);
+    let url = validate_url_for_settings(&args.url, &settings)?;
     let existing = {
         let manager = manager().lock().await;
         manager.sessions.get(session_id).and_then(|workspace| {
@@ -853,6 +986,7 @@ async fn open_for_session(
     if !args.new_tab {
         if let Some((tab_id, session)) = existing {
             let mut session = session.lock().await;
+            session.apply_runtime_settings(&settings).await?;
             session.navigate(&url).await?;
             session.wait_ready(args.wait_ms).await?;
             let result = session.snapshot(true).await?;
@@ -865,7 +999,8 @@ async fn open_for_session(
     tokio::fs::create_dir_all(output_dir.join("downloads")).await?;
     let tab_id = uuid::Uuid::new_v4().to_string();
     let tab_dir = output_dir.join("tabs").join(&tab_id);
-    let mut session = BrowserSession::launch(&url, tab_dir, output_dir.join("downloads")).await?;
+    let mut session =
+        BrowserSession::launch(&url, tab_dir, output_dir.join("downloads"), &settings).await?;
     session.wait_ready(args.wait_ms).await?;
     let result = session.snapshot(true).await?;
     let session = Arc::new(Mutex::new(session));
@@ -1223,9 +1358,21 @@ pub async fn desktop_control(
             snapshot_for_session(session_id, args.screenshot.unwrap_or(true), args.wait_ms).await
         }
         "new_tab" => {
-            let mut args: BrowserOpenArgs = serde_json::from_value(args)?;
-            args.new_tab = true;
-            open_for_session(session_id, memory_dir, args).await
+            let args: BrowserDesktopNewTabArgs = serde_json::from_value(args)?;
+            let url = args
+                .url
+                .filter(|url| !url.trim().is_empty())
+                .unwrap_or_else(|| load_browser_settings(memory_dir).home_page);
+            open_for_session(
+                session_id,
+                memory_dir,
+                BrowserOpenArgs {
+                    url,
+                    wait_ms: args.wait_ms,
+                    new_tab: true,
+                },
+            )
+            .await
         }
         "switch_tab" => {
             let args: BrowserTabArgs = serde_json::from_value(args)?;
@@ -1542,7 +1689,12 @@ async fn close_for_session(session_id: &str) -> anyhow::Result<String> {
 }
 
 impl BrowserSession {
-    async fn launch(url: &str, output_dir: PathBuf, download_dir: PathBuf) -> anyhow::Result<Self> {
+    async fn launch(
+        url: &str,
+        output_dir: PathBuf,
+        download_dir: PathBuf,
+        settings: &BrowserSettings,
+    ) -> anyhow::Result<Self> {
         let executable = find_browser_executable().ok_or_else(|| {
             anyhow::anyhow!(
                 "no Chromium browser found; install Chrome, Chromium, Edge, Brave, or set ASTRO_BROWSER_EXECUTABLE"
@@ -1562,7 +1714,10 @@ impl BrowserSession {
             .arg("--disable-component-update")
             .arg("--disable-sync")
             .arg("--metrics-recording-only")
-            .arg("--window-size=1280,800")
+            .arg(format!(
+                "--window-size={},{}",
+                settings.viewport_width, settings.viewport_height
+            ))
             .arg("about:blank")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -1609,27 +1764,37 @@ impl BrowserSession {
             socket,
             next_id: 0,
             output_dir,
-            allow_loopback: is_loopback_url(url),
-            viewport_width: 1280,
-            viewport_height: 800,
+            page_allows_loopback: is_loopback_url(url),
+            loopback_enabled: settings.allow_loopback,
+            download_dir,
+            downloads_enabled: settings.downloads_enabled,
+            viewport_width: settings.viewport_width,
+            viewport_height: settings.viewport_height,
         };
         session.command("Page.enable", json!({})).await?;
         session.command("Runtime.enable", json!({})).await?;
         session.command("DOM.enable", json!({})).await?;
+        let download_behavior = if settings.downloads_enabled {
+            json!({
+                "behavior":"allow",
+                "downloadPath":session.download_dir.to_string_lossy(),
+                "eventsEnabled":true
+            })
+        } else {
+            json!({"behavior":"deny","eventsEnabled":true})
+        };
         session
-            .command(
-                "Browser.setDownloadBehavior",
-                json!({
-                    "behavior":"allow",
-                    "downloadPath":download_dir.to_string_lossy(),
-                    "eventsEnabled":true
-                }),
-            )
+            .command("Browser.setDownloadBehavior", download_behavior)
             .await?;
         session
             .command(
                 "Emulation.setDeviceMetricsOverride",
-                json!({"width":1280,"height":800,"deviceScaleFactor":1,"mobile":false}),
+                json!({
+                    "width":settings.viewport_width,
+                    "height":settings.viewport_height,
+                    "deviceScaleFactor":1,
+                    "mobile":false
+                }),
             )
             .await?;
         session
@@ -1649,12 +1814,33 @@ impl BrowserSession {
 
     async fn navigate(&mut self, url: &str) -> anyhow::Result<()> {
         let url = validate_url(url)?;
-        self.allow_loopback = is_loopback_url(&url);
+        if is_loopback_url(&url) && !self.loopback_enabled {
+            anyhow::bail!("local development addresses are disabled in Browser settings");
+        }
+        self.page_allows_loopback = is_loopback_url(&url);
         let navigation = self.command("Page.navigate", json!({"url":url})).await?;
         if let Some(error) = navigation.get("errorText").and_then(Value::as_str) {
             if !error.is_empty() {
                 anyhow::bail!("browser navigation failed: {error}");
             }
+        }
+        Ok(())
+    }
+
+    async fn apply_runtime_settings(&mut self, settings: &BrowserSettings) -> anyhow::Result<()> {
+        self.loopback_enabled = settings.allow_loopback;
+        if self.downloads_enabled != settings.downloads_enabled {
+            let params = if settings.downloads_enabled {
+                json!({
+                    "behavior":"allow",
+                    "downloadPath":self.download_dir.to_string_lossy(),
+                    "eventsEnabled":true
+                })
+            } else {
+                json!({"behavior":"deny","eventsEnabled":true})
+            };
+            self.command("Browser.setDownloadBehavior", params).await?;
+            self.downloads_enabled = settings.downloads_enabled;
         }
         Ok(())
     }
@@ -1814,7 +2000,7 @@ impl BrowserSession {
         let loopback = host.eq_ignore_ascii_case("localhost")
             || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
         if loopback {
-            self.allow_loopback
+            self.page_allows_loopback && self.loopback_enabled
         } else {
             crate::engine::network::assert_public_http_url(raw).is_ok()
         }
@@ -2022,6 +2208,54 @@ mod tests {
         assert!(load_approval_rules(dir.path()).is_empty());
     }
 
+    #[test]
+    fn browser_settings_round_trip_normalizes_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let saved = save_browser_settings(
+            dir.path(),
+            BrowserSettings {
+                home_page: "https://1.1.1.1".into(),
+                viewport_width: 10_000,
+                viewport_height: 100,
+                allow_loopback: false,
+                downloads_enabled: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(saved.home_page, "https://1.1.1.1/");
+        assert_eq!(saved.viewport_width, 1_600);
+        assert_eq!(saved.viewport_height, 240);
+        assert_eq!(load_browser_settings(dir.path()), saved);
+    }
+
+    #[test]
+    fn browser_settings_reject_invalid_home_page_and_gate_loopback() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(save_browser_settings(
+            dir.path(),
+            BrowserSettings {
+                home_page: "file:///tmp/index.html".into(),
+                ..BrowserSettings::default()
+            },
+        )
+        .is_err());
+        assert!(save_browser_settings(
+            dir.path(),
+            BrowserSettings {
+                home_page: "http://localhost:5173".into(),
+                allow_loopback: false,
+                ..BrowserSettings::default()
+            },
+        )
+        .is_err());
+        let settings = BrowserSettings {
+            allow_loopback: false,
+            ..BrowserSettings::default()
+        };
+        assert!(validate_url_for_settings("http://localhost:5173", &settings).is_err());
+        assert!(validate_url_for_settings("https://1.1.1.1", &settings).is_ok());
+    }
+
     #[tokio::test]
     async fn preview_server_serves_draft_and_relative_asset() {
         let temp = tempfile::tempdir().unwrap();
@@ -2085,6 +2319,7 @@ mod tests {
             &format!("http://{addr}"),
             temp.path().join("tab"),
             temp.path().join("downloads"),
+            &BrowserSettings::default(),
         )
         .await
         .unwrap();

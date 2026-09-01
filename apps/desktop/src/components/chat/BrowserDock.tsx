@@ -259,12 +259,7 @@ export default function BrowserDock({
           className="browser-new-tab"
           aria-label={t("chat.browserDock.newTab")}
           disabled={!sessionId}
-          onClick={() =>
-            void run("new_tab", {
-              url: preview?.url || "https://example.com",
-              new_tab: true,
-            })
-          }
+          onClick={() => void run("new_tab")}
         >
           <Plus size={14} aria-hidden />
         </button>

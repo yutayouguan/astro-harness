@@ -40,6 +40,7 @@ import MemoryPanel from "./components/settings/MemoryPanel";
 import ModelPicker from "./components/agents/ModelPicker";
 import ExpandableSearch from "./components/ui/ExpandableSearch";
 import PreferencesPanel from "./components/settings/PreferencesPanel";
+import BrowserSettingsPanel from "./components/settings/BrowserSettingsPanel";
 import ProvidersPanel from "./components/settings/ProvidersPanel";
 import SidebarContextMenu from "./components/settings/SidebarContextMenu";
 import PluginsPage from "./components/plugins/PluginsPage";
@@ -1714,6 +1715,12 @@ export default function App() {
                       active={nav === "settings"}
                       initialTab={toolsInitialTab}
                       onInitialTabConsumed={() => setToolsInitialTab(null)}
+                    />
+                  )}
+                  {settingsTab === "browser" && (
+                    <BrowserSettingsPanel
+                      active={nav === "settings"}
+                      tone={shellTone}
                     />
                   )}
                   {settingsTab === "evolution" && (

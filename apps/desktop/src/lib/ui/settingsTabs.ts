@@ -2,6 +2,7 @@
 import type { ComponentType, SVGProps } from "react";
 import {
   IconAtom,
+  IconBrowser,
   IconChat,
   IconContext,
   IconDiagnostics,
@@ -52,6 +53,7 @@ export const SETTINGS_TAB_GROUPS: SettingsTabGroup[] = [
     id: "extensions",
     label: "扩展",
     items: [
+      { id: "browser", label: "浏览器", Icon: IconBrowser },
       { id: "models", label: "模型市场", Icon: IconModelMarket },
       { id: "insights", label: "洞察", Icon: IconInsights },
     ],

@@ -277,6 +277,9 @@ pub fn run() {
             commands::branches::get_chat_branch_graph,
             commands::browser::browser_panel_control,
             commands::browser::browser_preview_project_file,
+            commands::browser::browser_get_settings,
+            commands::browser::browser_set_settings,
+            commands::browser::browser_revoke_approval,
             // — projects —
             commands::common::get_default_workspace_path,
             commands::session::list_projects,

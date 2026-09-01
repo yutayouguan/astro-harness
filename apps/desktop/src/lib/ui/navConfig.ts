@@ -19,6 +19,7 @@ export type SettingsTabId =
   | "preferences:about"
   | "providers"
   | "tools"
+  | "browser"
   | "models"
   | "insights"
   | "evolution"

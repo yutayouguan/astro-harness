@@ -557,6 +557,36 @@ export const zh = {
     "仅记录站点来源与操作类别；敏感操作不会被永久放行。可随时移除。",
   "approvals.browser.empty": "暂无已记忆的网页操作授权。",
   "approvals.browser.stateChanging": "允许更改网页状态",
+  "browser.settings.runtime.title": "浏览器运行时",
+  "browser.settings.runtime.sub":
+    "Astro 使用独立 Chromium 会话，与 AI 工具和右侧浏览器共享标签页。",
+  "browser.settings.status.checking": "正在检查",
+  "browser.settings.status.ready": "浏览器可用",
+  "browser.settings.status.missing": "未找到 Chromium",
+  "browser.settings.data.label": "本地数据",
+  "browser.settings.startup.title": "新标签页与视口",
+  "browser.settings.startup.sub": "设置新建标签页的起始页和初始渲染尺寸。",
+  "browser.settings.home.label": "默认主页",
+  "browser.settings.viewport.label": "默认视口",
+  "browser.settings.viewport.hint":
+    "右侧浏览器打开后会自动贴合面板；此尺寸用于新标签页的首次渲染和 AI 截图。",
+  "browser.settings.permissions.title": "访问权限",
+  "browser.settings.permissions.sub":
+    "这些开关同时约束你和 AI 操作的共享浏览器会话。",
+  "browser.settings.loopback.label": "本地开发地址",
+  "browser.settings.loopback.desc":
+    "允许访问 localhost 和 127.0.0.1，用于预览项目文件和本地前端。其他私有网络仍始终拦截。",
+  "browser.settings.downloads.label": "允许下载",
+  "browser.settings.downloads.desc":
+    "允许网页将文件保存到当前任务的隔离下载目录。",
+  "browser.settings.sitePermissions.title": "站点操作权限",
+  "browser.settings.sitePermissions.sub":
+    "管理你在 AI 审批卡中选择“始终允许”的站点。",
+  "browser.settings.sensitive":
+    "登录、授权、支付、发布、删除等敏感操作不会被永久放行，仍会每次请求批准。",
+  "browser.settings.revoke": "撤销",
+  "browser.settings.save": "保存",
+  "browser.settings.saving": "保存中…",
   "approvals.hardline.label": "永久拦截（hardline）",
   "approvals.hardline.desc":
     "mkfs、dd 写块设备、fork 炸弹、rm -rf / 等不可恢复操作——任何模式、任何白名单都无法放行。",
@@ -3318,6 +3348,37 @@ export const en: Record<MessageKey, string> = {
     "Rules remember only the site origin and action class. Sensitive actions are never permanently allowed.",
   "approvals.browser.empty": "No remembered browser action permissions.",
   "approvals.browser.stateChanging": "Allow state-changing actions",
+  "browser.settings.runtime.title": "Browser runtime",
+  "browser.settings.runtime.sub":
+    "Astro uses isolated Chromium sessions shared by AI tools and the right-side browser.",
+  "browser.settings.status.checking": "Checking",
+  "browser.settings.status.ready": "Browser available",
+  "browser.settings.status.missing": "Chromium not found",
+  "browser.settings.data.label": "Local data",
+  "browser.settings.startup.title": "New tabs and viewport",
+  "browser.settings.startup.sub":
+    "Choose the start page and initial rendering size for new tabs.",
+  "browser.settings.home.label": "Home page",
+  "browser.settings.viewport.label": "Default viewport",
+  "browser.settings.viewport.hint":
+    "The right-side browser fits its panel after opening. This size is used for a new tab's first render and AI screenshots.",
+  "browser.settings.permissions.title": "Access permissions",
+  "browser.settings.permissions.sub":
+    "These controls apply to the shared browser session used by you and AI.",
+  "browser.settings.loopback.label": "Local development addresses",
+  "browser.settings.loopback.desc":
+    "Allow localhost and 127.0.0.1 for project previews and local frontends. Other private networks remain blocked.",
+  "browser.settings.downloads.label": "Allow downloads",
+  "browser.settings.downloads.desc":
+    "Allow websites to save files inside the current task's isolated downloads directory.",
+  "browser.settings.sitePermissions.title": "Site action permissions",
+  "browser.settings.sitePermissions.sub":
+    "Manage sites where you selected Always allow on an AI approval prompt.",
+  "browser.settings.sensitive":
+    "Login, authorization, payment, publishing, deletion, and other sensitive actions are never permanently allowed and still require approval every time.",
+  "browser.settings.revoke": "Revoke",
+  "browser.settings.save": "Save",
+  "browser.settings.saving": "Saving…",
   "approvals.hardline.label": "Hardline blocklist",
   "approvals.hardline.desc":
     "mkfs, dd to block devices, fork bombs, rm -rf / and other unrecoverable ops — never allowed by any mode or allowlist.",

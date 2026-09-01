@@ -382,6 +382,19 @@ export function IconGlobe(props: IconProps) {
   );
 }
 
+/** 浏览器设置 */
+export function IconBrowser(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <circle className="nav-icon-stroke" cx="12" cy="12" r="9" />
+      <path
+        className="nav-icon-stroke"
+        d="M3.5 9h17M3.5 15h17M12 3c2.2 2.45 3.35 5.45 3.35 9S14.2 18.55 12 21M12 3C9.8 5.45 8.65 8.45 8.65 12S9.8 18.55 12 21"
+      />
+    </NavIconBase>
+  );
+}
+
 /** 展开侧栏 */
 export function IconPanelOpen(props: IconProps) {
   return (
