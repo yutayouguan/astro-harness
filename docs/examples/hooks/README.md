@@ -2,6 +2,8 @@
 
 把下列片段放到数据根（默认 `~/.astro`，可用 `ASTRO_MEMORY_DIR` 覆盖）。
 
+Command/MCP hooks 使用 `hooks.json` 或 `config.toml`，可以参与 typed lifecycle 决策；本页原有 `config.yaml` 示例属于 legacy Shell telemetry，只观察事件、不参与控制流。完整 command/MCP 示例见 [Hook 运行契约](../../hooks.md#5-配置与信任)。
+
 ## Shell Hooks — `config.yaml`
 
 ```yaml

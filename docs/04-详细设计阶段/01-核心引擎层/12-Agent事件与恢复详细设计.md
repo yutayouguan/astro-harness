@@ -1,6 +1,6 @@
 # Agent 事件与恢复详细设计
 
-> **Harness 当前基线（2026-08-30）**：Core 产生 `agent-protocol::EventMsg/TurnItem`，Session 在 `event_dispatch` 中序列化状态归约、rollout 持久化和 live 交付。Server listener 投影到 gRPC/Tauri，恢复使用 rollout snapshot + live boundary。Core EventBus、SessionEventHub 及独立转换链仅是已被取代的历史架构。
+> **Harness 当前基线（2026-09-01）**：Core 产生 `agent-protocol::EventMsg/TurnItem`，Session 在 `event_dispatch` 中序列化状态归约、rollout 持久化和 live 交付。模型历史以原生 `ResponseItem` 单独写入 rollout。Server listener 投影到 gRPC/Tauri，恢复使用 rollout snapshot + live boundary。Core EventBus、SessionEventHub 及独立转换链仅是已被取代的历史架构。
 
 > 版本：v1.0
 > 日期：2026-08-20
@@ -68,6 +68,11 @@ Server 对每个加载 Thread 启动一个 listener。listener 先用 `ThreadHis
 `TurnAborted` 表达。消息、reasoning、exec、patch、approval、MCP、Hook、Subagent、usage 和
 compaction 都映射到同一 EventMsg/TurnItem 模型。token、reasoning 和 stdout delta 服务于
 实时体验，通常不持久化。
+
+Provider history 是另一条互补的 durable 记录：`RolloutItem::ResponseItem` 直接保存原生
+Responses message/reasoning/call/output。`TurnItem` 面向稳定客户端投影，`ResponseItem` 面向模型
+回放；二者不能用 SQLite `Message` 互相猜测重建。`HookStarted` / `HookCompleted` 只服务 live
+时间线，按策略不持久化。
 
 Server listener 是 Core → proto 的唯一映射层。Tauri、exec 和外部客户端只接收同一个
 `ThreadEvent`。desktop 可在进程内把 terminal 投影成 `ChatStreamEvent::Done` 供现有 React 状态机

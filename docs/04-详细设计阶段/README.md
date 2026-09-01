@@ -15,7 +15,7 @@
 | [05-成本预算控制详细设计.md](01-核心引擎层/05-成本预算控制详细设计.md) | BudgetManager：三级预算模型、Token 计费、check_before_call 拦截、渐进降级、YOLO 强制关闭、费用统计报表 |
 | [06-子Agent派生详细设计.md](01-核心引擎层/06-子Agent派生详细设计.md) | Codex V2 Agent Threads：六工具控制面、持久 Agent Graph/mailbox/status、真实 Session 时间线 |
 | [07-Agent生命周期详细设计.md](01-核心引擎层/07-Agent生命周期详细设计.md) | Thread/Session/Task/Turn/Step/Attempt 六级生命周期与取消、steer、热更新边界 |
-| [08-Hooks系统详细设计.md](01-核心引擎层/08-Hooks系统详细设计.md) | Plugin/Gateway/Shell 三总线、canonical 事件、Block/Modify/Transform/KeepGoing 结果契约 |
+| [08-Hooks系统详细设计.md](01-核心引擎层/08-Hooks系统详细设计.md) | Plugin、Command/MCP、Gateway、Shell 的 typed lifecycle、信任、异步运行与事件专属结果契约 |
 | [09-Checkpoint与状态快照详细设计.md](01-核心引擎层/09-Checkpoint与状态快照详细设计.md) | rollout append-only 事实源、snapshot + live boundary 与 SessionStore 可重建投影 |
 | [10-自主决策与行为进化详细设计.md](01-核心引擎层/10-自主决策与行为进化详细设计.md) | 自主进化：BehaviorEngine 行为策略、反馈信号收集、偏好学习模型、Prompt 自优化、工具模式学习、主动决策引擎 |
 | [11-Agent协作协议详细设计.md](01-核心引擎层/11-Agent协作协议详细设计.md) | V2 Agent Graph/mailbox 已实现基础和 Debate/MapReduce/Voting 等目标协作协议的明确分界 |
@@ -27,7 +27,7 @@
 
 | 文件 | 说明 |
 | ---- | ---- |
-| [01-agent-providers详细设计.md](02-Provider与模型层/01-agent-providers详细设计.md) | agent-providers 各 Provider 独立客户端实现（Anthropic/OpenAI/DeepSeek/MiniMax 等）、ProviderRegistry 路由与 fallback、流式响应处理 |
+| [01-agent-providers详细设计.md](02-Provider与模型层/01-agent-providers详细设计.md) | Agent Responses-only 路由、原生 `ResponseItem`、通用 Provider/媒体兼容边界与 fallback |
 | [02-多模型对比系统设计.md](02-Provider与模型层/02-多模型对比系统设计.md) | F-33/US-082 多模型对比：tokio 并发流式调用、CompareView 并排 UI、选优采纳、费用独立统计 |
 | [03-Provider故障转移设计.md](02-Provider与模型层/03-Provider故障转移设计.md) | F-14 故障转移：错误可重试性分类、指数退避+Jitter、熔断器、Provider 自动切换、流式续传、全链路降级 |
 | [04-离线与本地模型详细设计.md](02-Provider与模型层/04-离线与本地模型详细设计.md) | F-18 离线能力：Ollama Sidecar 生命周期、本地模型发现与注册、NetworkMonitor 离线检测、自动降级切换、在线恢复 |

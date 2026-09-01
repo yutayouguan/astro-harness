@@ -1,82 +1,55 @@
-# Responses API — Provider 参考
+# Responses API Provider 参考
 
-各厂商 Responses API 的官方文档链接与接入要点。新增或更新 provider 时读此文件。
+> 状态：当前实现基线
+> 更新：2026-09-01
 
-## 统一接入架构
+Agent 对话只支持 Responses API。本文记录 Provider 接入要求；Chat Completions 不是 Agent 的第二选项，只属于工具、媒体和独立兼容调用。
 
-所有 Responses API provider 走同一路径：
+## 统一接入
 
-1. `register_provider()` 正常注册（Chat Completions + 全部媒体能力）
-2. `upgrade_to_responses()` 替换 completion model 为 `OpenAIResponsesModel<Ext>`
-3. `OpenAICompatible::responses_base_url()` 处理 base_url 变换（仅 Azure 需要覆盖）
+Provider 成为 Agent target 必须同时满足：
 
-新增并默认使用 Responses 的 provider 需要：`profile.rs` 设
-`api_mode: ApiMode::Responses` 和 `supports_responses: true`，再在 `dispatch.rs` 的 upgrade match 加一行。
-`ChatCompletions` 仅作为用户显式选择的兼容模式。
+1. 提供可用的 `/responses` 兼容端点；
+2. profile 默认 `api_mode: ApiMode::Responses`；
+3. profile 标记 `supports_responses: true`；
+4. 通过 `agent_responses_stream()` 的原生 `ResponseItem` 多轮工具测试；
+5. 保持 call/output id、类型与顺序；
+6. 正确解析文本、reasoning、tool call、usage 和终态 SSE。
 
-## Provider 参考表
+不要先注册 Chat Completions 再把 Agent 请求隐式升级或降级。通用 registry 可以复用 adapter，但 Agent capability 必须显式成立。
 
-### OpenAI
+## 当前内置能力
 
-- **文档**: https://platform.openai.com/docs/api-reference/responses
-- **端点**: `POST /v1/responses`
-- **认证**: `Authorization: Bearer sk-xxx`
-- **特殊**: `store: false`（平台专有）、`parallel_tool_calls`、`reasoning.summary: "auto"`
+当前 profile 中标记为 Responses-capable 的 Provider 包括 OpenAI、DeepSeek、Azure OpenAI、百炼、MiniMax 和 Mimo。代码中的 `ProviderProfile.supports_responses` 是权威列表；文档列表只用于说明，新增或移除能力时必须同步更新测试。
 
-### DeepSeek
+| Provider | 端点约定 | 主要差异 |
+| --- | --- | --- |
+| OpenAI | `POST /v1/responses` | `store: false`、parallel tools、reasoning summary |
+| DeepSeek | `POST /v1/responses` | OpenAI Responses 兼容；thinking 字段由 adapter 归一化 |
+| Azure OpenAI | `POST /openai/v1/responses` | `api-key` header；deployment name 位于 model 字段 |
+| 百炼 | `POST /compatible-mode/v1/responses` | thinking/cache 扩展参数；不支持 background |
+| MiniMax | `POST /v1/responses` | reasoning details 与媒体 API 分离 |
+| Mimo | `POST /v1/responses` | OpenAI Responses 兼容 |
 
-- **文档**: https://api-docs.deepseek.com/
-- **端点**: `POST /v1/responses`（兼容 OpenAI Responses）
-- **认证**: `Authorization: Bearer sk-xxx`
-- **特殊**: `reasoning_content` 字段（thinking 格式 `ThinkingFormat::DeepSeek`）
+## 暂不进入 Agent 路由
 
-### Azure OpenAI
+Anthropic、Google/Gemini、Ollama、OpenRouter、智谱、Moonshot、火山、混元、NVIDIA 等 profile 当前未声明 Responses capability。即使它们拥有 Chat Completions、Messages、Interactions 或原生协议实现，也不能作为 Agent primary/fallback target。
 
-- **文档**: https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses
-- **端点**: `POST /openai/v1/responses`（注意不是旧的 `/deployments/{id}/` 路径）
-- **认证**: `api-key` header（非 Bearer）
-- **base_url 变换**: `responses_base_url()` 追加 `/openai/v1`
-- **model 字段**: deployment name（与 Chat Completions 不同，model 留在 body 中，不在 URL）
-- **特殊**: `content_filters` 扩展字段（Azure 专有）、默认 store 30 天
+若上游后来提供 Responses，必须完成兼容验证后再打开 capability；不能仅因为端点名称存在就启用。
 
-### 百炼 (Qwen / DashScope)
+## 必测场景
 
-- **文档**: https://platform.qianwenai.com/docs/api-reference/chat/openai-responses
-- **端点**: `POST /compatible-mode/v1/responses`
-- **认证**: `Authorization: Bearer sk-xxx`（DashScope API Key）
-- **特殊**:
-  - `enable_thinking` 需通过 `extra_body` 传递，推荐用 `reasoning.effort`（7 级：none/minimal/low/medium/high/xhigh/max）
-  - `x-dashscope-session-cache` header 控制服务端上下文缓存（≥1024 tokens，5min TTL）
-  - `store` 默认 true（7 天保留）
-  - `background` 不支持（仅同步调用）
+- user → assistant final text；
+- user → function call → function output → assistant；
+- 并行多个 tool calls；
+- custom tool 与 tool search call/output；
+- reasoning + tool call 同轮；
+- tool output 与 call 邻接、孤立 output 清理；
+- 首个 chunk 前网络/5xx fallback；
+- 400/401/429 不被错误降级到 Chat Completions；
+- cached input、reasoning、reported total usage。
 
-### MiniMax
+## 相关文档
 
-- **文档**: https://platform.minimaxi.com/document/Responses
-- **端点**: `POST /v1/responses`
-- **认证**: `Authorization: Bearer xxx`
-- **特殊**: `reasoning_details` 数组格式（`ThinkingFormat::MiniMaxAdaptive`）、全媒体能力（video/music/TTS）
-
-### Mimo
-
-- **端点**: `POST /v1/responses`（OpenAI 兼容）
-- **认证**: `Authorization: Bearer xxx`
-
-## 潜在可接入（尚未启用）
-
-| Provider | Responses API | 备注 |
-|---|---|---|
-| Ollama | 支持（Open Responses 首批） | base_url `http://localhost:11434/v1` |
-| OpenRouter | 支持（Open Responses 首批） | 需验证工具调用兼容性 |
-| Volcengine | 未知 | 需查证 |
-| Moonshot | 未知 | Kimi K3 仅 Chat Completions 兼容 |
-| NVIDIA NIM | 未知 | OpenAI 兼容但未确认 Responses |
-| Hunyuan | 未知 | 需查证 |
-
-## 更新此文件
-
-接入新 provider 的 Responses API 后，在上方添加对应条目。关键记录：
-- 官方文档 URL
-- 端点路径
-- 认证方式
-- 与标准 OpenAI Responses API 的差异
+- [Providers 架构](ARCHITECTURE.md)
+- [Responses 原生 Agent 运行时架构](../../docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)

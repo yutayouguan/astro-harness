@@ -1,68 +1,37 @@
 # Codex Hook Alignment Handoff
 
-This file records the production contract for the Codex-compatible hook surface. It is intentionally named `HANOFF.md` to match the requested handoff artifact.
+> 状态：已落地基线
+> 更新：2026-09-01
 
-## Canonical runtime path
+本文只记录维护边界。对外配置和输出契约见 [`../../docs/hooks.md`](../../docs/hooks.md)。
 
-The five alignment areas covered by this change enter through the session-owned `HookRuntime`:
+## 已完成
 
-```text
-business boundary
-  -> Session::fire_hook / typed Session hook method
-  -> HookRuntime
-       -> PluginHookBus (synchronous decisions)
-       -> GatewayHookRegistry (observer)
-       -> ShellHookRunner (asynchronous observer)
-       -> UI timeline slot
-```
+- 12 个 command hook 事件使用 canonical 精确名称；
+- tool、session、prompt、compact、stop、interrupt 和 subagent 生命周期使用 typed request/outcome；
+- command handler 接收事件专属 stdin JSON，并校验事件专属输出字段；
+- `mcp_tool` handler 通过 session-bound `HookMcpExecutor` 实际执行；
+- user/project 配置分层、project trust、handler hash 和 enable state 已接入；
+- sync/async 生命周期、每 session 并发上限、shutdown cancel/drain 已实现；
+- `SessionEnd` 单次发送且强制同步，`Interrupt` 使用短超时；
+- Unix process group 与 Windows Job Object 收敛子进程生命周期；
+- Hook run 通过 `HookStarted` / `HookCompleted` 进入 live timeline。
 
-Child Agent Threads inherit the complete `Arc<HookRuntime>` from the parent runtime material. They must not call `PluginHookBus` directly. Gateway and Shell transports remain observers; decisions are produced synchronously by the Plugin bus and applied by the owning business boundary.
+## 仍然明确不做
 
-## Aligned lifecycle events
+- `prompt` / `agent` command handler 类型尚未执行；只有 `command` 与 `mcp_tool` 可运行。
+- Gateway 和 legacy Shell 仍是观察 transport，不参与 typed decision aggregation。
+- Hook run 事件不进入 durable rollout。
+- 不引入 executor-scoped plugin/request metadata；如未来确有跨 executor 隔离需求，需另行设计 ownership、恢复和清理协议。
 
-| Event | Production boundary | Control semantics |
-|---|---|---|
-| `PreCompact` | Immediately before a non-empty automatic compression plan, or before Desktop manual compaction | `Block`/`Skip` prevents automatic/manual compaction and stops the active automatic turn |
-| `PostCompact` | After compressed views are durably updated, or after Desktop manual split succeeds | `Block`/`Skip` stops the active automatic turn; completed side effects are not rolled back |
-| `SessionEnd` | Once during session-owned runtime shutdown; the no-live-runtime new-chat fallback emits the same canonical event | Observer; `reason="other"` |
-| `PermissionRequest` | Before policy/HITL approval | Any `Deny` wins; otherwise any `Allow` grants; all abstain continues the normal policy/HITL path |
-| `PostToolUse` | After the tool side effect and `TransformToolResult` | Block replaces the model-visible result; additional contexts and feedback are appended; media assets are retained |
-| `SubagentStart` | Child startup admission, before its first provider request | Uses the inherited full `HookRuntime`; only additional context is applied, while block/stop requests are ignored as in Codex |
-| `SubagentStop` | Every child terminal turn, including interrupted/errored turns | Same `KeepGoing` continuation guard as root `Stop`; Desktop `Shutdown` does not emit a duplicate stop |
+## 维护检查
 
-`SessionEnd` is the only canonical session-shutdown lifecycle event.
+修改 Hook 行为时至少检查：
 
-## Payloads
-
-- Compact events set `trigger` to `auto` or `manual`.
-- Session end sets `reason="other"`.
-- Permission and tool events carry canonical tool name/input/response fields.
-- Subagent events set `agent_id`, `agent_type`, `turn_id` where available, and include the canonical path in the internal detail string.
-- `SubagentStop` carries `last_assistant_message` on normal terminal candidates and `stop_hook_active` during continuation retries.
-
-## Decision aggregation
-
-`PermissionRequest` and `PostToolUse` deliberately do not use the generic first-non-continue rule:
-
-- permission callbacks are all evaluated; deny has precedence over allow;
-- post-tool callbacks aggregate the first block reason, every additional context, and every feedback message;
-- subagent-start callbacks ignore block/stop requests and combine all injected context;
-- subagent-stop callbacks combine all continuation prompts for the same terminal candidate;
-- callback panics are contained and treated as abstain/continue.
-
-Tool side effects are never rolled back by `PostToolUse`. A block controls only the result exposed to the next model sampling step.
-
-## Regression coverage
-
-Keep tests for these invariants when changing hooks:
-
-1. automatic compression observes `PreCompact -> PostCompact` and reports `trigger=auto`;
-2. permission allow bypasses HITL and permission deny prevents dispatch;
-3. post-tool block/context/feedback changes the model-visible text without dropping media;
-4. a child start is emitted once, while child stop is emitted for every terminal turn and never duplicated by Desktop close;
-5. concurrent/repeated shutdown emits one `SessionEnd` only after the active task has completed;
-6. Desktop manual compaction emits `manual` compact boundaries when a live Session exists.
-
-## Known transport boundary
-
-Plugin handlers are the synchronous decision source. Gateway manifests and legacy `config.yaml` Shell commands receive the same canonical events but are observational because their current APIs do not return a structured decision. Adding Codex `hooks.json` command-response parsing should extend `HookRuntime` rather than creating another business-layer hook path.
+1. `HookEvent::COMMAND_HOOK_EVENTS` 的名称和顺序；
+2. `HookInput::command_input_for_event()` 输入字段；
+3. `event_output_has_codex_shape()` 与事件专属 outcome 聚合；
+4. async runtime 是否仍由 session 所有并可 shutdown；
+5. command 与 MCP handler 是否生成一致的 `HookRunRecord`；
+6. live Hook 事件是否保持 transient；
+7. `SessionEnd` 是否只发送一次。

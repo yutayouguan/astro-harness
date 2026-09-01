@@ -75,7 +75,7 @@ pub struct ConnectionGenerationKey;         // generation 键（connection_id + 
 - **`home`** — 路径约定（`default_memory_dir`、`logs_dir`、`active_agent_id`）
 - **`cron`** — `CronStore` 认领任务、`compute_next_run` 计算下次运行时间
 - **`workflow`** — `WorkflowStore` / `WorkflowRunDb` / `execute_workflow` 工作流执行
-- **`hooks`** — `HookRuntime` 三总线钩子系统
+- **`hooks`** — typed Plugin/Command/MCP/Gateway/Shell 生命周期钩子系统
 - **`tools`** — 图像生成目标解析（`image_gen_targets_from_parts`）
 - **`agent-protocol`** — Thread 事件协议类型（`Event`、`EventMsg`、`Op`）
 - **`agent-rollout`** — Rollout 持久化记录器

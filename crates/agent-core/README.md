@@ -1,13 +1,13 @@
 # agent
 
-Agent 运行时核心 crate：组装对话循环、上下文管理、钩子系统与流式多轮输出，驱动 Astro Agent 的完整请求生命周期。
+Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> StepContext` 驱动 Responses-only 多轮执行、工具调用、typed hooks、持久化与恢复。
 
 ## 核心职责
 
-- 维护单次会话的消息历史、轮次预算（`max_turns` / `multi_turn`）与取消信号
+- 维护原生 `ResponseItem` 会话历史、轮次预算与取消信号
 - 每轮用户输入时召回记忆，组装 Codex 风格的三层 Prompt 契约：稳定基础指令、带角色动态上下文、独立原生工具 schema
-- 统一路由内置工具与 MCP 工具，调用前后触发三总线 hook
-- 实现流式补全的三层 trait 抽象（`StreamingCompletion` / `StreamingChat` / `StreamingPrompt`）
+- 统一路由内置工具与 MCP 工具，调用前后触发 typed Plugin/Command/MCP/Gateway/Shell hooks
+- 通过 `StreamingCompletion` / `StreamingChat` / `StreamingPrompt` trait 暴露统一流式能力，生产 Agent 请求最终进入 Responses-only provider 入口
 - 驱动「LLM 流式 → 工具执行 → 再请求」的多轮闭环
 - 提供声明式 `AgentBuilder` 构建可运行 Agent 实例
 - 管理工具结果压缩（原文保留，压缩视图给 provider）
@@ -58,6 +58,7 @@ Agent 运行时核心 crate：组装对话循环、上下文管理、钩子系�
 | `runtime/tool_router.rs` | `ToolRouter` — 内置/MCP/动态工具统一路由 |
 | `runtime/system_prompt.rs` | Prompt 契约构建 — `build_prompt_contract` |
 | `runtime/submission_loop.rs` | 有序提交循环 |
+| `runtime/history_control.rs` | compact replacement、rollback、suspend/recover 历史控制 |
 | `runtime/validate.rs` | `validate_message_order` 消息角色顺序校验 |
 | `streaming/multi_turn.rs` | 多轮工具循环编排（核心流式主循环） |
 | `streaming/traits.rs` | 三层 Streaming trait 定义 |
@@ -72,7 +73,7 @@ Agent 运行时核心 crate：组装对话循环、上下文管理、钩子系�
 
 ## 核心类型与 API
 
-- `Session`（别名 `AgentLoop`）— 会话运行时，拥有对话状态、记忆、工具注册表与 provider 凭证
+- `Session`（兼容别名 `AgentLoop`）— 会话运行时，拥有 canonical `ResponseItem` 历史、记忆、工具注册表与 provider 凭证
 - `Config`（别名 `AgentConfig`）— 运行时配置：轮次预算、记忆路径、soul、温度、上下文预算
 - `AstroThread` — Session 的事件流句柄，提供 `next_event()` / `status()` 接口
 - `TurnResult` — 单轮结果枚举：`Continue` / `Steered` / `ToolCalls` / `Finished` / `BudgetExhausted` / `MaxDepth` / `Interrupted`
@@ -88,14 +89,15 @@ Agent 运行时核心 crate：组装对话循环、上下文管理、钩子系�
 
 | 方向 | crate | 说明 |
 |------|-------|------|
-| 依赖 | `types` | 共享类型：Message、ChatTarget、ToolEntry、InteractionMode |
+| 依赖 | `agent-protocol` | `Op`、`EventMsg`、`TurnItem` 与 canonical `ResponseItem` |
+| 依赖 | `types` | 通用 DTO：ChatTarget、ToolEntry、InteractionMode 及兼容 Message 投影 |
 | 依赖 | `providers` | LLM 流式调用、fallback、media 生成 |
 | 依赖 | `tools` | 工具注册表、分发、审批、ToolContext |
 | 依赖 | `memory` | MemoryManager、配置加载、workspace 引导 |
 | 依赖 | `session` | SessionStore / ConversationStore 消息持久化 |
 | 依赖 | `sandbox` | 子 Agent 进程沙箱策略 |
 | 依赖 | `home` | 路径约定、agent config、tool gates |
-| 依赖 | `hooks` | 三总线 hook 运行时 |
+| 依赖 | `hooks` | typed lifecycle 与 Plugin/Command/MCP/Gateway/Shell hook runtime |
 | 依赖 | `mcp` | MCP 客户端连接池与工具发现 |
 | 依赖 | `skills` | Skill 加载与管理 |
 | 依赖 | `subagents` | AgentControl / AgentPath / AgentGraph |
@@ -108,12 +110,13 @@ Agent 运行时核心 crate：组装对话循环、上下文管理、钩子系�
 
 ## 关键不变量
 
-1. **角色顺序**：`SessionState.history` 中相邻消息不得连续出现相同 role；由 `validate_message_order()` 强制
-2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 200）；`increment_tool_round()` 超限返回 `MaxDepthError`
+1. **原生历史**：Agent sampling 使用 `ResponseItem`；`Message` 只作查询/UI/非 Agent 兼容投影
+2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 90）；`increment_tool_round()` 超限返回 `MaxDepthError`
 3. **streaming 不变量**：每轮 assistant 回复必须先写入 history 再执行工具；usage 覆盖式累加
 4. **取消信号**：`CancelSignal` 在工具调用前后均检查，已取消则立即中断
 5. **Session 是 Send + Sync**：所有可变状态封装在 `StdMutex` / `TokioMutex` 中，无裸 `RefCell`
 6. **事件有序性**：`event_dispatch` 锁保证 rollout 持久化与 live 投递严格有序
+7. **Provider 边界**：primary、fallback 和 Agent 辅助任务都必须支持 Responses，不回退 Chat Completions
 
 ## 测试
 

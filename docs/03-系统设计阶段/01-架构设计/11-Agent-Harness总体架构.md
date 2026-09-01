@@ -4,7 +4,7 @@
 >
 > 状态：当前实现基线
 >
-> 更新：2026-08-30
+> 更新：2026-09-01
 >
 > 适用范围：Astro 中包裹模型、驱动多步任务并把意图落到真实环境的工程化运行系统
 
@@ -66,7 +66,10 @@ Desktop / gRPC / Cron / Subagent runner
       prepare_turn + PromptContract
                   |
                   v
-       Provider streaming request
+   native Vec<ResponseItem>
+                  |
+                  v
+       Responses streaming request
                   |
       text/reasoning/tool deltas
                   |
@@ -248,7 +251,7 @@ Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真�
 ### 12.2 Astro 的扩展和差异
 
 - Astro 是 Tauri + gRPC 的本地桌面工作站，同时提供内嵌 Server 投影。
-- Astro 支持多 Provider 及媒体 Provider，非 Responses Provider 需要安全 lowering。
+- Astro 支持多 Provider 及媒体 Provider；Agent target 只接受 Responses，其他协议仅保留给工具、媒体和非 Agent 调用。
 - Astro 增加了 MemoryManager、Knowledge DB、Workflow、Cron、A2UI 和用量成本子系统。
 - Astro Code Mode 使用本地 Node/V8 + OS sandbox，而不是复制 Codex 的独立宿主部署。
 - `Op` 中已声明但 `submission_loop` 尚未实现的控制分支，必须标记为协议预留，不得写成已落地功能。
@@ -262,6 +265,7 @@ Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真�
 | 模型工具循环 | `streaming/multi_turn.rs`、`tools_exec.rs`、`fallback.rs` |
 | Prompt / context | `prompt/contract.rs`、`context_source.rs`、`runtime/system_prompt.rs` |
 | Provider | `agent-providers/src/dispatch.rs`、`types/request.rs`、各 Provider adapter |
+| 原生模型历史 | `agent-protocol/src/response_item.rs`、`agent-rollout/src/reconstruction.rs` |
 | 工具 | `agent-tools/src/engine/registry.rs`、`dispatch.rs`、`execution.rs` |
 | 协议 | `agent-protocol/src/submission.rs`、`event.rs`、`items.rs` |
 | 事件源 | `agent-rollout/src/recorder.rs`、`reconstruction.rs`、`policy.rs` |
@@ -280,3 +284,5 @@ Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真�
 - **历史参考**：仅用于解释决策演进，不能覆盖当前契约。
 
 `docs/superpowers/plans/`、`docs/superpowers/specs/` 和 `_v0.3规划/` 保留作为时点记录，不随当前 Harness 重写。当其与本文或当前源码冲突时，以当前源码、本文和对应详细设计为准。
+
+Responses-only 路由、原生历史和 Hook 交叉点的专项基线见 [Responses 原生 Agent 运行时架构](12-Responses原生Agent运行时架构.md)。

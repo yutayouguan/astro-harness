@@ -414,6 +414,8 @@ Astro Agent 需要一个插件机制来支持第三方扩展复杂 Skill 和自�
 
 ### ADR-009: Hooks 系统而非硬编码拦截器
 
+> **已被后续实现细化**：当前采用 `HookRuntime` 下的 Plugin、Command/MCP、Gateway 和 legacy Shell 执行面，以及事件专属 typed request/outcome；不存在本文设想的统一 `HookRegistry/HookPipeline`、WASM Hook 优先级管线。现行契约见 [Hooks 系统详细设计](../../04-详细设计阶段/01-核心引擎层/08-Hooks系统详细设计.md)。
+
 **状态**：已采纳
 **日期**：2026-08
 **决策者**：架构组
@@ -697,6 +699,8 @@ Checkpoint 与对话分支的关系：fork-on-restore 模式在从 Checkpoint �
 ---
 
 ### ADR-015: Provider 故障转移采用熔断器模式
+
+> **已被后续实现细化**：Agent primary/fallback 只接受 Responses-capable targets，并且只允许首个可见 chunk 前切换；Chat、Anthropic、Gemini 与 Interactions adapter 仅服务非 Agent 调用。现行契约见 [Responses 原生 Agent 运行时架构](12-Responses原生Agent运行时架构.md)。
 
 **状态**：已采纳
 **日期**：2026-07

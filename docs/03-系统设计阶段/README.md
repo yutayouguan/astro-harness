@@ -36,6 +36,7 @@
 | [09-端到端数据流追踪.md](01-架构设计/09-端到端数据流追踪.md) | 端到端数据流追踪：从用户输入到 LLM 响应的全链路数据流 |
 | [10-架构决策记录ADR.md](01-架构设计/10-架构决策记录ADR.md) | 架构决策记录（ADR）：关键技术选型与设计决策的记录与追溯 |
 | [11-Agent-Harness总体架构.md](01-架构设计/11-Agent-Harness总体架构.md) | Agent = Model + Harness；统一执行循环、上下文、工具、安全、恢复、观测和运行环境边界 |
+| [12-Responses原生Agent运行时架构.md](01-架构设计/12-Responses原生Agent运行时架构.md) | Agent Responses-only 路由、canonical `ResponseItem`、生命周期、Hooks 与 rollout 恢复边界 |
 
 ## 02-核心功能模块
 

@@ -148,9 +148,9 @@ astro/
 ├── Cargo.toml              # Workspace 根（25 个 crate + 1 个桌面应用）
 ├── crates/                 # 所有 Rust crate（扁平 agent-* 命名）
 │   ├── agent-core/         # Agent 运行时核心（Session、streaming、工具路由）
-│   ├── agent-types/        # 共享类型（Message、ToolEntry、ToolExposure 等）
+│   ├── agent-types/        # 通用 DTO 与兼容投影（Message、ToolEntry、ToolExposure 等）
 │   ├── agent-config/       # 分层配置原语
-│   ├── agent-protocol/     # Core 领域事件协议
+│   ├── agent-protocol/     # Core 协议与 canonical ResponseItem
 │   ├── agent-rollout/      # JSONL append-only 历史
 │   ├── agent-providers/    # 多厂商 LLM/图像 Provider（15+ 厂商）
 │   ├── agent-tools/        # 工具实现 + ToolRegistry（BM25 搜索、三级暴露）
@@ -162,7 +162,7 @@ astro/
 │   ├── agent-network-proxy/ # 受管网络代理
 │   ├── agent-skills/       # Skills 管理
 │   ├── agent-mcp/          # MCP 客户端
-│   ├── agent-hooks/        # 三总线 Hook 系统
+│   ├── agent-hooks/        # typed Hook 生命周期与 Command/MCP 执行
 │   ├── agent-proto/        # Protobuf / tonic gRPC 契约
 │   └── ...                 # 另有 8 个 crate（artifacts/usage/cron/workflow/a2ui/delegate/evolution/home）
 └── apps/
@@ -174,7 +174,7 @@ astro/
 | `astro-agent` | Tauri 桌面应用（`apps/desktop/src-tauri`） |
 | `agent` | Agent 运行时核心（Session、AstroThread、streaming） |
 | `server` | gRPC 服务（可独立运行；桌面壳默认同进程内嵌） |
-| `providers` | 多厂商 LLM / 图像供应商适配 |
+| `providers` | Agent Responses-only 路由 + 工具/媒体 Provider 适配 |
 | `tools` | 工具实现 + ToolRegistry（ToolExposure 三级暴露、BM25 搜索） |
 | `subagents` | V2 Agent Thread 子 Agent 系统 |
 | `memory` | 记忆管理（MEMORY.md/USER.md 快照） |
@@ -183,13 +183,13 @@ astro/
 | `sandbox` | 沙箱权限控制（PermissionProfile） |
 | `network-proxy` | 受管网络代理 |
 | `agent-config` | 分层配置原语 |
-| `agent-protocol` | Core 领域事件协议（Event、EventMsg） |
+| `agent-protocol` | Core 协议（Op、EventMsg、TurnItem、ResponseItem） |
 | `agent-rollout` | JSONL append-only 权威历史 |
 | `skills` / `mcp` | 扩展能力（Skills 管理、MCP 客户端） |
-| `hooks` | Plugin / Gateway / Shell 三套生命周期钩子 |
+| `hooks` | Plugin、Command/MCP、Gateway、Shell 生命周期钩子 |
 | `proto` / `types` | gRPC 契约与公共类型 |
 
-钩子说明见 [`docs/hooks.md`](./docs/hooks.md)。
+运行时架构见 [`docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md`](./docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，钩子说明见 [`docs/hooks.md`](./docs/hooks.md)。
 
 ## 常用命令
 

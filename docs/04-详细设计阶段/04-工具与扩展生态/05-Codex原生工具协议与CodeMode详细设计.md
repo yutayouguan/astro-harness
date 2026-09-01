@@ -212,7 +212,9 @@ WebSearch 表示由 Provider 托管的搜索：
 
 当前代码已能解析和传输原生 `WebSearch`，但 Registry 尚未注册 Provider-hosted WebSearch 实例。这是有意保留的能力边界：本地搜索可跨 Provider 稳定工作，托管搜索则必须先由具体 Provider profile 声明支持。
 
-### 4.7 不支持原生类型的 Provider 如何降级
+### 4.7 非 Agent 兼容调用的工具降级
+
+> Agent primary、fallback 和辅助模型不进入本节路径：它们只使用 Responses 原生工具类型。以下 lowering 仅服务仍显式调用 Chat/Anthropic/Gemini adapter 的工具或独立 Provider 功能。
 
 | 原生类型 | Chat Completions / Anthropic / Gemini 等兼容路径 |
 | --- | --- |
