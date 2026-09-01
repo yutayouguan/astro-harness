@@ -563,10 +563,6 @@ impl CommandHookRunner {
                                 timeout_sec,
                                 status_message,
                             } => {
-                                if event_name == HookEvent::SessionEnd {
-                                    warn!(%event, source = %source.display(), "SessionEnd MCP hook is not supported");
-                                    continue;
-                                }
                                 if server.trim().is_empty() || tool.trim().is_empty() {
                                     warn!(%event, source = %source.display(), "MCP hook server and tool must not be empty");
                                     continue;
@@ -798,6 +794,8 @@ impl CommandHookRunner {
             let environment = environment.clone();
             let mcp_executor = Arc::clone(&self.mcp_executor);
             if handler.asynchronous {
+                let additional_context_limit = handler.additional_context_limit;
+                let session_id = payload.session_id.clone();
                 let runs = self.runs.clone();
                 let run_event = event.to_string();
                 let started = Instant::now();
@@ -818,10 +816,23 @@ impl CommandHookRunner {
                         if let Err(error) = &result {
                             warn!(%error, "asynchronous command hook failed");
                         }
-                        let decision = result
+                        let mut decision = result
                             .as_ref()
                             .ok()
                             .map(|output| parse_output(&run_event, output, false));
+                        if let Some(decision) = decision.as_mut() {
+                            if let Some(context) = decision.additional_context.take() {
+                                decision.additional_context = Some(
+                                    maybe_spill_additional_context(
+                                        &session_id,
+                                        &task_run_id,
+                                        context,
+                                        additional_context_limit,
+                                    )
+                                    .await,
+                                );
+                            }
+                        }
                         finish_run(
                             &runs,
                             &task_run_id,
@@ -2035,6 +2046,57 @@ mod tests {
         assert_eq!(runner.list()[0].handler_type, HookHandlerType::McpTool);
     }
 
+    #[tokio::test]
+    async fn session_end_mcp_hook_uses_the_codex_reason_payload() {
+        let executor = Arc::new(RecordingMcpExecutor::default());
+        let runner = CommandHookRunner::from_file(
+            HooksFile {
+                hooks: HashMap::from([(
+                    crate::SESSION_END.into(),
+                    vec![MatcherGroup {
+                        matcher: Some("other".into()),
+                        hooks: vec![HookHandlerConfig::McpTool {
+                            server: "audit".into(),
+                            tool: "close".into(),
+                            input: serde_json::from_value(serde_json::json!({
+                                "reason": "${reason}"
+                            }))
+                            .unwrap(),
+                            timeout_sec: Some(2),
+                            status_message: None,
+                        }],
+                    }],
+                )]),
+                ..Default::default()
+            },
+            Path::new("hooks.json"),
+        )
+        .unwrap()
+        .with_mcp_executor(executor.clone());
+
+        let decisions = runner
+            .run(
+                crate::SESSION_END,
+                &HookPayload {
+                    session_id: "session-1".into(),
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    reason: Some("other".into()),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        assert_eq!(decisions.len(), 1);
+        let calls = executor.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].server, "audit");
+        assert_eq!(calls[0].tool, "close");
+        assert_eq!(calls[0].input["reason"], "other");
+    }
+
     #[test]
     fn pre_tool_use_rejects_updated_input_without_allow() {
         let decision = parse_output(
@@ -2132,6 +2194,68 @@ mod tests {
         let path = preview.rsplit_once(": ").unwrap().1;
         assert_eq!(std::fs::read_to_string(path).unwrap(), context);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn asynchronous_additional_context_is_spilled_before_completion() {
+        let context = "y".repeat(512);
+        let command = format!(
+            "printf '%s' '{}'",
+            serde_json::json!({"hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": context
+            }})
+        );
+        let mut file = file(command, None, true);
+        let HookHandlerConfig::Command {
+            additional_context_limit,
+            ..
+        } = &mut file.hooks.get_mut(crate::PRE_TOOL_USE).unwrap()[0].hooks[0]
+        else {
+            unreachable!()
+        };
+        *additional_context_limit = Some(8);
+        let groups = file.hooks.remove(crate::PRE_TOOL_USE).unwrap();
+        file.hooks.insert(crate::USER_PROMPT_SUBMIT.into(), groups);
+        let runner = CommandHookRunner::from_file(file, Path::new("hooks.json")).unwrap();
+
+        assert!(runner
+            .run(
+                crate::USER_PROMPT_SUBMIT,
+                &HookPayload {
+                    session_id: "async-spill-test".into(),
+                    cwd: std::env::current_dir()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    prompt: Some("hello".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .is_empty());
+
+        let preview = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let runs = runner.recent_runs();
+                if let Some(entry) = runs
+                    .first()
+                    .filter(|run| run.status == HookRunStatus::Completed)
+                    .and_then(|run| run.entries.first())
+                {
+                    break entry.text.clone();
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+
+        assert!(preview.contains("Full hook output saved to:"));
+        let path = preview.rsplit_once(": ").unwrap().1;
+        assert_eq!(std::fs::read_to_string(path).unwrap(), context);
+        let _ = std::fs::remove_file(path);
+        runner.shutdown().await;
     }
 
     #[test]
