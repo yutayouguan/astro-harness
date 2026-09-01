@@ -1870,7 +1870,7 @@ html[data-theme="dark"] .msg-activity-io-label {
   animation: msg-live-glow 1.8s ease-in-out infinite;
 }
 
-.msg-activity:is(.is-waiting, .is-partial, .is-interrupted)
+.msg-activity:is(.is-waiting, .is-partial, .is-declined, .is-interrupted)
   :is(.msg-activity-kind-icon, .msg-activity-duration) {
   color: var(--tone-amber, #d97706);
 }

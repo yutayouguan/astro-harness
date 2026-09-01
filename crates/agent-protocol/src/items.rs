@@ -75,6 +75,8 @@ pub enum ToolStatus {
     InProgress,
     Completed,
     Failed,
+    Declined,
+    Interrupted,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -218,6 +220,20 @@ fn serialize_hook_prompt_fragment(text: &str, hook_run_id: &str) -> Option<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tool_status_roundtrips_codex_aligned_terminal_states() {
+        for (status, wire) in [
+            (ToolStatus::InProgress, "\"in_progress\""),
+            (ToolStatus::Completed, "\"completed\""),
+            (ToolStatus::Failed, "\"failed\""),
+            (ToolStatus::Declined, "\"declined\""),
+            (ToolStatus::Interrupted, "\"interrupted\""),
+        ] {
+            assert_eq!(serde_json::to_string(&status).unwrap(), wire);
+            assert_eq!(serde_json::from_str::<ToolStatus>(wire).unwrap(), status);
+        }
+    }
 
     #[test]
     fn hook_prompt_roundtrips_multiple_fragments() {

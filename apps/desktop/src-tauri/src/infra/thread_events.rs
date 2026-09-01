@@ -2162,10 +2162,14 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
                 .unwrap_or_default(),
             phase: if started {
                 "started"
-            } else if tool.status == agent_protocol::ToolStatus::Failed {
-                "failed"
             } else {
-                "completed"
+                match tool.status {
+                    agent_protocol::ToolStatus::InProgress => "started",
+                    agent_protocol::ToolStatus::Completed => "completed",
+                    agent_protocol::ToolStatus::Failed => "failed",
+                    agent_protocol::ToolStatus::Declined => "declined",
+                    agent_protocol::ToolStatus::Interrupted => "interrupted",
+                }
             }
             .into(),
             batch_id: tool.batch_id,
@@ -3014,37 +3018,43 @@ mod tests {
     }
 
     #[test]
-    fn tool_item_maps_batch_mode_and_failure_status() {
-        let item = proto::ThreadItem {
-            id: "call-1".into(),
-            item_type: "dynamic_tool_call".into(),
-            status: "failed".into(),
-            payload_json: serde_json::to_string(&TurnItem::DynamicToolCall(
-                agent_protocol::ToolItem {
-                    id: "call-1".into(),
-                    name: "read_file".into(),
-                    arguments: serde_json::json!({"path":"README.md"}),
-                    output: Some(serde_json::json!("failed")),
-                    media: Vec::new(),
-                    status: agent_protocol::ToolStatus::Failed,
-                    batch_id: Some("batch-1".into()),
-                    execution_mode: Some(agent_protocol::ToolExecutionMode::Parallel),
-                },
-            ))
-            .unwrap(),
-        };
+    fn tool_item_maps_batch_mode_and_terminal_statuses() {
+        for (status, expected_phase) in [
+            (agent_protocol::ToolStatus::Failed, "failed"),
+            (agent_protocol::ToolStatus::Declined, "declined"),
+            (agent_protocol::ToolStatus::Interrupted, "interrupted"),
+        ] {
+            let item = proto::ThreadItem {
+                id: "call-1".into(),
+                item_type: "dynamic_tool_call".into(),
+                status: expected_phase.into(),
+                payload_json: serde_json::to_string(&TurnItem::DynamicToolCall(
+                    agent_protocol::ToolItem {
+                        id: "call-1".into(),
+                        name: "read_file".into(),
+                        arguments: serde_json::json!({"path":"README.md"}),
+                        output: Some(serde_json::json!(expected_phase)),
+                        media: Vec::new(),
+                        status,
+                        batch_id: Some("batch-1".into()),
+                        execution_mode: Some(agent_protocol::ToolExecutionMode::Parallel),
+                    },
+                ))
+                .unwrap(),
+            };
 
-        assert!(matches!(
-            map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
-            [ChatStreamEvent::ToolCall {
-                phase,
-                batch_id,
-                execution_mode,
-                ..
-            }] if phase == "failed"
-                && batch_id.as_deref() == Some("batch-1")
-                && execution_mode.as_deref() == Some("parallel")
-        ));
+            assert!(matches!(
+                map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
+                [ChatStreamEvent::ToolCall {
+                    phase,
+                    batch_id,
+                    execution_mode,
+                    ..
+                }] if phase == expected_phase
+                    && batch_id.as_deref() == Some("batch-1")
+                    && execution_mode.as_deref() == Some("parallel")
+            ));
+        }
     }
 
     #[test]

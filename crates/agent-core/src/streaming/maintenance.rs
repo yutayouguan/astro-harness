@@ -303,9 +303,8 @@ pub(super) async fn record_tool_outcomes(
 
         let tool_media = result.media().to_vec();
         let result_text = result.text().to_string();
-        let is_success = !result_text.starts_with("工具错误")
-            && !result_text.starts_with("工具已禁用")
-            && !result_text.starts_with("工具参数 JSON 解析失败");
+        let tool_status = tool_status_from_result(&result_text);
+        let is_success = tool_status == ToolStatus::Completed;
 
         let info_ui = parse_astro_ui(&result_text);
         let result_for_history = if let Some(ref ui) = info_ui {
@@ -364,11 +363,7 @@ pub(super) async fn record_tool_outcomes(
                 call.arguments.clone(),
                 Some(serde_json::Value::String(result_text.clone())),
                 tool_media,
-                if is_success {
-                    ToolStatus::Completed
-                } else {
-                    ToolStatus::Failed
-                },
+                tool_status,
                 execution,
             )
         } else {
@@ -379,11 +374,7 @@ pub(super) async fn record_tool_outcomes(
                 call.arguments.clone(),
                 Some(serde_json::Value::String(result_text.clone())),
                 tool_media,
-                if is_success {
-                    ToolStatus::Completed
-                } else {
-                    ToolStatus::Failed
-                },
+                tool_status,
             )
         };
         emit_prepared(session, turn_context, completed_event).await;
@@ -665,4 +656,51 @@ fn parse_astro_ui(result: &str) -> Option<AstroUiPayload> {
             .to_string(),
         operations,
     })
+}
+
+fn tool_status_from_result(result: &str) -> ToolStatus {
+    // Tool execution currently transports terminal state through canonical
+    // runtime-generated result prefixes. Keep the mapping centralized until
+    // ToolOutput carries typed outcome metadata.
+    if result.starts_with("Permission denied")
+        || result.starts_with("Permission blocked")
+        || result.starts_with("Command denied")
+        || result.starts_with("Command blocked")
+        || result.starts_with("Browser action denied")
+        || result.contains("\n\nSandbox retry denied:")
+    {
+        ToolStatus::Declined
+    } else if result.starts_with("工具错误")
+        || result.starts_with("工具已禁用")
+        || result.starts_with("工具参数 JSON 解析失败")
+        || result.starts_with("Tool error")
+    {
+        ToolStatus::Failed
+    } else {
+        ToolStatus::Completed
+    }
+}
+
+#[cfg(test)]
+mod tool_status_tests {
+    use super::*;
+
+    #[test]
+    fn classifies_completed_failed_and_declined_tool_results() {
+        assert_eq!(tool_status_from_result("ok"), ToolStatus::Completed);
+        assert_eq!(
+            tool_status_from_result("工具错误: transport failed"),
+            ToolStatus::Failed
+        );
+        assert_eq!(
+            tool_status_from_result("Permission denied by user. Do not retry."),
+            ToolStatus::Declined
+        );
+        assert_eq!(
+            tool_status_from_result(
+                "sandbox denied\n\nSandbox retry denied: Permission denied by user"
+            ),
+            ToolStatus::Declined
+        );
+    }
 }

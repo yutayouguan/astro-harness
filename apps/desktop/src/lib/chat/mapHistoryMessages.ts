@@ -27,6 +27,7 @@ const ACTIVITY_STATUSES = new Set<ChatActivityStatus>([
   "done",
   "partial",
   "error",
+  "declined",
   "interrupted",
 ]);
 

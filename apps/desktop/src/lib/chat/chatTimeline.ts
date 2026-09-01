@@ -9,6 +9,7 @@ import type {
   UiSurface,
 } from "../../types";
 import { elapsedSecSince } from "./elapsedSec.ts";
+import { isSettledActivityStatus } from "./toolActivityStatus.ts";
 
 function ensureSegments(m: ChatMessage): ChatTimelineSegment[] {
   return [...(m.segments ?? [])];
@@ -304,7 +305,7 @@ export function applyActivityUpsert(
     let durationSec = activity.durationSec ?? prev.durationSec;
     const status = activity.status ?? prev.status;
     if (
-      (status === "done" || status === "error") &&
+      isSettledActivityStatus(status) &&
       (durationSec == null || durationSec <= 0) &&
       preservedAt != null
     ) {
@@ -319,7 +320,7 @@ export function applyActivityUpsert(
   } else {
     let durationSec = activity.durationSec;
     if (
-      (activity.status === "done" || activity.status === "error") &&
+      isSettledActivityStatus(activity.status) &&
       (durationSec == null || durationSec <= 0)
     ) {
       durationSec = elapsedSecSince(at, Date.now());

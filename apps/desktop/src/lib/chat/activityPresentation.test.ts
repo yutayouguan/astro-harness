@@ -138,22 +138,24 @@ test("summarizes live and partial group progress", () => {
     { ...activity("read_file"), status: "done" as const },
     { ...activity("exec_command"), status: "retrying" as const },
     { ...activity("apply_patch"), status: "error" as const },
+    { ...activity("write_file"), status: "declined" as const },
   ];
   assert.deepEqual(activityGroupProgress(activities), {
-    total: 3,
+    total: 4,
     waiting: 0,
     running: 0,
     retrying: 1,
     done: 1,
     partial: 0,
     error: 1,
+    declined: 1,
     interrupted: 0,
-    resolved: 2,
+    resolved: 3,
     hasPartialOutcome: true,
   });
 });
 
-test("selects semantic title keys for all seven activity states", () => {
+test("selects semantic title keys for all eight activity states", () => {
   const states = [
     "waiting",
     "running",
@@ -161,6 +163,7 @@ test("selects semantic title keys for all seven activity states", () => {
     "done",
     "partial",
     "error",
+    "declined",
     "interrupted",
   ] as const;
   assert.deepEqual(

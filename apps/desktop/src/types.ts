@@ -48,6 +48,7 @@ export type ChatActivityStatus =
   | "done"
   | "partial"
   | "error"
+  | "declined"
   | "interrupted";
 export type ChatTurnStatus =
   "waiting" | "running" | "done" | "error" | "interrupted";

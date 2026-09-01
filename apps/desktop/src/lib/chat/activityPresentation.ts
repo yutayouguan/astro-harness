@@ -237,6 +237,7 @@ export type ActivityGroupProgress = {
   done: number;
   partial: number;
   error: number;
+  declined: number;
   interrupted: number;
   resolved: number;
   hasPartialOutcome: boolean;
@@ -253,8 +254,9 @@ export function activityGroupProgress(
   const done = count("done");
   const partial = count("partial");
   const error = count("error");
+  const declined = count("declined");
   const interrupted = count("interrupted");
-  const resolved = done + partial + error + interrupted;
+  const resolved = done + partial + error + declined + interrupted;
   return {
     total: activities.length,
     waiting,
@@ -263,10 +265,12 @@ export function activityGroupProgress(
     done,
     partial,
     error,
+    declined,
     interrupted,
     resolved,
     hasPartialOutcome:
-      partial > 0 || (done > 0 && (error > 0 || interrupted > 0)),
+      partial > 0 ||
+      (done > 0 && (error > 0 || declined > 0 || interrupted > 0)),
   };
 }
 

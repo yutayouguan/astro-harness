@@ -31,6 +31,7 @@ const STATUS_KEYS: Record<NonNullable<ChatActivity["status"]>, MessageKey> = {
   done: "chat.activity.status.done",
   partial: "chat.activity.status.partial",
   error: "chat.activity.status.error",
+  declined: "chat.activity.status.declined",
   interrupted: "chat.activity.status.interrupted",
 };
 

@@ -35,10 +35,11 @@ export default function MsgActivityGroup({
   const running = progress.running > 0;
   const retrying = progress.retrying > 0;
   const failed = progress.error > 0;
+  const declined = progress.declined > 0;
   const interrupted = progress.interrupted > 0;
   const partial = progress.hasPartialOutcome;
   const needsAttention =
-    waiting || running || retrying || failed || interrupted || partial;
+    waiting || running || retrying || failed || declined || interrupted || partial;
   const [open, setOpen] = useState(() => defaultOpen || needsAttention);
 
   useEffect(() => {
@@ -62,7 +63,7 @@ export default function MsgActivityGroup({
           completed: String(progress.done),
           total: String(progress.total),
         })
-      : waiting || running || retrying || failed || interrupted
+      : waiting || running || retrying || failed || declined || interrupted
         ? t("chat.activityGroup.progress", {
             completed: String(progress.done),
             total: String(progress.total),
@@ -81,11 +82,15 @@ export default function MsgActivityGroup({
           ? t("chat.activity.status.running")
           : failed
             ? t("chat.activityGroup.failed", { count: String(progress.error) })
-            : interrupted
-              ? t("chat.activityGroup.interrupted", {
-                  count: String(progress.interrupted),
+            : declined
+              ? t("chat.activityGroup.declined", {
+                  count: String(progress.declined),
                 })
-              : null,
+              : interrupted
+                ? t("chat.activityGroup.interrupted", {
+                    count: String(progress.interrupted),
+                  })
+                : null,
   ].filter(Boolean);
 
   return (
@@ -94,7 +99,7 @@ export default function MsgActivityGroup({
         running ? " is-running" : ""
       }${retrying ? " is-retrying" : ""}${waiting ? " is-waiting" : ""}${
         failed ? " is-error" : ""
-      }${partial ? " is-partial" : ""}${interrupted ? " is-interrupted" : ""}`}
+      }${partial ? " is-partial" : ""}${declined ? " is-declined" : ""}${interrupted ? " is-interrupted" : ""}`}
     >
       <button
         type="button"
@@ -132,6 +137,7 @@ export default function MsgActivityGroup({
                 forcedOpen ??
                 (activity.status === "waiting" ||
                   activity.status === "error" ||
+                  activity.status === "declined" ||
                   activity.status === "interrupted")
               }
               showTimestamp={showTimestamp}

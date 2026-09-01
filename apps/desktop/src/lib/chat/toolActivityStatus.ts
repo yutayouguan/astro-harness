@@ -10,6 +10,7 @@ const WAITING_PHASES = new Set([
 const RETRYING_PHASES = new Set(["retry", "retrying"]);
 const PARTIAL_PHASES = new Set(["partial", "partially_completed"]);
 const ERROR_PHASES = new Set(["error", "failed", "timeout", "timed_out"]);
+const DECLINED_PHASES = new Set(["declined", "denied", "rejected"]);
 const INTERRUPTED_PHASES = new Set(["cancelled", "canceled", "interrupted"]);
 const DONE_PHASES = new Set(["completed", "done", "succeeded", "success"]);
 
@@ -23,6 +24,7 @@ export function resolveToolActivityStatus(
   if (RETRYING_PHASES.has(normalized)) return "retrying";
   if (PARTIAL_PHASES.has(normalized)) return "partial";
   if (ERROR_PHASES.has(normalized)) return "error";
+  if (DECLINED_PHASES.has(normalized)) return "declined";
   if (INTERRUPTED_PHASES.has(normalized)) return "interrupted";
   if (DONE_PHASES.has(normalized) || result?.trim()) return "done";
   return "running";
@@ -41,6 +43,7 @@ export function isSettledActivityStatus(
     status === "done" ||
     status === "partial" ||
     status === "error" ||
+    status === "declined" ||
     status === "interrupted"
   );
 }

@@ -16,6 +16,7 @@ test("maps protocol tool phases onto stable activity states", () => {
   assert.equal(resolveToolActivityStatus("partial", undefined), "partial");
   assert.equal(resolveToolActivityStatus("completed", undefined), "done");
   assert.equal(resolveToolActivityStatus("failed", undefined), "error");
+  assert.equal(resolveToolActivityStatus("declined", undefined), "declined");
   assert.equal(
     resolveToolActivityStatus("cancelled", undefined),
     "interrupted",
@@ -36,6 +37,7 @@ test("only waiting, running, and retrying states remain live", () => {
   assert.equal(isSettledActivityStatus("done"), true);
   assert.equal(isSettledActivityStatus("partial"), true);
   assert.equal(isSettledActivityStatus("error"), true);
+  assert.equal(isSettledActivityStatus("declined"), true);
   assert.equal(isSettledActivityStatus("interrupted"), true);
   assert.equal(isSettledActivityStatus("running"), false);
 });

@@ -125,7 +125,7 @@
 }
 
 .bubble.assistant
-  .msg-activity-group:is(.is-waiting, .is-partial):not(.is-error)
+  .msg-activity-group:is(.is-waiting, .is-partial, .is-declined):not(.is-error)
   :is(.msg-activity-group-icon, .msg-activity-group-count) {
   color: var(--tone-amber, #d97706);
 }
