@@ -8,6 +8,7 @@ use async_channel::Receiver;
 use futures::FutureExt;
 use serde_json::Value;
 
+use super::realtime::{RealtimeConnectionConfig, RealtimeTransportEvent};
 use super::Session;
 use crate::streaming::ChatOverride;
 
@@ -169,6 +170,127 @@ impl Session {
         chat_override: Option<ChatOverride>,
     ) {
         match op {
+            Op::RealtimeConversationStart(mut params) => {
+                let target = self.lock_state().model_ctx.primary_chat_target();
+                let model = params
+                    .model
+                    .clone()
+                    .filter(|model| !model.trim().is_empty())
+                    .unwrap_or_else(|| {
+                        if target.model.trim().is_empty() {
+                            agent_protocol::DEFAULT_REALTIME_MODEL.to_string()
+                        } else {
+                            target.model.clone()
+                        }
+                    });
+                if params.include_startup_context {
+                    let context = self.build_system_prompt().await;
+                    params.instructions = Some(match params.instructions.take() {
+                        Some(instructions) if !instructions.trim().is_empty() => {
+                            truncate_realtime_text(&format!("{context}\n\n{instructions}"), 24_000)
+                        }
+                        _ => truncate_realtime_text(&context, 24_000),
+                    });
+                    let mut history = self
+                        .clone_history()
+                        .await
+                        .into_iter()
+                        .rev()
+                        .filter_map(|message| {
+                            let role = match &message.role {
+                                types::message::Role::User => {
+                                    agent_protocol::ConversationTextRole::User
+                                }
+                                types::message::Role::Assistant => {
+                                    agent_protocol::ConversationTextRole::Assistant
+                                }
+                                _ => return None,
+                            };
+                            let text = message.content_text();
+                            (!text.trim().is_empty()).then_some(
+                                agent_protocol::ConversationTextParams {
+                                    text: truncate_realtime_text(&text, 8_000),
+                                    role,
+                                },
+                            )
+                        })
+                        .take(32)
+                        .collect::<Vec<_>>();
+                    history.reverse();
+                    history.append(&mut params.initial_items);
+                    params.initial_items = history;
+                }
+                match self
+                    .realtime
+                    .start(RealtimeConnectionConfig {
+                        api_key: target.api_key,
+                        base_url: target.base_url,
+                        model: model.clone(),
+                        params: params.clone(),
+                    })
+                    .await
+                {
+                    Ok(connection) => {
+                        self.send_event(
+                            &submission_id,
+                            EventMsg::RealtimeConversationStarted(
+                                agent_protocol::RealtimeConversationStartedEvent {
+                                    realtime_session_id: connection.provider_session_id,
+                                    model,
+                                },
+                            ),
+                        )
+                        .await;
+                        self.spawn_realtime_event_fanout(submission_id, connection.events);
+                    }
+                    Err(error) => {
+                        let reason = error.to_string();
+                        self.emit_control_error(submission_id.clone(), "realtime_start", &reason)
+                            .await;
+                        self.send_event(
+                            &submission_id,
+                            EventMsg::RealtimeConversationClosed(
+                                agent_protocol::RealtimeConversationClosedEvent {
+                                    reason: Some(reason),
+                                },
+                            ),
+                        )
+                        .await;
+                    }
+                }
+            }
+            Op::RealtimeConversationAudio(params) => {
+                if let Err(error) = self.realtime.send_audio(params.frame).await {
+                    self.emit_control_error(submission_id, "realtime_audio", error)
+                        .await;
+                }
+            }
+            Op::RealtimeConversationText(params) => {
+                if let Err(error) = self.realtime.send_text(params).await {
+                    self.emit_control_error(submission_id, "realtime_text", error)
+                        .await;
+                }
+            }
+            Op::RealtimeConversationSpeech(params) => {
+                if let Err(error) = self.realtime.send_speech(params.text).await {
+                    self.emit_control_error(submission_id, "realtime_speech", error)
+                        .await;
+                }
+            }
+            Op::RealtimeConversationClose => {
+                self.realtime.close().await;
+            }
+            Op::RealtimeConversationListVoices => {
+                self.send_event(
+                    &submission_id,
+                    EventMsg::RealtimeConversationListVoicesResponse(
+                        agent_protocol::RealtimeConversationListVoicesResponseEvent {
+                            voices: agent_protocol::RealtimeVoicesList::builtin(),
+                        },
+                    ),
+                )
+                .await;
+            }
             Op::ThreadSettings { thread_settings } => {
                 match self.apply_thread_settings(thread_settings) {
                     Ok(thread_settings) => {
@@ -516,6 +638,41 @@ impl Session {
         .await;
     }
 
+    fn spawn_realtime_event_fanout(
+        self: &Arc<Self>,
+        route_id: String,
+        mut events: tokio::sync::mpsc::Receiver<RealtimeTransportEvent>,
+    ) {
+        let session = Arc::clone(self);
+        tokio::spawn(async move {
+            while let Some(event) = events.recv().await {
+                match event {
+                    RealtimeTransportEvent::Payload(payload) => {
+                        session
+                            .send_event(
+                                &route_id,
+                                EventMsg::RealtimeConversationRealtime(
+                                    agent_protocol::RealtimeConversationRealtimeEvent { payload },
+                                ),
+                            )
+                            .await;
+                    }
+                    RealtimeTransportEvent::Closed(reason) => {
+                        session
+                            .send_event(
+                                &route_id,
+                                EventMsg::RealtimeConversationClosed(
+                                    agent_protocol::RealtimeConversationClosedEvent { reason },
+                                ),
+                            )
+                            .await;
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
     pub async fn shutdown_runtime(self: &Arc<Self>) {
         if self.begin_runtime_shutdown() {
             let session = Arc::clone(self);
@@ -533,6 +690,7 @@ impl Session {
     }
 
     async fn run_shutdown_worker(self: &Arc<Self>) {
+        self.realtime.close().await;
         let (task_lifecycle, abort_result) = self
             .abort_all_tasks_for_shutdown(agent_protocol::TurnAbortReason::Interrupted)
             .await;
@@ -601,6 +759,13 @@ fn approval_resolution(decision: ReviewDecision) -> (&'static str, Value) {
             serde_json::json!({ "approved": false, "abort": true }),
         ),
     }
+}
+
+fn truncate_realtime_text(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    text.chars().take(max_chars).collect()
 }
 
 #[cfg(test)]

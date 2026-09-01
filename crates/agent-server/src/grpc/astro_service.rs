@@ -18,10 +18,13 @@ use proto::astro_service_server::AstroService;
 use proto::{
     ApproveGuardianDeniedActionRequest, ChatControlAction, ChatControlRequest, Empty,
     FileListRequest, FileListResponse, ImageEvent, ImageRequest, McpReconnectRequest,
-    McpServerList, McpServerListRequest, MemoryQuery, MemoryResult, ResolveElicitationRequest,
-    RunUserShellCommandRequest, RunUserShellCommandResponse, SessionSnippet as ProtoSessionSnippet,
-    SkillEvent, SkillInfo, SkillList, SkillRequest, SteerChatRequest, SteerChatResponse,
-    UpdateTurnSettingsRequest, UpdateTurnSettingsResponse,
+    McpServerList, McpServerListRequest, MemoryQuery, MemoryResult,
+    RealtimeConversationAudioRequest, RealtimeConversationRequest,
+    RealtimeConversationSpeechRequest, RealtimeConversationStartRequest,
+    RealtimeConversationTextRequest, RealtimeOperationResponse, RealtimeVoicesResponse,
+    ResolveElicitationRequest, RunUserShellCommandRequest, RunUserShellCommandResponse,
+    SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList, SkillRequest,
+    SteerChatRequest, SteerChatResponse, UpdateTurnSettingsRequest, UpdateTurnSettingsResponse,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
@@ -48,6 +51,10 @@ async fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionS
 fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
     use agent_protocol::EventMsg;
     match msg {
+        EventMsg::RealtimeConversationStarted(_)
+        | EventMsg::RealtimeConversationRealtime(_)
+        | EventMsg::RealtimeConversationClosed(_)
+        | EventMsg::RealtimeConversationListVoicesResponse(_) => None,
         EventMsg::TurnStarted(event) => Some(event.turn_id.clone()),
         EventMsg::UserInputCommitted(event) => Some(event.turn_id.clone()),
         EventMsg::ItemStarted(event)
@@ -98,6 +105,37 @@ fn mcp_server_info(status: mcp::ServerStatus) -> proto::McpServerInfo {
         oauth_available: status.oauth_available,
         authenticated: status.authenticated,
     }
+}
+
+fn require_realtime_session_id(session_id: &str) -> Result<&str, Status> {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        Err(Status::invalid_argument("session_id is required"))
+    } else {
+        Ok(session_id)
+    }
+}
+
+fn nonempty(value: String) -> Option<String> {
+    (!value.trim().is_empty()).then_some(value)
+}
+
+async fn submit_realtime_op(
+    service: &AstroServiceImpl,
+    session_id: &str,
+    op: agent_protocol::Op,
+) -> Result<Response<RealtimeOperationResponse>, Status> {
+    let managed = service
+        .threads
+        .get(session_id)
+        .await
+        .ok_or_else(|| Status::failed_precondition("realtime conversation is not loaded"))?;
+    let submission_id = managed
+        .runtime
+        .submit(op)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+    Ok(Response::new(RealtimeOperationResponse { submission_id }))
 }
 
 /// 将 ChatRequest 下传的辅助目标按 `task` 分组、按 `order` 排序后写入 Session。
@@ -2156,6 +2194,204 @@ impl AstroService for AstroServiceImpl {
         request: Request<proto::SubmitTurnRequest>,
     ) -> Result<Response<proto::SubmitTurnResponse>, Status> {
         super::thread_service::submit_turn(self, request).await
+    }
+
+    async fn realtime_conversation_start(
+        &self,
+        request: Request<RealtimeConversationStartRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        let session_id = require_realtime_session_id(&req.session_id)?;
+        if req.api_key.trim().is_empty() {
+            return Err(Status::invalid_argument("realtime api_key is required"));
+        }
+        let model = if req.model.trim().is_empty() {
+            agent_protocol::DEFAULT_REALTIME_MODEL.to_string()
+        } else {
+            req.model.trim().to_string()
+        };
+        let output_modality = match req.output_modality.as_str() {
+            "" | "audio" => agent_protocol::RealtimeOutputModality::Audio,
+            "text" => agent_protocol::RealtimeOutputModality::Text,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime output_modality {value}"
+                )))
+            }
+        };
+        let turn_detection = match req.turn_detection.as_str() {
+            "" | "server_vad" => agent_protocol::RealtimeTurnDetection::ServerVad,
+            "semantic_vad" => agent_protocol::RealtimeTurnDetection::SemanticVad,
+            "disabled" => agent_protocol::RealtimeTurnDetection::Disabled,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime turn_detection {value}"
+                )))
+            }
+        };
+        let noise_reduction = match req.noise_reduction.as_str() {
+            "" => None,
+            "near_field" => Some(agent_protocol::RealtimeNoiseReduction::NearField),
+            "far_field" => Some(agent_protocol::RealtimeNoiseReduction::FarField),
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime noise_reduction {value}"
+                )))
+            }
+        };
+        let managed = self.get_or_create_thread(session_id).await?;
+        let subscription = self
+            .connections
+            .current_generation_key(req.connection_id.trim())
+            .await
+            .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
+        super::thread_service::resume(&managed, subscription, false).await?;
+        managed
+            .runtime
+            .session()
+            .set_chat_targets(vec![types::ChatTarget {
+                provider_id: req.provider.clone(),
+                backend_id: req.provider,
+                model: model.clone(),
+                api_key: req.api_key,
+                base_url: req.base_url,
+            }]);
+        let submission_id = managed
+            .runtime
+            .submit(agent_protocol::Op::RealtimeConversationStart(
+                agent_protocol::ConversationStartParams {
+                    model: Some(model),
+                    output_modality,
+                    voice: nonempty(req.voice),
+                    instructions: nonempty(req.instructions),
+                    include_startup_context: req.include_startup_context,
+                    initial_items: Vec::new(),
+                    turn_detection,
+                    noise_reduction,
+                    input_audio_transcription_model: nonempty(req.transcription_model),
+                },
+            ))
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        Ok(Response::new(RealtimeOperationResponse { submission_id }))
+    }
+
+    async fn realtime_conversation_audio(
+        &self,
+        request: Request<RealtimeConversationAudioRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        let format = match req.format.as_str() {
+            "" | "pcm16" => agent_protocol::RealtimeAudioFormat::Pcm16,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime audio format {value}"
+                )))
+            }
+        };
+        let frame = agent_protocol::RealtimeAudioFrame {
+            data: req.data,
+            sample_rate: if req.sample_rate == 0 {
+                agent_protocol::DEFAULT_REALTIME_SAMPLE_RATE
+            } else {
+                req.sample_rate
+            },
+            num_channels: if req.num_channels == 0 {
+                1
+            } else {
+                u16::try_from(req.num_channels)
+                    .map_err(|_| Status::invalid_argument("num_channels exceeds u16"))?
+            },
+            format,
+        };
+        submit_realtime_op(
+            self,
+            require_realtime_session_id(&req.session_id)?,
+            agent_protocol::Op::RealtimeConversationAudio(
+                agent_protocol::ConversationAudioParams { frame },
+            ),
+        )
+        .await
+    }
+
+    async fn realtime_conversation_text(
+        &self,
+        request: Request<RealtimeConversationTextRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        if req.text.trim().is_empty() {
+            return Err(Status::invalid_argument("realtime text is required"));
+        }
+        let role = match req.role.as_str() {
+            "" | "user" => agent_protocol::ConversationTextRole::User,
+            "developer" => agent_protocol::ConversationTextRole::Developer,
+            "assistant" => agent_protocol::ConversationTextRole::Assistant,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime text role {value}"
+                )))
+            }
+        };
+        submit_realtime_op(
+            self,
+            require_realtime_session_id(&req.session_id)?,
+            agent_protocol::Op::RealtimeConversationText(agent_protocol::ConversationTextParams {
+                text: req.text,
+                role,
+            }),
+        )
+        .await
+    }
+
+    async fn realtime_conversation_speech(
+        &self,
+        request: Request<RealtimeConversationSpeechRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        if req.text.trim().is_empty() {
+            return Err(Status::invalid_argument("realtime speech text is required"));
+        }
+        submit_realtime_op(
+            self,
+            require_realtime_session_id(&req.session_id)?,
+            agent_protocol::Op::RealtimeConversationSpeech(
+                agent_protocol::ConversationSpeechParams { text: req.text },
+            ),
+        )
+        .await
+    }
+
+    async fn realtime_conversation_close(
+        &self,
+        request: Request<RealtimeConversationRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        submit_realtime_op(
+            self,
+            require_realtime_session_id(&req.session_id)?,
+            agent_protocol::Op::RealtimeConversationClose,
+        )
+        .await
+    }
+
+    async fn realtime_conversation_list_voices(
+        &self,
+        request: Request<RealtimeConversationRequest>,
+    ) -> Result<Response<RealtimeVoicesResponse>, Status> {
+        let req = request.into_inner();
+        let session_id = require_realtime_session_id(&req.session_id)?;
+        let voices = agent_protocol::RealtimeVoicesList::builtin();
+        if let Some(managed) = self.threads.get(session_id).await {
+            managed
+                .runtime
+                .submit(agent_protocol::Op::RealtimeConversationListVoices)
+                .await
+                .map_err(|error| Status::internal(error.to_string()))?;
+        }
+        Ok(Response::new(RealtimeVoicesResponse {
+            voices: voices.voices,
+            default_voice: voices.default_voice,
+        }))
     }
 
     async fn resume_thread(

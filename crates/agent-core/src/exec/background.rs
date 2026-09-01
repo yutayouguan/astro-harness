@@ -232,6 +232,10 @@ async fn collect_background_events(
                 anyhow::bail!("background turn aborted: {:?}", event.reason);
             }
             EventMsg::Warning(_)
+            | EventMsg::RealtimeConversationStarted(_)
+            | EventMsg::RealtimeConversationRealtime(_)
+            | EventMsg::RealtimeConversationClosed(_)
+            | EventMsg::RealtimeConversationListVoicesResponse(_)
             | EventMsg::UserInputCommitted(_)
             | EventMsg::TurnStarted(_)
             | EventMsg::AgentMessageContentDelta(_)

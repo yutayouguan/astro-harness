@@ -230,6 +230,12 @@ pub fn run() {
             set_app_menu_locale,
             // — chat —
             commands::chat::start_chat,
+            commands::chat::start_realtime_conversation,
+            commands::chat::send_realtime_audio,
+            commands::chat::send_realtime_text,
+            commands::chat::send_realtime_speech,
+            commands::chat::close_realtime_conversation,
+            commands::chat::list_realtime_voices,
             commands::chat::chat_control,
             commands::chat::steer_chat,
             commands::chat::interrupt_resume,

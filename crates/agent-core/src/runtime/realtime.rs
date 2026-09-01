@@ -13,6 +13,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
+use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -160,11 +161,18 @@ impl RealtimeConversationManager {
         {
             bail!("realtime input must be mono PCM16 at 24000 Hz");
         }
-        self.active_sender()
+        match self
+            .active_sender()
             .await?
-            .send(RealtimeCommand::Audio(frame))
-            .await
-            .map_err(|_| anyhow!("realtime conversation is closed"))
+            .try_send(RealtimeCommand::Audio(frame))
+        {
+            Ok(()) => Ok(()),
+            Err(TrySendError::Full(_)) => {
+                tracing::warn!("dropping realtime input audio frame because the queue is full");
+                Ok(())
+            }
+            Err(TrySendError::Closed(_)) => Err(anyhow!("realtime conversation is closed")),
+        }
     }
 
     pub(crate) async fn send_text(&self, params: ConversationTextParams) -> Result<()> {
@@ -380,6 +388,7 @@ fn session_update_message(model: &str, params: &ConversationStartParams) -> Valu
             "type": "server_vad",
             "create_response": true,
             "interrupt_response": true,
+            "silence_duration_ms": 500,
         }),
         RealtimeTurnDetection::SemanticVad => json!({
             "type": "semantic_vad",
@@ -411,7 +420,7 @@ fn session_update_message(model: &str, params: &ConversationStartParams) -> Valu
                     "turn_detection": turn_detection,
                 },
                 "output": {
-                    "format": { "type": "audio/pcm" },
+                    "format": { "type": "audio/pcm", "rate": 24_000 },
                     "voice": params.voice.as_deref().unwrap_or("marin"),
                 }
             }
@@ -429,7 +438,7 @@ fn audio_append_message(frame: &RealtimeAudioFrame) -> Value {
 fn text_item_message(params: &ConversationTextParams) -> Value {
     let role = match params.role {
         agent_protocol::ConversationTextRole::User => "user",
-        agent_protocol::ConversationTextRole::System => "system",
+        agent_protocol::ConversationTextRole::Developer => "developer",
         agent_protocol::ConversationTextRole::Assistant => "assistant",
     };
     let content_type = if role == "assistant" {
@@ -520,6 +529,46 @@ mod tests {
             format: agent_protocol::RealtimeAudioFormat::Pcm16,
         });
         assert_eq!(payload["audio"], "AAEC");
+    }
+
+    #[tokio::test]
+    async fn full_audio_queue_drops_frames_without_blocking_control_loop() {
+        let manager = RealtimeConversationManager::default();
+        let (command_tx, _command_rx) = mpsc::channel(INPUT_QUEUE_CAPACITY);
+        for _ in 0..INPUT_QUEUE_CAPACITY {
+            command_tx
+                .try_send(RealtimeCommand::Audio(RealtimeAudioFrame {
+                    data: vec![0, 0],
+                    sample_rate: agent_protocol::DEFAULT_REALTIME_SAMPLE_RATE,
+                    num_channels: 1,
+                    format: agent_protocol::RealtimeAudioFormat::Pcm16,
+                }))
+                .expect("queue has capacity");
+        }
+        let cancel = CancellationToken::new();
+        let task_cancel = cancel.clone();
+        let task = tokio::spawn(async move { task_cancel.cancelled().await });
+        *manager.state.lock().await = Some(ConversationState {
+            command_tx,
+            cancel,
+            active: Arc::new(AtomicBool::new(true)),
+            task,
+        });
+
+        tokio::time::timeout(
+            Duration::from_millis(50),
+            manager.send_audio(RealtimeAudioFrame {
+                data: vec![0, 0],
+                sample_rate: agent_protocol::DEFAULT_REALTIME_SAMPLE_RATE,
+                num_channels: 1,
+                format: agent_protocol::RealtimeAudioFormat::Pcm16,
+            }),
+        )
+        .await
+        .expect("full audio queue must not block")
+        .expect("dropping a frame is not a transport failure");
+
+        manager.close().await;
     }
 
     #[tokio::test]

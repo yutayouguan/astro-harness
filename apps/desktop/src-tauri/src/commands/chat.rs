@@ -3,7 +3,9 @@
 use proto::astro_service_client::AstroServiceClient;
 use proto::{
     ApproveGuardianDeniedActionRequest, ChatControlAction, ChatControlRequest, ChatRequest,
-    ImageRequest, MemoryQuery, ResolveElicitationRequest, RunUserShellCommandRequest,
+    ImageRequest, MemoryQuery, RealtimeConversationAudioRequest, RealtimeConversationRequest,
+    RealtimeConversationSpeechRequest, RealtimeConversationStartRequest,
+    RealtimeConversationTextRequest, ResolveElicitationRequest, RunUserShellCommandRequest,
     SteerChatRequest, UpdateTurnSettingsRequest,
 };
 use serde::{Deserialize, Serialize};
@@ -413,9 +415,158 @@ pub struct GenerateImageResult {
     pub model: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartRealtimeConversationRequest {
+    pub session_id: String,
+    pub provider: String,
+    pub model: String,
+    pub provider_id: Option<String>,
+    pub voice: Option<String>,
+    pub instructions: Option<String>,
+    pub output_modality: Option<String>,
+    pub turn_detection: Option<String>,
+    pub noise_reduction: Option<String>,
+    pub transcription_model: Option<String>,
+    pub include_startup_context: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RealtimeVoicesDto {
+    pub voices: Vec<String>,
+    pub default_voice: String,
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn start_realtime_conversation(
+    app: AppHandle,
+    request: StartRealtimeConversationRequest,
+) -> Result<String, String> {
+    let session_id = request.session_id.trim();
+    if session_id.is_empty() {
+        return Err("sessionId 不能为空".into());
+    }
+    let targets = resolve_chat_targets(
+        request.provider_id.as_deref(),
+        &request.provider,
+        &request.model,
+    )?;
+    let primary = targets
+        .first()
+        .ok_or_else(|| "无可用 Realtime 目标".to_string())?;
+    let bridge = managed_bridge(&app);
+    bridge.wait_ready_for(THREAD_EVENTS_READY_TIMEOUT).await?;
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .realtime_conversation_start(RealtimeConversationStartRequest {
+            session_id: session_id.to_string(),
+            provider: primary.backend_id.clone(),
+            model: primary.model.clone(),
+            api_key: primary.api_key.clone(),
+            base_url: primary.base_url.clone(),
+            output_modality: request.output_modality.unwrap_or_else(|| "audio".into()),
+            voice: request.voice.unwrap_or_default(),
+            instructions: request.instructions.unwrap_or_default(),
+            include_startup_context: request.include_startup_context.unwrap_or(true),
+            turn_detection: request
+                .turn_detection
+                .unwrap_or_else(|| "server_vad".into()),
+            noise_reduction: request.noise_reduction.unwrap_or_default(),
+            transcription_model: request
+                .transcription_model
+                .unwrap_or_else(|| "gpt-4o-mini-transcribe".into()),
+            connection_id: bridge.connection_id().into(),
+        })
+        .await
+        .map_err(|error| friendly_error(&error.to_string()))?
+        .into_inner();
+    Ok(response.submission_id)
+}
+
+#[tauri::command]
+pub async fn send_realtime_audio(session_id: String, data: Vec<u8>) -> Result<(), String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    client
+        .realtime_conversation_audio(RealtimeConversationAudioRequest {
+            session_id,
+            data,
+            sample_rate: 24_000,
+            num_channels: 1,
+            format: "pcm16".into(),
+        })
+        .await
+        .map_err(|error| friendly_error(&error.to_string()))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn send_realtime_text(
+    session_id: String,
+    text: String,
+    role: Option<String>,
+) -> Result<(), String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    client
+        .realtime_conversation_text(RealtimeConversationTextRequest {
+            session_id,
+            text,
+            role: role.unwrap_or_else(|| "user".into()),
+        })
+        .await
+        .map_err(|error| friendly_error(&error.to_string()))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn send_realtime_speech(session_id: String, text: String) -> Result<(), String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    client
+        .realtime_conversation_speech(RealtimeConversationSpeechRequest { session_id, text })
+        .await
+        .map_err(|error| friendly_error(&error.to_string()))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_realtime_conversation(session_id: String) -> Result<(), String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    client
+        .realtime_conversation_close(RealtimeConversationRequest { session_id })
+        .await
+        .map_err(|error| friendly_error(&error.to_string()))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn list_realtime_voices(session_id: String) -> Result<RealtimeVoicesDto, String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .realtime_conversation_list_voices(RealtimeConversationRequest { session_id })
+        .await
+        .map_err(|error| friendly_error(&error.to_string()))?
+        .into_inner();
+    Ok(RealtimeVoicesDto {
+        voices: response.voices,
+        default_voice: response.default_voice,
+    })
+}
 
 /// 启动流式聊天（内部走 Agent / Provider）。
 ///

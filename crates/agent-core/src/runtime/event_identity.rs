@@ -83,6 +83,10 @@ fn normalize_turn_item(item: &mut TurnItem) {
 pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> String {
     let turn_id = event_turn_id(raw_turn_id);
     match msg {
+        EventMsg::RealtimeConversationStarted(_)
+        | EventMsg::RealtimeConversationRealtime(_)
+        | EventMsg::RealtimeConversationClosed(_)
+        | EventMsg::RealtimeConversationListVoicesResponse(_) => {}
         EventMsg::TurnStarted(event) => event.turn_id.clone_from(&turn_id),
         EventMsg::UserInputCommitted(event) => event.turn_id.clone_from(&turn_id),
         EventMsg::ItemStarted(event)

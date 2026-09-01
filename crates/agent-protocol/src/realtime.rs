@@ -17,7 +17,7 @@ pub enum RealtimeOutputModality {
 pub enum ConversationTextRole {
     #[default]
     User,
-    System,
+    Developer,
     Assistant,
 }
 

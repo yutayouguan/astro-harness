@@ -139,7 +139,7 @@ fn item_type(item: &agent_protocol::TurnItem) -> &'static str {
     }
 }
 
-async fn resume(
+pub(crate) async fn resume(
     managed: &crate::ManagedThread,
     subscription: crate::transport::ConnectionGenerationKey,
     include_turns: bool,

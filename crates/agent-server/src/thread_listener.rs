@@ -88,6 +88,35 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
     use proto::thread_event::Payload;
 
     let (turn_id, payload) = match &event.msg {
+        EventMsg::RealtimeConversationStarted(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "started".into(),
+                payload_json: serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
+            }),
+        ),
+        EventMsg::RealtimeConversationRealtime(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "event".into(),
+                payload_json: serde_json::to_string(&value.payload)
+                    .unwrap_or_else(|_| "null".into()),
+            }),
+        ),
+        EventMsg::RealtimeConversationClosed(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "closed".into(),
+                payload_json: serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
+            }),
+        ),
+        EventMsg::RealtimeConversationListVoicesResponse(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "voices".into(),
+                payload_json: serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
+            }),
+        ),
         EventMsg::TurnStarted(started) => (
             started.turn_id.clone(),
             Payload::TurnStarted(proto::ThreadTurnStarted {

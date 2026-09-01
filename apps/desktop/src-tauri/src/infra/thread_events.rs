@@ -21,6 +21,7 @@ use crate::commands::chat::{
 const SNAPSHOT_EVENT: &str = "thread_snapshot";
 const SESSION_EVENT: &str = "session_event";
 const SESSION_STATUS_CHANGED_EVENT: &str = "session_status_changed";
+const REALTIME_CONVERSATION_EVENT: &str = "realtime_conversation_event";
 pub(crate) const THREAD_EVENTS_READY_TIMEOUT: Duration = Duration::from_secs(15);
 const PROVISIONAL_EVENT_BUFFER_CAPACITY: usize = 128;
 
@@ -34,6 +35,14 @@ pub(crate) struct SessionStatusChangedDto {
     pub active_flags: Vec<String>,
     pub error: Option<String>,
     pub ts_ms: i64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RealtimeConversationEventDto {
+    session_id: String,
+    kind: String,
+    payload: serde_json::Value,
 }
 
 fn session_status_registry() -> &'static std::sync::Mutex<HashMap<String, SessionStatusChangedDto>>
@@ -1777,6 +1786,20 @@ async fn process_live_event(
 ) {
     let thread_id = event.thread_id.clone();
     let turn_id = event.turn_id.clone();
+    if let Some(proto::thread_event::Payload::Realtime(realtime)) = event.payload.as_ref() {
+        let payload = serde_json::from_str(&realtime.payload_json).unwrap_or_else(
+            |error| serde_json::json!({ "serialization_error": error.to_string() }),
+        );
+        let _ = app.emit(
+            REALTIME_CONVERSATION_EVENT,
+            RealtimeConversationEventDto {
+                session_id: thread_id,
+                kind: realtime.kind.clone(),
+                payload,
+            },
+        );
+        return;
+    }
     emit_status_for_thread_event(app, &thread_id, event.payload.as_ref());
     let is_extension = matches!(
         event.payload.as_ref(),
@@ -2003,6 +2026,7 @@ fn map_thread_event(event: proto::ThreadEvent) -> Vec<ChatStreamEvent> {
             serde_json::json!([{"id":"","reason":aborted.reason,"message":"","tool_call_id":"","response_schema_json":"","expires_at":"","metadata_json":""}]).to_string(),
         ),
         Some(Payload::Extension(extension)) => map_extension_to_chat(extension),
+        Some(Payload::Realtime(_)) => Vec::new(),
         Some(Payload::ShutdownComplete(_)) => vec![activity(
             turn_id,
             "shutdown_complete",
