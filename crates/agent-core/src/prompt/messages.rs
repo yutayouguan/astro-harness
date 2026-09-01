@@ -536,39 +536,6 @@ mod tests {
     }
 
     #[test]
-    fn responses_projection_keeps_text_call_output_order() {
-        let session = vec![Message::assistant_with_tools(
-            "I will inspect it.",
-            vec![ToolCall {
-                id: "c1".into(),
-                name: "read".into(),
-                arguments: json!({"path": "f.rs"}),
-                signature: None,
-            }],
-        )];
-
-        let provider_messages = to_provider_messages("sys", &session);
-        let input = providers::openai::responses::to_responses_input(&provider_messages);
-        let kinds = input
-            .iter()
-            .map(|item| {
-                item.get("type")
-                    .and_then(serde_json::Value::as_str)
-                    .or_else(|| item.get("role").and_then(serde_json::Value::as_str))
-                    .unwrap_or_default()
-            })
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            kinds,
-            ["assistant", "function_call", "function_call_output"]
-        );
-        assert_eq!(input[1]["call_id"], "c1");
-        assert_eq!(input[2]["call_id"], "c1");
-        assert_eq!(input[2]["output"], "aborted");
-    }
-
-    #[test]
     fn tool_message_uses_compressed_content_for_provider() {
         let assistant = Message::assistant_with_tools(
             "",

@@ -1,4 +1,4 @@
-//! Google Gemini Native `streamGenerateContent` — 原生 CompletionModel 实现。
+//! Google Gemini Native `streamGenerateContent` — 非 Agent Chat 兼容模型实现。
 //!
 //! 与 Interactions API 不同，此协议使用 `POST /v1beta/models/{model}:streamGenerateContent`，
 //! 支持 `function_declarations` 工具调用和 `thinkingConfig`。
@@ -9,9 +9,9 @@ use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
 use crate::traits::{
-    Capabilities, Capable, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
+    Capabilities, Capable, ChatCompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
 };
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::types::{ChatCompletionRequest, CompletionStream};
 
 // ─── Provider Extension ─────────────────────────────────
 
@@ -72,8 +72,8 @@ impl FromClient<GeminiNative> for GeminiNativeCompletionModel {
 }
 
 #[async_trait::async_trait]
-impl CompletionModel for GeminiNativeCompletionModel {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+impl ChatCompletionModel for GeminiNativeCompletionModel {
+    async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream> {
         let model = if request.model.is_empty() {
             &self.model
         } else {
@@ -457,7 +457,7 @@ mod tests {
     #[test]
     fn gemini_native_has_chat() {
         let client = ProviderClient::new("test-key", GeminiNative);
-        let _model = client.completion_model("gemini-3.6-flash");
+        let _model = client.chat_completion_model("gemini-3.6-flash");
     }
 
     #[test]

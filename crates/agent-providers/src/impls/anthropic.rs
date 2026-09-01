@@ -1,4 +1,4 @@
-//! Anthropic Messages API — 原生 CompletionModel 实现。
+//! Anthropic Messages API — 非 Agent Chat 兼容模型实现。
 //!
 //! 消息格式、SSE 事件、认证方式均与 OpenAI 不同，不走 compat 层。
 
@@ -8,9 +8,9 @@ use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
 use crate::traits::{
-    Capabilities, Capable, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
+    Capabilities, Capable, ChatCompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
 };
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::types::{ChatCompletionRequest, CompletionStream};
 
 const ANTHROPIC_VERSION: &str = "2024-10-22";
 const ANTHROPIC_BETA: &str = "prompt-caching-2024-07-31,pdfs-2024-09-25,token-counting-2024-11-01,interleaved-thinking-2025-05-14";
@@ -82,8 +82,8 @@ impl FromClient<Anthropic> for AnthropicCompletionModel {
 }
 
 #[async_trait::async_trait]
-impl CompletionModel for AnthropicCompletionModel {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+impl ChatCompletionModel for AnthropicCompletionModel {
+    async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream> {
         if self.api_key.is_empty() {
             return Err(anyhow!("缺少 Anthropic API Key"));
         }
@@ -501,7 +501,7 @@ mod tests {
     #[test]
     fn anthropic_has_chat() {
         let client = ProviderClient::new("test-key", Anthropic);
-        let _model = client.completion_model("claude-opus-4-8");
+        let _model = client.chat_completion_model("claude-opus-4-8");
     }
 
     #[test]

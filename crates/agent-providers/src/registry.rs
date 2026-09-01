@@ -67,8 +67,8 @@ impl Registry {
             + 'static,
     {
         let client = self.make_client(api_key, base_url, Ext::default());
-        let provider =
-            DynProvider::new(Ext::NAME, Ext::NAME).with_completion(client.completion_model(model));
+        let provider = DynProvider::new(Ext::NAME, Ext::NAME)
+            .with_chat_completion(client.chat_completion_model(model));
         self.providers.insert(Ext::NAME.to_string(), provider);
     }
 
@@ -94,7 +94,7 @@ impl Registry {
     {
         let client = self.make_client(api_key, base_url, Ext::default());
         let provider = DynProvider::new(Ext::NAME, Ext::NAME)
-            .with_completion(client.completion_model(model))
+            .with_chat_completion(client.chat_completion_model(model))
             .with_embedding(client.embedding_model(model))
             .with_image_gen(client.image_model(model))
             .with_tts(client.tts_model(model));
@@ -106,7 +106,7 @@ impl Registry {
         use crate::impls::openai::OpenAI;
         let client = self.make_client(api_key, base_url, OpenAI);
         let provider = DynProvider::new("openai", "openai")
-            .with_completion(client.completion_model(model))
+            .with_chat_completion(client.chat_completion_model(model))
             .with_embedding(client.embedding_model(model))
             .with_image_gen(client.image_model(model))
             .with_tts(client.tts_model(model));
@@ -118,7 +118,7 @@ impl Registry {
         use crate::impls::anthropic::Anthropic;
         let client = self.make_client(api_key, base_url, Anthropic);
         let provider = DynProvider::new("anthropic", "anthropic")
-            .with_completion(client.completion_model(model));
+            .with_chat_completion(client.chat_completion_model(model));
         self.providers
             .insert("claude".to_string(), provider.clone());
         self.providers.insert("anthropic".to_string(), provider);
@@ -129,7 +129,7 @@ impl Registry {
         use crate::impls::google::Google;
         let client = self.make_client(api_key, base_url, Google);
         let provider = DynProvider::new("google", "google")
-            .with_completion(client.completion_model(model))
+            .with_chat_completion(client.chat_completion_model(model))
             .with_embedding(client.embedding_model(model))
             .with_image_gen(client.image_model(model))
             .with_video_gen(client.video_model(model))
@@ -143,7 +143,7 @@ impl Registry {
         use crate::impls::minimax_chat::MiniMax;
         let client = self.make_client(api_key, base_url, MiniMax);
         let provider = DynProvider::new("minimax", "minimax")
-            .with_completion(client.completion_model(model))
+            .with_chat_completion(client.chat_completion_model(model))
             .with_embedding(client.embedding_model(model))
             .with_image_gen(client.image_model(model))
             .with_video_gen(client.video_model(model))
@@ -152,11 +152,11 @@ impl Registry {
         self.providers.insert("minimax".to_string(), provider);
     }
 
-    /// 将已注册 provider 的 completion 升级为 Responses API 变体。
+    /// 为已注册 provider 挂载 Agent 原生 Responses 模型。
     ///
-    /// 保留已有的全部媒体能力，只替换 completion model。
+    /// Chat/media 能力继续独立存在，不参与 Agent target/fallback 链。
     /// 通过 `Ext::responses_base_url()` 处理 base_url 变换（如 Azure）。
-    pub fn upgrade_to_responses<Ext>(
+    pub fn attach_responses<Ext>(
         &mut self,
         id: &str,
         api_key: &str,
@@ -171,9 +171,9 @@ impl Registry {
         let responses_base = base_url.map(|b| ext.responses_base_url(b));
         let effective_base = responses_base.as_deref().or(base_url);
         let client = self.make_client(api_key, effective_base, ext);
-        let completion = crate::compat::OpenAIResponsesModel::<Ext>::from_client(&client, model);
+        let responses = crate::compat::OpenAIResponsesModel::<Ext>::from_client(&client, model);
         if let Some(provider) = self.providers.get_mut(id) {
-            provider.replace_completion(completion);
+            provider.replace_responses(responses);
         }
     }
 
@@ -182,7 +182,7 @@ impl Registry {
         use crate::impls::gemini_native::GeminiNative;
         let client = self.make_client(api_key, base_url, GeminiNative);
         let provider = DynProvider::new("gemini-native", "gemini-native")
-            .with_completion(client.completion_model(model));
+            .with_chat_completion(client.chat_completion_model(model));
         self.providers.insert("gemini-native".to_string(), provider);
     }
 
@@ -199,14 +199,14 @@ impl Registry {
         } else {
             model
         };
-        let completion = crate::custom::ConfigDrivenCompletionModel::new(
+        let responses = crate::custom::ConfigDrivenResponsesModel::new(
             self.http.clone(),
             config,
             api_key.to_string(),
             model.to_string(),
             id.to_string(),
         );
-        let provider = DynProvider::new(id, "custom").with_completion(completion);
+        let provider = DynProvider::new(id, "custom").with_responses(responses);
         self.providers.insert(id.to_string(), provider);
     }
 
@@ -229,11 +229,18 @@ impl Registry {
         self.providers.keys().map(|s| s.as_str()).collect()
     }
 
-    pub fn completion_model(
+    pub fn responses_model(
         &self,
         id: &str,
-    ) -> Option<&dyn crate::traits::dyn_provider::DynCompletionModel> {
-        self.get(id)?.completion_model()
+    ) -> Option<&dyn crate::traits::dyn_provider::DynResponsesModel> {
+        self.get(id)?.responses_model()
+    }
+
+    pub fn chat_completion_model(
+        &self,
+        id: &str,
+    ) -> Option<&dyn crate::traits::dyn_provider::DynChatCompletionModel> {
+        self.get(id)?.chat_completion_model()
     }
 }
 
@@ -257,11 +264,11 @@ mod tests {
     }
 
     #[test]
-    fn completion_model_lookup() {
+    fn chat_completion_model_lookup() {
         let mut reg = Registry::new();
         reg.register_anthropic("test-key", None, "claude-opus-4-8");
-        assert!(reg.completion_model("anthropic").is_some());
-        assert!(reg.completion_model("openai").is_none());
+        assert!(reg.chat_completion_model("anthropic").is_some());
+        assert!(reg.responses_model("anthropic").is_none());
     }
 
     #[test]
@@ -269,7 +276,8 @@ mod tests {
         let mut reg = Registry::new();
         reg.register_openai("test-key", None, "gpt-4o");
         let p = reg.get("openai").unwrap();
-        assert!(p.completion_model().is_some());
+        assert!(p.chat_completion_model().is_some());
+        assert!(p.responses_model().is_none());
         assert!(p.embedding_model().is_some());
         assert!(p.image_gen_model().is_some());
         assert!(p.tts_model().is_some());
@@ -280,7 +288,8 @@ mod tests {
         let mut reg = Registry::new();
         reg.register_google("test-key", None, "gemini-3.5-flash");
         let p = reg.get("google").unwrap();
-        assert!(p.completion_model().is_some());
+        assert!(p.chat_completion_model().is_some());
+        assert!(p.responses_model().is_none());
         assert!(p.embedding_model().is_some());
         assert!(p.image_gen_model().is_some());
         assert!(p.video_gen_model().is_some());
@@ -293,7 +302,8 @@ mod tests {
         let mut reg = Registry::new();
         reg.register_minimax("test-key", None, "MiniMax-M2.5");
         let p = reg.get("minimax").unwrap();
-        assert!(p.completion_model().is_some());
+        assert!(p.chat_completion_model().is_some());
+        assert!(p.responses_model().is_none());
         assert!(p.embedding_model().is_some());
         assert!(p.image_gen_model().is_some());
         assert!(p.video_gen_model().is_some());

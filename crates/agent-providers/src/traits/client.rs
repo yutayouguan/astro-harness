@@ -72,18 +72,18 @@ impl<Ext: ProviderExt> ProviderClient<Ext> {
 
 /// 拥有聊天能力的客户端。
 pub trait ChatClient {
-    type Model: CompletionModel;
-    fn completion_model(&self, model: &str) -> Self::Model;
+    type Model: ChatCompletionModel;
+    fn chat_completion_model(&self, model: &str) -> Self::Model;
 }
 
 /// blanket impl：当 Ext 声明 Chat = Capable<M> 时，Client<Ext> 自动实现 ChatClient。
 impl<Ext, M> ChatClient for ProviderClient<Ext>
 where
     Ext: ProviderExt + Capabilities<Chat = Capable<M>>,
-    M: CompletionModel + FromClient<Ext>,
+    M: ChatCompletionModel + FromClient<Ext>,
 {
     type Model = M;
-    fn completion_model(&self, model: &str) -> M {
+    fn chat_completion_model(&self, model: &str) -> M {
         M::from_client(self, model)
     }
 }

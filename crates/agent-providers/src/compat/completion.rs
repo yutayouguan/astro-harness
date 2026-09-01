@@ -12,8 +12,8 @@ use serde_json::{json, Value};
 
 use super::messages::to_openai_messages_with_developer_role;
 use super::sse::extract_openai_delta;
-use crate::traits::{CompletionModel, FromClient, ProviderClient, ProviderExt};
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::traits::{ChatCompletionModel, FromClient, ProviderClient, ProviderExt};
+use crate::types::{ChatCompletionRequest, CompletionStream};
 
 fn openai_chat_function_tools(tools: &[crate::types::message::ToolDefinition]) -> Vec<Value> {
     tools
@@ -194,11 +194,11 @@ impl<Ext: ProviderExt> FromClient<Ext> for OpenAICompletionModel<Ext> {
 }
 
 #[async_trait::async_trait]
-impl<Ext> CompletionModel for OpenAICompletionModel<Ext>
+impl<Ext> ChatCompletionModel for OpenAICompletionModel<Ext>
 where
     Ext: OpenAICompatible + Clone + Send + Sync + 'static,
 {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+    async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream> {
         let base = self.base_url.trim_end_matches('/');
         let url = format!("{base}/chat/completions");
 

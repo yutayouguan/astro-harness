@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use agent_protocol::ResponseItem;
+
 use super::message::{Message, ToolDefinition};
 
 /// 单次模型调用的运行时配置。
@@ -71,18 +73,14 @@ pub enum ToolChoice {
     Specific(String),
 }
 
-/// 统一聊天补全请求（provider-agnostic）。
+/// Agent 交给模型的原生 Responses prompt。
 #[derive(Debug, Clone)]
-pub struct CompletionRequest {
+pub struct Prompt {
     pub model: String,
     /// 稳定的基础指令，独立于带角色的对话输入。
     pub instructions: String,
-    /// 动态上下文与对话条目（带显式角色）。
-    pub input: Vec<Message>,
-    /// Native Responses input for the Agent path. When present, Responses
-    /// providers serialize these items directly and never lower them through
-    /// chat-completions messages.
-    pub response_input: Option<Vec<agent_protocol::ResponseItem>>,
+    /// 原生 Responses input。Agent 历史不得经 `Message` 降级后进入此字段。
+    pub input: Vec<ResponseItem>,
     /// 原生工具 schema；不编码到指令或消息文本中。
     pub tools: Vec<ToolDefinition>,
     /// 显式工具选择策略。`None` 保持 provider 默认。
@@ -93,17 +91,49 @@ pub struct CompletionRequest {
     pub max_tokens: Option<u32>,
     pub thinking: Option<ThinkingConfig>,
     pub additional_params: Value,
-    /// Google Interactions：续写上一轮 interaction。
-    pub previous_interaction_id: Option<String>,
 }
 
-impl Default for CompletionRequest {
+impl Default for Prompt {
     fn default() -> Self {
         Self {
             model: String::new(),
             instructions: String::new(),
             input: Vec::new(),
-            response_input: None,
+            tools: Vec::new(),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            thinking: None,
+            additional_params: Value::Null,
+        }
+    }
+}
+
+/// 非 Agent Chat/Anthropic/Gemini 等兼容调用请求。
+///
+/// 此类型不进入 Agent target/fallback 链，也不能用于恢复 Agent 历史。
+#[derive(Debug, Clone)]
+pub struct ChatCompletionRequest {
+    pub model: String,
+    pub instructions: String,
+    pub input: Vec<Message>,
+    pub tools: Vec<ToolDefinition>,
+    pub tool_choice: Option<ToolChoice>,
+    pub parallel_tool_calls: Option<bool>,
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub thinking: Option<ThinkingConfig>,
+    pub additional_params: Value,
+    pub previous_interaction_id: Option<String>,
+}
+
+impl Default for ChatCompletionRequest {
+    fn default() -> Self {
+        Self {
+            model: String::new(),
+            instructions: String::new(),
+            input: Vec::new(),
             tools: Vec::new(),
             tool_choice: None,
             parallel_tool_calls: None,
@@ -116,7 +146,7 @@ impl Default for CompletionRequest {
     }
 }
 
-impl CompletionRequest {
+impl ChatCompletionRequest {
     /// 将 instructions 字段降级为 system 消息，供线路协议没有顶层指令字段的 provider 使用。
     pub fn input_with_instructions(&self) -> Vec<Message> {
         let mut messages = Vec::with_capacity(self.input.len() + 1);
@@ -135,7 +165,7 @@ mod tests {
 
     #[test]
     fn lowering_keeps_contract_layers_distinct() {
-        let request = CompletionRequest {
+        let request = ChatCompletionRequest {
             instructions: "stable base".into(),
             input: vec![
                 Message::developer("dynamic policy"),

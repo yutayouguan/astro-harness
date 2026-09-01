@@ -3,7 +3,7 @@
 //! 多供应商 AI 能力统一封装。
 //!
 //! - [`types`]：统一消息模型（`Message` enum + `StreamChunk` + `Usage` + `ProviderConfig`）
-//! - [`traits`]：能力 trait 系统（`CompletionModel` + `Capable<M>/Nothing` 编译期检查）
+//! - [`traits`]：能力 trait 系统（`ResponsesModel` / `ChatCompletionModel` + `Capable<M>/Nothing`）
 //! - [`compat`]：OpenAI 兼容层（`OpenAICompatible` trait — 一行接厂商）
 //! - [`impls`]：19 个厂商实现（5 种协议管线）
 //! - [`registry`]：协议管线注册表（trait-based `Registry`）

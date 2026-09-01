@@ -8,15 +8,15 @@ use serde_json::Value;
 use crate::types::error::{ProviderError, ProviderResult};
 use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
 use crate::types::message::{FunctionToolDefinition, Message, ToolDefinition};
-use crate::types::request::{CompletionRequest, ProviderConfig, ThinkingConfig, ToolChoice};
+use crate::types::request::{
+    ChatCompletionRequest, Prompt, ProviderConfig, ThinkingConfig, ToolChoice,
+};
 use crate::types::stream::CompletionStream;
 
-/// 协议管线分发。
-///
-/// 接受 `CompletionRequest`，返回 `CompletionStream`。
+/// 非 Agent Chat/Anthropic/Gemini 兼容管线分发。
 pub async fn chat_stream_direct(
     provider: &str,
-    request: CompletionRequest,
+    request: ChatCompletionRequest,
     config: &ProviderConfig,
 ) -> ProviderResult<CompletionStream> {
     let provider = normalize_provider_id(provider);
@@ -24,13 +24,33 @@ pub async fn chat_stream_direct(
     register_provider(&mut reg, provider, config);
 
     let dyn_model = reg
-        .completion_model(provider)
+        .chat_completion_model(provider)
         .ok_or_else(|| ProviderError::UnknownProvider(provider.to_string()))?;
 
     dyn_model
         .stream(request)
         .await
         .map_err(ProviderError::Other)
+}
+
+/// Agent 原生 Responses 管线分发。
+pub async fn responses_stream_direct(
+    provider: &str,
+    prompt: Prompt,
+    config: &ProviderConfig,
+) -> ProviderResult<CompletionStream> {
+    let provider = normalize_provider_id(provider);
+    let mut reg = crate::registry::Registry::new();
+    register_provider(&mut reg, provider, config);
+
+    let dyn_model =
+        reg.responses_model(provider)
+            .ok_or_else(|| ProviderError::UnsupportedCapability {
+                provider: provider.to_string(),
+                capability: "Agent Responses API".to_string(),
+            })?;
+
+    dyn_model.stream(prompt).await.map_err(ProviderError::Other)
 }
 
 /// 聊天补全 — 接受旧签名（messages + tools JSON + config）。
@@ -67,11 +87,10 @@ pub async fn agent_responses_stream(
     }
     let mut config = config.clone();
     config.api_mode = "responses".to_string();
-    let request = CompletionRequest {
+    let prompt = Prompt {
         model: config.model.clone(),
         instructions,
-        input: Vec::new(),
-        response_input: Some(input),
+        input,
         tools: tools.iter().filter_map(parse_tool_definition).collect(),
         tool_choice: None,
         parallel_tool_calls: None,
@@ -83,9 +102,8 @@ pub async fn agent_responses_stream(
             effort: config.reasoning_effort.clone(),
         }),
         additional_params: config.additional_params.clone(),
-        previous_interaction_id: None,
     };
-    chat_stream_direct(provider, request, &config).await
+    responses_stream_direct(provider, prompt, &config).await
 }
 
 /// Convenience entry point for Agent-owned one-shot tasks such as title,
@@ -139,11 +157,10 @@ pub(crate) async fn chat_stream_with_tool_policy(
     }
     let tool_defs = tools.iter().filter_map(parse_tool_definition).collect();
 
-    let request = CompletionRequest {
+    let request = ChatCompletionRequest {
         model: config.model.clone(),
         instructions,
         input,
-        response_input: None,
         tools: tool_defs,
         tool_choice,
         parallel_tool_calls,
@@ -595,48 +612,47 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         }
     }
 
-    // 2) Responses 模式：替换 completion model（保留已注册的全部媒体能力）
-    //    默认由 profile.api_mode 决定；用户可显式覆盖为 Responses 或 Chat Completions。
+    // 2) Responses 模式：独立挂载 Agent Responses 模型，保留 Chat/media 能力。
+    //    默认由 profile.api_mode 决定；用户可显式覆盖协议模式。
     if responses {
         match provider {
             "openai" => {
-                reg.upgrade_to_responses::<crate::impls::openai::OpenAI>(provider, key, base, model)
+                reg.attach_responses::<crate::impls::openai::OpenAI>(provider, key, base, model)
             }
-            "deepseek" => reg.upgrade_to_responses::<crate::impls::deepseek::DeepSeek>(
-                provider, key, base, model,
-            ),
+            "deepseek" => {
+                reg.attach_responses::<crate::impls::deepseek::DeepSeek>(provider, key, base, model)
+            }
             "azure" => {
-                reg.upgrade_to_responses::<crate::impls::azure::Azure>(provider, key, base, model)
+                reg.attach_responses::<crate::impls::azure::Azure>(provider, key, base, model)
             }
-            "bailian" => reg
-                .upgrade_to_responses::<crate::impls::bailian::Bailian>(provider, key, base, model),
-            "minimax" | "minmax" => reg
-                .upgrade_to_responses::<crate::impls::minimax_chat::MiniMax>(
-                    "minimax", key, base, model,
-                ),
-            "mimo" => {
-                reg.upgrade_to_responses::<crate::impls::mimo::Mimo>(provider, key, base, model)
+            "bailian" => {
+                reg.attach_responses::<crate::impls::bailian::Bailian>(provider, key, base, model)
             }
+            "minimax" | "minmax" => reg.attach_responses::<crate::impls::minimax_chat::MiniMax>(
+                "minimax", key, base, model,
+            ),
+            "mimo" => reg.attach_responses::<crate::impls::mimo::Mimo>(provider, key, base, model),
             "ollama" => {
-                reg.upgrade_to_responses::<crate::impls::ollama::Ollama>(provider, key, base, model)
+                reg.attach_responses::<crate::impls::ollama::Ollama>(provider, key, base, model)
             }
-            "openrouter" => reg.upgrade_to_responses::<crate::impls::openrouter::OpenRouter>(
+            "openrouter" => reg.attach_responses::<crate::impls::openrouter::OpenRouter>(
                 provider, key, base, model,
             ),
             "zhipu" => {
-                reg.upgrade_to_responses::<crate::impls::zhipu::Zhipu>(provider, key, base, model)
+                reg.attach_responses::<crate::impls::zhipu::Zhipu>(provider, key, base, model)
             }
-            "moonshot" => reg.upgrade_to_responses::<crate::impls::moonshot::Moonshot>(
-                provider, key, base, model,
-            ),
+            "moonshot" => {
+                reg.attach_responses::<crate::impls::moonshot::Moonshot>(provider, key, base, model)
+            }
             "nvidia" => {
-                reg.upgrade_to_responses::<crate::impls::nvidia::Nvidia>(provider, key, base, model)
+                reg.attach_responses::<crate::impls::nvidia::Nvidia>(provider, key, base, model)
             }
-            "volcengine" => reg.upgrade_to_responses::<crate::impls::volcengine::Volcengine>(
+            "volcengine" => reg.attach_responses::<crate::impls::volcengine::Volcengine>(
                 provider, key, base, model,
             ),
-            "hunyuan" => reg
-                .upgrade_to_responses::<crate::impls::hunyuan::Hunyuan>(provider, key, base, model),
+            "hunyuan" => {
+                reg.attach_responses::<crate::impls::hunyuan::Hunyuan>(provider, key, base, model)
+            }
             _ => {}
         }
     }
@@ -723,9 +739,11 @@ mod tests {
         for id in providers {
             let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
+            let registered = reg.get(id).expect("provider should be registered");
             assert!(
-                reg.completion_model(id).is_some(),
-                "provider {id} should have completion model"
+                registered.responses_model().is_some()
+                    || registered.chat_completion_model().is_some(),
+                "provider {id} should have a Responses or compatibility model"
             );
         }
     }
@@ -737,9 +755,13 @@ mod tests {
             let normalized = normalize_provider_id(id);
             let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, normalized, &config);
+            let registered = reg
+                .get(normalized)
+                .unwrap_or_else(|| panic!("provider alias {id} should resolve"));
             assert!(
-                reg.completion_model(normalized).is_some(),
-                "provider alias {id} (normalized to {normalized}) should resolve"
+                registered.responses_model().is_some()
+                    || registered.chat_completion_model().is_some(),
+                "provider alias {id} (normalized to {normalized}) should expose a model"
             );
         }
     }
@@ -791,8 +813,8 @@ mod tests {
             let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(
-                reg.completion_model(id).is_some(),
-                "provider {id} (default Responses) should have completion model"
+                reg.responses_model(id).is_some(),
+                "provider {id} (default Responses) should have a Responses model"
             );
         }
     }

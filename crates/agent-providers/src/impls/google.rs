@@ -1,4 +1,4 @@
-//! Google Gemini Interactions API — 原生 CompletionModel 实现。
+//! Google Gemini Interactions API — 非 Agent Chat 兼容模型实现。
 
 use std::future::Future;
 use std::time::Duration;
@@ -9,14 +9,14 @@ use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
 use crate::traits::{
-    Capabilities, Capable, CompletionModel, EmbeddingModel, FromClient, ImageGenModel, ModelBase,
-    MusicGenModel, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
+    Capabilities, Capable, ChatCompletionModel, EmbeddingModel, FromClient, ImageGenModel,
+    ModelBase, MusicGenModel, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
 };
 use crate::types::media::{
     Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenConfig, MusicGenConfig,
     TTSConfig, VideoGenConfig,
 };
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::types::{ChatCompletionRequest, CompletionStream};
 
 const API_REVISION: &str = "2026-05-20";
 const MAX_CONNECT_ATTEMPTS: usize = 3;
@@ -136,8 +136,8 @@ impl InteractionsCompletionModel {
 }
 
 #[async_trait::async_trait]
-impl CompletionModel for InteractionsCompletionModel {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+impl ChatCompletionModel for InteractionsCompletionModel {
+    async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream> {
         let base = self.base_url.trim_end_matches('/');
         let url = if base.contains("/v1beta") {
             format!("{base}/interactions")
@@ -1077,7 +1077,7 @@ mod tests {
     #[test]
     fn google_has_chat() {
         let client = ProviderClient::new("test-key", Google);
-        let _model = client.completion_model("gemini-3.5-flash");
+        let _model = client.chat_completion_model("gemini-3.5-flash");
     }
 
     #[test]

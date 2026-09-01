@@ -11,8 +11,8 @@ use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
 use super::completion::OpenAICompatible;
-use crate::traits::{CompletionModel, FromClient, ProviderClient, ProviderExt};
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::traits::{FromClient, ProviderClient, ProviderExt, ResponsesModel};
+use crate::types::{CompletionStream, Prompt};
 
 /// 泛型 OpenAI Responses API 补全模型。
 ///
@@ -54,11 +54,11 @@ impl<Ext: ProviderExt> FromClient<Ext> for OpenAIResponsesModel<Ext> {
 }
 
 #[async_trait::async_trait]
-impl<Ext> CompletionModel for OpenAIResponsesModel<Ext>
+impl<Ext> ResponsesModel for OpenAIResponsesModel<Ext>
 where
     Ext: OpenAICompatible + Clone + Send + Sync + 'static,
 {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+    async fn stream(&self, request: Prompt) -> Result<CompletionStream> {
         if self.api_key.trim().is_empty() {
             return Err(anyhow!("Responses API Key 为空"));
         }
@@ -71,10 +71,7 @@ where
             &request.model
         };
 
-        let input = match request.response_input.as_deref() {
-            Some(items) => crate::openai::responses::to_native_responses_input(items)?,
-            None => crate::openai::responses::to_responses_input(&request.input),
-        };
+        let input = crate::openai::responses::to_native_responses_input(&request.input)?;
 
         let mut body = json!({
             "model": model,
@@ -179,7 +176,6 @@ where
 mod tests {
     use super::*;
     use crate::compat::OpenAICompatible;
-    use crate::traits::Capabilities;
 
     #[derive(Debug, Clone, Copy, Default)]
     struct FakeResponses;
@@ -196,19 +192,10 @@ mod tests {
         const SUPPORTS_RESPONSES: bool = true;
     }
 
-    impl Capabilities for FakeResponses {
-        type Chat = crate::traits::Capable<OpenAIResponsesModel<Self>>;
-        type Embedding = crate::traits::Nothing;
-        type ImageGen = crate::traits::Nothing;
-        type VideoGen = crate::traits::Nothing;
-        type TTS = crate::traits::Nothing;
-        type MusicGen = crate::traits::Nothing;
-    }
-
     #[test]
     fn responses_model_from_client() {
-        use crate::traits::client::ChatClient;
+        use crate::traits::FromClient;
         let client = ProviderClient::new("test-key", FakeResponses);
-        let _model = client.completion_model("gpt-5.6");
+        let _model = OpenAIResponsesModel::from_client(&client, "gpt-5.6");
     }
 }

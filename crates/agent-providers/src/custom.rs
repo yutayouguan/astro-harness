@@ -11,8 +11,8 @@ use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::traits::CompletionModel;
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::traits::ResponsesModel;
+use crate::types::{CompletionStream, Prompt};
 
 /// 自定义模型声明（TOML 中的 `[[custom_providers.<id>.models]]`）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,7 +93,7 @@ pub fn read_env_key(env_keys: &[String]) -> Option<String> {
 /// 所有行为由运行时配置参数化，不依赖编译期 trait 常量。
 /// 统一走 Responses API。
 #[derive(Clone)]
-pub struct ConfigDrivenCompletionModel {
+pub struct ConfigDrivenResponsesModel {
     http: HttpClient,
     base_url: String,
     api_key: String,
@@ -101,7 +101,7 @@ pub struct ConfigDrivenCompletionModel {
     provider_id: String,
 }
 
-impl ConfigDrivenCompletionModel {
+impl ConfigDrivenResponsesModel {
     pub fn new(
         http: HttpClient,
         config: &CustomProviderConfig,
@@ -120,8 +120,8 @@ impl ConfigDrivenCompletionModel {
 }
 
 #[async_trait::async_trait]
-impl CompletionModel for ConfigDrivenCompletionModel {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+impl ResponsesModel for ConfigDrivenResponsesModel {
+    async fn stream(&self, request: Prompt) -> Result<CompletionStream> {
         if self.api_key.trim().is_empty() {
             anyhow::bail!("{} API Key 为空", self.provider_id);
         }
@@ -134,10 +134,7 @@ impl CompletionModel for ConfigDrivenCompletionModel {
             &request.model
         };
 
-        let input = match request.response_input.as_deref() {
-            Some(items) => crate::openai::responses::to_native_responses_input(items)?,
-            None => crate::openai::responses::to_responses_input(&request.input),
-        };
+        let input = crate::openai::responses::to_native_responses_input(&request.input)?;
 
         let mut body = json!({
             "model": model,
