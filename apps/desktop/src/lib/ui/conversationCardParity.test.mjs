@@ -7,7 +7,7 @@ const cssUrl = new URL(
   import.meta.url,
 );
 
-test("user and assistant messages share the same outer card surface", async () => {
+test("user and assistant entries share the same outer card surface", async () => {
   const css = await readFile(cssUrl, "utf8");
 
   assert.match(

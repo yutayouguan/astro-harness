@@ -60,7 +60,7 @@ reqwest      = { version = "0.12", features = ["json", "stream", "rustls-tls", "
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `crates/agent-types` | `types` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`ToolEntry`（含 `ToolExposure`、`namespace`）、`MediaAsset`、`ChatTarget`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。零业务逻辑。 |
+| `crates/agent-types` | `types` | 跨 crate 共享类型：`ModelTarget`、`model_tool::ToolCall`、`ToolEntry`（含 `ToolExposure`、`namespace`）、`MediaAsset`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。Agent history 类型归 `agent-protocol`。 |
 | `crates/agent-config` | `agent-config` | 分层配置原语：`ConfigLayer`、`ConfigLayerSource`（4 级优先级）、`ConfigKeyPath`。无产品特有字段，不做文件系统发现。 |
 | `crates/agent-protocol` | `agent-protocol` | Core 领域事件协议：`Event`、`EventMsg`、`TurnItem`、`Submission`。运行时唯一事件格式。 |
 | `crates/agent-rollout` | `agent-rollout` | JSONL append-only 历史记录：`RolloutRecorder`、`PersistencePolicy`、`reconstruct` 重建。rollout 是线程历史的权威事实源。 |

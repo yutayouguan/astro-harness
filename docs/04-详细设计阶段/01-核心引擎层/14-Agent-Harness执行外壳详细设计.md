@@ -108,7 +108,7 @@ schema 是三个边界，不应重新拼成一段无类型字符串，也不应�
 
 ## 6. Provider step
 
-每次 Provider sampling 使用当前 `ChatTarget` 和 `StepContext`。Fallback 只在尚未对用户产生可见输出的安全边界切换目标，避免将两个 Provider 的半段回答拼在同一 turn 中。
+每次 Provider sampling 使用当前 `ModelTarget` 和 `StepContext`。Fallback 只在尚未对用户产生可见输出的安全边界切换目标，避免将两个 Provider 的半段回答拼在同一 turn 中。
 
 Provider 返回的 text、reasoning、usage 和 tool deltas 被规范化为统一 `StreamChunk`，但必须在请求和历史层保留 Provider 原生语义，尤其是 Responses API 的 custom/tool_search call-output pair。
 

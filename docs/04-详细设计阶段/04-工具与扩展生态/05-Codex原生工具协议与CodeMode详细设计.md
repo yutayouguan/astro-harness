@@ -97,7 +97,7 @@ next request: reconstruct the matching native call/output history pair
 
 代码位置：
 
-- `crates/agent-providers/src/types/message.rs`：`ToolDefinition` 及其子类型；
+- `crates/agent-providers/src/types/request_content.rs`：`ToolDefinition` 及其子类型；
 - `crates/agent-providers/src/types/request.rs`：`ResponsesRequest.tools`；
 - `crates/agent-providers/src/dispatch.rs`：从 Registry JSON 解析为强类型定义；
 - `crates/agent-tools/src/engine/registry.rs`：生成模型可见 schema。
@@ -581,7 +581,7 @@ ModelSpec.tool_mode 显式值
 
 | 职责 | 当前实现 |
 | --- | --- |
-| Provider 工具联合类型 | `crates/agent-providers/src/types/message.rs` |
+| Provider 工具联合类型 | `crates/agent-providers/src/types/request_content.rs` |
 | Registry schema 生成与暴露策略 | `crates/agent-tools/src/engine/registry.rs` |
 | `tool_search` 搜索与激活 | `crates/agent-tools/src/builtin/shell/tool_search.rs` |
 | MCP 动态注册 | `crates/agent-core/src/runtime/mod.rs::attach_mcp_tools` |

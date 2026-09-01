@@ -97,7 +97,7 @@ prepare_turn
 
 每个 sampling step 重新创建 `StepContext`。它冻结本次可见工具、MCP、路由、权限和工作目录；热加载只影响下一 step。模型不能调用生成该 call 时不可见的工具。
 
-Agent 请求只走 Responses API。Session 与 rollout 的 canonical history 是 `ResponseItem`；`Message` 仅是查询/UI/非 Agent 兼容投影。
+Agent 请求只走 Responses API。Session、rollout 和 Desktop history RPC 的 canonical history 是 `ResponseItem`；UI 仅在渲染边界生成 `ConversationEntry`，非 Agent 兼容入口单独使用 `ChatCompletionMessage`。
 
 ## 5. Steer、Interrupt、Suspend 与 Recover
 
@@ -225,7 +225,7 @@ denied assessment
 Realtime 是 Thread 所有的会话级连接，并非一个普通 sampling step。`agent-realtime` 独立拥有 transport negotiation、Provider wire decoding、typed event、history reducer 和 handoff wire；`agent-core` 只负责把 handoff 转换为普通 Agent turn，并将完整历史写入 rollout。Provider 原始 JSON 不跨越 crate 边界。
 
 - `RealtimeConversationStart` 的 reply 在 transport-specific readiness 成功或失败后才完成：WebSocket 等待 session handshake，WebRTC 等待 call 创建与 SDP answer，ExistingCall 启动 sideband 生命周期。
-- Realtime `ChatTarget` 和 API credential 仅属于该连接，不改写普通文本回合的 primary/fallback targets。
+- Realtime `ModelTarget` 和 API credential 仅属于该连接，不改写普通文本回合的 primary/fallback targets。
 - `include_startup_context` 默认为 `true`：注入截断后的 system prompt，并取最近 32 条 user/assistant 文本项；显式关闭时不注入。
 - transport 支持 `websocket`、`webrtc { sdp }` 和 `existing_call { call_id }`。WebRTC 使用 unified SDP 交换媒体并以 call id 建立 server sideband；ExistingCall 只附加 sideband，不发送 session update。
 - V2 是 OpenAI GA 默认协议，V3 是显式选择的 frameless/live 协议。V3 sideband 支持有界指数退避重连；V2 断开即关闭，避免自动重放非幂等音频或 response request。

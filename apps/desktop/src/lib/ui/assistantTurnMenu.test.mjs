@@ -11,7 +11,7 @@ async function source(path) {
 test("assistant answers expose one accessible context menu from pointer and toolbar", async () => {
   const [chatView, menu] = await Promise.all([
     source("components/chat/ChatView.tsx"),
-    source("components/chat/AssistantMessageContextMenu.tsx"),
+    source("components/chat/AssistantTurnContextMenu.tsx"),
   ]);
 
   assert.match(chatView, /onContextMenu=\{\(event\) =>/);
@@ -46,7 +46,7 @@ test("per-answer layout overrides remain separate from the global default", asyn
 test("copy actions are disabled when an answer has no text", async () => {
   const [chatView, menu] = await Promise.all([
     source("components/chat/ChatView.tsx"),
-    source("components/chat/AssistantMessageContextMenu.tsx"),
+    source("components/chat/AssistantTurnContextMenu.tsx"),
   ]);
 
   assert.match(
@@ -87,7 +87,7 @@ test("full-process controls reach reasoning and tool groups", async () => {
 
 test("menu glass stays responsive and respects motion and transparency preferences", async () => {
   const [css, tokens] = await Promise.all([
-    source("styles/features/chat/message-context-menu.css"),
+    source("styles/features/chat/assistant-turn-context-menu.css"),
     source("styles/tokens/component/menu.css"),
   ]);
 

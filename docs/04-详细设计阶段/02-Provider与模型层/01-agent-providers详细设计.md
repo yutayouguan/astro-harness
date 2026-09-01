@@ -6,10 +6,10 @@
 
 ## 1. 设计边界
 
-`agent-providers` 是多供应商协议与媒体适配层。其最重要的边界不是“统一成一种 Message”，而是区分：
+`agent-providers` 是多供应商协议与媒体适配层。其最重要的边界是区分：
 
 - **Agent Responses**：Responses-only，输入为 canonical `agent_protocol::ResponseItem`；
-- **通用/工具/媒体调用**：可保留 `Message` 和厂商原生协议。
+- **非 Agent 兼容调用**：可保留 `ChatCompletionMessage` 和厂商原生协议。
 
 因此 `ApiMode` 的多协议枚举属于通用 Provider 层，不是 Agent 模式选项。Agent target 必须通过 `supports_agent_responses()`；不支持 Responses 时在调用前返回 `UnsupportedCapability`。
 
@@ -22,9 +22,9 @@ Agent 与兼容路径使用两个互不兼容的请求类型：
 | `ResponsesRequest.instructions` | Agent 独立稳定指令 |
 | `ResponsesRequest.input` | Agent 的 `Vec<ResponseItem>`，adapter 直接序列化 |
 | `ResponsesRequest.tools` | 原生工具定义，不拼入 prompt |
-| `ChatCompletionRequest.input` | 非 Agent 的 `Vec<Message>` 兼容入口 |
+| `ChatCompletionRequest.input` | 非 Agent 的 `Vec<ChatCompletionMessage>` 兼容入口 |
 
-两个请求类型没有共享的消息输入字段，因此 Agent 无法在类型层误传 `Vec<Message>`。`Message` 投影只能用于 UI、查询、兼容 API 或明确的局部计算，不可作为恢复后的模型历史。
+两个请求类型没有共享的消息输入字段，因此 Agent 无法在类型层误传 `Vec<ChatCompletionMessage>`。UI 使用的 `ConversationEntry` 也不能作为恢复后的模型历史。
 
 ## 3. Agent 请求链
 
@@ -39,7 +39,7 @@ ProviderStreamer::stream_responses_with_contract
   -> Responses adapter
 ```
 
-生产 Agent 链路不会调用 `chat_stream()`。测试通过 `ResponsesOverride` / `ResponsesOverrideInput` 接收原生 Items，不存在测试专用的 Message 降级路径。
+生产 Agent 链路不会调用 `chat_stream()`。测试通过 `ResponsesOverride` / `ResponsesOverrideInput` 接收原生 Items，不存在测试专用的 Chat Completions 降级路径。
 
 ### 3.1 Target 过滤
 
@@ -53,7 +53,7 @@ primary 与 fallback targets 在进入请求前都必须支持 Responses。辅�
 
 Agent 历史由 `ResponseItem` 表示并直接进入 Responses input：
 
-- `Message` content items；
+- `ResponseItem::Message` content items；
 - reasoning；
 - function call/output；
 - custom tool call/output；
@@ -100,7 +100,7 @@ Usage 归一化规则：
 - 文件上传、voice clone 等厂商扩展；
 - 明确调用 `chat_stream()` 的工具级兼容任务。
 
-这些调用不得把其 `Message` 历史写回 Agent canonical rollout。
+这些调用不得把其 `ChatCompletionMessage` 历史写回 Agent canonical rollout。
 
 ## 8. 错误与重试
 

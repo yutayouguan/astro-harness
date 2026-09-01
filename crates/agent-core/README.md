@@ -39,21 +39,21 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | `prompt/contract.rs` | `PromptContract` 三层边界与 developer/user 角色分层 |
 | `prompt/prompt_builder.rs` | System prompt 分层构建器 |
 | `prompt/hooks.rs` | Hook 集成与 `CancelSignal` |
-| `prompt/messages.rs` | 消息变换与注入 |
+| `prompt/response_input.rs` | 原生 `ResponseItem` 输入变换与注入 |
 | `prompt/sanitize.rs` | Prompt 清洗与安全处理 |
 | `runtime/mod.rs` | `Session`（原 `AgentLoop`）核心结构体、`Config`、`TurnResult` |
 | `runtime/session_state.rs` | `SessionState` — 会话级可变运行时状态 |
 | `runtime/session_services.rs` | `SessionServices` — 会话级服务注册表 |
 | `runtime/session_io.rs` | `AgentStatus` 状态枚举与 I/O 绑定 |
 | `runtime/astro_thread.rs` | `AstroThread` — Session 的事件流句柄 |
-| `runtime/model_ctx.rs` | `ModelContext` — LLM 凭证、chat_targets/fallback 链 |
+| `runtime/model_ctx.rs` | `ModelContext` — LLM 凭证、model_targets/fallback 链 |
 | `runtime/turn_budget.rs` | `TurnState` — turn_id、轮次/深度计数、`MaxDepthError` |
 | `runtime/turn_lifecycle.rs` | 轮次生命周期 — `begin_user_turn` / `run_turn` / `prepare_llm_context` |
 | `runtime/turn_context.rs` | `TurnContext` — 单轮上下文快照 |
 | `runtime/step_context.rs` | `StepContext` — 单步（工具调用）上下文 |
 | `runtime/compression_state.rs` | `CompressionState` — mid-run 摘要、compact 建议、召回上下文 |
 | `runtime/context_maintenance.rs` | 上下文维护 — `maintain_tool_context` / `provider_history` |
-| `runtime/recording.rs` | 消息记录 — `record_assistant_*` / `record_tool_result_*` |
+| `runtime/recording.rs` | `ResponseItem` 记录 — `record_assistant_*` / `record_tool_result_*` |
 | `runtime/tool_dispatch.rs` | 工具调度 — `handle_tool_call_async` / `finalize_tool_call_result` |
 | `runtime/tool_router.rs` | `ToolRouter` — 内置/MCP/动态工具统一路由 |
 | `runtime/system_prompt.rs` | Prompt 契约构建 — `build_prompt_contract` |
@@ -91,7 +91,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | 方向 | crate | 说明 |
 |------|-------|------|
 | 依赖 | `agent-protocol` | `Op`、`EventMsg`、`TurnItem` 与 canonical `ResponseItem` |
-| 依赖 | `types` | 通用 DTO：ChatTarget、ToolEntry、InteractionMode；`ChatTarget` 是模型路由目标名，不代表 Chat Completions 协议 |
+| 依赖 | `types` | 通用 DTO：ModelTarget、ToolEntry、InteractionMode；`ModelTarget` 是模型路由目标名，不代表 Chat Completions 协议 |
 | 依赖 | `providers` | LLM 流式调用、fallback、media 生成 |
 | 依赖 | `tools` | 工具注册表、分发、审批、ToolContext |
 | 依赖 | `memory` | MemoryManager、配置加载、workspace 引导 |
@@ -111,7 +111,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 
 ## 关键不变量
 
-1. **原生历史**：Agent sampling 使用 `ResponseItem`；`Message` 只作查询/UI/非 Agent 兼容投影
+1. **原生历史**：Agent sampling、SessionStore、rollout 和 Desktop history RPC 都使用 `ResponseItem`；UI 只在渲染边界生成 `ConversationEntry`
 2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 90）；`increment_tool_round()` 超限返回 `MaxDepthError`
 3. **streaming 不变量**：每轮 assistant 回复必须先写入 history 再执行工具；usage 覆盖式累加
 4. **取消信号**：`CancelSignal` 在工具调用前后均检查，已取消则立即中断

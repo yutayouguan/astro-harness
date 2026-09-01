@@ -80,11 +80,11 @@ agent-rollout (本 crate)
 ```
 
 - **agent-protocol**：`EventMsg` 类型被 `policy.rs` 直接 match 判断持久化
-- **agent-types**：`Message` 只参与 SQLite/UI 或非 Agent 兼容投影，不是 rollout history
+- **agent-types**：提供 model target、tool call 和通用运行类型，不定义 Agent history 消息模型
 - **agent-core**：运行时分别写入 `message` / `function_call` / `tool_search_call` / 对应 output
 - **agent-server**：Thread 恢复时先读 rollout，再重建 SQLite 搜索/UI 投影和运行时 history
 
-`ResponseItem` 不经 `Message` 往返后再写入。`src/response_items.rs` 可以生成 read model，但恢复 Agent sampling 时必须保留原生 item type、call id 和顺序。
+`ResponseItem` 不经通用消息类型往返后再写入。恢复 Agent sampling 时必须保留原生 item type、call id 和顺序。
 
 ## 测试运行
 

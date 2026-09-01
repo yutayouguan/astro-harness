@@ -17,8 +17,8 @@ Astro 的 Agent 对话链路只接受 Responses API。`agent_protocol::ResponseI
 核心不变量如下：
 
 1. Agent target 必须通过 `supports_agent_responses()`，否则在发请求前拒绝。
-2. Agent 请求必须使用 `ResponsesRequest.input: Vec<ResponseItem>`；`ChatCompletionRequest.input: Vec<Message>` 仅属于非 Agent 兼容入口。
-3. Session SQLite 与 rollout 都保存原生 `ResponseItem`；Desktop RPC 也直接返回 item。UI 只在渲染边界临时组合气泡，不定义、持久化或回传 `Message` 历史 DTO。
+2. Agent 请求必须使用 `ResponsesRequest.input: Vec<ResponseItem>`；`ChatCompletionRequest.input: Vec<ChatCompletionMessage>` 仅属于非 Agent 兼容入口。
+3. Session SQLite 与 rollout 都保存原生 `ResponseItem`；Desktop RPC 也直接返回 item。UI 只在渲染边界临时组合 `ConversationEntry`，不持久化或回传该投影。
 4. Function、custom、tool search 等 call/output 项必须保持原始类型、标识和顺序；output 紧邻对应 call，不能跨轮重排。
 5. 标题、压缩、记忆回顾、智能审批等 Agent 自有辅助任务同样走 Responses-only 入口。
 6. Provider 的显式 `api_mode` 不能绕过 Agent capability gate。
@@ -52,8 +52,8 @@ TurnInput
 - **执行关联**：使用 call id 将工具输出与模型发出的调用精确配对。
 - **持久恢复**：`RolloutItem::ResponseItem` 直接写入 append-only rollout，重启后按原类型重建。
 
-`Message` 只留在非 Agent provider 兼容边界。Session DB、rollout、Desktop history RPC
-和 Agent prompt 不包含 `Message` 路径；搜索所需的 role/text/tool name 是由 `ResponseItem`
+`ChatCompletionMessage` 只留在非 Agent provider 兼容边界。Session DB、rollout、Desktop history RPC
+和 Agent prompt 不包含 Chat Completions 消息路径；搜索所需的 role/text/tool name 是由 `ResponseItem`
 生成的可重建索引列，不是另一份历史模型。
 
 ### 3.1 工具结果配对
@@ -133,7 +133,7 @@ SQLite schema v22 的 `response_items.item_json` 是唯一会话内容列。升�
 | 提交协议 | `crates/agent-protocol/src/submission.rs` |
 | Thread 与 submission loop | `crates/agent-core/src/runtime/astro_thread.rs`、`submission_loop.rs` |
 | SessionTask 生命周期 | `crates/agent-core/src/tasks/` |
-| Responses 请求组装 | `crates/agent-core/src/streaming/provider.rs`、`prompt/messages.rs` |
+| Responses 请求组装 | `crates/agent-core/src/streaming/provider.rs`、`prompt/response_input.rs` |
 | Agent capability gate | `crates/agent-providers/src/dispatch.rs`、`profile.rs` |
 | Responses 序列化 | `crates/agent-providers/src/compat/responses.rs` |
 | Rollout 策略与恢复 | `crates/agent-rollout/src/policy.rs`、`reconstruction.rs` |
@@ -143,6 +143,6 @@ SQLite schema v22 的 `response_items.item_json` 是唯一会话内容列。升�
 
 - 不为 Agent 链路恢复 Chat Completions fallback。
 - 不以 DeepSeek 或其他兼容实现的特殊限制替代 Codex Responses 语义。
-- 不把原生 `ResponseItem` 降级为 `Message` 作为 canonical storage。
+- 不把原生 `ResponseItem` 降级为 `ChatCompletionMessage` 或 UI `ConversationEntry` 作为 canonical storage。
 - 不引入 executor-scoped plugin/request metadata；当前作用域是 process plugin bus、session-bound command/MCP runtime 和 turn/step typed context。
 - 不把历史计划文档中的未实现接口描述为当前能力。

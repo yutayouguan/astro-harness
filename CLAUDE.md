@@ -67,7 +67,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、`ToolRegistry`（`ToolExposure` 六级暴露 Direct/DirectModelOnly/Deferred/DeferredModelOnly/CodeModeOnly/Hidden + BM25 工具搜索）、审批逻辑、HITL、schema sanitization。内部目录：`engine/`（注册表/分发/catalog/schema）、`builtin/`（shell/agents/hitl/media/memory/present）。工具域：exec_command（原 terminal）、apply_patch（Freeform 补丁工具，替代 file_ops）、write_stdin、request_permissions、code_exec、memory、skills、subagents（6 个 V2 工具）、tool_search、media 等。`FreeformToolFormat` 支持非 JSON 工具输入（Lark 语法）。 |
 | `crates/agent-a2ui` | `a2ui` | AG-UI 声明式生成式 UI 表面：22 种组件（Text、Card、Button、Image、Audio、Video、Metric、ClarifyWizard 等）、模板、校验。 |
 | `crates/agent-server` | `server` | gRPC 服务端（tonic）：Thread submit/resume/subscribe RPC、`ThreadHistoryBuilder` 活跃 Turn 快照、per-connection 128 容量队列、慢消费者断连。`run_embedded()` 供 Tauri in-process 使用。 |
-| `crates/agent-types` | `types` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`MediaAsset`、`ChatTarget`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。 |
+| `crates/agent-types` | `types` | 跨 crate 共享类型：`ModelTarget`、`model_tool::ToolCall`、`MediaAsset`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。 |
 | `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、AgentThreadChanged 等 RPC。 |
 | `crates/agent-protocol` | `protocol` | Core 领域事件协议：`Event`、`EventMsg`、`TurnItem`、`Submission`。运行时唯一事件格式。 |
 | `crates/agent-rollout` | `rollout` | JSONL append-only 历史记录：`RolloutRecorder`、`PersistencePolicy`、`reconstruct` 重建。rollout 是线程历史的权威事实源。 |
@@ -175,7 +175,7 @@ reasoning = true
 
 **模型元数据**（三层合并）：API 厂商端点发现 → OpenRouter 模型表 enrich → 已知能力补丁 (`apply_known_capability_overrides`)。合并结果持久化到 `~/.astro/cache/models.json`，前端和运行时共用。
 
-**Provider Fallback 链**：`chat_targets: Vec<ChatTarget>` — primary + 最多 `MAX_CHAT_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。`ChatTarget.api_mode` 随链路传播到 `ProviderConfig`，确保探测和聊天走同一协议。辅助任务各有独立目标链，缺省回退到 primary。
+**Provider Fallback 链**：`model_targets: Vec<ModelTarget>` — primary + 最多 `MAX_MODEL_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。`ModelTarget.api_mode` 随链路传播到 `ProviderConfig`，确保探测和聊天走同一协议。辅助任务各有独立目标链，缺省回退到 primary。
 
 **Profile 表**：`ProviderProfile` 静态表驱动（`PROFILES` 数组），每厂商一个条目。字段含 `supports_responses: bool`（UI 切换标志）。前端 `supports_responses_toggle()` 读此字段。
 
@@ -221,7 +221,7 @@ Plugin bus 事件（Codex 对齐命名 + Astro 扩展）：`PreLlmCall`、`PreTo
 
 ## Key Invariants
 
-1. **角色顺序**：`session_messages` 中相邻消息不得连续出现相同 role。由 `validate_message_order()` 强制。
+1. **原生历史**：Agent、rollout、SQLite 和 Desktop history RPC 都使用 `ResponseItem`。其中相邻的 user/assistant message item 不得重复角色，由 `validate_message_order()` 强制。
 
 2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 90）。`increment_tool_round()` 耗尽时返回 `MaxDepthError`。
 

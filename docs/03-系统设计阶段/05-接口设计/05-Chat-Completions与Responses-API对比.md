@@ -398,9 +398,9 @@ PromptContract + canonical ResponseItem history
   -> POST .../responses
 
 非 Agent / 兼容路径
-Vec<Message>
+Vec<ChatCompletionMessage>
   -> providers::chat_stream
-  -> ChatCompletionRequest.input: Vec<Message>
+  -> ChatCompletionRequest.input: Vec<ChatCompletionMessage>
   -> OpenAICompletionModel 或其他协议 adapter
   -> POST .../chat/completions（当选择 Chat adapter 时）
 ```
@@ -412,7 +412,7 @@ Vec<Message>
 | 语义 | `ChatCompletionRequest` | `ResponsesRequest` |
 | --- | --- | --- |
 | `instructions` | 降级成 system message | 顶层 `instructions` |
-| 输入 | `Vec<Message>` 序列化成 `messages[]` | `Vec<ResponseItem>` 直接序列化 |
+| 输入 | `Vec<ChatCompletionMessage>` 序列化成 `messages[]` | `Vec<ResponseItem>` 直接序列化 |
 | `tools` | 外层 `function` 包装 | 扁平 typed tool 定义 |
 | `tool_choice` | 指定函数时为 `function.name` | 指定函数时为顶层 `name` |
 | `max_tokens` | 当前兼容层发为 `max_tokens` | 映射为 `max_output_tokens` |
@@ -462,11 +462,11 @@ Chat parser 则从 `choices[].delta` 中抽取文本、reasoning 兼容字段、
 | Registry 槽位 | `responses_model`，与 `chat_completion_model` 独立 |
 | 厂商差异 trait | `OpenAIResponsesCompatible`，不再依赖 Chat 的 `OpenAICompatible` |
 | 生产 Agent 入口 | `agent_responses_stream` / `agent_responses_prompt` |
-| 测试注入 | `ResponsesOverrideInput { instructions, items }`，不再把 Items 还原成 `Message` |
+| 测试注入 | `ResponsesOverrideInput { instructions, items }`，不再把 Items 还原成 Chat Completions 消息 |
 | Chat Completions | 仅保留在 workflow、媒体与显式非 Agent 兼容调用中 |
 | 隐式协议降级 | Agent 路径不存在；不支持 Responses 时返回 `UnsupportedCapability` |
 
-代码中仍保留 `ChatTarget`、`chat_targets` 等名称。它们表示桌面产品中的“会话模型目标/凭证链”，不是 Chat Completions wire contract；其值会先经过 Responses capability gate，再进入 Agent 主链，因此没有作为兼容命名迁移。若未来统一产品术语，可单独改为 `ModelTarget`，但不应与协议迁移混在一起破坏持久化或 RPC 字段。
+`ModelTarget`、`model_targets` 表示模型调用目标/凭证链，不暗示 Chat Completions wire contract。其值会先经过 Responses capability gate，再进入 Agent 主链。
 
 ## 8. 对 Astro 的建议
 

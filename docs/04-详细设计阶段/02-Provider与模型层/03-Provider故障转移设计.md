@@ -1,6 +1,6 @@
 # Provider 故障转移与网络恢复设计
 
-> **Harness 当前基线（2026-08-29）**：`Session.chat_targets` 保存 primary + 有界 fallback 链，只有在首个用户可见 chunk 前失败才能切换。五类 `AuxiliaryTask` 可配置独立目标链，缺省回退 primary。已输出部分内容后不做跨 Provider 拼接续写。
+> **Harness 当前基线（2026-08-29）**：`Session.model_targets` 保存 primary + 有界 fallback 链，只有在首个用户可见 chunk 前失败才能切换。五类 `AuxiliaryTask` 可配置独立目标链，缺省回退 primary。已输出部分内容后不做跨 Provider 拼接续写。
 
 > 版本：v2.0 | 更新日期：2026-08-28 | 状态：网络恢复待实施，显式 fallback 已实现
 >
@@ -78,7 +78,7 @@ Sampling
   → emit StreamError("Reconnecting... waiting for network")
   → wait 5s / 10s / 20s / 40s / 60s / 60s ...
   → rebuild request from authoritative Session history
-  → retry same ChatTarget in same turn_id
+  → retry same ModelTarget in same turn_id
 ```
 
 约束：
@@ -111,7 +111,7 @@ Astro 当前没有 Responses WebSocket transport，因此 Codex 的 WebSocket �
 
 ## 6. 显式 Provider fallback
 
-`ProviderStreamer` 持有 `Vec<ChatTarget>`，每次 sampling 从 primary 开始。只有用户配置了
+`ProviderStreamer` 持有 `Vec<ModelTarget>`，每次 sampling 从 primary 开始。只有用户配置了
 fallback 链时才允许切换，且仅限首个有效业务 chunk 之前。
 
 可切换：
@@ -165,7 +165,7 @@ Server 对齐 Codex app-server，将 `Error` 和 `StreamError` 投影为同一�
 
 ```text
 providers.json ProviderConfig
-  → ChatTarget
+  → ModelTarget
   → providers::ProviderConfig
   → RequestRetryPolicy / SamplingRetryState
 ```
@@ -202,7 +202,7 @@ error.kind
 
 1. 不可达端口触发等待事件，不产生“全部模型尝试失败”。
 2. 同址服务恢复后原 Turn 自动成功，`turn_id` 不变。
-3. 连接失败不会访问第二个 `ChatTarget`。
+3. 连接失败不会访问第二个 `ModelTarget`。
 4. 用户中断等待后只产生一个 `TurnAborted`。
 5. 后台任务有界耗尽并释放 worker。
 6. 5xx/429/401 的显式 fallback 行为保持可测试。

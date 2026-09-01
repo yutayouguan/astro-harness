@@ -1,7 +1,7 @@
 # session
 
 `SessionStore` 是 Agent 会话的 SQLite 索引与查询层。schema v22 直接保存
-`agent_protocol::ResponseItem` JSON；它不再保存或返回 `Message` 投影。append-only rollout
+`agent_protocol::ResponseItem` JSON；它不再保存或返回第二套泛化消息模型。append-only rollout
 仍是可恢复事件的事实源，SQLite 可由 rollout 重建。
 
 ## 核心职责

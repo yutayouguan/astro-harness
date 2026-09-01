@@ -87,7 +87,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `crates/agent-types` | `types` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`MediaAsset`、`ChatTarget`、`ModelSpec`、SQLite helpers、tool-spill。无业务逻辑。 |
+| `crates/agent-types` | `types` | 跨 crate 共享类型：`ModelTarget`、`model_tool::ToolCall`、`MediaAsset`、`ModelSpec`、SQLite helpers、tool-spill。Agent history 类型归 `agent-protocol`。 |
 | `crates/agent-protocol` | `agent-protocol` | 统一 Thread 提交与事件协议：`Op`、`EventMsg`、`TurnItem`、approval/control 与扩展事件。 |
 | `crates/agent-rollout` | `agent-rollout` | append-only rollout 持久化、记录策略与 Thread 历史重建；是稳定事件恢复的事实源。 |
 | `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。定义 `AstroService` 的 Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、Files、Token 与 Batch RPC。 |
@@ -198,7 +198,7 @@ rollout snapshot + live boundary。
 
 ### Provider Fallback 链
 
-`AgentLoop.chat_targets: Vec<ChatTarget>` — primary + 最多 `MAX_CHAT_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。五类 `AuxiliaryTask`（Dreaming、Compaction、SmartApproval、TitleGen 等）各有独立目标链，缺省回退到 primary。
+`AgentLoop.model_targets: Vec<ModelTarget>` — primary + 最多 `MAX_MODEL_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。五类 `AuxiliaryTask`（Dreaming、Compaction、SmartApproval、TitleGen 等）各有独立目标链，缺省回退到 primary。
 
 ### 三总线 Hook 系统
 

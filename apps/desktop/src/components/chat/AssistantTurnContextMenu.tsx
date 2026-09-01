@@ -23,7 +23,7 @@ import {
   resolveClipBoundsAt,
 } from "../../lib/ui/clampPopover";
 
-export type AssistantMessageMenuAction =
+export type AssistantTurnMenuAction =
   | "layout-default"
   | "layout-timeline"
   | "layout-grouped"
@@ -46,12 +46,12 @@ type Props = {
   canSetDefault: boolean;
   canRegenerate: boolean;
   canBranch: boolean;
-  onAction: (action: AssistantMessageMenuAction) => void;
+  onAction: (action: AssistantTurnMenuAction) => void;
   onClose: (restoreFocus?: boolean) => void;
 };
 
 type ActionItem = {
-  action: AssistantMessageMenuAction;
+  action: AssistantTurnMenuAction;
   label: string;
   Icon: LucideIcon;
   disabled?: boolean;
@@ -59,7 +59,7 @@ type ActionItem = {
   separatorBefore?: boolean;
 };
 
-export default function AssistantMessageContextMenu({
+export default function AssistantTurnContextMenu({
   x,
   y,
   defaultLayout,
@@ -223,14 +223,14 @@ export default function AssistantMessageContextMenu({
   return createPortal(
     <div
       ref={ref}
-      className="assistant-message-menu"
+      className="assistant-turn-menu"
       role="menu"
       aria-label={t("chat.messageMenu.title")}
       data-allow-context-menu
       style={{ left: x, top: y }}
       onKeyDown={handleKeyDown}
     >
-      <div className="assistant-message-menu-label" role="presentation">
+      <div className="assistant-turn-menu-label" role="presentation">
         {t("chat.messageMenu.display")}
       </div>
       {layoutItems.map(({ action, label, Icon, checked }) => (
@@ -239,7 +239,7 @@ export default function AssistantMessageContextMenu({
           type="button"
           role="menuitemradio"
           aria-checked={checked}
-          className="assistant-message-menu-item"
+          className="assistant-turn-menu-item"
           onClick={() => {
             onAction(action);
             onClose(true);
@@ -248,7 +248,7 @@ export default function AssistantMessageContextMenu({
           <Icon size={15} strokeWidth={1.9} aria-hidden />
           <span>{label}</span>
           <Check
-            className={`assistant-message-menu-check${checked ? " is-visible" : ""}`}
+            className={`assistant-turn-menu-check${checked ? " is-visible" : ""}`}
             size={14}
             strokeWidth={2.3}
             aria-hidden
@@ -259,20 +259,15 @@ export default function AssistantMessageContextMenu({
         <div
           key={action}
           role="presentation"
-          className={
-            separatorBefore ? "assistant-message-menu-group" : undefined
-          }
+          className={separatorBefore ? "assistant-turn-menu-group" : undefined}
         >
           {separatorBefore ? (
-            <div
-              className="assistant-message-menu-separator"
-              role="separator"
-            />
+            <div className="assistant-turn-menu-separator" role="separator" />
           ) : null}
           <button
             type="button"
             role="menuitem"
-            className="assistant-message-menu-item"
+            className="assistant-turn-menu-item"
             disabled={disabled}
             onClick={() => {
               if (disabled) return;

@@ -16,7 +16,7 @@ Agent runtime 的稳定控制、事件、item 与原生模型历史协议。本 
 
 `ResponseItem` 直接表达 message、reasoning、local shell、function/custom/tool-search call 及 output。它保留 item id、call id、phase 和内部 metadata，使 Agent history 可以跨 sampling、rollout 与进程重启保持协议身份。
 
-它不是 `Message` 的序列化包装。Agent 请求直接使用 `Vec<ResponseItem>`；SQLite/UI 所需 `Message` 是派生 read model。
+它不是通用 `Message` 的序列化包装。Agent 请求、SQLite 和 rollout 直接使用 `Vec<ResponseItem>`；Desktop 也返回原生 item，UI 只在渲染边界生成 `ConversationEntry`。
 
 ## `Op`
 

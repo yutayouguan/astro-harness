@@ -157,9 +157,9 @@ import {
   MsgTimelineStep,
   type MsgTimelineKind,
 } from "./MsgTimeline";
-import AssistantMessageContextMenu, {
-  type AssistantMessageMenuAction,
-} from "./AssistantMessageContextMenu";
+import AssistantTurnContextMenu, {
+  type AssistantTurnMenuAction,
+} from "./AssistantTurnContextMenu";
 import { useMcpTools } from "../../hooks/providers/useMcpTools";
 import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
 import { useRealtimeConversation } from "../../hooks/chat/useRealtimeConversation";
@@ -2506,7 +2506,7 @@ export default function ChatView({
     [assistantMenu, messages],
   );
 
-  const openAssistantMessageMenu = useCallback(
+  const openAssistantTurnMenu = useCallback(
     (
       messageId: string,
       x: number,
@@ -2531,7 +2531,7 @@ export default function ChatView({
     [],
   );
 
-  const closeAssistantMessageMenu = useCallback((restoreFocus = false) => {
+  const closeAssistantTurnMenu = useCallback((restoreFocus = false) => {
     const returnFocus = assistantMenuReturnFocusRef.current;
     assistantMenuReturnFocusRef.current = null;
     setAssistantMenu(null);
@@ -2545,11 +2545,11 @@ export default function ChatView({
       assistantMenu &&
       !messages.some((message) => message.id === assistantMenu.messageId)
     ) {
-      closeAssistantMessageMenu(false);
+      closeAssistantTurnMenu(false);
     }
-  }, [assistantMenu, closeAssistantMessageMenu, messages]);
+  }, [assistantMenu, closeAssistantTurnMenu, messages]);
 
-  const copyAssistantMessageText = useCallback(
+  const copyAssistantTurnText = useCallback(
     async (text: string) => {
       if (!text) return;
       try {
@@ -2564,8 +2564,8 @@ export default function ChatView({
     [showToast, t],
   );
 
-  const handleAssistantMessageMenuAction = useCallback(
-    (action: AssistantMessageMenuAction) => {
+  const handleAssistantTurnMenuAction = useCallback(
+    (action: AssistantTurnMenuAction) => {
       const menu = assistantMenu;
       if (!menu) return;
       const message = messages.find(
@@ -2608,17 +2608,15 @@ export default function ChatView({
         return;
       }
       if (action === "copy-answer") {
-        void copyAssistantMessageText(
-          assistantAnswerPlainText(message.content),
-        );
+        void copyAssistantTurnText(assistantAnswerPlainText(message.content));
         return;
       }
       if (action === "copy-markdown") {
-        void copyAssistantMessageText(message.content);
+        void copyAssistantTurnText(message.content);
         return;
       }
       if (action === "copy-process") {
-        void copyAssistantMessageText(assistantProcessMarkdown(message));
+        void copyAssistantTurnText(assistantProcessMarkdown(message));
         return;
       }
       if (action === "regenerate") {
@@ -2629,7 +2627,7 @@ export default function ChatView({
     },
     [
       assistantMenu,
-      copyAssistantMessageText,
+      copyAssistantTurnText,
       messageLayoutOverrides,
       messages,
       onBranchMessage,
@@ -2656,7 +2654,7 @@ export default function ChatView({
         {toastHost}
         <TaskCompletionCelebration trigger={completionCelebrationId} />
         {assistantMenu && contextMenuMessage?.role === "assistant" ? (
-          <AssistantMessageContextMenu
+          <AssistantTurnContextMenu
             x={assistantMenu.x}
             y={assistantMenu.y}
             defaultLayout={displayPrefs.answerLayout}
@@ -2672,8 +2670,8 @@ export default function ChatView({
             canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
             canRegenerate={!streaming && Boolean(onRegenerateMessage)}
             canBranch={!streaming && Boolean(onBranchMessage)}
-            onAction={handleAssistantMessageMenuAction}
-            onClose={closeAssistantMessageMenu}
+            onAction={handleAssistantTurnMenuAction}
+            onClose={closeAssistantTurnMenu}
           />
         ) : null}
         {cronRun && !workspaceContent ? (
@@ -2771,7 +2769,7 @@ export default function ChatView({
                         onContextMenu={(event) => {
                           if (m.role !== "assistant" || isStreamingBubble)
                             return;
-                          const opened = openAssistantMessageMenu(
+                          const opened = openAssistantTurnMenu(
                             m.id,
                             event.clientX,
                             event.clientY,
@@ -3266,7 +3264,7 @@ export default function ChatView({
                             m.role === "assistant"
                               ? (anchor) => {
                                   const rect = anchor.getBoundingClientRect();
-                                  openAssistantMessageMenu(
+                                  openAssistantTurnMenu(
                                     m.id,
                                     rect.right,
                                     rect.bottom + 4,

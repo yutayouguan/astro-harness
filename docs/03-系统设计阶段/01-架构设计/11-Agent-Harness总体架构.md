@@ -25,7 +25,7 @@ Agent Harness 不是一段 system prompt，也不是一个工具调用函数。�
 
 | 术语 | 责任 | 在 Astro 中的对应 |
 | --- | --- | --- |
-| Model | 推理、生成、工具选择 | `agent-providers`、`ChatTarget`、Provider 适配器 |
+| Model | 推理、生成、工具选择 | `agent-providers`、`ModelTarget`、Provider 适配器 |
 | Scaffold | 基础指令、动态上下文、工具 schema、输出契约 | `PromptContract`、`ResponsesRequest.tools` |
 | Harness | 运行循环、状态、工具、权限、恢复和观测 | `agent-core` 为中心的跨 crate 系统 |
 | Framework | 构建 Agent 的 API/组件集 | Astro 整体可被视为框架，但不与 Harness 同义 |

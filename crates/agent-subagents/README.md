@@ -91,7 +91,7 @@ pub fn resolve_agent(catalog, settings, name, ...) -> Result<ResolvedAgent>;
 
 ## 与其他 crate 的关系
 
-- **`types`（agent-types）** — 共享基础类型：`ChatTarget`、`SandboxMode` 等
+- **`types`（agent-types）** — 共享基础类型：`ModelTarget`、`SandboxMode` 等
 - **`home`（agent-home）** — 路径约定（`default_memory_dir`）和 SQLite WAL 打开工具（`open_wal`）
 - **`hooks`（agent-hooks）** — `PluginHookBus` 传递给派生子 Agent
 - **被 `agent`（agent-core）** — `exec::subagents` 模块使用本 crate 的控制器和存储进行实际的派生执行
