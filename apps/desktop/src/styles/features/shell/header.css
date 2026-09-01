@@ -244,7 +244,7 @@
   border-radius: 999px;
   background: var(--titlebar-menu-bg);
   border: 1px solid var(--titlebar-menu-border);
-  box-shadow: var(--titlebar-menu-shadow);
+  box-shadow: var(--header-chip-shadow);
   backdrop-filter: var(--titlebar-menu-blur);
   -webkit-backdrop-filter: var(--titlebar-menu-blur);
 }
@@ -448,7 +448,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   border-radius: 999px;
   background: var(--titlebar-menu-bg);
   border: 1px solid var(--titlebar-menu-border);
-  box-shadow: var(--titlebar-menu-shadow);
+  box-shadow: var(--header-chip-shadow);
   backdrop-filter: var(--titlebar-menu-blur);
   -webkit-backdrop-filter: var(--titlebar-menu-blur);
   color: var(--ink);
@@ -464,7 +464,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
     var(--glass-edge)
   );
   box-shadow:
-    var(--shadow-card),
+    var(--header-chip-shadow),
     var(--glass-rim),
     0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 12%, transparent);
 }

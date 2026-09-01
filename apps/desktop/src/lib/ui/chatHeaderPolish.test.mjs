@@ -41,12 +41,12 @@ test("conversation title truncates and only exposes its full text when overflowi
   assert.match(tips, /showFor\(el, true\)/);
 });
 
-test("header tool groups reuse the titlebar session-menu surface recipe", async () => {
+test("header tool groups keep the titlebar surface with a compact shadow", async () => {
   const css = await readFile(cssUrl, "utf8");
   const expectedSurface = [
     "background: var(--titlebar-menu-bg);",
     "border: 1px solid var(--titlebar-menu-border);",
-    "box-shadow: var(--titlebar-menu-shadow);",
+    "box-shadow: var(--header-chip-shadow);",
     "backdrop-filter: var(--titlebar-menu-blur);",
   ];
 
