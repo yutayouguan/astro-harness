@@ -582,8 +582,8 @@ impl Session {
         {
             let parent = self.lock_state();
             let mut child_state = child.lock_state();
-            child_state.mcp_config_override = parent.mcp_config_override.clone();
             child_state.skill_config_overrides = parent.skill_config_overrides.clone();
+            child_state.mcp_enabled = false;
         }
         child.set_permission_profile(Some(types::READ_ONLY_PROFILE.into()));
         Ok(child)
@@ -1877,6 +1877,15 @@ impl Session {
     /// optional Server 失败仅降级；required Server 失败向调用方传播。
     /// 无论是否存在 required 失败，已成功连接的工具都会同步到 `MCP_TOOLSET`。
     pub async fn reload_mcp(&self) -> anyhow::Result<()> {
+        if !self.lock_state().mcp_enabled {
+            self.services
+                .tool_registry
+                .write()
+                .expect("tool registry lock poisoned")
+                .unregister_toolset(MCP_TOOLSET);
+            self.lock_state().mcp_instructions.clear();
+            return Ok(());
+        }
         let agent_id = self.agent_id.clone();
         let (project_root, permission_profile, mcp_config_override) = {
             let state = self.lock_state();
@@ -2511,8 +2520,26 @@ mod tests {
         assert!(state.model_ctx.chat_targets.is_empty());
         assert!(state.mcp_config_override.is_empty());
         assert!(state.mcp_instructions.is_empty());
+        assert!(state.mcp_enabled);
         assert!(state.permission_profile.is_none());
         assert!(state.skill_config_overrides.is_empty());
+    }
+
+    #[tokio::test]
+    async fn isolated_review_session_disables_mcp_loading() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
+
+        let review = session
+            .isolated_review_session("isolated-review".into(), "review".into())
+            .await
+            .unwrap();
+
+        assert!(!review.lock_state().mcp_enabled);
+        assert_eq!(
+            review.permission_profile().as_deref(),
+            Some(types::READ_ONLY_PROFILE)
+        );
     }
 
     #[test]

@@ -18,31 +18,15 @@ pub(crate) struct ReviewTask {
 
 const REVIEW_SYSTEM_PROMPT: &str = r#"You are a code reviewer. Inspect the requested change and report only actionable correctness, security, performance, and regression findings. Prioritize findings by severity, cite precise files and lines when possible, and explain the concrete failure mode. Do not modify files, create commits, delegate work, browse the web, or ask the user questions. If there are no findings, say so plainly."#;
 
-const REVIEW_BLOCKED_TOOLS: &[&str] = &[
-    "spawn_agent",
-    "list_agents",
-    "read_agent",
-    "send_message_to_agent",
-    "send_message",
-    "followup_task",
-    "wait_agents",
-    "wait_agent",
-    "interrupt_agent",
-    "close_agent",
-    "web_search",
-    "web_fetch",
-    "browser_open",
-    "browser_click",
-    "browser_type",
-    "browser_scroll",
-    "browser_wait",
-    "browser_snapshot",
-    "browser_screenshot",
-    "browser_close",
-    "view_image",
-    "ask_user",
-    "send_user_message_async",
-    "switch_mode",
+const REVIEW_ALLOWED_TOOLS: &[&str] = &[
+    "terminal",
+    "exec_command",
+    "write_stdin",
+    "code_exec",
+    "exec",
+    "wait",
+    "tool_search",
+    "get_context_remaining",
 ];
 
 impl ReviewTask {
@@ -135,19 +119,29 @@ impl ReviewTask {
             .await?;
         {
             let registry = child.tool_registry_mut();
-            for name in REVIEW_BLOCKED_TOOLS {
-                registry.unregister(name);
+            let registered = registry
+                .all_tools()
+                .into_iter()
+                .map(|entry| entry.name.clone())
+                .collect::<Vec<_>>();
+            for name in registered {
+                if !REVIEW_ALLOWED_TOOLS.contains(&name.as_str()) {
+                    registry.unregister(&name);
+                }
             }
         }
         let child = Arc::new(child);
-        let child_turn = Arc::new(crate::runtime::TurnContext::new_with_roots(
-            format!("{}::worker", parent_ctx.sub_id()),
-            1,
-            types::InteractionMode::Agent,
-            Some(types::READ_ONLY_PROFILE.into()),
-            parent_ctx.project_root().map(ToOwned::to_owned),
-            parent_ctx.workspace_roots().to_vec(),
-        ));
+        let child_turn = Arc::new(
+            crate::runtime::TurnContext::new_with_roots(
+                format!("{}::worker", parent_ctx.sub_id()),
+                1,
+                types::InteractionMode::Agent,
+                Some(types::READ_ONLY_PROFILE.into()),
+                parent_ctx.project_root().map(ToOwned::to_owned),
+                parent_ctx.workspace_roots().to_vec(),
+            )
+            .with_network_access(false),
+        );
         child.bind_turn_context(Arc::clone(&child_turn)).await;
 
         let (event_tx, event_rx) = async_channel::unbounded();
@@ -255,6 +249,9 @@ impl SessionTask for ReviewTask {
                 .ok()
                 .and_then(|message| message.clone())
                 .unwrap_or_else(|| "Review failed before producing a result.".into());
+            if result.is_ok() {
+                Self::record_review_result(session.as_ref(), &prompt_text, &content).await?;
+            }
             Self::exit_review_mode(
                 session.as_ref(),
                 ctx.as_ref(),
@@ -262,9 +259,6 @@ impl SessionTask for ReviewTask {
                 content.clone(),
             )
             .await;
-            if result.is_ok() {
-                Self::record_review_result(session.as_ref(), &prompt_text, &content).await?;
-            }
         }
         let error = result.as_ref().err().map(ToString::to_string);
         let turn = session.session_turn().await;
@@ -284,6 +278,12 @@ impl SessionTask for ReviewTask {
 
     async fn abort(&self, session: Arc<Session>, ctx: Arc<TurnContext>) {
         let content = "Review was interrupted. Please run the review again.";
+        if let Err(error) =
+            Self::record_review_result(session.as_ref(), &self.prompt(), content).await
+        {
+            tracing::warn!(%error, "failed to record interrupted review result");
+            return;
+        }
         Self::exit_review_mode(
             session.as_ref(),
             ctx.as_ref(),
@@ -291,10 +291,5 @@ impl SessionTask for ReviewTask {
             content.into(),
         )
         .await;
-        if let Err(error) =
-            Self::record_review_result(session.as_ref(), &self.prompt(), content).await
-        {
-            tracing::warn!(%error, "failed to record interrupted review result");
-        }
     }
 }

@@ -94,6 +94,9 @@ async fn start_managed_network(
     call: &types::ParsedToolCall,
     turn_context: Option<Arc<TurnContext>>,
 ) -> anyhow::Result<Option<Arc<network_proxy::StartedNetworkProxy>>> {
+    if !step_context.turn.network_access() {
+        return Ok(None);
+    }
     let settings = memory::load_permission_settings(session.memory_dir());
     let active_profile_id = step_context
         .turn
@@ -256,6 +259,7 @@ fn sandbox_policy_for_call(
         None,
     )
     .map_err(crate::runtime::ToolCallError::from)?;
+    policy.network_access &= step_context.turn.network_access();
     if preference == types::SandboxablePreference::Require
         && policy.mode == types::SandboxMode::DangerFullAccess
     {
@@ -2400,6 +2404,42 @@ mod tests {
             "web_fetch",
             &serde_json::json!({"url": "https://example.com"})
         ));
+    }
+
+    #[tokio::test]
+    async fn turn_network_override_disables_subprocess_network() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::new(crate::runtime::Config::with_defaults(
+                dir.path().to_path_buf(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let turn = Arc::new(
+            TurnContext::new(
+                "review-network-off".into(),
+                1,
+                types::InteractionMode::Agent,
+                Some(types::READ_ONLY_PROFILE.into()),
+                Some(dir.path().to_path_buf()),
+            )
+            .with_network_access(false),
+        );
+        session.bind_turn_context(turn).await;
+        let step = session.capture_step_context().await.unwrap();
+        let call = types::ParsedToolCall::with_id(
+            "call-review-network",
+            "exec_command",
+            json!({"command": "curl https://example.com"}),
+        );
+
+        let policy = sandbox_policy_for_call(session.as_ref(), &step, &call, false, None)
+            .unwrap()
+            .expect("exec_command must run in the subprocess sandbox");
+
+        assert!(!policy.network_access);
+        assert!(policy.managed_network.is_none());
     }
 
     #[test]

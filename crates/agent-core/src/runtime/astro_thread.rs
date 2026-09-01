@@ -1040,6 +1040,8 @@ mod tests {
             let tools = serde_json::to_string(&tools).unwrap();
             assert!(!tools.contains("spawn_agent"));
             assert!(!tools.contains("web_search"));
+            assert!(!tools.contains("image_gen"));
+            assert!(!tools.contains("apply_patch"));
             Box::pin(async {
                 Ok(Box::pin(futures::stream::iter(
                     vec![
@@ -1124,12 +1126,27 @@ mod tests {
             .is_empty());
         session.flush_rollout().await.unwrap();
         let rollout = read_rollout(&rollout_path).await.unwrap();
-        assert_eq!(
-            rollout
-                .iter()
-                .filter(|item| matches!(item, RolloutItem::ResponseItem(_)))
-                .count(),
-            2
+        let response_indices = rollout
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| {
+                matches!(item, RolloutItem::ResponseItem(_)).then_some(index)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(response_indices.len(), 2);
+        let exit_index = rollout
+            .iter()
+            .position(|item| {
+                matches!(
+                    item,
+                    RolloutItem::EventMsg(agent_protocol::EventMsg::ItemCompleted(event))
+                        if matches!(event.item, agent_protocol::TurnItem::ExitedReviewMode(_))
+                )
+            })
+            .expect("review exit event persisted");
+        assert!(
+            response_indices[1] < exit_index,
+            "review result must be durable before the exit event"
         );
 
         thread.submit(Op::Shutdown).await.unwrap();

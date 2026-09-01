@@ -78,6 +78,8 @@ pub struct TurnContext {
     pub(crate) project_root: Option<PathBuf>,
     /// turn 开始时准入的所有可写项目根路径。
     pub(crate) workspace_roots: Vec<PathBuf>,
+    /// 是否允许该 turn 启动的子进程访问网络。
+    pub(crate) network_access: bool,
     /// 注入活跃任务的用户输入，在下一次采样请求前被消费。
     input_state: Mutex<TurnInputState>,
     input_notify: Notify,
@@ -129,6 +131,7 @@ impl TurnContext {
             permission_profile,
             project_root,
             workspace_roots,
+            network_access: true,
             input_state: Mutex::new(TurnInputState {
                 pending: Vec::new(),
                 mailbox_pending: Vec::new(),
@@ -173,6 +176,15 @@ impl TurnContext {
 
     pub fn workspace_roots(&self) -> &[PathBuf] {
         &self.workspace_roots
+    }
+
+    pub(crate) fn with_network_access(mut self, allowed: bool) -> Self {
+        self.network_access = allowed;
+        self
+    }
+
+    pub(crate) fn network_access(&self) -> bool {
+        self.network_access
     }
 
     /// 注册一个子任务并返回存活凭证。
