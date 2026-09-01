@@ -3,7 +3,7 @@
 use agent_db::sqlx;
 use anyhow::{Context, Result};
 
-use super::messages::{insert_response_item_row, response_item_is_tool_output};
+use super::response_items::{insert_response_item_row, response_item_is_tool_output};
 use super::{now_epoch_secs, NewResponseItem, SessionStore};
 
 /// 用 rollout 中的原生 `ResponseItem` 替换单个会话的 SQLite 索引。

@@ -330,14 +330,14 @@ struct InteractionsInput {
 /// 无法续写时按 Interactions 原生 step 完整重放 call/result 对，不将工具
 /// 结果降级为 `user_input`。
 fn to_interactions_input(
-    messages: &[crate::types::Message],
+    messages: &[crate::types::ChatCompletionMessage],
     has_previous: bool,
 ) -> InteractionsInput {
-    use crate::types::message::*;
+    use crate::types::request_content::*;
 
     let continuation_start = messages
         .iter()
-        .rposition(|m| matches!(m, Message::Assistant { .. }))
+        .rposition(|m| matches!(m, ChatCompletionMessage::Assistant { .. }))
         .map(|idx| idx + 1)
         .filter(|start| *start < messages.len());
     let continues_previous = has_previous && continuation_start.is_some();
@@ -347,10 +347,10 @@ fn to_interactions_input(
         messages
     };
 
-    // Message::Tool 不带工具名，但 function_result 步骤必须带，从助手回合回填。
+    // ChatCompletionMessage::Tool 不带工具名，function_result 需从助手回合回填。
     let mut call_names = std::collections::HashMap::new();
     for m in messages {
-        if let Message::Assistant { content } = m {
+        if let ChatCompletionMessage::Assistant { content } = m {
             for c in content {
                 if let AssistantContent::ToolCall(tc) = c {
                     call_names.insert(tc.id.as_str(), tc.name.as_str());
@@ -363,7 +363,8 @@ fn to_interactions_input(
     let instruction_parts = messages
         .iter()
         .filter_map(|m| match m {
-            Message::System { content } | Message::Developer { content } => {
+            ChatCompletionMessage::System { content }
+            | ChatCompletionMessage::Developer { content } => {
                 (!content.trim().is_empty()).then(|| content.clone())
             }
             _ => None,
@@ -374,7 +375,7 @@ fn to_interactions_input(
     let replayable_call_ids = messages
         .iter()
         .filter_map(|message| match message {
-            Message::Assistant { content } => Some(content),
+            ChatCompletionMessage::Assistant { content } => Some(content),
             _ => None,
         })
         .flatten()
@@ -403,18 +404,18 @@ fn to_interactions_input(
 }
 
 fn to_interactions_steps(
-    messages: &[crate::types::Message],
+    messages: &[crate::types::ChatCompletionMessage],
     call_names: &std::collections::HashMap<&str, &str>,
     replayable_call_ids: Option<&std::collections::HashSet<&str>>,
 ) -> Vec<Value> {
-    use crate::types::message::*;
+    use crate::types::request_content::*;
     let mut steps = Vec::new();
 
     for m in messages {
         match m {
             // system_instruction 由调用方单独下发，不进 input。
-            Message::System { .. } | Message::Developer { .. } => {}
-            Message::User { content } => {
+            ChatCompletionMessage::System { .. } | ChatCompletionMessage::Developer { .. } => {}
+            ChatCompletionMessage::User { content } => {
                 let parts: Vec<Value> = content
                     .iter()
                     .map(|c| match c {
@@ -434,7 +435,7 @@ fn to_interactions_steps(
                     .collect();
                 steps.push(json!({"type": "user_input", "content": parts}));
             }
-            Message::Tool {
+            ChatCompletionMessage::Tool {
                 tool_call_id,
                 content,
                 ..
@@ -454,7 +455,7 @@ fn to_interactions_steps(
                     "result": content,
                 }));
             }
-            Message::Assistant { content } => {
+            ChatCompletionMessage::Assistant { content } => {
                 // thinking step first
                 for c in content {
                     if let AssistantContent::Thinking { text, signature } = c {
@@ -1126,9 +1127,9 @@ mod tests {
     #[test]
     fn system_instruction_extracted() {
         let msgs = vec![
-            crate::types::Message::system("Be helpful"),
-            crate::types::Message::developer("Follow project policy"),
-            crate::types::Message::user_text("Hi"),
+            crate::types::ChatCompletionMessage::system("Be helpful"),
+            crate::types::ChatCompletionMessage::developer("Follow project policy"),
+            crate::types::ChatCompletionMessage::user_text("Hi"),
         ];
         let converted = to_interactions_input(&msgs, false);
         assert_eq!(
@@ -1140,18 +1141,20 @@ mod tests {
         assert!(!converted.continues_previous);
     }
 
-    fn tool_loop_messages() -> Vec<crate::types::Message> {
-        use crate::types::message::{AssistantContent, ToolCall};
+    fn tool_loop_messages() -> Vec<crate::types::ChatCompletionMessage> {
+        use crate::types::request_content::{AssistantContent, ToolCall};
         vec![
-            crate::types::Message::system("Be helpful"),
-            crate::types::Message::user_text("查看当前目录"),
-            crate::types::Message::assistant(vec![AssistantContent::ToolCall(ToolCall {
-                id: "call-1".into(),
-                name: "exec_command".into(),
-                arguments: json!({"command": "pwd"}),
-                signature: Some("sig-1".into()),
-            })]),
-            crate::types::Message::tool_result("call-1", "/tmp", false),
+            crate::types::ChatCompletionMessage::system("Be helpful"),
+            crate::types::ChatCompletionMessage::user_text("查看当前目录"),
+            crate::types::ChatCompletionMessage::assistant(vec![AssistantContent::ToolCall(
+                ToolCall {
+                    id: "call-1".into(),
+                    name: "exec_command".into(),
+                    arguments: json!({"command": "pwd"}),
+                    signature: Some("sig-1".into()),
+                },
+            )]),
+            crate::types::ChatCompletionMessage::tool_result("call-1", "/tmp", false),
         ]
     }
 
@@ -1188,10 +1191,10 @@ mod tests {
 
     #[test]
     fn replay_does_not_serialize_structured_tool_calls_as_text() {
-        use crate::types::message::{AssistantContent, ToolCall};
+        use crate::types::request_content::{AssistantContent, ToolCall};
         let msgs = vec![
-            crate::types::Message::user_text("查看当前目录"),
-            crate::types::Message::assistant(vec![
+            crate::types::ChatCompletionMessage::user_text("查看当前目录"),
+            crate::types::ChatCompletionMessage::assistant(vec![
                 AssistantContent::Text {
                     text: "Checking the directory.".into(),
                 },
@@ -1215,10 +1218,10 @@ mod tests {
 
     #[test]
     fn mixed_text_tool_call_and_result_keep_interactions_pairing() {
-        use crate::types::message::{AssistantContent, ToolCall};
+        use crate::types::request_content::{AssistantContent, ToolCall};
         let msgs = vec![
-            crate::types::Message::user_text("查看当前目录"),
-            crate::types::Message::assistant(vec![
+            crate::types::ChatCompletionMessage::user_text("查看当前目录"),
+            crate::types::ChatCompletionMessage::assistant(vec![
                 AssistantContent::Text {
                     text: "Checking the directory.".into(),
                 },
@@ -1229,7 +1232,7 @@ mod tests {
                     signature: Some("sig-1".into()),
                 }),
             ]),
-            crate::types::Message::tool_result("call-1", "/tmp", false),
+            crate::types::ChatCompletionMessage::tool_result("call-1", "/tmp", false),
         ];
 
         let converted = to_interactions_input(&msgs, false);
@@ -1254,17 +1257,19 @@ mod tests {
 
     #[test]
     fn full_replay_drops_unsigned_foreign_tool_pairs() {
-        use crate::types::message::{AssistantContent, ToolCall};
+        use crate::types::request_content::{AssistantContent, ToolCall};
         let msgs = vec![
-            crate::types::Message::user_text("查看当前目录"),
-            crate::types::Message::assistant(vec![AssistantContent::ToolCall(ToolCall {
-                id: "foreign-call".into(),
-                name: "exec_command".into(),
-                arguments: json!({"command": "pwd"}),
-                signature: None,
-            })]),
-            crate::types::Message::tool_result("foreign-call", "/tmp", false),
-            crate::types::Message::user_text("继续"),
+            crate::types::ChatCompletionMessage::user_text("查看当前目录"),
+            crate::types::ChatCompletionMessage::assistant(vec![AssistantContent::ToolCall(
+                ToolCall {
+                    id: "foreign-call".into(),
+                    name: "exec_command".into(),
+                    arguments: json!({"command": "pwd"}),
+                    signature: None,
+                },
+            )]),
+            crate::types::ChatCompletionMessage::tool_result("foreign-call", "/tmp", false),
+            crate::types::ChatCompletionMessage::user_text("继续"),
         ];
         let converted = to_interactions_input(&msgs, false);
         let kinds = converted
@@ -1278,8 +1283,10 @@ mod tests {
     #[test]
     fn new_user_turn_continues_with_only_the_new_input() {
         let mut msgs = tool_loop_messages();
-        msgs.push(crate::types::Message::assistant_text("在 /tmp"));
-        msgs.push(crate::types::Message::user_text("再看一次"));
+        msgs.push(crate::types::ChatCompletionMessage::assistant_text(
+            "在 /tmp",
+        ));
+        msgs.push(crate::types::ChatCompletionMessage::user_text("再看一次"));
         let converted = to_interactions_input(&msgs, true);
         // 服务端已保留上一轮，新用户回合只补发末尾 user_input。
         assert!(converted.continues_previous);

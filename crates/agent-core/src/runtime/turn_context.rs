@@ -37,7 +37,7 @@ struct TurnInputState {
 
 #[derive(Debug, Clone)]
 pub(crate) struct TurnProviderSettings {
-    pub(crate) targets: Vec<types::ChatTarget>,
+    pub(crate) targets: Vec<types::ModelTarget>,
     pub(crate) base_config: providers::ProviderConfig,
     pub(crate) generation: u64,
 }
@@ -193,7 +193,7 @@ impl TurnContext {
 
     pub(crate) fn initialize_provider_settings(
         &self,
-        targets: Vec<types::ChatTarget>,
+        targets: Vec<types::ModelTarget>,
         base_config: providers::ProviderConfig,
     ) {
         let mut settings = self
@@ -702,7 +702,7 @@ mod tests {
             None,
         );
         turn_context.initialize_provider_settings(
-            vec![types::ChatTarget {
+            vec![types::ModelTarget {
                 provider_id: "provider".into(),
                 backend_id: "openai".into(),
                 model: "old-model".into(),
@@ -750,7 +750,7 @@ mod tests {
             None,
         );
         turn_context.initialize_provider_settings(
-            vec![types::ChatTarget {
+            vec![types::ModelTarget {
                 provider_id: "provider".into(),
                 backend_id: "openai".into(),
                 model: "old-model".into(),

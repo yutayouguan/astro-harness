@@ -3,12 +3,12 @@
 pub mod error;
 pub mod image_gen;
 pub mod media;
-pub mod message;
 pub mod request;
+pub mod request_content;
 pub mod stream;
 
 pub use error::*;
 pub use media::*;
-pub use message::*;
 pub use request::*;
+pub use request_content::*;
 pub use stream::*;

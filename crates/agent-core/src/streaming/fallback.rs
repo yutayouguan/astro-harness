@@ -3,7 +3,7 @@
 use futures::{stream, StreamExt};
 use providers::types::stream::{CompletionStream, StreamChunk};
 use providers::ProviderConfig;
-use types::ChatTarget;
+use types::ModelTarget;
 
 /// 实际命中目标的可观测元数据（写入 usage 等，不改会话默认模型）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,7 +15,7 @@ pub struct ActiveTargetMeta {
 }
 
 impl ActiveTargetMeta {
-    pub(super) fn from_target(t: &ChatTarget) -> Self {
+    pub(super) fn from_target(t: &ModelTarget) -> Self {
         Self {
             provider_id: t.provider_id.clone(),
             backend_id: t.backend_id.clone(),
@@ -113,12 +113,12 @@ pub async fn probe_or_wrap_pre_content(
 
 /// 按 `targets` 链尝试 `chat_stream`；仅首包前可切；耗尽返回聚合错误。
 pub async fn try_stream_responses_with_fallback(
-    targets: &[ChatTarget],
+    targets: &[ModelTarget],
     instructions: String,
     input: Vec<agent_protocol::ResponseItem>,
     tools: Vec<serde_json::Value>,
     base_config: &ProviderConfig,
-    mut on_failover: impl FnMut(&ChatTarget, &ChatTarget, &anyhow::Error),
+    mut on_failover: impl FnMut(&ModelTarget, &ModelTarget, &anyhow::Error),
 ) -> anyhow::Result<(CompletionStream, ActiveTargetMeta)> {
     if targets.is_empty() {
         anyhow::bail!("聊天目标列表为空，无法发起补全");

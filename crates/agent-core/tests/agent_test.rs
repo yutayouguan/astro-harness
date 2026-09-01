@@ -139,7 +139,7 @@ async fn test_set_model_agno_style_entry() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     agent.set_chat_credentials("openai", "gpt-old", "sk-test", "https://api.openai.com/v1");
-    agent.set_chat_targets(vec![types::ChatTarget {
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: "openai".into(),
         backend_id: "openai".into(),
         model: "gpt-old".into(),
@@ -155,7 +155,7 @@ async fn test_set_model_agno_style_entry() {
     assert_eq!(agent.chat_provider(), "claude");
     assert_eq!(agent.chat_model(), "claude-sonnet-4-5");
     assert_eq!(agent.temperature(), 0.2);
-    let primary = &agent.chat_targets()[0];
+    let primary = &agent.model_targets()[0];
     assert_eq!(primary.backend_id, "claude");
     assert_eq!(primary.model, "claude-sonnet-4-5");
     assert_eq!(primary.api_key, "sk-test");
@@ -177,7 +177,7 @@ async fn test_set_model_agno_style_entry() {
 async fn test_set_fallback_models_keeps_primary() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).await.unwrap();
-    agent.set_chat_targets(vec![types::ChatTarget {
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: "claude".into(),
         backend_id: "claude".into(),
         model: "opus".into(),
@@ -193,7 +193,7 @@ async fn test_set_fallback_models_keeps_primary() {
         types::ModelSpec::parse("zhipu:glm").unwrap(),
     ]);
 
-    let chain = agent.chat_targets();
+    let chain = agent.model_targets();
     assert_eq!(chain.len(), 4); // primary + 3 fallbacks
     assert_eq!(chain[0].backend_id, "claude");
     assert_eq!(chain[0].model, "opus");

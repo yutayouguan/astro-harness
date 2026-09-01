@@ -96,7 +96,7 @@ fn summary_prompt(transcript: &str) -> String {
 }
 
 async fn complete_summary_response(
-    target: &types::ChatTarget,
+    target: &types::ModelTarget,
     prompt: &str,
 ) -> anyhow::Result<String> {
     let config = ProviderConfig {
@@ -136,7 +136,7 @@ async fn complete_summary_response(
 }
 
 async fn complete_with_targets(
-    targets: &[types::ChatTarget],
+    targets: &[types::ModelTarget],
     prompt: &str,
 ) -> anyhow::Result<String> {
     let mut last_error = None;

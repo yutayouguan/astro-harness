@@ -35,7 +35,7 @@ pub struct StoredResponseItemDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatHistoryDto {
+pub struct ResponseItemHistoryDto {
     pub session_id: Option<String>,
     pub items: Vec<StoredResponseItemDto>,
     /// 会话结束原因（如 `compacted`）；未结束为 `None`
@@ -140,7 +140,7 @@ fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
 pub async fn get_chat_history(
     session_id: Option<String>,
     limit: Option<i32>,
-) -> Result<ChatHistoryDto, String> {
+) -> Result<ResponseItemHistoryDto, String> {
     let store = open_sessions().await?;
     let limit = limit.unwrap_or(200).clamp(1, 500) as usize;
 
@@ -149,7 +149,7 @@ pub async fn get_chat_history(
         None => match store.latest_session_id().await.map_err(|e| e.to_string())? {
             Some(s) => s,
             None => {
-                return Ok(ChatHistoryDto {
+                return Ok(ResponseItemHistoryDto {
                     session_id: None,
                     items: vec![],
                     end_reason: None,
@@ -203,7 +203,7 @@ pub async fn get_chat_history(
         items = items.split_off(items.len() - limit);
     }
 
-    Ok(ChatHistoryDto {
+    Ok(ResponseItemHistoryDto {
         session_id: Some(sid),
         items,
         end_reason,
@@ -406,7 +406,7 @@ pub async fn regenerate_session_title(
         emit_session_event, now_ts_ms, SessionEventDto, SessionMetadataChangedDto,
     };
     use crate::meta::auxiliary_resolver::{
-        primary_chat_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
+        primary_model_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
     };
 
     let sid = session_id.trim().to_string();
@@ -423,7 +423,7 @@ pub async fn regenerate_session_title(
             .ok_or_else(|| "会话尚无完整首轮对话，无法生成标题".to_string())?
     };
 
-    let primary = primary_chat_target_for_session(&sid).await?;
+    let primary = primary_model_target_for_session(&sid).await?;
     let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::TitleGeneration, &primary)?;
     let chain: Vec<&ResolvedTarget> = std::iter::once(&targets.preferred)
         .chain(targets.fallback.as_ref())

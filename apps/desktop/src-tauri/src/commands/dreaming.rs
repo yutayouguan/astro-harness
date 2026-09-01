@@ -253,14 +253,14 @@ pub async fn set_dreaming_enabled_cmd(enabled: bool) -> Result<DreamingStatusDto
     Ok(status_from_state(&base, &state))
 }
 
-/// 取 UI 当前激活（或列表首个）供应商，并展开为 ChatTarget。
-fn active_chat_target() -> Result<types::ChatTarget, String> {
+/// 取 UI 当前激活（或列表首个）供应商，并展开为 ModelTarget。
+fn active_model_target() -> Result<types::ModelTarget, String> {
     let ui = active_ui_provider()?;
     if ui.model.trim().is_empty() {
         return Err("激活提供商未配置模型".into());
     }
     let (_has, _src, _env, key) = resolve_api_key(&ui);
-    Ok(types::ChatTarget {
+    Ok(types::ModelTarget {
         provider_id: ui.id,
         backend_id: ui.kind.backend_id().to_string(),
         model: ui.model,
@@ -271,7 +271,7 @@ fn active_chat_target() -> Result<types::ChatTarget, String> {
 
 /// 解析入梦辅助路由（preferred + 可选 primary fallback）。
 fn resolve_dreaming_targets() -> Result<AuxiliaryTargets, String> {
-    let primary = active_chat_target()?;
+    let primary = active_model_target()?;
     resolve_auxiliary_targets(memory::AuxiliaryKind::Dreaming, &primary)
 }
 

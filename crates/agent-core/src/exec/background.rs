@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use providers::{PauseControl, ProviderConfig, Usage};
-use types::ChatTarget;
+use types::ModelTarget;
 
 use crate::runtime::Session;
 use crate::streaming::multi_turn::{
@@ -31,7 +31,7 @@ struct BackgroundCollected {
 /// 使用统一多轮引擎执行后台任务。
 pub async fn run_background_multi_turn(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     input: Vec<TurnInput>,
 ) -> anyhow::Result<(String, Usage)> {
     run_background_multi_turn_controlled(session, targets, input, None).await
@@ -40,7 +40,7 @@ pub async fn run_background_multi_turn(
 /// 带 Agent Thread interrupt / close 控制的后台执行入口。
 pub async fn run_background_multi_turn_controlled(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
 ) -> anyhow::Result<(String, Usage)> {
@@ -50,7 +50,7 @@ pub async fn run_background_multi_turn_controlled(
 
 pub(crate) async fn run_background_multi_turn_controlled_with_responses(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
     responses_override: Option<ResponsesOverride>,
@@ -69,7 +69,7 @@ pub(crate) async fn run_background_multi_turn_controlled_with_responses(
 
 pub(crate) async fn run_background_prepared_turn_controlled_with_responses(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     prompt: crate::prompt::PromptContract,
     control: Option<Arc<subagents::AgentThreadControl>>,
     responses_override: Option<ResponsesOverride>,
@@ -88,7 +88,7 @@ pub(crate) async fn run_background_prepared_turn_controlled_with_responses(
 
 async fn run_background_multi_turn_controlled_with_responses_and_system(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     input: Vec<TurnInput>,
     system_prompt: Option<String>,
     prompt: Option<crate::prompt::PromptContract>,
@@ -320,8 +320,8 @@ mod tests {
         })
     }
 
-    fn test_target() -> ChatTarget {
-        ChatTarget {
+    fn test_target() -> ModelTarget {
+        ModelTarget {
             provider_id: "test".into(),
             backend_id: "openai".into(),
             model: "test".into(),
@@ -459,7 +459,7 @@ mod tests {
             .unwrap();
         let session = Arc::new(agent);
         let control = Arc::new(subagents::AgentThreadControl::default());
-        let target = ChatTarget {
+        let target = ModelTarget {
             provider_id: "test".into(),
             backend_id: "openai".into(),
             model: "test".into(),

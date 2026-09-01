@@ -1571,10 +1571,10 @@ async fn ensure_interrupted_history_boundary(
     Ok(())
 }
 
-pub(super) fn resolve_chat_targets_for_model(
-    targets: &[types::ChatTarget],
+pub(super) fn resolve_model_targets_for_model(
+    targets: &[types::ModelTarget],
     model: Option<&str>,
-) -> anyhow::Result<Vec<types::ChatTarget>> {
+) -> anyhow::Result<Vec<types::ModelTarget>> {
     anyhow::ensure!(!targets.is_empty(), "agent turn has no chat target");
     let Some(model) = model else {
         return Ok(targets.to_vec());
@@ -1667,11 +1667,11 @@ async fn run_request(
         "startup"
     });
 
-    let targets = resolve_chat_targets_for_model(
-        &request.runtime.chat_targets,
+    let targets = resolve_model_targets_for_model(
+        &request.runtime.model_targets,
         request.runtime.model_request.model.as_deref(),
     )?;
-    session.set_chat_targets(targets.clone());
+    session.set_model_targets(targets.clone());
     let prepared_system_prompt = if request.consume_mailbox {
         let turn = session.prepare_mailbox_turn().await?;
         let system_prompt = match turn {
@@ -1991,7 +1991,7 @@ mod tests {
                 sandbox_mode: Some("read-only".into()),
                 mcp_servers: BTreeMap::new(),
                 skills_config: Vec::new(),
-                chat_targets: vec![types::ChatTarget {
+                model_targets: vec![types::ModelTarget {
                     provider_id: "test".into(),
                     backend_id: "openai".into(),
                     model: "test".into(),

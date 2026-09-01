@@ -8,7 +8,7 @@ use agent::exec::cron::{self as cron_exec, CronExecCredentials};
 use cron::{CronJob, CronStore};
 use home::default_memory_dir;
 use serde::Deserialize;
-use types::{expand_chat_targets, ChatTarget, FallbackRef};
+use types::{expand_model_targets, FallbackRef, ModelTarget};
 
 #[derive(Debug, Deserialize)]
 struct ProvidersFile {
@@ -63,7 +63,7 @@ fn entry_supports_agent_responses(entry: &ProviderEntry) -> bool {
     providers::dispatch::supports_agent_responses(kind_to_backend(&entry.kind))
 }
 
-fn entry_to_target(entry: &ProviderEntry) -> Option<ChatTarget> {
+fn entry_to_target(entry: &ProviderEntry) -> Option<ModelTarget> {
     if !entry.enabled {
         return None;
     }
@@ -81,7 +81,7 @@ fn entry_to_target(entry: &ProviderEntry) -> Option<ChatTarget> {
     } else {
         entry.endpoint.clone()
     };
-    Some(ChatTarget {
+    Some(ModelTarget {
         provider_id: entry.id.clone(),
         backend_id,
         model: entry.model.clone(),
@@ -142,7 +142,7 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
                         model: e.model.clone(),
                     })
                     .collect();
-                let targets = expand_chat_targets(&primary, &refs, |id| {
+                let targets = expand_model_targets(&primary, &refs, |id| {
                     file.providers
                         .iter()
                         .find(|p| p.id == id)
@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn expand_from_file_entries_env_only() {
-        let primary = ChatTarget {
+        let primary = ModelTarget {
             provider_id: "p0".into(),
             backend_id: "openai".into(),
             model: "gpt".into(),
@@ -297,9 +297,9 @@ mod tests {
             provider_id: "p1".into(),
             model: Some("deepseek-chat".into()),
         }];
-        let chain = expand_chat_targets(&primary, &refs, |id| {
+        let chain = expand_model_targets(&primary, &refs, |id| {
             if id == "p1" {
-                Some(ChatTarget {
+                Some(ModelTarget {
                     provider_id: "p1".into(),
                     backend_id: "deepseek".into(),
                     model: "deepseek-v3".into(),

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use providers::types::stream::CompletionStream;
 use providers::ProviderConfig;
-use types::ChatTarget;
+use types::ModelTarget;
 
 use super::fallback::{try_stream_responses_with_fallback, ActiveTargetMeta};
 use super::traits::StreamingResponses;
@@ -89,7 +89,7 @@ pub type ResponsesOverride = Arc<
 /// 包装 fallback 链，实现三层 Streaming trait。
 pub struct ProviderStreamer {
     /// 含 primary 的聊天目标链（失败切模仅用此列表，不改会话默认凭据）。
-    pub targets: Vec<ChatTarget>,
+    pub targets: Vec<ModelTarget>,
     /// temperature / thinking 等；model/key/url 由每跳 target 覆盖。
     pub base_config: ProviderConfig,
     /// 最近一次成功补全命中的目标元数据（供 usage 记录）。
@@ -101,7 +101,7 @@ pub struct ProviderStreamer {
 }
 
 impl ProviderStreamer {
-    pub fn new(targets: Vec<ChatTarget>, base_config: ProviderConfig) -> Self {
+    pub fn new(targets: Vec<ModelTarget>, base_config: ProviderConfig) -> Self {
         Self {
             targets,
             base_config,
@@ -113,7 +113,7 @@ impl ProviderStreamer {
 
     /// 构造带测试覆盖的 ProviderStreamer（供集成测试注入脚本化回复）。
     pub fn with_responses_override(
-        targets: Vec<ChatTarget>,
+        targets: Vec<ModelTarget>,
         base_config: ProviderConfig,
         responses_override: ResponsesOverride,
     ) -> Self {
@@ -164,7 +164,7 @@ impl ProviderStreamer {
         history: &[agent_protocol::ResponseItem],
         tools: Vec<serde_json::Value>,
     ) -> anyhow::Result<AssistantContentStream> {
-        let input = crate::prompt::messages::to_response_items_with_context_history(
+        let input = crate::prompt::response_input::to_response_items_with_context_history(
             prompt_context,
             history,
         );

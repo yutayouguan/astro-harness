@@ -24,7 +24,7 @@ pub struct TitleChangedNotify {
 pub struct TitleGenerationJob {
     pub memory_dir: std::path::PathBuf,
     pub session_id: String,
-    pub targets: Vec<types::ChatTarget>,
+    pub targets: Vec<types::ModelTarget>,
 }
 
 /// 从当前 [`AgentLoop`] 构造标题任务。
@@ -70,11 +70,11 @@ fn build_title_prompt(user: &str, assistant: &str) -> String {
 
 /// 按 preferred→fallback 完成标题文本。
 pub async fn complete_title_with_targets<F, Fut>(
-    targets: &[types::ChatTarget],
+    targets: &[types::ModelTarget],
     mut complete: F,
 ) -> Result<String, String>
 where
-    F: FnMut(&types::ChatTarget) -> Fut,
+    F: FnMut(&types::ModelTarget) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>>,
 {
     let mut last_err = "no title targets".to_string();
@@ -171,7 +171,7 @@ async fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::Ses
 }
 
 async fn complete_title_response(
-    target: &types::ChatTarget,
+    target: &types::ModelTarget,
     prompt: &str,
 ) -> anyhow::Result<String> {
     let config = ProviderConfig {
@@ -216,14 +216,14 @@ mod tests {
     #[tokio::test]
     async fn preferred_failure_falls_back() {
         let targets = vec![
-            types::ChatTarget {
+            types::ModelTarget {
                 provider_id: "a".into(),
                 backend_id: "deepseek".into(),
                 model: "mini".into(),
                 api_key: "k1".into(),
                 base_url: "https://a".into(),
             },
-            types::ChatTarget {
+            types::ModelTarget {
                 provider_id: "b".into(),
                 backend_id: "openai".into(),
                 model: "gpt".into(),

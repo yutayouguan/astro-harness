@@ -182,15 +182,17 @@ impl ChatCompletionModel for GeminiNativeCompletionModel {
 
 // ─── 消息转换 ──────────────────────────────────
 
-fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Vec<Value>) {
-    use crate::types::message::*;
+fn to_native_contents(
+    messages: &[crate::types::ChatCompletionMessage],
+) -> (Option<String>, Vec<Value>) {
+    use crate::types::request_content::*;
     let mut instruction_parts = Vec::new();
     let mut contents = Vec::new();
 
-    // Message::Tool 只保留 call id，Gemini functionResponse 还要求原始函数名。
+    // ChatCompletionMessage::Tool 只保留 call id，Gemini functionResponse 还要求原始函数名。
     let mut call_names = std::collections::HashMap::new();
     for message in messages {
-        if let Message::Assistant { content } = message {
+        if let ChatCompletionMessage::Assistant { content } = message {
             for part in content {
                 if let AssistantContent::ToolCall(call) = part {
                     call_names.insert(call.id.as_str(), call.name.as_str());
@@ -202,12 +204,13 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
     for m in messages {
         match m {
             // Gemini 只有一个 system_instruction 字段；developer 角色降级到此字段。
-            Message::System { content } | Message::Developer { content } => {
+            ChatCompletionMessage::System { content }
+            | ChatCompletionMessage::Developer { content } => {
                 if !content.trim().is_empty() {
                     instruction_parts.push(content.clone());
                 }
             }
-            Message::User { content } => {
+            ChatCompletionMessage::User { content } => {
                 let parts: Vec<Value> = content
                     .iter()
                     .map(|c| match c {
@@ -225,7 +228,7 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
                     .collect();
                 contents.push(json!({"role": "user", "parts": parts}));
             }
-            Message::Tool {
+            ChatCompletionMessage::Tool {
                 tool_call_id,
                 content,
                 ..
@@ -251,7 +254,7 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
                     }]
                 }));
             }
-            Message::Assistant { content } => {
+            ChatCompletionMessage::Assistant { content } => {
                 let mut parts = Vec::new();
                 for c in content {
                     match c {
@@ -463,9 +466,9 @@ mod tests {
     #[test]
     fn system_instruction_extracted() {
         let msgs = vec![
-            crate::types::Message::system("Be helpful"),
-            crate::types::Message::developer("Follow project policy"),
-            crate::types::Message::user_text("Hi"),
+            crate::types::ChatCompletionMessage::system("Be helpful"),
+            crate::types::ChatCompletionMessage::developer("Follow project policy"),
+            crate::types::ChatCompletionMessage::user_text("Hi"),
         ];
         let (sys, contents) = to_native_contents(&msgs);
         assert_eq!(sys.as_deref(), Some("Be helpful\n\nFollow project policy"));
@@ -567,8 +570,8 @@ mod tests {
 
     #[test]
     fn tool_call_in_assistant_message() {
-        let msgs = vec![crate::types::Message::assistant(vec![
-            crate::types::AssistantContent::ToolCall(crate::types::message::ToolCall {
+        let msgs = vec![crate::types::ChatCompletionMessage::assistant(vec![
+            crate::types::AssistantContent::ToolCall(crate::types::request_content::ToolCall {
                 id: "call_1".into(),
                 name: "search".into(),
                 arguments: json!({"q": "rust"}),
@@ -585,10 +588,10 @@ mod tests {
 
     #[test]
     fn mixed_text_tool_call_and_result_keep_native_pairing() {
-        use crate::types::message::{AssistantContent, ToolCall};
+        use crate::types::request_content::{AssistantContent, ToolCall};
 
         let msgs = vec![
-            crate::types::Message::assistant(vec![
+            crate::types::ChatCompletionMessage::assistant(vec![
                 AssistantContent::Text {
                     text: "Searching now.".into(),
                 },
@@ -599,7 +602,7 @@ mod tests {
                     signature: None,
                 }),
             ]),
-            crate::types::Message::tool_result("call_1", "[1, 2]", false),
+            crate::types::ChatCompletionMessage::tool_result("call_1", "[1, 2]", false),
         ];
 
         let (_, contents) = to_native_contents(&msgs);

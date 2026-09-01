@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use providers::types::message::legacy_namespace_function_name;
+use providers::types::request_content::legacy_namespace_function_name;
 use tools::{DynToolHandler, ToolRegistry};
 
 #[derive(Clone)]

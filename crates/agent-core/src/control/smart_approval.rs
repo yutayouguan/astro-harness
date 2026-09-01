@@ -23,8 +23,8 @@ pub struct ApprovalTarget {
     pub base_url: String,
 }
 
-impl From<&types::ChatTarget> for ApprovalTarget {
-    fn from(t: &types::ChatTarget) -> Self {
+impl From<&types::ModelTarget> for ApprovalTarget {
+    fn from(t: &types::ModelTarget) -> Self {
         Self {
             backend_id: t.backend_id.clone(),
             model: t.model.clone(),

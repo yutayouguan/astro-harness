@@ -194,7 +194,7 @@ impl AgentLoop {
             session_id,
             turn_id,
             credentials: &model_ctx.credentials,
-            chat_targets: &model_ctx.chat_targets,
+            model_targets: &model_ctx.model_targets,
             execution,
             permission_profile: step_context
                 .and_then(|step_context| step_context.turn.permission_profile().map(str::to_string))

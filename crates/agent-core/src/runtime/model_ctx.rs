@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use types::{AuxiliaryTask, ChatTarget, ModelSpec, ToolMode, MAX_CHAT_FALLBACKS};
+use types::{AuxiliaryTask, ModelSpec, ModelTarget, ToolMode, MAX_MODEL_FALLBACKS};
 use types::{ImageGenTargets, ModelCredentials};
 
 /// LLM 模型配置、凭证与 fallback 链。
@@ -15,9 +15,9 @@ pub struct ModelContext {
     /// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
     pub(crate) credentials: ModelCredentials,
     pub(crate) context_window: u32,
-    pub(crate) chat_targets: Vec<ChatTarget>,
+    pub(crate) model_targets: Vec<ModelTarget>,
     pub(crate) model_spec: Option<ModelSpec>,
-    pub(crate) auxiliary_targets: HashMap<AuxiliaryTask, Vec<ChatTarget>>,
+    pub(crate) auxiliary_targets: HashMap<AuxiliaryTask, Vec<ModelTarget>>,
     pub(crate) image_gen_targets: ImageGenTargets,
 }
 
@@ -26,7 +26,7 @@ impl Default for ModelContext {
         Self {
             credentials: ModelCredentials::default(),
             context_window: crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW,
-            chat_targets: Vec::new(),
+            model_targets: Vec::new(),
             model_spec: None,
             auxiliary_targets: HashMap::new(),
             image_gen_targets: ImageGenTargets::default(),
@@ -37,11 +37,11 @@ impl Default for ModelContext {
 impl ModelContext {
     // ── 主目标 ─────────────────────────────────────────────
 
-    pub fn primary_chat_target(&self) -> ChatTarget {
-        self.chat_targets
+    pub fn primary_model_target(&self) -> ModelTarget {
+        self.model_targets
             .first()
             .cloned()
-            .unwrap_or_else(|| ChatTarget {
+            .unwrap_or_else(|| ModelTarget {
                 provider_id: self.credentials.provider.clone(),
                 backend_id: self.credentials.provider.clone(),
                 model: self.credentials.model.clone(),
@@ -81,7 +81,7 @@ impl ModelContext {
     // ── 聊天目标链 ─────────────────────────────────────────
 
     /// 设置含 primary 的聊天 fallback 链。
-    pub fn set_chat_targets(&mut self, targets: Vec<ChatTarget>) {
+    pub fn set_model_targets(&mut self, targets: Vec<ModelTarget>) {
         if let Some(primary) = targets.first() {
             self.credentials.provider = primary.backend_id.clone();
             self.credentials.model = primary.model.clone();
@@ -89,21 +89,21 @@ impl ModelContext {
             self.credentials.base_url = primary.base_url.clone();
             self.model_spec = Some(ModelSpec::new(&primary.backend_id, &primary.model));
         }
-        self.chat_targets = targets;
+        self.model_targets = targets;
     }
 
-    pub fn chat_targets(&self) -> &[ChatTarget] {
-        &self.chat_targets
+    pub fn model_targets(&self) -> &[ModelTarget] {
+        &self.model_targets
     }
 
     /// 设置 fallback 链（保留 primary，追加去重后的备用目标）。
     pub fn set_fallback_models(&mut self, specs: &[ModelSpec]) {
-        let primary = self.primary_chat_target();
+        let primary = self.primary_model_target();
         let mut chain = vec![primary.clone()];
         let mut seen = std::collections::HashSet::new();
         seen.insert(primary.provider_id.clone());
-        for spec in specs.iter().take(MAX_CHAT_FALLBACKS * 2) {
-            if chain.len() > MAX_CHAT_FALLBACKS {
+        for spec in specs.iter().take(MAX_MODEL_FALLBACKS * 2) {
+            if chain.len() > MAX_MODEL_FALLBACKS {
                 break;
             }
             let t = spec.apply_to(&primary);
@@ -112,25 +112,25 @@ impl ModelContext {
             }
             chain.push(t);
         }
-        self.chat_targets = chain;
+        self.model_targets = chain;
     }
 
     // ── 辅助任务目标 ───────────────────────────────────────
 
-    pub fn set_auxiliary_targets(&mut self, targets: HashMap<AuxiliaryTask, Vec<ChatTarget>>) {
+    pub fn set_auxiliary_targets(&mut self, targets: HashMap<AuxiliaryTask, Vec<ModelTarget>>) {
         self.auxiliary_targets = targets;
     }
 
     /// 返回指定辅助任务的目标链；未配置时回退到主目标。
-    pub fn auxiliary_targets(&self, task: AuxiliaryTask) -> Vec<ChatTarget> {
+    pub fn auxiliary_targets(&self, task: AuxiliaryTask) -> Vec<ModelTarget> {
         if let Some(targets) = self.auxiliary_targets.get(&task) {
             if !targets.is_empty() {
                 return targets.clone();
             }
         }
-        match self.chat_targets.first() {
+        match self.model_targets.first() {
             Some(primary) => vec![primary.clone()],
-            None => vec![ChatTarget {
+            None => vec![ModelTarget {
                 provider_id: String::new(),
                 backend_id: self.credentials.provider.clone(),
                 model: self.credentials.model.clone(),

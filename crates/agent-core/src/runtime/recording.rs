@@ -133,7 +133,7 @@ impl AgentLoop {
     pub async fn record_assistant_message_with_tools(
         &self,
         content: &str,
-        tool_calls: Option<Vec<types::message::ToolCall>>,
+        tool_calls: Option<Vec<types::model_tool::ToolCall>>,
         reasoning: Option<&str>,
         reasoning_details: Option<serde_json::Value>,
     ) -> anyhow::Result<()> {
@@ -156,7 +156,7 @@ impl AgentLoop {
     pub(crate) async fn record_assistant_response_items(
         &self,
         _content: &str,
-        _tool_calls: Option<Vec<types::message::ToolCall>>,
+        _tool_calls: Option<Vec<types::model_tool::ToolCall>>,
         _reasoning: Option<&str>,
         _reasoning_details: Option<serde_json::Value>,
         response_items: Vec<ResponseItem>,
@@ -183,7 +183,7 @@ impl AgentLoop {
             Some(
                 calls
                     .iter()
-                    .map(|c| types::message::ToolCall {
+                    .map(|c| types::model_tool::ToolCall {
                         id: c.id.clone(),
                         name: c.name.clone(),
                         arguments: c.arguments.clone(),
@@ -433,7 +433,7 @@ fn attach_response_item_metadata(
 
 fn response_items_for_assistant(
     content: &str,
-    calls: &[types::message::ToolCall],
+    calls: &[types::model_tool::ToolCall],
     reasoning: Option<&str>,
     metadata: Option<serde_json::Value>,
 ) -> anyhow::Result<Vec<ResponseItem>> {

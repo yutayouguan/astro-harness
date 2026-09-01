@@ -7,9 +7,11 @@ use serde_json::Value;
 
 use crate::types::error::{ProviderError, ProviderResult};
 use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
-use crate::types::message::{FunctionToolDefinition, Message, ToolDefinition};
 use crate::types::request::{
     ChatCompletionRequest, ProviderConfig, ResponsesRequest, ThinkingConfig, ToolChoice,
+};
+use crate::types::request_content::{
+    ChatCompletionMessage, FunctionToolDefinition, ToolDefinition,
 };
 use crate::types::stream::CompletionStream;
 
@@ -58,7 +60,7 @@ pub async fn responses_stream_direct(
 /// 大多数调用者使用此函数。tools 为 OpenAI 格式 JSON。
 pub async fn chat_stream(
     provider: &str,
-    messages: Vec<Message>,
+    messages: Vec<ChatCompletionMessage>,
     tools: Vec<Value>,
     config: &ProviderConfig,
 ) -> ProviderResult<CompletionStream> {
@@ -141,7 +143,7 @@ pub fn supports_agent_responses(provider: &str) -> bool {
 
 pub(crate) async fn chat_stream_with_tool_policy(
     provider: &str,
-    messages: Vec<Message>,
+    messages: Vec<ChatCompletionMessage>,
     tools: Vec<Value>,
     config: &ProviderConfig,
     tool_choice: Option<ToolChoice>,
@@ -151,7 +153,9 @@ pub(crate) async fn chat_stream_with_tool_policy(
     let mut input = Vec::with_capacity(messages.len());
     for message in messages {
         match message {
-            Message::System { content } if instructions.is_empty() => instructions = content,
+            ChatCompletionMessage::System { content } if instructions.is_empty() => {
+                instructions = content;
+            }
             other => input.push(other),
         }
     }

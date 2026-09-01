@@ -957,11 +957,11 @@ impl Session {
         update: agent_protocol::ThreadSettingsOverrides,
     ) -> Result<agent_protocol::ThreadSettingsSnapshot, String> {
         if update
-            .chat_targets
+            .model_targets
             .as_ref()
             .is_some_and(|targets| targets.is_empty())
         {
-            return Err("chat_targets cannot be empty".into());
+            return Err("model_targets cannot be empty".into());
         }
         if update.context_window.is_some_and(|window| window == 0) {
             return Err("context_window must be greater than zero".into());
@@ -975,8 +975,8 @@ impl Session {
             return Err("max_tokens must be greater than zero".into());
         }
         let mut state = self.lock_state();
-        if let Some(targets) = update.chat_targets {
-            state.model_ctx.set_chat_targets(targets);
+        if let Some(targets) = update.model_targets {
+            state.model_ctx.set_model_targets(targets);
         }
         if let Some(targets) = update.auxiliary_targets {
             state.model_ctx.set_auxiliary_targets(targets);
@@ -1027,7 +1027,7 @@ impl Session {
             }
         }
 
-        let primary = state.model_ctx.primary_chat_target();
+        let primary = state.model_ctx.primary_model_target();
         Ok(agent_protocol::ThreadSettingsSnapshot {
             provider: primary.backend_id,
             model: primary.model,
@@ -1295,7 +1295,7 @@ impl Session {
             payload.cwd = cwd.to_string_lossy().into_owned();
         }
         if payload.model.is_empty() {
-            let target = self.lock_state().model_ctx.primary_chat_target();
+            let target = self.lock_state().model_ctx.primary_model_target();
             let backend = target.backend_id.trim();
             let model = target.model.trim();
             payload.model = match (backend.is_empty(), model.is_empty()) {
@@ -1751,7 +1751,7 @@ impl Session {
 
     /// Agno 风格主模型入口：`Agent(model=…)`。
     ///
-    /// 更新 `chat_provider` / `chat_model` 与可选温度；若已有 `chat_targets`，
+    /// 更新 `chat_provider` / `chat_model` 与可选温度；若已有 `model_targets`，
     /// 用本规格覆盖 primary 的 provider/model（保留 api_key / base_url）。
     pub fn set_model(&mut self, spec: types::ModelSpec) {
         if let Some(t) = spec.temperature {
@@ -1764,18 +1764,18 @@ impl Session {
         if !spec.model_id.trim().is_empty() {
             model_ctx.credentials.model = spec.model_id.trim().to_string();
         }
-        if let Some(primary) = model_ctx.chat_targets.first_mut() {
+        if let Some(primary) = model_ctx.model_targets.first_mut() {
             *primary = spec.apply_to(primary);
             model_ctx.credentials.api_key = primary.api_key.clone();
             model_ctx.credentials.base_url = primary.base_url.clone();
         } else if !model_ctx.credentials.api_key.is_empty()
             || !model_ctx.credentials.base_url.is_empty()
         {
-            let target = spec.to_chat_target(
+            let target = spec.to_model_target(
                 &model_ctx.credentials.api_key,
                 &model_ctx.credentials.base_url,
             );
-            model_ctx.chat_targets = vec![target];
+            model_ctx.model_targets = vec![target];
         }
         model_ctx.model_spec = Some(spec);
     }
@@ -1786,19 +1786,19 @@ impl Session {
             types::ModelRole::Main => self.set_model(spec),
             types::ModelRole::Auxiliary(task) => {
                 let model_ctx = &mut self.state_mut().model_ctx;
-                let base = model_ctx.primary_chat_target();
+                let base = model_ctx.primary_model_target();
                 let target = spec.apply_to(&base);
                 model_ctx.auxiliary_targets.insert(task, vec![target]);
             }
         }
     }
 
-    /// Agno 风格主聊 fallback 入口：只改 `chat_targets[1..]`，保留 primary。
+    /// Agno 风格主聊 fallback 入口：只改 `model_targets[1..]`，保留 primary。
     ///
-    /// - 条数上限：[`types::MAX_CHAT_FALLBACKS`]
+    /// - 条数上限：[`types::MAX_MODEL_FALLBACKS`]
     /// - 凭据：默认继承 primary 的 `api_key` / `base_url`（跨厂商且 key 不同时，
-    ///   请改用已解析的 [`Self::set_chat_targets`]）
-    /// - 同 `provider_id` 去重（对齐 `expand_chat_targets`）
+    ///   请改用已解析的 [`Self::set_model_targets`]）
+    /// - 同 `provider_id` 去重（对齐 `expand_model_targets`）
     pub fn set_fallback_models(&mut self, specs: &[types::ModelSpec]) {
         self.state_mut().model_ctx.set_fallback_models(specs);
     }
@@ -1816,12 +1816,12 @@ impl Session {
                     .get(&task)
                     .and_then(|v| v.first())
                     .cloned()
-                    .unwrap_or_else(|| model_ctx.primary_chat_target());
+                    .unwrap_or_else(|| model_ctx.primary_model_target());
                 let mut chain = vec![preferred.clone()];
                 let mut seen = std::collections::HashSet::new();
                 seen.insert(preferred.provider_id.clone());
-                for spec in specs.iter().take(types::MAX_CHAT_FALLBACKS * 2) {
-                    if chain.len() > types::MAX_CHAT_FALLBACKS {
+                for spec in specs.iter().take(types::MAX_MODEL_FALLBACKS * 2) {
+                    if chain.len() > types::MAX_MODEL_FALLBACKS {
                         break;
                     }
                     let t = spec.apply_to(&preferred);
@@ -1881,13 +1881,13 @@ impl Session {
     }
 
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / Agent Thread 共用）。
-    pub fn set_chat_targets(&self, targets: Vec<types::ChatTarget>) {
-        self.lock_state().model_ctx.set_chat_targets(targets);
+    pub fn set_model_targets(&self, targets: Vec<types::ModelTarget>) {
+        self.lock_state().model_ctx.set_model_targets(targets);
     }
 
     /// 当前聊天 fallback 链。
-    pub fn chat_targets(&self) -> Vec<types::ChatTarget> {
-        self.lock_state().model_ctx.chat_targets().to_vec()
+    pub fn model_targets(&self) -> Vec<types::ModelTarget> {
+        self.lock_state().model_ctx.model_targets().to_vec()
     }
 
     /// 设置五类辅助任务的已解析目标链（每次 `Chat` 请求由 backend 下传后调用）。
@@ -1895,16 +1895,16 @@ impl Session {
     /// 调用方保证不落盘：本方法只存内存，session 结束或进程重启即丢弃。
     pub fn set_auxiliary_targets(
         &self,
-        targets: std::collections::HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>>,
+        targets: std::collections::HashMap<types::AuxiliaryTask, Vec<types::ModelTarget>>,
     ) {
         self.lock_state().model_ctx.set_auxiliary_targets(targets);
     }
 
     /// 返回指定辅助任务的目标链（preferred + 可选 fallback）。
     ///
-    /// 未传输该任务目标时回退当前主 `ChatTarget`（`chat_targets` 的首项，缺失时
+    /// 未传输该任务目标时回退当前主 `ModelTarget`（`model_targets` 的首项，缺失时
     /// 由 `set_chat_credentials` 字段现造一条），保持旧客户端兼容。
-    pub fn auxiliary_targets(&self, task: types::AuxiliaryTask) -> Vec<types::ChatTarget> {
+    pub fn auxiliary_targets(&self, task: types::AuxiliaryTask) -> Vec<types::ModelTarget> {
         self.lock_state().model_ctx.auxiliary_targets(task)
     }
 
@@ -2525,8 +2525,8 @@ mod tests {
         AgentConfig::with_defaults(dir.path().to_path_buf())
     }
 
-    fn t(id: &str, backend: &str, model: &str) -> types::ChatTarget {
-        types::ChatTarget {
+    fn t(id: &str, backend: &str, model: &str) -> types::ModelTarget {
+        types::ModelTarget {
             provider_id: id.into(),
             backend_id: backend.into(),
             model: model.into(),
@@ -2655,10 +2655,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn auxiliary_targets_falls_back_to_primary_chat_target_when_nothing_set() {
+    async fn auxiliary_targets_falls_back_to_primary_model_target_when_nothing_set() {
         let dir = TempDir::new().unwrap();
         let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
-        agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
+        agent.set_model_targets(vec![t("p0", "openai", "gpt-5.6")]);
 
         let targets = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
         assert_eq!(targets, vec![t("p0", "openai", "gpt-5.6")]);
@@ -2668,7 +2668,7 @@ mod tests {
     async fn auxiliary_targets_returns_configured_chain_for_matching_task() {
         let dir = TempDir::new().unwrap();
         let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
-        agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
+        agent.set_model_targets(vec![t("p0", "openai", "gpt-5.6")]);
 
         let mut map = std::collections::HashMap::new();
         map.insert(
@@ -2683,7 +2683,7 @@ mod tests {
             vec![t("p1", "claude", "opus"), t("p0", "openai", "gpt-5.6")]
         );
 
-        // 未配置的任务仍回退主 ChatTarget，不受其它任务配置影响。
+        // 未配置的任务仍回退主 ModelTarget，不受其它任务配置影响。
         let dreaming = agent.auxiliary_targets(types::AuxiliaryTask::Dreaming);
         assert_eq!(dreaming, vec![t("p0", "openai", "gpt-5.6")]);
     }
@@ -2726,7 +2726,7 @@ mod tests {
         assert!(state.current_turn_context.is_none());
         assert!(state.current_step_context.is_none());
         assert!(state.compression.recalled_context().is_empty());
-        assert!(state.model_ctx.chat_targets.is_empty());
+        assert!(state.model_ctx.model_targets.is_empty());
         assert!(state.mcp_config_override.is_empty());
         assert!(state.mcp_instructions.is_empty());
         assert!(state.mcp_enabled);

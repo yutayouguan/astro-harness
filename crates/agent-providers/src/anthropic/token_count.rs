@@ -9,13 +9,13 @@ use serde_json::{json, Value};
 use super::defaults;
 use super::tools::openai_tools_to_anthropic;
 use crate::http_stream::{resolve_base, trim_slash};
-use crate::types::message::Message;
+use crate::types::request_content::ChatCompletionMessage;
 use crate::types::ProviderConfig;
 
 /// 统计消息和工具的 token 数。
 pub async fn anthropic_count_tokens(
     client: &Client,
-    messages: &[Message],
+    messages: &[ChatCompletionMessage],
     tools: &[Value],
     config: &ProviderConfig,
 ) -> Result<u32> {

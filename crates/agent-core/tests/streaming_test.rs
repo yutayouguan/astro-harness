@@ -47,7 +47,7 @@ enum ProjectedStreamItem {
 
 struct ProjectedStreamArgs {
     session: Arc<agent::Session>,
-    targets: Vec<types::ChatTarget>,
+    targets: Vec<types::ModelTarget>,
     base_config: ProviderConfig,
     input: Vec<TurnInput>,
     system_prompt: Option<String>,
@@ -260,7 +260,7 @@ async fn run_projected_stream_with_responses_fn(
 ) {
     run_projected_stream(ProjectedStreamArgs {
         session,
-        targets: vec![types::ChatTarget {
+        targets: vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: config.model.clone(),
@@ -1201,7 +1201,7 @@ async fn regular_task_owns_initial_input_persistence() {
 
     run_projected_stream(ProjectedStreamArgs {
         session: Arc::clone(&session),
-        targets: vec![types::ChatTarget {
+        targets: vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
@@ -1245,7 +1245,7 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
 
     run_projected_stream(ProjectedStreamArgs {
         session,
-        targets: vec![types::ChatTarget {
+        targets: vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
@@ -1298,7 +1298,7 @@ async fn regular_task_prepare_error_emits_error_then_done() {
 
     run_projected_stream(ProjectedStreamArgs {
         session,
-        targets: vec![types::ChatTarget {
+        targets: vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),

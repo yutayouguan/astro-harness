@@ -2,7 +2,6 @@
 
 pub mod approval;
 pub mod auxiliary_target;
-pub mod chat_target;
 pub mod compact_scope;
 pub mod credentials;
 pub mod error;
@@ -10,8 +9,9 @@ pub mod grpc_addr;
 pub mod interaction_mode;
 pub mod media;
 pub mod memory_citation;
-pub mod message;
 pub mod model_spec;
+pub mod model_target;
+pub mod model_tool;
 pub mod network_policy;
 pub mod notify;
 pub mod permissions;
@@ -27,7 +27,6 @@ pub mod tool_output;
 pub mod tool_spill;
 
 pub use auxiliary_target::{AuxiliaryTargetChain, AuxiliaryTask};
-pub use chat_target::*;
 pub use compact_scope::CompactTokenLimitScope;
 pub use grpc_addr::{
     grpc_bind_address, resolve_grpc_address, runtime_grpc_address, set_runtime_grpc_address,
@@ -37,6 +36,7 @@ pub use media::{
     MediaRef,
 };
 pub use model_spec::{ModelRole, ModelSpec};
+pub use model_target::*;
 pub use network_policy::{
     NetworkApprovalContext, NetworkApprovalProtocol, NetworkDecisionSource, NetworkPolicyAmendment,
     NetworkPolicyDecision, NetworkPolicyDecisionPayload, NetworkPolicyRuleAction,

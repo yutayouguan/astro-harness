@@ -19,7 +19,7 @@ pub struct ParentRuntimeMaterial {
     pub parent_model: Option<String>,
     pub parent_sandbox_mode: String,
     pub inherited_skill_config: Vec<(PathBuf, bool)>,
-    pub chat_targets: Vec<types::ChatTarget>,
+    pub model_targets: Vec<types::ModelTarget>,
     pub project_root: Option<PathBuf>,
     pub workspace_roots: Vec<PathBuf>,
     pub hook_runtime: Option<Arc<hooks::HookRuntime>>,

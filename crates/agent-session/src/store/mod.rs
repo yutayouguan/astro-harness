@@ -1,8 +1,8 @@
 //! 单库会话存储：sessions、富 messages 与 FTS5。
 
 mod branches;
-mod messages;
 pub mod projects;
+mod response_items;
 mod rollout_projection;
 mod schema;
 mod search;

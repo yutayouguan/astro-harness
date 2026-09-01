@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use agent_protocol::ResponseItem;
 
-use super::message::{Message, ToolDefinition};
+use super::request_content::{ChatCompletionMessage, ToolDefinition};
 
 /// 单次模型调用的运行时配置。
 #[derive(Debug, Clone)]
@@ -79,7 +79,7 @@ pub struct ResponsesRequest {
     pub model: String,
     /// 稳定的基础指令，独立于带角色的对话输入。
     pub instructions: String,
-    /// 原生 Responses input。Agent 历史不得经 `Message` 降级后进入此字段。
+    /// 原生 Responses input。Agent 历史不得经 `ChatCompletionMessage` 降级后进入此字段。
     pub input: Vec<ResponseItem>,
     /// 原生工具 schema；不编码到指令或消息文本中。
     pub tools: Vec<ToolDefinition>,
@@ -117,7 +117,7 @@ impl Default for ResponsesRequest {
 pub struct ChatCompletionRequest {
     pub model: String,
     pub instructions: String,
-    pub input: Vec<Message>,
+    pub input: Vec<ChatCompletionMessage>,
     pub tools: Vec<ToolDefinition>,
     pub tool_choice: Option<ToolChoice>,
     pub parallel_tool_calls: Option<bool>,
@@ -148,10 +148,10 @@ impl Default for ChatCompletionRequest {
 
 impl ChatCompletionRequest {
     /// 将 instructions 字段降级为 system 消息，供线路协议没有顶层指令字段的 provider 使用。
-    pub fn input_with_instructions(&self) -> Vec<Message> {
+    pub fn input_with_instructions(&self) -> Vec<ChatCompletionMessage> {
         let mut messages = Vec::with_capacity(self.input.len() + 1);
         if !self.instructions.trim().is_empty() {
-            messages.push(Message::system(&self.instructions));
+            messages.push(ChatCompletionMessage::system(&self.instructions));
         }
         messages.extend(self.input.iter().cloned());
         messages
@@ -161,15 +161,15 @@ impl ChatCompletionRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::message::Role;
+    use crate::types::request_content::Role;
 
     #[test]
     fn lowering_keeps_contract_layers_distinct() {
         let request = ChatCompletionRequest {
             instructions: "stable base".into(),
             input: vec![
-                Message::developer("dynamic policy"),
-                Message::user_text("hello"),
+                ChatCompletionMessage::developer("dynamic policy"),
+                ChatCompletionMessage::user_text("hello"),
             ],
             tools: vec![ToolDefinition::function(
                 "lookup",

@@ -64,7 +64,7 @@ async fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaul
     agent.set_hook_runtime(runtime);
     agent.set_project_root(None);
     agent.set_permission_profile(Some("workspace-write".into()));
-    agent.set_chat_targets(vec![types::ChatTarget {
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: String::new(),
         backend_id: String::new(),
         model: "model-only".into(),
@@ -73,7 +73,7 @@ async fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaul
     }]);
 
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
-    agent.set_chat_targets(vec![types::ChatTarget {
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: String::new(),
         backend_id: "backend-only".into(),
         model: String::new(),
@@ -81,7 +81,7 @@ async fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaul
         base_url: String::new(),
     }]);
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
-    agent.set_chat_targets(vec![types::ChatTarget {
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: String::new(),
         backend_id: String::new(),
         model: String::new(),

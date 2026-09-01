@@ -10,12 +10,14 @@ use anyhow::{Context, Result};
 use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
-use super::messages::to_openai_messages_with_developer_role;
+use super::chat_completions::to_openai_messages_with_developer_role;
 use super::sse::extract_openai_delta;
 use crate::traits::{ChatCompletionModel, FromClient, ProviderClient, ProviderExt};
 use crate::types::{ChatCompletionRequest, CompletionStream};
 
-fn openai_chat_function_tools(tools: &[crate::types::message::ToolDefinition]) -> Vec<Value> {
+fn openai_chat_function_tools(
+    tools: &[crate::types::request_content::ToolDefinition],
+) -> Vec<Value> {
     tools
         .iter()
         .flat_map(|tool| tool.function_definitions())
@@ -272,7 +274,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::message::{
+    use crate::types::request_content::{
         FunctionToolDefinition, NamespaceToolDefinition, ToolDefinition, ToolNamespaceDefinition,
     };
 

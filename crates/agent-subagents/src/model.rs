@@ -153,7 +153,7 @@ pub struct SpawnRuntimeV2Request {
     pub sandbox_mode: Option<String>,
     pub mcp_servers: BTreeMap<String, toml::Value>,
     pub skills_config: Vec<crate::SkillConfigEntry>,
-    pub chat_targets: Vec<types::ChatTarget>,
+    pub model_targets: Vec<types::ModelTarget>,
     pub project_root: Option<PathBuf>,
     pub workspace_roots: Vec<PathBuf>,
     pub hook_runtime: Option<Arc<hooks::HookRuntime>>,

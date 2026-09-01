@@ -21,7 +21,7 @@ use providers::ProviderConfig;
 use providers::{PauseControl, Usage};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use types::ChatTarget;
+use types::ModelTarget;
 
 use super::lifecycle::{
     emit, emit_delta, emit_response_items_completed, emit_text_item_started, emit_usage,
@@ -133,7 +133,7 @@ async fn record_assistant_output(
     let tool_calls = (!calls.is_empty()).then(|| {
         calls
             .iter()
-            .map(|call| types::message::ToolCall {
+            .map(|call| types::model_tool::ToolCall {
                 id: call.id.clone(),
                 name: call.name.clone(),
                 arguments: call.arguments.clone(),
@@ -199,7 +199,7 @@ async fn emit_tool_argument_events(
 
 pub(crate) struct ThreadTurnTaskArgs {
     pub(crate) session: Arc<Session>,
-    pub(crate) targets: Vec<ChatTarget>,
+    pub(crate) targets: Vec<ModelTarget>,
     pub(crate) base_config: ProviderConfig,
     pub(crate) input: Vec<TurnInput>,
     pub(crate) system_prompt: Option<String>,
@@ -224,7 +224,7 @@ pub(crate) struct MultiTurnInstallError {
 #[doc(hidden)]
 pub struct ThreadTurnEventArgs {
     pub session: Arc<Session>,
-    pub targets: Vec<ChatTarget>,
+    pub targets: Vec<ModelTarget>,
     pub base_config: ProviderConfig,
     pub input: Vec<TurnInput>,
     pub system_prompt: Option<String>,
@@ -346,7 +346,7 @@ pub async fn run_multi_turn_events_with_responses_fn(
     hitl_gate: Option<Arc<HitlGate>>,
     tx: mpsc::Sender<anyhow::Result<Event>>,
 ) {
-    let target = ChatTarget {
+    let target = ModelTarget {
         provider_id: "scripted".into(),
         backend_id: "scripted".into(),
         model: config.model.clone(),
@@ -389,7 +389,7 @@ pub async fn run_multi_turn_stream_with_responses_fn(
 pub(crate) struct RunTurnArgs {
     session: Arc<Session>,
     turn_context: Arc<TurnContext>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     base_config: ProviderConfig,
     system_prompt: Option<String>,
     prompt: Option<crate::prompt::PromptContract>,
@@ -405,13 +405,13 @@ impl RunTurnArgs {
         turn_context: Arc<TurnContext>,
         responses_override: Option<super::provider::ResponsesOverride>,
     ) -> Self {
-        let mut targets = session.chat_targets();
+        let mut targets = session.model_targets();
         let provider = session.chat_provider();
         let model = session.chat_model();
         let api_key = session.chat_api_key();
         let base_url = session.chat_base_url();
         if targets.is_empty() {
-            targets.push(ChatTarget {
+            targets.push(ModelTarget {
                 provider_id: provider.clone(),
                 backend_id: provider,
                 model: model.clone(),
@@ -1053,7 +1053,7 @@ pub(crate) async fn run_turn(
                     "model returned reasoning only with no text; injecting retry prompt"
                 );
                 let agent = session.as_ref();
-                let details = types::message::merge_google_thought_signature(
+                let details = types::model_tool::merge_google_thought_signature(
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
                 );
@@ -1125,7 +1125,7 @@ pub(crate) async fn run_turn(
                 && !verify_outcome.continuation_fragments.is_empty()
             {
                 verify_attempt += 1;
-                let details = types::message::merge_google_thought_signature(
+                let details = types::model_tool::merge_google_thought_signature(
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
                 );
@@ -1263,7 +1263,7 @@ pub(crate) async fn run_turn(
                     }),
                 );
             }
-            let details = types::message::merge_google_thought_signature(
+            let details = types::model_tool::merge_google_thought_signature(
                 Some(timeline.reasoning_details_snapshot()),
                 thought_signature.as_deref(),
             );

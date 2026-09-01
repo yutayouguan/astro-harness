@@ -4,8 +4,8 @@ pub(crate) mod context_state;
 pub mod context_usage;
 pub mod contract;
 pub mod hooks;
-pub mod messages;
 pub mod prompt_builder;
+pub mod response_input;
 pub mod sanitize;
 
 pub use context_source::{

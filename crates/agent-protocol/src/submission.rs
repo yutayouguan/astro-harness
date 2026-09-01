@@ -79,7 +79,7 @@ pub enum Op {
     RealtimeConversationStart {
         params: ConversationStartParams,
         /// Realtime credentials and routing stay scoped to this connection.
-        target: types::ChatTarget,
+        target: types::ModelTarget,
         /// Completes only after the provider handshake succeeds or fails.
         reply: tokio::sync::oneshot::Sender<Result<(), String>>,
     },

@@ -1,7 +1,7 @@
 //! 工具结果落盘与可恢复引用（Cursor 式「大结果外部化」）。
 //!
 //! 不变量：
-//! - `Message::content` / DB `content` 始终保留全文（审计、FTS、UI）
+//! - `ResponseItem` / DB `item_json` 始终保留全文（审计、FTS、UI）
 //! - `compressed_content` 可改为 spill / prune 视图，供 Provider 读取
 //! - 落盘路径：`{memory_dir}/sessions/tool_spills/{session_id}/{message_id}.txt`
 

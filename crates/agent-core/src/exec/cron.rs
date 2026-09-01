@@ -18,7 +18,7 @@ use cron::{cron_db_path, CronJob, CronRunDb, NewCronRun};
 use home::default_memory_dir;
 use providers::Usage;
 use session::{SessionStore, StoredResponseItem};
-use types::ChatTarget;
+use types::ModelTarget;
 use uuid::Uuid;
 
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
@@ -197,12 +197,12 @@ pub struct CronExecCredentials {
     /// 自定义 API 基址；空白时由 Provider 默认配置决定。
     pub base_url: String,
     /// 含 primary 的聊天目标链；空则从四字段合成。
-    pub targets: Vec<ChatTarget>,
+    pub targets: Vec<ModelTarget>,
 }
 
 impl CronExecCredentials {
     /// 有效聊天目标：优先 `targets`，否则由四字段合成单元素链。
-    fn effective_targets(&self) -> Vec<ChatTarget> {
+    fn effective_targets(&self) -> Vec<ModelTarget> {
         if !self.targets.is_empty() {
             return self.targets.clone();
         }
@@ -216,7 +216,7 @@ impl CronExecCredentials {
         } else {
             self.model.clone()
         };
-        vec![ChatTarget {
+        vec![ModelTarget {
             provider_id: backend.clone(),
             backend_id: backend,
             model,
@@ -735,7 +735,7 @@ async fn run_agent_job(
         &creds.base_url,
     );
     let targets = creds.effective_targets();
-    session.set_chat_targets(targets.clone());
+    session.set_model_targets(targets.clone());
 
     let session = Arc::new(session);
     run_background_multi_turn(

@@ -55,7 +55,7 @@ pub fn make_llm_compress_view(
 }
 
 async fn complete_compaction_response(
-    target: &types::ChatTarget,
+    target: &types::ModelTarget,
     prompt: &str,
     max_tokens: u32,
 ) -> anyhow::Result<String> {
@@ -97,7 +97,7 @@ async fn complete_compaction_response(
 
 /// 对单条 tool 结果做 LLM 摘要；失败返回 Err（调用方回退 head/tail）。
 pub async fn summarize_tool_result(
-    targets: &[types::ChatTarget],
+    targets: &[types::ModelTarget],
     tool_name: Option<&str>,
     content: &str,
     max_chars: usize,

@@ -1,4 +1,4 @@
-//! 统一消息模型 — 多模态、工具调用、thinking 内建。
+//! Provider 请求中的内容块、工具定义与 Chat Completions 兼容消息。
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -255,10 +255,10 @@ impl ToolDefinition {
     }
 }
 
-/// 统一消息。
+/// 仅供非 Agent 入口使用的 Chat Completions 兼容消息。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "role", rename_all = "lowercase")]
-pub enum Message {
+pub enum ChatCompletionMessage {
     System {
         content: String,
     },
@@ -279,7 +279,7 @@ pub enum Message {
     },
 }
 
-impl Message {
+impl ChatCompletionMessage {
     pub fn system(content: impl Into<String>) -> Self {
         Self::System {
             content: content.into(),
@@ -362,30 +362,30 @@ mod tests {
 
     #[test]
     fn message_constructors() {
-        let sys = Message::system("You are helpful.");
+        let sys = ChatCompletionMessage::system("You are helpful.");
         assert_eq!(sys.role(), Role::System);
         assert_eq!(sys.text_content(), "You are helpful.");
 
-        let developer = Message::developer("Follow project policy.");
+        let developer = ChatCompletionMessage::developer("Follow project policy.");
         assert_eq!(developer.role(), Role::Developer);
         assert_eq!(developer.text_content(), "Follow project policy.");
 
-        let user = Message::user_text("Hello");
+        let user = ChatCompletionMessage::user_text("Hello");
         assert_eq!(user.role(), Role::User);
         assert_eq!(user.text_content(), "Hello");
 
-        let asst = Message::assistant_text("Hi there");
+        let asst = ChatCompletionMessage::assistant_text("Hi there");
         assert_eq!(asst.role(), Role::Assistant);
         assert_eq!(asst.text_content(), "Hi there");
 
-        let tool = Message::tool_result("call_1", "result", false);
+        let tool = ChatCompletionMessage::tool_result("call_1", "result", false);
         assert_eq!(tool.role(), Role::Tool);
         assert_eq!(tool.text_content(), "result");
     }
 
     #[test]
     fn multimodal_user_message() {
-        let msg = Message::user(vec![
+        let msg = ChatCompletionMessage::user(vec![
             UserContent::Text {
                 text: "Look at this".into(),
             },
@@ -398,14 +398,14 @@ mod tests {
             },
         ]);
         assert_eq!(msg.role(), Role::User);
-        if let Message::User { content } = &msg {
+        if let ChatCompletionMessage::User { content } = &msg {
             assert_eq!(content.len(), 3);
         }
     }
 
     #[test]
     fn assistant_with_thinking_and_tool_call() {
-        let msg = Message::assistant(vec![
+        let msg = ChatCompletionMessage::assistant(vec![
             AssistantContent::Thinking {
                 text: "Let me think...".into(),
                 signature: Some("sig123".into()),

@@ -1,10 +1,10 @@
 //! Agno 风格模型声明：`provider:model_id` 简写 + 可选采样参数。
 //!
-//! 与运行时 [`crate::ChatTarget`]（含 API key）分离：`ModelSpec` 是「要用哪家模型」的
-//! 声明；凭据由钥匙串 / 环境解析后再 [`ModelSpec::apply_to`] 或 [`ModelSpec::to_chat_target`]。
+//! 与运行时 [`crate::ModelTarget`]（含 API key）分离：`ModelSpec` 是「要用哪家模型」的
+//! 声明；凭据由钥匙串 / 环境解析后再 [`ModelSpec::apply_to`] 或 [`ModelSpec::to_model_target`]。
 
 use crate::auxiliary_target::AuxiliaryTask;
-use crate::chat_target::ChatTarget;
+use crate::model_target::ModelTarget;
 use crate::tool_mode::ToolMode;
 use serde::{Deserialize, Serialize};
 
@@ -110,7 +110,7 @@ impl ModelSpec {
     /// 用本规格覆盖 `target` 的 provider/model；保留 api_key / base_url。
     ///
     /// 若 `provider_id` 为空，保留 target 原有 provider。
-    pub fn apply_to(&self, target: &ChatTarget) -> ChatTarget {
+    pub fn apply_to(&self, target: &ModelTarget) -> ModelTarget {
         let provider = if self.provider_id.trim().is_empty() {
             target.backend_id.clone()
         } else {
@@ -121,7 +121,7 @@ impl ModelSpec {
         } else {
             self.model_id.trim().to_string()
         };
-        ChatTarget {
+        ModelTarget {
             provider_id: provider.clone(),
             backend_id: provider,
             model,
@@ -130,14 +130,14 @@ impl ModelSpec {
         }
     }
 
-    /// 从凭据构造完整 [`ChatTarget`]。
-    pub fn to_chat_target(
+    /// 从凭据构造完整 [`ModelTarget`]。
+    pub fn to_model_target(
         &self,
         api_key: impl Into<String>,
         base_url: impl Into<String>,
-    ) -> ChatTarget {
+    ) -> ModelTarget {
         let provider = self.provider_id.trim().to_string();
-        ChatTarget {
+        ModelTarget {
             provider_id: provider.clone(),
             backend_id: provider,
             model: self.model_id.trim().to_string(),
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn apply_to_keeps_credentials() {
-        let base = ChatTarget {
+        let base = ModelTarget {
             provider_id: "openai".into(),
             backend_id: "openai".into(),
             model: "old".into(),
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn bare_model_keeps_provider_on_apply() {
-        let base = ChatTarget {
+        let base = ModelTarget {
             provider_id: "google".into(),
             backend_id: "google".into(),
             model: "old".into(),

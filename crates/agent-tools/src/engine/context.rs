@@ -40,7 +40,7 @@ pub struct ToolContext<'a> {
     /// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
     pub credentials: &'a ModelCredentials,
     /// 含 primary 的聊天 fallback 链，供子 Agent thread 继承。
-    pub chat_targets: &'a [types::ChatTarget],
+    pub model_targets: &'a [types::ModelTarget],
     /// 子 Agent 执行调度器（由 AgentLoop 注入；工具层测试可为 None）。
     pub execution: Option<Arc<dyn crate::AgentThreadDispatch>>,
     /// 当前会话的权限 profile；子 Agent 缺省继承，可由 custom agent 收紧。
@@ -307,7 +307,7 @@ permissions:
             session_id: "test".into(),
             turn_id: None,
             credentials: &credentials,
-            chat_targets: &[],
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],

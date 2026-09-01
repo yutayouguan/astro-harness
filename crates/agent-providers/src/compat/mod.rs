@@ -1,8 +1,8 @@
 //! OpenAI Chat Completions 兼容层 — 一行接入 OpenAI 兼容厂商。
 
+pub mod chat_completions;
 pub mod completion;
 pub mod media;
-pub mod messages;
 pub mod responses;
 pub mod sse;
 pub mod think_tag;

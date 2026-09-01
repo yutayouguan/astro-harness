@@ -189,12 +189,14 @@ impl ChatCompletionModel for AnthropicCompletionModel {
 // ─── 消息转换 ──────────────────────────────────
 
 /// 公开供 token_count 等旧模块调用。
-pub fn to_anthropic_messages_public(messages: &[crate::types::Message]) -> (Value, Vec<Value>) {
+pub fn to_anthropic_messages_public(
+    messages: &[crate::types::ChatCompletionMessage],
+) -> (Value, Vec<Value>) {
     to_anthropic_messages(messages)
 }
 
-fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Value>) {
-    use crate::types::message::*;
+fn to_anthropic_messages(messages: &[crate::types::ChatCompletionMessage]) -> (Value, Vec<Value>) {
+    use crate::types::request_content::*;
     let mut system = String::new();
     let mut api_msgs = Vec::new();
     let mut pending_tool_results: Vec<Value> = Vec::new();
@@ -209,13 +211,14 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
     for m in messages {
         match m {
             // Anthropic 只有一个顶层 system 通道；内部的 developer 角色一并降级到此通道。
-            Message::System { content } | Message::Developer { content } => {
+            ChatCompletionMessage::System { content }
+            | ChatCompletionMessage::Developer { content } => {
                 if !system.is_empty() {
                     system.push_str("\n\n");
                 }
                 system.push_str(content);
             }
-            Message::Tool {
+            ChatCompletionMessage::Tool {
                 tool_call_id,
                 content,
                 is_error,
@@ -227,7 +230,7 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
                 }
                 pending_tool_results.push(block);
             }
-            Message::Assistant { content } => {
+            ChatCompletionMessage::Assistant { content } => {
                 flush(&mut pending_tool_results, &mut api_msgs);
                 let mut blocks = Vec::new();
                 for c in content {
@@ -260,7 +263,7 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
                 }
                 api_msgs.push(json!({"role": "assistant", "content": blocks}));
             }
-            Message::User { content } => {
+            ChatCompletionMessage::User { content } => {
                 flush(&mut pending_tool_results, &mut api_msgs);
                 let blocks = anthropic_user_content(content);
                 api_msgs.push(json!({"role": "user", "content": blocks}));
@@ -288,7 +291,7 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
 }
 
 fn anthropic_user_content(content: &[crate::types::UserContent]) -> Value {
-    use crate::types::message::UserContent;
+    use crate::types::request_content::UserContent;
     if content.len() == 1 {
         if let UserContent::Text { text } = &content[0] {
             return json!(text);
@@ -507,8 +510,8 @@ mod tests {
     #[test]
     fn system_with_cache_control() {
         let msgs = vec![
-            crate::types::Message::system("You are helpful."),
-            crate::types::Message::developer("Follow project policy."),
+            crate::types::ChatCompletionMessage::system("You are helpful."),
+            crate::types::ChatCompletionMessage::developer("Follow project policy."),
         ];
         let (sys, _) = to_anthropic_messages(&msgs);
         let blocks = sys.as_array().unwrap();
@@ -521,7 +524,7 @@ mod tests {
 
     #[test]
     fn thinking_block_in_assistant() {
-        let msgs = vec![crate::types::Message::assistant(vec![
+        let msgs = vec![crate::types::ChatCompletionMessage::assistant(vec![
             crate::types::AssistantContent::Thinking {
                 text: "hmm".into(),
                 signature: Some("sig".into()),
@@ -537,10 +540,10 @@ mod tests {
 
     #[test]
     fn mixed_text_tool_call_and_result_keep_anthropic_pairing() {
-        use crate::types::message::{AssistantContent, ToolCall};
+        use crate::types::request_content::{AssistantContent, ToolCall};
 
         let msgs = vec![
-            crate::types::Message::assistant(vec![
+            crate::types::ChatCompletionMessage::assistant(vec![
                 AssistantContent::Text {
                     text: "Searching now.".into(),
                 },
@@ -551,7 +554,7 @@ mod tests {
                     signature: None,
                 }),
             ]),
-            crate::types::Message::tool_result("call_1", "done", false),
+            crate::types::ChatCompletionMessage::tool_result("call_1", "done", false),
         ];
 
         let (_, api) = to_anthropic_messages(&msgs);

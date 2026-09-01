@@ -151,7 +151,7 @@ fn run_to_dto(r: cron::run_db::CronRunRow) -> CronRunDto {
 fn resolve_creds_for_job(
     job: &cron::CronJob,
 ) -> Result<agent::exec::cron::CronExecCredentials, String> {
-    use super::providers::{find_provider, find_provider_by_backend, resolve_chat_targets};
+    use super::providers::{find_provider, find_provider_by_backend, resolve_model_targets};
 
     let provider_cfg = if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
         find_provider(id).or_else(|_| find_provider_by_backend(id))?
@@ -170,7 +170,7 @@ fn resolve_creds_for_job(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| provider_cfg.model.clone());
 
-    let targets = resolve_chat_targets(
+    let targets = resolve_model_targets(
         Some(provider_cfg.id.as_str()),
         provider_cfg.kind.backend_id(),
         &model,

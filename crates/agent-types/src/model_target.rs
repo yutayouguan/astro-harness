@@ -1,9 +1,11 @@
+//! Agent 模型调用目标与回退链展开。
+
 use serde::{Deserialize, Serialize};
 
-pub const MAX_CHAT_FALLBACKS: usize = 3;
+pub const MAX_MODEL_FALLBACKS: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChatTarget {
+pub struct ModelTarget {
     pub provider_id: String,
     pub backend_id: String,
     pub model: String,
@@ -19,20 +21,20 @@ pub struct FallbackRef {
 }
 
 /// `lookup` 返回已解析凭据的条目（含 key）；None 则跳过。
-pub fn expand_chat_targets<F>(
-    primary: &ChatTarget,
+pub fn expand_model_targets<F>(
+    primary: &ModelTarget,
     fallbacks: &[FallbackRef],
     mut lookup: F,
-) -> Vec<ChatTarget>
+) -> Vec<ModelTarget>
 where
-    F: FnMut(&str) -> Option<ChatTarget>,
+    F: FnMut(&str) -> Option<ModelTarget>,
 {
     let mut out = vec![primary.clone()];
     let mut seen = std::collections::HashSet::new();
     seen.insert(primary.provider_id.clone());
-    for fr in fallbacks.iter().take(MAX_CHAT_FALLBACKS * 2) {
+    for fr in fallbacks.iter().take(MAX_MODEL_FALLBACKS * 2) {
         // 多读一点以便跳过后仍能填满 3 条
-        if out.len() > MAX_CHAT_FALLBACKS {
+        if out.len() > MAX_MODEL_FALLBACKS {
             break;
         }
         if fr.provider_id.is_empty() || !seen.insert(fr.provider_id.clone()) {
@@ -58,8 +60,8 @@ where
 mod tests {
     use super::*;
 
-    fn t(id: &str, backend: &str, model: &str) -> ChatTarget {
-        ChatTarget {
+    fn t(id: &str, backend: &str, model: &str) -> ModelTarget {
+        ModelTarget {
             provider_id: id.into(),
             backend_id: backend.into(),
             model: model.into(),
@@ -109,8 +111,8 @@ mod tests {
             },
         ];
         let lookup = |id: &str| catalog.iter().find(|c| c.provider_id == id).cloned();
-        let chain = expand_chat_targets(&primary, &refs, lookup);
-        assert_eq!(chain.len(), 1 + MAX_CHAT_FALLBACKS); // primary + 3
+        let chain = expand_model_targets(&primary, &refs, lookup);
+        assert_eq!(chain.len(), 1 + MAX_MODEL_FALLBACKS); // primary + 3
         assert_eq!(chain[0].provider_id, "p0");
         assert_eq!(chain[1].model, "opus-x");
         assert_eq!(chain[2].provider_id, "p2");

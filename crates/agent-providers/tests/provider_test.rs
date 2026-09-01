@@ -74,7 +74,7 @@ fn test_auth_kind_for_providers() {
     assert_eq!(AuthKind::for_provider("claude"), AuthKind::AnthropicKey);
     assert_eq!(AuthKind::for_provider("anthropic"), AuthKind::AnthropicKey);
     assert_eq!(AuthKind::for_provider("google"), AuthKind::GoogleApiKey);
-    assert_eq!(AuthKind::for_provider("azure"), AuthKind::AzureHeader);
+    assert_eq!(AuthKind::for_provider("azure"), AuthKind::Bearer);
     assert_eq!(AuthKind::for_provider("openai"), AuthKind::Bearer);
     assert_eq!(AuthKind::for_provider("deepseek"), AuthKind::Bearer);
 }

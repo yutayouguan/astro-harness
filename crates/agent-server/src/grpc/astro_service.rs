@@ -144,8 +144,8 @@ async fn submit_realtime_op(
 /// 未知 `task` 字符串静默跳过（旧客户端/脏数据不阻塞主聊）；API key 仅存内存。
 fn parse_auxiliary_targets(
     items: Vec<proto::AuxiliaryModelTarget>,
-) -> HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>> {
-    let mut grouped: HashMap<types::AuxiliaryTask, Vec<(u32, types::ChatTarget)>> = HashMap::new();
+) -> HashMap<types::AuxiliaryTask, Vec<types::ModelTarget>> {
+    let mut grouped: HashMap<types::AuxiliaryTask, Vec<(u32, types::ModelTarget)>> = HashMap::new();
     for item in items {
         let Some(task) = types::AuxiliaryTask::parse(item.task.trim()) else {
             continue;
@@ -155,7 +155,7 @@ fn parse_auxiliary_targets(
         }
         grouped.entry(task).or_default().push((
             item.order,
-            types::ChatTarget {
+            types::ModelTarget {
                 provider_id: item.provider_id,
                 backend_id: item.backend_id,
                 model: item.model,
@@ -1293,7 +1293,7 @@ impl AstroServiceImpl {
             req.api_key.trim().to_string()
         };
         let base_url = req.base_url.trim().to_string();
-        let mut targets = vec![types::ChatTarget {
+        let mut targets = vec![types::ModelTarget {
             provider_id: String::new(),
             backend_id: provider.into(),
             model: model.clone(),
@@ -1302,7 +1302,7 @@ impl AstroServiceImpl {
         }];
         targets.extend(req.chat_fallbacks.iter().filter_map(|fallback| {
             providers::dispatch::supports_agent_responses(&fallback.provider).then(|| {
-                types::ChatTarget {
+                types::ModelTarget {
                     provider_id: fallback.provider_id.clone(),
                     backend_id: fallback.provider.clone(),
                     model: fallback.model.clone(),
@@ -1325,7 +1325,7 @@ impl AstroServiceImpl {
             }
         }
         Ok(agent_protocol::ThreadSettingsOverrides {
-            chat_targets: Some(targets),
+            model_targets: Some(targets),
             auxiliary_targets: Some(parse_auxiliary_targets(req.auxiliary_targets.clone())),
             image_gen_targets: Some(tools::image_gen_targets_from_parts(tools::ImageGenParts {
                 provider: &req.image_gen_provider,
@@ -2307,7 +2307,7 @@ impl AstroService for AstroServiceImpl {
             .await
             .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
         super::thread_service::resume(&managed, subscription, false).await?;
-        let target = types::ChatTarget {
+        let target = types::ModelTarget {
             provider_id: req.provider.clone(),
             backend_id: req.provider,
             model: model.clone(),

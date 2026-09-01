@@ -12,8 +12,8 @@ use crate::{AgentMessageInputContent, ResponseItem, ResponseItemId};
 /// The custom `Debug` implementation deliberately omits provider credentials.
 #[derive(Clone, Default, PartialEq)]
 pub struct ThreadSettingsOverrides {
-    pub chat_targets: Option<Vec<types::ChatTarget>>,
-    pub auxiliary_targets: Option<HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>>>,
+    pub model_targets: Option<Vec<types::ModelTarget>>,
+    pub auxiliary_targets: Option<HashMap<types::AuxiliaryTask, Vec<types::ModelTarget>>>,
     pub image_gen_targets: Option<types::ImageGenTargets>,
     pub context_window: Option<u32>,
     pub interaction_mode: Option<types::InteractionMode>,
@@ -38,8 +38,8 @@ impl fmt::Debug for ThreadSettingsOverrides {
         formatter
             .debug_struct("ThreadSettingsOverrides")
             .field(
-                "chat_targets",
-                &self.chat_targets.as_ref().map(|targets| targets.len()),
+                "model_targets",
+                &self.model_targets.as_ref().map(|targets| targets.len()),
             )
             .field(
                 "auxiliary_targets",

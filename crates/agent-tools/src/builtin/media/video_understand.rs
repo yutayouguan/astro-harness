@@ -485,7 +485,7 @@ mod path_tests {
             session_id: "test".into(),
             turn_id: None,
             credentials: &creds,
-            chat_targets: &[],
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],

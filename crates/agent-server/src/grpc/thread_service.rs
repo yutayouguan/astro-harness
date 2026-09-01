@@ -693,7 +693,7 @@ mod tests {
             .await
             .expect("configure thread");
 
-        let targets = managed.runtime.session().chat_targets();
+        let targets = managed.runtime.session().model_targets();
         assert_eq!(targets.len(), 2);
         assert_eq!(targets[0].backend_id, "deepseek");
         assert_eq!(targets[1].backend_id, "openai");
@@ -815,7 +815,7 @@ mod tests {
             .expect("thread");
         let session = managed.runtime.session();
         let initial_temperature = session.temperature();
-        let initial_targets = session.chat_targets();
+        let initial_targets = session.model_targets();
 
         let error = service
             .configure_thread_from_chat(
@@ -834,7 +834,7 @@ mod tests {
 
         assert_eq!(error.code(), tonic::Code::InvalidArgument);
         assert_eq!(session.temperature(), initial_temperature);
-        assert_eq!(session.chat_targets(), initial_targets);
+        assert_eq!(session.model_targets(), initial_targets);
 
         managed
             .runtime

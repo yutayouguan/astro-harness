@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
 
-use providers::types::message::Message as ProviderMessage;
+use providers::types::request_content::{ChatCompletionMessage, UserContent};
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 
@@ -66,8 +66,8 @@ pub async fn one_shot_llm(
     user: &str,
 ) -> Result<String> {
     let messages = vec![
-        ProviderMessage::system(system),
-        ProviderMessage::user_text(user),
+        ChatCompletionMessage::system(system),
+        ChatCompletionMessage::user_text(user),
     ];
 
     let mut stream =
@@ -443,10 +443,10 @@ impl NodeExecutor for VisionUnderstandingExec {
 
         let (provider_id, config) = build_provider_config(node)?;
         let messages = vec![
-            ProviderMessage::system("你是一个视觉理解助手。根据用户提示分析图片内容。"),
-            ProviderMessage::user(vec![
-                providers::types::message::UserContent::Image { url: image_url },
-                providers::types::message::UserContent::Text { text: prompt },
+            ChatCompletionMessage::system("你是一个视觉理解助手。根据用户提示分析图片内容。"),
+            ChatCompletionMessage::user(vec![
+                UserContent::Image { url: image_url },
+                UserContent::Text { text: prompt },
             ]),
         ];
 

@@ -28,8 +28,8 @@ pub struct BackgroundReviewJob {
     pub agent_id: String,
     /// `(role, content)` 升序。
     pub messages: Vec<(String, String)>,
-    /// preferred + 可选 fallback；每项是完整 ChatTarget。
-    pub targets: Vec<types::ChatTarget>,
+    /// preferred + 可选 fallback；每项是完整 ModelTarget。
+    pub targets: Vec<types::ModelTarget>,
 }
 
 /// review 写盘后的轻量通知（`op` + `content`）。
@@ -117,11 +117,11 @@ pub async fn spawn_background_review_after_turn(
 
 /// 按 preferred→fallback 完成；返回首个非空响应。全部失败返回 Err。
 pub async fn complete_review_with_targets<F, Fut>(
-    targets: &[types::ChatTarget],
+    targets: &[types::ModelTarget],
     mut complete: F,
 ) -> Result<String, String>
 where
-    F: FnMut(&types::ChatTarget) -> Fut,
+    F: FnMut(&types::ModelTarget) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>>,
 {
     let mut last_err = "no review targets".to_string();
@@ -264,8 +264,8 @@ async fn complete_review_response(
 mod tests {
     use super::*;
 
-    fn target(id: &str, backend: &str, model: &str, key: &str) -> types::ChatTarget {
-        types::ChatTarget {
+    fn target(id: &str, backend: &str, model: &str, key: &str) -> types::ModelTarget {
+        types::ModelTarget {
             provider_id: id.into(),
             backend_id: backend.into(),
             model: model.into(),

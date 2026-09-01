@@ -269,7 +269,7 @@ mod tests {
         session
             .record_assistant_message_with_tools(
                 "",
-                Some(vec![types::message::ToolCall {
+                Some(vec![types::model_tool::ToolCall {
                     id: "call-1".into(),
                     name: "echo".into(),
                     arguments: serde_json::json!({}),

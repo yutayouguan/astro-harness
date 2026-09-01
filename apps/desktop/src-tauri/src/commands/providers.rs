@@ -955,7 +955,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
         let fallback = provider
             .fallback
             .into_iter()
-            .take(types::MAX_CHAT_FALLBACKS)
+            .take(types::MAX_MODEL_FALLBACKS)
             .filter(|e| !e.provider_id.trim().is_empty())
             .collect();
         s.providers[idx] = ProviderConfig {
@@ -1134,12 +1134,12 @@ pub(crate) fn find_provider_by_backend(backend_id: &str) -> Result<ProviderConfi
 /// 从 providers.json + keyring 展开主目标与聊天后备链（含 primary）。
 ///
 /// - primary：与 `resolve_chat_credentials` 相同的查找规则；`model` 空则用条目默认模型
-/// - fallback：跳过禁用、无 Key（ollama 除外）、缺失条目；去重与上限由 `expand_chat_targets` 负责
-pub fn resolve_chat_targets(
+/// - fallback：跳过禁用、无 Key（ollama 除外）、缺失条目；去重与上限由 `expand_model_targets` 负责
+pub fn resolve_model_targets(
     primary_provider_id: Option<&str>,
     backend_hint: &str,
     model: &str,
-) -> Result<Vec<types::ChatTarget>, String> {
+) -> Result<Vec<types::ModelTarget>, String> {
     let cfg: ProviderConfig = if let Some(id) = primary_provider_id.filter(|s| !s.is_empty()) {
         find_provider(id)?
     } else {
@@ -1167,7 +1167,7 @@ pub fn resolve_chat_targets(
         }
     };
 
-    let primary = types::ChatTarget {
+    let primary = types::ModelTarget {
         provider_id: cfg.id.clone(),
         backend_id: primary_backend,
         model,
@@ -1184,7 +1184,7 @@ pub fn resolve_chat_targets(
         })
         .collect();
 
-    let chain = types::expand_chat_targets(&primary, &refs, |id| {
+    let chain = types::expand_model_targets(&primary, &refs, |id| {
         let Ok(p) = find_provider(id) else {
             return None;
         };
@@ -1201,7 +1201,7 @@ pub fn resolve_chat_targets(
         if api_key.trim().is_empty() && !allow_empty_key {
             return None;
         }
-        Some(types::ChatTarget {
+        Some(types::ModelTarget {
             provider_id: p.id.clone(),
             backend_id: bid,
             model: p.model.clone(),

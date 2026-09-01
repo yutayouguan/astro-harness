@@ -16,7 +16,7 @@ use uuid::Uuid;
 use super::common::{bootstrap_workspace, friendly_error, open_sessions};
 use super::providers::{
     cached_model_context_window, cached_model_info, cached_model_max_output_tokens,
-    resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
+    resolve_image_gen_targets, resolve_model_targets, ImageGenTarget,
 };
 use super::session::ensure_default_project_in_store;
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
@@ -459,7 +459,7 @@ pub async fn start_realtime_conversation(
     if session_id.is_empty() {
         return Err("sessionId 不能为空".into());
     }
-    let targets = resolve_chat_targets(
+    let targets = resolve_model_targets(
         request.provider_id.as_deref(),
         &request.provider,
         &request.model,
@@ -717,7 +717,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
     }
 
     // 从 providers.json + keyring 解析 primary 与聊天后备链
-    let targets = resolve_chat_targets(provider_id.as_deref(), &provider, &model)?;
+    let targets = resolve_model_targets(provider_id.as_deref(), &provider, &model)?;
     let primary = targets
         .first()
         .cloned()
@@ -1195,13 +1195,13 @@ pub async fn run_user_shell_command(
     })
 }
 
-/// 从请求/钥匙串/环境解析聊天 Provider 凭证（仅 primary；完整链见 `resolve_chat_targets`）。
-#[allow(dead_code)] // cron / 其它入口仍可复用；主聊已走 resolve_chat_targets
+/// 从请求/钥匙串/环境解析聊天 Provider 凭证（仅 primary；完整链见 `resolve_model_targets`）。
+#[allow(dead_code)] // cron / 其它入口仍可复用；主聊已走 resolve_model_targets
 fn resolve_chat_credentials(
     provider_id: Option<&str>,
     backend_id: &str,
 ) -> Result<(String, String), String> {
-    let targets = resolve_chat_targets(provider_id, backend_id, "")?;
+    let targets = resolve_model_targets(provider_id, backend_id, "")?;
     let t = targets
         .first()
         .ok_or_else(|| "无可用聊天目标".to_string())?;

@@ -11,8 +11,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use thiserror::Error;
 
-use crate::types::message::Message;
 use crate::types::request::{ProviderConfig, ToolChoice};
+use crate::types::request_content::ChatCompletionMessage;
 use crate::types::stream::StreamChunk;
 
 /// 结构化抽取过程中的错误类型。
@@ -267,7 +267,7 @@ where
     }
 
     /// 构造 system + user 消息，引导模型通过原生 `submit` 工具返回结果。
-    fn build_messages(&self, text: &str) -> Vec<Message> {
+    fn build_messages(&self, text: &str) -> Vec<ChatCompletionMessage> {
         let schema = schema_value_for::<T>();
         let schema_pretty =
             serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string());
@@ -288,7 +288,10 @@ where
         }
 
         let user = format!("请从以下文本抽取结构化数据：\n\n{text}");
-        vec![Message::system(system), Message::user_text(user)]
+        vec![
+            ChatCompletionMessage::system(system),
+            ChatCompletionMessage::user_text(user),
+        ]
     }
 
     fn submit_tool(&self) -> Value {

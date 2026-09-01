@@ -298,7 +298,7 @@ fn parent_runtime_material(ctx: &ToolContext<'_>) -> ParentRuntimeMaterial {
         parent_model,
         parent_sandbox_mode: current_sandbox_mode(ctx),
         inherited_skill_config: ctx.skill_config_overrides.to_vec(),
-        chat_targets: ctx.chat_targets.to_vec(),
+        model_targets: ctx.model_targets.to_vec(),
         project_root: ctx.project_root.clone(),
         workspace_roots: ctx.workspace_roots.clone(),
         hook_runtime: ctx.hook_runtime.clone(),

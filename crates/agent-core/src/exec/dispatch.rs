@@ -20,7 +20,7 @@ use tools::{
 };
 
 use super::agent_runtime::{
-    resolve_chat_targets_for_model, AgentRuntimeManager, CloseThreadStart, FollowupAdmission,
+    resolve_model_targets_for_model, AgentRuntimeManager, CloseThreadStart, FollowupAdmission,
     RunAgentTurnRequest, UnacceptedSpawnCleanup,
 };
 use crate::runtime::{Config, Session};
@@ -120,7 +120,7 @@ async fn active_root_runtime_material_with_upgrade_hook(
         after_upgrade();
         tokio::task::yield_now().await;
         let parent_model = session
-            .chat_targets()
+            .model_targets()
             .first()
             .map(|target| format!("{}:{}", target.backend_id.trim(), target.model.trim()));
         let material = ParentRuntimeMaterial {
@@ -131,7 +131,7 @@ async fn active_root_runtime_material_with_upgrade_hook(
                 .permission_profile()
                 .unwrap_or_else(|| types::WORKSPACE_PROFILE.to_string()),
             inherited_skill_config: session.skill_config_overrides(),
-            chat_targets: session.chat_targets(),
+            model_targets: session.model_targets(),
             project_root: session.project_root(),
             workspace_roots: session.workspace_roots(),
             hook_runtime: Some(session.hook_runtime()),
@@ -566,8 +566,8 @@ impl DefaultAgentThreadDispatch {
             self.control.root_thread_id(),
             settings.interrupt_message,
         );
-        runtime.chat_targets = resolve_chat_targets_for_model(
-            &runtime.chat_targets,
+        runtime.model_targets = resolve_model_targets_for_model(
+            &runtime.model_targets,
             runtime.model_request.model.as_deref(),
         )?;
         validate_recovered_runtime_setup(&material.memory_dir, &self.control, target, &runtime)
@@ -603,8 +603,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             request.runtime.parent_model.as_deref(),
             Some(&request.runtime.parent_sandbox_mode),
         )?;
-        request.runtime.chat_targets = resolve_chat_targets_for_model(
-            &request.runtime.chat_targets,
+        request.runtime.model_targets = resolve_model_targets_for_model(
+            &request.runtime.model_targets,
             resolved.model.as_deref(),
         )?;
 
@@ -951,7 +951,7 @@ fn build_runtime_request(
         sandbox_mode: resolved.sandbox_mode,
         mcp_servers: resolved.definition.mcp_servers,
         skills_config: skills,
-        chat_targets: material.chat_targets,
+        model_targets: material.model_targets,
         project_root: material.project_root,
         workspace_roots: material.workspace_roots,
         hook_runtime: material.hook_runtime,
@@ -1001,8 +1001,8 @@ async fn validate_runtime_setup(
     runtime: &SpawnRuntimeV2Request,
     child_session_id: &str,
 ) -> anyhow::Result<()> {
-    let _ = resolve_chat_targets_for_model(
-        &runtime.chat_targets,
+    let _ = resolve_model_targets_for_model(
+        &runtime.model_targets,
         runtime.model_request.model.as_deref(),
     )?;
     let _ = mcp::decode_inline_mcp_servers(&runtime.mcp_servers)?;
@@ -1773,7 +1773,7 @@ mod tests {
                 parent_model: Some("openai:test".into()),
                 parent_sandbox_mode: "workspace-write".into(),
                 inherited_skill_config: Vec::new(),
-                chat_targets: vec![types::ChatTarget {
+                model_targets: vec![types::ModelTarget {
                     provider_id: "test".into(),
                     backend_id: "openai".into(),
                     model: "test".into(),
@@ -1936,7 +1936,7 @@ mod tests {
             .unwrap(),
         );
         register_active_root_session(&memory_dir, "root-session", &root_session).unwrap();
-        root_session.set_chat_targets(root_material.chat_targets);
+        root_session.set_model_targets(root_material.model_targets);
         root_session.set_permission_profile(Some(root_material.parent_sandbox_mode));
         root_session.set_project_root(root_material.project_root);
         root_session.set_skill_config_overrides(root_material.inherited_skill_config);
@@ -1979,7 +1979,7 @@ mod tests {
                 )
                 .await
                 .unwrap();
-                session.set_chat_targets(vec![types::ChatTarget {
+                session.set_model_targets(vec![types::ModelTarget {
                     provider_id: "openai".into(),
                     backend_id: "openai".into(),
                     model: "test".into(),
@@ -2014,7 +2014,7 @@ mod tests {
         upgraded_rx.await.unwrap();
         register_active_root_session(&memory_dir, "root-session", &replacement).unwrap();
         let material = lookup.await.unwrap();
-        assert_eq!(material.chat_targets[0].api_key, "replacement-key");
+        assert_eq!(material.model_targets[0].api_key, "replacement-key");
         assert_eq!(material.parent_sandbox_mode, types::READ_ONLY_PROFILE);
     }
 
@@ -3671,7 +3671,7 @@ mod tests {
             hooks::HookOutcome::Continue
         });
         let mut request = request_with_hook_bus(&memory_dir, bus);
-        request.runtime.chat_targets.clear();
+        request.runtime.model_targets.clear();
 
         let error = AgentThreadDispatch::spawn_agent(&dispatch, request)
             .await
@@ -4868,14 +4868,14 @@ mod tests {
         spawn.runtime.project_root = Some(project);
         spawn.request.reasoning_effort = Some("max".into());
         let mut runtime_material = spawn.runtime.clone();
-        runtime_material.chat_targets[0] = types::ChatTarget {
+        runtime_material.model_targets[0] = types::ModelTarget {
             provider_id: "current-anthropic".into(),
             backend_id: "anthropic".into(),
             model: "claude-current".into(),
             api_key: "anthropic-key-must-not-leak".into(),
             base_url: "https://anthropic.invalid".into(),
         };
-        runtime_material.chat_targets.push(types::ChatTarget {
+        runtime_material.model_targets.push(types::ModelTarget {
             provider_id: "current-openai".into(),
             backend_id: "openai".into(),
             model: "openai-current".into(),
@@ -4961,13 +4961,13 @@ mod tests {
             stored.runtime.model_request.reasoning_effort.as_deref(),
             Some("max")
         );
-        assert_eq!(stored.runtime.chat_targets[0].backend_id, "openai");
+        assert_eq!(stored.runtime.model_targets[0].backend_id, "openai");
         assert_eq!(
-            stored.runtime.chat_targets[0].api_key,
+            stored.runtime.model_targets[0].api_key,
             "restarted-openai-key"
         );
         assert_eq!(
-            stored.runtime.chat_targets[0].base_url,
+            stored.runtime.model_targets[0].base_url,
             "https://openai-current.invalid"
         );
         let messages = sessions
@@ -5007,7 +5007,7 @@ mod tests {
             tokio::task::yield_now().await;
         }
 
-        runtime_material.chat_targets = vec![types::ChatTarget {
+        runtime_material.model_targets = vec![types::ModelTarget {
             provider_id: "current-anthropic".into(),
             backend_id: "anthropic".into(),
             model: "claude-current".into(),
@@ -5076,7 +5076,7 @@ mod tests {
         let dispatch = dispatch(&dir).await;
         let mut request = spawn_request(&memory_dir);
         request.request.model = Some("openai:pinned-model".into());
-        request.runtime.chat_targets = vec![types::ChatTarget {
+        request.runtime.model_targets = vec![types::ModelTarget {
             provider_id: "current-anthropic".into(),
             backend_id: "anthropic".into(),
             model: "claude-current".into(),
@@ -6455,7 +6455,7 @@ enabled = true
                     parent_model: Some("openai:gpt-5.6".into()),
                     parent_sandbox_mode: "locked".into(),
                     inherited_skill_config: vec![(PathBuf::from("parent/SKILL.md"), true)],
-                    chat_targets: Vec::new(),
+                    model_targets: Vec::new(),
                     project_root: Some(project),
                     workspace_roots: Vec::new(),
                     hook_runtime: None,

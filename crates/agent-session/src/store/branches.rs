@@ -724,7 +724,9 @@ fn turn_spans(items: &[StoredResponseItem]) -> Vec<TurnSpan> {
             TurnSpan {
                 index: i64::try_from(turn + 1).unwrap_or(i64::MAX),
                 user_message_id: items[*start].id,
-                content: Some(super::messages::response_item_text(&items[*start].item)),
+                content: Some(super::response_items::response_item_text(
+                    &items[*start].item,
+                )),
                 completed: items[*start + 1..end]
                     .iter()
                     .any(|item| matches!(&item.item, agent_protocol::ResponseItem::Message { role, .. } if role == "assistant")),

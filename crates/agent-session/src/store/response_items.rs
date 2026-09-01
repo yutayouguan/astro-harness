@@ -1,4 +1,4 @@
-//! 原生 Responses item 读写。
+//! 原生 Responses item 持久化、分支与裁剪。
 
 use agent_db::sqlx::{self, Row};
 use agent_protocol::{ContentItem, ResponseItem};

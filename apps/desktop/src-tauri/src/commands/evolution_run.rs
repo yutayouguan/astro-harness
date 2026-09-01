@@ -134,13 +134,13 @@ fn active_ui_provider() -> Result<UiProvider, String> {
     providers_commands::find_provider(&id)
 }
 
-fn active_primary_target() -> Result<types::ChatTarget, String> {
+fn active_primary_target() -> Result<types::ModelTarget, String> {
     let ui = active_ui_provider()?;
     if ui.model.trim().is_empty() {
         return Err("激活提供商未配置模型".into());
     }
     let (_has, _src, _env, key) = resolve_api_key(&ui);
-    Ok(types::ChatTarget {
+    Ok(types::ModelTarget {
         provider_id: ui.id,
         backend_id: ui.kind.backend_id().to_string(),
         model: ui.model,

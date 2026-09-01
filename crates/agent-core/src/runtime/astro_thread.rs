@@ -174,7 +174,7 @@ mod tests {
         session
             .record_assistant_message_with_tools(
                 "",
-                Some(vec![types::message::ToolCall {
+                Some(vec![types::model_tool::ToolCall {
                     id: "call-search".into(),
                     name: "tool_search".into(),
                     arguments: serde_json::json!({"query": "image"}),
@@ -421,7 +421,7 @@ mod tests {
         let submission_id = thread
             .submit(Op::ThreadSettings {
                 thread_settings: agent_protocol::ThreadSettingsOverrides {
-                    chat_targets: Some(vec![types::ChatTarget {
+                    model_targets: Some(vec![types::ModelTarget {
                         provider_id: "provider-1".into(),
                         backend_id: "openai".into(),
                         model: "gpt-test".into(),
@@ -483,7 +483,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        session.set_chat_targets(vec![types::ChatTarget {
+        session.set_model_targets(vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
@@ -554,7 +554,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        session.set_chat_targets(vec![types::ChatTarget {
+        session.set_model_targets(vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "old-model".into(),
@@ -592,7 +592,7 @@ mod tests {
                         client_message_id: None,
                     }],
                     thread_settings: agent_protocol::ThreadSettingsOverrides {
-                        chat_targets: Some(vec![types::ChatTarget {
+                        model_targets: Some(vec![types::ModelTarget {
                             provider_id: "scripted".into(),
                             backend_id: "scripted".into(),
                             model: "new-model".into(),
@@ -662,7 +662,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        session.set_chat_targets(vec![types::ChatTarget {
+        session.set_model_targets(vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
@@ -753,7 +753,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        session.set_chat_targets(vec![types::ChatTarget {
+        session.set_model_targets(vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
@@ -880,7 +880,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        first_session.set_chat_targets(vec![types::ChatTarget {
+        first_session.set_model_targets(vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
@@ -943,7 +943,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        second_session.set_chat_targets(vec![types::ChatTarget {
+        second_session.set_model_targets(vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
@@ -1019,7 +1019,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        session.set_chat_targets(vec![types::ChatTarget {
+        session.set_model_targets(vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
@@ -1167,7 +1167,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        session.set_chat_targets(vec![types::ChatTarget {
+        session.set_model_targets(vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
@@ -1326,7 +1326,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        session.set_chat_targets(vec![types::ChatTarget {
+        session.set_model_targets(vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),

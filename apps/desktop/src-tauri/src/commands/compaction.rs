@@ -9,7 +9,7 @@ use providers::ProviderConfig;
 use session::StoredResponseItem;
 
 use crate::meta::auxiliary_resolver::{
-    primary_chat_target_for_session, resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget,
+    primary_model_target_for_session, resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget,
 };
 
 const SUMMARY_PREFIX: &str = "[CONTEXT COMPACTION]";
@@ -177,7 +177,7 @@ async fn summarize_with_targets(
 
 /// 用辅助模型路由生成压实交接摘要（primary 取自会话账单/模型）。
 async fn summarize_with_llm(session_id: &str, transcript: &str) -> Result<String, String> {
-    let primary = primary_chat_target_for_session(session_id).await?;
+    let primary = primary_model_target_for_session(session_id).await?;
     let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::Compaction, &primary)?;
     summarize_with_targets(targets, transcript).await
 }

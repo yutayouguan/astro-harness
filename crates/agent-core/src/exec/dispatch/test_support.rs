@@ -248,7 +248,7 @@ impl LifecycleTestApp {
             parent_model: Some("openai:test".into()),
             parent_sandbox_mode: "workspace-write".into(),
             inherited_skill_config: Vec::new(),
-            chat_targets: vec![types::ChatTarget {
+            model_targets: vec![types::ModelTarget {
                 provider_id: "test".into(),
                 backend_id: "openai".into(),
                 model: "test".into(),
