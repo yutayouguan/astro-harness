@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::items::TurnItem;
+use crate::realtime::{
+    RealtimeConversationClosedEvent, RealtimeConversationListVoicesResponseEvent,
+    RealtimeConversationRealtimeEvent, RealtimeConversationStartedEvent,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
@@ -324,6 +328,10 @@ pub struct HookCompletedEvent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum EventMsg {
+    RealtimeConversationStarted(RealtimeConversationStartedEvent),
+    RealtimeConversationRealtime(RealtimeConversationRealtimeEvent),
+    RealtimeConversationClosed(RealtimeConversationClosedEvent),
+    RealtimeConversationListVoicesResponse(RealtimeConversationListVoicesResponseEvent),
     TurnStarted(TurnStartedEvent),
     UserInputCommitted(UserInputCommittedEvent),
     ItemStarted(ItemEvent),

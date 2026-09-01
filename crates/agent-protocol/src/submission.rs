@@ -6,6 +6,10 @@ use crate::control::{
     RequestUserInputResponse, ReviewDecision, ReviewRequest, ThreadSettingsOverrides,
 };
 use crate::items::ExtensionItem;
+use crate::realtime::{
+    ConversationAudioParams, ConversationSpeechParams, ConversationStartParams,
+    ConversationTextParams,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnInput {
@@ -70,6 +74,18 @@ pub enum SuspendTurnOutcome {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Op {
+    /// Start a realtime conversation stream for this thread.
+    RealtimeConversationStart(ConversationStartParams),
+    /// Append an audio frame to the running realtime conversation.
+    RealtimeConversationAudio(ConversationAudioParams),
+    /// Append a role-bearing text item to the running realtime conversation.
+    RealtimeConversationText(ConversationTextParams),
+    /// Ask the running realtime conversation to speak the supplied text.
+    RealtimeConversationSpeech(ConversationSpeechParams),
+    /// Close the running realtime conversation.
+    RealtimeConversationClose,
+    /// Emit the voices supported by the realtime transport.
+    RealtimeConversationListVoices,
     TurnInput {
         request: TurnInputRequest,
         mode: TurnInputMode,

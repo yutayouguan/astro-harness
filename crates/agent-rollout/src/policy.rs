@@ -5,7 +5,9 @@ use crate::RolloutItem;
 /// Returns whether an event is part of durable rollout history.
 pub fn should_persist_event_msg(event: &EventMsg) -> bool {
     match event {
-        EventMsg::ItemCompleted(_) => true,
+        EventMsg::ItemCompleted(_)
+        | EventMsg::RealtimeConversationStarted(_)
+        | EventMsg::RealtimeConversationClosed(_) => true,
         EventMsg::TurnStarted(_)
         | EventMsg::UserInputCommitted(_)
         | EventMsg::TurnComplete(_)
@@ -14,7 +16,9 @@ pub fn should_persist_event_msg(event: &EventMsg) -> bool {
         | EventMsg::ContextUsage(_)
         | EventMsg::ThreadSettingsApplied(_)
         | EventMsg::ThreadRolledBack(_) => true,
-        EventMsg::ItemStarted(_)
+        EventMsg::RealtimeConversationRealtime(_)
+        | EventMsg::RealtimeConversationListVoicesResponse(_)
+        | EventMsg::ItemStarted(_)
         | EventMsg::AgentMessageContentDelta(_)
         | EventMsg::PlanDelta(_)
         | EventMsg::ReasoningContentDelta(_)
@@ -123,6 +127,29 @@ mod tests {
         });
 
         assert!(should_persist_event_msg(&committed));
+    }
+
+    #[test]
+    fn realtime_boundaries_are_durable_but_stream_payloads_are_transient() {
+        let started = EventMsg::RealtimeConversationStarted(
+            agent_protocol::RealtimeConversationStartedEvent {
+                realtime_session_id: Some("rt-1".into()),
+                model: "gpt-realtime".into(),
+            },
+        );
+        let payload = EventMsg::RealtimeConversationRealtime(
+            agent_protocol::RealtimeConversationRealtimeEvent {
+                payload: serde_json::json!({"type": "response.audio.delta", "delta": "AA=="}),
+            },
+        );
+        let closed =
+            EventMsg::RealtimeConversationClosed(agent_protocol::RealtimeConversationClosedEvent {
+                reason: Some("requested".into()),
+            });
+
+        assert!(should_persist_event_msg(&started));
+        assert!(!should_persist_event_msg(&payload));
+        assert!(should_persist_event_msg(&closed));
     }
 
     #[test]
