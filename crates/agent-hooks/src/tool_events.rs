@@ -197,6 +197,17 @@ fn tool_payload(
         agent_type: String::new(),
         agent_transcript_path: None,
     });
+    let detail = tool_input
+        .get("detail")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| {
+            if matcher_aliases.is_empty() {
+                tool_name.clone()
+            } else {
+                format!("{tool_name} aliases={}", matcher_aliases.join(","))
+            }
+        });
     HookInput {
         session_id,
         transcript_path,
@@ -212,11 +223,7 @@ fn tool_payload(
         agent_id: (!subagent.agent_id.is_empty()).then_some(subagent.agent_id),
         agent_type: (!subagent.agent_type.is_empty()).then_some(subagent.agent_type),
         agent_transcript_path: subagent.agent_transcript_path,
-        detail: if matcher_aliases.is_empty() {
-            tool_name
-        } else {
-            format!("{tool_name} aliases={}", matcher_aliases.join(","))
-        },
+        detail,
         ..Default::default()
     }
 }
@@ -286,6 +293,35 @@ mod tests {
         });
 
         assert_eq!(outcome.decision, None);
+    }
+
+    #[test]
+    fn permission_plugin_keeps_the_local_detail_projection() {
+        let runtime = runtime();
+        runtime
+            .plugin
+            .register(crate::PERMISSION_REQUEST, |payload| {
+                assert_eq!(payload.detail, "surface=terminal ask=remove files");
+                HookOutcome::Continue
+            });
+        let pre = pre_request();
+
+        runtime.run_permission_request(PermissionRequestRequest {
+            session_id: pre.session_id,
+            turn_id: pre.turn_id,
+            subagent: pre.subagent,
+            cwd: pre.cwd,
+            transcript_path: pre.transcript_path,
+            model: pre.model,
+            permission_mode: pre.permission_mode,
+            tool_name: "Bash".into(),
+            matcher_aliases: pre.matcher_aliases,
+            run_id_suffix: pre.tool_use_id,
+            tool_input: json!({
+                "command": "rm -rf /tmp/example",
+                "detail": "surface=terminal ask=remove files"
+            }),
+        });
     }
 
     #[test]
