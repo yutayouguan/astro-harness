@@ -832,14 +832,16 @@ impl CommandHookRunner {
                         );
                     },
                     move || {
-                        let cancellation_error = anyhow::anyhow!("asynchronous hook cancelled");
-                        finish_run(
-                            &cancelled_runs,
+                        let summary = format!("{cancelled_event} hook cancelled");
+                        cancelled_runs.finish_silently(
                             &cancelled_run_id,
-                            &cancelled_event,
-                            started,
-                            Err(&cancellation_error),
-                            None,
+                            HookRunStatus::Failed,
+                            summary.clone(),
+                            started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+                            vec![HookOutputEntry {
+                                kind: HookOutputEntryKind::Error,
+                                text: summary,
+                            }],
                         );
                     },
                 ) {
@@ -2699,6 +2701,6 @@ mod tests {
 
         let runs = runner.recent_runs();
         assert_eq!(runs[0].status, HookRunStatus::Failed);
-        assert_eq!(runs[0].summary, "asynchronous hook cancelled");
+        assert_eq!(runs[0].summary, "PreToolUse hook cancelled");
     }
 }

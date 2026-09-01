@@ -198,6 +198,29 @@ impl HookRunStore {
         duration_ms: u64,
         entries: Vec<HookOutputEntry>,
     ) {
+        self.finish_inner(id, status, summary, duration_ms, entries, true);
+    }
+
+    pub(crate) fn finish_silently(
+        &self,
+        id: &str,
+        status: HookRunStatus,
+        summary: String,
+        duration_ms: u64,
+        entries: Vec<HookOutputEntry>,
+    ) {
+        self.finish_inner(id, status, summary, duration_ms, entries, false);
+    }
+
+    fn finish_inner(
+        &self,
+        id: &str,
+        status: HookRunStatus,
+        summary: String,
+        duration_ms: u64,
+        entries: Vec<HookOutputEntry>,
+        notify: bool,
+    ) {
         let completed = {
             let Ok(mut records) = self.records.lock() else {
                 return;
@@ -219,9 +242,7 @@ impl HookRunStore {
                     )
                 })
         };
-        if let Some((session_id, turn_id, run)) =
-            completed.filter(|(_, _, run)| run.execution_mode == HookExecutionMode::Sync)
-        {
+        if let Some((session_id, turn_id, run)) = completed.filter(|_| notify) {
             self.notify(
                 &session_id,
                 HookRunLifecycleEvent::Completed { turn_id, run },
@@ -321,7 +342,7 @@ mod tests {
     }
 
     #[test]
-    fn observer_keeps_async_runs_out_of_live_lifecycle() {
+    fn observer_emits_only_completion_for_async_runs() {
         let store = HookRunStore::default();
         let observed = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&observed);
@@ -341,8 +362,41 @@ mod tests {
             Vec::new(),
         );
 
-        assert!(observed.lock().unwrap().is_empty());
+        let observed = observed.lock().unwrap();
+        assert_eq!(observed.len(), 1);
+        assert!(matches!(
+            &observed[0],
+            HookRunLifecycleEvent::Completed { turn_id, run }
+                if turn_id.as_deref() == Some("turn-1")
+                    && run.execution_mode == HookExecutionMode::Async
+                    && run.status == HookRunStatus::Completed
+        ));
         assert_eq!(store.recent()[0].status, HookRunStatus::Completed);
+    }
+
+    #[test]
+    fn silent_completion_updates_storage_without_notifying() {
+        let store = HookRunStore::default();
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&observed);
+        store.set_observer(
+            "session-1",
+            Arc::new(move |event| sink.lock().unwrap().push(event)),
+        );
+        let mut record = running_record();
+        record.execution_mode = HookExecutionMode::Async;
+
+        store.start("session-1".into(), Some("turn-1".into()), record);
+        store.finish_silently(
+            "hook-run-1",
+            HookRunStatus::Failed,
+            "cancelled".into(),
+            7,
+            Vec::new(),
+        );
+
+        assert!(observed.lock().unwrap().is_empty());
+        assert_eq!(store.recent()[0].status, HookRunStatus::Failed);
     }
 
     #[test]
