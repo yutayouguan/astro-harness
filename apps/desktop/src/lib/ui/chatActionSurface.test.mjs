@@ -149,6 +149,18 @@ test("composer approval selector keeps the three supported permission choices", 
   assert.match(messages, /"chat\.approval\.fullAccess": "完全访问"/);
   assert.match(styles, /\.composer-policy-menu/);
   assert.match(styles, /\.composer-policy-pill\.is-full-access/);
+  assert.match(source, /className="composer-mode-pill-label"/);
+  assert.match(source, /className="composer-policy-current-icon"/);
+  assert.match(source, /className="composer-mode-chevron"/);
+  assert.match(styles, /container-name:\s*chat-composer/);
+  assert.match(
+    styles,
+    /@container chat-composer \(max-width: 640px\)[\s\S]*?\.composer-mode-pill-label,[\s\S]*?\.composer-policy-approval,[\s\S]*?\.composer-mode-chevron\s*\{\s*display:\s*none;/,
+  );
+  assert.match(
+    styles,
+    /@container chat-composer \(max-width: 640px\)[\s\S]*?\.composer-policy-current-icon\s*\{\s*display:\s*block;/,
+  );
 });
 
 test("composer keeps context usage available at every occupancy level", async () => {

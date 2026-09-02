@@ -549,6 +549,8 @@ html[data-theme="dark"] .bubble.assistant {
     transparent 72%
   );
   display: flex;
+  container-name: chat-composer;
+  container-type: inline-size;
   align-items: flex-end;
   gap: 10px;
   margin: 0 12px 12px;
@@ -1021,6 +1023,10 @@ html[data-theme="dark"] .composer-agent-validate-hint {
 .composer-policy-separator {
   color: var(--ink-mute);
   opacity: 0.6;
+}
+
+.composer-policy-current-icon {
+  display: none;
 }
 
 .composer-policy-approval {
@@ -6029,14 +6035,15 @@ html[data-theme="dark"] .chat-agent-icon-plus {
   transform: translateY(-1px);
 }
 
-@media (max-width: 700px) {
+@container chat-composer (max-width: 640px) {
   .composer-bar {
-    align-items: flex-end;
-    flex-wrap: wrap;
+    align-items: center;
+    flex-wrap: nowrap;
   }
 
   .composer-bar-left {
-    flex: 1 1 100%;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
     gap: 3px;
   }
 
@@ -6045,8 +6052,21 @@ html[data-theme="dark"] .chat-agent-icon-plus {
   }
 
   .composer-mode-pill {
-    gap: 0.25rem;
-    padding-inline: 0.45rem;
+    width: 64px;
+    justify-content: center;
+    gap: 8px;
+    padding: 0;
+  }
+
+  .composer-mode-pill-label,
+  .composer-policy-separator,
+  .composer-policy-approval,
+  .composer-mode-chevron {
+    display: none;
+  }
+
+  .composer-policy-current-icon {
+    display: block;
   }
 }
 
