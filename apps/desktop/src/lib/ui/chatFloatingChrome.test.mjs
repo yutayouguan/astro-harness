@@ -203,6 +203,10 @@ test("file workspace shares the titlebar material and keeps square edges", () =>
     rightPanelStyles,
     ".chat-layout-with-right.has-right-dock",
   );
+  const browserLayout = rule(
+    rightPanelStyles,
+    ".app-shell .chat-layout-with-right.has-browser",
+  );
   const layoutBase = rule(rightPanelStyles, ".chat-layout-with-right");
   const runtimePanel = rule(rightPanelStyles, ".chat-right-panel");
   const projectPanel = rule(projectFilesStyles, ".project-files-panel");
@@ -226,6 +230,8 @@ test("file workspace shares the titlebar material and keeps square edges", () =>
 
   assert.ok(layout, "missing docked chat layout rule");
   assert.match(layout, /border-radius:\s*28px 0 0 0;/);
+  assert.ok(browserLayout, "missing browser-specific chat layout rule");
+  assert.match(browserLayout, /border-top-left-radius:\s*0;/);
   assert.ok(layoutBase, "missing shared chat dock surface tokens");
   assert.match(layoutBase, /--chat-dock-inset:\s*0px;/);
   assert.match(layoutBase, /--chat-dock-radius:\s*0px;/);

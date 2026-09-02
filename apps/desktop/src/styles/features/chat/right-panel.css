@@ -76,6 +76,11 @@
   border-radius: 22px;
 }
 
+/* 浏览器面板与窗口顶边相接，左上角保持直角。 */
+.app-shell .chat-layout-with-right.has-browser {
+  border-top-left-radius: 0;
+}
+
 .chat-right-panel {
   /* 右栏旧样式统一使用 --tone-blue / --tone-blue-soft；在组件根部将它们
      映射到当前 Tab 的语义色，内部面板、图标、选中态和深色规则即可整体
