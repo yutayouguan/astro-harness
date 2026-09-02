@@ -1107,9 +1107,11 @@ html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
 /* ── Settings inline content ─────────────────────────────────────────── */
 
 .settings-content-inline {
+  --settings-content-inline-padding: clamp(20px, 2vw, 28px);
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  padding-inline: var(--settings-content-inline-padding);
 }
 
 /* 自带分区滚动的设置页：撑满高度，外层不再整体滚动 */

@@ -208,7 +208,7 @@ html[data-theme="dark"] .morphicon-segmented button.is-active {
 .prefs-page.is-embedded .prefs-category-content {
   max-width: 720px;
   margin: 0 auto;
-  padding: 18px 24px;
+  padding: 18px 0;
 }
 
 .prefs-category-nav {
