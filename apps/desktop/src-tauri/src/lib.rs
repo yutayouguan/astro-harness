@@ -249,6 +249,7 @@ pub fn run() {
             commands::terminal::terminal_write,
             commands::terminal::terminal_resize,
             commands::terminal::terminal_kill,
+            commands::terminal::terminal_close,
             commands::terminal::terminal_open_external,
             commands::chat::generate_image,
             commands::chat::query_memory,

@@ -588,7 +588,8 @@ export const zh = {
   "browser.settings.save": "保存",
   "browser.settings.saving": "保存中…",
   "terminal.settings.mode.title": "终端执行模式",
-  "terminal.settings.mode.sub": "选择兼容完整用户 Shell，或限制在当前项目中运行。",
+  "terminal.settings.mode.sub":
+    "设置新建普通终端 Tab 的默认模式；AI 终端始终使用项目沙箱。",
   "terminal.settings.mode.system": "系统终端（推荐）",
   "terminal.settings.mode.systemDesc":
     "直接启动登录 Shell，兼容 Homebrew、Oh My Zsh、Powerlevel10k、历史记录和系统临时目录。",
@@ -596,9 +597,9 @@ export const zh = {
   "terminal.settings.mode.projectDesc":
     "仅允许写入项目目录，适合受限 AI 命令；部分 Shell 插件可能因无法写入主目录而降级。",
   "terminal.settings.mode.systemNote":
-    "系统模式拥有与你的外部终端相同的文件权限。低权限 AI 不会自动连接到这个会话。切换模式会重启当前终端。",
+    "系统模式拥有与你的外部终端相同的文件权限。低权限 AI 不会自动连接到该会话；这里的模式用于之后新建的普通终端。",
   "terminal.settings.mode.projectNote":
-    "项目沙箱仍允许写入 /dev/null，但会阻止主目录历史、缓存和部分 P10k/gitstatus 临时文件。",
+    "项目沙箱仍允许写入 /dev/null，但会阻止主目录历史、缓存和部分 P10k/gitstatus 临时文件；该模式用于之后新建的普通终端。",
   "terminal.settings.font.title": "字体与字形",
   "terminal.settings.font.sub": "优先使用 Nerd Font，正确显示 Powerlevel10k 图标和提示符。",
   "terminal.settings.font.preset": "字体预设",
@@ -1568,6 +1569,16 @@ export const zh = {
   "chat.terminal.close": "折叠终端",
   "chat.terminal.outputTruncated": "较早的终端输出已被截断",
   "chat.terminal.exited": "终端已退出，代码 {code}",
+  "chat.terminal.tab.user": "用户终端",
+  "chat.terminal.tab.ai": "AI 终端",
+  "chat.terminal.tab.aiManaged": "AI 默认",
+  "chat.terminal.tab.number": "终端 {number}",
+  "chat.terminal.tab.new": "新建终端（⌘/Ctrl+Shift+T）",
+  "chat.terminal.tab.close": "关闭终端标签",
+  "chat.terminal.tab.closeNamed": "关闭 {name}",
+  "chat.terminal.tab.rename": "重命名终端",
+  "chat.terminal.tab.starting": "正在启动终端…",
+  "chat.terminal.tab.limit": "每个项目最多可打开 {count} 个终端",
   "chat.side.reasoning": "思考过程",
   "chat.side.stop": "停止生成",
   "chat.side.thinking": "正在回答…",
@@ -3428,7 +3439,7 @@ export const en: Record<MessageKey, string> = {
   "browser.settings.saving": "Saving…",
   "terminal.settings.mode.title": "Terminal execution mode",
   "terminal.settings.mode.sub":
-    "Choose full user-shell compatibility or restrict execution to the current project.",
+    "Choose the default mode for new regular tabs. The AI terminal always uses the project sandbox.",
   "terminal.settings.mode.system": "System terminal (recommended)",
   "terminal.settings.mode.systemDesc":
     "Starts your login shell directly, including Homebrew, Oh My Zsh, Powerlevel10k, history, and system temp files.",
@@ -3436,9 +3447,9 @@ export const en: Record<MessageKey, string> = {
   "terminal.settings.mode.projectDesc":
     "Only the project is writable. Useful for restricted AI commands, but some shell plugins may degrade.",
   "terminal.settings.mode.systemNote":
-    "System mode has the same filesystem access as your external terminal. Lower-permission AI cannot attach automatically. Changing mode restarts the active terminal.",
+    "System mode has the same filesystem access as your external terminal. Lower-permission AI cannot attach automatically; this mode applies to subsequently created regular terminals.",
   "terminal.settings.mode.projectNote":
-    "The project sandbox permits /dev/null but blocks home-directory history, caches, and some P10k/gitstatus temp files.",
+    "The project sandbox permits /dev/null but blocks home-directory history, caches, and some P10k/gitstatus temp files. This mode applies to new regular tabs.",
   "terminal.settings.font.title": "Font and glyphs",
   "terminal.settings.font.sub":
     "Prefer a Nerd Font so Powerlevel10k icons and prompts render correctly.",
@@ -4455,6 +4466,16 @@ export const en: Record<MessageKey, string> = {
   "chat.terminal.close": "Collapse terminal",
   "chat.terminal.outputTruncated": "Earlier terminal output was truncated",
   "chat.terminal.exited": "Terminal exited with code {code}",
+  "chat.terminal.tab.user": "User terminal",
+  "chat.terminal.tab.ai": "AI terminal",
+  "chat.terminal.tab.aiManaged": "AI default",
+  "chat.terminal.tab.number": "Terminal {number}",
+  "chat.terminal.tab.new": "New terminal (⌘/Ctrl+Shift+T)",
+  "chat.terminal.tab.close": "Close terminal tab",
+  "chat.terminal.tab.closeNamed": "Close {name}",
+  "chat.terminal.tab.rename": "Rename terminal",
+  "chat.terminal.tab.starting": "Starting terminal…",
+  "chat.terminal.tab.limit": "A project can have up to {count} terminals",
   "chat.side.reasoning": "Reasoning",
   "chat.side.stop": "Stop generating",
   "chat.side.thinking": "Answering…",

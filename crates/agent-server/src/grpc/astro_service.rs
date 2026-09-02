@@ -2923,8 +2923,9 @@ impl AstroService for AstroServiceImpl {
                 )))
             }
         };
-        let info = tools::shared_terminal_sessions()
-            .ensure_shell_with_options(
+        let manager = tools::shared_terminal_sessions();
+        let info = if req.client_token.trim().is_empty() {
+            manager.ensure_shell_with_options(
                 &scope,
                 &cwd,
                 &policy,
@@ -2932,7 +2933,18 @@ impl AstroService for AstroServiceImpl {
                 req.rows.min(u16::MAX.into()) as u16,
                 req.replace_mode_mismatch,
             )
-            .map_err(|error| Status::invalid_argument(error.to_string()))?;
+        } else {
+            manager.open_desktop_shell(
+                &scope,
+                &cwd,
+                &policy,
+                &req.client_token,
+                req.agent_default,
+                req.cols.min(u16::MAX.into()) as u16,
+                req.rows.min(u16::MAX.into()) as u16,
+            )
+        }
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
         Ok(Response::new(terminal_session_response(info)))
     }
 
@@ -2995,6 +3007,16 @@ impl AstroService for AstroServiceImpl {
     ) -> Result<Response<Empty>, Status> {
         tools::shared_terminal_sessions()
             .kill(request.into_inner().id)
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn close_terminal(
+        &self,
+        request: Request<TerminalIdRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        tools::shared_terminal_sessions()
+            .close(request.into_inner().id)
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
         Ok(Response::new(Empty {}))
     }

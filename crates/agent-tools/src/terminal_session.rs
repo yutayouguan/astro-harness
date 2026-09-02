@@ -18,6 +18,7 @@ use tokio::sync::Notify;
 
 const OUTPUT_CAPACITY_BYTES: usize = 1024 * 1024;
 const MAX_READ_BYTES: usize = 64 * 1024;
+pub const MAX_TERMINALS_PER_SCOPE: usize = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TerminalSessionInfo {
@@ -142,7 +143,8 @@ impl TerminalSession {
 #[derive(Default)]
 struct RegistryState {
     sessions: HashMap<u64, Arc<TerminalSession>>,
-    active_by_scope: HashMap<PathBuf, u64>,
+    agent_by_scope: HashMap<PathBuf, u64>,
+    desktop_by_token: HashMap<(PathBuf, String), u64>,
 }
 
 pub struct TerminalSessionManager {
@@ -201,7 +203,7 @@ impl TerminalSessionManager {
             .registry
             .read()
             .expect("terminal registry lock poisoned")
-            .active_by_scope
+            .agent_by_scope
             .get(&scope)
             .copied()
         {
@@ -223,8 +225,7 @@ impl TerminalSessionManager {
                 .registry
                 .write()
                 .expect("terminal registry lock poisoned");
-            registry.active_by_scope.remove(&scope);
-            registry.sessions.remove(&existing_id);
+            remove_session_from_registry(&mut registry, existing_id);
         }
 
         let shell = default_shell();
@@ -237,14 +238,140 @@ impl TerminalSessionManager {
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
         command.env("ASTRO_TERMINAL", "1");
-        self.spawn(scope, cwd, command, policy.mode, cols, rows)
+        self.spawn(scope, cwd, command, policy.mode, None, true, cols, rows)
+    }
+
+    /// Creates or reattaches one Desktop-owned terminal tab. A stable client token makes this
+    /// idempotent across React remounts and prevents StrictMode from leaking duplicate shells.
+    pub fn open_desktop_shell(
+        &self,
+        scope: &Path,
+        cwd: &Path,
+        policy: &sandbox::SandboxPolicy,
+        client_token: &str,
+        make_agent_default: bool,
+        cols: u16,
+        rows: u16,
+    ) -> anyhow::Result<TerminalSessionInfo> {
+        let client_token = client_token.trim();
+        if client_token.is_empty() || client_token.len() > 128 {
+            anyhow::bail!("terminal client token must contain 1 to 128 characters");
+        }
+        if make_agent_default && policy.mode != types::SandboxMode::WorkspaceWrite {
+            anyhow::bail!("the AI default terminal must use the project sandbox");
+        }
+
+        let _lifecycle = self
+            .lifecycle
+            .lock()
+            .expect("terminal lifecycle lock poisoned");
+        let scope = canonical_directory(scope, "terminal scope")?;
+        let cwd = canonical_directory(cwd, "terminal cwd")?;
+        if !cwd.starts_with(&scope) {
+            anyhow::bail!("terminal cwd must stay inside its project scope");
+        }
+        let key = (scope.clone(), client_token.to_owned());
+
+        if let Some(existing_id) = self
+            .registry
+            .read()
+            .expect("terminal registry lock poisoned")
+            .desktop_by_token
+            .get(&key)
+            .copied()
+        {
+            let existing = self.session(existing_id)?;
+            if existing.info().running {
+                if existing.sandbox_mode != policy.mode {
+                    anyhow::bail!("terminal tab execution mode changed; close it before reopening");
+                }
+                if make_agent_default {
+                    self.registry
+                        .write()
+                        .expect("terminal registry lock poisoned")
+                        .agent_by_scope
+                        .insert(scope, existing_id);
+                }
+                return Ok(existing.info());
+            }
+            remove_session_from_registry(
+                &mut self
+                    .registry
+                    .write()
+                    .expect("terminal registry lock poisoned"),
+                existing_id,
+            );
+        }
+
+        // The Agent may have created its implicit terminal before the Desktop dock was opened.
+        // Adopt that process into the stable UI tab instead of spawning a hidden duplicate.
+        if make_agent_default {
+            let existing_agent_id = self
+                .registry
+                .read()
+                .expect("terminal registry lock poisoned")
+                .agent_by_scope
+                .get(&scope)
+                .copied();
+            if let Some(existing_id) = existing_agent_id {
+                let existing = self.session(existing_id)?;
+                if existing.info().running && existing.sandbox_mode == policy.mode {
+                    let mut registry = self
+                        .registry
+                        .write()
+                        .expect("terminal registry lock poisoned");
+                    registry
+                        .desktop_by_token
+                        .retain(|_, session_id| *session_id != existing_id);
+                    registry.desktop_by_token.insert(key, existing_id);
+                    return Ok(existing.info());
+                }
+            }
+        }
+
+        let active_count = self
+            .registry
+            .read()
+            .expect("terminal registry lock poisoned")
+            .sessions
+            .values()
+            .filter(|session| session.scope == scope && session.info().running)
+            .count();
+        if active_count >= MAX_TERMINALS_PER_SCOPE {
+            anyhow::bail!("terminal limit reached for this project ({MAX_TERMINALS_PER_SCOPE})");
+        }
+
+        let shell = default_shell();
+        let shell_text = shell.to_string_lossy();
+        let mut command = sandbox::SandboxRunner
+            .std_command(policy, &shell_text)
+            .context("prepare terminal sandbox")?;
+        configure_interactive_shell(&mut command, &shell);
+        command.current_dir(&cwd);
+        command.env("TERM", "xterm-256color");
+        command.env("COLORTERM", "truecolor");
+        command.env("ASTRO_TERMINAL", "1");
+        self.spawn(
+            scope,
+            cwd,
+            command,
+            policy.mode,
+            Some(client_token.to_owned()),
+            make_agent_default,
+            cols,
+            rows,
+        )
     }
 
     pub fn active_for_scope(&self, scope: &Path) -> Option<TerminalSessionInfo> {
         let scope = scope.canonicalize().ok()?;
         let registry = self.registry.read().ok()?;
-        let id = registry.active_by_scope.get(&scope)?;
-        registry.sessions.get(id).map(|session| session.info())
+        let id = registry.agent_by_scope.get(&scope)?;
+        registry
+            .sessions
+            .get(id)
+            .filter(|session| session.info().running)
+            .map(|session| session.info())
     }
 
     fn spawn(
@@ -253,6 +380,8 @@ impl TerminalSessionManager {
         cwd: PathBuf,
         command: Command,
         sandbox_mode: types::SandboxMode,
+        desktop_token: Option<String>,
+        make_agent_default: bool,
         cols: u16,
         rows: u16,
     ) -> anyhow::Result<TerminalSessionInfo> {
@@ -320,7 +449,12 @@ impl TerminalSessionManager {
                 .write()
                 .expect("terminal registry lock poisoned");
             registry.sessions.insert(id, Arc::clone(&session));
-            registry.active_by_scope.insert(scope, id);
+            if let Some(token) = desktop_token {
+                registry.desktop_by_token.insert((scope.clone(), token), id);
+            }
+            if make_agent_default {
+                registry.agent_by_scope.insert(scope, id);
+            }
         }
 
         Ok(session.info())
@@ -394,6 +528,32 @@ impl TerminalSessionManager {
         result
     }
 
+    /// Closes a Desktop tab and removes its routing metadata. Other sessions in the same project
+    /// remain untouched.
+    pub fn close(&self, id: u64) -> anyhow::Result<()> {
+        let _lifecycle = self
+            .lifecycle
+            .lock()
+            .expect("terminal lifecycle lock poisoned");
+        let session = self.session(id)?;
+        if session.info().running {
+            session
+                .killer
+                .lock()
+                .expect("terminal killer lock poisoned")
+                .kill()
+                .context("close terminal")?;
+        }
+        remove_session_from_registry(
+            &mut self
+                .registry
+                .write()
+                .expect("terminal registry lock poisoned"),
+            id,
+        );
+        Ok(())
+    }
+
     pub async fn read(
         &self,
         id: u64,
@@ -461,6 +621,16 @@ impl TerminalSessionManager {
             .cloned()
             .ok_or_else(|| anyhow!("unknown terminal session {id}"))
     }
+}
+
+fn remove_session_from_registry(registry: &mut RegistryState, id: u64) {
+    registry.sessions.remove(&id);
+    registry
+        .agent_by_scope
+        .retain(|_, session_id| *session_id != id);
+    registry
+        .desktop_by_token
+        .retain(|_, session_id| *session_id != id);
 }
 
 async fn read_session(
@@ -650,6 +820,8 @@ mod tests {
                 scope,
                 command,
                 types::SandboxMode::WorkspaceWrite,
+                None,
+                true,
                 80,
                 24,
             )
@@ -710,6 +882,91 @@ mod tests {
             String::from_utf8_lossy(&output.data),
         );
         manager.kill(sessions[0].id).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn desktop_client_token_reopens_the_same_shell() {
+        let dir = tempfile::tempdir().unwrap();
+        let scope = dir.path().canonicalize().unwrap();
+        let manager = TerminalSessionManager::default();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::DangerFullAccess,
+            &scope,
+            Vec::new(),
+            true,
+        )
+        .unwrap();
+
+        let first = manager
+            .open_desktop_shell(&scope, &scope, &policy, "stable-tab", false, 80, 24)
+            .unwrap();
+        let reopened = manager
+            .open_desktop_shell(&scope, &scope, &policy, "stable-tab", false, 120, 32)
+            .unwrap();
+        assert_eq!(first.id, reopened.id);
+        manager.close(first.id).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn desktop_tabs_are_independent_and_only_one_is_the_agent_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let scope = dir.path().canonicalize().unwrap();
+        let manager = TerminalSessionManager::default();
+
+        let spawn_tab = |token: &str, agent_default: bool| {
+            let mut command = Command::new("/bin/sh");
+            command.arg("-c").arg("cat").current_dir(&scope);
+            manager
+                .spawn(
+                    scope.clone(),
+                    scope.clone(),
+                    command,
+                    types::SandboxMode::WorkspaceWrite,
+                    Some(token.to_owned()),
+                    agent_default,
+                    80,
+                    24,
+                )
+                .unwrap()
+        };
+
+        let user = spawn_tab("user-tab", false);
+        let agent = spawn_tab("agent-tab", true);
+        assert_ne!(user.id, agent.id);
+        assert_eq!(manager.active_for_scope(&scope).unwrap().id, agent.id);
+
+        manager.close(user.id).unwrap();
+        assert!(manager.info(user.id).is_err());
+        assert!(manager.info(agent.id).is_ok());
+        manager.close(agent.id).unwrap();
+        assert!(manager.active_for_scope(&scope).is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn desktop_ai_tab_adopts_an_existing_agent_shell() {
+        let dir = tempfile::tempdir().unwrap();
+        let scope = dir.path().canonicalize().unwrap();
+        let manager = TerminalSessionManager::default();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::WorkspaceWrite,
+            &scope,
+            Vec::new(),
+            true,
+        )
+        .unwrap();
+
+        let agent = manager
+            .ensure_shell(&scope, &scope, &policy, 80, 24)
+            .unwrap();
+        let desktop = manager
+            .open_desktop_shell(&scope, &scope, &policy, "ai-tab", true, 120, 32)
+            .unwrap();
+
+        assert_eq!(desktop.id, agent.id);
+        manager.close(agent.id).unwrap();
     }
 
     #[test]

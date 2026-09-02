@@ -41,6 +41,7 @@ service AstroService {
   rpc WriteTerminal(TerminalWriteRequest) returns (Empty);
   rpc ResizeTerminal(TerminalResizeRequest) returns (Empty);
   rpc KillTerminal(TerminalIdRequest) returns (Empty);
+  rpc CloseTerminal(TerminalIdRequest) returns (Empty);
   // 文生图流：进度、图片字节或错误。
   rpc GenerateImage(ImageRequest) returns (stream ImageEvent);
   // 列出已安装且可用于提示的技能。
@@ -461,6 +462,11 @@ message TerminalOpenRequest {
   // Desktop settings may deliberately replace an existing shell when its mode
   // no longer matches. Agent callers continue to reuse the active session.
   bool replace_mode_mismatch = 6;
+  // Stable Desktop tab identity. Reopening the same token reattaches instead of
+  // spawning another shell, including during React StrictMode remounts.
+  string client_token = 7;
+  // Marks a project-sandbox tab as the implicit target for AI terminal tools.
+  bool agent_default = 8;
 }
 
 message TerminalIdRequest { uint64 id = 1; }

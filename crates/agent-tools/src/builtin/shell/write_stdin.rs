@@ -14,7 +14,7 @@ fn default_max_output_tokens() -> usize {
 /// `write_stdin` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct WriteStdinArgs {
-    /// 运行中的 exec_command 会话 ID；省略时使用当前项目的 Desktop 终端。
+    /// 运行中的 exec_command 会话 ID；省略时使用当前项目的 AI 默认终端。
     pub session_id: Option<u64>,
     /// 写入 stdin 的内容。为空或省略时 = 仅轮询不写入。
     #[serde(default)]
@@ -33,7 +33,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "write_stdin".to_string(),
         toolset: "exec_command".to_string(),
-        description: "Writes characters to a shared exec_command/Desktop terminal session and returns new output. session_id is optional when the current project has an active terminal; use empty chars to poll."
+        description: "Writes characters to a shared exec_command/Desktop terminal session and returns new output. session_id is optional when the current project has an AI-default terminal; use empty chars to poll."
             .to_string(),
         schema: schema_for_args::<WriteStdinArgs>(),
         check_fn: None,
@@ -62,7 +62,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &WriteStdinArgs) -> anyhow::R
         None => {
             manager
                 .active_for_scope(ctx.project_or_workspace())
-                .ok_or_else(|| anyhow::anyhow!("no active shared terminal for this project"))?
+                .ok_or_else(|| anyhow::anyhow!("no active AI terminal for this project"))?
                 .id
         }
     };

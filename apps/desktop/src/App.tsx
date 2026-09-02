@@ -144,7 +144,7 @@ import type {
   ProviderModelsResult,
 } from "./types";
 
-const TerminalDock = lazy(() => import("./components/chat/TerminalDock"));
+const TerminalDock = lazy(() => import("./components/chat/TerminalTabsDock"));
 const ACTIVE_PROJECT_KEY = "astro.activeProjectId";
 
 export default function App() {

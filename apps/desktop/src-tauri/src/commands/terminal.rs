@@ -24,6 +24,8 @@ pub struct TerminalOpenDto {
     pub cols: u32,
     pub rows: u32,
     pub execution_mode: Option<String>,
+    pub client_token: Option<String>,
+    pub agent_default: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -76,6 +78,7 @@ pub struct TerminalResizeDto {
 #[tauri::command]
 pub async fn terminal_open(request: TerminalOpenDto) -> Result<TerminalSessionDto, String> {
     let mut client = terminal_client().await?;
+    let client_token = request.client_token.unwrap_or_default();
     let response = client
         .open_terminal(TerminalOpenRequest {
             scope: request.scope,
@@ -83,7 +86,11 @@ pub async fn terminal_open(request: TerminalOpenDto) -> Result<TerminalSessionDt
             cols: request.cols,
             rows: request.rows,
             execution_mode: request.execution_mode.unwrap_or_default(),
-            replace_mode_mismatch: true,
+            // Keep the legacy single-terminal behavior intact. Token-owned tabs have stable
+            // identities and are rejected on a mode mismatch by the backend instead.
+            replace_mode_mismatch: client_token.trim().is_empty(),
+            client_token,
+            agent_default: request.agent_default.unwrap_or(false),
         })
         .await
         .map_err(|error| error.to_string())?
@@ -154,6 +161,16 @@ pub async fn terminal_kill(id: u64) -> Result<(), String> {
     let mut client = terminal_client().await?;
     client
         .kill_terminal(TerminalIdRequest { id })
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn terminal_close(id: u64) -> Result<(), String> {
+    let mut client = terminal_client().await?;
+    client
+        .close_terminal(TerminalIdRequest { id })
         .await
         .map_err(|error| error.to_string())?;
     Ok(())
