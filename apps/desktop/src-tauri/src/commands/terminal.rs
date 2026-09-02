@@ -9,8 +9,12 @@ use proto::{
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tauri_plugin_shell::ShellExt;
+use tokio::sync::OnceCell;
+use tonic::transport::{Channel, Endpoint};
 
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
+
+static TERMINAL_CHANNEL: OnceCell<Channel> = OnceCell::const_new();
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -198,7 +202,14 @@ pub fn terminal_open_external(app: AppHandle, cwd: String) -> Result<(), String>
 }
 
 async fn terminal_client() -> Result<AstroServiceClient<tonic::transport::Channel>, String> {
-    AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
-        .await
-        .map_err(|error| error.to_string())
+    let channel = TERMINAL_CHANNEL
+        .get_or_try_init(|| async {
+            Endpoint::from_shared(endpoint_url(&default_grpc_address()))
+                .map_err(|error| error.to_string())?
+                .connect()
+                .await
+                .map_err(|error| error.to_string())
+        })
+        .await?;
+    Ok(AstroServiceClient::new(channel.clone()))
 }

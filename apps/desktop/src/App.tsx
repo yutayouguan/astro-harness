@@ -2182,6 +2182,7 @@ export default function App() {
                     {terminalDockOpen && activeProjectRoot && activeProject ? (
                       <Suspense fallback={null}>
                         <TerminalDock
+                          key={activeProject.id}
                           projectId={activeProject.id}
                           projectName={activeProject.name}
                           projectRoot={activeProjectRoot}

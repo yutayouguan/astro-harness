@@ -28,4 +28,15 @@ test("terminal dock uses one shared backend session for input, output, resize an
   assert.match(component, /"terminal_resize"/);
   assert.match(component, /"terminal_kill"/);
   assert.match(component, /"terminal_open_external"/);
+  assert.match(component, /WRITE_CHUNK_BYTES/);
+  assert.match(component, /encoded\.subarray/);
+  assert.match(component, /restartGeneration/);
+});
+
+test("terminal dock resets ownership when the active project changes", () => {
+  const app = source("App.tsx");
+  const component = source("components/chat/TerminalDock.tsx");
+
+  assert.match(app, /key=\{activeProject\.id\}/);
+  assert.match(component, /setSession\(null\)/);
 });

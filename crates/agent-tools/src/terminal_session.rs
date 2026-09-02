@@ -115,7 +115,8 @@ impl TerminalSession {
         cursor: u64,
         max_bytes: usize,
     ) -> TerminalReadResult {
-        let effective_cursor = cursor.max(output.base_cursor);
+        let end_cursor = output.base_cursor + output.bytes.len() as u64;
+        let effective_cursor = cursor.max(output.base_cursor).min(end_cursor);
         let start = effective_cursor
             .saturating_sub(output.base_cursor)
             .min(output.bytes.len() as u64) as usize;
@@ -146,6 +147,7 @@ struct RegistryState {
 
 pub struct TerminalSessionManager {
     next_id: AtomicU64,
+    lifecycle: Mutex<()>,
     registry: RwLock<RegistryState>,
 }
 
@@ -153,6 +155,7 @@ impl Default for TerminalSessionManager {
     fn default() -> Self {
         Self {
             next_id: AtomicU64::new(1),
+            lifecycle: Mutex::new(()),
             registry: RwLock::new(RegistryState::default()),
         }
     }
@@ -167,6 +170,12 @@ impl TerminalSessionManager {
         cols: u16,
         rows: u16,
     ) -> anyhow::Result<TerminalSessionInfo> {
+        // Process creation is synchronous and uncommon. Serializing it prevents two callers from
+        // both observing an empty scope and leaking a second, unreachable shell.
+        let _lifecycle = self
+            .lifecycle
+            .lock()
+            .expect("terminal lifecycle lock poisoned");
         let scope = canonical_directory(scope, "terminal scope")?;
         let cwd = canonical_directory(cwd, "terminal cwd")?;
         if !cwd.starts_with(&scope) {
@@ -215,7 +224,7 @@ impl TerminalSessionManager {
         registry.sessions.get(id).map(|session| session.info())
     }
 
-    pub fn spawn(
+    fn spawn(
         &self,
         scope: PathBuf,
         cwd: PathBuf,
@@ -257,6 +266,31 @@ impl TerminalSessionManager {
             notify: Notify::new(),
         });
 
+        let reader_session = Arc::clone(&session);
+        if let Err(error) = std::thread::Builder::new()
+            .name(format!("astro-terminal-read-{id}"))
+            .spawn(move || read_loop(reader_session, reader))
+        {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error).context("spawn terminal reader");
+        }
+        let wait_session = Arc::clone(&session);
+        if let Err(error) = std::thread::Builder::new()
+            .name(format!("astro-terminal-wait-{id}"))
+            .spawn(move || {
+                let exit_code = child.wait().ok().map(|status| status.exit_code());
+                wait_session.child_finished(exit_code);
+            })
+        {
+            let _ = session
+                .killer
+                .lock()
+                .expect("terminal killer lock poisoned")
+                .kill();
+            return Err(error).context("spawn terminal waiter");
+        }
+
         {
             let mut registry = self
                 .registry
@@ -265,20 +299,6 @@ impl TerminalSessionManager {
             registry.sessions.insert(id, Arc::clone(&session));
             registry.active_by_scope.insert(scope, id);
         }
-
-        let reader_session = Arc::clone(&session);
-        std::thread::Builder::new()
-            .name(format!("astro-terminal-read-{id}"))
-            .spawn(move || read_loop(reader_session, reader))
-            .context("spawn terminal reader")?;
-        let wait_session = Arc::clone(&session);
-        std::thread::Builder::new()
-            .name(format!("astro-terminal-wait-{id}"))
-            .spawn(move || {
-                let exit_code = child.wait().ok().map(|status| status.exit_code());
-                wait_session.child_finished(exit_code);
-            })
-            .context("spawn terminal waiter")?;
 
         Ok(session.info())
     }
@@ -573,6 +593,10 @@ mod tests {
         assert_eq!(result.data, b"world");
         assert_eq!(result.next_cursor, 10);
         assert!(result.dropped);
+
+        let ahead = session.read_locked(&output, 999, 64);
+        assert!(ahead.data.is_empty());
+        assert_eq!(ahead.next_cursor, 10);
     }
 
     #[derive(Debug)]
@@ -611,6 +635,58 @@ mod tests {
         let result = manager.read(session.id, 0, 1024, 3_000).await.unwrap();
         assert_eq!(String::from_utf8_lossy(&result.data), "astro-pty");
         assert_eq!(result.next_cursor, 9);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_open_reuses_one_interactive_shell() {
+        let dir = tempfile::tempdir().unwrap();
+        let scope = dir.path().canonicalize().unwrap();
+        let manager = Arc::new(TerminalSessionManager::default());
+        let policy = Arc::new(sandbox::SandboxPolicy {
+            mode: types::SandboxMode::DangerFullAccess,
+            writable_roots: vec![scope.clone()],
+            readable_roots: Vec::new(),
+            network_access: true,
+            managed_network: None,
+        });
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let handles = (0..2)
+            .map(|_| {
+                let manager = Arc::clone(&manager);
+                let policy = Arc::clone(&policy);
+                let barrier = Arc::clone(&barrier);
+                let scope = scope.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    manager
+                        .ensure_shell(&scope, &scope, &policy, 80, 24)
+                        .unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+        let sessions = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(sessions[0].id, sessions[1].id);
+
+        let output = manager
+            .interact_for_agent(
+                sessions[0].id,
+                Some(b"printf '__astro_terminal_ready__\\n'\n"),
+                true,
+                64 * 1024,
+                750,
+            )
+            .await
+            .unwrap();
+        assert!(
+            String::from_utf8_lossy(&output.data).contains("__astro_terminal_ready__"),
+            "terminal output: {}",
+            String::from_utf8_lossy(&output.data),
+        );
+        manager.kill(sessions[0].id).unwrap();
     }
 
     #[test]

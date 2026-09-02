@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XtermTerminal } from "@xterm/xterm";
-import { ExternalLink, Square, Trash2, X } from "lucide-react";
+import { ExternalLink, RotateCcw, Square, Trash2, X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 
 import { useI18n } from "../../i18n/LocaleContext";
@@ -34,6 +34,7 @@ type Props = {
 };
 
 const HEIGHT_KEY_PREFIX = "astro.terminalDock.height.";
+const WRITE_CHUNK_BYTES = 32 * 1024;
 
 function initialHeight(projectId: string): number {
   const stored = Number(localStorage.getItem(`${HEIGHT_KEY_PREFIX}${projectId}`));
@@ -61,9 +62,11 @@ export default function TerminalDock({
   const { t } = useI18n();
   const hostRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XtermTerminal | null>(null);
+  const resizeDragCleanupRef = useRef<(() => void) | null>(null);
   const [height, setHeight] = useState(() => initialHeight(projectId));
   const [session, setSession] = useState<TerminalSessionDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [restartGeneration, setRestartGeneration] = useState(0);
 
   useEffect(() => {
     setHeight(initialHeight(projectId));
@@ -72,6 +75,8 @@ export default function TerminalDock({
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !projectRoot) return;
+    setSession(null);
+    setError(null);
     let disposed = false;
     let cursor = 0;
     let pendingInput = "";
@@ -103,12 +108,15 @@ export default function TerminalDock({
         while (pendingInput && sessionRef.current && !disposed) {
           const data = pendingInput;
           pendingInput = "";
-          await invoke("terminal_write", {
-            request: {
-              id: sessionRef.current.id,
-              data: Array.from(new TextEncoder().encode(data)),
-            },
-          });
+          const encoded = new TextEncoder().encode(data);
+          for (let offset = 0; offset < encoded.length; offset += WRITE_CHUNK_BYTES) {
+            await invoke("terminal_write", {
+              request: {
+                id: sessionRef.current.id,
+                data: Array.from(encoded.subarray(offset, offset + WRITE_CHUNK_BYTES)),
+              },
+            });
+          }
         }
       } catch (reason) {
         if (!disposed) setError(String(reason));
@@ -122,15 +130,25 @@ export default function TerminalDock({
       pendingInput += data;
       void flushInput();
     });
+    let resizeTimer: number | null = null;
     const resizeDisposable = terminal.onResize(({ cols, rows }) => {
-      const current = sessionRef.current;
-      if (!current) return;
-      void invoke("terminal_resize", {
-        request: { id: current.id, cols, rows },
-      }).catch(() => undefined);
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        resizeTimer = null;
+        const current = sessionRef.current;
+        if (!current || disposed) return;
+        void invoke("terminal_resize", {
+          request: { id: current.id, cols, rows },
+        }).catch(() => undefined);
+      }, 60);
     });
+    let fitFrame: number | null = null;
     const observer = new ResizeObserver(() => {
-      fit.fit();
+      if (fitFrame !== null) return;
+      fitFrame = window.requestAnimationFrame(() => {
+        fitFrame = null;
+        if (!disposed) fit.fit();
+      });
     });
     observer.observe(host);
     const themeObserver = new MutationObserver(() => {
@@ -156,6 +174,7 @@ export default function TerminalDock({
         setSession(opened);
         setError(null);
         cursor = opened.baseCursor;
+        void flushInput();
         terminal.focus();
 
         while (!disposed) {
@@ -207,30 +226,42 @@ export default function TerminalDock({
       sessionRef.current = null;
       observer.disconnect();
       themeObserver.disconnect();
+      if (fitFrame !== null) window.cancelAnimationFrame(fitFrame);
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
       inputDisposable.dispose();
       resizeDisposable.dispose();
       terminal.dispose();
       xtermRef.current = null;
     };
-  }, [projectRoot, t]);
+  }, [projectRoot, restartGeneration, t]);
 
   const beginResize = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
       event.preventDefault();
       const startY = event.clientY;
       const startHeight = height;
+      resizeDragCleanupRef.current?.();
       const move = (moveEvent: PointerEvent) => {
         const max = Math.min(720, Math.floor(window.innerHeight * 0.65));
         setHeight(Math.max(160, Math.min(max, startHeight + startY - moveEvent.clientY)));
       };
-      const up = () => {
+      const cleanup = () => {
         window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointerup", cleanup);
+        resizeDragCleanupRef.current = null;
       };
+      resizeDragCleanupRef.current = cleanup;
       window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up, { once: true });
+      window.addEventListener("pointerup", cleanup, { once: true });
     },
     [height],
+  );
+
+  useEffect(
+    () => () => {
+      resizeDragCleanupRef.current?.();
+    },
+    [],
   );
 
   useEffect(() => {
@@ -249,6 +280,10 @@ export default function TerminalDock({
       setError(String(reason)),
     );
   }, [session]);
+
+  const restart = useCallback(() => {
+    setRestartGeneration((generation) => generation + 1);
+  }, []);
 
   return (
     <section
@@ -296,12 +331,18 @@ export default function TerminalDock({
           </button>
           <button
             type="button"
-            onClick={kill}
-            disabled={!session?.running}
-            title={t("chat.terminal.kill")}
-            aria-label={t("chat.terminal.kill")}
+            onClick={session?.running ? kill : restart}
+            disabled={!session && !error}
+            title={t(session?.running ? "chat.terminal.kill" : "chat.terminal.restart")}
+            aria-label={t(
+              session?.running ? "chat.terminal.kill" : "chat.terminal.restart",
+            )}
           >
-            <Square size={12} aria-hidden />
+            {session?.running ? (
+              <Square size={12} aria-hidden />
+            ) : (
+              <RotateCcw size={14} aria-hidden />
+            )}
           </button>
           <button
             type="button"

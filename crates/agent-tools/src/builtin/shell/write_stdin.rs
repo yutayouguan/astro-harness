@@ -51,6 +51,11 @@ crate::submit_builtin_tool! {
 
 /// 向共享 PTY 会话写入 stdin 并返回 Agent 自己的增量输出。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &WriteStdinArgs) -> anyhow::Result<String> {
+    if ctx.managed_network.is_some() {
+        anyhow::bail!(
+            "shared PTY sessions do not support attempt-scoped managed network; use exec_command with tty=false"
+        );
+    }
     let manager = crate::terminal_session::shared_terminal_sessions();
     let id = match args.session_id {
         Some(id) => id,
