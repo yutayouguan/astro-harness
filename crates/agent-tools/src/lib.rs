@@ -52,7 +52,8 @@ pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegi
 pub use sandbox::{SandboxAuditKind, SandboxAuditMetadata};
 pub use schema::{sanitize_tool_schema, schema_for_args, schema_has_vendor_hazards};
 pub use terminal_session::{
-    shared_terminal_sessions, TerminalReadResult, TerminalSessionInfo, TerminalSessionManager,
+    shared_terminal_sessions, TerminalDimensions, TerminalReadResult, TerminalSessionInfo,
+    TerminalSessionManager,
 };
 pub use types::{ParsedToolCall, ToolCallAccumulator, ToolCallDelta};
 

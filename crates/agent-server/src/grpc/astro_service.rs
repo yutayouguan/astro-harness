@@ -2940,8 +2940,10 @@ impl AstroService for AstroServiceImpl {
                 &policy,
                 &req.client_token,
                 req.agent_default,
-                req.cols.min(u16::MAX.into()) as u16,
-                req.rows.min(u16::MAX.into()) as u16,
+                tools::TerminalDimensions {
+                    cols: req.cols.min(u16::MAX.into()) as u16,
+                    rows: req.rows.min(u16::MAX.into()) as u16,
+                },
             )
         }
         .map_err(|error| Status::invalid_argument(error.to_string()))?;

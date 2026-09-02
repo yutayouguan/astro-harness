@@ -32,12 +32,13 @@ export function defaultTerminalTabs(
   projectRoot: string,
   userTitle: string,
   agentTitle: string,
+  userExecutionMode: TerminalExecutionMode = "system",
 ): TerminalTabLayout {
   const user = {
     clientId: createTerminalClientId(),
     title: userTitle,
     cwd: projectRoot,
-    executionMode: "system" as const,
+    executionMode: userExecutionMode,
     agentDefault: false,
   };
   const agent = {
@@ -70,8 +71,10 @@ export function readTerminalTabLayout(
   projectRoot: string,
   userTitle: string,
   agentTitle: string,
+  userExecutionMode: TerminalExecutionMode = "system",
 ): TerminalTabLayout {
-  const fallback = () => defaultTerminalTabs(projectRoot, userTitle, agentTitle);
+  const fallback = () =>
+    defaultTerminalTabs(projectRoot, userTitle, agentTitle, userExecutionMode);
   if (typeof window === "undefined") return fallback();
   try {
     const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${projectId}`);

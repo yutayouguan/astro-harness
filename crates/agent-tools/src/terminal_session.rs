@@ -20,6 +20,17 @@ const OUTPUT_CAPACITY_BYTES: usize = 1024 * 1024;
 const MAX_READ_BYTES: usize = 64 * 1024;
 pub const MAX_TERMINALS_PER_SCOPE: usize = 8;
 
+#[derive(Debug, Clone, Copy)]
+pub struct TerminalDimensions {
+    pub cols: u16,
+    pub rows: u16,
+}
+
+struct SessionRegistration {
+    desktop_token: Option<String>,
+    make_agent_default: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TerminalSessionInfo {
     pub id: u64,
@@ -238,7 +249,17 @@ impl TerminalSessionManager {
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
         command.env("ASTRO_TERMINAL", "1");
-        self.spawn(scope, cwd, command, policy.mode, None, true, cols, rows)
+        self.spawn(
+            scope,
+            cwd,
+            command,
+            policy.mode,
+            SessionRegistration {
+                desktop_token: None,
+                make_agent_default: true,
+            },
+            TerminalDimensions { cols, rows },
+        )
     }
 
     /// Creates or reattaches one Desktop-owned terminal tab. A stable client token makes this
@@ -250,8 +271,7 @@ impl TerminalSessionManager {
         policy: &sandbox::SandboxPolicy,
         client_token: &str,
         make_agent_default: bool,
-        cols: u16,
-        rows: u16,
+        dimensions: TerminalDimensions,
     ) -> anyhow::Result<TerminalSessionInfo> {
         let client_token = client_token.trim();
         if client_token.is_empty() || client_token.len() > 128 {
@@ -356,10 +376,11 @@ impl TerminalSessionManager {
             cwd,
             command,
             policy.mode,
-            Some(client_token.to_owned()),
-            make_agent_default,
-            cols,
-            rows,
+            SessionRegistration {
+                desktop_token: Some(client_token.to_owned()),
+                make_agent_default,
+            },
+            dimensions,
         )
     }
 
@@ -380,16 +401,14 @@ impl TerminalSessionManager {
         cwd: PathBuf,
         command: Command,
         sandbox_mode: types::SandboxMode,
-        desktop_token: Option<String>,
-        make_agent_default: bool,
-        cols: u16,
-        rows: u16,
+        registration: SessionRegistration,
+        dimensions: TerminalDimensions,
     ) -> anyhow::Result<TerminalSessionInfo> {
         let pty = native_pty_system();
         let pair = pty
             .openpty(PtySize {
-                rows: rows.clamp(2, 500),
-                cols: cols.clamp(2, 500),
+                rows: dimensions.rows.clamp(2, 500),
+                cols: dimensions.cols.clamp(2, 500),
                 pixel_width: 0,
                 pixel_height: 0,
             })
@@ -449,10 +468,10 @@ impl TerminalSessionManager {
                 .write()
                 .expect("terminal registry lock poisoned");
             registry.sessions.insert(id, Arc::clone(&session));
-            if let Some(token) = desktop_token {
+            if let Some(token) = registration.desktop_token {
                 registry.desktop_by_token.insert((scope.clone(), token), id);
             }
-            if make_agent_default {
+            if registration.make_agent_default {
                 registry.agent_by_scope.insert(scope, id);
             }
         }
@@ -535,7 +554,16 @@ impl TerminalSessionManager {
             .lifecycle
             .lock()
             .expect("terminal lifecycle lock poisoned");
-        let session = self.session(id)?;
+        let session = self
+            .registry
+            .read()
+            .expect("terminal registry lock poisoned")
+            .sessions
+            .get(&id)
+            .cloned();
+        let Some(session) = session else {
+            return Ok(());
+        };
         if session.info().running {
             session
                 .killer
@@ -820,10 +848,11 @@ mod tests {
                 scope,
                 command,
                 types::SandboxMode::WorkspaceWrite,
-                None,
-                true,
-                80,
-                24,
+                SessionRegistration {
+                    desktop_token: None,
+                    make_agent_default: true,
+                },
+                TerminalDimensions { cols: 80, rows: 24 },
             )
             .unwrap();
 
@@ -899,10 +928,27 @@ mod tests {
         .unwrap();
 
         let first = manager
-            .open_desktop_shell(&scope, &scope, &policy, "stable-tab", false, 80, 24)
+            .open_desktop_shell(
+                &scope,
+                &scope,
+                &policy,
+                "stable-tab",
+                false,
+                TerminalDimensions { cols: 80, rows: 24 },
+            )
             .unwrap();
         let reopened = manager
-            .open_desktop_shell(&scope, &scope, &policy, "stable-tab", false, 120, 32)
+            .open_desktop_shell(
+                &scope,
+                &scope,
+                &policy,
+                "stable-tab",
+                false,
+                TerminalDimensions {
+                    cols: 120,
+                    rows: 32,
+                },
+            )
             .unwrap();
         assert_eq!(first.id, reopened.id);
         manager.close(first.id).unwrap();
@@ -924,10 +970,11 @@ mod tests {
                     scope.clone(),
                     command,
                     types::SandboxMode::WorkspaceWrite,
-                    Some(token.to_owned()),
-                    agent_default,
-                    80,
-                    24,
+                    SessionRegistration {
+                        desktop_token: Some(token.to_owned()),
+                        make_agent_default: agent_default,
+                    },
+                    TerminalDimensions { cols: 80, rows: 24 },
                 )
                 .unwrap()
         };
@@ -937,6 +984,7 @@ mod tests {
         assert_ne!(user.id, agent.id);
         assert_eq!(manager.active_for_scope(&scope).unwrap().id, agent.id);
 
+        manager.close(user.id).unwrap();
         manager.close(user.id).unwrap();
         assert!(manager.info(user.id).is_err());
         assert!(manager.info(agent.id).is_ok());
@@ -962,7 +1010,17 @@ mod tests {
             .ensure_shell(&scope, &scope, &policy, 80, 24)
             .unwrap();
         let desktop = manager
-            .open_desktop_shell(&scope, &scope, &policy, "ai-tab", true, 120, 32)
+            .open_desktop_shell(
+                &scope,
+                &scope,
+                &policy,
+                "ai-tab",
+                true,
+                TerminalDimensions {
+                    cols: 120,
+                    rows: 32,
+                },
+            )
             .unwrap();
 
         assert_eq!(desktop.id, agent.id);

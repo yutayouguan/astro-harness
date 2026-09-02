@@ -64,11 +64,13 @@ type Props = {
 };
 
 type TerminalPaneProps = {
+  clientId: string;
+  visible: boolean;
   session: TerminalSessionDto;
   settings: TerminalSettings;
   startCursor: number;
   clearGeneration: number;
-  onSessionUpdate: (session: TerminalSessionDto) => void;
+  onSessionProgress: (clientId: string, session: TerminalSessionDto) => void;
   onError: (message: string | null) => void;
 };
 
@@ -77,8 +79,13 @@ const WRITE_CHUNK_BYTES = 32 * 1024;
 const SCROLLBAR_WIDTH = 4;
 
 function initialHeight(projectId: string): number {
-  const stored = Number(localStorage.getItem(`${HEIGHT_KEY_PREFIX}${projectId}`));
-  return Number.isFinite(stored) && stored >= 160 ? stored : 260;
+  if (typeof window === "undefined") return 260;
+  try {
+    const stored = Number(localStorage.getItem(`${HEIGHT_KEY_PREFIX}${projectId}`));
+    return Number.isFinite(stored) && stored >= 160 ? stored : 260;
+  } catch {
+    return 260;
+  }
 }
 
 function terminalTheme() {
@@ -94,17 +101,21 @@ function terminalTheme() {
 }
 
 function TerminalPane({
+  clientId,
+  visible,
   session,
   settings,
   startCursor,
   clearGeneration,
-  onSessionUpdate,
+  onSessionProgress,
   onError,
 }: TerminalPaneProps) {
   const { t } = useI18n();
   const hostRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XtermTerminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -131,7 +142,7 @@ function TerminalPane({
     terminal.open(host);
     xtermRef.current = terminal;
     fitRef.current = fit;
-    fit.fit();
+    if (visibleRef.current) fit.fit();
 
     const flushInput = async () => {
       if (writing || !pendingInput || disposed) return;
@@ -141,7 +152,11 @@ function TerminalPane({
           const data = pendingInput;
           pendingInput = "";
           const encoded = new TextEncoder().encode(data);
-          for (let offset = 0; offset < encoded.length; offset += WRITE_CHUNK_BYTES) {
+          for (
+            let offset = 0;
+            offset < encoded.length && !disposed;
+            offset += WRITE_CHUNK_BYTES
+          ) {
             await invoke("terminal_write", {
               request: {
                 id: session.id,
@@ -178,7 +193,7 @@ function TerminalPane({
       if (fitFrame !== null) return;
       fitFrame = window.requestAnimationFrame(() => {
         fitFrame = null;
-        if (!disposed) fit.fit();
+        if (!disposed && visibleRef.current) fit.fit();
       });
     });
     observer.observe(host);
@@ -207,7 +222,7 @@ function TerminalPane({
             terminal.writeln(`\r\n[${t("chat.terminal.outputTruncated")}]`);
           }
           if (result.data.length > 0) terminal.write(Uint8Array.from(result.data));
-          onSessionUpdate({
+          onSessionProgress(clientId, {
             ...session,
             running: result.running,
             exitCode: result.exitCode,
@@ -250,8 +265,12 @@ function TerminalPane({
     terminal.options.scrollback = settings.scrollback;
     terminal.options.cursorStyle = settings.cursorStyle;
     terminal.options.cursorBlink = settings.cursorBlink;
-    window.requestAnimationFrame(() => fitRef.current?.fit());
+    if (visibleRef.current) window.requestAnimationFrame(() => fitRef.current?.fit());
   }, [settings]);
+
+  useEffect(() => {
+    if (visible) window.requestAnimationFrame(() => fitRef.current?.fit());
+  }, [visible]);
 
   useEffect(() => {
     if (clearGeneration > 0) xtermRef.current?.clear();
@@ -268,6 +287,7 @@ export default function TerminalTabsDock({
   onClose,
 }: Props) {
   const { t } = useI18n();
+  const initialSettings = useMemo(() => readTerminalSettings(), []);
   const initialLayout = useMemo(
     () =>
       readTerminalTabLayout(
@@ -275,8 +295,9 @@ export default function TerminalTabsDock({
         projectRoot,
         t("chat.terminal.tab.user"),
         t("chat.terminal.tab.ai"),
+        initialSettings.executionMode,
       ),
-    [projectId, projectRoot, t],
+    [initialSettings.executionMode, projectId, projectRoot, t],
   );
   const [tabs, setTabs] = useState(initialLayout.tabs);
   const [activeClientId, setActiveClientId] = useState(initialLayout.activeClientId);
@@ -289,13 +310,17 @@ export default function TerminalTabsDock({
     Record<string, { cursor: number; generation: number }>
   >({});
   const [height, setHeight] = useState(() => initialHeight(projectId));
-  const [settings, setSettings] = useState(readTerminalSettings);
+  const [settings, setSettings] = useState(initialSettings);
   const tabsRef = useRef(tabs);
+  const sessionsRef = useRef(sessions);
+  const cursorByClientRef = useRef<Record<string, number>>({});
   const openingRef = useRef(new Set<string>());
+  const mutatingRef = useRef(new Set<string>());
   const removedTokensRef = useRef(new Set<string>());
   const resizeDragCleanupRef = useRef<(() => void) | null>(null);
 
   tabsRef.current = tabs;
+  sessionsRef.current = sessions;
   const activeTab = tabs.find((tab) => tab.clientId === activeClientId) ?? tabs[0];
   const activeSession = activeTab ? sessions[activeTab.clientId] : undefined;
   const activeError = activeTab ? errors[activeTab.clientId] : undefined;
@@ -330,6 +355,7 @@ export default function TerminalTabsDock({
           return;
         }
         setSessions((current) => ({ ...current, [tab.clientId]: opened }));
+        cursorByClientRef.current[tab.clientId] = opened.endCursor;
         setErrors((current) => {
           const next = { ...current };
           delete next[tab.clientId];
@@ -350,10 +376,8 @@ export default function TerminalTabsDock({
   );
 
   useEffect(() => {
-    for (const tab of tabs) {
-      if (!sessions[tab.clientId]) void openTab(tab);
-    }
-  }, [openTab, sessions, tabs]);
+    if (activeTab && !activeSession && !activeError) void openTab(activeTab);
+  }, [activeError, activeSession, activeTab, openTab]);
 
   const createTab = useCallback(() => {
     if (tabsRef.current.length >= MAX_TERMINAL_TABS) {
@@ -380,13 +404,14 @@ export default function TerminalTabsDock({
 
   const closeTab = useCallback(
     async (clientId: string) => {
-      if (closing.has(clientId)) return;
+      if (mutatingRef.current.has(clientId)) return;
       const tab = tabsRef.current.find((candidate) => candidate.clientId === clientId);
       if (!tab) return;
+      mutatingRef.current.add(clientId);
       removedTokensRef.current.add(clientId);
       setClosing((current) => new Set(current).add(clientId));
       try {
-        const session = sessions[clientId];
+        const session = sessionsRef.current[clientId];
         if (session) await invoke("terminal_close", { id: session.id });
         let nextTabs = tabsRef.current.filter((candidate) => candidate.clientId !== clientId);
         if (tab.agentDefault) {
@@ -412,6 +437,7 @@ export default function TerminalTabsDock({
           delete next[clientId];
           return next;
         });
+        delete cursorByClientRef.current[clientId];
         if (activeClientId === clientId) {
           const oldIndex = tabsRef.current.findIndex(
             (candidate) => candidate.clientId === clientId,
@@ -423,6 +449,7 @@ export default function TerminalTabsDock({
         removedTokensRef.current.delete(clientId);
         setErrors((current) => ({ ...current, [clientId]: String(reason) }));
       } finally {
+        mutatingRef.current.delete(clientId);
         setClosing((current) => {
           const next = new Set(current);
           next.delete(clientId);
@@ -430,19 +457,21 @@ export default function TerminalTabsDock({
         });
       }
     },
-    [activeClientId, closing, projectRoot, sessions, t],
+    [activeClientId, projectRoot, t],
   );
 
   const restartActive = useCallback(async () => {
-    if (!activeTab || closing.has(activeTab.clientId)) return;
-    const session = sessions[activeTab.clientId];
+    if (!activeTab || mutatingRef.current.has(activeTab.clientId)) return;
+    mutatingRef.current.add(activeTab.clientId);
+    const session = sessionsRef.current[activeTab.clientId];
     if (!session) {
       setErrors((current) => {
         const next = { ...current };
         delete next[activeTab.clientId];
         return next;
       });
-      void openTab(activeTab);
+      await openTab(activeTab);
+      mutatingRef.current.delete(activeTab.clientId);
       return;
     }
     setClosing((current) => new Set(current).add(activeTab.clientId));
@@ -453,25 +482,29 @@ export default function TerminalTabsDock({
         delete next[activeTab.clientId];
         return next;
       });
+      delete cursorByClientRef.current[activeTab.clientId];
       setErrors((current) => {
         const next = { ...current };
         delete next[activeTab.clientId];
         return next;
       });
+      await openTab(activeTab);
     } catch (reason) {
       setErrors((current) => ({ ...current, [activeTab.clientId]: String(reason) }));
     } finally {
+      mutatingRef.current.delete(activeTab.clientId);
       setClosing((current) => {
         const next = new Set(current);
         next.delete(activeTab.clientId);
         return next;
       });
     }
-  }, [activeTab, closing, openTab, sessions]);
+  }, [activeTab, openTab]);
 
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.isComposing) return;
       if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.altKey) return;
       const key = event.key.toLowerCase();
       if (key === "t") {
@@ -528,13 +561,26 @@ export default function TerminalTabsDock({
 
   useEffect(() => () => resizeDragCleanupRef.current?.(), []);
   useEffect(() => {
-    localStorage.setItem(`${HEIGHT_KEY_PREFIX}${projectId}`, String(Math.round(height)));
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(`${HEIGHT_KEY_PREFIX}${projectId}`, String(Math.round(height)));
+      } catch {
+        // Resizing remains functional when WebView storage is unavailable.
+      }
+    }, 120);
+    return () => window.clearTimeout(timer);
   }, [height, projectId]);
 
-  const updateSession = useCallback((next: TerminalSessionDto) => {
+  const updateSessionProgress = useCallback((clientId: string, next: TerminalSessionDto) => {
+    if (sessionsRef.current[clientId]?.id !== next.id) return;
+    cursorByClientRef.current[clientId] = next.endCursor;
     setSessions((current) => {
-      const entry = Object.entries(current).find(([, session]) => session.id === next.id);
-      return entry ? { ...current, [entry[0]]: next } : current;
+      const previous = current[clientId];
+      if (!previous || previous.id !== next.id) return current;
+      if (previous.running === next.running && previous.exitCode === next.exitCode) {
+        return current;
+      }
+      return { ...current, [clientId]: next };
     });
   }, []);
 
@@ -582,6 +628,7 @@ export default function TerminalTabsDock({
                     className="terminal-tab-main"
                     role="tab"
                     aria-selected={active}
+                    tabIndex={active ? 0 : -1}
                     onClick={() => setActiveClientId(tab.clientId)}
                     onDoubleClick={() => {
                       setRenameDraft(tab.title);
@@ -663,7 +710,9 @@ export default function TerminalTabsDock({
               setClearState((current) => ({
                 ...current,
                 [activeTab.clientId]: {
-                  cursor: activeSession.endCursor,
+                  cursor:
+                    cursorByClientRef.current[activeTab.clientId] ??
+                    activeSession.endCursor,
                   generation: (current[activeTab.clientId]?.generation ?? 0) + 1,
                 },
               }));
@@ -695,11 +744,13 @@ export default function TerminalTabsDock({
       {activeSession ? (
         <TerminalPane
           key={activeSession.id}
+          clientId={activeTab.clientId}
+          visible={open}
           session={activeSession}
           settings={settings}
           startCursor={clearState[activeTab.clientId]?.cursor ?? activeSession.baseCursor}
           clearGeneration={clearState[activeTab.clientId]?.generation ?? 0}
-          onSessionUpdate={updateSession}
+          onSessionProgress={updateSessionProgress}
           onError={(message) => {
             if (!activeTab) return;
             setErrors((current) => {

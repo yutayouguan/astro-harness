@@ -23,11 +23,16 @@ test("terminal dock routes to the multi-tab implementation", () => {
 });
 
 test("new projects start with separate user and AI terminals", () => {
-  assert.match(tabs, /executionMode: "system" as const/);
+  assert.match(tabs, /executionMode: userExecutionMode/);
   assert.match(tabs, /executionMode: "project" as const/);
   assert.match(tabs, /agentDefault: true/);
   assert.match(dock, /clientToken: tab\.clientId/);
   assert.match(dock, /agentDefault: tab\.agentDefault/);
+});
+
+test("only the active tab is started eagerly", () => {
+  assert.match(dock, /if \(activeTab && !activeSession && !activeError\) void openTab\(activeTab\)/);
+  assert.doesNotMatch(dock, /for \(const tab of tabs\)/);
 });
 
 test("desktop tab tokens are idempotent and closing is session-scoped", () => {
