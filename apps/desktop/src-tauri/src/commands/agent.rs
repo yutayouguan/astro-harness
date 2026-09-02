@@ -215,8 +215,8 @@ pub fn prepare_task_worktree(task_id: String) -> Result<Option<TaskWorktreeDto>,
     match agent::git_worktree::create_task_worktree(&repo, &task_id) {
         Ok(handle) => Ok(Some(TaskWorktreeDto {
             path: handle.path().to_string_lossy().into_owned(),
-            repo_root: handle.repo_root.to_string_lossy().into_owned(),
-            branch: handle.branch.clone(),
+            repo_root: handle.source_root.to_string_lossy().into_owned(),
+            branch: handle.branch.clone().unwrap_or(handle.head_sha.clone()),
         })),
         Err(e) => {
             tracing::warn!(error = %e, "prepare_task_worktree failed; continuing without");
