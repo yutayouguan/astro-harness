@@ -383,13 +383,35 @@ fn copy_worktreeinclude(repo: &Path, worktree: &Path) -> anyhow::Result<()> {
         }
         let source = repo.join(relative);
         let destination = worktree.join(relative);
-        if !source.is_file() {
+        let Ok(metadata) = fs::symlink_metadata(&source) else {
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
             continue;
         }
+        copy_included_path(&source, &destination)?;
+    }
+    Ok(())
+}
+
+fn copy_included_path(source: &Path, destination: &Path) -> anyhow::Result<()> {
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+    if metadata.is_dir() {
+        fs::create_dir_all(destination)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            copy_included_path(&entry.path(), &destination.join(entry.file_name()))?;
+        }
+        return Ok(());
+    }
+    if metadata.is_file() {
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::copy(&source, &destination).with_context(|| {
+        fs::copy(source, destination).with_context(|| {
             format!(
                 "cannot copy worktree include {} to {}",
                 source.display(),
@@ -516,12 +538,22 @@ mod tests {
     fn dirty_worktree_is_kept_for_recovery() {
         let repo = tempfile::tempdir().unwrap();
         init_git_repo(repo.path());
-        fs::write(repo.path().join(".worktreeinclude"), ".env\n../escape\n").unwrap();
+        fs::write(
+            repo.path().join(".worktreeinclude"),
+            ".env\n.cache\n../escape\n",
+        )
+        .unwrap();
         fs::write(repo.path().join(".env"), "TOKEN=test").unwrap();
+        fs::create_dir(repo.path().join(".cache")).unwrap();
+        fs::write(repo.path().join(".cache/data"), "cached").unwrap();
         let managed = create_task_worktree(repo.path(), "dirty-1").unwrap();
         assert_eq!(
             fs::read_to_string(managed.root.join(".env")).unwrap(),
             "TOKEN=test"
+        );
+        assert_eq!(
+            fs::read_to_string(managed.root.join(".cache/data")).unwrap(),
+            "cached"
         );
         assert!(!managed.root.join("escape").exists());
         fs::write(managed.root.join("new.txt"), "x").unwrap();
