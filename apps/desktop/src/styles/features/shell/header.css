@@ -415,9 +415,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .app-shell.is-chat-expanded .page-body {
-  padding-left: 16px;
-  padding-right: 16px;
-  padding-bottom: 16px;
+  padding: 0;
 }
 
 .content-pane > .page-body.page-body--chat,
@@ -1496,36 +1494,30 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
 }
 
 .page-body {
-  --page-body-inline-padding: 22px;
+  --page-body-inline-padding: 0px;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 var(--page-body-inline-padding) 22px;
+  padding: 0;
 }
 
-/* Full-canvas tools should meet the pinned sidebar directly. Animate the
-   shared content inset so browser focus mode and the terminal drawer expand
-   with the same physical motion as the rest of the dock surface. */
-.content-pane > .page-body.page-body--chat {
-  transition: padding-left 300ms cubic-bezier(0.22, 1, 0.36, 1);
+/* Browser focus mode reaches the content edge. Only its title moves aside for
+   native window chrome; content surfaces no longer carry a global safe inset. */
+.chat-layout-with-right.is-browser-expanded .browser-dock-title {
+  left: var(--window-chrome-safe-left);
 }
 
-.content-pane
-  > .page-body.page-body--chat:has(
-    > .chat-layout-with-right.is-browser-expanded
-  ),
-.content-pane
-  > .page-body.page-body--chat:has(
-    > .chat-layout-with-right > .chat-main > .terminal-dock.is-open
-  ) {
-  padding-left: 0;
+.body-row:has(> .sidebar.is-pinned.is-icons)
+  .chat-layout-with-right.is-browser-expanded
+  .browser-dock-title {
+  left: calc(var(--window-chrome-safe-left) - var(--sidebar-w));
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .content-pane > .page-body.page-body--chat {
-    transition: none;
-  }
+.body-row:has(> .sidebar.is-pinned.is-labels)
+  .chat-layout-with-right.is-browser-expanded
+  .browser-dock-title {
+  left: 12px;
 }
 
 /* 无页头的功能页：自己补出标题栏安全区 */

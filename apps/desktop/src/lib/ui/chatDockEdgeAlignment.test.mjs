@@ -7,28 +7,39 @@ const headerStyles = await readFile(
   "utf8",
 );
 
-test("full-canvas browser and terminal surfaces align with the pinned sidebar", () => {
-  assert.match(
+function rule(css, selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return css.match(
+    new RegExp(`(?:^|\\n)${escaped}\\s*\\{(?<body>[\\s\\S]*?)\\}`),
+  )?.groups?.body;
+}
+
+test("page bodies use the window edge without a shared 22px inset", () => {
+  const pageBody = rule(headerStyles, ".page-body");
+  const expandedPageBody = rule(
     headerStyles,
-    /\.page-body\.page-body--chat:has\(\s*> \.chat-layout-with-right\.is-browser-expanded\s*\)/,
+    ".app-shell.is-chat-expanded .page-body",
   );
-  assert.match(
-    headerStyles,
-    /\.page-body\.page-body--chat:has\(\s*> \.chat-layout-with-right > \.chat-main > \.terminal-dock\.is-open\s*\)/,
-  );
-  assert.match(
-    headerStyles,
-    /\.terminal-dock\.is-open\s*\)\s*\{\s*padding-left:\s*0;/,
-  );
+
+  assert.ok(pageBody, "missing page body rule");
+  assert.match(pageBody, /--page-body-inline-padding:\s*0px;/);
+  assert.match(pageBody, /padding:\s*0;/);
+  assert.doesNotMatch(pageBody, /22px/);
+  assert.ok(expandedPageBody, "missing expanded page body rule");
+  assert.match(expandedPageBody, /padding:\s*0;/);
 });
 
-test("the dock edge inset follows the drawer motion and reduced-motion preference", () => {
+test("browser focus title alone clears the native sidebar control", () => {
   assert.match(
     headerStyles,
-    /\.content-pane > \.page-body\.page-body--chat\s*\{[\s\S]*?transition:\s*padding-left 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\);/,
+    /\.chat-layout-with-right\.is-browser-expanded \.browser-dock-title\s*\{\s*left:\s*var\(--window-chrome-safe-left\);/,
   );
   assert.match(
     headerStyles,
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.content-pane > \.page-body\.page-body--chat\s*\{\s*transition:\s*none;/,
+    /\.sidebar\.is-pinned\.is-icons\)[\s\S]*?\.browser-dock-title\s*\{\s*left:\s*calc\(var\(--window-chrome-safe-left\) - var\(--sidebar-w\)\);/,
+  );
+  assert.match(
+    headerStyles,
+    /\.sidebar\.is-pinned\.is-labels\)[\s\S]*?\.browser-dock-title\s*\{\s*left:\s*12px;/,
   );
 });
