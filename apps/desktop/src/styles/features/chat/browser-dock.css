@@ -145,7 +145,7 @@
   gap: 3px;
 }
 
-.browser-dock button {
+.browser-dock button:not(.browser-dock-resizer) {
   border: 0;
   color: var(--ink-mute);
   background: transparent;
@@ -353,10 +353,10 @@
 .browser-dock-resizer {
   position: absolute;
   z-index: 5;
-  top: var(--chat-header-overlay-height, 50px);
+  top: 0;
   bottom: 0;
   left: 0;
-  width: 10px;
+  width: 12px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -392,6 +392,10 @@
 
 .browser-dock-resizer:focus-visible {
   outline: none;
+}
+
+.browser-dock .browser-dock-resizer {
+  cursor: ew-resize;
 }
 
 .browser-dock.is-resizing {

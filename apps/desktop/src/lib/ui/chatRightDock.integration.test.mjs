@@ -149,6 +149,12 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
   assert.match(browserStyles, /\.has-composer-overlay/);
   assert.match(composerStyles, /\.composer-shell\.is-capsule/);
   assert.match(composerStyles, /--composer-capsule-frost/);
+  assert.match(composerStyles, /var\(--glass-panel\) 78%/);
+  assert.match(composerStyles, /saturate\(1\.18\)/);
+  assert.doesNotMatch(
+    composerStyles,
+    /--composer-capsule-frost:\s*rgba\(248, 250, 252, 0\.96\)/,
+  );
   assert.match(composerStyles, /border-radius:\s*999px/);
 });
 

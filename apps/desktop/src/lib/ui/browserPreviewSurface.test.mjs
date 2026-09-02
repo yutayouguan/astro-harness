@@ -37,6 +37,7 @@ test("browser preview supports standalone browsing and completed browser tool re
   );
 
   const dock = source("../../components/chat/BrowserDock.tsx");
+  const css = source("../../styles/features/chat/browser-dock.css");
   assert.doesNotMatch(dock, /disabled=\{!sessionId/);
   assert.match(dock, /disabled=\{!address\.trim\(\)\}/);
   assert.match(dock, /open \? " is-open" : ""/);
@@ -53,6 +54,11 @@ test("browser preview supports standalone browsing and completed browser tool re
     /expanded && !restoring\s*\? "chat\.browserDock\.restore"/,
   );
   assert.match(dock, /useBrowserLiveWebviews/);
+  assert.match(css, /\.browser-dock button:not\(\.browser-dock-resizer\)/);
+  assert.match(
+    css,
+    /\.browser-dock \.browser-dock-resizer\s*\{\s*cursor:\s*ew-resize;/,
+  );
   const addressStart = dock.indexOf('<form className="browser-address-row"');
   const screenshotStart = dock.indexOf(
     'aria-label={t("chat.browserDock.screenshot")}',

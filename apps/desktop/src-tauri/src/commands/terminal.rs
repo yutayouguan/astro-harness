@@ -248,9 +248,7 @@ async fn terminal_client() -> Result<AstroServiceClient<tonic::transport::Channe
         .map_err(|error| error.to_string())?
         .connect_timeout(TERMINAL_CONNECT_TIMEOUT)
         .timeout(TERMINAL_REQUEST_TIMEOUT)
-        .connect()
-        .await
-        .map_err(|error| format!("connect terminal backend at {address}: {error}"))?;
+        .connect_lazy();
     *cached = Some(CachedTerminalChannel {
         address,
         channel: channel.clone(),

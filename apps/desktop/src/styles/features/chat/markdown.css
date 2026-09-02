@@ -1609,7 +1609,11 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
 }
 
 .composer-shell.is-capsule {
-  --composer-capsule-frost: rgba(248, 250, 252, 0.96);
+  --composer-capsule-frost: color-mix(
+    in srgb,
+    var(--glass-panel) 78%,
+    var(--tone-soft, transparent) 22%
+  );
   right: auto;
   bottom: 18px;
   left: 50%;
@@ -1619,7 +1623,11 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
 }
 
 html[data-theme="dark"] .composer-shell.is-capsule {
-  --composer-capsule-frost: rgba(16, 14, 28, 0.96);
+  --composer-capsule-frost: color-mix(
+    in srgb,
+    var(--glass-panel) 86%,
+    var(--tone-soft, transparent) 14%
+  );
 }
 
 .composer-shell.is-capsule:not(.is-capsule-expanded)
@@ -1639,13 +1647,24 @@ html[data-theme="dark"] .composer-shell.is-capsule {
     ),
     var(--composer-capsule-frost);
   box-shadow:
-    var(--glass-rim),
-    0 14px 38px rgba(var(--shadow-ink), 0.18),
-    0 2px 8px rgba(var(--shadow-ink), 0.08);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 12px 34px rgba(var(--shadow-ink), 0.12),
+    0 2px 8px rgba(var(--shadow-ink), 0.05);
   backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
-    saturate(1.55);
+    saturate(1.18);
   -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
-    saturate(1.55);
+    saturate(1.18);
+}
+
+html[data-theme="dark"]
+  .composer-shell.is-capsule:not(.is-capsule-expanded)
+  .composer:not(.has-clarify) {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 34px rgba(0, 0, 0, 0.24),
+    0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .composer-shell.is-capsule:not(.is-capsule-expanded) .composer-input-wrap {
@@ -2876,7 +2895,11 @@ html[data-theme="dark"] .composer:focus-within {
   }
 
   .composer-shell.is-capsule:not(.is-capsule-expanded) .composer {
-    background: rgb(248, 250, 252);
+    background: color-mix(
+      in srgb,
+      var(--surface-panel-background) 84%,
+      var(--tone-soft, transparent) 16%
+    );
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
@@ -2884,7 +2907,11 @@ html[data-theme="dark"] .composer:focus-within {
   html[data-theme="dark"]
     .composer-shell.is-capsule:not(.is-capsule-expanded)
     .composer {
-    background: rgb(16, 14, 28);
+    background: color-mix(
+      in srgb,
+      var(--surface-panel-background) 90%,
+      var(--tone-soft, transparent) 10%
+    );
   }
 }
 

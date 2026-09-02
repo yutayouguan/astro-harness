@@ -186,9 +186,8 @@ impl TerminalSessionManager {
         self.ensure_shell_with_options(scope, cwd, policy, cols, rows, false)
     }
 
-    /// Opens the shared shell and optionally replaces it when the Desktop user changes the
-    /// configured execution mode. Agent callers use [`Self::ensure_shell`] so they can never
-    /// replace a more permissive user-owned session as a side effect of attaching.
+    /// 打开共享终端；当桌面端切换执行模式时，可按需替换已有终端。
+    /// Agent 调用方统一走 [`Self::ensure_shell`]，避免附加终端时意外替换权限更高的用户终端。
     pub fn ensure_shell_with_options(
         &self,
         scope: &Path,
@@ -198,8 +197,8 @@ impl TerminalSessionManager {
         rows: u16,
         replace_mode_mismatch: bool,
     ) -> anyhow::Result<TerminalSessionInfo> {
-        // Process creation is synchronous and uncommon. Serializing it prevents two callers from
-        // both observing an empty scope and leaking a second, unreachable shell.
+        // 进程创建是低频同步操作。串行化生命周期变更，避免两个调用方同时看到空作用域，
+        // 从而创建出第二个无法再寻址的终端进程。
         let _lifecycle = self
             .lifecycle
             .lock()
@@ -210,9 +209,8 @@ impl TerminalSessionManager {
             anyhow::bail!("terminal cwd must stay inside its project scope");
         }
 
-        // Drop the registry read guard before entering the branch. An `if let` scrutinee
-        // temporary lives through the whole statement, so keeping the lookup inline would
-        // self-deadlock below when a stale session has to be removed under the write lock.
+        // 必须在进入分支前释放注册表读锁。`if let` 条件中的临时读锁会存活到整条语句结束；
+        // 若把查询直接写在条件里，下面清理失效会话时申请写锁，就会在同一线程内自锁死。
         let existing_id = {
             self.registry
                 .read()
@@ -266,8 +264,8 @@ impl TerminalSessionManager {
         )
     }
 
-    /// Creates or reattaches one Desktop-owned terminal tab. A stable client token makes this
-    /// idempotent across React remounts and prevents StrictMode from leaking duplicate shells.
+    /// 创建或重新附加桌面端终端标签页。稳定的客户端 token 让 React 重挂载保持幂等，
+    /// 并防止 StrictMode 重复创建终端进程。
     pub fn open_desktop_shell(
         &self,
         scope: &Path,
@@ -296,8 +294,8 @@ impl TerminalSessionManager {
         }
         let key = (scope.clone(), client_token.to_owned());
 
-        // Do not keep the read guard alive across this branch: reattaching the AI-default tab
-        // updates `agent_by_scope` and therefore needs the registry write lock.
+        // 不能让读锁跨越此分支：重新附加 AI 默认终端时还要更新 `agent_by_scope`，
+        // 该操作需要获取注册表写锁。
         let existing_id = {
             self.registry
                 .read()
@@ -330,8 +328,8 @@ impl TerminalSessionManager {
             );
         }
 
-        // The Agent may have created its implicit terminal before the Desktop dock was opened.
-        // Adopt that process into the stable UI tab instead of spawning a hidden duplicate.
+        // Agent 可能在桌面终端面板打开前就创建了隐式终端。此处把已有进程归入稳定的 UI 标签页，
+        // 避免额外创建一个不可见的重复终端。
         if make_agent_default {
             let existing_agent_id = self
                 .registry
@@ -1156,6 +1154,7 @@ mod tests {
                 },
             )
             .unwrap();
+        // 第二次使用相同 AI token 打开时应直接附加已有会话，并能安全刷新 Agent 默认映射。
         let reattached = manager
             .open_desktop_shell(
                 &scope,

@@ -82,6 +82,8 @@ const RESIZE_KEYBOARD_STEP = 24;
 const WRITE_CHUNK_BYTES = 32 * 1024;
 const SCROLLBAR_WIDTH = 4;
 const TERMINAL_START_TIMEOUT_MS = 15_000;
+const READ_RETRY_DELAYS = [500, 1_000, 2_000, 4_000];
+const OPEN_RETRY_DELAYS = [1_000, 2_000, 4_000];
 
 function withTimeout<T>(
   promise: Promise<T>,
@@ -246,8 +248,9 @@ function TerminalPane({
     });
 
     const readOutput = async () => {
-      try {
-        while (!disposed) {
+      let retries = 0;
+      while (!disposed) {
+        try {
           const result = await invoke<TerminalReadResultDto>("terminal_read", {
             request: {
               id: session.id,
@@ -257,6 +260,7 @@ function TerminalPane({
             },
           });
           if (disposed) return;
+          retries = 0;
           cursor = result.nextCursor;
           if (result.dropped) {
             terminal.writeln(`\r\n[${t("chat.terminal.outputTruncated")}]`);
@@ -275,9 +279,16 @@ function TerminalPane({
             );
             break;
           }
+        } catch {
+          if (disposed) return;
+          const delay = READ_RETRY_DELAYS[retries];
+          if (delay === undefined) {
+            onError(t("chat.terminal.tab.readFailed"));
+            return;
+          }
+          retries++;
+          await new Promise((r) => setTimeout(r, delay));
         }
-      } catch (reason) {
-        if (!disposed) onError(String(reason));
       }
     };
 
@@ -534,6 +545,7 @@ export default function TerminalTabsDock({
   const restartActive = useCallback(async () => {
     if (!activeTab || mutatingRef.current.has(activeTab.clientId)) return;
     mutatingRef.current.add(activeTab.clientId);
+    openingRef.current.add(activeTab.clientId);
     const session = sessionsRef.current[activeTab.clientId];
     if (!session) {
       setErrors((current) => {
@@ -541,13 +553,14 @@ export default function TerminalTabsDock({
         delete next[activeTab.clientId];
         return next;
       });
+      openingRef.current.delete(activeTab.clientId);
       await openTab(activeTab);
       mutatingRef.current.delete(activeTab.clientId);
       return;
     }
     setClosing((current) => new Set(current).add(activeTab.clientId));
     try {
-      if (session) await invoke("terminal_close", { id: session.id });
+      await invoke("terminal_close", { id: session.id }).catch(() => undefined);
       setSessions((current) => {
         const next = { ...current };
         delete next[activeTab.clientId];
@@ -559,8 +572,10 @@ export default function TerminalTabsDock({
         delete next[activeTab.clientId];
         return next;
       });
+      openingRef.current.delete(activeTab.clientId);
       await openTab(activeTab);
     } catch (reason) {
+      openingRef.current.delete(activeTab.clientId);
       setErrors((current) => ({
         ...current,
         [activeTab.clientId]: String(reason),
