@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent,
+  type TransitionEvent as ReactTransitionEvent,
   type WheelEvent,
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
@@ -60,6 +61,7 @@ type Props = {
 
 const RESIZE_KEYBOARD_STEP = 24;
 const RESIZE_KEYBOARD_LARGE_STEP = 64;
+const RESTORE_ANIMATION_MS = 300;
 
 function formatBytes(size: number): string {
   if (size < 1024) return `${size} B`;
@@ -81,6 +83,7 @@ export default function BrowserDock({
   const [address, setAddress] = useState(preview?.url ?? "");
   const [downloadsOpen, setDownloadsOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const screenshotRef = useRef<HTMLImageElement>(null);
   const nativeViewportRef = useRef<HTMLDivElement>(null);
@@ -96,6 +99,7 @@ export default function BrowserDock({
   const wheelDeltaRef = useRef(0);
   const wheelTimerRef = useRef<number | null>(null);
   const resizeTimerRef = useRef<number | null>(null);
+  const restoreTimerRef = useRef<number | null>(null);
   const lastViewportRef = useRef("");
   const controlRunRef = useRef(0);
   const [dockWidth, setDockWidth] = useState(() => {
@@ -254,6 +258,49 @@ export default function BrowserDock({
     updateDockWidth(nextWidth, true);
   };
 
+  const finishRestore = useCallback(() => {
+    if (restoreTimerRef.current != null) {
+      window.clearTimeout(restoreTimerRef.current);
+      restoreTimerRef.current = null;
+    }
+    setRestoring(false);
+    onExpandedChange(false);
+  }, [onExpandedChange]);
+
+  const toggleExpanded = () => {
+    if (restoring) {
+      if (restoreTimerRef.current != null) {
+        window.clearTimeout(restoreTimerRef.current);
+        restoreTimerRef.current = null;
+      }
+      setRestoring(false);
+      return;
+    }
+    if (!expanded) {
+      onExpandedChange(true);
+      return;
+    }
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      onExpandedChange(false);
+      return;
+    }
+    setRestoring(true);
+    restoreTimerRef.current = window.setTimeout(
+      finishRestore,
+      RESTORE_ANIMATION_MS + 60,
+    );
+  };
+
+  const onDockTransitionEnd = (event: ReactTransitionEvent<HTMLElement>) => {
+    if (
+      !restoring ||
+      event.target !== event.currentTarget ||
+      event.propertyName !== "width"
+    )
+      return;
+    finishRestore();
+  };
+
   useEffect(() => {
     if (preview?.url) setAddress(preview.url);
   }, [preview?.url]);
@@ -282,12 +329,23 @@ export default function BrowserDock({
     if (!open) setActionsOpen(false);
   }, [open]);
 
+  useEffect(() => {
+    if (expanded) return;
+    setRestoring(false);
+    if (restoreTimerRef.current != null) {
+      window.clearTimeout(restoreTimerRef.current);
+      restoreTimerRef.current = null;
+    }
+  }, [expanded]);
+
   useEffect(
     () => () => {
       if (wheelTimerRef.current != null)
         window.clearTimeout(wheelTimerRef.current);
       if (resizeTimerRef.current != null)
         window.clearTimeout(resizeTimerRef.current);
+      if (restoreTimerRef.current != null)
+        window.clearTimeout(restoreTimerRef.current);
     },
     [],
   );
@@ -407,10 +465,11 @@ export default function BrowserDock({
   return (
     <aside
       ref={dockRef}
-      className={`browser-dock${open ? " is-open" : ""}${resizing ? " is-resizing" : ""}${expanded ? " is-expanded" : ""}`}
+      className={`browser-dock${open ? " is-open" : ""}${resizing ? " is-resizing" : ""}${expanded ? " is-expanded" : ""}${restoring ? " is-restoring" : ""}`}
       aria-label={t("chat.browserDock.title")}
       aria-hidden={!open}
       style={{ "--browser-dock-width": `${dockWidth}px` } as CSSProperties}
+      onTransitionEnd={onDockTransitionEnd}
     >
       {!expanded ? (
         <button
@@ -556,15 +615,19 @@ export default function BrowserDock({
           type="button"
           className="browser-dock-expand"
           aria-label={t(
-            expanded ? "chat.browserDock.restore" : "chat.browserDock.expand",
+            expanded && !restoring
+              ? "chat.browserDock.restore"
+              : "chat.browserDock.expand",
           )}
           title={t(
-            expanded ? "chat.browserDock.restore" : "chat.browserDock.expand",
+            expanded && !restoring
+              ? "chat.browserDock.restore"
+              : "chat.browserDock.expand",
           )}
-          aria-pressed={expanded}
-          onClick={() => onExpandedChange(!expanded)}
+          aria-pressed={expanded && !restoring}
+          onClick={toggleExpanded}
         >
-          {expanded ? (
+          {expanded && !restoring ? (
             <Minimize2 size={14} aria-hidden />
           ) : (
             <Maximize2 size={14} aria-hidden />

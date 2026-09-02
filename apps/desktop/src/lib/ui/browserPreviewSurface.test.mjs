@@ -44,8 +44,14 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(dock, /occluded: actionsOpen/);
   assert.match(dock, /browser-dock-resizer/);
   assert.match(dock, /browser-dock-expand/);
+  assert.match(dock, /restoring \? " is-restoring" : ""/);
+  assert.match(dock, /event\.propertyName !== "width"/);
+  assert.match(dock, /RESTORE_ANIMATION_MS \+ 60/);
   assert.match(dock, /BROWSER_DOCK_WIDTH_KEY/);
-  assert.match(dock, /expanded \? "chat\.browserDock\.restore"/);
+  assert.match(
+    dock,
+    /expanded && !restoring\s*\? "chat\.browserDock\.restore"/,
+  );
   assert.match(dock, /useBrowserLiveWebviews/);
   const addressStart = dock.indexOf('<form className="browser-address-row"');
   const screenshotStart = dock.indexOf(
@@ -84,6 +90,23 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(liveWebviews, /occludedRef\.current = occluded/);
   assert.match(liveWebviews, /!occludedRef\.current &&/);
   assert.match(liveWebviews, /entry\.webview\.hide\(\)/);
+});
+
+test("browser restore animates toward the right edge before rejoining layout", () => {
+  const css = source("../../styles/features/chat/browser-dock.css");
+  const expandedRule = css.match(
+    /\.chat-layout-with-right\.is-browser-expanded > \.browser-dock \{([^}]*)\}/s,
+  )?.[1];
+  const restoringRule = css.match(
+    /\.chat-layout-with-right\.is-browser-expanded > \.browser-dock\.is-restoring \{([^}]*)\}/s,
+  )?.[1];
+
+  assert.ok(expandedRule);
+  assert.match(expandedRule, /right:\s*0/);
+  assert.match(expandedRule, /width:\s*100%/);
+  assert.ok(restoringRule);
+  assert.match(restoringRule, /width:\s*var\(--browser-dock-current-width\)/);
+  assert.match(restoringRule, /max-width:\s*calc\(100% - 320px\)/);
 });
 
 test("browser dock uses a native child WebView with a screenshot fallback", () => {

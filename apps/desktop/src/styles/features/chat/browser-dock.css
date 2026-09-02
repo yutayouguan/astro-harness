@@ -62,6 +62,14 @@
   border-left-width: 0;
 }
 
+/* 收回时保持右侧锚点，先向右收窄，再回到布局流。 */
+.chat-layout-with-right.is-browser-expanded > .browser-dock.is-restoring {
+  width: var(--browser-dock-current-width);
+  max-width: calc(100% - 320px);
+  border-left-width: 0.5px;
+  border-left-color: color-mix(in srgb, var(--glass-edge) 62%, transparent);
+}
+
 .chat-layout-with-right.is-browser-expanded
   > .chat-main
   .composer-shell.is-capsule {
@@ -555,6 +563,10 @@
 
 @media (max-width: 840px) {
   .browser-dock {
+    --browser-dock-current-width: min(
+      100%,
+      var(--browser-dock-width, 680px)
+    );
     position: absolute;
     inset: 0 0 0 auto;
     min-width: 0;
