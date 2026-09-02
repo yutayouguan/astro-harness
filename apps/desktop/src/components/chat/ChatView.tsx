@@ -186,7 +186,11 @@ import {
   CreateCronDialog,
   type ProviderOpt,
 } from "../schedule/CreateCronDialog";
-import { formatElapsedSec } from "../../lib/chat/elapsedSec";
+import {
+  formatCompactTurnTokens,
+  formatExactTurnTokens,
+  formatTurnDuration,
+} from "../../lib/chat/turnUsageDisplay";
 import { projectResponseItemsToEntries } from "../../lib/chat/projectResponseItemsToEntries";
 import {
   groupConsecutiveActivities,
@@ -223,8 +227,8 @@ function formatTokenSpeed(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-/** 单条消息底部的 token 用量、回合耗时与生成速度 */
-function MessageTokenStats({
+/** 单条消息底部的易读摘要与可展开用量详情。 */
+export function MessageTokenStats({
   usage,
   tokensPerSec,
   generationDurationSec,
@@ -233,7 +237,7 @@ function MessageTokenStats({
   tokensPerSec?: number;
   generationDurationSec?: number;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const hasUsage = Boolean(
     usage &&
     (usage.totalTokens || usage.promptTokens || usage.completionTokens),
@@ -245,16 +249,12 @@ function MessageTokenStats({
     tokensPerSec != null && tokensPerSec > 0
       ? formatTokenSpeed(tokensPerSec)
       : null;
-  const label = hasUsage
-    ? t("chat.tokenStats", {
-        total: String(usage!.totalTokens),
-        prompt: String(usage!.promptTokens),
-        completion: String(usage!.completionTokens),
-      })
+  const total = hasUsage
+    ? formatCompactTurnTokens(usage!.totalTokens, locale)
     : null;
   const durationLabel = hasDuration
     ? t("chat.generationDuration", {
-        s: formatElapsedSec(generationDurationSec!),
+        s: formatTurnDuration(generationDurationSec!, locale),
       })
     : null;
   const cacheHit =
@@ -265,37 +265,77 @@ function MessageTokenStats({
         )
       : null;
   const aria = t("chat.tokenStatsAria", {
-    total: String(usage?.totalTokens ?? 0),
-    prompt: String(usage?.promptTokens ?? 0),
-    completion: String(usage?.completionTokens ?? 0),
-    speed: speed ?? "—",
+    total: formatExactTurnTokens(usage?.totalTokens ?? 0, locale),
+    prompt: formatExactTurnTokens(usage?.promptTokens ?? 0, locale),
+    completion: formatExactTurnTokens(usage?.completionTokens ?? 0, locale),
   });
 
-  return (
-    <div className="msg-token-stats" aria-label={aria}>
-      {durationLabel ? (
+  if (!hasUsage) {
+    return (
+      <div className="msg-token-stats is-static">
         <span className="msg-token-stats-duration">{durationLabel}</span>
-      ) : null}
-      {label ? <span className="msg-token-stats-usage">{label}</span> : null}
-      {cacheHit != null ? (
-        <span className="msg-token-stats-speed">
-          {t("chat.tokenCacheHit", {
-            tokens: String(usage?.cacheReadTokens ?? 0),
-            pct: String(cacheHit),
+      </div>
+    );
+  }
+
+  return (
+    <details className="msg-token-stats" aria-label={aria}>
+      <summary
+        className="msg-token-stats-summary"
+        title={t("chat.tokenDetails")}
+      >
+        {durationLabel ? (
+          <span className="msg-token-stats-duration">{durationLabel}</span>
+        ) : null}
+        <span className="msg-token-stats-usage">
+          {t("chat.tokenSummary", { total: total ?? "0" })}
+        </span>
+        {cacheHit != null ? (
+          <span className="msg-token-stats-cache">
+            {t("chat.tokenCacheSummary", { pct: String(cacheHit) })}
+          </span>
+        ) : null}
+        <ChevronDown
+          className="msg-token-stats-chevron"
+          size={12}
+          strokeWidth={2}
+          aria-hidden
+        />
+      </summary>
+      <div className="msg-token-stats-details">
+        <span>
+          {t("chat.tokenInput", {
+            tokens: formatCompactTurnTokens(usage!.promptTokens, locale),
           })}
         </span>
-      ) : null}
-      {usage?.reasoningReported ? (
-        <span className="msg-token-stats-speed">
-          {t("chat.tokenReasoning", { tokens: String(usage.reasoningTokens) })}
+        <span>
+          {t("chat.tokenOutput", {
+            tokens: formatCompactTurnTokens(usage!.completionTokens, locale),
+          })}
         </span>
-      ) : null}
-      {speed != null ? (
-        <span className="msg-token-stats-speed">
-          {t("chat.tokenSpeed", { n: speed })}
-        </span>
-      ) : null}
-    </div>
+        {cacheHit != null ? (
+          <span>
+            {t("chat.tokenCacheHit", {
+              tokens: formatCompactTurnTokens(
+                usage!.cacheReadTokens,
+                locale,
+              ),
+              pct: String(cacheHit),
+            })}
+          </span>
+        ) : null}
+        {usage?.reasoningReported ? (
+          <span>
+            {t("chat.tokenReasoning", {
+              tokens: formatCompactTurnTokens(usage.reasoningTokens, locale),
+            })}
+          </span>
+        ) : null}
+        {speed != null ? (
+          <span>{t("chat.tokenSpeed", { n: speed })}</span>
+        ) : null}
+      </div>
+    </details>
   );
 }
 
@@ -3293,50 +3333,47 @@ export default function ChatView({
                         ) : null}
                         {m.role === "assistant" &&
                         !isStreamingBubble &&
-                        (m.usage || m.generationDurationSec) ? (
-                          <MessageTokenStats
-                            usage={m.usage}
-                            tokensPerSec={m.tokensPerSec}
-                            generationDurationSec={m.generationDurationSec}
-                          />
+                        m.id !== "welcome" ? (
+                          <div className="assistant-message-footer">
+                            <MessageActions
+                              messageId={m.id}
+                              content={m.content}
+                              role="assistant"
+                              disabled={streaming}
+                              onRegenerate={onRegenerateMessage}
+                              onBranch={onBranchMessage}
+                              onOpenMenu={(anchor) => {
+                                const rect = anchor.getBoundingClientRect();
+                                openAssistantTurnMenu(
+                                  m.id,
+                                  rect.right,
+                                  rect.bottom + 4,
+                                  false,
+                                  anchor,
+                                );
+                              }}
+                            />
+                            {m.usage || m.generationDurationSec ? (
+                              <MessageTokenStats
+                                usage={m.usage}
+                                tokensPerSec={m.tokensPerSec}
+                                generationDurationSec={m.generationDurationSec}
+                              />
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
                       {!isStreamingBubble &&
                       m.id !== "welcome" &&
-                      (m.role === "assistant" ||
-                        (canEditUserMessage && !isEditingUserMessage)) ? (
+                      m.role === "user" &&
+                      canEditUserMessage &&
+                      !isEditingUserMessage ? (
                         <MessageActions
                           messageId={m.id}
                           content={m.content}
-                          role={m.role}
+                          role="user"
                           disabled={streaming}
-                          onRegenerate={
-                            m.role === "assistant"
-                              ? onRegenerateMessage
-                              : undefined
-                          }
-                          onEdit={
-                            m.role === "user"
-                              ? () => beginUserMessageEdit(m)
-                              : undefined
-                          }
-                          onBranch={
-                            m.role === "assistant" ? onBranchMessage : undefined
-                          }
-                          onOpenMenu={
-                            m.role === "assistant"
-                              ? (anchor) => {
-                                  const rect = anchor.getBoundingClientRect();
-                                  openAssistantTurnMenu(
-                                    m.id,
-                                    rect.right,
-                                    rect.bottom + 4,
-                                    false,
-                                    anchor,
-                                  );
-                                }
-                              : undefined
-                          }
+                          onEdit={() => beginUserMessageEdit(m)}
                         />
                       ) : null}
                     </div>

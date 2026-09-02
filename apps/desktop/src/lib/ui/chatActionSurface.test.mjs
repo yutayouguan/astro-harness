@@ -58,6 +58,12 @@ test("hover actions exclude deletion and only the latest user question can be ed
   assert.match(messages, /"chat\.editSubmit": "保存并重新生成"/);
   assert.match(styles, /\.bubble\.user\.is-editing/);
   assert.match(styles, /\.msg-row\.user:hover \.msg-actions/);
+  assert.match(source, /className="assistant-message-footer"/);
+  assert.match(source, /<MessageTokenStats/);
+  assert.match(styles, /\.assistant-message-footer/);
+  assert.match(styles, /\.msg-token-stats\[open\]/);
+  assert.match(messages, /"chat\.tokenSummary": "共 \{total\} tokens"/);
+  assert.match(messages, /"chat\.tokenInput": "输入 \{tokens\}"/);
   assert.doesNotMatch(styles, /\.user-message-edit-trigger/);
   assert.doesNotMatch(source, /MsgDissolveOverlay|onDeleteMessage/);
   assert.doesNotMatch(session, /const deleteMessage|persistAfterEditTruncate/);

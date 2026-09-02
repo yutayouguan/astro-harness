@@ -239,10 +239,6 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
   padding-block: 13px 15px;
 }
 
-.bubble.assistant .msg-token-stats {
-  margin-top: 12px;
-}
-
 @media (prefers-reduced-transparency: reduce) {
   html[data-theme="light"] .bubble:is(.assistant, .user) {
     background: rgba(248, 250, 253, 0.98);

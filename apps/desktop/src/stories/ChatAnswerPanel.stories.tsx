@@ -8,7 +8,10 @@ import MsgActivity from "../components/chat/MsgActivity";
 import MsgActivityGroup from "../components/chat/MsgActivityGroup";
 import MsgReasoning from "../components/chat/MsgReasoning";
 import { MsgTimeline, MsgTimelineStep } from "../components/chat/MsgTimeline";
-import ChatView, { MessageActions } from "../components/chat/ChatView";
+import ChatView, {
+  MessageActions,
+  MessageTokenStats,
+} from "../components/chat/ChatView";
 import type { ChatActivity, ConversationEntry } from "../types";
 
 const terminalActivity: ChatActivity = {
@@ -152,18 +155,34 @@ function ChatAnswerPanel() {
                     <ChatMarkdown content={answer} />
                   </MsgTimelineStep>
                 </MsgTimeline>
-                <div className="msg-token-stats" aria-label="回答统计">
-                  <span className="msg-token-stats-duration">用时 4.8s</span>
-                  <span className="msg-token-stats-usage">428 tokens</span>
+                <div className="assistant-message-footer">
+                  <MessageActions
+                    messageId="storybook-assistant"
+                    content={answer}
+                    role="assistant"
+                    onRegenerate={() => {}}
+                    onBranch={() => {}}
+                    onOpenMenu={() => {}}
+                  />
+                  <MessageTokenStats
+                    generationDurationSec={258}
+                    tokensPerSec={41.4}
+                    usage={{
+                      promptTokens: 188_650,
+                      uncachedInputTokens: 169_049,
+                      completionTokens: 10_683,
+                      totalTokens: 199_333,
+                      cacheReadTokens: 19_601,
+                      cacheWriteTokens: 0,
+                      reasoningTokens: 2_990,
+                      requestCount: 1,
+                      cacheReadReported: true,
+                      cacheWriteReported: false,
+                      reasoningReported: true,
+                    }}
+                  />
                 </div>
               </article>
-              <MessageActions
-                messageId="storybook-assistant"
-                content={answer}
-                role="assistant"
-                onRegenerate={() => {}}
-                onBranch={() => {}}
-              />
             </div>
           </div>
         </main>
