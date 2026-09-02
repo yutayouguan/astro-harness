@@ -1,4 +1,4 @@
-//! 桌面端浏览器侧栏与 Agent `browser_*` 工具共享同一任务浏览器会话。
+//! 桌面端浏览器侧栏与 Agent `browser_*` 工具共享浏览器会话。
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -99,7 +99,7 @@ pub async fn browser_revoke_approval(
 pub async fn browser_panel_control(request: BrowserPanelRequest) -> Result<Value, String> {
     let session_id = request.session_id.trim();
     if session_id.is_empty() {
-        return Err("需要先开始一个对话，才能创建共享浏览器会话".into());
+        return Err("浏览器会话 ID 不能为空".into());
     }
     let raw = tools::builtin::shell::browser::desktop_control(
         session_id,

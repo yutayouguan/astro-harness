@@ -42,6 +42,7 @@ export type BrowserPreviewApi = {
 };
 
 const STORAGE_PREFIX = "astro.browserPreview.";
+export const DESKTOP_BROWSER_SESSION_ID = "desktop-browser-default";
 
 function parseRecord(raw: string | undefined): Record<string, unknown> | null {
   if (!raw?.trim()) return null;
@@ -109,8 +110,7 @@ function status(
     : fallback;
 }
 
-function loadStored(sessionId: string | null): BrowserPreview | null {
-  if (!sessionId) return null;
+function loadStored(sessionId: string): BrowserPreview | null {
   try {
     const value = parseRecord(
       localStorage.getItem(`${STORAGE_PREFIX}${sessionId}`) ?? undefined,
@@ -139,31 +139,31 @@ function loadStored(sessionId: string | null): BrowserPreview | null {
 }
 
 export function useBrowserPreview(sessionId: string | null) {
+  const browserSessionId = sessionId ?? DESKTOP_BROWSER_SESSION_ID;
   const [preview, setPreview] = useState<BrowserPreview | null>(() =>
-    loadStored(sessionId),
+    loadStored(browserSessionId),
   );
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    setPreview(loadStored(sessionId));
+    setPreview(loadStored(browserSessionId));
     setDismissed(false);
-  }, [sessionId]);
+  }, [browserSessionId]);
 
   useEffect(() => {
-    if (!sessionId || !preview) return;
+    if (!preview) return;
     try {
       localStorage.setItem(
-        `${STORAGE_PREFIX}${sessionId}`,
+        `${STORAGE_PREFIX}${browserSessionId}`,
         JSON.stringify(preview),
       );
     } catch {
       // Persistence is best-effort; live preview remains available.
     }
-  }, [preview, sessionId]);
+  }, [browserSessionId, preview]);
 
   const applyResult = useCallback(
     (raw: unknown, fallbackAction?: string) => {
-      if (!sessionId) return;
       const result =
         typeof raw === "string"
           ? parseRecord(raw)
@@ -176,7 +176,7 @@ export function useBrowserPreview(sessionId: string | null) {
         setDismissed(true);
         setPreview(null);
         try {
-          localStorage.removeItem(`${STORAGE_PREFIX}${sessionId}`);
+          localStorage.removeItem(`${STORAGE_PREFIX}${browserSessionId}`);
         } catch {
           // Persistence is best-effort.
         }
@@ -188,7 +188,7 @@ export function useBrowserPreview(sessionId: string | null) {
           : null;
       setDismissed(false);
       setPreview((current) => ({
-        sessionId,
+        sessionId: browserSessionId,
         url: text(result.url) || current?.url || "",
         title: text(result.title) || current?.title || "",
         screenshotPath:
@@ -211,7 +211,7 @@ export function useBrowserPreview(sessionId: string | null) {
           : current?.downloads || [],
       }));
     },
-    [sessionId],
+    [browserSessionId],
   );
 
   const onToolCall = useCallback(
@@ -221,7 +221,6 @@ export function useBrowserPreview(sessionId: string | null) {
       result?: string;
       phase?: string;
     }) => {
-      if (!sessionId) return;
       const name = call.name?.toLowerCase() ?? "";
       if (!name.startsWith("browser_")) return;
       const args = parseRecord(call.arguments_json);
@@ -231,7 +230,7 @@ export function useBrowserPreview(sessionId: string | null) {
       if (call.phase === "started") {
         setDismissed(false);
         setPreview((current) => ({
-          sessionId,
+          sessionId: browserSessionId,
           url: text(args?.url) || current?.url || "",
           title: current?.title || "",
           screenshotPath: current?.screenshotPath ?? null,
@@ -260,12 +259,11 @@ export function useBrowserPreview(sessionId: string | null) {
         );
       }
     },
-    [applyResult, sessionId],
+    [applyResult, browserSessionId],
   );
 
   const control = useCallback(
     async (action: string, args: Record<string, unknown> = {}) => {
-      if (!sessionId) throw new Error("需要先开始一个对话");
       setDismissed(false);
       setPreview((current) =>
         current ? { ...current, status: "connecting", action } : current,
@@ -273,7 +271,7 @@ export function useBrowserPreview(sessionId: string | null) {
       try {
         const result = await invoke<Record<string, unknown>>(
           "browser_panel_control",
-          { request: { sessionId, action, args } },
+          { request: { sessionId: browserSessionId, action, args } },
         );
         applyResult(result, action);
         return result;
@@ -284,23 +282,23 @@ export function useBrowserPreview(sessionId: string | null) {
         throw error;
       }
     },
-    [applyResult, sessionId],
+    [applyResult, browserSessionId],
   );
 
   const dismiss = useCallback(() => {
     setDismissed(true);
     setPreview(null);
-    if (!sessionId) return;
     try {
-      localStorage.removeItem(`${STORAGE_PREFIX}${sessionId}`);
+      localStorage.removeItem(`${STORAGE_PREFIX}${browserSessionId}`);
     } catch {
       // Persistence is best-effort.
     }
-  }, [sessionId]);
+  }, [browserSessionId]);
   const api = useMemo<BrowserPreviewApi>(() => ({ onToolCall }), [onToolCall]);
 
   return {
-    preview: !dismissed && preview?.sessionId === sessionId ? preview : null,
+    preview:
+      !dismissed && preview?.sessionId === browserSessionId ? preview : null,
     api,
     control,
     applyResult,

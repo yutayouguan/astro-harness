@@ -870,7 +870,7 @@ fn validate_url(raw: &str) -> anyhow::Result<String> {
     let loopback = host.eq_ignore_ascii_case("localhost")
         || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
     if !loopback {
-        crate::engine::network::assert_public_http_url(parsed.as_str())?;
+        crate::engine::network::assert_browser_http_url(parsed.as_str())?;
     }
     Ok(normalized)
 }
@@ -2002,7 +2002,7 @@ impl BrowserSession {
         if loopback {
             self.page_allows_loopback && self.loopback_enabled
         } else {
-            crate::engine::network::assert_public_http_url(raw).is_ok()
+            crate::engine::network::assert_browser_http_url(raw).is_ok()
         }
     }
 

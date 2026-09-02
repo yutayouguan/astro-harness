@@ -2161,7 +2161,6 @@ export default function App() {
                   />
                   {activeChatRightDock === "browser" ? (
                     <BrowserDock
-                      sessionId={chat.sessionId}
                       preview={chat.browserPreview}
                       onControl={chat.controlBrowser}
                       onClose={() => setBrowserDockOpen(false)}

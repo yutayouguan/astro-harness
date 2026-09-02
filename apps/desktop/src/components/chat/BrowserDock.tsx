@@ -30,7 +30,6 @@ type BrowserControl = (
 ) => Promise<unknown>;
 
 type Props = {
-  sessionId: string | null;
   preview: BrowserPreview | null;
   onControl: BrowserControl;
   onClose: () => void;
@@ -42,12 +41,7 @@ function formatBytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function BrowserDock({
-  sessionId,
-  preview,
-  onControl,
-  onClose,
-}: Props) {
+export default function BrowserDock({ preview, onControl, onClose }: Props) {
   const { t } = useI18n();
   const [address, setAddress] = useState(preview?.url ?? "");
   const [downloadsOpen, setDownloadsOpen] = useState(false);
@@ -258,7 +252,6 @@ export default function BrowserDock({
           type="button"
           className="browser-new-tab"
           aria-label={t("chat.browserDock.newTab")}
-          disabled={!sessionId}
           onClick={() => void run("new_tab")}
         >
           <Plus size={14} aria-hidden />
@@ -300,7 +293,7 @@ export default function BrowserDock({
         <button
           type="submit"
           className="browser-address-go"
-          disabled={!sessionId || !address.trim()}
+          disabled={!address.trim()}
         >
           {t("chat.browserDock.open")}
         </button>
@@ -376,11 +369,7 @@ export default function BrowserDock({
         ) : (
           <div className="browser-empty">
             <Globe2 size={28} aria-hidden />
-            <strong>
-              {sessionId
-                ? t("chat.browserDock.emptyReady")
-                : t("chat.browserDock.emptyNoSession")}
-            </strong>
+            <strong>{t("chat.browserDock.emptyReady")}</strong>
             <span>{t("chat.browserDock.supports")}</span>
           </div>
         )}

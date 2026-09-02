@@ -33,6 +33,18 @@ pub(crate) fn public_redirect_policy(max_redirects: usize) -> reqwest::redirect:
 
 /// 校验 URL 仅使用 HTTP(S)，且 DNS 没有解析到本机/私网。
 pub(crate) fn assert_public_http_url(raw: &str) -> anyhow::Result<()> {
+    assert_http_url(raw, false)
+}
+
+/// 内置浏览器会跟随系统代理，兼容 Clash 等代理的 Fake-IP DNS 结果。
+///
+/// 仅当 URL 使用域名时允许 DNS 解析到 `198.18.0.0/15`；直接访问该网段的
+/// IP 字面量仍会被 `is_blocked_host` 拒绝。
+pub(crate) fn assert_browser_http_url(raw: &str) -> anyhow::Result<()> {
+    assert_http_url(raw, true)
+}
+
+fn assert_http_url(raw: &str, allow_proxy_fake_ip: bool) -> anyhow::Result<()> {
     let url = reqwest::Url::parse(raw).map_err(|error| anyhow::anyhow!("URL 无效: {error}"))?;
     match url.scheme() {
         "http" | "https" => {}
@@ -51,7 +63,7 @@ pub(crate) fn assert_public_http_url(raw: &str) -> anyhow::Result<()> {
     let mut resolved = false;
     for addr in addrs {
         resolved = true;
-        if is_blocked_ip(addr.ip()) {
+        if is_blocked_resolved_ip(addr.ip(), allow_proxy_fake_ip) {
             anyhow::bail!("拒绝访问解析到私网/本机的地址: {}", addr.ip());
         }
     }
@@ -59,6 +71,14 @@ pub(crate) fn assert_public_http_url(raw: &str) -> anyhow::Result<()> {
         anyhow::bail!("主机未解析到任何地址: {host}");
     }
     Ok(())
+}
+
+fn is_blocked_resolved_ip(ip: IpAddr, allow_proxy_fake_ip: bool) -> bool {
+    is_blocked_ip(ip) && !(allow_proxy_fake_ip && is_proxy_fake_ip(ip))
+}
+
+fn is_proxy_fake_ip(ip: IpAddr) -> bool {
+    matches!(ip, IpAddr::V4(ip) if ip.octets()[0] == 198 && matches!(ip.octets()[1], 18 | 19))
 }
 
 fn is_blocked_host(host: &str) -> bool {
@@ -119,6 +139,18 @@ mod tests {
         assert!(assert_public_http_url("http://198.18.0.1/").is_err());
         assert!(assert_public_http_url("http://224.0.0.1/").is_err());
         assert!(assert_public_http_url("http://metadata.google.internal/").is_err());
+    }
+
+    #[test]
+    fn browser_only_allows_proxy_fake_ip_dns_results() {
+        let fake_ip = IpAddr::V4(Ipv4Addr::new(198, 18, 1, 42));
+        assert!(is_blocked_resolved_ip(fake_ip, false));
+        assert!(!is_blocked_resolved_ip(fake_ip, true));
+        assert!(assert_browser_http_url("http://198.18.1.42/").is_err());
+        assert!(is_blocked_resolved_ip(
+            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 42)),
+            true
+        ));
     }
 
     #[test]

@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const source = (relative) =>
   fs.readFileSync(path.resolve(here, relative), "utf8");
 
-test("browser preview is task-bound and driven by completed browser tool results", () => {
+test("browser preview supports standalone browsing and completed browser tool results", () => {
   const hook = source("../../hooks/chat/useBrowserPreview.ts");
   assert.match(hook, /STORAGE_PREFIX = "astro\.browserPreview\."/);
   assert.match(hook, /name\.startsWith\("browser_"\)/);
@@ -20,7 +20,13 @@ test("browser preview is task-bound and driven by completed browser tool results
   assert.match(hook, /\? "disconnected"/);
   assert.match(hook, /if \(storedStatus === "closed"\) return null/);
   assert.match(hook, /localStorage\.removeItem/);
-  assert.match(hook, /preview\?\.sessionId === sessionId/);
+  assert.match(hook, /DESKTOP_BROWSER_SESSION_ID = "desktop-browser-default"/);
+  assert.match(hook, /sessionId \?\? DESKTOP_BROWSER_SESSION_ID/);
+  assert.match(hook, /preview\?\.sessionId === browserSessionId/);
+
+  const dock = source("../../components/chat/BrowserDock.tsx");
+  assert.doesNotMatch(dock, /disabled=\{!sessionId/);
+  assert.match(dock, /disabled=\{!address\.trim\(\)\}/);
 });
 
 test("floating browser preview supports direct manipulation and accessibility fallbacks", () => {
