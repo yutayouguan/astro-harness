@@ -1,6 +1,7 @@
 //! 工具基础设施：注册表、上下文、分发、解析、schema 与目录。
 
 pub mod catalog;
+pub mod code_mode;
 pub mod context;
 pub mod dispatch;
 pub mod execution;

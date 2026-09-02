@@ -1009,12 +1009,18 @@ fn code_mode_nested_tools(
         };
         let name = crate::runtime::code_mode::normalize_identifier(&wire_name);
         by_identifier.entry(name.clone()).or_insert_with(|| {
+            // 与 Codex 一致：ALL_TOOLS 只保留 name/description，但 description
+            // 自带精确调用声明，因此不需要维护另一套 getToolSchema API。
+            let description = tools::render_code_mode_tool_description(
+                &name,
+                &entry.description,
+                &tools::sanitize_tool_schema(entry.schema.clone()),
+                entry.freeform_format.as_ref(),
+            );
             crate::runtime::code_mode::NestedToolMetadata {
                 name,
                 wire_name,
-                description: entry.description.clone(),
-                parameters: tools::sanitize_tool_schema(entry.schema.clone()),
-                format: entry.freeform_format.clone(),
+                description,
             }
         });
     }

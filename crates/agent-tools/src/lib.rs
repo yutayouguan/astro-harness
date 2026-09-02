@@ -41,6 +41,7 @@ pub use context::{
     ToolContext,
 };
 pub use dispatch::{builtin_handler_names, dispatch_tool, tool_requires_in_process_write};
+pub use engine::code_mode::render_tool_description as render_code_mode_tool_description;
 pub use engine::execution::{
     AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
     SpawnAgentDispatchRequest,

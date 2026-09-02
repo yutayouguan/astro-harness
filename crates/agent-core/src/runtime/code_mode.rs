@@ -39,13 +39,6 @@ const encode = (value) => {
   const encoded = JSON.stringify(value);
   return encoded === undefined ? JSON.stringify(String(value)) : encoded;
 };
-const deepFreeze = (value) => {
-  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const child of Object.values(value)) deepFreeze(child);
-  }
-  return value;
-};
 const decodeResponse = (encoded) => {
   const response = JSON.parse(encoded);
   if (!response.ok) throw new Error(response.error);
@@ -61,7 +54,6 @@ const exitToken = globalThis.__astroExitToken;
 const stores = new Map(Object.entries(JSON.parse(globalThis.__astroInitialStoresJson)));
 const tools = Object.create(null);
 const toolMetadata = JSON.parse(globalThis.__astroToolMetadataJson);
-const toolSchemas = new Map();
 for (const tool of toolMetadata) {
   tools[tool.name] = async (input) => decodeResponse(
     await hostInvoke(
@@ -69,10 +61,6 @@ for (const tool of toolMetadata) {
       JSON.stringify(input === undefined ? null : input),
     ),
   );
-  const definition = tool.format
-    ? { type: 'custom', name: tool.name, description: tool.description, format: tool.format }
-    : { type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters };
-  toolSchemas.set(tool.name, deepFreeze(definition));
 }
 
 let nextTimerId = 1;
@@ -100,7 +88,6 @@ globalThis.tools = Object.freeze(tools);
 globalThis.ALL_TOOLS = Object.freeze(
   toolMetadata.map(({ name, description }) => Object.freeze({ name, description })),
 );
-globalThis.getToolSchema = (name) => toolSchemas.get(String(name));
 globalThis.text = (value) => hostEmit('text', encode(printable(value)), null);
 globalThis.image = (value, detail) => hostEmit(
   'image',
@@ -144,9 +131,6 @@ pub(crate) struct NestedToolMetadata {
     pub(crate) name: String,
     pub(crate) wire_name: String,
     pub(crate) description: String,
-    pub(crate) parameters: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) format: Option<types::FreeformToolFormat>,
 }
 
 #[derive(Debug, Clone)]
@@ -738,12 +722,6 @@ mod tests {
                     name: "echo".into(),
                     wire_name: "echo".into(),
                     description: "echo input".into(),
-                    parameters: serde_json::json!({
-                        "type": "object",
-                        "properties": {"answer": {"type": "number"}},
-                        "required": ["answer"]
-                    }),
-                    format: None,
                 }],
                 std::env::current_dir().unwrap().as_path(),
             )
@@ -769,51 +747,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn tool_schema_is_available_on_demand_but_catalog_stays_compact() {
+    async fn all_tools_description_carries_the_tool_declaration() {
         let service = CodeModeService::default();
         let source = parse_exec_source(
-            "text([typeof toolMetadata, typeof toolSchemas].join(','));\
-             text(Object.hasOwn(ALL_TOOLS[0], 'parameters'));\
-             text(getToolSchema('echo').parameters.properties.answer.type);\
-             text(getToolSchema('patch').format.syntax);\
-             text(Object.isFrozen(getToolSchema('echo').parameters));\
-             text(getToolSchema('missing') === undefined);",
+            "text(Object.keys(ALL_TOOLS[0]).sort().join(','));\
+             text(ALL_TOOLS[0].description.includes('echo(args:'));\
+             text(typeof getToolSchema);",
         )
         .unwrap();
-        let tools = vec![
-            NestedToolMetadata {
-                name: "echo".into(),
-                wire_name: "echo".into(),
-                description: "echo input".into(),
-                parameters: serde_json::json!({
-                    "type": "object",
-                    "properties": {"answer": {"type": "number"}},
-                    "required": ["answer"]
-                }),
-                format: None,
-            },
-            NestedToolMetadata {
-                name: "patch".into(),
-                wire_name: "patch".into(),
-                description: "apply a patch".into(),
-                parameters: serde_json::json!({"type": "object", "properties": {}}),
-                format: Some(types::FreeformToolFormat {
-                    r#type: "grammar".into(),
-                    syntax: "lark".into(),
-                    definition: "start: /.+/".into(),
-                }),
-            },
-        ];
+        let tools = vec![NestedToolMetadata {
+            name: "echo".into(),
+            wire_name: "echo".into(),
+            description: concat!(
+                "echo input\n\n",
+                "exec tool declaration:\n",
+                "```ts\n",
+                "declare const tools: { echo(args: { answer: number }): Promise<unknown>; };\n",
+                "```"
+            )
+            .into(),
+        }];
         let cwd = std::env::current_dir().unwrap();
         let cell_id = service.execute(&source, &tools, &cwd).await.unwrap();
-        for expected in [
-            "undefined,undefined",
-            "false",
-            "number",
-            "lark",
-            "true",
-            "true",
-        ] {
+        for expected in ["description,name", "true", "undefined"] {
             assert!(matches!(
                 next(&service, &cell_id).await,
                 RuntimeEvent::Content { value, .. } if value == expected

@@ -1,6 +1,6 @@
 # Codex 原生工具协议、Tool Search 与 Code Mode 详细设计
 
-> **Harness 当前基线（2026-09-02）**：Direct 工具链已完整接入；进程内 QuickJS Code Mode runtime 及 `getToolSchema(name)` 按需 Schema 查询已实现。模型目录的 `CodeModeOnly` 选择和仅暴露 `exec` / `wait` 的 Provider 投影仍是待接线项，不应把“runtime 存在”误写为“模型已启用”。
+> **Harness 当前基线（2026-09-02）**：Direct 工具链已完整接入；进程内 QuickJS Code Mode runtime 及自描述 `ALL_TOOLS` 目录已实现。模型目录的 `CodeModeOnly` 选择和仅暴露 `exec` / `wait` 的 Provider 投影仍是待接线项，不应把“runtime 存在”误写为“模型已启用”。
 
 > 阶段：详细设计
 >
@@ -441,8 +441,7 @@ text(result);
 | 能力 | 用途 |
 | --- | --- |
 | `tools.<normalized_name>(input)` | 调用 Astro 工具 |
-| `ALL_TOOLS` | 列出可用嵌套工具的名称和描述 |
-| `getToolSchema(name)` | 按 `ALL_TOOLS[].name` 查询单个工具的完整 Function parameters 或 Freeform format；未命中返回 `undefined` |
+| `ALL_TOOLS` | 列出可用嵌套工具的名称和自描述声明；对象形状固定为 `{name, description}` |
 | `text(value)` | 追加文本输出 |
 | `image(value, detail)` / `audio(value)` | 输出媒体事件 |
 | `generatedImage(value)` | 输出生成图片事件 |
@@ -470,55 +469,46 @@ oneshot result: Ok(value) | Err(error)
 resolve/reject JavaScript Promise
 ```
 
-### 7.4 两阶段工具发现与按需 Schema
+### 7.4 分层工具声明
 
-CodeModeOnly 不把所有业务工具 Schema 注入 Provider 请求。工具发现分为两阶段：
+CodeModeOnly 不把所有业务工具 Schema 注入 Provider 请求。声明按热路径分层披露：
 
-1. `ALL_TOOLS` 是轻量索引，每项只含 `name` 和 `description`，用于在 JavaScript 内筛选候选工具。
-2. 选定后调用 `getToolSchema(name)`，只把该工具的完整定义输出给模型。
+1. Direct 工具的精简 TypeScript 声明随 `exec` 描述预置，模型首次采样即可生成调用代码。
+2. Deferred 工具不进入初始 `exec` 描述，但仍存在于 cell 的 `ALL_TOOLS`。
+3. `ALL_TOOLS` 每项只含 `name` 和 `description`；description 末尾携带同形 TypeScript 调用声明，不再提供独立的 `getToolSchema()`。
 
-Function 工具返回：
+Function 工具描述示例：
 
-```json
-{
-  "type": "function",
-  "name": "exec_command",
-  "description": "...",
-  "parameters": {
-    "type": "object",
-    "properties": {}
-  }
-}
+```ts
+declare const tools: {
+  exec_command(args: {
+    command: string;
+    cwd?: string;
+  }): Promise<unknown>;
+};
 ```
 
-Freeform 工具返回：
+Freeform 工具描述示例：
 
-```json
-{
-  "type": "custom",
-  "name": "apply_patch",
-  "description": "...",
-  "format": {
-    "type": "grammar",
-    "syntax": "lark",
-    "definition": "..."
-  }
-}
+```ts
+declare const tools: {
+  apply_patch(input: string): Promise<unknown>;
+};
 ```
 
-典型编排：
+延迟工具发现示例：
 
 ```javascript
 const candidates = ALL_TOOLS.filter(({ name, description }) =>
   /calendar|schedule/i.test(`${name} ${description}`)
 );
 if (candidates.length === 0) throw new Error("no matching tool");
-
-const definition = getToolSchema(candidates[0].name);
-text(definition); // 模型获得精确参数合同
+text(candidates.slice(0, 5)); // description 已含调用声明
 ```
 
-Schema 在 Rust 侧从当前 `ToolRegistry.available_tools()` 快照生成，Function parameters 经过 `sanitize_tool_schema()` 清理。`Hidden`、`exec`、`wait` 和 `tool_search` 不进入 cell 目录。`ALL_TOOLS` 和 `getToolSchema()` 的返回对象均冻结，脚本不能篡改后续查询结果。完整 Schema 仅存在本地 QuickJS 内存，除非脚本显式调用 `text()`，不会进入模型上下文。
+声明在 Rust 侧从当前 `ToolRegistry.available_tools()` 快照生成，Function parameters 先经过 `sanitize_tool_schema()` 清理，再转换为 TypeScript；Freeform 工具使用 `input: string`。`Hidden`、`exec`、`wait` 和 `tool_search` 不进入 cell 目录。`ALL_TOOLS` 数组及条目均冻结，脚本不能篡改后续查询结果。
+
+这一设计消除了“先查名称、再调用另一个 Schema API”的重复协议，但不会掩盖延迟披露的成本：模型若事先不知道某个 Deferred 工具，仍需先输出筛选到的 description，再经过一次模型采样生成实际调用。常用 Direct 工具通过预置声明避免这次额外往返。
 
 ### 7.5 `yield` / `wait` 生命周期
 
@@ -586,7 +576,7 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 | 模式 | Provider `tools` 中直接可见 | 业务工具发现 | 调用路径 |
 | --- | --- | --- | --- |
 | `Direct` | Direct Function / Freeform / Namespace + `tool_search`；每个工具带完整 Schema | Deferred 经 Provider 原生 `tool_search` 按需返回 | 模型直接产生原生 tool call |
-| `CodeModeOnly` | 仅 `exec` / `wait` | JS 内先查 `ALL_TOOLS`，再用 `getToolSchema(name)` 按需取完整定义 | 模型产生 JavaScript，cell 通过 `tools.<name>(input)` 嵌套调用 |
+| `CodeModeOnly` | 仅 `exec` / `wait` | Direct 声明预置于 `exec` 描述；Deferred 从 `ALL_TOOLS[].description` 检索 | 模型产生 JavaScript，cell 通过 `tools.<name>(input)` 嵌套调用 |
 
 `ToolExposure` 与模式正交：它描述工具条目在注册表中的披露策略，模式决定该策略如何投影到本次 Provider step。两者都不是授权；执行仍必须经过工具 gate、approval 和 sandbox。
 
@@ -602,7 +592,7 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 1. Direct 模型调用必须命中 `model_visible_specs`。
 2. CodeModeOnly 模型不得伪造业务工具的顶层 call；顶层只接受 `exec` / `wait`。
 3. cell 嵌套调用只能命中该 step 冻结的可路由工具快照，不允许按名称直接穿透全局 Registry。
-4. `ALL_TOOLS`、`getToolSchema()` 和 `tools` 必须来自同一份快照，避免“看见 A Schema、却调用 B handler”。
+4. `ALL_TOOLS` 与 `tools` 必须来自同一份快照，避免“看见 A 声明、却调用 B handler”。
 5. 无论哪种模式，tool result 都使用同一持久化、spill、Hook 和审计链。
 
 ### 9.4 当前接线状态
@@ -611,7 +601,7 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 | --- | --- |
 | Direct Function / Freeform / Namespace | 已接入 |
 | Direct `tool_search` + Deferred 路由 | 已接入 |
-| QuickJS cell、`exec/wait` 调度、按需 Schema 查询 | 已实现 runtime |
+| QuickJS cell、`exec/wait` 调度、自描述 `ALL_TOOLS` | 已实现 runtime |
 | 模型目录 `tool_mode=CodeModeOnly` | 待接入 |
 | Provider step 仅投影 `exec/wait` | 待接入 |
 
@@ -623,7 +613,7 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 4. `tool_search` 激活在下一次 sampling step 生效，MCP 热重载不丢失状态。
 5. 模型直调只能命中当前 Step 真正可见的路由。
 6. 历史只回放已有匹配结果的 tool call，避免孤立调用破坏 Provider 请求。
-7. CodeModeOnly 的轻量目录不带完整 Schema；完整定义只能通过 `getToolSchema(name)` 按需读取。
+7. CodeModeOnly 的 `ALL_TOOLS` 对象形状固定为 `{name, description}`；description 是包含 TypeScript 调用声明的自描述合同。
 
 ## 11. 实现映射
 
@@ -635,7 +625,8 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 | MCP 动态注册 | `crates/agent-core/src/runtime/mod.rs::attach_mcp_tools` |
 | Responses 请求 / SSE / 历史 | `crates/agent-providers/src/openai/responses.rs` |
 | Step 级可见/可路由快照 | `crates/agent-core/src/runtime/step_context.rs` / `tool_router.rs` |
-| QuickJS cell 与 `getToolSchema` | `crates/agent-core/src/runtime/code_mode.rs` |
+| QuickJS cell 与 `ALL_TOOLS` | `crates/agent-core/src/runtime/code_mode.rs` |
+| JSON Schema 到 TypeScript 声明 | `crates/agent-tools/src/engine/code_mode.rs` |
 | Code Mode 嵌套工具快照与调度 | `crates/agent-core/src/streaming/tools_exec.rs` |
 
 ## 12. 验证与回归
@@ -651,7 +642,7 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
   - `exec` / `wait` 不进入模型 schema。
 - `crates/agent-core/src/runtime/code_mode.rs` 单元测试
   - QuickJS 嵌套工具调用与 `yield/wait` 恢复；
-  - `ALL_TOOLS` 保持轻量，`getToolSchema(name)` 按需返回完整定义；
+  - `ALL_TOOLS` 保持 `{name, description}` 形状，description 携带 TypeScript 调用声明；
   - 定时器、宿主全局隐藏和忙循环中断。
 - `crates/agent-providers/src/openai/responses.rs` 单元测试
   - custom call/output 回放；

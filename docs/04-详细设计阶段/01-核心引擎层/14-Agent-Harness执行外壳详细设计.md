@@ -157,9 +157,9 @@ Code Mode 原先将多步确定性编排放入一个 JavaScript cell；保留的
 - 共享 `store/load` 位于 Session 服务而不是 QuickJS context；
 - `yield_control()` 使 cell 保持存活，`wait` 负责 resume/terminate；
 - 嵌套工具通过 Rust 异步通道回到 Host。
-- `ALL_TOOLS` 只投影名称和描述，`getToolSchema(name)` 按需返回单个工具的完整参数或 grammar 合同。
+- `ALL_TOOLS` 只投影名称和描述；description 自带精简 TypeScript 调用声明，不另设 `getToolSchema()`。
 
-Direct 模式在 Provider `tools` 中传递每个工具的完整 Schema；CodeModeOnly 顶层只传递 `exec` / `wait`，业务工具只能从 cell 的冻结快照调用。CodeModeOnly 宿主不可用时必须 fail closed，不能自动扩大为 Direct 工具集。
+Direct 模式在 Provider `tools` 中传递每个工具的完整 Schema；CodeModeOnly 顶层只传递 `exec` / `wait`，常用工具声明预置在 `exec` 描述中，延迟工具可从 `ALL_TOOLS` 检索，业务调用只能命中 cell 的冻结快照。CodeModeOnly 宿主不可用时必须 fail closed，不能自动扩大为 Direct 工具集。
 
 Code Mode 不是绕过 Harness 的后门；它是 Harness 内的另一种工具调度器。
 
