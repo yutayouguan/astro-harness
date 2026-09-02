@@ -12,6 +12,7 @@ pub mod approval;
 pub mod builtin;
 pub mod engine;
 pub mod interaction_mode;
+pub mod terminal_session;
 
 pub use approval::{
     classify_dangerous_command, command_type_rule_candidate, is_hardline_blocked,
@@ -50,6 +51,9 @@ pub use registry::DynToolHandler;
 pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};
 pub use sandbox::{SandboxAuditKind, SandboxAuditMetadata};
 pub use schema::{sanitize_tool_schema, schema_for_args, schema_has_vendor_hazards};
+pub use terminal_session::{
+    shared_terminal_sessions, TerminalReadResult, TerminalSessionInfo, TerminalSessionManager,
+};
 pub use types::{ParsedToolCall, ToolCallAccumulator, ToolCallDelta};
 
 // 宏：`tool_schema!` / `register_tool_schemars!` / `define_tool_args!` / `submit_builtin_tool!`

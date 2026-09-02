@@ -6,7 +6,7 @@
 //! 默认工作目录为 workspace；可选 `cwd` / `workdir` 指定相对子目录。
 //! 默认超时 60 秒（`timeout_secs`，上限 900s）。stdout/stderr 有 64KiB 截断。
 //!
-//! 会话管理参数（stub，尚未持久化）：
+//! 会话管理参数：
 //! - `yield_time_ms`：最长等待毫秒（默认 10000，范围 250-30000）
 //! - `max_output_tokens`：输出 token 预算（默认 10000）
 //! - `tty`：分配 PTY
@@ -148,10 +148,25 @@ async fn dispatch_run(
     let cwd = if let Some(rel) = effective_cwd.map(str::trim).filter(|s| !s.is_empty()) {
         crate::path_safe::resolve_safe_in_roots(&root, &ctx.workspace_roots, rel)?
     } else {
-        root
+        root.clone()
     };
     std::fs::create_dir_all(&cwd)?;
     let audit = ctx.sandbox_audit_metadata("exec_command");
+
+    if parsed.tty.unwrap_or(false) {
+        if parsed.background.unwrap_or(false) {
+            anyhow::bail!("PTY terminal sessions cannot run with background=true");
+        }
+        return run_in_shared_terminal(
+            ctx,
+            command,
+            &root,
+            &cwd,
+            parsed.yield_time_ms,
+            parsed.max_output_tokens,
+        )
+        .await;
+    }
 
     if parsed.background.unwrap_or(false) {
         if ctx.managed_network.is_some() {
@@ -304,6 +319,62 @@ async fn dispatch_run(
         &body,
         types::MAX_TOOL_RESULT_BYTES,
     ))
+}
+
+pub(super) async fn run_in_shared_terminal(
+    ctx: &ToolContext<'_>,
+    command: &str,
+    root: &std::path::Path,
+    cwd: &std::path::Path,
+    yield_time_ms: Option<i64>,
+    max_output_tokens: Option<usize>,
+) -> anyhow::Result<String> {
+    if ctx.managed_network.is_some() {
+        anyhow::bail!(
+            "shared PTY sessions do not support attempt-scoped managed network; use tty=false"
+        );
+    }
+    // A shared terminal outlives the current tool attempt, so never retain one-shot
+    // workspace-write grants or attempt-scoped sandbox policy in its process.
+    let policy = crate::context::build_command_sandbox_policy_with_roots(
+        &ctx.memory_dir,
+        root,
+        &ctx.workspace_roots,
+        ctx.permission_profile.as_deref(),
+        false,
+        None,
+    )?;
+    let manager = crate::terminal_session::shared_terminal_sessions();
+    let session = manager.ensure_shell(root, cwd, &policy, 120, 32)?;
+    let mut input = command_for_shared_terminal(command, cwd);
+    if !input.ends_with('\n') && !input.ends_with('\r') {
+        input.push('\n');
+    }
+    let wait_ms = yield_time_ms.unwrap_or(1_000).clamp(0, 30_000) as u64;
+    let max_bytes = max_output_tokens
+        .unwrap_or(10_000)
+        .saturating_mul(4)
+        .clamp(1, 64 * 1024);
+    let output = manager
+        .interact_for_agent(session.id, Some(input.as_bytes()), true, max_bytes, wait_ms)
+        .await?;
+    let text = String::from_utf8_lossy(&output.data);
+    Ok(format!(
+        "Terminal session {} (running={}, next_cursor={})\n{}",
+        session.id, output.running, output.next_cursor, text
+    ))
+}
+
+#[cfg(unix)]
+fn command_for_shared_terminal(command: &str, cwd: &std::path::Path) -> String {
+    let quoted_cwd = cwd.to_string_lossy().replace('\'', "'\"'\"'");
+    format!("cd -- '{quoted_cwd}' && {command}")
+}
+
+#[cfg(windows)]
+fn command_for_shared_terminal(command: &str, cwd: &std::path::Path) -> String {
+    let quoted_cwd = cwd.to_string_lossy().replace('\'', "''");
+    format!("Set-Location -LiteralPath '{quoted_cwd}'; {command}")
 }
 
 #[cfg(test)]

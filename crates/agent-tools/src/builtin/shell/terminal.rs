@@ -37,6 +37,15 @@ pub struct TerminalArgs {
     /// `status` / `wait` 输出分页的字节偏移量。
     #[serde(default)]
     pub offset: Option<usize>,
+    /// 使用共享 PTY 终端；用户可在 Desktop Terminal Dock 中看到并接管。
+    #[serde(default)]
+    pub tty: Option<bool>,
+    /// PTY 命令写入后等待输出的毫秒数。
+    #[serde(default)]
+    pub yield_time_ms: Option<i64>,
+    /// PTY 返回输出的 token 预算。
+    #[serde(default)]
+    pub max_output_tokens: Option<usize>,
 }
 
 /// `timeout_secs` 上限，防止命令永久挂起占用执行器。
@@ -52,7 +61,7 @@ pub fn register(registry: &mut ToolRegistry) {
         toolset: "terminal".to_string(),
         description: "Run a shell command or manage background jobs. \
 action=run (default): command required; cwd=project_root or workspace; timeout_secs max 900; \
-background=true returns job id. \
+background=true returns job id; tty=true runs in the shared Desktop terminal session. \
 action=list|status|wait|kill: manage background jobs (id required except list; \
 status/wait support offset; wait timeout_secs default 30 max 600). \
 stdout/stderr capped at 64KiB (run) / 60KiB per poll (jobs)."
@@ -130,6 +139,21 @@ async fn dispatch_run(
     };
     std::fs::create_dir_all(&cwd)?;
     let audit = ctx.sandbox_audit_metadata("terminal");
+
+    if parsed.tty.unwrap_or(false) {
+        if parsed.background.unwrap_or(false) {
+            anyhow::bail!("PTY terminal sessions cannot run with background=true");
+        }
+        return super::exec_command::run_in_shared_terminal(
+            ctx,
+            command,
+            &root,
+            &cwd,
+            parsed.yield_time_ms,
+            parsed.max_output_tokens,
+        )
+        .await;
+    }
 
     if parsed.background.unwrap_or(false) {
         if ctx.managed_network.is_some() {

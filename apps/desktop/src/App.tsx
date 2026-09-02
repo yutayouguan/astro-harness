@@ -1,5 +1,7 @@
 /** 根布局：侧栏导航、聊天与各功能面板编排。 */
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -124,6 +126,7 @@ import {
   Globe2,
   MessageSquare,
   MoreHorizontal,
+  SquareTerminal,
 } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import { dynamicGradientForTab } from "./lib/ui/dynamicGradient";
@@ -140,6 +143,7 @@ import type {
   ProviderModelsResult,
 } from "./types";
 
+const TerminalDock = lazy(() => import("./components/chat/TerminalDock"));
 const ACTIVE_PROJECT_KEY = "astro.activeProjectId";
 
 export default function App() {
@@ -365,6 +369,7 @@ export default function App() {
   }, []);
   const [projectFilesWidth, setProjectFilesWidth] = useState(264);
   const [browserDockOpen, setBrowserDockOpen] = useState(false);
+  const [terminalDockOpen, setTerminalDockOpen] = useState(false);
   const [sideSessionId, setSideSessionId] = useState<string | null>(null);
   const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(
     null,
@@ -373,6 +378,7 @@ export default function App() {
     files: FileChangeItem[];
     selectedPath: string;
   } | null>(null);
+  const activeProjectRoot = activeProject?.roots.find(Boolean) ?? null;
 
   const closeSideChat = useCallback(async () => {
     const sideId = sideSessionId;
@@ -672,6 +678,21 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [nav, startNewChat]);
+
+  // ── ⌘/Ctrl+J：打开或折叠项目共享终端 ────────────────────────────
+  useEffect(() => {
+    if (nav !== "chat" || !activeProjectRoot) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== "j" || event.isComposing) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      event.preventDefault();
+      setTerminalDockOpen((open) => !open);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeProjectRoot, nav]);
 
   // ── macOS open-preferences / open-about listener ─────────────────────────
   useEffect(() => {
@@ -1948,6 +1969,17 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      className={`header-icon-btn ${terminalDockOpen ? "is-active" : ""}`}
+                      onClick={() => setTerminalDockOpen((open) => !open)}
+                      title={t("chat.terminal.toggle")}
+                      aria-label={t("chat.terminal.toggle")}
+                      aria-pressed={terminalDockOpen}
+                      disabled={!activeProjectRoot}
+                    >
+                      <SquareTerminal width={16} height={16} />
+                    </button>
+                    <button
+                      type="button"
                       className={`header-icon-btn ${activeChatRightDock === "side-chat" ? "is-active" : ""}`}
                       onClick={() =>
                         void (sideSessionId ? closeSideChat() : startSideChat())
@@ -2147,6 +2179,16 @@ export default function App() {
                           : null
                       }
                     />
+                    {terminalDockOpen && activeProjectRoot && activeProject ? (
+                      <Suspense fallback={null}>
+                        <TerminalDock
+                          projectId={activeProject.id}
+                          projectName={activeProject.name}
+                          projectRoot={activeProjectRoot}
+                          onClose={() => setTerminalDockOpen(false)}
+                        />
+                      </Suspense>
+                    ) : null}
                     {colorStyle === "dynamic" ? (
                       <DynamicPaletteButton
                         label={t("prefs.colorStyle.reshuffle")}

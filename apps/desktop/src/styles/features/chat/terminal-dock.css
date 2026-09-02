@@ -1,0 +1,163 @@
+.terminal-dock {
+  --terminal-dock-height: 260px;
+  position: relative;
+  flex: 0 0 var(--terminal-dock-height);
+  min-height: 160px;
+  max-height: 65vh;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border-top: 0.5px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  background: color-mix(in srgb, var(--sidebar-bg) 96%, black 4%);
+  box-shadow: 0 -10px 28px rgba(var(--shadow-ink), 0.07);
+}
+
+.terminal-dock-resizer {
+  position: absolute;
+  z-index: 3;
+  top: -5px;
+  right: 0;
+  left: 0;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.terminal-dock-resizer::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 42px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-soft) 34%, transparent);
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 0.14s ease;
+}
+
+.terminal-dock-resizer:hover::after,
+.terminal-dock-resizer:focus-visible::after {
+  opacity: 1;
+}
+
+.terminal-dock-header {
+  flex: 0 0 34px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 8px 3px 12px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  user-select: none;
+}
+
+.terminal-dock-identity,
+.terminal-dock-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.terminal-dock-identity strong {
+  color: var(--ink);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.terminal-dock-identity > span:not(.terminal-dock-status) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-dock-shared {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone-soft) 56%, transparent);
+  color: var(--tone);
+}
+
+.terminal-dock-status {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.terminal-dock-status.is-running {
+  background: #38b86b;
+  box-shadow: 0 0 0 3px rgba(56, 184, 107, 0.12);
+}
+
+.terminal-dock-actions button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.terminal-dock-actions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--tone) 20%, transparent);
+  background: color-mix(in srgb, var(--tone-soft) 48%, transparent);
+  color: var(--ink);
+}
+
+.terminal-dock-actions button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.terminal-dock-error {
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--danger, #d14f4f);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-dock-screen {
+  flex: 1;
+  min-height: 0;
+  padding: 2px 8px 7px 10px;
+  overflow: hidden;
+}
+
+.terminal-dock-screen .xterm,
+.terminal-dock-screen .xterm-screen,
+.terminal-dock-screen .xterm-viewport {
+  height: 100%;
+}
+
+.terminal-dock-screen .xterm-viewport {
+  scrollbar-width: thin;
+  background: transparent !important;
+}
+
+@media (max-height: 560px) {
+  .terminal-dock {
+    min-height: 120px;
+    max-height: 55vh;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .terminal-dock {
+    background: var(--surface-panel-background);
+  }
+}

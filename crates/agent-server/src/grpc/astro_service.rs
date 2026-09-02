@@ -24,7 +24,9 @@ use proto::{
     RealtimeConversationTextRequest, RealtimeOperationResponse, RealtimeVoicesResponse,
     ResolveElicitationRequest, RunUserShellCommandRequest, RunUserShellCommandResponse,
     SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList, SkillRequest,
-    SteerChatRequest, SteerChatResponse, UpdateTurnSettingsRequest, UpdateTurnSettingsResponse,
+    SteerChatRequest, SteerChatResponse, TerminalIdRequest, TerminalOpenRequest,
+    TerminalReadRequest, TerminalReadResponse, TerminalResizeRequest, TerminalSessionResponse,
+    TerminalWriteRequest, UpdateTurnSettingsRequest, UpdateTurnSettingsResponse,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
@@ -119,6 +121,18 @@ fn require_realtime_session_id(session_id: &str) -> Result<&str, Status> {
 
 fn nonempty(value: String) -> Option<String> {
     (!value.trim().is_empty()).then_some(value)
+}
+
+fn terminal_session_response(info: tools::TerminalSessionInfo) -> TerminalSessionResponse {
+    TerminalSessionResponse {
+        id: info.id,
+        scope: info.scope,
+        cwd: info.cwd,
+        running: info.running,
+        exit_code: info.exit_code,
+        base_cursor: info.base_cursor,
+        end_cursor: info.end_cursor,
+    }
 }
 
 async fn submit_realtime_op(
@@ -2870,6 +2884,104 @@ impl AstroService for AstroServiceImpl {
             item_id: launch.item_id,
             attached_to_active_turn: launch.attached_to_active_turn,
         }))
+    }
+
+    async fn open_terminal(
+        &self,
+        request: Request<TerminalOpenRequest>,
+    ) -> Result<Response<TerminalSessionResponse>, Status> {
+        let req = request.into_inner();
+        let scope = PathBuf::from(req.scope.trim());
+        if req.scope.trim().is_empty() {
+            return Err(Status::invalid_argument("terminal scope is required"));
+        }
+        let cwd = if req.cwd.trim().is_empty() {
+            scope.clone()
+        } else {
+            PathBuf::from(req.cwd.trim())
+        };
+        let policy = tools::context::build_command_sandbox_policy_with_roots(
+            &self.memory_dir,
+            &scope,
+            std::slice::from_ref(&scope),
+            None,
+            false,
+            None,
+        )
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        let info = tools::shared_terminal_sessions()
+            .ensure_shell(
+                &scope,
+                &cwd,
+                &policy,
+                req.cols.min(u16::MAX.into()) as u16,
+                req.rows.min(u16::MAX.into()) as u16,
+            )
+            .map_err(|error| Status::invalid_argument(error.to_string()))?;
+        Ok(Response::new(terminal_session_response(info)))
+    }
+
+    async fn read_terminal(
+        &self,
+        request: Request<TerminalReadRequest>,
+    ) -> Result<Response<TerminalReadResponse>, Status> {
+        let req = request.into_inner();
+        let result = tools::shared_terminal_sessions()
+            .read(
+                req.id,
+                req.cursor,
+                req.max_bytes.max(1) as usize,
+                req.wait_ms.into(),
+            )
+            .await
+            .map_err(|error| Status::not_found(error.to_string()))?;
+        Ok(Response::new(TerminalReadResponse {
+            id: result.id,
+            data: result.data,
+            next_cursor: result.next_cursor,
+            dropped: result.dropped,
+            running: result.running,
+            exit_code: result.exit_code,
+        }))
+    }
+
+    async fn write_terminal(
+        &self,
+        request: Request<TerminalWriteRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        if req.data.len() > 64 * 1024 {
+            return Err(Status::invalid_argument("terminal write exceeds 64 KiB"));
+        }
+        tools::shared_terminal_sessions()
+            .write(req.id, &req.data)
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn resize_terminal(
+        &self,
+        request: Request<TerminalResizeRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        tools::shared_terminal_sessions()
+            .resize(
+                req.id,
+                req.cols.min(u16::MAX.into()) as u16,
+                req.rows.min(u16::MAX.into()) as u16,
+            )
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn kill_terminal(
+        &self,
+        request: Request<TerminalIdRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        tools::shared_terminal_sessions()
+            .kill(request.into_inner().id)
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        Ok(Response::new(Empty {}))
     }
 
     /// 文生图流：先推送 progress，再推送 `image_data` 或 error。

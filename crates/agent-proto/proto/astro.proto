@@ -36,6 +36,11 @@ service AstroService {
   rpc UpdateTurnSettings(UpdateTurnSettingsRequest) returns (UpdateTurnSettingsResponse);
   rpc ApproveGuardianDeniedAction(ApproveGuardianDeniedActionRequest) returns (Empty);
   rpc RunUserShellCommand(RunUserShellCommandRequest) returns (RunUserShellCommandResponse);
+  rpc OpenTerminal(TerminalOpenRequest) returns (TerminalSessionResponse);
+  rpc ReadTerminal(TerminalReadRequest) returns (TerminalReadResponse);
+  rpc WriteTerminal(TerminalWriteRequest) returns (Empty);
+  rpc ResizeTerminal(TerminalResizeRequest) returns (Empty);
+  rpc KillTerminal(TerminalIdRequest) returns (Empty);
   // 文生图流：进度、图片字节或错误。
   rpc GenerateImage(ImageRequest) returns (stream ImageEvent);
   // 列出已安装且可用于提示的技能。
@@ -443,6 +448,52 @@ message RunUserShellCommandResponse {
   string turn_id = 2;
   string item_id = 3;
   bool attached_to_active_turn = 4;
+}
+
+message TerminalOpenRequest {
+  string scope = 1;
+  string cwd = 2;
+  uint32 cols = 3;
+  uint32 rows = 4;
+}
+
+message TerminalIdRequest { uint64 id = 1; }
+
+message TerminalReadRequest {
+  uint64 id = 1;
+  uint64 cursor = 2;
+  uint32 max_bytes = 3;
+  uint32 wait_ms = 4;
+}
+
+message TerminalWriteRequest {
+  uint64 id = 1;
+  bytes data = 2;
+}
+
+message TerminalResizeRequest {
+  uint64 id = 1;
+  uint32 cols = 2;
+  uint32 rows = 3;
+}
+
+message TerminalSessionResponse {
+  uint64 id = 1;
+  string scope = 2;
+  string cwd = 3;
+  bool running = 4;
+  optional uint32 exit_code = 5;
+  uint64 base_cursor = 6;
+  uint64 end_cursor = 7;
+}
+
+message TerminalReadResponse {
+  uint64 id = 1;
+  bytes data = 2;
+  uint64 next_cursor = 3;
+  bool dropped = 4;
+  bool running = 5;
+  optional uint32 exit_code = 6;
 }
 
 message ImageRequest {
