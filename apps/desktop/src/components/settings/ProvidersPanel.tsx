@@ -29,9 +29,9 @@ import {
   LoaderCircle,
   MessageCircle,
   Mic,
+  MoreHorizontal,
   Music,
   Plus,
-  Power,
   RefreshCw,
   Save,
   Search,
@@ -53,7 +53,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
-import { Button, IconButton, SelectMenu, Surface } from "../ui";
+import { Button, IconButton, PopoverSurface, SelectMenu, Surface } from "../ui";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
@@ -359,11 +359,6 @@ function IconStar(props: SVGProps<SVGSVGElement>) {
   return <Star size={16} strokeWidth={2} aria-hidden {...props} />;
 }
 
-/** 启用/停用 */
-function IconPower(props: SVGProps<SVGSVGElement>) {
-  return <Power size={16} strokeWidth={2} aria-hidden {...props} />;
-}
-
 /** 删除供应商 */
 function IconTrash(props: SVGProps<SVGSVGElement>) {
   return <Trash2 size={16} strokeWidth={2} aria-hidden {...props} />;
@@ -431,6 +426,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [providerActionsOpen, setProviderActionsOpen] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testingAll, setTestingAll] = useState(false);
   const [listingModelsRequest, setListingModelsRequest] = useState<{
@@ -481,6 +477,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   const modelsRequestRef = useRef(0);
   const healthRunRef = useRef(0);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const providerActionsAnchorRef = useRef<HTMLButtonElement | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
   selectedIdRef.current = selectedId;
@@ -580,6 +577,13 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   };
 
   const selected = state?.providers.find((p) => p.id === selectedId) ?? null;
+  const hasUnsavedChanges = useMemo(() => {
+    if (!selected || !draft) return false;
+    return (
+      JSON.stringify(providerSaveInput(selected, draft)) !==
+      JSON.stringify(providerSaveInput(selected, draftFromProvider(selected)))
+    );
+  }, [draft, selected]);
   const listingModels = isMediaModelsRequestLoading(
     selected?.id ?? null,
     modelsRequestRef.current,
@@ -619,6 +623,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     setExpandedModelId(null);
     setShowAddModel(false);
     setCustomModelInput("");
+    setProviderActionsOpen(false);
     setError(null);
     autoFetchIdRef.current = null;
 
@@ -1662,72 +1667,125 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
               </div>
               {selected && draft && (
                 <div className="providers-pane-head-actions">
-                  <IconButton
-                    variant="primary"
-                    className="providers-pane-action"
-                    busy={saving}
-                    busyLabel={t("providers.saving")}
-                    title={saving ? t("providers.saving") : t("providers.save")}
-                    aria-label={
-                      saving ? t("providers.saving") : t("providers.save")
-                    }
-                    onClick={() => void saveDraft()}
-                  >
-                    <IconSave />
-                  </IconButton>
-                  {!isActive &&
-                    draft.enabled &&
-                    selected.supports_responses_api && (
-                      <IconButton
-                        variant="secondary"
-                        className="providers-pane-action"
-                        title={t("providers.setActive")}
-                        aria-label={t("providers.setActive")}
-                        onClick={() => void setActive(selected.id)}
-                      >
-                        <IconStar />
-                      </IconButton>
-                    )}
-                  {!isImageActive && draft.enabled && selected.supports_image && (
-                    <IconButton
-                      variant="secondary"
-                      className="providers-pane-action"
-                      title={t("providers.setImageActive")}
-                      aria-label={t("providers.setImageActive")}
-                      onClick={() => void setImageActive(selected.id)}
-                    >
-                      <Image />
-                    </IconButton>
-                  )}
-                  <IconButton
-                    variant="danger"
-                    className="providers-pane-action"
-                    title={t("providers.delete")}
-                    aria-label={t("providers.delete")}
-                    onClick={() => void deleteProvider()}
-                  >
-                    <IconTrash />
-                  </IconButton>
-                  <IconButton
-                    variant="secondary"
-                    className="providers-pane-action"
-                    active={draft.enabled}
-                    aria-pressed={draft.enabled}
+                  <button
+                    type="button"
+                    role="switch"
+                    className="providers-enabled-control"
+                    aria-checked={draft.enabled}
+                    aria-label={t("providers.enable")}
                     title={
                       draft.enabled
-                        ? t("providers.enabled")
-                        : t("providers.disabled")
-                    }
-                    aria-label={
-                      draft.enabled
-                        ? t("providers.enabled")
-                        : t("providers.disabled")
+                        ? t("providers.disable")
+                        : t("providers.enable")
                     }
                     disabled={saving}
                     onClick={() => void toggleEnabled()}
                   >
-                    <IconPower />
+                    <span className="providers-enabled-control-label">
+                      {draft.enabled
+                        ? t("providers.enabled")
+                        : t("providers.disabled")}
+                    </span>
+                    <span className="providers-switch-track" aria-hidden>
+                      <span className="providers-switch-thumb" />
+                    </span>
+                  </button>
+                  <IconButton
+                    ref={providerActionsAnchorRef}
+                    variant="ghost"
+                    className={`providers-pane-action providers-more-action ${providerActionsOpen ? "is-active" : ""}`}
+                    title={t("providers.moreActions")}
+                    aria-label={t("providers.moreActions")}
+                    aria-haspopup="menu"
+                    aria-expanded={providerActionsOpen}
+                    onClick={() => setProviderActionsOpen((open) => !open)}
+                  >
+                    <MoreHorizontal size={18} strokeWidth={2} aria-hidden />
                   </IconButton>
+                  <PopoverSurface
+                    open={providerActionsOpen}
+                    onClose={() => setProviderActionsOpen(false)}
+                    anchorRef={providerActionsAnchorRef}
+                    placement="below"
+                    align="end"
+                    minWidth={190}
+                    className="providers-actions-menu"
+                    role="menu"
+                    aria-label={t("providers.moreActions")}
+                    onKeyDown={(event) => {
+                      if (
+                        !["ArrowDown", "ArrowUp", "Home", "End"].includes(
+                          event.key,
+                        )
+                      ) {
+                        return;
+                      }
+                      const items = Array.from(
+                        event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                          '[role="menuitem"]:not(:disabled)',
+                        ),
+                      );
+                      if (items.length === 0) return;
+                      event.preventDefault();
+                      const current = items.indexOf(
+                        document.activeElement as HTMLButtonElement,
+                      );
+                      const next =
+                        event.key === "Home"
+                          ? 0
+                          : event.key === "End"
+                            ? items.length - 1
+                            : event.key === "ArrowDown"
+                              ? (current + 1 + items.length) % items.length
+                              : (current - 1 + items.length) % items.length;
+                      items[next]?.focus();
+                    }}
+                  >
+                    {!isActive &&
+                    draft.enabled &&
+                    selected.supports_responses_api ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="providers-actions-menu-item"
+                        onClick={() => {
+                          setProviderActionsOpen(false);
+                          void setActive(selected.id);
+                        }}
+                      >
+                        <IconStar />
+                        <span>{t("providers.setActive")}</span>
+                      </button>
+                    ) : null}
+                    {!isImageActive &&
+                    draft.enabled &&
+                    selected.supports_image ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="providers-actions-menu-item"
+                        onClick={() => {
+                          setProviderActionsOpen(false);
+                          void setImageActive(selected.id);
+                        }}
+                      >
+                        <Image size={16} strokeWidth={2} aria-hidden />
+                        <span>{t("providers.setImageActive")}</span>
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="providers-actions-menu-item is-danger"
+                      onClick={() => {
+                        setProviderActionsOpen(false);
+                        void deleteProvider();
+                      }}
+                    >
+                      <IconTrash />
+                      <span>{t("providers.delete")}</span>
+                    </button>
+                  </PopoverSurface>
                 </div>
               )}
             </div>
@@ -3164,6 +3222,38 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                     </div>
                   </div>
                 )}
+
+                <div className="providers-form-actions">
+                  <span
+                    className="providers-form-save-state"
+                    aria-live="polite"
+                  >
+                    {hasUnsavedChanges ? t("providers.unsavedChanges") : ""}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!hasUnsavedChanges || saving}
+                    onClick={() => {
+                      setDraft(draftFromProvider(selected));
+                      setError(null);
+                    }}
+                  >
+                    {t("providers.discardChanges")}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="providers-save-action"
+                    busy={saving}
+                    busyLabel={t("providers.saving")}
+                    disabled={!hasUnsavedChanges}
+                    onClick={() => void saveDraft()}
+                  >
+                    <IconSave />
+                    <span>{t("providers.saveChanges")}</span>
+                  </Button>
+                </div>
               </div>
             )}
 
