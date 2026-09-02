@@ -23,10 +23,32 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(hook, /DESKTOP_BROWSER_SESSION_ID = "desktop-browser-default"/);
   assert.match(hook, /sessionId \?\? DESKTOP_BROWSER_SESSION_ID/);
   assert.match(hook, /preview\?\.sessionId === browserSessionId/);
+  assert.match(hook, /isNavigationAction\(action\)/);
+  assert.match(hook, /isNavigationAction\(name\)/);
+  const navigationActions = hook.slice(
+    hook.indexOf("const NAVIGATION_ACTIONS"),
+    hook.indexOf("function isNavigationAction"),
+  );
+  assert.match(navigationActions, /"open"/);
+  assert.match(navigationActions, /"browser_open"/);
+  assert.doesNotMatch(
+    navigationActions,
+    /click|scroll|key|resize|snapshot|screenshot/,
+  );
 
   const dock = source("../../components/chat/BrowserDock.tsx");
   assert.doesNotMatch(dock, /disabled=\{!sessionId/);
   assert.match(dock, /disabled=\{!address\.trim\(\)\}/);
+  assert.match(dock, /className="browser-dock-resizer"/);
+  assert.match(dock, /setPointerCapture/);
+  assert.match(dock, /BROWSER_DOCK_WIDTH_KEY/);
+
+  const headerStart = dock.indexOf('<header className="browser-dock-header">');
+  const tabsStart = dock.indexOf('className="browser-tabs"', headerStart);
+  const headerEnd = dock.indexOf("</header>", headerStart);
+  assert.ok(
+    headerStart >= 0 && tabsStart > headerStart && tabsStart < headerEnd,
+  );
 });
 
 test("floating browser preview supports direct manipulation and accessibility fallbacks", () => {

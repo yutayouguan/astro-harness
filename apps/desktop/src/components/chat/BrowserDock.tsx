@@ -1,7 +1,10 @@
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
   type PointerEvent,
@@ -23,6 +26,15 @@ import {
 import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
 import { useI18n } from "../../i18n/LocaleContext";
 import { normalizeBrowserUrl } from "../../lib/browser/browserUrl";
+import {
+  BROWSER_DOCK_DEFAULT_WIDTH,
+  BROWSER_DOCK_MIN_WIDTH,
+  BROWSER_DOCK_OVERLAY_BREAKPOINT,
+  BROWSER_DOCK_WIDTH_KEY,
+  clampBrowserDockWidth,
+  maxBrowserDockWidth,
+  parseStoredBrowserDockWidth,
+} from "../../lib/ui/browserDockWidth";
 
 type BrowserControl = (
   action: string,
@@ -34,6 +46,9 @@ type Props = {
   onControl: BrowserControl;
   onClose: () => void;
 };
+
+const RESIZE_KEYBOARD_STEP = 24;
+const RESIZE_KEYBOARD_LARGE_STEP = 64;
 
 function formatBytes(size: number): string {
   if (size < 1024) return `${size} B`;
@@ -48,10 +63,145 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const screenshotRef = useRef<HTMLImageElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLElement>(null);
+  const dockWidthRef = useRef(BROWSER_DOCK_DEFAULT_WIDTH);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
   const wheelDeltaRef = useRef(0);
   const wheelTimerRef = useRef<number | null>(null);
   const resizeTimerRef = useRef<number | null>(null);
   const lastViewportRef = useRef("");
+  const [dockWidth, setDockWidth] = useState(() => {
+    try {
+      return parseStoredBrowserDockWidth(
+        localStorage.getItem(BROWSER_DOCK_WIDTH_KEY),
+      );
+    } catch {
+      return BROWSER_DOCK_DEFAULT_WIDTH;
+    }
+  });
+  const [maxDockWidth, setMaxDockWidth] = useState(BROWSER_DOCK_DEFAULT_WIDTH);
+  const [resizing, setResizing] = useState(false);
+
+  dockWidthRef.current = dockWidth;
+
+  const containerWidth = useCallback(() => {
+    const width =
+      dockRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
+    return width > 0 ? width : Number.POSITIVE_INFINITY;
+  }, []);
+
+  const usesOverlayLayout = useCallback(
+    () => window.innerWidth <= BROWSER_DOCK_OVERLAY_BREAKPOINT,
+    [],
+  );
+
+  const updateDockWidth = useCallback(
+    (nextWidth: number, persist = false) => {
+      const next = clampBrowserDockWidth(
+        nextWidth,
+        containerWidth(),
+        usesOverlayLayout(),
+      );
+      dockWidthRef.current = next;
+      setDockWidth(next);
+      if (!persist) return;
+      try {
+        localStorage.setItem(BROWSER_DOCK_WIDTH_KEY, String(next));
+      } catch {
+        // Storage is best-effort in private or locked-down webviews.
+      }
+    },
+    [containerWidth, usesOverlayLayout],
+  );
+
+  useLayoutEffect(() => {
+    const container = dockRef.current?.parentElement;
+    if (!container) return;
+    const syncBounds = () => {
+      const width = container.getBoundingClientRect().width;
+      if (width <= 0) return;
+      const overlayLayout = usesOverlayLayout();
+      const nextMax = maxBrowserDockWidth(width, overlayLayout);
+      setMaxDockWidth(nextMax);
+      const nextWidth = clampBrowserDockWidth(
+        dockWidthRef.current,
+        width,
+        overlayLayout,
+      );
+      dockWidthRef.current = nextWidth;
+      setDockWidth(nextWidth);
+    };
+    syncBounds();
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(syncBounds)
+        : null;
+    observer?.observe(container);
+    window.addEventListener("resize", syncBounds);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncBounds);
+    };
+  }, [usesOverlayLayout]);
+
+  const finishResize = useCallback((pointerId: number) => {
+    if (dragRef.current?.pointerId !== pointerId) return;
+    dragRef.current = null;
+    setResizing(false);
+    try {
+      localStorage.setItem(
+        BROWSER_DOCK_WIDTH_KEY,
+        String(dockWidthRef.current),
+      );
+    } catch {
+      // Storage is best-effort in private or locked-down webviews.
+    }
+  }, []);
+
+  const onResizePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || dragRef.current) return;
+    event.preventDefault();
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth:
+        dockRef.current?.getBoundingClientRect().width ?? dockWidthRef.current,
+    };
+    setResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onResizePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    updateDockWidth(drag.startWidth + drag.startX - event.clientX);
+  };
+
+  const onResizePointerUp = (event: PointerEvent<HTMLButtonElement>) => {
+    finishResize(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const onResizeKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const step = event.shiftKey
+      ? RESIZE_KEYBOARD_LARGE_STEP
+      : RESIZE_KEYBOARD_STEP;
+    let nextWidth: number | null = null;
+    if (event.key === "ArrowLeft") nextWidth = dockWidthRef.current + step;
+    else if (event.key === "ArrowRight")
+      nextWidth = dockWidthRef.current - step;
+    else if (event.key === "Home") nextWidth = BROWSER_DOCK_MIN_WIDTH;
+    else if (event.key === "End") nextWidth = maxDockWidth;
+    if (nextWidth == null) return;
+    event.preventDefault();
+    updateDockWidth(nextWidth, true);
+  };
 
   useEffect(() => {
     if (preview?.url) setAddress(preview.url);
@@ -172,12 +322,88 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
     : null;
 
   return (
-    <aside className="browser-dock" aria-label={t("chat.browserDock.title")}>
+    <aside
+      ref={dockRef}
+      className={`browser-dock${resizing ? " is-resizing" : ""}`}
+      aria-label={t("chat.browserDock.title")}
+      style={{ "--browser-dock-width": `${dockWidth}px` } as CSSProperties}
+    >
+      <button
+        type="button"
+        className="browser-dock-resizer"
+        role="separator"
+        aria-label={t("chat.browserDock.resize")}
+        aria-orientation="vertical"
+        aria-valuemin={Math.min(BROWSER_DOCK_MIN_WIDTH, maxDockWidth)}
+        aria-valuemax={maxDockWidth}
+        aria-valuenow={dockWidth}
+        title={t("chat.browserDock.resize")}
+        onDoubleClick={() => updateDockWidth(BROWSER_DOCK_DEFAULT_WIDTH, true)}
+        onKeyDown={onResizeKeyDown}
+        onPointerDown={onResizePointerDown}
+        onPointerMove={onResizePointerMove}
+        onPointerUp={onResizePointerUp}
+        onPointerCancel={(event) => finishResize(event.pointerId)}
+        onLostPointerCapture={(event) => finishResize(event.pointerId)}
+      />
       <header className="browser-dock-header">
-        <strong>
+        <strong className="browser-dock-title">
           <Globe2 size={15} aria-hidden />
           {t("chat.browserDock.title")}
         </strong>
+        <div
+          className="browser-tabs"
+          role="tablist"
+          aria-label={t("chat.browserDock.tabs")}
+        >
+          <div className="browser-tabs-scroll">
+            {(preview?.tabs ?? []).map((tab) => (
+              <div
+                key={tab.id}
+                role="tab"
+                tabIndex={0}
+                aria-selected={tab.active}
+                className={`browser-tab${tab.active ? " is-active" : ""}`}
+                title={tab.url}
+                onClick={() => void run("switch_tab", { tab_id: tab.id })}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  void run("switch_tab", { tab_id: tab.id });
+                }}
+              >
+                <Globe2 size={12} aria-hidden />
+                <span>
+                  {tab.title || tab.url || t("chat.browserDock.newTab")}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`${t("chat.browserDock.closeTab")} ${tab.title || ""}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void run("close_tab", { tab_id: tab.id });
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void run("close_tab", { tab_id: tab.id });
+                  }}
+                >
+                  <X size={11} aria-hidden />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="browser-new-tab"
+            aria-label={t("chat.browserDock.newTab")}
+            onClick={() => void run("new_tab")}
+          >
+            <Plus size={14} aria-hidden />
+          </button>
+        </div>
         <div className="browser-dock-header-actions">
           <button
             type="button"
@@ -203,60 +429,6 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
           </button>
         </div>
       </header>
-
-      <div
-        className="browser-tabs"
-        role="tablist"
-        aria-label={t("chat.browserDock.tabs")}
-      >
-        <div className="browser-tabs-scroll">
-          {(preview?.tabs ?? []).map((tab) => (
-            <div
-              key={tab.id}
-              role="tab"
-              tabIndex={0}
-              aria-selected={tab.active}
-              className={`browser-tab${tab.active ? " is-active" : ""}`}
-              title={tab.url}
-              onClick={() => void run("switch_tab", { tab_id: tab.id })}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                void run("switch_tab", { tab_id: tab.id });
-              }}
-            >
-              <Globe2 size={12} aria-hidden />
-              <span>
-                {tab.title || tab.url || t("chat.browserDock.newTab")}
-              </span>
-              <button
-                type="button"
-                aria-label={`${t("chat.browserDock.closeTab")} ${tab.title || ""}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void run("close_tab", { tab_id: tab.id });
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void run("close_tab", { tab_id: tab.id });
-                }}
-              >
-                <X size={11} aria-hidden />
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="browser-new-tab"
-          aria-label={t("chat.browserDock.newTab")}
-          onClick={() => void run("new_tab")}
-        >
-          <Plus size={14} aria-hidden />
-        </button>
-      </div>
 
       <form className="browser-address-row" onSubmit={submitAddress}>
         <button

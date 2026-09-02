@@ -43,6 +43,24 @@ export type BrowserPreviewApi = {
 
 const STORAGE_PREFIX = "astro.browserPreview.";
 export const DESKTOP_BROWSER_SESSION_ID = "desktop-browser-default";
+const NAVIGATION_ACTIONS = new Set([
+  "open",
+  "new_tab",
+  "switch_tab",
+  "back",
+  "forward",
+  "reload",
+  "browser_open",
+  "browser_tab_open",
+  "browser_tab_switch",
+  "browser_back",
+  "browser_forward",
+  "browser_reload",
+]);
+
+function isNavigationAction(action: string): boolean {
+  return NAVIGATION_ACTIONS.has(action);
+}
 
 function parseRecord(raw: string | undefined): Record<string, unknown> | null {
   if (!raw?.trim()) return null;
@@ -228,14 +246,20 @@ export function useBrowserPreview(sessionId: string | null) {
       const now = Date.now();
 
       if (call.phase === "started") {
+        const action = name.replace(/^browser_/, "");
         setDismissed(false);
         setPreview((current) => ({
           sessionId: browserSessionId,
           url: text(args?.url) || current?.url || "",
           title: current?.title || "",
           screenshotPath: current?.screenshotPath ?? null,
-          status: name === "browser_close" ? "closed" : "connecting",
-          action: name.replace(/^browser_/, ""),
+          status:
+            name === "browser_close"
+              ? "closed"
+              : isNavigationAction(name)
+                ? "connecting"
+                : current?.status || "connected",
+          action,
           updatedAt: now,
           activeTabId: current?.activeTabId ?? null,
           tabs: current?.tabs ?? [],
@@ -266,7 +290,15 @@ export function useBrowserPreview(sessionId: string | null) {
     async (action: string, args: Record<string, unknown> = {}) => {
       setDismissed(false);
       setPreview((current) =>
-        current ? { ...current, status: "connecting", action } : current,
+        current
+          ? {
+              ...current,
+              status: isNavigationAction(action)
+                ? "connecting"
+                : current.status,
+              action,
+            }
+          : current,
       );
       try {
         const result = await invoke<Record<string, unknown>>(

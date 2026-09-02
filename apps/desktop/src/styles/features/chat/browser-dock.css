@@ -1,8 +1,10 @@
 .browser-dock {
   position: relative;
   z-index: 21;
-  flex: 0 0 min(680px, 56%);
-  min-width: 420px;
+  flex: 0 0 var(--browser-dock-width, 680px);
+  width: var(--browser-dock-width, 680px);
+  max-width: calc(100% - 320px);
+  min-width: 0;
   min-height: 0;
   padding-top: var(--chat-header-overlay-height, 50px);
   display: flex;
@@ -22,7 +24,6 @@
 }
 
 .browser-dock-header,
-.browser-tabs,
 .browser-address-row {
   display: flex;
   align-items: center;
@@ -32,13 +33,13 @@
 }
 
 .browser-dock-header {
-  min-height: 36px;
-  justify-content: space-between;
-  padding: 0 10px 0 12px;
+  min-height: 38px;
+  gap: 7px;
+  padding: 3px 8px 3px 12px;
 }
 
-.browser-dock-header > strong {
-  min-width: 0;
+.browser-dock-title {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -64,7 +65,7 @@
   cursor: pointer;
 }
 
-.browser-dock button:hover:not(:disabled),
+.browser-dock button:hover:not(:disabled):not(.browser-dock-resizer),
 .browser-dock button.is-active {
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 7%, transparent);
@@ -104,8 +105,11 @@
 }
 
 .browser-tabs {
-  min-height: 35px;
-  padding: 3px 7px;
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
   gap: 4px;
 }
 
@@ -199,6 +203,54 @@
   color: var(--tone);
   font-size: 11px;
   font-weight: 650;
+}
+
+.browser-dock-resizer {
+  position: absolute;
+  z-index: 5;
+  top: var(--chat-header-overlay-height, 50px);
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.browser-dock-resizer::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone-blue, #2563eb) 44%, transparent);
+  opacity: 0;
+  transform: scaleY(0.76);
+  transition:
+    opacity 0.14s ease,
+    transform 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+    background 0.14s ease;
+}
+
+.browser-dock-resizer:hover::before,
+.browser-dock-resizer:focus-visible::before,
+.browser-dock.is-resizing .browser-dock-resizer::before {
+  opacity: 1;
+  transform: scaleY(1);
+  background: color-mix(in srgb, var(--tone-blue, #2563eb) 74%, transparent);
+}
+
+.browser-dock-resizer:focus-visible {
+  outline: none;
+}
+
+.browser-dock.is-resizing {
+  user-select: none;
 }
 
 .browser-viewport {
@@ -326,7 +378,8 @@
   .browser-dock {
     position: absolute;
     inset: 0 0 0 auto;
-    width: min(100%, 620px);
+    width: min(100%, var(--browser-dock-width, 680px));
+    max-width: none;
     min-width: 0;
   }
 }
