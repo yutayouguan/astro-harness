@@ -1,6 +1,8 @@
 //! Shared terminal dock commands. PTY state lives in the backend so Agent tools and Desktop
 //! attach to the same bounded-output session.
 
+use std::time::Duration;
+
 use proto::astro_service_client::AstroServiceClient;
 use proto::{
     TerminalIdRequest, TerminalOpenRequest, TerminalReadRequest, TerminalResizeRequest,
@@ -9,12 +11,20 @@ use proto::{
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tauri_plugin_shell::ShellExt;
-use tokio::sync::OnceCell;
+use tokio::sync::{Mutex, OnceCell};
 use tonic::transport::{Channel, Endpoint};
 
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 
-static TERMINAL_CHANNEL: OnceCell<Channel> = OnceCell::const_new();
+const TERMINAL_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+const TERMINAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+struct CachedTerminalChannel {
+    address: String,
+    channel: Channel,
+}
+
+static TERMINAL_CHANNEL: OnceCell<Mutex<Option<CachedTerminalChannel>>> = OnceCell::const_new();
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,8 +89,9 @@ pub struct TerminalResizeDto {
 pub async fn terminal_open(request: TerminalOpenDto) -> Result<TerminalSessionDto, String> {
     let mut client = terminal_client().await?;
     let client_token = request.client_token.unwrap_or_default();
-    let response = client
-        .open_terminal(TerminalOpenRequest {
+    let response = tokio::time::timeout(
+        TERMINAL_REQUEST_TIMEOUT,
+        client.open_terminal(TerminalOpenRequest {
             scope: request.scope,
             cwd: request.cwd.unwrap_or_default(),
             cols: request.cols,
@@ -91,10 +102,12 @@ pub async fn terminal_open(request: TerminalOpenDto) -> Result<TerminalSessionDt
             replace_mode_mismatch: client_token.trim().is_empty(),
             client_token,
             agent_default: request.agent_default.unwrap_or(false),
-        })
-        .await
-        .map_err(|error| error.to_string())?
-        .into_inner();
+        }),
+    )
+    .await
+    .map_err(|_| "terminal backend did not respond within 10 seconds".to_string())?
+    .map_err(|error| error.to_string())?
+    .into_inner();
     Ok(TerminalSessionDto {
         id: response.id,
         scope: response.scope,
@@ -222,14 +235,25 @@ pub fn terminal_open_external(app: AppHandle, cwd: String) -> Result<(), String>
 }
 
 async fn terminal_client() -> Result<AstroServiceClient<tonic::transport::Channel>, String> {
-    let channel = TERMINAL_CHANNEL
-        .get_or_try_init(|| async {
-            Endpoint::from_shared(endpoint_url(&default_grpc_address()))
-                .map_err(|error| error.to_string())?
-                .connect()
-                .await
-                .map_err(|error| error.to_string())
-        })
-        .await?;
-    Ok(AstroServiceClient::new(channel.clone()))
+    let address = default_grpc_address();
+    let cache = TERMINAL_CHANNEL
+        .get_or_init(|| async { Mutex::new(None) })
+        .await;
+    let mut cached = cache.lock().await;
+    if let Some(existing) = cached.as_ref().filter(|entry| entry.address == address) {
+        return Ok(AstroServiceClient::new(existing.channel.clone()));
+    }
+
+    let channel = Endpoint::from_shared(endpoint_url(&address))
+        .map_err(|error| error.to_string())?
+        .connect_timeout(TERMINAL_CONNECT_TIMEOUT)
+        .timeout(TERMINAL_REQUEST_TIMEOUT)
+        .connect()
+        .await
+        .map_err(|error| format!("connect terminal backend at {address}: {error}"))?;
+    *cached = Some(CachedTerminalChannel {
+        address,
+        channel: channel.clone(),
+    });
+    Ok(AstroServiceClient::new(channel))
 }

@@ -77,6 +77,18 @@ type TerminalPaneProps = {
 const HEIGHT_KEY_PREFIX = "astro.terminalDock.height.";
 const WRITE_CHUNK_BYTES = 32 * 1024;
 const SCROLLBAR_WIDTH = 4;
+const TERMINAL_START_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(message), timeoutMs);
+    promise.then(resolve, reject).finally(() => window.clearTimeout(timer));
+  });
+}
 
 function initialHeight(projectId: string): number {
   if (typeof window === "undefined") return 260;
@@ -336,17 +348,21 @@ export default function TerminalTabsDock({
       if (openingRef.current.has(tab.clientId)) return;
       openingRef.current.add(tab.clientId);
       try {
-        const opened = await invoke<TerminalSessionDto>("terminal_open", {
-          request: {
-            scope: projectRoot,
-            cwd: tab.cwd,
-            cols: 120,
-            rows: 32,
-            executionMode: tab.executionMode,
-            clientToken: tab.clientId,
-            agentDefault: tab.agentDefault,
-          },
-        });
+        const opened = await withTimeout(
+          invoke<TerminalSessionDto>("terminal_open", {
+            request: {
+              scope: projectRoot,
+              cwd: tab.cwd,
+              cols: 120,
+              rows: 32,
+              executionMode: tab.executionMode,
+              clientToken: tab.clientId,
+              agentDefault: tab.agentDefault,
+            },
+          }),
+          TERMINAL_START_TIMEOUT_MS,
+          t("chat.terminal.tab.startTimeout"),
+        );
         if (
           removedTokensRef.current.has(tab.clientId) ||
           !tabsRef.current.some((candidate) => candidate.clientId === tab.clientId)
@@ -372,7 +388,7 @@ export default function TerminalTabsDock({
         }
       }
     },
-    [projectRoot],
+    [projectRoot, t],
   );
 
   useEffect(() => {

@@ -35,6 +35,14 @@ test("only the active tab is started eagerly", () => {
   assert.doesNotMatch(dock, /for \(const tab of tabs\)/);
 });
 
+test("terminal startup is bounded in both the webview and gRPC client", () => {
+  assert.match(dock, /TERMINAL_START_TIMEOUT_MS = 15_000/);
+  assert.match(dock, /withTimeout\(/);
+  assert.match(tauri, /TERMINAL_CONNECT_TIMEOUT/);
+  assert.match(tauri, /TERMINAL_REQUEST_TIMEOUT/);
+  assert.match(tauri, /entry\.address == address/);
+});
+
 test("desktop tab tokens are idempotent and closing is session-scoped", () => {
   assert.match(proto, /string client_token = 7/);
   assert.match(proto, /rpc CloseTerminal/);

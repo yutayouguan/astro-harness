@@ -1578,6 +1578,8 @@ export const zh = {
   "chat.terminal.tab.closeNamed": "关闭 {name}",
   "chat.terminal.tab.rename": "重命名终端",
   "chat.terminal.tab.starting": "正在启动终端…",
+  "chat.terminal.tab.startTimeout":
+    "终端启动超时，请确认桌面后端已启动，然后点击重新启动。",
   "chat.terminal.tab.limit": "每个项目最多可打开 {count} 个终端",
   "chat.side.reasoning": "思考过程",
   "chat.side.stop": "停止生成",
@@ -4475,6 +4477,8 @@ export const en: Record<MessageKey, string> = {
   "chat.terminal.tab.closeNamed": "Close {name}",
   "chat.terminal.tab.rename": "Rename terminal",
   "chat.terminal.tab.starting": "Starting terminal…",
+  "chat.terminal.tab.startTimeout":
+    "Terminal startup timed out. Check that the desktop backend is running, then restart the terminal.",
   "chat.terminal.tab.limit": "A project can have up to {count} terminals",
   "chat.side.reasoning": "Reasoning",
   "chat.side.stop": "Stop generating",
