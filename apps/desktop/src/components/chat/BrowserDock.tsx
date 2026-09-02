@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Camera,
+  CircleAlert,
   Download,
   ExternalLink,
   Globe2,
@@ -95,6 +96,7 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
         await onControl("open", { url, new_tab: false });
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
+        throw cause;
       }
     },
     [onControl],
@@ -516,6 +518,16 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
         >
           <Camera size={14} aria-hidden />
         </button>
+        {error && liveWebview.isLive ? (
+          <span
+            className="browser-address-error"
+            role="alert"
+            title={error}
+            aria-label={error}
+          >
+            <CircleAlert size={14} aria-hidden />
+          </span>
+        ) : null}
       </form>
 
       {downloadsOpen ? (
@@ -573,7 +585,9 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
             <span>{t("chat.browserDock.supports")}</span>
           </div>
         )}
-        {error ? <div className="browser-error">{error}</div> : null}
+        {error && !liveWebview.isLive ? (
+          <div className="browser-error">{error}</div>
+        ) : null}
       </div>
     </aside>
   );

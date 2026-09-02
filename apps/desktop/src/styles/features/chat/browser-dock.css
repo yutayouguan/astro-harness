@@ -209,6 +209,15 @@
   font-weight: 650;
 }
 
+.browser-address-error {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--danger);
+}
+
 .browser-dock-resizer {
   position: absolute;
   z-index: 5;
@@ -264,7 +273,7 @@
   overflow: hidden;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--bg1) 92%, transparent);
+  background: transparent;
 }
 
 .browser-viewport > img {
@@ -280,7 +289,7 @@
 .browser-live-placeholder {
   width: 100%;
   height: 100%;
-  background: color-mix(in srgb, var(--bg1) 92%, transparent);
+  background: transparent;
 }
 
 .browser-empty,
