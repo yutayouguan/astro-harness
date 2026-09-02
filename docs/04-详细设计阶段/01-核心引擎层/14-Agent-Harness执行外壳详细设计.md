@@ -149,14 +149,14 @@ raw output
 
 > 当前已从模型可见工具和运行时配置中下线；以下仅为历史设计记录。
 
-Code Mode 原先将多步确定性编排放入一个 Node/V8 cell：
+Code Mode 原先将多步确定性编排放入一个 JavaScript cell；保留的兼容运行时现已改为进程内 QuickJS：
 
 - `exec` 是 grammar-constrained Freeform tool；
 - `wait` 是 Function tool；
-- 每 cell 使用新 Node 进程和新 `node:vm` context；
-- 共享 `store/load` 位于 Session 服务而不是 V8 context；
+- 每 cell 使用专用线程和新的 QuickJS runtime/context；
+- 共享 `store/load` 位于 Session 服务而不是 QuickJS context；
 - `yield_control()` 使 cell 保持存活，`wait` 负责 resume/terminate；
-- 嵌套工具通过 JSONL bridge 回到 Rust Host。
+- 嵌套工具通过 Rust 异步通道回到 Host。
 
 Code Mode 不是绕过 Harness 的后门；它是 Harness 内的另一种工具调度器。
 

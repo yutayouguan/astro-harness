@@ -436,7 +436,7 @@ text(result);
 
 ### 7.3 Cell 运行时
 
-本文所说的“V8 cell”，是指由 Node.js 内嵌 V8 执行的隔离 JavaScript cell。每个 cell 都启动一个新 Node 进程，并在新的 `node:vm` context 中执行脚本。模型代码不获得 Node 全局对象，可用边界只有：
+保留的兼容实现使用进程内 QuickJS 执行隔离 JavaScript cell。每个 cell 都在专用线程中创建新的 runtime/context，并设置内存、栈和中断限制；不依赖用户电脑安装 Node.js。模型代码不获得宿主全局对象，可用边界只有：
 
 | 能力 | 用途 |
 | --- | --- |
@@ -451,19 +451,19 @@ text(result);
 | `exit()` | 正常结束 cell |
 | `setTimeout` / `clearTimeout` | 显式异步等待 |
 
-Node 子进程和 Rust Host 通过 stdin/stdout JSON Lines 通信：
+QuickJS host function 和 Rust 调度器通过类型化异步通道通信：
 
 ```text
 JavaScript await tools.x(input)
         |
         v
-stdout: {type:"tool_call", id, name, input}
+RuntimeEvent::ToolCall {id, name, input}
         |
         v
 Rust ToolRouter -> approval/sandbox/hook -> handler
         |
         v
-stdin:  {type:"tool_result", id, ok, value|error}
+oneshot result: Ok(value) | Err(error)
         |
         v
 resolve/reject JavaScript Promise
@@ -481,7 +481,7 @@ resolve/reject JavaScript Promise
 
 - 发送 `resume` 并继续读取新事件；
 - 再次超时后返回同一 cell id；
-- 通过 `terminate: true` kill 子进程并移除 cell；
+- 通过 `terminate: true` 设置中断信号并移除 cell；
 - 完成或失败时从 `cells` map 中清理。
 
 `store/load` 与 cell 生命周期分离：它们存储在 Session 级 map，新 cell 启动时获取快照，因此可以跨 cell 复用结果。
@@ -493,11 +493,9 @@ resolve/reject JavaScript Promise
 Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 
 1. **cell 运行时边界**
-   - 必须同时检测到 Node `--permission` 和 Astro OS sandbox，才注册 `exec/wait`；
-   - `SandboxMode::ReadOnly`；
-   - cell 本身网络关闭；
-   - 子进程 `env_clear()`，仅传入 locale/terminal 所需的少量变量；
-   - `node:vm` 禁止字符串代码生成和 WASM 代码生成；
+   - QuickJS 由 Rust 二进制内嵌，不做 Node 或外部运行时探测；
+   - 每个 cell 使用独立 runtime/context，并限制内存、栈及可中断执行；
+   - 不注册文件系统、网络、进程或模块加载 host API；
    - 不向模型脚本暴露 `require` / `process` / 文件系统 / 网络 API。
 2. **嵌套工具边界**
    - JavaScript 只能发出结构化 `tool_call`；

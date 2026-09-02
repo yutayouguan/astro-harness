@@ -43,6 +43,7 @@ futures = "0.3"
 regex = "1"
 async-channel = "2"
 base64 = { workspace = true }
+rquickjs = { workspace = true }
 tokio-tungstenite = { workspace = true }
 url = { workspace = true }
 

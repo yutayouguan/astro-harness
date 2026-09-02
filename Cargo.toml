@@ -53,3 +53,4 @@ base64 = "0.22"
 tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
 url = "2"
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "rustls-tls", "macos-system-configuration"], default-features = false }
+rquickjs = { version = "0.12.2", features = ["futures"] }
