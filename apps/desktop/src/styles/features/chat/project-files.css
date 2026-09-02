@@ -556,6 +556,10 @@ html .chat-pane.has-project-file {
   max-width: 760px;
 }
 
+.chat-pane.has-project-file .composer-shell.is-capsule {
+  max-width: 640px;
+}
+
 /* 文件打开时仍沿用侧栏同款材质，只略微增强边界。 */
 .chat-pane.has-project-file .composer {
   border-color: color-mix(in srgb, var(--tone) 10%, var(--glass-edge));

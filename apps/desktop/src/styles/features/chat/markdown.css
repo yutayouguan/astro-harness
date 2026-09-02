@@ -1608,6 +1608,80 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   padding: 0;
 }
 
+.composer-shell.is-capsule {
+  right: auto;
+  bottom: 18px;
+  left: 50%;
+  width: min(640px, calc(100% - 32px));
+  max-width: 640px;
+  transform: translateX(-50%);
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded)
+  .composer:not(.has-clarify) {
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 7px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone-soft, transparent) 28%, transparent),
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--sidebar-bg) 94%, transparent);
+  box-shadow:
+    var(--glass-rim),
+    0 10px 30px rgba(var(--shadow-ink), 0.14);
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-input-wrap {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 36px;
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-input {
+  min-height: 36px;
+  max-height: 36px;
+  padding: 6px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: pre;
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-typed-hint {
+  padding: 6px 4px;
+  overflow: hidden;
+  transform: none;
+  white-space: nowrap;
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-bar {
+  display: contents;
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-bar-left {
+  grid-column: 1;
+  grid-row: 1;
+  flex-wrap: nowrap;
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-bar-right {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+@media (max-width: 560px) {
+  .composer-shell.is-capsule {
+    bottom: 10px;
+    width: calc(100% - 20px);
+  }
+}
+
 .composer-queue {
   margin: 0 12px 8px;
   border-radius: 14px;

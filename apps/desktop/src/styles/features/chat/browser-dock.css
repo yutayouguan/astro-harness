@@ -15,6 +15,41 @@
   backdrop-filter: var(--chat-dock-surface-filter);
   -webkit-backdrop-filter: var(--chat-dock-surface-filter);
 }
+.chat-layout-with-right.is-browser-expanded > .browser-dock {
+  position: absolute;
+  inset: 0;
+  z-index: 21;
+  width: 100%;
+  max-width: none;
+  flex-basis: auto;
+}
+
+.chat-layout-with-right.is-browser-expanded
+  > .chat-main
+  .composer-shell.is-capsule {
+  z-index: 23;
+}
+
+/* Native child WebViews sit above DOM stacking contexts. Reserve the capsule's
+   measured footprint so the composer stays clickable in live-browser mode. */
+.browser-dock.is-expanded .browser-viewport {
+  margin-bottom: calc(var(--browser-composer-height, 50px) + 36px);
+}
+
+.chat-layout-with-right.has-composer-overlay
+  .browser-dock.is-expanded
+  .browser-viewport {
+  margin-bottom: calc(
+    var(--browser-composer-height, 50px) + min(55vh, 480px) + 44px
+  );
+}
+
+.content-header--chat.is-browser-expanded .content-heading {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 
 .browser-dock button,
 .browser-dock input,
@@ -93,6 +128,11 @@
 
 .browser-dock-header-actions button {
   position: relative;
+}
+
+.browser-dock-header-actions .browser-dock-expand[aria-pressed="true"] {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone-soft) 72%, transparent);
 }
 
 .browser-dock-header-actions button > span {

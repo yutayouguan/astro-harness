@@ -307,6 +307,12 @@ type Props = {
   messages: ConversationEntry[];
   /** 项目文件打开时替换消息滚动区；输入框与任务条仍保留。 */
   workspaceContent?: ReactNode;
+  /** 内容专注态下将输入框收束为底部悬浮胶囊。 */
+  composerPresentation?: "default" | "capsule";
+  /** 同步悬浮输入区高度，用于为原生 WebView 预留可交互空间。 */
+  onComposerHeightChange?: (height: number) => void;
+  /** 同步胶囊上方的浮层状态，避免原生 WebView 遮挡菜单。 */
+  onComposerOverlayOpenChange?: (open: boolean) => void;
   /** 输入框文本 */
   input: string;
   /** 从其它页面带入输入框的结构化上下文标签。 */
@@ -820,6 +826,9 @@ export default function ChatView({
   sessionId = null,
   messages,
   workspaceContent = null,
+  composerPresentation = "default",
+  onComposerHeightChange,
+  onComposerOverlayOpenChange,
   input,
   composerContextPrefill = null,
   onComposerContextPrefillConsumed,
@@ -948,6 +957,7 @@ export default function ChatView({
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
+  const [capsuleComposerExpanded, setCapsuleComposerExpanded] = useState(false);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -1237,10 +1247,12 @@ export default function ChatView({
     if (!pane || !composer) return;
 
     const syncComposerOverlayHeight = () => {
+      const height = Math.ceil(composer.getBoundingClientRect().height);
       pane.style.setProperty(
         "--composer-overlay-height",
-        `${Math.ceil(composer.getBoundingClientRect().height)}px`,
+        `${height}px`,
       );
+      onComposerHeightChange?.(height);
     };
 
     syncComposerOverlayHeight();
@@ -1256,7 +1268,7 @@ export default function ChatView({
       window.removeEventListener("resize", syncComposerOverlayHeight);
       pane.style.removeProperty("--composer-overlay-height");
     };
-  }, []);
+  }, [onComposerHeightChange]);
 
   const loadMentionSources = useCallback(async () => {
     // 媒体预览只依赖本地工作区路径，不应被较重的 Agent 配置加载失败连带清空。
@@ -2215,6 +2227,34 @@ export default function ChatView({
     () => findComposerClarifySurface(messages, pendingInterrupts),
     [messages, pendingInterrupts],
   );
+  const useCapsuleComposer =
+    composerPresentation === "capsule" || Boolean(workspaceContent);
+  const hasFloatingComposerOverlay =
+    modeMenuOpen || plusOpen || contextPopoverOpen;
+  const capsuleComposerHasRichContent =
+    attachments.length > 0 ||
+    composerContexts.length > 0 ||
+    Boolean(composerClarify) ||
+    Boolean(realtime.active && realtime.transcript) ||
+    agentCreateMissing.length > 0 ||
+    welcomeTemplateMissing.length > 0 ||
+    fileDragOver ||
+    input.includes("\n");
+
+  useEffect(() => {
+    setCapsuleComposerExpanded(false);
+  }, [useCapsuleComposer]);
+
+  useEffect(() => {
+    onComposerOverlayOpenChange?.(
+      useCapsuleComposer && hasFloatingComposerOverlay,
+    );
+    return () => onComposerOverlayOpenChange?.(false);
+  }, [
+    hasFloatingComposerOverlay,
+    onComposerOverlayOpenChange,
+    useCapsuleComposer,
+  ]);
   const canQueueWhileBusy = streaming || turnInFlight || interruptBlocked;
   const canSend =
     !sendBlocked &&
@@ -3310,7 +3350,20 @@ export default function ChatView({
 
         <form
           ref={composerShellRef}
-          className="composer-shell"
+          className={`composer-shell${useCapsuleComposer ? " is-capsule" : ""}${
+            useCapsuleComposer &&
+            (capsuleComposerExpanded || capsuleComposerHasRichContent)
+              ? " is-capsule-expanded"
+              : ""
+          }`}
+          onBlurCapture={(event) => {
+            if (!useCapsuleComposer || capsuleComposerHasRichContent) return;
+            const next = event.relatedTarget;
+            if (next instanceof Node && event.currentTarget.contains(next)) {
+              return;
+            }
+            setCapsuleComposerExpanded(false);
+          }}
           onSubmit={(e) => {
             e.preventDefault();
             if (composerContexts.length === 0 && tryHandleSlashSubmit()) return;
@@ -3868,6 +3921,7 @@ export default function ChatView({
                   rows={2}
                   onChange={(e) => {
                     const v = e.target.value;
+                    if (useCapsuleComposer) setCapsuleComposerExpanded(true);
                     onInputChange(v);
                     syncTriggerFromCaret(
                       v,
@@ -3880,6 +3934,9 @@ export default function ChatView({
                     syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
                   }}
                   onPaste={(e) => void onPaste(e)}
+                  onFocus={() => {
+                    if (useCapsuleComposer) setCapsuleComposerExpanded(true);
+                  }}
                   onClick={() => {
                     const el = textareaRef.current;
                     if (!el) return;

@@ -20,6 +20,8 @@ import {
   ExternalLink,
   Globe2,
   LoaderCircle,
+  Maximize2,
+  Minimize2,
   Plus,
   RefreshCw,
   X,
@@ -45,7 +47,9 @@ type BrowserControl = (
 
 type Props = {
   preview: BrowserPreview | null;
+  expanded: boolean;
   onControl: BrowserControl;
+  onExpandedChange: (expanded: boolean) => void;
   onClose: () => void;
 };
 
@@ -58,7 +62,13 @@ function formatBytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function BrowserDock({ preview, onControl, onClose }: Props) {
+export default function BrowserDock({
+  preview,
+  expanded,
+  onControl,
+  onExpandedChange,
+  onClose,
+}: Props) {
   const { t } = useI18n();
   const [address, setAddress] = useState(preview?.url ?? "");
   const [downloadsOpen, setDownloadsOpen] = useState(false);
@@ -348,28 +358,32 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
   return (
     <aside
       ref={dockRef}
-      className={`browser-dock${resizing ? " is-resizing" : ""}`}
+      className={`browser-dock${resizing ? " is-resizing" : ""}${expanded ? " is-expanded" : ""}`}
       aria-label={t("chat.browserDock.title")}
       style={{ "--browser-dock-width": `${dockWidth}px` } as CSSProperties}
     >
-      <button
-        type="button"
-        className="browser-dock-resizer"
-        role="separator"
-        aria-label={t("chat.browserDock.resize")}
-        aria-orientation="vertical"
-        aria-valuemin={Math.min(BROWSER_DOCK_MIN_WIDTH, maxDockWidth)}
-        aria-valuemax={maxDockWidth}
-        aria-valuenow={dockWidth}
-        title={t("chat.browserDock.resize")}
-        onDoubleClick={() => updateDockWidth(BROWSER_DOCK_DEFAULT_WIDTH, true)}
-        onKeyDown={onResizeKeyDown}
-        onPointerDown={onResizePointerDown}
-        onPointerMove={onResizePointerMove}
-        onPointerUp={onResizePointerUp}
-        onPointerCancel={(event) => finishResize(event.pointerId)}
-        onLostPointerCapture={(event) => finishResize(event.pointerId)}
-      />
+      {!expanded ? (
+        <button
+          type="button"
+          className="browser-dock-resizer"
+          role="separator"
+          aria-label={t("chat.browserDock.resize")}
+          aria-orientation="vertical"
+          aria-valuemin={Math.min(BROWSER_DOCK_MIN_WIDTH, maxDockWidth)}
+          aria-valuemax={maxDockWidth}
+          aria-valuenow={dockWidth}
+          title={t("chat.browserDock.resize")}
+          onDoubleClick={() =>
+            updateDockWidth(BROWSER_DOCK_DEFAULT_WIDTH, true)
+          }
+          onKeyDown={onResizeKeyDown}
+          onPointerDown={onResizePointerDown}
+          onPointerMove={onResizePointerMove}
+          onPointerUp={onResizePointerUp}
+          onPointerCancel={(event) => finishResize(event.pointerId)}
+          onLostPointerCapture={(event) => finishResize(event.pointerId)}
+        />
+      ) : null}
       <strong className="browser-dock-title">
         <Globe2 size={15} aria-hidden />
         {t("chat.browserDock.title")}
@@ -429,6 +443,24 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
           </button>
         </div>
         <div className="browser-dock-header-actions">
+          <button
+            type="button"
+            className="browser-dock-expand"
+            aria-label={t(
+              expanded ? "chat.browserDock.restore" : "chat.browserDock.expand",
+            )}
+            title={t(
+              expanded ? "chat.browserDock.restore" : "chat.browserDock.expand",
+            )}
+            aria-pressed={expanded}
+            onClick={() => onExpandedChange(!expanded)}
+          >
+            {expanded ? (
+              <Minimize2 size={14} aria-hidden />
+            ) : (
+              <Maximize2 size={14} aria-hidden />
+            )}
+          </button>
           <button
             type="button"
             aria-label={t("chat.browserDock.downloads")}

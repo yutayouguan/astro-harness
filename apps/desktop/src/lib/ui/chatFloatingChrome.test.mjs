@@ -388,7 +388,7 @@ test("composer overlay clearance follows the live composer height", () => {
 });
 
 test("todo and file status stay inside the composer shell", () => {
-  const composerStart = chatView.indexOf('className="composer-shell"');
+  const composerStart = /className=\{`composer-shell/.exec(chatView)?.index ?? -1;
   const progressMatch = /<TodoProgress\s+messages=\{messages\}/.exec(chatView);
   const progress = progressMatch?.index ?? -1;
   const composerSurface = chatView.indexOf("composer composer--stacked");

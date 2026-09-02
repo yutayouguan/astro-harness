@@ -68,6 +68,42 @@ test("opening either dock entry closes the previously active surface", () => {
   );
 });
 
+test("browser focus mode expands inside the chat canvas and keeps the composer available", async () => {
+  const browserDock = await readFile(
+    new URL("../../components/chat/BrowserDock.tsx", import.meta.url),
+    "utf8",
+  );
+  const chatView = await readFile(
+    new URL("../../components/chat/ChatView.tsx", import.meta.url),
+    "utf8",
+  );
+  const browserStyles = await readFile(
+    new URL("../../styles/features/chat/browser-dock.css", import.meta.url),
+    "utf8",
+  );
+  const composerStyles = await readFile(
+    new URL("../../styles/features/chat/markdown.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(appSource, /const \[browserExpanded, setBrowserExpanded\]/);
+  assert.match(appSource, /browserExpanded \? " is-browser-expanded" : ""/);
+  assert.match(appSource, /composerPresentation=\{/);
+  assert.match(appSource, /onComposerHeightChange=\{/);
+  assert.match(appSource, /onComposerOverlayOpenChange=\{/);
+  assert.match(appSource, /expanded=\{browserExpanded\}/);
+  assert.match(appSource, /onExpandedChange=\{setBrowserExpanded\}/);
+  assert.match(browserDock, /Maximize2/);
+  assert.match(browserDock, /Minimize2/);
+  assert.match(chatView, /composerPresentation === "capsule"/);
+  assert.match(chatView, /Boolean\(workspaceContent\)/);
+  assert.match(browserStyles, /\.chat-layout-with-right\.is-browser-expanded/);
+  assert.match(browserStyles, /--browser-composer-height/);
+  assert.match(browserStyles, /\.has-composer-overlay/);
+  assert.match(composerStyles, /\.composer-shell\.is-capsule/);
+  assert.match(composerStyles, /border-radius:\s*999px/);
+});
+
 test("the pinned summary entry opens the reorganized three-tab inspector", async () => {
   const panelSource = await readFile(
     new URL("../../components/chat/ChatRightPanel.tsx", import.meta.url),
