@@ -71,9 +71,7 @@ const meta = {
         },
       ],
     },
-    expanded: false,
     onControl: async () => undefined,
-    onExpandedChange: () => undefined,
     onClose: () => undefined,
   },
 } satisfies Meta<typeof BrowserDock>;

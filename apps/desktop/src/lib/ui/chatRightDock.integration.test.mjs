@@ -57,15 +57,16 @@ test("browser dock keeps an exit lifecycle and uses the project drawer motion", 
   assert.match(appSource, /open=\{browserDockPresence\.visible\}/);
   assert.match(
     browserStyles,
-    /\.browser-dock\s*\{[\s\S]*?flex:\s*0 0 0;[\s\S]*?visibility:\s*hidden;/,
+    /\.browser-dock\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?inset:\s*0;[\s\S]*?width:\s*100%;[\s\S]*?visibility:\s*hidden;/,
   );
+  assert.doesNotMatch(browserStyles, /flex-basis/);
   assert.match(
     browserStyles,
     /\.browser-dock\.is-open\s*\{[\s\S]*?visibility:\s*visible;/,
   );
   assert.match(
     browserStyles,
-    /flex-basis 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
+    /transform 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
   );
 });
 
@@ -109,21 +110,23 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
     "utf8",
   );
 
-  assert.match(appSource, /const \[browserExpanded, setBrowserExpanded\]/);
-  assert.match(appSource, /browserExpanded \? " is-browser-expanded" : ""/);
+  assert.doesNotMatch(appSource, /browserExpanded/);
+  assert.match(appSource, /has-browser is-browser-expanded/);
   assert.match(appSource, /composerPresentation=\{/);
   assert.match(appSource, /onComposerHeightChange=\{/);
   assert.match(appSource, /onComposerOverlayOpenChange=\{/);
-  assert.match(appSource, /expanded=\{browserExpanded\}/);
-  assert.match(appSource, /onExpandedChange=\{setBrowserExpanded\}/);
-  assert.match(browserDock, /Maximize2/);
-  assert.match(browserDock, /Minimize2/);
+  assert.doesNotMatch(browserDock, /Maximize2/);
+  assert.doesNotMatch(browserDock, /Minimize2/);
   assert.match(chatView, /composerPresentation === "capsule"/);
   assert.match(chatView, /Boolean\(workspaceContent\)/);
+  assert.doesNotMatch(chatView, /capsuleComposerExpanded/);
+  assert.doesNotMatch(chatView, /input\.includes\("\\n"\)/);
   assert.match(browserStyles, /\.chat-layout-with-right\.is-browser-expanded/);
+  assert.match(browserStyles, /\.browser-dock\.is-open \.browser-viewport/);
   assert.match(browserStyles, /--browser-composer-height/);
   assert.match(browserStyles, /\.has-composer-overlay/);
   assert.match(composerStyles, /\.composer-shell\.is-capsule/);
+  assert.match(composerStyles, /--composer-capsule-frost/);
   assert.match(composerStyles, /border-radius:\s*999px/);
 });
 

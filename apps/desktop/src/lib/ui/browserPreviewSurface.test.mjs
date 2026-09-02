@@ -39,27 +39,25 @@ test("browser preview supports standalone browsing and completed browser tool re
   const dock = source("../../components/chat/BrowserDock.tsx");
   assert.doesNotMatch(dock, /disabled=\{!sessionId/);
   assert.match(dock, /disabled=\{!address\.trim\(\)\}/);
-  assert.match(dock, /className="browser-dock-resizer"/);
   assert.match(dock, /open \? " is-open" : ""/);
   assert.match(dock, /active: open/);
-  assert.match(dock, /className="browser-dock-expand"/);
-  assert.match(dock, /aria-pressed=\{expanded\}/);
-  assert.match(dock, /onExpandedChange\(!expanded\)/);
-  assert.match(dock, /expanded \? \" is-expanded\" : \"\"/);
-  assert.match(dock, /setPointerCapture/);
-  assert.match(dock, /BROWSER_DOCK_WIDTH_KEY/);
+  assert.doesNotMatch(dock, /browser-dock-resizer/);
+  assert.doesNotMatch(dock, /browser-dock-expand/);
+  assert.doesNotMatch(dock, /BROWSER_DOCK_WIDTH_KEY/);
   assert.match(dock, /useBrowserLiveWebviews/);
   assert.match(dock, /browser-live-placeholder/);
   assert.match(dock, /liveWebview\.isLoading/);
 
-  const titleStart = dock.indexOf('className="browser-dock-title"');
   const headerStart = dock.indexOf('<header className="browser-dock-header">');
   const tabsStart = dock.indexOf('className="browser-tabs"', headerStart);
   const headerEnd = dock.indexOf("</header>", headerStart);
-  assert.ok(titleStart >= 0 && titleStart < headerStart);
+  assert.doesNotMatch(dock, /browser-dock-title/);
   assert.ok(
     headerStart >= 0 && tabsStart > headerStart && tabsStart < headerEnd,
   );
+  assert.match(dock, /browser-dock-overflow-trigger/);
+  assert.match(dock, /role="menu"/);
+  assert.match(dock, /MoreVertical/);
 });
 
 test("browser dock uses a native child WebView with a screenshot fallback", () => {

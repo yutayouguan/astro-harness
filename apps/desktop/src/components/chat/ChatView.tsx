@@ -999,7 +999,6 @@ export default function ChatView({
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
-  const [capsuleComposerExpanded, setCapsuleComposerExpanded] = useState(false);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -2283,12 +2282,7 @@ export default function ChatView({
     Boolean(realtime.active && realtime.transcript) ||
     agentCreateMissing.length > 0 ||
     welcomeTemplateMissing.length > 0 ||
-    fileDragOver ||
-    input.includes("\n");
-
-  useEffect(() => {
-    setCapsuleComposerExpanded(false);
-  }, [useCapsuleComposer]);
+    fileDragOver;
 
   useEffect(() => {
     onComposerOverlayOpenChange?.(
@@ -3393,19 +3387,10 @@ export default function ChatView({
         <form
           ref={composerShellRef}
           className={`composer-shell${useCapsuleComposer ? " is-capsule" : ""}${
-            useCapsuleComposer &&
-            (capsuleComposerExpanded || capsuleComposerHasRichContent)
+            useCapsuleComposer && capsuleComposerHasRichContent
               ? " is-capsule-expanded"
               : ""
           }`}
-          onBlurCapture={(event) => {
-            if (!useCapsuleComposer || capsuleComposerHasRichContent) return;
-            const next = event.relatedTarget;
-            if (next instanceof Node && event.currentTarget.contains(next)) {
-              return;
-            }
-            setCapsuleComposerExpanded(false);
-          }}
           onSubmit={(e) => {
             e.preventDefault();
             if (composerContexts.length === 0 && tryHandleSlashSubmit()) return;
@@ -3963,7 +3948,6 @@ export default function ChatView({
                   rows={2}
                   onChange={(e) => {
                     const v = e.target.value;
-                    if (useCapsuleComposer) setCapsuleComposerExpanded(true);
                     onInputChange(v);
                     syncTriggerFromCaret(
                       v,
@@ -3976,9 +3960,6 @@ export default function ChatView({
                     syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
                   }}
                   onPaste={(e) => void onPaste(e)}
-                  onFocus={() => {
-                    if (useCapsuleComposer) setCapsuleComposerExpanded(true);
-                  }}
                   onClick={() => {
                     const el = textareaRef.current;
                     if (!el) return;

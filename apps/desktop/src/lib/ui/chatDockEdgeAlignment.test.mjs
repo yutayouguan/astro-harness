@@ -33,18 +33,18 @@ test("page bodies use the window edge without a shared 22px inset", () => {
   assert.match(expandedPageBody, /padding:\s*0;/);
 });
 
-test("browser focus title alone clears the native sidebar control", () => {
+test("browser focus tabs clear the native sidebar control", () => {
   assert.match(
     headerStyles,
-    /\.chat-layout-with-right\.is-browser-expanded \.browser-dock-title\s*\{\s*left:\s*var\(--window-chrome-safe-left\);/,
+    /\.chat-layout-with-right\.is-browser-expanded \.browser-dock-header\s*\{\s*left:\s*var\(--window-chrome-safe-left\);/,
   );
   assert.match(
     headerStyles,
-    /\.sidebar\.is-pinned\.is-icons\)[\s\S]*?\.browser-dock-title\s*\{\s*left:\s*calc\(var\(--window-chrome-safe-left\) - var\(--sidebar-w\)\);/,
+    /\.sidebar\.is-pinned\.is-icons\)[\s\S]*?\.browser-dock-header\s*\{\s*left:\s*calc\(var\(--window-chrome-safe-left\) - var\(--sidebar-w\)\);/,
   );
   assert.match(
     headerStyles,
-    /\.sidebar\.is-pinned\.is-labels\)[\s\S]*?\.browser-dock-title\s*\{\s*left:\s*16px;/,
+    /\.sidebar\.is-pinned\.is-labels\)[\s\S]*?\.browser-dock-header\s*\{\s*left:\s*16px;/,
   );
 });
 
@@ -60,6 +60,6 @@ test("native controls and chat titles share one compact titlebar row", () => {
   );
   assert.match(
     headerStyles,
-    /\.content-pane--chat \.browser-dock-title\s*\{\s*height:\s*var\(--titlebar-control-row-h\);/,
+    /\.content-pane--chat \.browser-dock-header\s*\{\s*height:\s*var\(--titlebar-control-row-h\);/,
   );
 });

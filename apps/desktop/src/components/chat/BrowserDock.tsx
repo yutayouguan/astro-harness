@@ -1,10 +1,8 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
   type PointerEvent,
@@ -20,8 +18,7 @@ import {
   ExternalLink,
   Globe2,
   LoaderCircle,
-  Maximize2,
-  Minimize2,
+  MoreVertical,
   Plus,
   RefreshCw,
   X,
@@ -30,15 +27,6 @@ import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
 import { useBrowserLiveWebviews } from "../../hooks/chat/useBrowserLiveWebviews";
 import { useI18n } from "../../i18n/LocaleContext";
 import { normalizeBrowserUrl } from "../../lib/browser/browserUrl";
-import {
-  BROWSER_DOCK_DEFAULT_WIDTH,
-  BROWSER_DOCK_MIN_WIDTH,
-  BROWSER_DOCK_OVERLAY_BREAKPOINT,
-  BROWSER_DOCK_WIDTH_KEY,
-  clampBrowserDockWidth,
-  maxBrowserDockWidth,
-  parseStoredBrowserDockWidth,
-} from "../../lib/ui/browserDockWidth";
 
 type BrowserControl = (
   action: string,
@@ -48,14 +36,9 @@ type BrowserControl = (
 type Props = {
   open: boolean;
   preview: BrowserPreview | null;
-  expanded: boolean;
   onControl: BrowserControl;
-  onExpandedChange: (expanded: boolean) => void;
   onClose: () => void;
 };
-
-const RESIZE_KEYBOARD_STEP = 24;
-const RESIZE_KEYBOARD_LARGE_STEP = 64;
 
 function formatBytes(size: number): string {
   if (size < 1024) return `${size} B`;
@@ -66,40 +49,23 @@ function formatBytes(size: number): string {
 export default function BrowserDock({
   open,
   preview,
-  expanded,
   onControl,
-  onExpandedChange,
   onClose,
 }: Props) {
   const { t } = useI18n();
   const [address, setAddress] = useState(preview?.url ?? "");
   const [downloadsOpen, setDownloadsOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const screenshotRef = useRef<HTMLImageElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const dockRef = useRef<HTMLElement>(null);
-  const dockWidthRef = useRef(BROWSER_DOCK_DEFAULT_WIDTH);
-  const dragRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startWidth: number;
-  } | null>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const actionsTriggerRef = useRef<HTMLButtonElement>(null);
   const wheelDeltaRef = useRef(0);
   const wheelTimerRef = useRef<number | null>(null);
   const resizeTimerRef = useRef<number | null>(null);
   const lastViewportRef = useRef("");
   const controlRunRef = useRef(0);
-  const [dockWidth, setDockWidth] = useState(() => {
-    try {
-      return parseStoredBrowserDockWidth(
-        localStorage.getItem(BROWSER_DOCK_WIDTH_KEY),
-      );
-    } catch {
-      return BROWSER_DOCK_DEFAULT_WIDTH;
-    }
-  });
-  const [maxDockWidth, setMaxDockWidth] = useState(BROWSER_DOCK_DEFAULT_WIDTH);
-  const [resizing, setResizing] = useState(false);
 
   const syncLiveNavigation = useCallback(
     async (url: string) => {
@@ -127,126 +93,33 @@ export default function BrowserDock({
     onError: setError,
   });
 
-  dockWidthRef.current = dockWidth;
-
-  const containerWidth = useCallback(() => {
-    const width =
-      dockRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
-    return width > 0 ? width : Number.POSITIVE_INFINITY;
-  }, []);
-
-  const usesOverlayLayout = useCallback(
-    () => window.innerWidth <= BROWSER_DOCK_OVERLAY_BREAKPOINT,
-    [],
-  );
-
-  const updateDockWidth = useCallback(
-    (nextWidth: number, persist = false) => {
-      const next = clampBrowserDockWidth(
-        nextWidth,
-        containerWidth(),
-        usesOverlayLayout(),
-      );
-      dockWidthRef.current = next;
-      setDockWidth(next);
-      if (!persist) return;
-      try {
-        localStorage.setItem(BROWSER_DOCK_WIDTH_KEY, String(next));
-      } catch {
-        // Storage is best-effort in private or locked-down webviews.
-      }
-    },
-    [containerWidth, usesOverlayLayout],
-  );
-
-  useLayoutEffect(() => {
-    const container = dockRef.current?.parentElement;
-    if (!container) return;
-    const syncBounds = () => {
-      const width = container.getBoundingClientRect().width;
-      if (width <= 0) return;
-      const overlayLayout = usesOverlayLayout();
-      const nextMax = maxBrowserDockWidth(width, overlayLayout);
-      setMaxDockWidth(nextMax);
-      const nextWidth = clampBrowserDockWidth(
-        dockWidthRef.current,
-        width,
-        overlayLayout,
-      );
-      dockWidthRef.current = nextWidth;
-      setDockWidth(nextWidth);
-    };
-    syncBounds();
-    const observer =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(syncBounds)
-        : null;
-    observer?.observe(container);
-    window.addEventListener("resize", syncBounds);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", syncBounds);
-    };
-  }, [usesOverlayLayout]);
-
-  const finishResize = useCallback((pointerId: number) => {
-    if (dragRef.current?.pointerId !== pointerId) return;
-    dragRef.current = null;
-    setResizing(false);
-    try {
-      localStorage.setItem(
-        BROWSER_DOCK_WIDTH_KEY,
-        String(dockWidthRef.current),
-      );
-    } catch {
-      // Storage is best-effort in private or locked-down webviews.
-    }
-  }, []);
-
-  const onResizePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0 || dragRef.current) return;
-    event.preventDefault();
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startWidth:
-        dockRef.current?.getBoundingClientRect().width ?? dockWidthRef.current,
-    };
-    setResizing(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const onResizePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    updateDockWidth(drag.startWidth + drag.startX - event.clientX);
-  };
-
-  const onResizePointerUp = (event: PointerEvent<HTMLButtonElement>) => {
-    finishResize(event.pointerId);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const onResizeKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const step = event.shiftKey
-      ? RESIZE_KEYBOARD_LARGE_STEP
-      : RESIZE_KEYBOARD_STEP;
-    let nextWidth: number | null = null;
-    if (event.key === "ArrowLeft") nextWidth = dockWidthRef.current + step;
-    else if (event.key === "ArrowRight")
-      nextWidth = dockWidthRef.current - step;
-    else if (event.key === "Home") nextWidth = BROWSER_DOCK_MIN_WIDTH;
-    else if (event.key === "End") nextWidth = maxDockWidth;
-    if (nextWidth == null) return;
-    event.preventDefault();
-    updateDockWidth(nextWidth, true);
-  };
-
   useEffect(() => {
     if (preview?.url) setAddress(preview.url);
   }, [preview?.url]);
+
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const closeOnOutsidePointer = (event: globalThis.PointerEvent) => {
+      if (!actionsRef.current?.contains(event.target as Node)) {
+        setActionsOpen(false);
+      }
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setActionsOpen(false);
+      actionsTriggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [actionsOpen]);
+
+  useEffect(() => {
+    if (!open) setActionsOpen(false);
+  }, [open]);
 
   useEffect(
     () => () => {
@@ -372,38 +245,10 @@ export default function BrowserDock({
 
   return (
     <aside
-      ref={dockRef}
-      className={`browser-dock${open ? " is-open" : ""}${resizing ? " is-resizing" : ""}${expanded ? " is-expanded" : ""}`}
+      className={`browser-dock${open ? " is-open" : ""}${actionsOpen ? " has-actions-menu" : ""}`}
       aria-label={t("chat.browserDock.title")}
       aria-hidden={!open}
-      style={{ "--browser-dock-width": `${dockWidth}px` } as CSSProperties}
     >
-      {!expanded ? (
-        <button
-          type="button"
-          className="browser-dock-resizer"
-          role="separator"
-          aria-label={t("chat.browserDock.resize")}
-          aria-orientation="vertical"
-          aria-valuemin={Math.min(BROWSER_DOCK_MIN_WIDTH, maxDockWidth)}
-          aria-valuemax={maxDockWidth}
-          aria-valuenow={dockWidth}
-          title={t("chat.browserDock.resize")}
-          onDoubleClick={() =>
-            updateDockWidth(BROWSER_DOCK_DEFAULT_WIDTH, true)
-          }
-          onKeyDown={onResizeKeyDown}
-          onPointerDown={onResizePointerDown}
-          onPointerMove={onResizePointerMove}
-          onPointerUp={onResizePointerUp}
-          onPointerCancel={(event) => finishResize(event.pointerId)}
-          onLostPointerCapture={(event) => finishResize(event.pointerId)}
-        />
-      ) : null}
-      <strong className="browser-dock-title">
-        <Globe2 size={15} aria-hidden />
-        {t("chat.browserDock.title")}
-      </strong>
       <header className="browser-dock-header">
         <div
           className="browser-tabs"
@@ -449,56 +294,69 @@ export default function BrowserDock({
               </div>
             ))}
           </div>
-          <button
-            type="button"
-            className="browser-new-tab"
-            aria-label={t("chat.browserDock.newTab")}
-            onClick={() => void run("new_tab")}
-          >
-            <Plus size={14} aria-hidden />
-          </button>
         </div>
-        <div className="browser-dock-header-actions">
+        <div className="browser-dock-overflow" ref={actionsRef}>
           <button
+            ref={actionsTriggerRef}
             type="button"
-            className="browser-dock-expand"
-            aria-label={t(
-              expanded ? "chat.browserDock.restore" : "chat.browserDock.expand",
-            )}
-            title={t(
-              expanded ? "chat.browserDock.restore" : "chat.browserDock.expand",
-            )}
-            aria-pressed={expanded}
-            onClick={() => onExpandedChange(!expanded)}
+            className={`browser-dock-overflow-trigger${actionsOpen ? " is-active" : ""}`}
+            aria-label={t("chat.browserDock.moreActions")}
+            title={t("chat.browserDock.moreActions")}
+            aria-haspopup="menu"
+            aria-expanded={actionsOpen}
+            aria-controls="browser-dock-actions-menu"
+            onClick={() => setActionsOpen((open) => !open)}
           >
-            {expanded ? (
-              <Minimize2 size={14} aria-hidden />
-            ) : (
-              <Maximize2 size={14} aria-hidden />
-            )}
+            <MoreVertical size={15} aria-hidden />
           </button>
-          <button
-            type="button"
-            aria-label={t("chat.browserDock.downloads")}
-            disabled={!preview}
-            className={downloadsOpen ? "is-active" : undefined}
-            onClick={() => {
-              setDownloadsOpen((open) => !open);
-              void run("downloads");
-            }}
-          >
-            <Download size={14} aria-hidden />
-            {preview?.downloads.length ? (
-              <span>{preview.downloads.length}</span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            aria-label={t("chat.browserDock.close")}
-            onClick={onClose}
-          >
-            <X size={15} aria-hidden />
-          </button>
+          {actionsOpen ? (
+            <div
+              id="browser-dock-actions-menu"
+              className="browser-dock-actions-menu"
+              role="menu"
+              aria-label={t("chat.browserDock.moreActions")}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setActionsOpen(false);
+                  void run("new_tab");
+                }}
+              >
+                <Plus size={14} aria-hidden />
+                <span>{t("chat.browserDock.newTab")}</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!preview}
+                onClick={() => {
+                  setActionsOpen(false);
+                  setDownloadsOpen((open) => !open);
+                  void run("downloads");
+                }}
+              >
+                <Download size={14} aria-hidden />
+                <span>{t("chat.browserDock.downloads")}</span>
+                {preview?.downloads.length ? (
+                  <small>{preview.downloads.length}</small>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="is-danger"
+                onClick={() => {
+                  setActionsOpen(false);
+                  onClose();
+                }}
+              >
+                <X size={14} aria-hidden />
+                <span>{t("chat.browserDock.close")}</span>
+              </button>
+            </div>
+          ) : null}
         </div>
       </header>
 

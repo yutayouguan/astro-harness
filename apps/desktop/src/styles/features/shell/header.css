@@ -1536,26 +1536,25 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
   padding: 0;
 }
 
-/* Browser focus mode reaches the content edge. Only its title moves aside for
-   native window chrome; content surfaces no longer carry a global safe inset. */
-.chat-layout-with-right.is-browser-expanded .browser-dock-title {
+/* 浏览器聚焦模式延伸到内容区边缘；标签栏与原生标题栏共用一行，并避让窗口按钮。 */
+.chat-layout-with-right.is-browser-expanded .browser-dock-header {
   left: var(--window-chrome-safe-left);
   height: var(--titlebar-control-row-h);
 }
 
-.content-pane--chat .browser-dock-title {
+.content-pane--chat .browser-dock-header {
   height: var(--titlebar-control-row-h);
 }
 
 .body-row:has(> .sidebar.is-pinned.is-icons)
   .chat-layout-with-right.is-browser-expanded
-  .browser-dock-title {
+  .browser-dock-header {
   left: calc(var(--window-chrome-safe-left) - var(--sidebar-w));
 }
 
 .body-row:has(> .sidebar.is-pinned.is-labels)
   .chat-layout-with-right.is-browser-expanded
-  .browser-dock-title {
+  .browser-dock-header {
   left: 16px;
 }
 
