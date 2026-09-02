@@ -107,6 +107,9 @@ pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
         "(allow mach-lookup)\n",
         "(allow ipc-posix-shm)\n",
         "(allow signal)\n",
+        // Interactive shells need tcsetpgrp/TIOCSPGRP on their inherited PTY slave. Limit
+        // file-ioctl to macOS pseudo-terminal devices instead of enabling it globally.
+        "(allow file-ioctl (regex #\"^/dev/ttys[0-9A-Za-z]+$\"))\n",
         // Shells and common CLI programs expect the null device to be writable even in
         // read-only mode. This discards bytes and does not broaden filesystem access.
         "(allow file-write* (literal \"/dev/null\"))\n",
@@ -176,6 +179,17 @@ mod tests {
         let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), [], true).unwrap();
         let profile = seatbelt_profile(&policy);
         assert!(profile.contains("(allow network*)"));
+    }
+
+    #[test]
+    fn profile_allows_ioctl_only_on_pty_slaves() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy =
+            SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), Vec::new(), false).unwrap();
+        let profile = seatbelt_profile(&policy);
+
+        assert!(profile.contains("(allow file-ioctl (regex #\"^/dev/ttys[0-9A-Za-z]+$\"))"));
+        assert!(!profile.contains("(allow file-ioctl)"));
     }
 
     #[test]

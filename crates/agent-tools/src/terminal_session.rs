@@ -930,6 +930,64 @@ mod tests {
         assert_eq!(result.next_cursor, 9);
     }
 
+    #[cfg(target_os = "macos")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn sandboxed_zsh_can_initialize_pty_job_control() {
+        let dir = tempfile::tempdir().unwrap();
+        let scope = dir.path().canonicalize().unwrap();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::WorkspaceWrite,
+            &scope,
+            Vec::new(),
+            true,
+        )
+        .unwrap();
+        let mut command = sandbox::SandboxRunner
+            .std_command(&policy, "/bin/zsh")
+            .unwrap();
+        configure_interactive_shell(
+            &mut command,
+            Path::new("/bin/zsh"),
+            types::SandboxMode::WorkspaceWrite,
+        );
+        command.current_dir(&scope);
+        command.env("TERM", "xterm-256color");
+
+        let manager = TerminalSessionManager::default();
+        let session = manager
+            .spawn(
+                scope.clone(),
+                scope,
+                command,
+                types::SandboxMode::WorkspaceWrite,
+                SessionRegistration {
+                    desktop_token: Some("sandboxed-zsh".into()),
+                    make_agent_default: true,
+                },
+                TerminalDimensions { cols: 80, rows: 24 },
+            )
+            .unwrap();
+        let mut cursor = 0;
+        let mut bytes = Vec::new();
+        for _ in 0..4 {
+            let output = manager.read(session.id, cursor, 4096, 1_000).await.unwrap();
+            cursor = output.next_cursor;
+            bytes.extend_from_slice(&output.data);
+            if bytes.windows(2).any(|window| window == b"AI") {
+                break;
+            }
+        }
+        let text = String::from_utf8_lossy(&bytes);
+
+        assert!(text.contains("AI"), "terminal output: {text:?}");
+        assert!(
+            !text.contains("can't set tty pgrp"),
+            "terminal output: {text:?}"
+        );
+        assert!(!text.contains("&#x20;"), "terminal output: {text:?}");
+        manager.close(session.id).unwrap();
+    }
+
     #[cfg(unix)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn concurrent_open_reuses_one_interactive_shell() {
