@@ -44,6 +44,16 @@
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }
 
+.sidebar.is-pinned.is-rail-preview {
+  position: absolute;
+  z-index: 60;
+  box-shadow: 12px 0 30px color-mix(in srgb, #0f172a 12%, transparent);
+}
+
+.body-row:has(> .sidebar.is-pinned.is-rail-preview) {
+  padding-left: var(--sidebar-w);
+}
+
 html[data-theme="dark"] .sidebar.is-pinned {
   background: var(--sidebar-chrome-background);
 }
@@ -293,6 +303,10 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
   padding: 3px 0;
 }
 
+.sidebar-section-icon {
+  display: none;
+}
+
 .sidebar-section-toggle:is(:hover, :focus-visible, :active) {
   background: transparent;
 }
@@ -308,6 +322,57 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
 .sidebar-collapsible-section:is(:hover, :focus-within)
   .sidebar-section-chevron {
   opacity: 0.68;
+}
+
+/* Icon-only mode is a semantic dock: section glyphs replace detached chevrons.
+   Activating one previews the labelled tree without changing the saved preference. */
+.sidebar:not(.is-labels) .sidebar-projects {
+  gap: 6px;
+}
+
+.sidebar:not(.is-labels) .sidebar-collapsible-section {
+  min-height: 38px;
+  padding: 1px 0;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-toggle {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 10px;
+  color: color-mix(in srgb, var(--ink-soft) 88%, transparent);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-toggle:is(:hover, :focus-visible) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.sidebar:not(.is-labels) .sidebar-section-toggle:focus-visible {
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 34%, transparent);
+  outline-offset: -2px;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-icon > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-chevron {
+  display: none;
 }
 
 .sidebar-add-btn,
@@ -452,6 +517,7 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
   .sidebar-global-search .expandable-search-btn,
   .sidebar-global-search .expandable-search-field,
   .sidebar-feature-tab,
+  .sidebar-section-toggle,
   .sidebar-project-header,
   .sidebar-session-item,
   .sidebar-settings-btn {

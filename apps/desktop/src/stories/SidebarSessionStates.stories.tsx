@@ -4,6 +4,8 @@ import {
   Archive,
   ChevronRight,
   Cpu,
+  FolderTree,
+  History,
   Layers2,
   MessageSquare,
   MoreVertical,
@@ -101,17 +103,20 @@ function SessionRow({
   );
 }
 
-function SidebarSessionStates() {
+function SidebarSessionStates({ labels = true }: { labels?: boolean }) {
   useBeautifyTips();
   const [query, setQuery] = useState("");
   const [mainProjectExpanded, setMainProjectExpanded] = useState(true);
+  const [railPreview, setRailPreview] = useState(false);
+  const showLabels = labels || railPreview;
 
   return (
     <main className="app-shell" data-tone="blue" style={{ minHeight: "100vh" }}>
       <div className="body-row">
         <aside
-          className="sidebar is-open is-pinned is-labels"
+          className={`sidebar is-open is-pinned ${showLabels ? "is-labels" : "is-icons"} ${railPreview ? "is-rail-preview" : ""}`}
           style={{ "--sidebar-w-wide": "280px" } as CSSProperties}
+          onMouseLeave={() => setRailPreview(false)}
         >
           <div className="sidebar-brand">
             <div className="sidebar-logo" aria-hidden>
@@ -153,7 +158,13 @@ function SidebarSessionStates() {
                 type="button"
                 className="sidebar-section-toggle"
                 aria-expanded
+                aria-label="项目"
+                title={showLabels ? undefined : "项目"}
+                onClick={() => setRailPreview(true)}
               >
+                <span className="sidebar-section-icon" aria-hidden>
+                  <FolderTree size={18} strokeWidth={1.8} />
+                </span>
                 <span className="sidebar-section-title">项目</span>
                 <ChevronRight
                   className="sidebar-section-chevron is-expanded"
@@ -173,9 +184,14 @@ function SidebarSessionStates() {
                   type="button"
                   className="sidebar-project-name"
                   aria-expanded={mainProjectExpanded}
-                  onClick={() =>
-                    setMainProjectExpanded((expanded) => !expanded)
-                  }
+                  onClick={() => {
+                    if (!showLabels) {
+                      setMainProjectExpanded(true);
+                      setRailPreview(true);
+                    } else {
+                      setMainProjectExpanded((expanded) => !expanded);
+                    }
+                  }}
                 >
                   <ProjectFolderIcon
                     iconId="astro-space"
@@ -209,7 +225,13 @@ function SidebarSessionStates() {
                 type="button"
                 className="sidebar-section-toggle"
                 aria-expanded
+                aria-label="最近"
+                title={showLabels ? undefined : "最近"}
+                onClick={() => setRailPreview(true)}
               >
+                <span className="sidebar-section-icon" aria-hidden>
+                  <History size={18} strokeWidth={1.8} />
+                </span>
                 <span className="sidebar-section-title">最近</span>
                 <ChevronRight
                   className="sidebar-section-chevron is-expanded"
@@ -343,6 +365,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const CollapsedNavigation: Story = {
+  args: { labels: false },
+};
 
 export const SettingsNavigation: Story = {
   render: () => <SettingsMenu />,

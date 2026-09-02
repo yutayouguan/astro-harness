@@ -125,8 +125,10 @@ import {
   ChevronRight,
   FolderTree,
   Globe2,
+  History,
   MessageSquare,
   MoreHorizontal,
+  Pin,
   SquareTerminal,
 } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
@@ -283,8 +285,40 @@ export default function App() {
   const [activeModelPricing, setActiveModelPricing] =
     useState<ModelPricingMeta | null>(null);
   const [chatHeaderHasUnderlay, setChatHeaderHasUnderlay] = useState(false);
+  const [sidebarRailPreview, setSidebarRailPreview] = useState(false);
   // ── Extracted hooks ───────────────────────────────────────────────────────
   const sidebar = useSidebar();
+  const sidebarContentExpanded =
+    sidebar.showSidebarLabels || sidebarRailPreview;
+  const toggleVisibleSidebarSection = useCallback(
+    (section: string) => {
+      if (!sidebarContentExpanded) {
+        setCollapsedSections((prev) => {
+          if (!prev.has(section)) return prev;
+          const next = new Set(prev);
+          next.delete(section);
+          return next;
+        });
+        setSidebarRailPreview(true);
+        return;
+      }
+      toggleSection(section);
+    },
+    [sidebarContentExpanded, toggleSection],
+  );
+  const toggleVisibleProject = useCallback(
+    (projectId: string) => {
+      setCollapsedProjects((prev) => {
+        const next = new Set(prev);
+        if (!sidebarContentExpanded) next.delete(projectId);
+        else if (next.has(projectId)) next.delete(projectId);
+        else next.add(projectId);
+        return next;
+      });
+      if (!sidebarContentExpanded) setSidebarRailPreview(true);
+    },
+    [sidebarContentExpanded],
+  );
   const winChrome = useWindowChrome();
   const {
     providers,
@@ -1172,9 +1206,23 @@ export default function App() {
       >
         <aside
           ref={sidebar.sidebarRef}
-          className={`sidebar ${nav === "settings" ? "is-settings" : ""} ${sidebar.sidebarOpen || sidebar.sidebarPinned ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned ? "is-pinned" : ""} ${sidebar.showSidebarLabels ? "is-labels" : "is-icons"} ${sidebar.sidebarResizing ? "is-resizing" : ""}`}
+          className={`sidebar ${nav === "settings" ? "is-settings" : ""} ${sidebar.sidebarOpen || sidebar.sidebarPinned ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned ? "is-pinned" : ""} ${sidebarContentExpanded ? "is-labels" : "is-icons"} ${sidebarRailPreview ? "is-rail-preview" : ""} ${sidebar.sidebarResizing ? "is-resizing" : ""}`}
           onMouseEnter={sidebar.openSidebar}
-          onMouseLeave={sidebar.scheduleHideSidebar}
+          onMouseLeave={() => {
+            sidebar.scheduleHideSidebar();
+            setSidebarRailPreview(false);
+          }}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              setSidebarRailPreview(false);
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && sidebarRailPreview) {
+              event.stopPropagation();
+              setSidebarRailPreview(false);
+            }
+          }}
           onContextMenu={sidebar.openSidebarContextMenu}
         >
           {nav === "settings" ? (
@@ -1323,9 +1371,18 @@ export default function App() {
                         <button
                           type="button"
                           className="sidebar-section-toggle"
-                          onClick={() => toggleSection("pinned")}
+                          onClick={() => toggleVisibleSidebarSection("pinned")}
                           aria-expanded={!collapsedSections.has("pinned")}
+                          aria-label={t("sessions.pin")}
+                          title={
+                            sidebarContentExpanded
+                              ? undefined
+                              : t("sessions.pin")
+                          }
                         >
+                          <span className="sidebar-section-icon" aria-hidden>
+                            <Pin size={17} strokeWidth={1.8} />
+                          </span>
                           <span className="sidebar-section-title">
                             {t("sessions.pin")}
                           </span>
@@ -1370,9 +1427,18 @@ export default function App() {
                       <button
                         type="button"
                         className="sidebar-section-toggle"
-                        onClick={() => toggleSection("projects")}
+                        onClick={() => toggleVisibleSidebarSection("projects")}
                         aria-expanded={!collapsedSections.has("projects")}
+                        aria-label={t("sidebar.projects")}
+                        title={
+                          sidebarContentExpanded
+                            ? undefined
+                            : t("sidebar.projects")
+                        }
                       >
+                        <span className="sidebar-section-icon" aria-hidden>
+                          <FolderTree size={18} strokeWidth={1.8} />
+                        </span>
                         <span className="sidebar-section-title">
                           {t("sidebar.projects")}
                         </span>
@@ -1429,14 +1495,7 @@ export default function App() {
                               className="sidebar-project-name"
                               title={proj.name}
                               aria-expanded={!collapsedProjects.has(proj.id)}
-                              onClick={() => {
-                                setCollapsedProjects((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(proj.id)) next.delete(proj.id);
-                                  else next.add(proj.id);
-                                  return next;
-                                });
-                              }}
+                              onClick={() => toggleVisibleProject(proj.id)}
                             >
                               <ProjectFolderIcon
                                 iconId={proj.icon}
@@ -1518,9 +1577,20 @@ export default function App() {
                         <button
                           type="button"
                           className="sidebar-section-toggle"
-                          onClick={() => toggleSection("automation")}
+                          onClick={() =>
+                            toggleVisibleSidebarSection("automation")
+                          }
                           aria-expanded={!collapsedSections.has("automation")}
+                          aria-label={t("sidebar.automationRuns")}
+                          title={
+                            sidebarContentExpanded
+                              ? undefined
+                              : t("sidebar.automationRuns")
+                          }
                         >
+                          <span className="sidebar-section-icon" aria-hidden>
+                            <Activity size={17} strokeWidth={1.8} />
+                          </span>
                           <span className="sidebar-section-title">
                             {t("sidebar.automationRuns")}
                           </span>
@@ -1566,9 +1636,24 @@ export default function App() {
                       <button
                         type="button"
                         className="sidebar-section-toggle"
-                        onClick={() => toggleSection("recent")}
+                        onClick={() => toggleVisibleSidebarSection("recent")}
                         aria-expanded={!collapsedSections.has("recent")}
+                        aria-label={
+                          sessionListKind === "archived"
+                            ? t("sessions.archived")
+                            : t("sidebar.recent")
+                        }
+                        title={
+                          sidebarContentExpanded
+                            ? undefined
+                            : sessionListKind === "archived"
+                              ? t("sessions.archived")
+                              : t("sidebar.recent")
+                        }
                       >
+                        <span className="sidebar-section-icon" aria-hidden>
+                          <History size={18} strokeWidth={1.8} />
+                        </span>
                         <span className="sidebar-section-title">
                           {sessionListKind === "archived"
                             ? t("sessions.archived")

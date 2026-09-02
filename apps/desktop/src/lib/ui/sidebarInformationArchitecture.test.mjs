@@ -127,12 +127,56 @@ test("project folders only expand while sessions own selection", () => {
   assert.match(app, /aria-expanded=\{!collapsedProjects\.has\(proj\.id\)\}/);
   assert.match(
     app,
-    /className="sidebar-project-name"[\s\S]*?onClick=\{\(\) => \{[\s\S]*?setCollapsedProjects\([\s\S]*?next\.has\(proj\.id\)[\s\S]*?next\.add\(proj\.id\);[\s\S]*?return next;[\s\S]*?\}\);[\s\S]*?\}\}/,
+    /const toggleVisibleProject = useCallback\([\s\S]*?setCollapsedProjects\([\s\S]*?next\.has\(projectId\)[\s\S]*?next\.add\(projectId\);[\s\S]*?return next;/,
     "project folder clicks should only toggle expansion",
+  );
+  assert.match(
+    app,
+    /className="sidebar-project-name"[\s\S]*?onClick=\{\(\) => toggleVisibleProject\(proj\.id\)\}/,
   );
   assert.match(sessionList, /aria-current=\{isActive \? "page" : undefined\}/);
   assert.doesNotMatch(sidebarPolishStyles, /\.sidebar-project\.is-active/);
   assert.doesNotMatch(projectStyles, /\.sidebar-project\.is-active/);
+});
+
+test("icon-only sidebar uses meaningful section controls instead of detached chevrons", () => {
+  assert.match(app, /<Pin size=\{17\} strokeWidth=\{1\.8\} \/>/);
+  assert.match(app, /<FolderTree size=\{18\} strokeWidth=\{1\.8\} \/>/);
+  assert.match(app, /<Activity size=\{17\} strokeWidth=\{1\.8\} \/>/);
+  assert.match(app, /<History size=\{18\} strokeWidth=\{1\.8\} \/>/);
+  assert.match(
+    app,
+    /const sidebarContentExpanded =\s*sidebar\.showSidebarLabels \|\| sidebarRailPreview;/,
+    "the rail preview should preserve the saved label preference",
+  );
+  assert.match(
+    app,
+    /if \(!sidebarContentExpanded\)[\s\S]*?setSidebarRailPreview\(true\);/,
+    "collapsed section controls should preview the labelled tree",
+  );
+  assert.match(
+    app,
+    /className="sidebar-project-name"[\s\S]*?onClick=\{\(\) => toggleVisibleProject\(proj\.id\)\}/,
+    "collapsed project folders should preview their expanded contents",
+  );
+  assert.match(
+    sidebarPolishStyles,
+    /\.sidebar:not\(\.is-labels\) \.sidebar-section-icon\s*\{[\s\S]*?display:\s*grid;/,
+  );
+  assert.match(
+    sidebarPolishStyles,
+    /\.sidebar:not\(\.is-labels\) \.sidebar-section-chevron\s*\{[\s\S]*?display:\s*none;/,
+  );
+  assert.match(
+    sidebarPolishStyles,
+    /\.sidebar\.is-pinned\.is-rail-preview\s*\{[\s\S]*?position:\s*absolute;/,
+    "the temporary preview should leave normal flex layout",
+  );
+  assert.match(
+    sidebarPolishStyles,
+    /\.body-row:has\(> \.sidebar\.is-pinned\.is-rail-preview\)\s*\{[\s\S]*?padding-left:\s*var\(--sidebar-w\);/,
+    "the temporary preview should overlay content instead of shifting it",
+  );
 });
 
 test("sidebar hierarchy stays compact and keeps a separated footer", () => {
