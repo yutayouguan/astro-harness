@@ -149,21 +149,26 @@
   background: transparent !important;
 }
 
-.terminal-dock-screen .xterm-viewport::-webkit-scrollbar {
-  width: 2px;
-}
-
-.terminal-dock-screen .xterm-viewport::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.terminal-dock-screen .xterm-viewport::-webkit-scrollbar-thumb {
+.terminal-dock-screen
+  .xterm
+  .xterm-scrollable-element
+  > .scrollbar
+  > .slider {
   border-radius: 999px;
-  background: color-mix(in srgb, var(--scroll-thumb) 72%, transparent);
+  opacity: 0.58;
 }
 
-.terminal-dock-screen .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: var(--scroll-thumb);
+.terminal-dock-screen
+  .xterm
+  .xterm-scrollable-element
+  > .scrollbar
+  > .slider:hover,
+.terminal-dock-screen
+  .xterm
+  .xterm-scrollable-element
+  > .scrollbar
+  > .slider.active {
+  opacity: 0.9;
 }
 
 @media (max-height: 560px) {

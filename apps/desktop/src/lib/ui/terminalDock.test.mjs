@@ -40,3 +40,15 @@ test("terminal dock resets ownership when the active project changes", () => {
   assert.match(app, /key=\{activeProject\.id\}/);
   assert.match(component, /setSession\(null\)/);
 });
+
+test("terminal dock configures the xterm 6 custom scrollbar instead of the legacy viewport", () => {
+  const component = source("components/chat/TerminalDock.tsx");
+  const css = source("styles/features/chat/terminal-dock.css");
+
+  assert.match(component, /SCROLLBAR_WIDTH = 4/);
+  assert.match(component, /overviewRuler:\s*\{ width: SCROLLBAR_WIDTH \}/);
+  assert.match(css, /\.xterm-scrollable-element/);
+  assert.match(css, /> \.scrollbar/);
+  assert.match(css, /> \.slider/);
+  assert.doesNotMatch(css, /xterm-viewport::/);
+});

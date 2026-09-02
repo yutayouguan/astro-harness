@@ -39,6 +39,7 @@ type Props = {
 
 const HEIGHT_KEY_PREFIX = "astro.terminalDock.height.";
 const WRITE_CHUNK_BYTES = 32 * 1024;
+const SCROLLBAR_WIDTH = 4;
 
 function initialHeight(projectId: string): number {
   const stored = Number(localStorage.getItem(`${HEIGHT_KEY_PREFIX}${projectId}`));
@@ -99,6 +100,7 @@ export default function TerminalDock({
       fontFamily: settings.fontFamily,
       fontSize: settings.fontSize,
       lineHeight: settings.lineHeight,
+      overviewRuler: { width: SCROLLBAR_WIDTH },
       scrollback: settings.scrollback,
       theme: terminalTheme(),
     });
