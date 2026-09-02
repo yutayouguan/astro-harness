@@ -29,7 +29,10 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
+import type {
+  BrowserPreview,
+  BrowserPreviewTab,
+} from "../../hooks/chat/useBrowserPreview";
 import { useBrowserLiveWebviews } from "../../hooks/chat/useBrowserLiveWebviews";
 import { useI18n } from "../../i18n/LocaleContext";
 import { normalizeBrowserUrl } from "../../lib/browser/browserUrl";
@@ -62,6 +65,22 @@ type Props = {
 const RESIZE_KEYBOARD_STEP = 24;
 const RESIZE_KEYBOARD_LARGE_STEP = 64;
 const RESTORE_ANIMATION_MS = 300;
+
+function BrowserTabIcon({ tab }: { tab: BrowserPreviewTab }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+
+  return tab.faviconUrl && failedUrl !== tab.faviconUrl ? (
+    <img
+      className="browser-tab-favicon"
+      src={tab.faviconUrl}
+      alt=""
+      aria-hidden
+      onError={() => setFailedUrl(tab.faviconUrl)}
+    />
+  ) : (
+    <Globe2 className="browser-tab-favicon-fallback" size={12} aria-hidden />
+  );
+}
 
 function formatBytes(size: number): string {
   if (size < 1024) return `${size} B`;
@@ -521,7 +540,7 @@ export default function BrowserDock({
                   void run("switch_tab", { tab_id: tab.id });
                 }}
               >
-                <Globe2 size={12} aria-hidden />
+                <BrowserTabIcon tab={tab} />
                 <span>
                   {tab.title || tab.url || t("chat.browserDock.newTab")}
                 </span>

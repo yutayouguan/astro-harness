@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { normalizeBrowserFaviconUrl } from "../../lib/browser/browserFavicon";
 import { nextBrowserPreviewRevision } from "../../lib/browser/browserPreviewState";
 
 export type BrowserPreviewStatus =
@@ -22,6 +23,7 @@ export type BrowserPreviewTab = {
   id: string;
   title: string;
   url: string;
+  faviconUrl: string | null;
   active: boolean;
 };
 
@@ -91,6 +93,9 @@ function browserTabs(value: unknown): BrowserPreviewTab[] {
         id,
         title: text(row.title),
         url: text(row.url),
+        faviconUrl: normalizeBrowserFaviconUrl(
+          row.favicon_url ?? row.faviconUrl,
+        ),
         active: row.active === true,
       },
     ];

@@ -93,6 +93,7 @@ function activeTab(preview: BrowserPreview | null): BrowserPreviewTab | null {
       id: preview.activeTabId || "active",
       title: preview.title,
       url: preview.url,
+      faviconUrl: null,
       active: true,
     }
   );

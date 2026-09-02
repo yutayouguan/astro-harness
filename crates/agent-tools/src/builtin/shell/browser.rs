@@ -679,6 +679,7 @@ struct BrowserTab {
     id: String,
     title: String,
     url: String,
+    favicon_url: Option<String>,
     session: Arc<Mutex<BrowserSession>>,
 }
 
@@ -957,6 +958,9 @@ async fn decorate_result(
         if let Some(title) = result.get("title").and_then(Value::as_str) {
             tab.title = title.to_string();
         }
+        if let Some(favicon_url) = result.get("favicon_url") {
+            tab.favicon_url = favicon_url.as_str().map(str::to_string);
+        }
     }
     result["session_id"] = Value::String(session_id.to_string());
     result["active_tab_id"] = Value::String(workspace.active_tab_id.clone());
@@ -969,6 +973,7 @@ async fn decorate_result(
                     "id": tab.id,
                     "title": tab.title,
                     "url": tab.url,
+                    "favicon_url": tab.favicon_url,
                     "active": tab.id == workspace.active_tab_id,
                 })
             })
@@ -1040,6 +1045,10 @@ async fn open_for_session(
                 .and_then(Value::as_str)
                 .unwrap_or(&url)
                 .to_string(),
+            favicon_url: result
+                .get("favicon_url")
+                .and_then(Value::as_str)
+                .map(str::to_string),
             session,
         });
         workspace.active_tab_id = tab_id.clone();
@@ -1351,6 +1360,7 @@ async fn downloads_for_session(session_id: &str) -> anyhow::Result<String> {
             "id": tab.id,
             "title": tab.title,
             "url": tab.url,
+            "favicon_url": tab.favicon_url,
             "active": tab.id == workspace.active_tab_id,
         })).collect::<Vec<_>>(),
         "downloads": download_entries(&workspace.output_dir),
@@ -2095,7 +2105,12 @@ impl BrowserSession {
               type: el.getAttribute('type'), text: (el.innerText || (sensitive(el) ? '' : el.value) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 180),
               disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true')
             }));
-          return JSON.stringify({url:location.href,title:document.title,text:(document.body?.innerText || '').slice(0,20000),interactive:nodes});
+          const iconLinks = [...document.querySelectorAll('link[rel]')].filter(el => el.getAttribute('href')?.trim());
+          const faviconCandidate = iconLinks.find(el => el.rel.toLowerCase().split(/\s+/).includes('icon'))?.href
+            || iconLinks.find(el => el.rel.toLowerCase().includes('apple-touch-icon'))?.href
+            || '';
+          const favicon = faviconCandidate.length <= 8192 ? faviconCandidate : '';
+          return JSON.stringify({url:location.href,title:document.title,faviconUrl:favicon,text:(document.body?.innerText || '').slice(0,20000),interactive:nodes});
         })()"#;
         let mut page = self.evaluate_json(expression).await?;
         if let Some(text) = page.get("text").and_then(Value::as_str).map(str::to_string) {
@@ -2114,6 +2129,7 @@ impl BrowserSession {
             "status": "connected",
             "url": page.get("url").cloned().unwrap_or(Value::Null),
             "title": page.get("title").cloned().unwrap_or(Value::Null),
+            "favicon_url": page.get("faviconUrl").cloned().unwrap_or(Value::Null),
             "snapshot": page,
             "screenshot_path": screenshot_path.map(|path| path.to_string_lossy().into_owned())
         }))
@@ -2331,7 +2347,7 @@ mod tests {
                 };
                 let mut request = [0_u8; 2048];
                 let _ = socket.read(&mut request).await;
-                let body = "<!doctype html><title>Astro Browser Test</title><input id='api-token' value='secret-token'><button id='danger'>Delete account</button>";
+                let body = "<!doctype html><link rel='icon' href='data:image/png;base64,AA=='><title>Astro Browser Test</title><input id='api-token' value='secret-token'><button id='danger'>Delete account</button>";
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(), body
@@ -2357,6 +2373,7 @@ mod tests {
         assert_eq!(viewport, json!({"width":640,"height":720}));
         let snapshot = session.snapshot(true).await.unwrap();
         assert_eq!(snapshot["title"], "Astro Browser Test");
+        assert_eq!(snapshot["favicon_url"], "data:image/png;base64,AA==");
         assert!(snapshot["screenshot_path"]
             .as_str()
             .is_some_and(|path| Path::new(path).exists()));
@@ -2371,12 +2388,21 @@ mod tests {
                     id: tab_id.clone(),
                     title: "Astro Browser Test".into(),
                     url: format!("http://{addr}"),
+                    favicon_url: Some("data:image/png;base64,AA==".into()),
                     session: Arc::new(Mutex::new(session)),
                 }],
                 active_tab_id: tab_id,
                 output_dir: temp.path().to_path_buf(),
                 preview_server: None,
             },
+        );
+        let decorated = snapshot_for_session(&session_id, false, None)
+            .await
+            .unwrap();
+        let decorated: Value = serde_json::from_str(&decorated).unwrap();
+        assert_eq!(
+            decorated["tabs"][0]["favicon_url"],
+            "data:image/png;base64,AA=="
         );
         assert_eq!(
             effective_approval_class(

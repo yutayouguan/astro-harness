@@ -285,6 +285,18 @@
   box-shadow: var(--glass-rim);
 }
 
+.browser-tab-favicon,
+.browser-tab-favicon-fallback {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+}
+
+.browser-tab-favicon {
+  display: block;
+  object-fit: contain;
+}
+
 .browser-tab > span {
   min-width: 0;
   flex: 1;
