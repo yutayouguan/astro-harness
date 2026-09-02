@@ -63,7 +63,7 @@ export default function BrowserDock({
   const [actionsOpen, setActionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const screenshotRef = useRef<HTMLImageElement>(null);
-  const viewportRef = useRef<HTMLDivElement>(null);
+  const nativeViewportRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const actionsTriggerRef = useRef<HTMLButtonElement>(null);
   const wheelDeltaRef = useRef(0);
@@ -93,7 +93,7 @@ export default function BrowserDock({
     active: open,
     occluded: actionsOpen,
     preview,
-    viewportRef,
+    viewportRef: nativeViewportRef,
     onUrlChange: setAddress,
     onNavigate: syncLiveNavigation,
     onError: setError,
@@ -138,7 +138,7 @@ export default function BrowserDock({
   );
 
   useEffect(() => {
-    const viewport = viewportRef.current;
+    const viewport = nativeViewportRef.current;
     if (!viewport || !preview?.activeTabId || preview.status !== "connected")
       return;
     const observer = new ResizeObserver(([entry]) => {
@@ -476,7 +476,12 @@ export default function BrowserDock({
         </div>
       ) : null}
 
-      <div className="browser-viewport" ref={viewportRef}>
+      <div className="browser-viewport">
+        <div
+          ref={nativeViewportRef}
+          className="browser-native-viewport"
+          aria-hidden
+        />
         {!liveWebview.isLive && preview?.status === "connecting" ? (
           <div className="browser-viewport-status">
             <LoaderCircle className="browser-spin" size={20} aria-hidden />
@@ -484,7 +489,18 @@ export default function BrowserDock({
           </div>
         ) : null}
         {liveWebview.isLive && preview?.url && !actionsOpen ? (
-          <div className="browser-live-placeholder" aria-hidden />
+          <>
+            {screenshot ? (
+              <img
+                className="browser-live-underlay"
+                src={screenshot}
+                alt=""
+                aria-hidden
+                draggable={false}
+              />
+            ) : null}
+            <div className="browser-live-placeholder" aria-hidden />
+          </>
         ) : screenshot ? (
           <img
             ref={screenshotRef}

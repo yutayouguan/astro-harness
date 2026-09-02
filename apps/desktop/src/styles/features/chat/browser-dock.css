@@ -41,16 +41,15 @@
   z-index: 23;
 }
 
-/* 原生子 WebView 位于 DOM 堆叠上方，因此预留胶囊的实际高度，
-   保证实时浏览时输入框仍可见且可点击。 */
-.browser-dock.is-open .browser-viewport {
-  margin-bottom: calc(var(--browser-composer-height, 50px) + 36px);
+/* 原生子 WebView 只占据可交互区域，外层浏览器画布继续铺到窗口底边。 */
+.browser-native-viewport {
+  position: absolute;
+  inset: 0 0 calc(var(--browser-composer-height, 50px) + 36px);
 }
 
 .chat-layout-with-right.has-composer-overlay
-  .browser-dock.is-open
-  .browser-viewport {
-  margin-bottom: calc(
+  .browser-native-viewport {
+  bottom: calc(
     var(--browser-composer-height, 50px) + min(55vh, 480px) + 44px
   );
 }
@@ -314,7 +313,11 @@
   overflow: hidden;
   display: grid;
   place-items: center;
-  background: transparent;
+  background: rgb(255, 255, 255);
+}
+
+html[data-theme="dark"] .browser-viewport {
+  background: rgb(18, 18, 20);
 }
 
 .browser-viewport > img {
@@ -327,7 +330,18 @@
   user-select: none;
 }
 
+.browser-viewport > .browser-live-underlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  object-fit: cover;
+  object-position: top center;
+  pointer-events: none;
+}
+
 .browser-live-placeholder {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   background: transparent;

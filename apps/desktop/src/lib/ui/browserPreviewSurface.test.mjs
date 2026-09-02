@@ -60,6 +60,9 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.ok(screenshotStart > addressStart);
   assert.ok(overflowStart > screenshotStart);
   assert.ok(overflowStart < addressEnd);
+  assert.match(dock, /viewportRef: nativeViewportRef/);
+  assert.match(dock, /className="browser-native-viewport"/);
+  assert.match(dock, /className="browser-live-underlay"/);
   assert.match(dock, /browser-live-placeholder/);
   assert.match(dock, /liveWebview\.isLoading/);
 

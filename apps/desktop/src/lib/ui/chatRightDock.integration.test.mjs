@@ -125,7 +125,16 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
   assert.doesNotMatch(chatView, /capsuleComposerExpanded/);
   assert.doesNotMatch(chatView, /input\.includes\("\\n"\)/);
   assert.match(browserStyles, /\.chat-layout-with-right\.is-browser-expanded/);
-  assert.match(browserStyles, /\.browser-dock\.is-open \.browser-viewport/);
+  assert.match(browserStyles, /\.browser-native-viewport/);
+  assert.match(
+    browserStyles,
+    /inset:\s*0 0 calc\(var\(--browser-composer-height/,
+  );
+  assert.doesNotMatch(
+    browserStyles,
+    /\.browser-viewport\s*\{[^}]*margin-bottom/s,
+  );
+  assert.match(browserStyles, /\.browser-live-underlay/);
   assert.match(browserStyles, /--browser-composer-height/);
   assert.match(browserStyles, /\.has-composer-overlay/);
   assert.match(composerStyles, /\.composer-shell\.is-capsule/);
