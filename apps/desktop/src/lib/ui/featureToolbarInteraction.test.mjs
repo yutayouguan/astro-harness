@@ -17,3 +17,10 @@ test("feature toolbars remain interactive above the native drag region", () => {
     /\.feature-content-inline\s+:is\(\s*\.cron-toolbar,\s*\.loop-toolbar,\s*\.loop-editor-toolbar,\s*\.plugins-command-bar\s*\)\s*>\s*\*\s*\{[\s\S]*?pointer-events:\s*auto;/,
   );
 });
+
+test("bare feature pages keep responsive horizontal breathing room", () => {
+  assert.match(
+    shellStyles,
+    /\.page-body--bare\s*\{[\s\S]*?--page-body-inline-padding:\s*clamp\(20px,\s*2vw,\s*28px\);[\s\S]*?padding-inline:\s*var\(--page-body-inline-padding\);/,
+  );
+});

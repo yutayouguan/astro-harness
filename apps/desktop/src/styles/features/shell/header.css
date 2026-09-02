@@ -1561,7 +1561,9 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
 
 /* 无页头的功能页：自己补出标题栏安全区 */
 .page-body--bare {
+  --page-body-inline-padding: clamp(20px, 2vw, 28px);
   padding-top: 18px;
+  padding-inline: var(--page-body-inline-padding);
 }
 
 /* 无页头功能页的工具栏会与窗口拖拽区垂直重叠。
