@@ -74,6 +74,42 @@ test("hover actions exclude deletion and only the latest user question can be ed
   assert.doesNotMatch(styles, /msg-dissolve/);
 });
 
+test("regeneration is single-flight and never becomes a queued duplicate", async () => {
+  const [view, session, sender] = await Promise.all([
+    readFile(chatViewUrl, "utf8"),
+    readFile(chatSessionUrl, "utf8"),
+    readFile(new URL("../../hooks/chat/useSend.ts", import.meta.url), "utf8"),
+  ]);
+  const regenerate = session.match(
+    /const regenerateMessage = useCallback\([\s\S]*?\n\s*\);\n\n\s*const undoLastExchange/,
+  )?.[0];
+
+  assert.ok(regenerate, "missing regenerate callback");
+  assert.match(
+    regenerate,
+    /streaming \|\|[\s\S]*turnInFlightRef\.current \|\|[\s\S]*sendStartLockRef\.current/,
+  );
+  assert.match(regenerate, /void sendImmediate\(\{/);
+  assert.doesNotMatch(regenerate, /void send\(\{/);
+  assert.match(
+    sender,
+    /streaming \|\|[\s\S]*turnInFlightRef\.current \|\|[\s\S]*sendStartLockRef\.current \|\|[\s\S]*!activeProvider/,
+  );
+  assert.match(
+    sender,
+    /sendStartLockRef\.current = true;[\s\S]*finally \{\s*sendStartLockRef\.current = false;/,
+  );
+  assert.match(
+    sender,
+    /catch \(err\) \{\s*pendingKeepChatBubblesRef\.current = null;\s*clearStreamBuffers\(\);/,
+  );
+  assert.match(
+    view,
+    /canRegenerate=\{[\s\S]*?!streaming && !turnInFlight && Boolean\(onRegenerateMessage\)/,
+  );
+  assert.match(view, /disabled=\{streaming \|\| turnInFlight\}/);
+});
+
 test("chat surface exposes realtime voice without restoring legacy ASR or read-aloud controls", async () => {
   const source = await readFile(chatViewUrl, "utf8");
   const messages = await readFile(messagesUrl, "utf8");

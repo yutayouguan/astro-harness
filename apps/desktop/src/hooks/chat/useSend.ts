@@ -147,6 +147,8 @@ export interface UseSendDeps {
   showTransientToast: ShowToastFn;
   /** 主会话整轮未结束（含 HITL 停顿）；供队列软边界 */
   turnInFlightRef: MutableRefObject<boolean>;
+  /** 提交前置解析单飞锁；防止 streaming state 提交前重复启动。 */
+  sendStartLockRef: MutableRefObject<boolean>;
   setTurnInFlight: Dispatch<SetStateAction<boolean>>;
   /** 流式活动时间戳（token/tool）；供长任务 idle checkpoint */
   lastStreamActivityAtRef: MutableRefObject<number>;
@@ -233,6 +235,7 @@ export function useSend(deps: UseSendDeps) {
         setCurrentTurnId,
         showTransientToast,
         turnInFlightRef,
+        sendStartLockRef,
         setTurnInFlight,
         persistContextUsage = true,
         lastStreamActivityAtRef,
@@ -275,6 +278,8 @@ export function useSend(deps: UseSendDeps) {
       if (
         (!text && pending.length === 0 && !opts?.allowEmpty && !resumeJson) ||
         streaming ||
+        turnInFlightRef.current ||
+        sendStartLockRef.current ||
         !activeProvider
       ) {
         return false;
@@ -283,68 +288,73 @@ export function useSend(deps: UseSendDeps) {
       // resolve /skill and @mentions
       let displayText = text;
       let modelBody = text;
-      if (text && !resumeJson) {
-        try {
-          const skillList = await invoke<
-            { id: string; name: string; enabled?: boolean }[]
-          >("list_installed_skills").catch(() => []);
-          const mcpList = await invoke<
-            { id: string; name: string; enabled?: boolean }[]
-          >("get_mcp_servers").catch(() => []);
+      sendStartLockRef.current = true;
+      try {
+        if (text && !resumeJson) {
+          try {
+            const skillList = await invoke<
+              { id: string; name: string; enabled?: boolean }[]
+            >("list_installed_skills").catch(() => []);
+            const mcpList = await invoke<
+              { id: string; name: string; enabled?: boolean }[]
+            >("get_mcp_servers").catch(() => []);
 
-          const resolved = await resolveComposerTurn(text, {
-            agents: [],
-            skills: (skillList ?? [])
-              .filter((s) => s.enabled !== false)
-              .map((s) => ({ id: s.id, name: s.name })),
-            mcpServers: (mcpList ?? []).map((s) => ({
-              id: s.id,
-              name: s.name,
-            })),
-          });
+            const resolved = await resolveComposerTurn(text, {
+              agents: [],
+              skills: (skillList ?? [])
+                .filter((s) => s.enabled !== false)
+                .map((s) => ({ id: s.id, name: s.name })),
+              mcpServers: (mcpList ?? []).map((s) => ({
+                id: s.id,
+                name: s.name,
+              })),
+            });
 
-          if (resolved === null) {
-            return false;
-          }
+            if (resolved === null) {
+              return false;
+            }
 
-          displayText = resolved.displayText || text;
-          modelBody = resolved.modelText || text;
+            displayText = resolved.displayText || text;
+            modelBody = resolved.modelText || text;
 
-          if (resolved.enableMcpIds.length > 0) {
-            try {
-              const servers = await invoke<
-                {
-                  id: string;
-                  name: string;
-                  enabled: boolean;
-                  [k: string]: unknown;
-                }[]
-              >("get_mcp_servers");
-              const want = new Set(resolved.enableMcpIds);
-              const next = (servers ?? []).map((s) =>
-                want.has(s.id) ? { ...s, enabled: true } : s,
-              );
-              await invoke("set_mcp_servers", { servers: next });
+            if (resolved.enableMcpIds.length > 0) {
+              try {
+                const servers = await invoke<
+                  {
+                    id: string;
+                    name: string;
+                    enabled: boolean;
+                    [k: string]: unknown;
+                  }[]
+                >("get_mcp_servers");
+                const want = new Set(resolved.enableMcpIds);
+                const next = (servers ?? []).map((s) =>
+                  want.has(s.id) ? { ...s, enabled: true } : s,
+                );
+                await invoke("set_mcp_servers", { servers: next });
+                showTransientToast(
+                  t("chat.mentionMcpEnabled", {
+                    names: resolved.enableMcpNames.join(", "),
+                  }),
+                );
+              } catch (e) {
+                console.warn("enable mcp failed", e);
+              }
+            }
+
+            if (resolved.loadedSkills.length > 0) {
               showTransientToast(
-                t("chat.mentionMcpEnabled", {
-                  names: resolved.enableMcpNames.join(", "),
+                t("chat.skillLoaded", {
+                  names: resolved.loadedSkills.join(", "),
                 }),
               );
-            } catch (e) {
-              console.warn("enable mcp failed", e);
             }
+          } catch (e) {
+            console.warn("resolveComposerTurn failed", e);
           }
-
-          if (resolved.loadedSkills.length > 0) {
-            showTransientToast(
-              t("chat.skillLoaded", {
-                names: resolved.loadedSkills.join(", "),
-              }),
-            );
-          }
-        } catch (e) {
-          console.warn("resolveComposerTurn failed", e);
         }
+      } finally {
+        sendStartLockRef.current = false;
       }
 
       const isCreatingAgent = emptyMode === "agent" && !opts?.skipUserAppend;
@@ -1140,6 +1150,7 @@ export function useSend(deps: UseSendDeps) {
         pendingKeepChatBubblesRef.current = null;
         setStatusPhase("generating");
       } catch (err) {
+        pendingKeepChatBubblesRef.current = null;
         clearStreamBuffers();
         setMessages((prev) =>
           prev.map((m) =>

@@ -174,6 +174,7 @@ export function useChatSession({
   const [turnInFlight, setTurnInFlight] = useState(false);
   const [completionCelebrationId, setCompletionCelebrationId] = useState(0);
   const turnInFlightRef = useRef(false);
+  const sendStartLockRef = useRef(false);
   const lastStreamActivityAtRef = useRef(0);
   const sessionWorktreeRef = useRef<{
     sessionId: string;
@@ -387,6 +388,7 @@ export function useChatSession({
     setCurrentTurnId,
     showTransientToast,
     turnInFlightRef,
+    sendStartLockRef,
     setTurnInFlight,
     lastStreamActivityAtRef,
     onModeSwitchDetected,
@@ -529,6 +531,8 @@ export function useChatSession({
   /** 当前任务忙时入队；空闲时立即发送。 */
   const send = useCallback(
     async (opts?: SendOpts) => {
+      // 同一次点击尚在解析 Skill/MCP 时，忽略再次提交；真正进入 turn 后才允许入队。
+      if (sendStartLockRef.current) return;
       if (
         streaming ||
         turnInFlightRef.current ||
@@ -1461,7 +1465,12 @@ export function useChatSession({
   // ── Message operations ────────────────────────────────────────────────────
   const regenerateMessage = useCallback(
     (assistantId: string) => {
-      if (streaming) return;
+      if (
+        streaming ||
+        turnInFlightRef.current ||
+        sendStartLockRef.current
+      )
+        return;
       const idx = messages.findIndex((m) => m.id === assistantId);
       if (idx < 0 || messages[idx]?.role !== "assistant") return;
       let userIdx = -1;
@@ -1477,15 +1486,17 @@ export function useChatSession({
       pendingKeepChatBubblesRef.current = countChatBubbles(
         messages.slice(0, userIdx),
       );
-      void send({
+      void sendImmediate({
         text: userMsg.content,
         attachments: userMsg.attachments ?? [],
         truncateTo: userIdx,
         skipUserAppend: false,
         reuseUserId: userMsg.id,
+      }).then((started) => {
+        if (!started) pendingKeepChatBubblesRef.current = null;
       });
     },
-    [messages, streaming, send],
+    [messages, streaming, sendImmediate],
   );
 
   const undoLastExchange = useCallback(() => {

@@ -2767,8 +2767,10 @@ export default function ChatView({
               contextMenuMessage.activities?.length,
             )}
             canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
-            canRegenerate={!streaming && Boolean(onRegenerateMessage)}
-            canBranch={!streaming && Boolean(onBranchMessage)}
+            canRegenerate={
+              !streaming && !turnInFlight && Boolean(onRegenerateMessage)
+            }
+            canBranch={!streaming && !turnInFlight && Boolean(onBranchMessage)}
             onAction={handleAssistantTurnMenuAction}
             onClose={closeAssistantTurnMenu}
           />
@@ -3374,7 +3376,7 @@ export default function ChatView({
                               messageId={m.id}
                               content={m.content}
                               role="assistant"
-                              disabled={streaming}
+                              disabled={streaming || turnInFlight}
                               onRegenerate={onRegenerateMessage}
                               onBranch={onBranchMessage}
                               onOpenMenu={(anchor) => {
