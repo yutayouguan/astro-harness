@@ -3,7 +3,7 @@
 //! `portable-pty` owns the platform-specific PTY/ConPTY implementation. This module only
 //! provides Astro-specific scope isolation, bounded replay, lifecycle and multi-consumer cursors.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -244,7 +244,7 @@ impl TerminalSessionManager {
         let mut command = sandbox::SandboxRunner
             .std_command(policy, &shell_text)
             .context("prepare terminal sandbox")?;
-        configure_interactive_shell(&mut command, &shell);
+        configure_interactive_shell(&mut command, &shell, policy.mode);
         command.current_dir(&cwd);
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
@@ -366,7 +366,7 @@ impl TerminalSessionManager {
         let mut command = sandbox::SandboxRunner
             .std_command(policy, &shell_text)
             .context("prepare terminal sandbox")?;
-        configure_interactive_shell(&mut command, &shell);
+        configure_interactive_shell(&mut command, &shell, policy.mode);
         command.current_dir(&cwd);
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
@@ -760,17 +760,86 @@ fn default_shell() -> PathBuf {
 }
 
 #[cfg(unix)]
-fn configure_interactive_shell(command: &mut Command, _shell: &Path) {
-    command.arg("-l");
+fn configure_interactive_shell(
+    command: &mut Command,
+    shell: &Path,
+    sandbox_mode: types::SandboxMode,
+) {
+    if sandbox_mode == types::SandboxMode::DangerFullAccess {
+        command.arg("-l");
+        return;
+    }
+
+    // Restricted terminals can read the user's shell configuration but cannot safely execute it:
+    // Oh My Zsh, Powerlevel10k and history plugins write to HOME and the system temp directory
+    // during startup. Use the shell's no-rc mode and a small explicit prompt instead of granting
+    // those directories to the sandbox.
+    let shell_name = shell
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    match shell_name {
+        "zsh" => {
+            command.arg("-f");
+            command.env("PROMPT", "%F{cyan}AI%f %F{blue}%~%f %# ");
+            command.env("RPROMPT", "");
+        }
+        "bash" => {
+            command.args(["--noprofile", "--norc"]);
+            command.env("PS1", "\\[\\e[36m\\]AI\\[\\e[0m\\] \\w \\$ ");
+        }
+        "fish" => {
+            command.arg("--no-config");
+        }
+        _ => {}
+    }
+    command.env("ASTRO_TERMINAL_PROFILE", "isolated");
+    command.env("HISTFILE", "/dev/null");
+    command.env("ZDOTDIR", "/dev/null");
+    command.env("BASH_ENV", "/dev/null");
+    command.env("ENV", "/dev/null");
+    if let Some(path) = isolated_shell_path() {
+        command.env("PATH", path);
+    }
+}
+
+#[cfg(unix)]
+fn isolated_shell_path() -> Option<std::ffi::OsString> {
+    let mut paths = Vec::new();
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+        paths.push(home.join(".cargo/bin"));
+        paths.push(home.join(".local/bin"));
+    }
+    paths.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/opt/homebrew/sbin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/local/sbin"),
+    ]);
+    if let Some(current) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&current));
+    }
+    let mut seen = HashSet::new();
+    paths.retain(|path| path.is_dir() && seen.insert(path.clone()));
+    std::env::join_paths(paths).ok()
 }
 
 #[cfg(windows)]
-fn configure_interactive_shell(command: &mut Command, _shell: &Path) {
+fn configure_interactive_shell(
+    command: &mut Command,
+    _shell: &Path,
+    _sandbox_mode: types::SandboxMode,
+) {
     command.args(["-NoLogo", "-NoExit"]);
 }
 
 #[cfg(not(any(unix, windows)))]
-fn configure_interactive_shell(_command: &mut Command, _shell: &Path) {}
+fn configure_interactive_shell(
+    _command: &mut Command,
+    _shell: &Path,
+    _sandbox_mode: types::SandboxMode,
+) {
+}
 
 static SHARED_TERMINAL_SESSIONS: OnceLock<TerminalSessionManager> = OnceLock::new();
 
@@ -1025,6 +1094,42 @@ mod tests {
 
         assert_eq!(desktop.id, agent.id);
         manager.close(agent.id).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn restricted_zsh_uses_an_isolated_startup_profile() {
+        let mut command = Command::new("/bin/zsh");
+        configure_interactive_shell(
+            &mut command,
+            Path::new("/bin/zsh"),
+            types::SandboxMode::WorkspaceWrite,
+        );
+
+        assert_eq!(command.get_args().collect::<Vec<_>>(), ["-f"]);
+        let environment = command
+            .get_envs()
+            .map(|(key, value)| (key.to_string_lossy().into_owned(), value.map(Into::into)))
+            .collect::<std::collections::HashMap<String, Option<std::ffi::OsString>>>();
+        assert_eq!(
+            environment.get("ASTRO_TERMINAL_PROFILE"),
+            Some(&Some("isolated".into()))
+        );
+        assert_eq!(environment.get("HISTFILE"), Some(&Some("/dev/null".into())));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unrestricted_zsh_keeps_the_user_login_profile() {
+        let mut command = Command::new("/bin/zsh");
+        configure_interactive_shell(
+            &mut command,
+            Path::new("/bin/zsh"),
+            types::SandboxMode::DangerFullAccess,
+        );
+
+        assert_eq!(command.get_args().collect::<Vec<_>>(), ["-l"]);
+        assert!(command.get_envs().all(|(key, _)| key != "ZDOTDIR"));
     }
 
     #[test]

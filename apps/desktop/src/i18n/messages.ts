@@ -595,11 +595,11 @@ export const zh = {
     "直接启动登录 Shell，兼容 Homebrew、Oh My Zsh、Powerlevel10k、历史记录和系统临时目录。",
   "terminal.settings.mode.project": "项目沙箱",
   "terminal.settings.mode.projectDesc":
-    "仅允许写入项目目录，适合受限 AI 命令；部分 Shell 插件可能因无法写入主目录而降级。",
+    "使用隔离 Shell 配置，仅允许写入项目目录；不加载会写入 Home 的 Oh My Zsh 和 Powerlevel10k。",
   "terminal.settings.mode.systemNote":
     "系统模式拥有与你的外部终端相同的文件权限。低权限 AI 不会自动连接到该会话；这里的模式用于之后新建的普通终端。",
   "terminal.settings.mode.projectNote":
-    "项目沙箱仍允许写入 /dev/null，但会阻止主目录历史、缓存和部分 P10k/gitstatus 临时文件；该模式用于之后新建的普通终端。",
+    "项目沙箱使用轻量隔离提示符，不写入主目录历史、缓存或 P10k/gitstatus 临时文件；需要个人 Shell 配置时请使用系统终端 Tab。",
   "terminal.settings.font.title": "字体与字形",
   "terminal.settings.font.sub": "优先使用 Nerd Font，正确显示 Powerlevel10k 图标和提示符。",
   "terminal.settings.font.preset": "字体预设",
@@ -3445,11 +3445,11 @@ export const en: Record<MessageKey, string> = {
     "Starts your login shell directly, including Homebrew, Oh My Zsh, Powerlevel10k, history, and system temp files.",
   "terminal.settings.mode.project": "Project sandbox",
   "terminal.settings.mode.projectDesc":
-    "Only the project is writable. Useful for restricted AI commands, but some shell plugins may degrade.",
+    "Uses an isolated shell profile with writes limited to the project. Oh My Zsh and Powerlevel10k are not loaded because they write outside it.",
   "terminal.settings.mode.systemNote":
     "System mode has the same filesystem access as your external terminal. Lower-permission AI cannot attach automatically; this mode applies to subsequently created regular terminals.",
   "terminal.settings.mode.projectNote":
-    "The project sandbox permits /dev/null but blocks home-directory history, caches, and some P10k/gitstatus temp files. This mode applies to new regular tabs.",
+    "The project sandbox uses a lightweight isolated prompt and does not write home history, caches, or P10k/gitstatus temp files. Use a system terminal tab for your personal shell profile.",
   "terminal.settings.font.title": "Font and glyphs",
   "terminal.settings.font.sub":
     "Prefer a Nerd Font so Powerlevel10k icons and prompts render correctly.",
