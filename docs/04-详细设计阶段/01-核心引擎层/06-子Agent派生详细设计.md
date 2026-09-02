@@ -437,7 +437,9 @@ pub const CODEX_V2_AGENT_TOOL_NAMES: [&str; 6] = [
 |------|------|------|
 | `path_prefix` | Option\<String\> | 可选路径前缀过滤 |
 
-返回 `AgentTreeSnapshotV2`：包含根线程 ID、所有线程列表和活动序列号。
+返回 `AgentTreeSnapshotV2`：包含根线程 ID、所有线程列表、活动序列号和 nullable
+`root_service_tier`。持久层只负责图与状态，`AgentControl` 在快照返回前注入当前
+根运行时的 service tier；旧后端缺少该字段时 Desktop 兼容为 `null`。
 
 ### 7.4 send_message
 
@@ -517,6 +519,7 @@ pub async fn list_subagent_definitions() -> Result<Vec<AgentDefinitionDto>, Stri
 桌面前端通过上述 Tauri Commands 维护子 Agent 面板，展示：
 
 - 线程树结构和状态
+- 根任务实际生效的 service tier（存在时）
 - 每个线程的消息时间线
 - 追问和中断操作
 - 自定义 Agent 定义列表

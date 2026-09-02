@@ -18,7 +18,10 @@ Astro 只有一套 Subagent 运行时契约：持久化的 Agent Thread 树。�
 Root turn 的 `service_tier` 由 root-scoped `AgentControl` 共享。`spawn_agent`、嵌套
 spawn 和后续启动的 Subagent turn 都从该快照继承 tier；只有 OpenAI/Codex
 backend 会将它写入 Provider 参数，其他 backend 不透传不支持的字段。模型、
-reasoning effort 和 sandbox 的现有继承/收窄规则不变。
+reasoning effort 和 sandbox 的现有继承/收窄规则不变。`AgentTreeSnapshotV2` 同时
+携带 nullable `root_service_tier`，Desktop 在 Agent Tree 摘要中展示实际根级值；
+增量状态事件与 mark-read 投影不会清除它。详见
+[Agent Tree 状态投影详细设计](04-详细设计阶段/01-核心引擎层/15-Agent-Tree状态投影详细设计.md)。
 
 模型可见输出保持 Codex V2 紧凑形状：`spawn_agent` 默认只返回 canonical `task_name`，`list_agents` 只返回 `agent_name` 和 `agent_status`，不泄露内部 thread/session ID。完整身份只在运行时与 Desktop 控制面中使用。
 

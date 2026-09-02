@@ -22,6 +22,7 @@
 | [12-Agent事件与恢复详细设计.md](01-核心引擎层/12-Agent事件与恢复详细设计.md) | `Op/EventMsg/TurnItem` 统一协议、rollout 事件源、live boundary 与 SessionStore 投影 |
 | [13-Astro统一配置系统详细设计.md](01-核心引擎层/13-Astro统一配置系统详细设计.md) | Agent/项目分层配置、信任边界、热加载和运行时快照 |
 | [14-Agent-Harness执行外壳详细设计.md](01-核心引擎层/14-Agent-Harness执行外壳详细设计.md) | Thread/Session/Task/Turn/Step/Attempt 执行层级，Reason→Act→Observe 闭环及安全、恢复和测试契约 |
+| [15-Agent-Tree状态投影详细设计.md](01-核心引擎层/15-Agent-Tree状态投影详细设计.md) | 根会话 Agent Tree 的持久图、活动游标、根服务层级、Desktop 快照与增量投影契约 |
 
 ## 02-Provider与模型层
 
