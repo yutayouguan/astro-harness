@@ -80,9 +80,9 @@ impl ReviewTask {
         content: &str,
     ) -> anyhow::Result<()> {
         let history = session.clone_history().await;
-        if !history
+        if history
             .last()
-            .is_some_and(|item| item.role() == Some("user"))
+            .is_none_or(|item| item.role() != Some("user"))
         {
             session
                 .record_user_message(&format!("[astro:review]\n{request}"))

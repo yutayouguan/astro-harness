@@ -218,10 +218,8 @@ async fn spans_from_chat_history(
         return Ok((Vec::new(), String::new()));
     }
 
-    let mut events = Vec::new();
+    let mut trace = TraceBuilder::new(agent_id);
     let mut title = String::new();
-    let mut pending_tools: std::collections::HashMap<String, (usize, f64)> =
-        std::collections::HashMap::new();
     let mut last_llm_input: Option<String> = None;
     let mut last_input_at: Option<f64> = None;
 
@@ -237,7 +235,7 @@ async fn spans_from_chat_history(
                 }
                 last_llm_input = nonempty_truncated(&content);
                 last_input_at = Some(stored.timestamp);
-                events.push(TraceEvent {
+                trace.events.push(TraceEvent {
                     id: format!("user-{}", stored.id),
                     ts,
                     kind: "user".into(),
@@ -257,7 +255,7 @@ async fn spans_from_chat_history(
             }
             ResponseItem::Message { role, .. } if role == "assistant" => {
                 let output = nonempty_truncated(&stored.text());
-                events.push(TraceEvent {
+                trace.events.push(TraceEvent {
                     id: format!("llm-{}", stored.id),
                     ts,
                     kind: "llm".into(),
@@ -284,16 +282,11 @@ async fn spans_from_chat_history(
                 arguments,
                 ..
             } => {
-                push_tool_trace(
-                    &mut events,
-                    &mut pending_tools,
-                    &ts,
-                    stored.timestamp,
-                    stored.id,
+                trace.push_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
                     call_id,
                     name,
                     Some(arguments.clone()),
-                    agent_id,
                 );
             }
             ResponseItem::CustomToolCall {
@@ -302,32 +295,22 @@ async fn spans_from_chat_history(
                 input,
                 ..
             } => {
-                push_tool_trace(
-                    &mut events,
-                    &mut pending_tools,
-                    &ts,
-                    stored.timestamp,
-                    stored.id,
+                trace.push_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
                     call_id,
                     name,
                     Some(input.clone()),
-                    agent_id,
                 );
             }
             ResponseItem::ToolSearchCall {
                 call_id, arguments, ..
             } => {
                 let id = call_id.clone().unwrap_or_else(|| stored.id.to_string());
-                push_tool_trace(
-                    &mut events,
-                    &mut pending_tools,
-                    &ts,
-                    stored.timestamp,
-                    stored.id,
+                trace.push_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
                     &id,
                     "tool_search",
                     Some(arguments.to_string()),
-                    agent_id,
                 );
             }
             ResponseItem::FunctionCallOutput {
@@ -337,16 +320,11 @@ async fn spans_from_chat_history(
                 ..
             } => {
                 let output = output.to_text();
-                finish_tool_trace(
-                    &mut events,
-                    &mut pending_tools,
-                    &ts,
-                    stored.timestamp,
-                    stored.id,
+                trace.finish_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
                     call_id.as_deref(),
                     name.as_deref(),
                     output.clone(),
-                    agent_id,
                 );
                 last_llm_input = output.as_deref().and_then(nonempty_truncated);
                 last_input_at = Some(stored.timestamp);
@@ -358,123 +336,146 @@ async fn spans_from_chat_history(
                 ..
             } => {
                 let output = output.to_text();
-                finish_tool_trace(
-                    &mut events,
-                    &mut pending_tools,
-                    &ts,
-                    stored.timestamp,
-                    stored.id,
+                trace.finish_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
                     Some(call_id),
                     name.as_deref(),
                     output.clone(),
-                    agent_id,
                 );
                 last_llm_input = output.as_deref().and_then(nonempty_truncated);
                 last_input_at = Some(stored.timestamp);
             }
             ResponseItem::ToolSearchOutput { call_id, tools, .. } => {
                 let output = serde_json::to_string(tools).ok();
-                finish_tool_trace(
-                    &mut events,
-                    &mut pending_tools,
-                    &ts,
-                    stored.timestamp,
-                    stored.id,
+                trace.finish_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
                     call_id.as_deref(),
                     Some("tool_search"),
                     output.clone(),
-                    agent_id,
                 );
                 last_llm_input = output.as_deref().and_then(nonempty_truncated);
                 last_input_at = Some(stored.timestamp);
             }
             _ => {}
         }
-        if events.len() >= TRACE_EVENTS_LIMIT {
+        if trace.events.len() >= TRACE_EVENTS_LIMIT {
             break;
         }
     }
 
-    Ok((events, title))
+    Ok((trace.events, title))
 }
 
-fn push_tool_trace(
-    events: &mut Vec<TraceEvent>,
-    pending: &mut std::collections::HashMap<String, (usize, f64)>,
-    ts: &str,
+#[derive(Debug, Clone, Copy)]
+struct TraceItem {
     timestamp: f64,
     item_id: i64,
-    call_id: &str,
-    tool_name: &str,
-    input: Option<String>,
-    agent_id: &str,
-) {
-    let (kind, name) = classify_activity(tool_name, input.as_deref());
-    pending.insert(call_id.to_string(), (events.len(), timestamp));
-    events.push(TraceEvent {
-        id: format!("act-{call_id}-{item_id}"),
-        ts: ts.to_string(),
-        kind: kind.into(),
-        name,
-        agent_id: agent_id.to_string(),
-        input_tokens: 0,
-        output_tokens: 0,
-        total_tokens: 0,
-        cost_usd: 0.0,
-        duration_ms: None,
-        parent_id: None,
-        status: Some("running".into()),
-        input: input.as_deref().and_then(nonempty_truncated),
-        output: None,
-        turn_id: None,
-    });
 }
 
-fn finish_tool_trace(
-    events: &mut Vec<TraceEvent>,
-    pending: &mut std::collections::HashMap<String, (usize, f64)>,
-    ts: &str,
-    timestamp: f64,
-    item_id: i64,
-    call_id: Option<&str>,
-    tool_name: Option<&str>,
-    output: Option<String>,
-    agent_id: &str,
-) {
-    let output = output.as_deref().and_then(nonempty_truncated);
-    let is_error = output
-        .as_deref()
-        .is_some_and(|text| text.starts_with("工具错误") || text.starts_with("Tool error"));
-    let status = if is_error { "error" } else { "done" };
-    if let Some((index, started_at)) = call_id.and_then(|id| pending.remove(id)) {
-        if let Some(event) = events.get_mut(index) {
-            event.output = output;
-            event.status = Some(status.into());
-            event.duration_ms = elapsed_ms(started_at, timestamp);
-            if event.name == "tool" {
-                event.name = tool_name.unwrap_or("tool").to_string();
-            }
-        }
-        return;
+impl TraceItem {
+    fn new(timestamp: f64, item_id: i64) -> Self {
+        Self { timestamp, item_id }
     }
-    let (kind, name) = classify_activity(tool_name.unwrap_or("tool"), None);
-    events.push(TraceEvent {
-        id: format!("tool-{item_id}"),
-        ts: ts.to_string(),
-        kind: kind.into(),
-        name,
-        agent_id: agent_id.to_string(),
-        input_tokens: 0,
-        output_tokens: 0,
-        total_tokens: 0,
-        cost_usd: 0.0,
-        duration_ms: None,
-        parent_id: None,
-        status: Some(status.into()),
-        input: None,
-        output,
-        turn_id: None,
-    });
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PendingToolTrace {
+    event_index: usize,
+    started_at: f64,
+}
+
+/// 构建单个会话的 Trace，并维护工具调用与结果之间的配对状态。
+struct TraceBuilder<'a> {
+    events: Vec<TraceEvent>,
+    pending_tools: std::collections::HashMap<String, PendingToolTrace>,
+    agent_id: &'a str,
+}
+
+impl<'a> TraceBuilder<'a> {
+    fn new(agent_id: &'a str) -> Self {
+        Self {
+            events: Vec::new(),
+            pending_tools: std::collections::HashMap::new(),
+            agent_id,
+        }
+    }
+
+    fn push_tool(
+        &mut self,
+        item: TraceItem,
+        call_id: &str,
+        tool_name: &str,
+        input: Option<String>,
+    ) {
+        let (kind, name) = classify_activity(tool_name, input.as_deref());
+        self.pending_tools.insert(
+            call_id.to_string(),
+            PendingToolTrace {
+                event_index: self.events.len(),
+                started_at: item.timestamp,
+            },
+        );
+        self.events.push(TraceEvent {
+            id: format!("act-{call_id}-{}", item.item_id),
+            ts: epoch_to_rfc3339(item.timestamp),
+            kind: kind.into(),
+            name,
+            agent_id: self.agent_id.to_string(),
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            duration_ms: None,
+            parent_id: None,
+            status: Some("running".into()),
+            input: input.as_deref().and_then(nonempty_truncated),
+            output: None,
+            turn_id: None,
+        });
+    }
+
+    fn finish_tool(
+        &mut self,
+        item: TraceItem,
+        call_id: Option<&str>,
+        tool_name: Option<&str>,
+        output: Option<String>,
+    ) {
+        let output = output.as_deref().and_then(nonempty_truncated);
+        let is_error = output
+            .as_deref()
+            .is_some_and(|text| text.starts_with("工具错误") || text.starts_with("Tool error"));
+        let status = if is_error { "error" } else { "done" };
+        if let Some(pending) = call_id.and_then(|id| self.pending_tools.remove(id)) {
+            if let Some(event) = self.events.get_mut(pending.event_index) {
+                event.output = output;
+                event.status = Some(status.into());
+                event.duration_ms = elapsed_ms(pending.started_at, item.timestamp);
+                if event.name == "tool" {
+                    event.name = tool_name.unwrap_or("tool").to_string();
+                }
+            }
+            return;
+        }
+        let (kind, name) = classify_activity(tool_name.unwrap_or("tool"), None);
+        self.events.push(TraceEvent {
+            id: format!("tool-{}", item.item_id),
+            ts: epoch_to_rfc3339(item.timestamp),
+            kind: kind.into(),
+            name,
+            agent_id: self.agent_id.to_string(),
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            duration_ms: None,
+            parent_id: None,
+            status: Some(status.into()),
+            input: None,
+            output,
+            turn_id: None,
+        });
+    }
 }
 
 fn elapsed_ms(start: f64, end: f64) -> Option<i64> {
