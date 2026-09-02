@@ -29,7 +29,7 @@ fn test_profile_has_all_providers() {
         assert!(resolve(id).is_some(), "profile missing for {id}");
     }
     assert!(resolve("anthropic").is_some());
-    assert!(resolve("minmax").is_some());
+    assert!(resolve("minmax").is_none());
 }
 
 #[test]

@@ -752,7 +752,7 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         "openrouter" => {
             register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
         }
-        "minimax" | "minmax" => reg.register_minimax(key, base, model),
+        "minimax" => reg.register_minimax(key, base, model),
         "minimax-anthropic" => {
             reg.register_anthropic(key, base, model);
             reg.register_alias("minimax-anthropic", "anthropic");
@@ -785,7 +785,7 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
             "bailian" => {
                 reg.attach_responses::<crate::impls::bailian::Bailian>(provider, key, base, model)
             }
-            "minimax" | "minmax" => reg.attach_responses::<crate::impls::minimax_chat::MiniMax>(
+            "minimax" => reg.attach_responses::<crate::impls::minimax_chat::MiniMax>(
                 "minimax", key, base, model,
             ),
             "mimo" => reg.attach_responses::<crate::impls::mimo::Mimo>(provider, key, base, model),
@@ -906,21 +906,18 @@ mod tests {
     }
 
     #[test]
-    fn minimax_variant_ids_resolve() {
+    fn minimax_anthropic_id_resolves() {
         let config = ProviderConfig::default();
-        for id in ["minimax-anthropic", "minmax", "minmax-anthropic"] {
-            let normalized = normalize_provider_id(id);
-            let mut reg = crate::registry::Registry::new();
-            register_provider(&mut reg, normalized, &config);
-            let registered = reg
-                .get(normalized)
-                .unwrap_or_else(|| panic!("provider alias {id} should resolve"));
-            assert!(
-                registered.responses_model().is_some()
-                    || registered.chat_completion_model().is_some(),
-                "provider alias {id} (normalized to {normalized}) should expose a model"
-            );
-        }
+        let id = "minimax-anthropic";
+        let mut reg = crate::registry::Registry::new();
+        register_provider(&mut reg, id, &config);
+        let registered = reg
+            .get(id)
+            .expect("MiniMax Anthropic provider should resolve");
+        assert!(
+            registered.responses_model().is_some() || registered.chat_completion_model().is_some(),
+            "provider {id} should expose a language model"
+        );
     }
 
     #[test]

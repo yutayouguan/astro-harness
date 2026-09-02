@@ -272,8 +272,7 @@ export const OPENAI_VOICES: VoiceOption[] = [
 ];
 
 export function getVoiceOptions(providerId: string): VoiceOption[] {
-  if (providerId === "minimax" || providerId === "minmax")
-    return MINIMAX_VOICES;
+  if (providerId === "minimax") return MINIMAX_VOICES;
   if (providerId === "openai") return OPENAI_VOICES;
   if (!providerId) return [];
   return [];

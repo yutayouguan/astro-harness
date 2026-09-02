@@ -72,7 +72,7 @@ export function inferProvider(modelName: string): string {
   if (n.startsWith("qwen")) return "bailian";
   if (n.startsWith("glm") || n.startsWith("chatglm")) return "zhipu";
   if (n.startsWith("kimi") || n.startsWith("moonshot")) return "moonshot";
-  if (n.startsWith("minmax") || n.startsWith("minimax")) return "minimax";
+  if (n.startsWith("minimax")) return "minimax";
   if (n.startsWith("mimo")) return "mimo";
   if (n.startsWith("llama")) return "meta";
   if (n.startsWith("ep-")) return "volcengine";

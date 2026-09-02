@@ -145,7 +145,7 @@ function resolveProviderBrand(kind?: string): BrandKey | null {
   if (key.includes("kimi")) return "kimi";
   if (key.includes("volcengine") || key.includes("volc")) return "volcengine";
   if (key.includes("doubao")) return "doubao";
-  if (key.includes("minimax") || key.includes("minmax")) return "minimax";
+  if (key.includes("minimax")) return "minimax";
   if (key.includes("hunyuan") || key.includes("tencent")) return "hunyuan";
   if (key.includes("openai") || key.includes("gpt")) return "openai";
   if (key.includes("google") || key.includes("gemini")) return "google";
@@ -219,7 +219,7 @@ function resolveModelBrand(modelId: string): BrandKey | null {
   if (id.includes("hunyuan") || id.includes("tencent")) return "hunyuan";
   if (id.includes("mimo") || id.includes("xiaomi")) return "xiaomi";
   if (id.includes("volc") || id.includes("ep-")) return "volcengine";
-  if (id.includes("minimax") || id.includes("minmax") || id.includes("abab")) {
+  if (id.includes("minimax") || id.includes("abab")) {
     return "minimax";
   }
   if (

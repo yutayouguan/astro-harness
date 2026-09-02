@@ -48,7 +48,6 @@ fn kind_to_backend(kind: &str) -> &str {
     match kind.trim() {
         "anthropic" => "claude",
         "custom" => "openai",
-        "minmax" => "minimax",
         other => other,
     }
 }

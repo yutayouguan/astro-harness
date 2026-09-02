@@ -302,7 +302,7 @@ CREATE TABLE IF NOT EXISTS media_tasks (
     progress_pct INTEGER CHECK(progress_pct BETWEEN 0 AND 100),
     file_paths   TEXT NOT NULL DEFAULT '[]',             -- JSON 数组，本地缓存绝对路径
     error        TEXT,
-    provider     TEXT NOT NULL,                          -- "google" / "minmax"
+    provider     TEXT NOT NULL,                          -- "google" / "minimax"
     model        TEXT NOT NULL,
     created_at   INTEGER NOT NULL DEFAULT (unixepoch('now','subsec')*1000),
     finished_at  INTEGER

@@ -184,7 +184,7 @@ pub async fn serve(
     tracing::info!("Memory dir: {}", memory_dir.display());
     tracing::info!("Logs dir: {}", logs_dir().display());
     tracing::info!("Cron dir: {}", cron_dir().display());
-    tracing::info!("Providers: google, openai, claude, deepseek, minmax, zhipu, mimo, ollama");
+    tracing::info!("Providers: google, openai, claude, deepseek, minimax, zhipu, mimo, ollama");
 
     Server::builder()
         .add_service(AstroServiceServer::new(service))

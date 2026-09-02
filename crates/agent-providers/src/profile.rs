@@ -361,7 +361,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         api_mode: ApiMode::Responses,
         default_base_url: "https://api.minimaxi.com/v1",
         auth: AuthKind::Bearer,
-        env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
+        env_keys: &["MINIMAX_API_KEY"],
         azure_deployment_style: false,
         default_model: "MiniMax-M3",
         supports_image_gen: true,
@@ -403,7 +403,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         api_mode: ApiMode::AnthropicMessages,
         default_base_url: "https://api.minimaxi.com/anthropic",
         auth: AuthKind::Bearer,
-        env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
+        env_keys: &["MINIMAX_API_KEY"],
         azure_deployment_style: false,
         default_model: "MiniMax-M3",
         supports_image_gen: false,
@@ -509,8 +509,6 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
 /// 将常见别名规范化为表内 id。
 pub fn normalize_provider_id(provider_id: &str) -> &str {
     match provider_id {
-        "minmax" => "minimax",
-        "minmax-anthropic" => "minimax-anthropic",
         "anthropic" => "claude",
         other => other,
     }

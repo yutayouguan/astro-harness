@@ -25,7 +25,6 @@ pub enum ProviderKind {
     Nvidia,
     Moonshot,
     Volcengine,
-    #[serde(alias = "minmax")]
     Minimax,
     Hunyuan,
     Custom,
@@ -47,7 +46,7 @@ impl ProviderKind {
             "nvidia" => Some(Self::Nvidia),
             "moonshot" => Some(Self::Moonshot),
             "volcengine" => Some(Self::Volcengine),
-            "minimax" | "minmax" => Some(Self::Minimax),
+            "minimax" => Some(Self::Minimax),
             "hunyuan" | "tencent" => Some(Self::Hunyuan),
             "custom" => Some(Self::Custom),
             _ => None,
@@ -206,7 +205,7 @@ impl ProviderKind {
             Self::Nvidia => &["NVIDIA_API_KEY"],
             Self::Moonshot => &["MOONSHOT_API_KEY", "KIMI_API_KEY"],
             Self::Volcengine => &["ARK_API_KEY", "VOLCENGINE_API_KEY"],
-            Self::Minimax => &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
+            Self::Minimax => &["MINIMAX_API_KEY"],
             Self::Hunyuan => &["HUNYUAN_API_KEY", "TENCENT_API_KEY"],
             Self::Custom => &["CUSTOM_API_KEY", "OPENAI_API_KEY"],
         }
@@ -2003,7 +2002,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_new_kinds_and_minimax_alias() {
+    fn parses_new_kinds() {
         assert_eq!(
             ProviderKind::from_str("openrouter"),
             Some(ProviderKind::Openrouter)
@@ -2025,10 +2024,7 @@ mod tests {
             ProviderKind::from_str("minimax"),
             Some(ProviderKind::Minimax)
         );
-        assert_eq!(
-            ProviderKind::from_str("minmax"),
-            Some(ProviderKind::Minimax)
-        );
+        assert_eq!(ProviderKind::from_str("minmax"), None);
         assert_eq!(ProviderKind::Minimax.as_str(), "minimax");
         assert_eq!(ProviderKind::Bailian.backend_id(), "bailian");
     }
@@ -2131,13 +2127,19 @@ mod tests {
     }
 
     #[test]
-    fn serde_accepts_minmax_alias() {
-        let raw = r#"{"id":"x","kind":"minmax","display_name":"M","endpoint":"https://api.minimaxi.com/v1","model":"MiniMax-M2.5","enabled":false}"#;
-        let p: ProviderConfig = serde_json::from_str(raw).expect("minmax alias");
+    fn serde_uses_minimax_id() {
+        let raw = r#"{"id":"x","kind":"minimax","display_name":"M","endpoint":"https://api.minimaxi.com/v1","model":"MiniMax-M2.5","enabled":false}"#;
+        let p: ProviderConfig = serde_json::from_str(raw).expect("minimax provider id");
         assert_eq!(p.kind, ProviderKind::Minimax);
         assert!(p.fallback.is_empty());
         let out = serde_json::to_value(&p).unwrap();
         assert_eq!(out["kind"], "minimax");
+    }
+
+    #[test]
+    fn serde_rejects_minmax_typo() {
+        let raw = r#"{"id":"x","kind":"minmax","display_name":"M","endpoint":"https://api.minimaxi.com/v1","model":"MiniMax-M2.5","enabled":false}"#;
+        assert!(serde_json::from_str::<ProviderConfig>(raw).is_err());
     }
 
     #[test]
