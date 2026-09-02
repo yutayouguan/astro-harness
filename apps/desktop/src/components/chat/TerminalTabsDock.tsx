@@ -399,52 +399,63 @@ export default function TerminalTabsDock({
     async (tab: TerminalTab) => {
       if (openingRef.current.has(tab.clientId)) return;
       openingRef.current.add(tab.clientId);
-      try {
-        const opened = await withTimeout(
-          invoke<TerminalSessionDto>("terminal_open", {
-            request: {
-              scope: projectRoot,
-              cwd: tab.cwd,
-              cols: 120,
-              rows: 32,
-              executionMode: tab.executionMode,
-              clientToken: tab.clientId,
-              agentDefault: tab.agentDefault,
-            },
-          }),
-          TERMINAL_START_TIMEOUT_MS,
-          t("chat.terminal.tab.startTimeout"),
-        );
-        if (
-          removedTokensRef.current.has(tab.clientId) ||
-          !tabsRef.current.some(
-            (candidate) => candidate.clientId === tab.clientId,
-          )
-        ) {
-          await invoke("terminal_close", { id: opened.id }).catch(
-            () => undefined,
+      const wasRemoved = () =>
+        removedTokensRef.current.has(tab.clientId) ||
+        !tabsRef.current.some((c) => c.clientId === tab.clientId);
+      let lastError: unknown;
+      for (let attempt = 0; attempt <= OPEN_RETRY_DELAYS.length; attempt++) {
+        if (wasRemoved()) break;
+        if (attempt > 0) {
+          await new Promise((r) =>
+            setTimeout(r, OPEN_RETRY_DELAYS[attempt - 1]),
           );
-          return;
+          if (wasRemoved()) break;
         }
-        setSessions((current) => ({ ...current, [tab.clientId]: opened }));
-        cursorByClientRef.current[tab.clientId] = opened.endCursor;
-        setErrors((current) => {
-          const next = { ...current };
-          delete next[tab.clientId];
-          return next;
-        });
-      } catch (reason) {
-        if (!removedTokensRef.current.has(tab.clientId)) {
-          setErrors((current) => ({
-            ...current,
-            [tab.clientId]: String(reason),
-          }));
+        try {
+          const opened = await withTimeout(
+            invoke<TerminalSessionDto>("terminal_open", {
+              request: {
+                scope: projectRoot,
+                cwd: tab.cwd,
+                cols: 120,
+                rows: 32,
+                executionMode: tab.executionMode,
+                clientToken: tab.clientId,
+                agentDefault: tab.agentDefault,
+              },
+            }),
+            TERMINAL_START_TIMEOUT_MS,
+            t("chat.terminal.tab.startTimeout"),
+          );
+          if (wasRemoved()) {
+            await invoke("terminal_close", { id: opened.id }).catch(
+              () => undefined,
+            );
+            lastError = undefined;
+            break;
+          }
+          setSessions((current) => ({ ...current, [tab.clientId]: opened }));
+          cursorByClientRef.current[tab.clientId] = opened.endCursor;
+          setErrors((current) => {
+            const next = { ...current };
+            delete next[tab.clientId];
+            return next;
+          });
+          lastError = undefined;
+          break;
+        } catch (reason) {
+          lastError = reason;
         }
-      } finally {
-        openingRef.current.delete(tab.clientId);
-        if (removedTokensRef.current.has(tab.clientId)) {
-          removedTokensRef.current.delete(tab.clientId);
-        }
+      }
+      if (lastError && !wasRemoved()) {
+        setErrors((current) => ({
+          ...current,
+          [tab.clientId]: String(lastError),
+        }));
+      }
+      openingRef.current.delete(tab.clientId);
+      if (removedTokensRef.current.has(tab.clientId)) {
+        removedTokensRef.current.delete(tab.clientId);
       }
     },
     [projectRoot, t],
