@@ -368,11 +368,11 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
         onPointerCancel={(event) => finishResize(event.pointerId)}
         onLostPointerCapture={(event) => finishResize(event.pointerId)}
       />
+      <strong className="browser-dock-title">
+        <Globe2 size={15} aria-hidden />
+        {t("chat.browserDock.title")}
+      </strong>
       <header className="browser-dock-header">
-        <strong className="browser-dock-title">
-          <Globe2 size={15} aria-hidden />
-          {t("chat.browserDock.title")}
-        </strong>
         <div
           className="browser-tabs"
           role="tablist"

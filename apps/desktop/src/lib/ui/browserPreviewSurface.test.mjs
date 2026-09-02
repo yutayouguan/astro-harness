@@ -46,9 +46,11 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(dock, /browser-live-placeholder/);
   assert.match(dock, /liveWebview\.isLoading/);
 
+  const titleStart = dock.indexOf('className="browser-dock-title"');
   const headerStart = dock.indexOf('<header className="browser-dock-header">');
   const tabsStart = dock.indexOf('className="browser-tabs"', headerStart);
   const headerEnd = dock.indexOf("</header>", headerStart);
+  assert.ok(titleStart >= 0 && titleStart < headerStart);
   assert.ok(
     headerStart >= 0 && tabsStart > headerStart && tabsStart < headerEnd,
   );

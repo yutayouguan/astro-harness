@@ -39,7 +39,11 @@
 }
 
 .browser-dock-title {
-  flex: 0 0 auto;
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 12px;
+  height: var(--chat-header-overlay-height, 50px);
   display: inline-flex;
   align-items: center;
   gap: 7px;
