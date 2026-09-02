@@ -9,6 +9,7 @@ import {
   canonicalBrowserUrl,
   createBrowserLiveSurfaceId,
   LIVE_BROWSER_WEBVIEW_PREFIX,
+  liveBrowserUserAgentOverride,
   retireBrowserLiveWebview,
   resolveLiveDesiredUrl,
 } from "./liveWebview.ts";
@@ -41,6 +42,24 @@ test("live WebView bounds use a stable key for redundant IPC suppression", () =>
     browserWebviewBoundsKey({ x: 12, y: 50, width: 680, height: 720 }),
     "12:50:680:720",
   );
+});
+
+test("macOS WKWebView receives Safari compatibility tokens", () => {
+  const wkWebView =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+    "AppleWebKit/605.1.15 (KHTML, like Gecko)";
+  assert.equal(
+    liveBrowserUserAgentOverride(wkWebView),
+    `${wkWebView} Safari/605.1.15`,
+  );
+
+  const safari = `${wkWebView} Version/18.3 Safari/605.1.15`;
+  assert.equal(liveBrowserUserAgentOverride(safari), undefined);
+
+  const webView2 =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+    "AppleWebKit/537.36 Chrome/134.0.0.0 Safari/537.36";
+  assert.equal(liveBrowserUserAgentOverride(webView2), undefined);
 });
 
 test("pending native navigation wins until the automation session catches up", () => {

@@ -16,6 +16,7 @@ import {
   browserWebviewBoundsKey,
   canonicalBrowserUrl,
   createBrowserLiveSurfaceId,
+  liveBrowserUserAgentOverride,
   retireBrowserLiveWebview,
   resolveLiveDesiredUrl,
 } from "../../lib/browser/liveWebview";
@@ -249,9 +250,11 @@ export function useBrowserLiveWebviews({
       }
 
       setStatus("creating");
+      const userAgent = liveBrowserUserAgentOverride(navigator.userAgent);
       const webview = new Webview(getCurrentWindow(), label, {
         url,
         ...bounds,
+        ...(userAgent ? { userAgent } : {}),
         focus: false,
         acceptFirstMouse: true,
         zoomHotkeysEnabled: true,

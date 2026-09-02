@@ -6,6 +6,29 @@ export type BrowserLiveWebviewHandle = {
 };
 
 /**
+ * WKWebView omits the `Safari/...` product token even though it runs the same
+ * system WebKit engine. Some sites (including bilibili.com) treat that
+ * otherwise-valid UA as an obsolete browser.
+ *
+ * Only patch the token-less macOS WebKit shape. Chromium/WebView2 and regular
+ * Safari keep their native UA so sites never receive a mismatched engine name.
+ */
+export function liveBrowserUserAgentOverride(
+  userAgent: string,
+): string | undefined {
+  const normalized = userAgent.trim();
+  const webKitVersion = normalized.match(/\bAppleWebKit\/([\d.]+)/)?.[1];
+  if (
+    !normalized.includes("Macintosh") ||
+    !webKitVersion ||
+    /\bSafari\/[\d.]+/.test(normalized)
+  ) {
+    return undefined;
+  }
+  return `${normalized} Safari/${webKitVersion}`;
+}
+
+/**
  * Native child WebViews render above the DOM. Hide first so a failed or slow
  * close cannot leave an interactive surface covering the rest of the app.
  */

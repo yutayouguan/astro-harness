@@ -123,6 +123,8 @@ test("browser dock uses a native child WebView with a screenshot fallback", () =
   assert.match(hook, /new Webview\(getCurrentWindow\(\), label/);
   assert.match(hook, /setPosition\(new LogicalPosition/);
   assert.match(hook, /setSize\(new LogicalSize/);
+  assert.match(hook, /liveBrowserUserAgentOverride\(navigator\.userAgent\)/);
+  assert.match(hook, /\.\.\.\(userAgent \? \{ userAgent \} : \{\}\)/);
   assert.match(hook, /browser-live-page-load/);
   assert.match(hook, /browser_live_webview_control/);
   assert.match(commands, /fn browser_live_webview_control/);
