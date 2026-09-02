@@ -87,52 +87,61 @@ test("chat header chrome stays anchored while project files animate", () => {
 
 test("chat header is invisible at rest and adds glass only above scrolling content", () => {
   const header = rule(headerStyles, ".content-header--chat");
-  const underlay = rule(
-    headerStyles,
-    ".content-header--chat.has-content-underlay",
-  );
   const fileHeader = rule(
     headerStyles,
     ".content-header--chat.has-project-file",
   );
+  const underlayLayer = rule(headerStyles, ".content-header--chat::before");
+  const visibleUnderlayLayer = rule(
+    headerStyles,
+    ".content-header--chat.has-content-underlay::before",
+  );
   const chatPane = rule(headerStyles, ".content-pane--chat");
 
   assert.ok(header, "missing chat header rule");
-  assert.ok(underlay, "missing chat header underlay rule");
+  assert.ok(underlayLayer, "missing chat header underlay layer");
+  assert.ok(visibleUnderlayLayer, "missing visible header underlay rule");
   assert.ok(chatPane, "missing chat content pane rule");
   assert.match(chatPane, /position:\s*relative;/);
   assert.match(
     headerStyles,
     /> \.chat-layout-with-right\s*\{\s*--chat-header-overlay-height:\s*50px;/,
   );
-  assert.match(header, /--chat-header-surface-base:\s*transparent;/);
-  assert.match(header, /--chat-header-surface-sheen:\s*none;/);
-  assert.match(header, /--chat-header-divider:\s*transparent;/);
-  assert.match(header, /--chat-header-filter:\s*none;/);
+  assert.match(header, /--chat-header-surface-base:\s*var\(--sidebar-bg\);/);
   assert.match(
     header,
-    /background:[\s\S]*var\(--chat-header-surface-sheen\)[\s\S]*var\(--chat-header-surface-base\);/,
+    /--chat-header-surface-sheen:\s*var\(--sidebar-chrome-sheen, none\);/,
   );
+  assert.match(
+    header,
+    /--chat-header-divider:\s*color-mix\(in srgb, var\(--ink\) 8%, transparent\);/,
+  );
+  assert.match(
+    header,
+    /--chat-header-filter:\s*var\(--sidebar-chrome-filter\);/,
+  );
+  assert.match(header, /background:\s*transparent;/);
   assert.match(header, /border:\s*0;/);
-  assert.match(
-    header,
-    /border-bottom:\s*0\.5px solid var\(--chat-header-divider\);/,
-  );
   assert.doesNotMatch(header, /border-top:/);
   assert.doesNotMatch(header, /border-left:/);
   assert.doesNotMatch(header, /border-right:/);
   assert.match(header, /box-shadow:\s*none;/);
-  assert.match(header, /backdrop-filter:\s*var\(--chat-header-filter\);/);
   assert.match(
-    underlay,
-    /--chat-header-surface-base:\s*color-mix\(in srgb, var\(--bg1\) 72%, transparent\);/,
+    underlayLayer,
+    /background:[\s\S]*var\(--chat-header-surface-sheen\)[\s\S]*var\(--chat-header-surface-base\);/,
   );
   assert.match(
-    underlay,
-    /--chat-header-divider:\s*color-mix\(in srgb, var\(--ink\) 6%, transparent\);/,
+    underlayLayer,
+    /border-bottom:\s*0\.5px solid var\(--chat-header-divider\);/,
   );
-  assert.match(underlay, /--chat-header-filter:\s*blur\(/);
-  assert.match(underlay, /saturate\(1\.05\);/);
+  assert.match(
+    underlayLayer,
+    /backdrop-filter:\s*var\(--chat-header-filter\);/,
+  );
+  assert.match(underlayLayer, /opacity:\s*0;/);
+  assert.match(underlayLayer, /transition:\s*opacity 160ms ease;/);
+  assert.match(visibleUnderlayLayer, /opacity:\s*1;/);
+  assert.doesNotMatch(headerStyles, /var\(--bg1\) 72%/);
   assert.ok(fileHeader, "missing project file header material rule");
   assert.match(fileHeader, /--chat-header-divider:\s*transparent;/);
   assert.match(fileHeader, /background:\s*var\(--sidebar-chrome-background\);/);
@@ -158,7 +167,12 @@ test("chat header is invisible at rest and adds glass only above scrolling conte
   );
   assert.match(app, /projectFiles\.tabs\.length > 0 \? " has-project-file"/);
   assert.match(app, /onHeaderUnderlayChange=\{setChatHeaderHasUnderlay\}/);
-  assert.match(chatView, /notifyHeaderUnderlay\(list\.scrollTop > 8\);/);
+  assert.match(
+    chatView,
+    /headerUnderlayRef\.current\s*\? list\.scrollTop > HEADER_UNDERLAY_EXIT_SCROLL_TOP\s*:\s*list\.scrollTop > HEADER_UNDERLAY_ENTER_SCROLL_TOP/,
+  );
+  assert.match(chatView, /HEADER_UNDERLAY_ENTER_SCROLL_TOP = 12;/);
+  assert.match(chatView, /HEADER_UNDERLAY_EXIT_SCROLL_TOP = 2;/);
   assert.match(
     coreStyles,
     /\.content-pane--chat[\s\S]*?> \.message-list\s*\{[\s\S]*?padding-top:\s*var\(--chat-header-overlay-height, 50px\);[\s\S]*?scroll-padding-block-start:/,

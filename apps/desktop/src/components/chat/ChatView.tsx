@@ -467,6 +467,8 @@ function detectTrigger(text: string, caret: number): TriggerState | null {
 const MAX_ATTACHMENTS = 8;
 /** 图片内联 base64 上限（字节） */
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
+const HEADER_UNDERLAY_ENTER_SCROLL_TOP = 12;
+const HEADER_UNDERLAY_EXIT_SCROLL_TOP = 2;
 
 type PermissionPreset = "ask_for_approval" | "approve_for_me" | "full_access";
 type PermissionSettings = {
@@ -1794,7 +1796,10 @@ export default function ChatView({
   const updateConversationScrollState = useCallback(() => {
     const list = messageListRef.current;
     if (!list) return;
-    notifyHeaderUnderlay(list.scrollTop > 8);
+    const hasHeaderUnderlay = headerUnderlayRef.current
+      ? list.scrollTop > HEADER_UNDERLAY_EXIT_SCROLL_TOP
+      : list.scrollTop > HEADER_UNDERLAY_ENTER_SCROLL_TOP;
+    notifyHeaderUnderlay(hasHeaderUnderlay);
     const distanceFromBottom =
       list.scrollHeight - list.scrollTop - list.clientHeight;
     const awayFromBottom = distanceFromBottom > 56;
