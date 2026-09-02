@@ -5,7 +5,7 @@
 //! `~/.astro/tools-enabled.json`）与运行时 `check_fn` 过滤出当前会话实际可用的
 //! 工具列表，供 `schemas_for_api` 下发给模型。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -78,6 +78,10 @@ fn namespace_child_name(entry: &ToolEntry) -> String {
         .to_string()
 }
 
+fn is_removed_code_mode_control(name: &str) -> bool {
+    matches!(name, "exec" | "wait")
+}
+
 fn entry_api_spec(entry: &ToolEntry, defer_loading: bool) -> serde_json::Value {
     if entry.name == "tool_search" {
         return serde_json::json!({
@@ -147,6 +151,15 @@ fn api_specs<'a>(entries: impl IntoIterator<Item = &'a ToolEntry>) -> Vec<serde_
 }
 
 impl ToolRegistry {
+    fn is_entry_available(&self, entry: &ToolEntry) -> bool {
+        let toolset_enabled = if entry.toolset == "mcp" {
+            true
+        } else {
+            self.is_toolset_enabled(&entry.toolset)
+        };
+        toolset_enabled && entry.check_fn.as_ref().map(|check| check()).unwrap_or(true)
+    }
+
     /// 创建空注册表。
     pub fn new() -> Self {
         ToolRegistry {
@@ -322,22 +335,18 @@ impl ToolRegistry {
     pub fn available_tools(&self) -> Vec<&ToolEntry> {
         self.tools
             .values()
-            .filter(|e| {
-                // MCP 门控只在 attach 时过滤，不走 tools-enabled.json
-                if e.toolset == "mcp" {
-                    return true;
-                }
-                self.is_toolset_enabled(&e.toolset)
-            })
-            .filter(|e| e.check_fn.as_ref().map(|f| f()).unwrap_or(true))
+            .filter(|entry| self.is_entry_available(entry))
             .collect()
     }
 
     /// 返回当前可搜索但尚未注入模型的工具。
     pub fn searchable_deferred_tools(&self) -> Vec<&ToolEntry> {
-        self.available_tools()
-            .into_iter()
-            .filter(|entry| entry.exposure.is_deferred())
+        self.tools
+            .values()
+            .filter(|entry| {
+                entry.exposure.is_deferred() && !is_removed_code_mode_control(&entry.name)
+            })
+            .filter(|entry| self.is_entry_available(entry))
             .collect()
     }
 
@@ -349,18 +358,44 @@ impl ToolRegistry {
     /// **非 Direct 工具不包含在返回列表中**。Deferred 工具由
     /// `tool_search` 以原生 output 形式返回，不改写注册表中的 exposure。
     pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        api_specs(self.available_tools().into_iter().filter(|entry| {
-            entry.exposure.is_direct() && !matches!(entry.name.as_str(), "exec" | "wait")
-        }))
+        api_specs(
+            self.tools
+                .values()
+                .filter(|entry| {
+                    entry.exposure.is_direct() && !is_removed_code_mode_control(&entry.name)
+                })
+                .filter(|entry| self.is_entry_available(entry)),
+        )
     }
 
-    /// 执行路由可调用的全部 schema，包含 Deferred 但排除 Hidden。
-    pub fn all_callable_tool_schemas(&self) -> Vec<serde_json::Value> {
-        api_specs(
-            self.available_tools()
-                .into_iter()
-                .filter(|entry| entry.exposure != types::ToolExposure::Hidden),
-        )
+    /// 一次性构建当前 Step 的模型可见 schema 与额外可路由 Deferred schema。
+    ///
+    /// Deferred 工具只有已经出现在可信 `tool_search_output` 中时才进入路由，
+    /// 防止模型仅凭猜测名称绕过发现流程。单次扫描也避免重复运行工具的
+    /// `check_fn`，其中浏览器等探测可能涉及文件系统查询。
+    pub fn schemas_for_step(
+        &self,
+        discovered_deferred: &HashSet<&str>,
+    ) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
+        let mut direct = Vec::new();
+        let mut discovered = Vec::new();
+        for entry in self.tools.values() {
+            if is_removed_code_mode_control(&entry.name) {
+                continue;
+            }
+            let is_direct = entry.exposure.is_direct();
+            let is_discovered =
+                entry.exposure.is_deferred() && discovered_deferred.contains(entry.name.as_str());
+            if (!is_direct && !is_discovered) || !self.is_entry_available(entry) {
+                continue;
+            }
+            if is_direct {
+                direct.push(entry);
+            } else {
+                discovered.push(entry);
+            }
+        }
+        (api_specs(direct), api_specs(discovered))
     }
 }
 
@@ -438,7 +473,13 @@ mod tests {
     fn all_registered_tools_have_vendor_safe_parameters() {
         let mut reg = ToolRegistry::new();
         crate::register_all(&mut reg);
-        let schemas = reg.all_callable_tool_schemas();
+        let discovered = reg
+            .searchable_deferred_tools()
+            .into_iter()
+            .map(|entry| entry.name.as_str())
+            .collect();
+        let (mut schemas, deferred) = reg.schemas_for_step(&discovered);
+        schemas.extend(deferred);
         assert!(!schemas.is_empty());
         for s in schemas {
             assert_vendor_safe_parameters(&s);
@@ -593,10 +634,69 @@ mod tests {
 
         assert!(reg.is_tool_allowed("image_gen"));
         assert!(!schema_names(&reg).iter().any(|name| name == "image_gen"));
+        let discovered = HashSet::from(["image_gen"]);
         assert!(reg
-            .all_callable_tool_schemas()
+            .schemas_for_step(&discovered)
+            .1
             .iter()
             .any(|spec| spec["name"] == "image_gen"));
+    }
+
+    #[test]
+    fn step_schema_snapshot_only_routes_discovered_deferred_tools_and_checks_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let checks = Arc::new(AtomicUsize::new(0));
+        let mut reg = ToolRegistry::new();
+        for (name, deferred) in [("direct", false), ("found", true), ("unseen", true)] {
+            let checks = Arc::clone(&checks);
+            let mut entry = ToolEntry {
+                name: name.into(),
+                toolset: "core".into(),
+                check_fn: Some(Box::new(move || {
+                    checks.fetch_add(1, Ordering::Relaxed);
+                    true
+                })),
+                ..ToolEntry::lifecycle_defaults()
+            };
+            if deferred {
+                entry = entry.deferred();
+            }
+            reg.register(entry);
+        }
+
+        let discovered = HashSet::from(["found"]);
+        let (visible, routable_deferred) = reg.schemas_for_step(&discovered);
+        let names = |specs: &[serde_json::Value]| {
+            specs
+                .iter()
+                .filter_map(|spec| spec.get("name").and_then(serde_json::Value::as_str))
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(names(&visible), vec!["direct".to_string()]);
+        assert_eq!(names(&routable_deferred), vec!["found".to_string()]);
+        assert_eq!(checks.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn removed_code_mode_controls_cannot_reenter_through_deferred_search() {
+        let mut reg = ToolRegistry::new();
+        for name in ["exec", "wait"] {
+            reg.register(ToolEntry {
+                name: name.into(),
+                toolset: "plugin".into(),
+                ..ToolEntry::lifecycle_defaults().deferred()
+            });
+        }
+
+        assert!(reg.searchable_deferred_tools().is_empty());
+        let discovered = HashSet::from(["exec", "wait"]);
+        let (visible, routable_deferred) = reg.schemas_for_step(&discovered);
+        assert!(visible.is_empty());
+        assert!(routable_deferred.is_empty());
     }
 
     #[test]

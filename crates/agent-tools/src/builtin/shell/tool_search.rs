@@ -115,7 +115,7 @@ fn search(
 /// 搜索当前 Step 的 deferred 工具并返回完整可加载 schema。
 ///
 /// 结果会由 Responses 适配器序列化为 `tool_search_output`；搜索本身不改写
-/// 注册表，执行时由 StepContext 中的完整路由解析已发现工具。
+/// 注册表，下一 Step 只把该输出中实际返回的工具加入可调用路由。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::Result<String> {
     let query = args.query.trim();
     if query.is_empty() {

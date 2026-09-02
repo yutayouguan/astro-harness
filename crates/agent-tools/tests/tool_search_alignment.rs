@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::RwLock;
 
 use tempfile::TempDir;
@@ -81,8 +82,9 @@ async fn search_returns_full_schema_without_mutating_deferred_dynamic_tool() {
             .and_then(|name| name.as_str())
             == Some("mcp__calendar__list_events")
     }));
-    let callable = registry.read().unwrap().all_callable_tool_schemas();
-    assert!(callable.iter().any(|spec| {
+    let discovered = HashSet::from(["mcp__calendar__list_events"]);
+    let routable_deferred = registry.read().unwrap().schemas_for_step(&discovered).1;
+    assert!(routable_deferred.iter().any(|spec| {
         spec.get("name")
             .or_else(|| spec.pointer("/function/name"))
             .and_then(|name| name.as_str())

@@ -22,7 +22,7 @@ struct ToolRoute {
 /// 不可变的注册表投影，与单次模型请求可见的工具规格配对。
 ///
 /// `routes` 是该步骤的可调用集合，是 `model_visible_specs` 的超集：
-/// deferred 工具不进入初始可见列表，但仍保留完整路由供搜索后的调用执行。
+/// 仅已由可信 `tool_search_output` 返回的 Deferred 工具会进入额外路由。
 pub(crate) struct ToolRouter {
     routes: HashMap<String, ToolRoute>,
     model_visible_specs: Arc<[serde_json::Value]>,
@@ -31,11 +31,14 @@ pub(crate) struct ToolRouter {
 impl ToolRouter {
     pub(crate) fn from_registry(
         registry: &ToolRegistry,
-        callable_specs: &[serde_json::Value],
+        additional_callable_specs: &[serde_json::Value],
         model_visible_specs: Vec<serde_json::Value>,
     ) -> Self {
         let mut routes = HashMap::new();
-        for spec in callable_specs.iter().chain(model_visible_specs.iter()) {
+        for spec in additional_callable_specs
+            .iter()
+            .chain(model_visible_specs.iter())
+        {
             for (wire_name, registered_name) in spec_route_names(registry, spec) {
                 let Some(entry) = registry.get(&registered_name) else {
                     continue;
@@ -237,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    fn deferred_tools_are_callable_without_being_advertised() {
+    fn only_discovered_deferred_tools_are_callable_without_being_advertised() {
         let mut registry = ToolRegistry::new();
         registry.register(types::ToolEntry {
             name: "direct_tool".into(),
@@ -258,12 +261,20 @@ mod tests {
             ..types::ToolEntry::lifecycle_defaults().hidden()
         });
 
-        let visible = registry.schemas_for_api();
-        let router =
-            ToolRouter::from_registry(&registry, &registry.all_callable_tool_schemas(), visible);
+        registry.register(types::ToolEntry {
+            name: "unseen_deferred_tool".into(),
+            toolset: "core".into(),
+            description: "not returned by tool_search".into(),
+            ..types::ToolEntry::lifecycle_defaults().deferred()
+        });
+
+        let discovered = std::collections::HashSet::from(["deferred_tool"]);
+        let (visible, routable_deferred) = registry.schemas_for_step(&discovered);
+        let router = ToolRouter::from_registry(&registry, &routable_deferred, visible);
 
         assert!(router.has_tool("direct_tool"));
         assert!(router.has_tool("deferred_tool"));
+        assert!(!router.has_tool("unseen_deferred_tool"));
         assert!(!router.has_tool("hidden_tool"));
         let specs = router.model_visible_specs();
         let advertised: Vec<&str> = specs
@@ -287,9 +298,9 @@ mod tests {
             description: "list jobs".into(),
             ..types::ToolEntry::lifecycle_defaults()
         });
-        let visible = registry.schemas_for_api();
-        let router =
-            ToolRouter::from_registry(&registry, &registry.all_callable_tool_schemas(), visible);
+        let (visible, routable_deferred) =
+            registry.schemas_for_step(&std::collections::HashSet::new());
+        let router = ToolRouter::from_registry(&registry, &routable_deferred, visible);
 
         assert!(router.has_tool("cron.list"));
         assert_eq!(router.registered_name("cron.list"), "cron_list");

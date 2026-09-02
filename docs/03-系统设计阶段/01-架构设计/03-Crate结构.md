@@ -137,7 +137,7 @@ apps/desktop/src-tauri ← Tauri 桌面壳
 crates/agent-tools/src/
 ├── lib.rs                    # register_all()、interaction_mode
 ├── engine/                   # 工具引擎核心
-│   ├── registry.rs           # ToolRegistry — schemas_for_api / activate_deferred / BM25 搜索
+│   ├── registry.rs           # ToolRegistry — Direct schema / discovered Deferred 路由
 │   ├── dispatch.rs           # 工具分发与执行
 │   ├── catalog.rs            # 工具目录列表
 │   ├── context.rs            # 工具执行上下文

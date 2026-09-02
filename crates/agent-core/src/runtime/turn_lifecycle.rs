@@ -4,6 +4,7 @@ use session::{
     build_conversation_context, format_recalled_context, ConversationStore, NewResponseItem,
 };
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use agent_protocol::{TurnInputError, TurnInputMode, TurnInputRequest, TurnInputSubmission};
@@ -33,6 +34,26 @@ where
         image_data_urls,
         client_message_id: None,
     })
+}
+
+fn discovered_deferred_tool_names(history: &[agent_protocol::ResponseItem]) -> HashSet<&str> {
+    history
+        .iter()
+        .filter_map(|item| match item {
+            agent_protocol::ResponseItem::ToolSearchOutput { status, tools, .. }
+                if status == "completed" =>
+            {
+                Some(tools)
+            }
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|tool| {
+            tool.get("name")
+                .or_else(|| tool.pointer("/function/name"))
+                .and_then(serde_json::Value::as_str)
+        })
+        .collect()
 }
 
 fn response_item_for_turn_input(
@@ -971,19 +992,19 @@ impl Session {
             })
         };
         let interaction_mode = turn_context.mode();
+        let discovered_deferred = discovered_deferred_tool_names(&history);
         let tool_router = {
             let registry = self
                 .services
                 .tool_registry
                 .read()
                 .expect("tool registry lock poisoned");
-            let visible_specs = tools::filter_schemas(interaction_mode, registry.schemas_for_api());
-            // Deferred 工具不进模型 schema，但发现后仍可调用；两者都要按交互模式过滤。
-            let callable_specs =
-                tools::filter_schemas(interaction_mode, registry.all_callable_tool_schemas());
+            let (visible_specs, discovered_specs) = registry.schemas_for_step(&discovered_deferred);
+            let visible_specs = tools::filter_schemas(interaction_mode, visible_specs);
+            let discovered_specs = tools::filter_schemas(interaction_mode, discovered_specs);
             Arc::new(crate::runtime::ToolRouter::from_registry(
                 &registry,
-                &callable_specs,
+                &discovered_specs,
                 visible_specs,
             ))
         };
@@ -1324,8 +1345,41 @@ mod tests {
             first.tool_router.model_visible_specs().as_ref(),
             second.tool_router.model_visible_specs().as_ref()
         );
-        assert!(first.routes_tool("web_search"));
+        assert!(!first.routes_tool("web_search"));
         assert!(!first.routes_tool("exec_command"));
+    }
+
+    #[test]
+    fn deferred_routes_come_only_from_completed_tool_search_outputs() {
+        let history = vec![
+            agent_protocol::ResponseItem::ToolSearchOutput {
+                id: None,
+                call_id: Some("search-ok".into()),
+                status: "completed".into(),
+                execution: "client".into(),
+                tools: vec![
+                    serde_json::json!({"type": "function", "name": "web_search"}),
+                    serde_json::json!({
+                        "type": "function",
+                        "function": {"name": "legacy_shape"}
+                    }),
+                ],
+                internal_chat_message_metadata_passthrough: None,
+            },
+            agent_protocol::ResponseItem::ToolSearchOutput {
+                id: None,
+                call_id: Some("search-failed".into()),
+                status: "failed".into(),
+                execution: "client".into(),
+                tools: vec![serde_json::json!({"name": "must_not_route"})],
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ];
+
+        assert_eq!(
+            discovered_deferred_tool_names(&history),
+            HashSet::from(["legacy_shape", "web_search"])
+        );
     }
 
     #[tokio::test]
