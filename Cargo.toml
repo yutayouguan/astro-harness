@@ -25,6 +25,7 @@ members = [
     "crates/agent-a2ui",
     "crates/agent-tools",
     "crates/agent-extensions",
+    "crates/agent-delegate",
     "crates/agent-core",
     "crates/agent-server",
     "apps/desktop/src-tauri",

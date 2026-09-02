@@ -28,6 +28,7 @@ agent-rollout = { path = "../agent-rollout" }
 realtime = { path = "../agent-realtime" }
 agent-extensions = { path = "../agent-extensions" }
 agent-config = { path = "../agent-config" }
+worktree = { path = "../agent-delegate" }
 tracing = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

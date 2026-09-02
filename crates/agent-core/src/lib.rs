@@ -16,7 +16,7 @@ pub mod exec;
 /// 可热发现扩展包的 manifest 与 turn 级不可变快照。
 pub use agent_extensions as extensions;
 /// Git worktree 隔离与项目根解析。
-pub mod git_worktree;
+pub use worktree as git_worktree;
 /// 提示词域：上下文、消息转换、hook 与 prompt builder。
 pub mod prompt;
 /// Agent 运行时核心。
