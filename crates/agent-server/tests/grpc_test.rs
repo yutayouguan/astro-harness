@@ -132,6 +132,15 @@ async fn terminal_can_switch_to_ai_tab_and_restart_without_timing_out() {
     .expect("AI terminal RPC timed out")
     .expect("open AI terminal")
     .into_inner();
+    let reattached = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        client.open_terminal(request("ai-tab", "project", true)),
+    )
+    .await
+    .expect("reattached AI terminal RPC timed out")
+    .expect("reattach AI terminal")
+    .into_inner();
+    assert_eq!(ai.id, reattached.id);
 
     client
         .close_terminal(TerminalIdRequest { id: ai.id })

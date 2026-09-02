@@ -210,14 +210,18 @@ impl TerminalSessionManager {
             anyhow::bail!("terminal cwd must stay inside its project scope");
         }
 
-        if let Some(existing_id) = self
-            .registry
-            .read()
-            .expect("terminal registry lock poisoned")
-            .agent_by_scope
-            .get(&scope)
-            .copied()
-        {
+        // Drop the registry read guard before entering the branch. An `if let` scrutinee
+        // temporary lives through the whole statement, so keeping the lookup inline would
+        // self-deadlock below when a stale session has to be removed under the write lock.
+        let existing_id = {
+            self.registry
+                .read()
+                .expect("terminal registry lock poisoned")
+                .agent_by_scope
+                .get(&scope)
+                .copied()
+        };
+        if let Some(existing_id) = existing_id {
             let existing = self.session(existing_id)?;
             let info = existing.info();
             if info.running {
@@ -292,14 +296,17 @@ impl TerminalSessionManager {
         }
         let key = (scope.clone(), client_token.to_owned());
 
-        if let Some(existing_id) = self
-            .registry
-            .read()
-            .expect("terminal registry lock poisoned")
-            .desktop_by_token
-            .get(&key)
-            .copied()
-        {
+        // Do not keep the read guard alive across this branch: reattaching the AI-default tab
+        // updates `agent_by_scope` and therefore needs the registry write lock.
+        let existing_id = {
+            self.registry
+                .read()
+                .expect("terminal registry lock poisoned")
+                .desktop_by_token
+                .get(&key)
+                .copied()
+        };
+        if let Some(existing_id) = existing_id {
             let existing = self.session(existing_id)?;
             if existing.info().running {
                 if existing.sandbox_mode != policy.mode {
@@ -1149,8 +1156,22 @@ mod tests {
                 },
             )
             .unwrap();
+        let reattached = manager
+            .open_desktop_shell(
+                &scope,
+                &scope,
+                &policy,
+                "ai-tab",
+                true,
+                TerminalDimensions {
+                    cols: 120,
+                    rows: 32,
+                },
+            )
+            .unwrap();
 
         assert_eq!(desktop.id, agent.id);
+        assert_eq!(reattached.id, agent.id);
         manager.close(agent.id).unwrap();
     }
 
