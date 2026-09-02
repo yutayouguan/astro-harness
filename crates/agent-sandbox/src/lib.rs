@@ -663,6 +663,26 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn seatbelt_allows_shell_output_to_dev_null() {
+        let workspace = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::new(
+            SandboxMode::ReadOnly,
+            workspace.path(),
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+        let status = SandboxRunner
+            .std_command(&policy, "/bin/sh")
+            .unwrap()
+            .args(["-c", "printf astro >/dev/null"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn seatbelt_enforces_workspace_write_boundary() {
         let workspace = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();

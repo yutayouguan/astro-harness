@@ -6,6 +6,10 @@ import { ExternalLink, RotateCcw, Square, Trash2, X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 
 import { useI18n } from "../../i18n/LocaleContext";
+import {
+  readTerminalSettings,
+  subscribeTerminalSettings,
+} from "../../lib/terminal/terminalSettings";
 
 type TerminalSessionDto = {
   id: number;
@@ -62,11 +66,15 @@ export default function TerminalDock({
   const { t } = useI18n();
   const hostRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XtermTerminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
   const resizeDragCleanupRef = useRef<(() => void) | null>(null);
   const [height, setHeight] = useState(() => initialHeight(projectId));
   const [session, setSession] = useState<TerminalSessionDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [restartGeneration, setRestartGeneration] = useState(0);
+  const [settings, setSettings] = useState(readTerminalSettings);
+
+  useEffect(() => subscribeTerminalSettings(setSettings), []);
 
   useEffect(() => {
     setHeight(initialHeight(projectId));
@@ -86,19 +94,19 @@ export default function TerminalDock({
     const terminal = new XtermTerminal({
       allowProposedApi: false,
       convertEol: false,
-      cursorBlink: true,
-      cursorStyle: "bar",
-      fontFamily:
-        '"SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, monospace',
-      fontSize: 12.5,
-      lineHeight: 1.28,
-      scrollback: 5_000,
+      cursorBlink: settings.cursorBlink,
+      cursorStyle: settings.cursorStyle,
+      fontFamily: settings.fontFamily,
+      fontSize: settings.fontSize,
+      lineHeight: settings.lineHeight,
+      scrollback: settings.scrollback,
       theme: terminalTheme(),
     });
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(host);
     xtermRef.current = terminal;
+    fitRef.current = fit;
     fit.fit();
 
     const flushInput = async () => {
@@ -167,6 +175,7 @@ export default function TerminalDock({
             cwd: projectRoot,
             cols: terminal.cols,
             rows: terminal.rows,
+            executionMode: settings.executionMode,
           },
         });
         if (disposed) return;
@@ -232,8 +241,21 @@ export default function TerminalDock({
       resizeDisposable.dispose();
       terminal.dispose();
       xtermRef.current = null;
+      fitRef.current = null;
     };
-  }, [projectRoot, restartGeneration, t]);
+  }, [projectRoot, restartGeneration, settings.executionMode, t]);
+
+  useEffect(() => {
+    const terminal = xtermRef.current;
+    if (!terminal) return;
+    terminal.options.fontFamily = settings.fontFamily;
+    terminal.options.fontSize = settings.fontSize;
+    terminal.options.lineHeight = settings.lineHeight;
+    terminal.options.scrollback = settings.scrollback;
+    terminal.options.cursorStyle = settings.cursorStyle;
+    terminal.options.cursorBlink = settings.cursorBlink;
+    window.requestAnimationFrame(() => fitRef.current?.fit());
+  }, [settings]);
 
   const beginResize = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -305,7 +327,13 @@ export default function TerminalDock({
           />
           <strong>{t("chat.terminal.title")}</strong>
           <span>{projectName}</span>
-          <span className="terminal-dock-shared">{t("chat.terminal.shared")}</span>
+          <span className="terminal-dock-shared">
+            {t(
+              settings.executionMode === "system"
+                ? "chat.terminal.mode.system"
+                : "chat.terminal.mode.project",
+            )}
+          </span>
         </div>
         <div className="terminal-dock-actions">
           {error ? <span className="terminal-dock-error">{error}</span> : null}

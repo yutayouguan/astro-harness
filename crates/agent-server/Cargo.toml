@@ -17,6 +17,7 @@ workflow = { path = "../agent-workflow" }
 skills = { path = "../agent-skills" }
 hooks = { path = "../agent-hooks" }
 tools = { path = "../agent-tools" }
+sandbox = { path = "../agent-sandbox" }
 mcp = { path = "../agent-mcp" }
 agent-protocol = { path = "../agent-protocol" }
 agent-rollout = { path = "../agent-rollout" }

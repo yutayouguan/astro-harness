@@ -23,6 +23,7 @@ pub struct TerminalOpenDto {
     pub cwd: Option<String>,
     pub cols: u32,
     pub rows: u32,
+    pub execution_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -81,6 +82,8 @@ pub async fn terminal_open(request: TerminalOpenDto) -> Result<TerminalSessionDt
             cwd: request.cwd.unwrap_or_default(),
             cols: request.cols,
             rows: request.rows,
+            execution_mode: request.execution_mode.unwrap_or_default(),
+            replace_mode_mismatch: true,
         })
         .await
         .map_err(|error| error.to_string())?

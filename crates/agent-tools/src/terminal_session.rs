@@ -170,6 +170,21 @@ impl TerminalSessionManager {
         cols: u16,
         rows: u16,
     ) -> anyhow::Result<TerminalSessionInfo> {
+        self.ensure_shell_with_options(scope, cwd, policy, cols, rows, false)
+    }
+
+    /// Opens the shared shell and optionally replaces it when the Desktop user changes the
+    /// configured execution mode. Agent callers use [`Self::ensure_shell`] so they can never
+    /// replace a more permissive user-owned session as a side effect of attaching.
+    pub fn ensure_shell_with_options(
+        &self,
+        scope: &Path,
+        cwd: &Path,
+        policy: &sandbox::SandboxPolicy,
+        cols: u16,
+        rows: u16,
+        replace_mode_mismatch: bool,
+    ) -> anyhow::Result<TerminalSessionInfo> {
         // Process creation is synchronous and uncommon. Serializing it prevents two callers from
         // both observing an empty scope and leaking a second, unreachable shell.
         let _lifecycle = self
@@ -193,8 +208,16 @@ impl TerminalSessionManager {
             let existing = self.session(existing_id)?;
             let info = existing.info();
             if info.running {
-                ensure_mode_allows(policy.mode, existing.sandbox_mode)?;
-                return Ok(info);
+                if !replace_mode_mismatch || existing.sandbox_mode == policy.mode {
+                    ensure_mode_allows(policy.mode, existing.sandbox_mode)?;
+                    return Ok(info);
+                }
+                existing
+                    .killer
+                    .lock()
+                    .expect("terminal killer lock poisoned")
+                    .kill()
+                    .context("replace terminal after execution mode changed")?;
             }
             let mut registry = self
                 .registry
@@ -514,7 +537,7 @@ fn ensure_mode_allows(
     };
     if rank(session) > rank(requested) {
         anyhow::bail!(
-            "active terminal sandbox ({session:?}) is broader than this Agent permission profile ({requested:?})"
+            "active system terminal is broader than this Agent permission profile ({requested:?}); switch the terminal to Project sandbox or use the danger-full-access profile"
         );
     }
     Ok(())

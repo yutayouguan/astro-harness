@@ -455,6 +455,12 @@ message TerminalOpenRequest {
   string cwd = 2;
   uint32 cols = 3;
   uint32 rows = 4;
+  // "project" keeps workspace-write sandboxing; "system" launches the user's
+  // login shell without the project filesystem sandbox.
+  string execution_mode = 5;
+  // Desktop settings may deliberately replace an existing shell when its mode
+  // no longer matches. Agent callers continue to reuse the active session.
+  bool replace_mode_mismatch = 6;
 }
 
 message TerminalIdRequest { uint64 id = 1; }

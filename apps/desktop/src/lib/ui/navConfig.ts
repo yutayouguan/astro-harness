@@ -20,6 +20,7 @@ export type SettingsTabId =
   | "providers"
   | "tools"
   | "browser"
+  | "terminal"
   | "models"
   | "insights"
   | "evolution"

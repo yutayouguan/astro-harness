@@ -5705,6 +5705,7 @@ dependencies = [
  "proto",
  "providers",
  "reqwest 0.12.28",
+ "sandbox",
  "serde",
  "serde_json",
  "session",

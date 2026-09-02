@@ -12,6 +12,7 @@ import {
   IconProviders,
   IconSettings,
   IconSparkles,
+  IconTerminal,
   IconTools,
 } from "../../components/icons";
 import type { SettingsTabId } from "./navConfig";
@@ -37,6 +38,7 @@ export const SETTINGS_TAB_GROUPS: SettingsTabGroup[] = [
       { id: "preferences", label: "通用", Icon: IconSettings },
       { id: "preferences:appearance", label: "外观", Icon: IconSparkles },
       { id: "preferences:conversation", label: "对话", Icon: IconChat },
+      { id: "terminal", label: "终端", Icon: IconTerminal },
     ],
   },
   {

@@ -2900,22 +2900,37 @@ impl AstroService for AstroServiceImpl {
         } else {
             PathBuf::from(req.cwd.trim())
         };
-        let policy = tools::context::build_command_sandbox_policy_with_roots(
-            &self.memory_dir,
-            &scope,
-            std::slice::from_ref(&scope),
-            None,
-            false,
-            None,
-        )
-        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        let policy = match req.execution_mode.trim() {
+            "" | "project" => tools::context::build_command_sandbox_policy_with_roots(
+                &self.memory_dir,
+                &scope,
+                std::slice::from_ref(&scope),
+                None,
+                false,
+                None,
+            )
+            .map_err(|error| Status::failed_precondition(error.to_string()))?,
+            "system" => sandbox::SandboxPolicy::new(
+                types::SandboxMode::DangerFullAccess,
+                &scope,
+                std::iter::empty(),
+                true,
+            )
+            .map_err(|error| Status::failed_precondition(error.to_string()))?,
+            mode => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported terminal execution mode: {mode}"
+                )))
+            }
+        };
         let info = tools::shared_terminal_sessions()
-            .ensure_shell(
+            .ensure_shell_with_options(
                 &scope,
                 &cwd,
                 &policy,
                 req.cols.min(u16::MAX.into()) as u16,
                 req.rows.min(u16::MAX.into()) as u16,
+                req.replace_mode_mismatch,
             )
             .map_err(|error| Status::invalid_argument(error.to_string()))?;
         Ok(Response::new(terminal_session_response(info)))

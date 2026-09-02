@@ -107,6 +107,9 @@ pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
         "(allow mach-lookup)\n",
         "(allow ipc-posix-shm)\n",
         "(allow signal)\n",
+        // Shells and common CLI programs expect the null device to be writable even in
+        // read-only mode. This discards bytes and does not broaden filesystem access.
+        "(allow file-write* (literal \"/dev/null\"))\n",
     ));
 
     if policy.mode == SandboxMode::WorkspaceWrite {
@@ -220,7 +223,19 @@ mod tests {
 
         assert!(profile.contains("(deny default)"));
         assert!(!profile.contains("WRITABLE_ROOT"));
-        assert!(!profile.contains("file-write*"));
+        assert!(profile.contains("(allow file-write* (literal \"/dev/null\"))"));
+        assert!(!profile.contains("(allow file-write* (subpath"));
+    }
+
+    #[test]
+    fn every_sandbox_mode_can_discard_output_to_dev_null() {
+        let dir = tempfile::tempdir().unwrap();
+        for mode in [SandboxMode::ReadOnly, SandboxMode::WorkspaceWrite] {
+            let policy = SandboxPolicy::new(mode, dir.path(), Vec::new(), false).unwrap();
+            assert!(
+                seatbelt_profile(&policy).contains("(allow file-write* (literal \"/dev/null\"))")
+            );
+        }
     }
 
     #[test]
