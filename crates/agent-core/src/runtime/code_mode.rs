@@ -1,10 +1,9 @@
-//! Codex-compatible Code Mode cell runtime.
+//! 与 Codex 兼容的 Code Mode cell 运行时。
 //!
-//! Each cell runs in a fresh embedded QuickJS runtime on a dedicated thread.
-//! The model script receives no host globals; its only privileged boundary is
-//! the tool proxy implemented below. Actual nested tool calls are deliberately
-//! executed by `streaming::tools_exec`, so they retain Astro's normal
-//! approvals, hooks, sandbox, cancellation, and accounting.
+//! 每个 cell 都在专用线程的全新内嵌 QuickJS runtime 中执行。
+//! 模型脚本不会获得宿主全局对象，唯一的特权边界是下方实现的工具代理。
+//! 真实的嵌套工具调用统一交给 `streaming::tools_exec` 执行，
+//! 因此仍保留 Astro 原有的审批、Hook、沙箱、取消与计量语义。
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
