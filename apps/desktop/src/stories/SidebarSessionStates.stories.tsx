@@ -79,22 +79,17 @@ function SessionRow({
       <div className="sidebar-session-actions">
         <button
           type="button"
-          className="sidebar-session-action-btn"
+          className="sidebar-session-action-btn is-pin"
           title="置顶"
+          aria-label="置顶"
         >
           <Pin size={13} aria-hidden />
         </button>
         <button
           type="button"
-          className="sidebar-session-action-btn"
-          title="归档"
-        >
-          <Archive size={13} aria-hidden />
-        </button>
-        <button
-          type="button"
-          className="sidebar-session-action-btn"
+          className="sidebar-session-action-btn is-more"
           title="更多操作"
+          aria-label="更多操作"
         >
           <MoreVertical size={13} aria-hidden />
         </button>

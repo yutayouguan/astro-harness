@@ -301,10 +301,13 @@ test("left sidebar shares the flush glass chrome contract", () => {
   );
 });
 
-test("session activity uses trailing status and hover-revealed tools", () => {
+test("session activity preserves title space and progressively reveals tools", () => {
   const actions = rule(sessionStyles, ".sidebar-session-actions");
+  const sessionMain = rule(sessionStyles, ".sidebar-session-main");
+  const pinAction = rule(sessionStyles, ".sidebar-session-action-btn.is-pin");
   const unreadDot = rule(sessionStyles, ".session-status-unread-dot");
   const titleWrap = rule(sessionStyles, ".sidebar-session-title-wrap");
+  const title = rule(sessionStyles, ".sidebar-session-title");
   const scrollableTitle = rule(
     sessionStyles,
     '.sidebar-session-item:hover .sidebar-session-title[data-scrollable="true"]',
@@ -320,20 +323,42 @@ test("session activity uses trailing status and hover-revealed tools", () => {
   assert.match(statusIcon, /className="session-status-icon-spin"/);
   assert.match(statusIcon, /className="session-status-unread-dot"/);
   assert.ok(actions, "missing session action styles");
-  assert.match(actions, /background:\s*var\(--titlebar-menu-bg\);/);
-  assert.match(actions, /border:\s*1px solid var\(--titlebar-menu-border\);/);
-  assert.match(actions, /box-shadow:\s*var\(--titlebar-menu-shadow\);/);
-  assert.match(actions, /backdrop-filter:\s*var\(--titlebar-menu-blur\);/);
-  assert.match(actions, /opacity:\s*0;/);
-  assert.match(actions, /pointer-events:\s*none;/);
+  assert.match(actions, /background:\s*transparent;/);
+  assert.match(actions, /border:\s*0;/);
+  assert.match(actions, /box-shadow:\s*none;/);
+  assert.match(actions, /opacity:\s*1;/);
+  assert.match(actions, /pointer-events:\s*auto;/);
+  assert.doesNotMatch(actions, /backdrop-filter:/);
+  assert.ok(sessionMain, "session title needs a reserved action gutter");
+  assert.match(sessionMain, /padding:\s*7px 66px 7px 8px;/);
   assert.match(
-    a11yStyles,
-    /\.sidebar-session-actions,[\s\S]*?\.model-picker-panel,[\s\S]*?backdrop-filter:\s*none !important;/,
+    sidebarPolishStyles,
+    /\.sidebar-session-main\s*\{[\s\S]*?padding:\s*8px 66px 8px 9px;/,
+    "the final sidebar polish layer must keep the action gutter",
+  );
+  assert.ok(pinAction, "pin action needs progressive disclosure styles");
+  assert.match(pinAction, /opacity:\s*0;/);
+  assert.match(pinAction, /pointer-events:\s*none;/);
+  assert.match(
+    sessionStyles,
+    /\.sidebar-session-item:is\(:hover, :focus-within\)[\s\S]*?\.sidebar-session-action-btn\.is-pin\s*\{[\s\S]*?opacity:\s*1;/,
+  );
+  const sessionItem = sessionList.slice(
+    sessionList.indexOf("function SessionItem"),
+  );
+  assert.match(sessionItem, /className="sidebar-session-action-btn is-pin"/);
+  assert.match(sessionItem, /className="sidebar-session-action-btn is-more"/);
+  assert.doesNotMatch(sessionItem, /onArchiveToggle|ArchiveRestoreData/);
+  assert.match(
+    sessionActionsMenu,
+    /archived \? "unarchive_session" : "archive_session"/,
   );
   assert.ok(unreadDot, "missing unread marker styles");
   assert.match(unreadDot, /border-radius:\s*50%;/);
   assert.ok(titleWrap, "missing session title clipping wrapper");
   assert.doesNotMatch(titleWrap, /mask-image:/);
+  assert.ok(title, "missing session title styles");
+  assert.match(title, /text-overflow:\s*ellipsis;/);
   assert.ok(scrollableTitle, "only clipped session titles should scroll");
   assert.match(scrollableTitle, /animation:\s*sidebar-title-scroll/);
   assert.match(sessionList, /if \(overflow > 1\)/);

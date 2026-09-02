@@ -21,7 +21,7 @@ function rule(css, selector) {
     ?.groups?.body;
 }
 
-test("chat overlays and session tools reuse the titlebar menu glass", async () => {
+test("chat overlays reuse the titlebar menu glass while inline session tools stay flat", async () => {
   const [markdown, sessions, projects] = await Promise.all([
     readFile(markdownUrl, "utf8"),
     readFile(sessionsUrl, "utf8"),
@@ -29,7 +29,6 @@ test("chat overlays and session tools reuse the titlebar menu glass", async () =
   ]);
   const titlebarMenu = rule(projects, ".project-context-menu");
   const surfaces = [
-    ["session tools", rule(sessions, ".sidebar-session-actions")],
     ["conversation mode", rule(markdown, ".composer-mode-menu")],
     ["add menu", rule(markdown, ".composer-plus-menu")],
     ["context usage", rule(markdown, ".ctx-usage-popover")],
@@ -57,6 +56,13 @@ test("chat overlays and session tools reuse the titlebar menu glass", async () =
       );
     }
   }
+
+  const sessionTools = rule(sessions, ".sidebar-session-actions");
+  assert.ok(sessionTools, "missing session tools styles");
+  assert.ok(sessionTools.includes("border: 0;"));
+  assert.ok(sessionTools.includes("background: transparent;"));
+  assert.ok(sessionTools.includes("box-shadow: none;"));
+  assert.ok(!sessionTools.includes("backdrop-filter:"));
 });
 
 test("titlebar menu glass becomes opaque when transparency is reduced", async () => {

@@ -6,8 +6,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { MoreVertical, Pin } from "lucide-react";
 import {
-  Archive as ArchiveData,
-  ArchiveRestore as ArchiveRestoreData,
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
   Pin as PinData,
@@ -244,7 +242,6 @@ export default function SidebarSessionList({
             session={s}
             t={t}
             isActive={s.sessionId === activeSessionId}
-            archived={archived}
             status={resolveSessionStatus(sessionStatuses[s.sessionId])}
             unread={isSessionUnread(s.sessionId)}
             unreadTick={unreadTick}
@@ -257,12 +254,6 @@ export default function SidebarSessionList({
             onPinToggle={() =>
               void runQuickAction(
                 s.pinnedAt ? "unpin_session" : "pin_session",
-                s.sessionId,
-              )
-            }
-            onArchiveToggle={() =>
-              void runQuickAction(
-                archived ? "unarchive_session" : "archive_session",
                 s.sessionId,
               )
             }
@@ -327,7 +318,6 @@ function SessionItem({
   session: s,
   t,
   isActive,
-  archived,
   status,
   unread,
   unreadTick,
@@ -335,12 +325,10 @@ function SessionItem({
   onContextMenu,
   onMoreClick,
   onPinToggle,
-  onArchiveToggle,
 }: {
   session: RecentSessionDto;
   t: Translate;
   isActive: boolean;
-  archived: boolean;
   status: SessionActivityStatus;
   unread: boolean;
   /** 未读集合变更计数；仅用于触发重渲染 */
@@ -349,7 +337,6 @@ function SessionItem({
   onContextMenu: (x: number, y: number) => void;
   onMoreClick: (x: number, y: number) => void;
   onPinToggle: () => void;
-  onArchiveToggle: () => void;
 }) {
   const titleRef = useRef<HTMLSpanElement>(null);
   void unreadTick;
@@ -419,8 +406,9 @@ function SessionItem({
       <div className="sidebar-session-actions">
         <button
           type="button"
-          className="sidebar-session-action-btn"
+          className="sidebar-session-action-btn is-pin"
           title={s.pinnedAt ? t("sessions.unpin") : t("sessions.pin")}
+          aria-label={s.pinnedAt ? t("sessions.unpin") : t("sessions.pin")}
           onClick={(e) => {
             e.stopPropagation();
             onPinToggle();
@@ -437,26 +425,9 @@ function SessionItem({
         </button>
         <button
           type="button"
-          className="sidebar-session-action-btn"
-          title={archived ? t("sessions.unarchive") : t("sessions.archive")}
-          onClick={(e) => {
-            e.stopPropagation();
-            onArchiveToggle();
-          }}
-        >
-          <MorphToggleIcon
-            active={archived}
-            activeIcon={ArchiveRestoreData}
-            inactiveIcon={ArchiveData}
-            size={13}
-            strokeWidth={1.8}
-            aria-hidden
-          />
-        </button>
-        <button
-          type="button"
-          className="sidebar-session-action-btn"
+          className="sidebar-session-action-btn is-more"
           title={t("sessions.moreActions")}
+          aria-label={t("sessions.moreActions")}
           onClick={(e) => {
             e.stopPropagation();
             const rect = e.currentTarget.getBoundingClientRect();
