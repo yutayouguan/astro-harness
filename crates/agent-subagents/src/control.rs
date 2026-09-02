@@ -210,6 +210,7 @@ pub struct AgentControl {
     activity: Arc<ActivityBus>,
     runtimes: Arc<RuntimeHandleRegistry>,
     runtime_lifecycle: Arc<Mutex<RuntimeLifecycleState>>,
+    root_service_tier: Arc<Mutex<Option<String>>>,
     lifecycle_notify: Arc<Notify>,
     #[cfg(test)]
     before_runtime_insert_hook: Arc<Mutex<Option<BeforeRuntimeInsertHook>>>,
@@ -240,6 +241,7 @@ impl AgentControl {
             activity: Arc::new(ActivityBus::default()),
             runtimes: Arc::new(RuntimeHandleRegistry::default()),
             runtime_lifecycle: Arc::new(Mutex::new(RuntimeLifecycleState::default())),
+            root_service_tier: Arc::new(Mutex::new(None)),
             lifecycle_notify: Arc::new(Notify::new()),
             #[cfg(test)]
             before_runtime_insert_hook: Arc::new(Mutex::new(None)),
@@ -248,6 +250,20 @@ impl AgentControl {
 
     pub fn root_thread_id(&self) -> &str {
         &self.root_thread_id
+    }
+
+    pub fn root_service_tier(&self) -> Option<String> {
+        self.root_service_tier
+            .lock()
+            .expect("root service tier mutex poisoned")
+            .clone()
+    }
+
+    pub fn set_root_service_tier(&self, service_tier: Option<String>) {
+        *self
+            .root_service_tier
+            .lock()
+            .expect("root service tier mutex poisoned") = service_tier;
     }
 
     pub fn graph_db_path(&self) -> &Path {
@@ -1033,6 +1049,18 @@ mod tests {
             .await
             .unwrap();
         (control, store)
+    }
+
+    #[tokio::test]
+    async fn root_service_tier_is_shared_across_control_clones() {
+        let dir = TempDir::new().unwrap();
+        let (control, _) = open_control(&dir, "root-thread").await;
+        let clone = Arc::clone(&control);
+
+        control.set_root_service_tier(Some("priority".into()));
+        assert_eq!(clone.root_service_tier().as_deref(), Some("priority"));
+        clone.set_root_service_tier(None);
+        assert_eq!(control.root_service_tier(), None);
     }
 
     async fn commit_spawn(

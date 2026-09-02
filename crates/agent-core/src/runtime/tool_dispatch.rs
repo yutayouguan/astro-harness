@@ -188,7 +188,7 @@ impl AgentLoop {
             .and_then(|step| step.turn.extension_snapshot())
             .map(|snapshot| snapshot.skill_configs().to_vec())
             .unwrap_or(skill_config_overrides);
-        let service_tier = step_context
+        let mut service_tier = step_context
             .and_then(|step| step.turn.provider_settings())
             .and_then(|settings| {
                 settings
@@ -198,6 +198,13 @@ impl AgentLoop {
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_string)
             });
+        if self.services.agent_path == subagents::AgentPath::root() {
+            self.services
+                .agent_control
+                .set_root_service_tier(service_tier.clone());
+        } else if let Some(root_service_tier) = self.services.agent_control.root_service_tier() {
+            service_tier = Some(root_service_tier);
+        }
         let mut ctx = ToolContext {
             memory: &self.services.memory,
             sessions,
