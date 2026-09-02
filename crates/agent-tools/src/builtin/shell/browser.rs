@@ -126,6 +126,10 @@ pub struct BrowserViewportArgs {
     pub width: u32,
     /// Browser viewport height in CSS pixels.
     pub height: u32,
+    /// Capture a screenshot after resizing. Desktop live WebViews disable this
+    /// because the native surface is already visible.
+    #[serde(default)]
+    pub screenshot: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, Default)]
@@ -1437,7 +1441,7 @@ pub async fn desktop_control(
             let (tab_id, session) = browser_session(session_id).await?;
             let mut session = session.lock().await;
             session.resize_viewport(args.width, args.height).await?;
-            let result = session.snapshot(true).await?;
+            let result = session.snapshot(args.screenshot.unwrap_or(true)).await?;
             drop(session);
             decorate_result(session_id, &tab_id, result).await
         }
@@ -2263,6 +2267,18 @@ mod tests {
         };
         assert!(validate_url_for_settings("http://localhost:5173", &settings).is_err());
         assert!(validate_url_for_settings("https://1.1.1.1", &settings).is_ok());
+    }
+
+    #[test]
+    fn desktop_resize_can_skip_an_unneeded_screenshot() {
+        let default_args: BrowserViewportArgs =
+            serde_json::from_value(json!({"width": 680, "height": 720})).unwrap();
+        assert_eq!(default_args.screenshot, None);
+
+        let live_args: BrowserViewportArgs =
+            serde_json::from_value(json!({"width": 680, "height": 720, "screenshot": false}))
+                .unwrap();
+        assert_eq!(live_args.screenshot, Some(false));
     }
 
     #[tokio::test]

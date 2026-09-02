@@ -12,6 +12,7 @@ import { Webview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   browserLiveWebviewLabel,
+  browserWebviewBoundsKey,
   canonicalBrowserUrl,
   createBrowserLiveSurfaceId,
   resolveLiveDesiredUrl,
@@ -43,6 +44,7 @@ type ManagedWebview = {
   visible: boolean;
   loading: boolean;
   loadingTimer: number | null;
+  boundsKey: string;
   failedUrl: string | null;
   failedAt: number | null;
 };
@@ -109,6 +111,8 @@ export function useBrowserLiveWebviews({
     let lastReloadKey = "";
     let lastNativeSync = "";
     let nativeSyncQueue = Promise.resolve();
+    let syncRunning = false;
+    let syncRequested = false;
     const surfaceId = createBrowserLiveSurfaceId();
     const managed = new Map<string, ManagedWebview>();
     const pendingCreates = new Map<string, Promise<ManagedWebview>>();
@@ -165,10 +169,13 @@ export function useBrowserLiveWebviews({
       if (!viewport || !entry.ready) return;
       const bounds = viewportBounds(viewport);
       if (bounds.width < 1 || bounds.height < 1) return;
+      const boundsKey = browserWebviewBoundsKey(bounds);
+      if (entry.boundsKey === boundsKey) return;
       await Promise.all([
         entry.webview.setPosition(new LogicalPosition(bounds.x, bounds.y)),
         entry.webview.setSize(new LogicalSize(bounds.width, bounds.height)),
       ]);
+      entry.boundsKey = boundsKey;
     };
 
     const createWebview = async (
@@ -176,6 +183,10 @@ export function useBrowserLiveWebviews({
       url: string,
     ): Promise<ManagedWebview> => {
       const existing = await Webview.getByLabel(label);
+      if (disposed) {
+        if (existing) void existing.close().catch(() => undefined);
+        throw new Error("实时浏览器 WebView 已停止");
+      }
       if (existing) {
         const entry = {
           webview: existing,
@@ -184,6 +195,7 @@ export function useBrowserLiveWebviews({
           visible: false,
           loading: false,
           loadingTimer: null,
+          boundsKey: "",
           failedUrl: null,
           failedAt: null,
         };
@@ -214,6 +226,7 @@ export function useBrowserLiveWebviews({
         visible: true,
         loading: false,
         loadingTimer: null,
+        boundsKey: browserWebviewBoundsKey(bounds),
         failedUrl: null,
         failedAt: null,
       };
@@ -285,13 +298,16 @@ export function useBrowserLiveWebviews({
       }
 
       let entry = managed.get(activeLabel);
-      if (!entry) entry = await ensureWebview(activeLabel, tab.url || current.url);
+      if (!entry)
+        entry = await ensureWebview(activeLabel, tab.url || current.url);
+      if (disposed) return;
 
       const previewUrl = tab.url || current.url;
       const pendingNativeUrl = pendingNativeUrls.get(activeLabel);
       if (
         pendingNativeUrl &&
-        canonicalBrowserUrl(pendingNativeUrl) === canonicalBrowserUrl(previewUrl)
+        canonicalBrowserUrl(pendingNativeUrl) ===
+          canonicalBrowserUrl(previewUrl)
       ) {
         pendingNativeUrls.delete(activeLabel);
       }
@@ -323,6 +339,7 @@ export function useBrowserLiveWebviews({
 
       if (!entry.ready) return;
       await updateBounds(entry);
+      if (disposed) return;
 
       if (
         desiredUrl &&
@@ -336,6 +353,7 @@ export function useBrowserLiveWebviews({
           await invoke("browser_live_webview_control", {
             request: { label: activeLabel, action: "navigate", url: desiredUrl },
           });
+          if (disposed) return;
         } catch (cause) {
           entry.url = previousUrl;
           setEntryLoading(entry, activeLabel, false);
@@ -369,7 +387,21 @@ export function useBrowserLiveWebviews({
       if (disposed || !listenerReady) return;
       window.cancelAnimationFrame(animationFrame);
       animationFrame = window.requestAnimationFrame(() => {
-        void sync().catch(reportError);
+        if (syncRunning) {
+          syncRequested = true;
+          return;
+        }
+        syncRunning = true;
+        void (async () => {
+          try {
+            do {
+              syncRequested = false;
+              await sync();
+            } while (syncRequested && !disposed);
+          } finally {
+            syncRunning = false;
+          }
+        })().catch(reportError);
       });
     };
     scheduleRef.current = schedule;

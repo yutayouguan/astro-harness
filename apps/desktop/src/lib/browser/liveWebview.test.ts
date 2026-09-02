@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   browserLiveWebviewLabel,
+  browserWebviewBoundsKey,
   canonicalBrowserUrl,
   createBrowserLiveSurfaceId,
   LIVE_BROWSER_WEBVIEW_PREFIX,
@@ -24,6 +25,13 @@ test("live WebView labels are safe and unique across mounts and tabs", () => {
   assert.ok(first.startsWith(LIVE_BROWSER_WEBVIEW_PREFIX));
   assert.notEqual(first, second);
   assert.notEqual(first, otherTab);
+});
+
+test("live WebView bounds use a stable key for redundant IPC suppression", () => {
+  assert.equal(
+    browserWebviewBoundsKey({ x: 12, y: 50, width: 680, height: 720 }),
+    "12:50:680:720",
+  );
 });
 
 test("pending native navigation wins until the automation session catches up", () => {

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { nextBrowserPreviewRevision } from "../../lib/browser/browserPreviewState";
 
 export type BrowserPreviewStatus =
   "connecting" | "connected" | "disconnected" | "closed" | "error";
@@ -158,18 +159,25 @@ function loadStored(sessionId: string): BrowserPreview | null {
 
 export function useBrowserPreview(sessionId: string | null) {
   const browserSessionId = sessionId ?? DESKTOP_BROWSER_SESSION_ID;
+  const browserSessionIdRef = useRef(browserSessionId);
+  const controlGenerationRef = useRef(0);
+  const controlQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [preview, setPreview] = useState<BrowserPreview | null>(() =>
     loadStored(browserSessionId),
   );
   const [dismissed, setDismissed] = useState(false);
 
+  browserSessionIdRef.current = browserSessionId;
+
   useEffect(() => {
+    controlGenerationRef.current += 1;
+    controlQueueRef.current = Promise.resolve();
     setPreview(loadStored(browserSessionId));
     setDismissed(false);
   }, [browserSessionId]);
 
   useEffect(() => {
-    if (!preview) return;
+    if (!preview || preview.sessionId !== browserSessionId) return;
     try {
       localStorage.setItem(
         `${STORAGE_PREFIX}${browserSessionId}`,
@@ -182,6 +190,7 @@ export function useBrowserPreview(sessionId: string | null) {
 
   const applyResult = useCallback(
     (raw: unknown, fallbackAction?: string) => {
+      if (browserSessionIdRef.current !== browserSessionId) return;
       const result =
         typeof raw === "string"
           ? parseRecord(raw)
@@ -205,29 +214,36 @@ export function useBrowserPreview(sessionId: string | null) {
           ? (result.action as Record<string, unknown>)
           : null;
       setDismissed(false);
-      setPreview((current) => ({
-        sessionId: browserSessionId,
-        url: text(result.url) || current?.url || "",
-        title: text(result.title) || current?.title || "",
-        screenshotPath:
-          text(result.screenshot_path ?? result.screenshotPath) ||
-          current?.screenshotPath ||
-          null,
-        status: nextStatus,
-        action:
-          text(actionRecord?.kind) || fallbackAction || current?.action || null,
-        updatedAt: Date.now(),
-        activeTabId:
-          text(result.active_tab_id ?? result.activeTabId) ||
-          current?.activeTabId ||
-          null,
-        tabs: Array.isArray(result.tabs)
-          ? browserTabs(result.tabs)
-          : current?.tabs || [],
-        downloads: Array.isArray(result.downloads)
-          ? browserDownloads(result.downloads)
-          : current?.downloads || [],
-      }));
+      setPreview((current) => {
+        const previous =
+          current?.sessionId === browserSessionId ? current : null;
+        return {
+          sessionId: browserSessionId,
+          url: text(result.url) || previous?.url || "",
+          title: text(result.title) || previous?.title || "",
+          screenshotPath:
+            text(result.screenshot_path ?? result.screenshotPath) ||
+            previous?.screenshotPath ||
+            null,
+          status: nextStatus,
+          action:
+            text(actionRecord?.kind) ||
+            fallbackAction ||
+            previous?.action ||
+            null,
+          updatedAt: nextBrowserPreviewRevision(previous?.updatedAt),
+          activeTabId:
+            text(result.active_tab_id ?? result.activeTabId) ||
+            previous?.activeTabId ||
+            null,
+          tabs: Array.isArray(result.tabs)
+            ? browserTabs(result.tabs)
+            : previous?.tabs || [],
+          downloads: Array.isArray(result.downloads)
+            ? browserDownloads(result.downloads)
+            : previous?.downloads || [],
+        };
+      });
     },
     [browserSessionId],
   );
@@ -239,32 +255,35 @@ export function useBrowserPreview(sessionId: string | null) {
       result?: string;
       phase?: string;
     }) => {
+      if (browserSessionIdRef.current !== browserSessionId) return;
       const name = call.name?.toLowerCase() ?? "";
       if (!name.startsWith("browser_")) return;
       const args = parseRecord(call.arguments_json);
       const result = parseRecord(call.result);
-      const now = Date.now();
-
       if (call.phase === "started") {
         const action = name.replace(/^browser_/, "");
         setDismissed(false);
-        setPreview((current) => ({
-          sessionId: browserSessionId,
-          url: text(args?.url) || current?.url || "",
-          title: current?.title || "",
-          screenshotPath: current?.screenshotPath ?? null,
-          status:
-            name === "browser_close"
-              ? "closed"
-              : isNavigationAction(name)
-                ? "connecting"
-                : current?.status || "connected",
-          action,
-          updatedAt: now,
-          activeTabId: current?.activeTabId ?? null,
-          tabs: current?.tabs ?? [],
-          downloads: current?.downloads ?? [],
-        }));
+        setPreview((current) => {
+          const previous =
+            current?.sessionId === browserSessionId ? current : null;
+          return {
+            sessionId: browserSessionId,
+            url: text(args?.url) || previous?.url || "",
+            title: previous?.title || "",
+            screenshotPath: previous?.screenshotPath ?? null,
+            status:
+              name === "browser_close"
+                ? "closed"
+                : isNavigationAction(name)
+                  ? "connecting"
+                  : previous?.status || "connected",
+            action,
+            updatedAt: nextBrowserPreviewRevision(previous?.updatedAt),
+            activeTabId: previous?.activeTabId ?? null,
+            tabs: previous?.tabs ?? [],
+            downloads: previous?.downloads ?? [],
+          };
+        });
         return;
       }
 
@@ -272,12 +291,12 @@ export function useBrowserPreview(sessionId: string | null) {
         applyResult(result, name.replace(/^browser_/, ""));
       } else if (call.result && call.phase === "completed") {
         setPreview((current) =>
-          current
+          current?.sessionId === browserSessionId
             ? {
                 ...current,
                 status: "error",
                 action: name.replace(/^browser_/, ""),
-                updatedAt: now,
+                updatedAt: nextBrowserPreviewRevision(current.updatedAt),
               }
             : current,
         );
@@ -288,29 +307,56 @@ export function useBrowserPreview(sessionId: string | null) {
 
   const control = useCallback(
     async (action: string, args: Record<string, unknown> = {}) => {
+      const generation = ++controlGenerationRef.current;
       setDismissed(false);
       setPreview((current) =>
-        current
+        current?.sessionId === browserSessionId
           ? {
               ...current,
               status: isNavigationAction(action)
                 ? "connecting"
                 : current.status,
               action,
+              updatedAt: nextBrowserPreviewRevision(current.updatedAt),
             }
           : current,
       );
-      try {
-        const result = await invoke<Record<string, unknown>>(
-          "browser_panel_control",
-          { request: { sessionId: browserSessionId, action, args } },
+      const operation = controlQueueRef.current
+        .catch(() => undefined)
+        .then(() =>
+          invoke<Record<string, unknown>>("browser_panel_control", {
+            request: { sessionId: browserSessionId, action, args },
+          }),
         );
-        applyResult(result, action);
+      controlQueueRef.current = operation.then(
+        () => undefined,
+        () => undefined,
+      );
+      try {
+        const result = await operation;
+        if (
+          browserSessionIdRef.current === browserSessionId &&
+          controlGenerationRef.current === generation
+        ) {
+          applyResult(result, action);
+        }
         return result;
       } catch (error) {
-        setPreview((current) =>
-          current ? { ...current, status: "error", action } : current,
-        );
+        if (
+          browserSessionIdRef.current === browserSessionId &&
+          controlGenerationRef.current === generation
+        ) {
+          setPreview((current) =>
+            current?.sessionId === browserSessionId
+              ? {
+                  ...current,
+                  status: "error",
+                  action,
+                  updatedAt: nextBrowserPreviewRevision(current.updatedAt),
+                }
+              : current,
+          );
+        }
         throw error;
       }
     },
@@ -318,6 +364,7 @@ export function useBrowserPreview(sessionId: string | null) {
   );
 
   const dismiss = useCallback(() => {
+    controlGenerationRef.current += 1;
     setDismissed(true);
     setPreview(null);
     try {

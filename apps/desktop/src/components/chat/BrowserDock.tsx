@@ -86,6 +86,7 @@ export default function BrowserDock({
   const wheelTimerRef = useRef<number | null>(null);
   const resizeTimerRef = useRef<number | null>(null);
   const lastViewportRef = useRef("");
+  const controlRunRef = useRef(0);
   const [dockWidth, setDockWidth] = useState(() => {
     try {
       return parseStoredBrowserDockWidth(
@@ -100,12 +101,15 @@ export default function BrowserDock({
 
   const syncLiveNavigation = useCallback(
     async (url: string) => {
+      const runId = ++controlRunRef.current;
       setError(null);
       setAddress(url);
       try {
         await onControl("open", { url, new_tab: false });
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        if (controlRunRef.current === runId) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
         throw cause;
       }
     },
@@ -265,7 +269,11 @@ export default function BrowserDock({
         window.clearTimeout(resizeTimerRef.current);
       resizeTimerRef.current = window.setTimeout(() => {
         lastViewportRef.current = key;
-        void onControl("resize", { width, height }).catch((cause) => {
+        void onControl("resize", {
+          width,
+          height,
+          screenshot: !liveWebview.isLive,
+        }).catch((cause) => {
           setError(cause instanceof Error ? cause.message : String(cause));
         });
       }, 180);
@@ -278,14 +286,18 @@ export default function BrowserDock({
         resizeTimerRef.current = null;
       }
     };
-  }, [onControl, preview?.activeTabId]);
+  }, [liveWebview.isLive, onControl, preview?.activeTabId]);
 
   const run = async (action: string, args: Record<string, unknown> = {}) => {
+    const runId = ++controlRunRef.current;
     setError(null);
     try {
       await onControl(action, args);
+      if (controlRunRef.current === runId) setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      if (controlRunRef.current === runId) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      }
     }
   };
 

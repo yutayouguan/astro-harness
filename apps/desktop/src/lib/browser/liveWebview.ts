@@ -32,6 +32,15 @@ export function canonicalBrowserUrl(raw: string): string {
   }
 }
 
+export function browserWebviewBoundsKey(bounds: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): string {
+  return `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}`;
+}
+
 export function resolveLiveDesiredUrl(
   previewUrl: string,
   pendingNativeUrl?: string,
