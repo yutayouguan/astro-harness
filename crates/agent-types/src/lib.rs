@@ -22,7 +22,6 @@ pub mod title;
 pub mod tool;
 pub mod tool_call;
 pub mod tool_entry;
-pub mod tool_mode;
 pub mod tool_output;
 pub mod tool_spill;
 
@@ -72,5 +71,4 @@ pub use tool_entry::{
     McpToolApprovalMode, McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry,
     ToolExposure, ToolName, ToolSpec,
 };
-pub use tool_mode::ToolMode;
 pub use tool_output::ToolOutput;

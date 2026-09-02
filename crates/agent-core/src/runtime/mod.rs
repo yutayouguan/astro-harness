@@ -99,8 +99,6 @@ pub struct Config {
     pub thread_memory_mode: types::ThreadMemoryMode,
     /// 控制 compact token 上限的度量方式（总量 vs 前缀之后的正文）。
     pub compact_scope: types::CompactTokenLimitScope,
-    /// 当模型目录未声明时使用的全局工具模式回退值。
-    pub tool_mode: Option<types::ToolMode>,
 }
 
 impl Config {
@@ -133,7 +131,6 @@ impl Config {
             static_override: None,
             thread_memory_mode: types::ThreadMemoryMode::Enabled,
             compact_scope: types::CompactTokenLimitScope::Total,
-            tool_mode: None,
         }
     }
 }
@@ -1075,18 +1072,14 @@ impl Session {
         let sub_id = turn_id.into();
         let mut state = self.lock_state();
         let workspace_roots = state.workspace_roots.clone();
-        let requested_tool_mode = state.model_ctx.requested_tool_mode(self.config.tool_mode);
-        let turn_context = Arc::new(
-            TurnContext::new_with_roots(
-                sub_id,
-                state.turn.current_turn(),
-                state.interaction_mode,
-                state.permission_profile.clone(),
-                state.project_root.clone(),
-                workspace_roots,
-            )
-            .with_requested_tool_mode(requested_tool_mode),
-        );
+        let turn_context = Arc::new(TurnContext::new_with_roots(
+            sub_id,
+            state.turn.current_turn(),
+            state.interaction_mode,
+            state.permission_profile.clone(),
+            state.project_root.clone(),
+            workspace_roots,
+        ));
         state
             .turn
             .set_current_turn_id(turn_context.sub_id().to_string());
@@ -1097,18 +1090,14 @@ impl Session {
     pub async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
         let state = self.lock_state();
         let workspace_roots = state.workspace_roots.clone();
-        let requested_tool_mode = state.model_ctx.requested_tool_mode(self.config.tool_mode);
-        Arc::new(
-            TurnContext::new_with_roots(
-                sub_id,
-                state.turn.current_turn().saturating_add(1),
-                state.interaction_mode,
-                state.permission_profile.clone(),
-                state.project_root.clone(),
-                workspace_roots,
-            )
-            .with_requested_tool_mode(requested_tool_mode),
-        )
+        Arc::new(TurnContext::new_with_roots(
+            sub_id,
+            state.turn.current_turn().saturating_add(1),
+            state.interaction_mode,
+            state.permission_profile.clone(),
+            state.project_root.clone(),
+            workspace_roots,
+        ))
     }
 
     pub(crate) async fn bind_turn_context(&self, turn_context: Arc<TurnContext>) {
@@ -1840,13 +1829,6 @@ impl Session {
         self.lock_state().model_ctx.model_spec().cloned()
     }
 
-    /// 请求的工具暴露模式；模型元数据优先于全局回退值。
-    pub fn requested_tool_mode(&self) -> types::ToolMode {
-        self.lock_state()
-            .model_ctx
-            .requested_tool_mode(self.config.tool_mode)
-    }
-
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
     pub fn set_project_root(&self, root: Option<PathBuf>) {
         self.lock_state().project_root = root;
@@ -2327,22 +2309,13 @@ impl Session {
 
     /// 按当前交互模式过滤后的工具 schema（OpenAI tools 数组）。
     pub async fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        let (interaction_mode, requested_tool_mode) = {
-            let state = self.lock_state();
-            (
-                state.interaction_mode,
-                state.model_ctx.requested_tool_mode(self.config.tool_mode),
-            )
-        };
+        let interaction_mode = self.lock_state().interaction_mode;
         let tool_registry = self
             .services
             .tool_registry
             .read()
             .expect("tool registry lock poisoned");
-        tools::filter_schemas(
-            interaction_mode,
-            tool_registry.schemas_for_api_with_mode(requested_tool_mode),
-        )
+        tools::filter_schemas(interaction_mode, tool_registry.schemas_for_api())
     }
 
     /// 将对话条目追加到会话拥有的历史记录中。

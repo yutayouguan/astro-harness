@@ -5,7 +5,6 @@
 
 use crate::auxiliary_target::AuxiliaryTask;
 use crate::model_target::ModelTarget;
-use crate::tool_mode::ToolMode;
 use serde::{Deserialize, Serialize};
 
 /// 模型角色：主聊或辅助任务（对齐 Agno `ModelType`）。
@@ -31,9 +30,6 @@ pub struct ModelSpec {
     /// 可选 max_tokens；`None` 表示沿用默认。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
-    /// 可选的模型目录工具模式覆盖。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_mode: Option<ToolMode>,
 }
 
 impl ModelSpec {
@@ -43,7 +39,6 @@ impl ModelSpec {
             model_id: model_id.into(),
             temperature: None,
             max_tokens: None,
-            tool_mode: None,
         }
     }
 
@@ -55,19 +50,6 @@ impl ModelSpec {
     pub fn with_max_tokens(mut self, n: u32) -> Self {
         self.max_tokens = Some(n);
         self
-    }
-
-    pub fn with_tool_mode(mut self, mode: ToolMode) -> Self {
-        self.tool_mode = Some(mode);
-        self
-    }
-
-    /// 按 Codex 顺序解析：模型显式值 > 当前目录默认值 > 全局回退值。
-    pub fn requested_tool_mode(&self, fallback: Option<ToolMode>) -> ToolMode {
-        self.tool_mode
-            .or_else(|| ToolMode::codex_default_for_model(&self.model_id))
-            .or(fallback)
-            .unwrap_or_default()
     }
 
     /// 解析 `"provider:model_id"` 或 `"provider/model_id"`。
@@ -200,23 +182,5 @@ mod tests {
             .apply_to(&base);
         assert_eq!(t.backend_id, "google");
         assert_eq!(t.model, "gemini-2.5-flash");
-    }
-
-    #[test]
-    fn tool_mode_uses_explicit_then_catalog_then_direct() {
-        assert_eq!(
-            ModelSpec::new("openai", "gpt-5.6-sol").requested_tool_mode(None),
-            ToolMode::CodeModeOnly
-        );
-        assert_eq!(
-            ModelSpec::new("openai", "gpt-5.5")
-                .with_tool_mode(ToolMode::CodeMode)
-                .requested_tool_mode(None),
-            ToolMode::CodeMode
-        );
-        assert_eq!(
-            ModelSpec::new("custom", "unknown").requested_tool_mode(None),
-            ToolMode::Direct
-        );
     }
 }

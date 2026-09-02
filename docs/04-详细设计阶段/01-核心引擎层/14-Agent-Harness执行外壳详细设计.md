@@ -121,14 +121,13 @@ Provider 返回的 text、reasoning、usage 和 tool deltas 被规范化为统�
 - schema 是否直接发给模型；
 - handler 是否允许在受信任的嵌套路径执行。
 
-Direct/Deferred/Hidden/ModelOnly/CodeModeOnly 不是权限等级。Deferred 工具被 `tool_search` 激活后仍需经过授权和沙箱。
+Direct/Deferred/Hidden/ModelOnly 不是权限等级。Deferred 工具被 `tool_search` 激活后仍需经过授权和沙箱。
 
 ### 7.2 执行快照
 
 `StepContext` 同时保存 advertised tools 和 routable tools。
 
 - `ToolInvocationSource::Model` 必须命中 `advertises_tool()`；
-- `ToolInvocationSource::CodeMode` 必须命中 `routes_tool()`；
 - 热重载工具和 MCP 不能改变已生成调用的执行边界。
 
 ### 7.3 结果生命周期
@@ -146,9 +145,11 @@ raw output
 
 `content` 保留原文；`compressed_content` 只是 Provider 视图。
 
-## 8. Code Mode
+## 8. 历史 Code Mode
 
-Code Mode 将多步确定性编排放入一个 Node/V8 cell：
+> 当前已从模型可见工具和运行时配置中下线；以下仅为历史设计记录。
+
+Code Mode 原先将多步确定性编排放入一个 Node/V8 cell：
 
 - `exec` 是 grammar-constrained Freeform tool；
 - `wait` 是 Function tool；
@@ -210,12 +211,11 @@ Responses API 官方 response usage 同时定义 `input_tokens`、`input_tokens_
 
 | 场景 | Harness 行为 |
 | --- | --- |
-| 用户 Interrupt | 取消 active task，终止 Code Mode cell/子进程，发出 `TurnAborted` |
+| 用户 Interrupt | 取消 active task，终止活跃工具/子进程，发出 `TurnAborted` |
 | Provider 首个可见 chunk 前失败 | 可切换 fallback target |
 | Provider 已产生可见输出后失败 | 不拼接另一 Provider，以 stream error 收束 |
 | 工具参数错误 | 返回结构化失败观察，允许模型重新规划 |
 | 结构化 policy denial | 不误归类为文件系统 escalation |
-| CodeModeOnly 但宿主不可用 | fail closed |
 | 压缩辅助模型失败 | head/tail fallback，原始内容不丢失 |
 
 ## 12. 持久化和恢复
@@ -259,5 +259,5 @@ Harness 使用两类存储：
 
 1. `agent-protocol::Op` 中部分控制操作尚是预留分支，`submission_loop` 会返回 unsupported；协议存在不等于 runtime 已实现。
 2. Provider-hosted `WebSearch` 已有协议表示，但当前 Registry 实际暴露的 `web_search` 是客户端 Deferred Function。
-3. Code Mode 媒体事件已有 cell 内类型，最终 `ToolOutput` 与前端 live projection 仍未完全同构。
+3. 历史 Code Mode 运行时代码仍待清理，但模型配置与工具注册路径已经下线。
 4. 工作流、Cron 和多模型对比使用 Harness 能力，但各自还有独立调度契约，不应混入单个 regular turn 状态机。

@@ -116,8 +116,6 @@ pub enum ToolExposure {
     DeferredModelOnly,
     /// 直接注入，但仅对模型可见，不对用户展示。
     DirectModelOnly,
-    /// 仅在 code mode 下可用。
-    CodeModeOnly,
 }
 
 impl ToolExposure {
@@ -128,7 +126,7 @@ impl ToolExposure {
         matches!(self, Self::Deferred | Self::DeferredModelOnly)
     }
     pub fn is_hidden(&self) -> bool {
-        matches!(self, Self::Hidden | Self::CodeModeOnly)
+        matches!(self, Self::Hidden)
     }
 }
 

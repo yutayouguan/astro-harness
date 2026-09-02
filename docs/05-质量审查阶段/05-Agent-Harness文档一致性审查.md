@@ -18,7 +18,7 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 
 - [Agent Harness 总体架构](../03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)；
 - [Agent Harness 执行外壳详细设计](../04-详细设计阶段/01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)；
-- [Codex 原生工具协议与 Code Mode](../04-详细设计阶段/04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md)；
+- [Codex 原生工具协议与 Tool Search](../04-详细设计阶段/04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md)；
 - [术语统一规范](02-术语统一规范.md)。
 
 ## 2. 已统一的不变量
@@ -29,9 +29,9 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 | 执行循环 | 每个 Step 进行模型采样；工具意图经 Harness 执行和回灌后进入下一 Step | 已实现 |
 | Scaffold | `PromptContract` 管基础指令和动态上下文；原生工具 schema 经 `ResponsesRequest.tools` 独立传递 | 已实现 |
 | Provider | Function / Freeform / Namespace / ToolSearch / WebSearch 是 wire protocol，不等同于本地注册表 | 已实现/部分实现 |
-| 工具可见性 | Direct / Deferred / Hidden / ModelOnly / CodeModeOnly 与授权正交 | 已实现 |
+| 工具可见性 | Direct / Deferred / Hidden / ModelOnly 与授权正交 | 已实现 |
 | 延迟激活 | `tool_search` 搜索 Deferred 工具和 MCP 元数据，激活结果在后续 Step 生效 | 已实现 |
-| Code Mode | `exec` 是 V8 cell，`wait` 恢复已 yield 的 cell；嵌套调用仍经 ToolRouter | 已实现 |
+| 工具编排 | 模型直接调用内置工具；Deferred 工具经 `tool_search` 发现 | 已实现 |
 | 安全 | interaction mode、approval、hooks、sandbox 和 attempt-scoped network lease 共同裁决 | 已实现/部分实现 |
 | 事件 | Core 产生 `EventMsg`；rollout 先记录，Server 再做 live projection | 已实现 |
 | Usage | turn aggregate 用于计费，latest sampling 校准上下文；保留 Provider total 和报告状态 | 已实现 |
@@ -49,7 +49,7 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 - `delegate_task`、Supervisor、`agent_spawn` 是当前子 Agent 模型；当前唯一模型是 V2 Agent Threads；
 - 单一 `agent.db` 承载全部状态；当前是 rollout + 多职责数据库；
 - 固定“8 槽位 SystemPromptBuilder”代表当前 prompt；当前使用 `PromptContract`；
-- Provider 工具、客户端 Function、MCP 工具和 Code Mode 嵌套工具共享同一暴露语义；当前必须区分 wire type、exposure 和 authorization。
+- Provider 工具、客户端 Function 和 MCP 工具共享单一暴露语义；当前必须区分 wire type、exposure 和 authorization。
 
 ## 4. 有意保留的范围
 
@@ -65,7 +65,7 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 
 1. `agent-protocol::Op` 中部分控制分支仍返回 unsupported，不能因协议类型存在就宣称 runtime 已实现。
 2. Provider-hosted `WebSearch` 有协议表示；Registry 当前 `web_search` 仍是客户端 Deferred Function。
-3. Code Mode cell 媒体事件与最终 `ToolOutput`、前端 live projection 尚未完全同构。
+3. 历史 Code Mode 运行时代码仍待清理，但已无模型配置入口，也不会注册 `exec` / `wait`。
 4. 旧文档正文保留的伪代码、表数量和性能目标需要在对应功能真正实现时逐项替换；顶部 Harness 基线只负责防止其被误读为现状。
 
 ## 6. 后续维护规则

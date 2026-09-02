@@ -44,7 +44,7 @@ Astro Agent Harness 包含七个不可缺失的职责面：
 4. **权限与安全**：实施交互模式、审批、沙箱、路径边界、网络策略、MCP 审批和 hook 拦截。
 5. **错误与恢复**：处理超时、取消、Provider fallback、残缺工具调用、压缩失败和进程重启。
 6. **可观测与审计**：持久化事件、token/成本、工具调用、审批决策、安全拒绝和子 Agent 活动。
-7. **运行环境**：承载终端、Code Mode、浏览器、MCP、媒体 Provider、Cron 和工作流执行。
+7. **运行环境**：承载终端、浏览器、MCP、媒体 Provider、Cron 和工作流执行。
 
 ## 4. 系统边界
 
@@ -118,7 +118,7 @@ Provider 返回原生 tool call 后，Harness 必须依次完成：
 -> handler/MCP -> TransformToolResult -> PostToolUse
 ```
 
-`StepContext` 是安全不变量：只有生成该调用时已暴露的工具才能被模型直调。Code Mode 嵌套调用使用独立来源，仍然经过 Rust 宿主的审批、沙箱、hook 和计数链。
+`StepContext` 是安全不变量：只有生成该调用时已暴露的工具才能被模型直调；`tool_search` 激活的 Deferred 工具从下一次 sampling 开始进入新的快照。所有调用都经过 Rust 宿主的审批、沙箱、hook 和计数链。
 
 ### 5.3 Observe
 
@@ -160,12 +160,12 @@ Harness 对“模型看到什么”负最终责任：
 
 ## 8. 工具和运行环境
 
-Harness 通过 `ToolRegistry` 区分工具是否可执行、是否对模型直接可见、是否仅能由 Code Mode 调用。Provider 协议保留 Function、Freeform、Namespace、ToolSearch 和 WebSearch 的原生差异。
+Harness 通过 `ToolRegistry` 区分工具是否可执行、是否直接对模型可见，以及是否可由 `tool_search` 延迟发现。Provider 协议保留 Function、Freeform、Namespace、ToolSearch 和 WebSearch 的原生差异。
 
 具体执行环境包括：
 
 - `terminal` / `exec_command`：受 OS sandbox、审批和可选 managed proxy 管理；
-- `exec` / `wait`：Node/V8 cell，通过 JSONL 只能回到 Rust 工具宿主；
+- `tool_search`：以原生 wire type 搜索并激活 Deferred 内置工具和 MCP 工具；
 - Browser：任务绑定的隔离浏览器会话；
 - MCP：每 Agent 连接池、延迟工具发现和调用时审批；
 - 媒体/工作流/Cron：作为扩展执行面，复用 Harness 的 Provider、持久化和观测能力。
@@ -176,7 +176,7 @@ Harness 通过 `ToolRegistry` 区分工具是否可执行、是否对模型直�
 
 | 层 | 决策 |
 | --- | --- |
-| 暴露 | tool gate、Skill additive override、Deferred/Hidden/CodeModeOnly |
+| 暴露 | tool gate、Skill additive override、Direct/Deferred/Hidden/ModelOnly |
 | 快照 | `StepContext` 拒绝本 step 未暴露的模型调用 |
 | 意图 | interaction mode 和参数 schema 校验 |
 | 授权 | smart approval、MCP approval、HITL、session approval cache |
@@ -245,7 +245,7 @@ Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真�
 - append-only rollout 事件源和 live boundary；
 - 每 step 不可变工具快照与 canonical 路由；
 - Function/Freeform/Namespace/ToolSearch/WebSearch 原生工具定义；
-- Code Mode `exec/wait`、Deferred tools 和 MCP 激活；
+- 内置工具直接调用、`tool_search`、Deferred tools 和 MCP 激活；
 - hooks、approval、sandbox、tool-round 和 cancellation 传播。
 
 ### 12.2 Astro 的扩展和差异
@@ -253,7 +253,7 @@ Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真�
 - Astro 是 Tauri + gRPC 的本地桌面工作站，同时提供内嵌 Server 投影。
 - Astro 支持多 Provider 及媒体 Provider；Agent target 只接受 Responses，其他协议仅保留给工具、媒体和非 Agent 调用。
 - Astro 增加了 MemoryManager、Knowledge DB、Workflow、Cron、A2UI 和用量成本子系统。
-- Astro Code Mode 使用本地 Node/V8 + OS sandbox，而不是复制 Codex 的独立宿主部署。
+- Astro 直接向模型暴露内置工具和原生 `tool_search`，不要求用户安装 Node.js 作为工具编排宿主。
 - `Op` 中已声明但 `submission_loop` 尚未实现的控制分支，必须标记为协议预留，不得写成已落地功能。
 
 ## 13. 实现映射

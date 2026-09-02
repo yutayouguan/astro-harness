@@ -1,6 +1,6 @@
-# Codex 原生工具协议与 Code Mode 详细设计
+# Codex 原生工具协议与 Tool Search 详细设计
 
-> **Harness 定位（2026-08-30）**：本文描述 Agent Harness 的 Tool + Environment 子系统。Model 只产生原生调用意图；工具发现、历史成对、V8 cell、真实执行、审批、沙箱和观测均由 Harness 负责。总体闭环见 [Agent Harness 执行外壳](../01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。
+> **Harness 当前基线（2026-09-02）**：模型直接获得内置工具和原生 `tool_search`。Astro 不再注册 `exec` / `wait`，也不再按模型选择 `CodeMode` / `CodeModeOnly`。本文 Code Mode 章节仅保留为历史设计记录，不代表当前运行时能力。
 
 > 阶段：详细设计
 >
@@ -8,7 +8,7 @@
 >
 > 基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
 >
-> 范围：Provider 工具协议、延迟工具发现、Responses 事件回放、Code Mode 运行时与安全边界
+> 范围：Provider 工具协议、延迟工具发现、Responses 事件回放，以及历史 Code Mode 设计
 
 ## 1. 文档目标
 
@@ -131,17 +131,17 @@ Freeform 工具不强迫输入进入 JSON object，而是保留原始文本并�
 ```json
 {
   "type": "custom",
-  "name": "exec",
-  "description": "Run JavaScript code to orchestrate tool calls",
+  "name": "apply_patch",
+  "description": "Apply a patch to workspace files",
   "format": {
     "type": "grammar",
     "syntax": "lark",
-    "definition": "start: pragma_source | plain_source ..."
+    "definition": "start: patch ..."
   }
 }
 ```
 
-对 `apply_patch` 和 `exec` 来说，这种设计有三个好处：
+对 `apply_patch` 这类自由文本工具来说，这种设计有三个好处：
 
 - 不需要把多行 patch / JavaScript 包在 JSON 字符串中；
 - grammar 在采样边界约束格式，而不是依赖 prompt 约定；
@@ -265,7 +265,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 - 媒体：`image_gen`、`image_analyze`、`audio_analyze`、`video_gen`、`video_analyze`、`speech_gen`、`music_gen`、`robotics`；
 - MCP：当 `tool_search` 可用时，当前 MCP Hub 发现的 `mcp__{server}__{tool}` 也默认进入 Deferred。
 
-`exec` / `wait` 是 `DirectModelOnly` 控制工具：Direct 模式不发给模型，CodeMode 模式与常规 Direct 工具一起发送，CodeModeOnly 模式则只发送这两个。
+`exec` / `wait` 已从注册表移除。模型始终直接获得当前启用的 Direct 工具和原生 `tool_search`；Deferred 工具由 `tool_search` 激活后进入下一次 sampling。
 
 ### 5.3 暴露状态
 
@@ -278,7 +278,6 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 | `Hidden` | 否 | 否 | 否 |
 | `DirectModelOnly` | 是 | 否 | 是，不在用户工具 UI 展示 |
 | `DeferredModelOnly` | 否 | 是 | 是，不在用户工具 UI 展示 |
-| `CodeModeOnly` | 否 | 否 | 仅受信任 Code Mode 嵌套路径 |
 
 ### 5.4 搜索和激活流程
 
@@ -390,7 +389,9 @@ Responses API 使用不同的 call/output item 表示不同工具。下一轮采
 }
 ```
 
-## 7. Code Mode：`exec` / `wait`
+## 7. 历史设计：Code Mode `exec` / `wait`
+
+> 当前不再注册或暴露这两个工具；以下内容仅记录原实现方案。
 
 ### 7.1 解决的问题
 
@@ -528,43 +529,24 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 - 嵌套调用经过同一路由和审计链；
 - 取消会终止 cell，不把孤儿进程留在会话外。
 
-## 9. `Direct / CodeMode / CodeModeOnly` 三态策略
+## 9. 当前 Direct 策略
 
-### 9.1 语义矩阵
+### 9.1 语义
 
-| 模式 | 模型直接看到 | 常规工具能否在 `exec` 内调用 | Code Mode 宿主不可用 |
-| --- | --- | --- | --- |
-| `Direct` | 常规 Direct 工具，不含 `exec/wait` | 不适用 | 继续 Direct |
-| `CodeMode` | 常规 Direct 工具 + `exec/wait` | 是 | 回退 Direct |
-| `CodeModeOnly` | 仅 `exec/wait` | 是 | fail-closed，不把常规工具意外暴露给模型 |
+Astro 始终使用 Direct 工具集：
 
-### 9.2 选择优先级
+- 常用内置工具以原生 Function / Freeform / Namespace schema 直接暴露；
+- `tool_search` 以 Responses 原生 ToolSearch schema 暴露；
+- Deferred 工具经 `tool_search` 发现后在后续 sampling step 可见；
+- `exec` / `wait` 不注册、不发给模型。
 
-`ModelSpec::requested_tool_mode()` 按以下顺序选择：
+### 9.2 模型选择
 
-```text
-ModelSpec.tool_mode 显式值
-        > Codex 当前模型目录默认值
-        > Agent Config 全局回退值
-        > Direct
-```
+工具暴露不再跟随 Codex 模型目录的 `tool_mode`；GPT-5.6 与其他模型都使用同一 Direct 路径。
 
-当前对齐的 Codex 目录中，以下模型默认为 `CodeModeOnly`：
+### 9.3 兼容边界
 
-- `gpt-5.6-sol`
-- `gpt-5.6-terra`
-- `gpt-5.6-luna`
-- `gpt-daybreak-blue-latest`
-- `gpt-daybreak-red-latest`
-- `codex-auto-review`
-
-未知模型默认 Direct，避免向不支持 custom tool 或 Code Mode 的 Provider 发送无法处理的协议。
-
-### 9.3 为什么 CodeModeOnly 不自动回退
-
-`CodeMode` 表示“有 Code Mode 就用，没有仍可直调”，所以可以安全回退。
-
-`CodeModeOnly` 是模型合同：该模型被训练或配置为只通过 `exec/wait` 编排工具。如果宿主不可用时悄然改成 Direct，会改变模型的安全和行为边界。因此 Astro 与 Codex 一样选择 fail-closed。
+底层历史 Code Mode 运行时暂保留以便平滑清理，但不存在模型选择入口，工具注册表也不再包含 `exec` / `wait`。
 
 ## 10. 关键不变量
 
@@ -572,10 +554,8 @@ ModelSpec.tool_mode 显式值
 2. Responses 原生类型在请求、SSE 事件、执行和历史回放之间保持对称。
 3. Deferred 仅表示可见性，不表示授权。
 4. `tool_search` 激活在下一次 sampling step 生效，MCP 热重载不丢失状态。
-5. 模型直调只能命中当前 Step 真正可见的路由；Code Mode 嵌套调用使用独立的受信任来源。
-6. `exec` 不能嵌套调用 `exec` 或 `wait`，避免 cell 生命周期递归失控。
-7. JavaScript 运行时没有直接系统权限；实际操作必须回到 Rust 工具链。
-8. 历史只回放已有匹配结果的 tool call，避免孤立调用破坏 Provider 请求。
+5. 模型直调只能命中当前 Step 真正可见的路由。
+6. 历史只回放已有匹配结果的 tool call，避免孤立调用破坏 Provider 请求。
 
 ## 11. 实现映射
 
@@ -586,11 +566,6 @@ ModelSpec.tool_mode 显式值
 | `tool_search` 搜索与激活 | `crates/agent-tools/src/builtin/shell/tool_search.rs` |
 | MCP 动态注册 | `crates/agent-core/src/runtime/mod.rs::attach_mcp_tools` |
 | Responses 请求 / SSE / 历史 | `crates/agent-providers/src/openai/responses.rs` |
-| Code Mode 工具 schema | `crates/agent-tools/src/builtin/shell/code_mode.rs` |
-| V8 cell 与 JSONL bridge | `crates/agent-core/src/runtime/code_mode.rs` |
-| 嵌套工具、审批、sandbox、hooks | `crates/agent-core/src/streaming/tools_exec.rs` |
-| 工具模式与模型目录默认值 | `crates/agent-types/src/tool_mode.rs` |
-| 模型声明优先级 | `crates/agent-types/src/model_spec.rs` |
 | Step 级可见/可路由快照 | `crates/agent-core/src/runtime/step_context.rs` / `tool_router.rs` |
 
 ## 12. 验证与回归
@@ -602,17 +577,13 @@ ModelSpec.tool_mode 显式值
   - Deferred 搜索和激活；
   - MCP 重注册后保留激活状态。
 - `crates/agent-tools/tests/code_mode_alignment.rs`
-  - `exec` Freeform grammar；
-  - `wait` Function schema；
-  - 三态暴露矩阵；
-  - CodeMode 回退和 CodeModeOnly fail-closed。
+  - Direct 工具和原生 `tool_search` 保持可见；
+  - `exec` / `wait` 不进入模型 schema。
 - `crates/agent-providers/src/openai/responses.rs` 单元测试
   - custom call/output 回放；
   - `exec` custom 回放；
   - ToolSearch call/output 回放；
   - custom/tool_search SSE 事件解析。
-- `crates/agent-types/src/model_spec.rs` / `tool_mode.rs` 单元测试
-  - 显式值、模型目录值和 Direct 回退顺序。
 
 建议回归命令：
 
@@ -628,8 +599,6 @@ CARGO_TARGET_DIR=/tmp/astro-tool-align cargo test -p tools --test tool_search_al
 以下内容必须与“已实现”能力区分：
 
 1. `ToolDefinition::WebSearch` 已具备原生传输能力，但当前没有 Provider profile 将它注册到模型工具列表；当前实际搜索走本地 Deferred Function。
-2. Astro 使用本地 Node + `node:vm` + OS sandbox 实现 Code Mode，不依赖 Codex 独立 code-mode host 进程；对模型的工具协议和生命周期语义保持对齐。
-3. `image` / `audio` / `generatedImage` 在 cell 内有独立事件类型，当前 `exec` 最终结果仍以文本表示为主；若要与 Codex UI 媒体 block 完全同构，需再扩展 `ToolOutput` 的 cell 事件投影。
-4. `notify` 会立即向 Rust Host 发出内容事件，但当前在 `exec/wait` 返回边界汇总给模型，尚不是独立的前端实时通知流。
+2. 历史 Code Mode 核心代码尚待后续删除，但已从模型配置和工具注册路径下线。
 
-这些边界不影响当前的原生 schema、ToolSearch、Responses 回放、Code Mode 工具编排与权限闭环，但在后续宣称“完全 UI/运行时同构”前应继续追踪。
+这些边界不影响当前的原生 schema、ToolSearch 和 Responses 回放。

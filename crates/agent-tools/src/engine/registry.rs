@@ -349,36 +349,12 @@ impl ToolRegistry {
     /// **非 Direct 工具不包含在返回列表中**。Deferred 工具由
     /// `tool_search` 以原生 output 形式返回，不改写注册表中的 exposure。
     pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        self.schemas_for_api_with_mode(types::ToolMode::Direct)
-    }
-
-    /// 按 Codex 的 Direct / CodeMode / CodeModeOnly 策略返回模型可见 schema。
-    /// CodeMode 在宿主不可用时回退 Direct；CodeModeOnly 则 fail-closed。
-    pub fn schemas_for_api_with_mode(
-        &self,
-        requested_mode: types::ToolMode,
-    ) -> Vec<serde_json::Value> {
-        let available = self.available_tools();
-        let code_mode_available = available.iter().any(|entry| entry.name == "exec");
-        let mode = if requested_mode == types::ToolMode::CodeMode && !code_mode_available {
-            types::ToolMode::Direct
-        } else {
-            requested_mode
-        };
-        api_specs(available.into_iter().filter(|entry| {
-            if !entry.exposure.is_direct() {
-                return false;
-            }
-            let is_code_mode_control = matches!(entry.name.as_str(), "exec" | "wait");
-            match mode {
-                types::ToolMode::Direct => !is_code_mode_control,
-                types::ToolMode::CodeMode => true,
-                types::ToolMode::CodeModeOnly => is_code_mode_control,
-            }
+        api_specs(self.available_tools().into_iter().filter(|entry| {
+            entry.exposure.is_direct() && !matches!(entry.name.as_str(), "exec" | "wait")
         }))
     }
 
-    /// 执行路由可调用的全部 schema，包含仅 Code Mode 可用的工具。
+    /// 执行路由可调用的全部 schema，包含 Deferred 但排除 Hidden。
     pub fn all_callable_tool_schemas(&self) -> Vec<serde_json::Value> {
         api_specs(
             self.available_tools()

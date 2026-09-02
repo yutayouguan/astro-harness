@@ -11,7 +11,7 @@
 | [01-agent-core详细设计.md](01-核心引擎层/01-agent-core详细设计.md) | `Session` 为中心的 Harness 编排：runtime/tasks/streaming/prompt/control/timeline |
 | [02-agent-runtime详细设计.md](01-核心引擎层/02-agent-runtime详细设计.md) | `AstroThread -> submission_loop -> SessionTask -> multi_turn` 当前执行链与旧 runtime 迁移边界 |
 | [03-交互执行模式设计.md](01-核心引擎层/03-交互执行模式设计.md) | F-39/M-38 交互执行模式：自适应规划、Pending 消息队列、YOLO 开关、MultiTask |
-| [04-多执行后端系统设计.md](01-核心引擎层/04-多执行后端系统设计.md) | 本地子进程、跨平台 sandbox、managed network、Browser/MCP/Code Mode 运行环境与规划边界 |
+| [04-多执行后端系统设计.md](01-核心引擎层/04-多执行后端系统设计.md) | 本地子进程、跨平台 sandbox、managed network、Browser/MCP 运行环境与规划边界 |
 | [05-成本预算控制详细设计.md](01-核心引擎层/05-成本预算控制详细设计.md) | BudgetManager：三级预算模型、Token 计费、check_before_call 拦截、渐进降级、YOLO 强制关闭、费用统计报表 |
 | [06-子Agent派生详细设计.md](01-核心引擎层/06-子Agent派生详细设计.md) | Codex V2 Agent Threads：六工具控制面、持久 Agent Graph/mailbox/status、真实 Session 时间线 |
 | [07-Agent生命周期详细设计.md](01-核心引擎层/07-Agent生命周期详细设计.md) | Thread/Session/Task/Turn/Step/Attempt 六级生命周期，以及完整 Realtime、Elicitation、TurnSettings、Guardian retry 和用户 Shell 控制边界 |
@@ -52,7 +52,7 @@
 | [02-工具系统详细设计.md](04-工具与扩展生态/02-工具系统详细设计.md) | ToolEntry/Registry/Definition/StepContext/Router/Output 执行链、动态暴露与审批边界 |
 | [03-MCP协议详细设计.md](04-工具与扩展生态/03-MCP协议详细设计.md) | Codex 对齐的 MCP Host/Client：STDIO/Streamable HTTP、分层配置、认证与 OAuth、Server Instructions、工具审批、连接状态机、迁移与验收 |
 | [04-PluginSDK开发者文档.md](04-工具与扩展生态/04-PluginSDK开发者文档.md) | Plugin SDK：Host API 参考（astro_*）、自定义工具/Hook/Skill 开发、测试调试、打包发布、完整示例 |
-| [05-Codex原生工具协议与CodeMode详细设计.md](04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md) | Codex 工具协议对齐：Function/Freeform/Namespace/ToolSearch/WebSearch、Deferred MCP 激活、Responses 回放、Code Mode 与三态暴露策略 |
+| [05-Codex原生工具协议与CodeMode详细设计.md](04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md) | Codex 工具协议对齐：Function/Freeform/Namespace/ToolSearch/WebSearch、Direct 内置工具、Deferred MCP 激活与 Responses 回放；Code Mode 仅作历史记录 |
 
 ## 05-桌面端与交互
 

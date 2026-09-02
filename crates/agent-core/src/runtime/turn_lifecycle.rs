@@ -956,37 +956,28 @@ impl Session {
         let turn_context = {
             let state = self.lock_state();
             state.current_turn_context.clone().unwrap_or_else(|| {
-                let requested_tool_mode =
-                    state.model_ctx.requested_tool_mode(self.config.tool_mode);
-                Arc::new(
-                    TurnContext::new_with_roots(
-                        state
-                            .turn
-                            .current_turn_id()
-                            .map(str::to_owned)
-                            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
-                        state.turn.current_turn(),
-                        state.interaction_mode,
-                        state.permission_profile.clone(),
-                        state.project_root.clone(),
-                        state.workspace_roots.clone(),
-                    )
-                    .with_requested_tool_mode(requested_tool_mode),
-                )
+                Arc::new(TurnContext::new_with_roots(
+                    state
+                        .turn
+                        .current_turn_id()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                    state.turn.current_turn(),
+                    state.interaction_mode,
+                    state.permission_profile.clone(),
+                    state.project_root.clone(),
+                    state.workspace_roots.clone(),
+                ))
             })
         };
         let interaction_mode = turn_context.mode();
-        let requested_tool_mode = turn_context.requested_tool_mode();
         let tool_router = {
             let registry = self
                 .services
                 .tool_registry
                 .read()
                 .expect("tool registry lock poisoned");
-            let visible_specs = tools::filter_schemas(
-                interaction_mode,
-                registry.schemas_for_api_with_mode(requested_tool_mode),
-            );
+            let visible_specs = tools::filter_schemas(interaction_mode, registry.schemas_for_api());
             // Deferred 工具不进模型 schema，但发现后仍可调用；两者都要按交互模式过滤。
             let callable_specs =
                 tools::filter_schemas(interaction_mode, registry.all_callable_tool_schemas());
