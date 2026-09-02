@@ -107,8 +107,8 @@ pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
         "(allow mach-lookup)\n",
         "(allow ipc-posix-shm)\n",
         "(allow signal)\n",
-        // Interactive shells need tcsetpgrp/TIOCSPGRP on their inherited PTY slave. Limit
-        // file-ioctl to macOS pseudo-terminal devices instead of enabling it globally.
+        // 交互式 Shell 需要在继承的 PTY 从设备上调用 tcsetpgrp/TIOCSPGRP。
+        // 仅对 macOS 伪终端设备放行 file-ioctl，避免全局开放该权限。
         "(allow file-ioctl (regex #\"^/dev/ttys[0-9A-Za-z]+$\"))\n",
         // Shells and common CLI programs expect the null device to be writable even in
         // read-only mode. This discards bytes and does not broaden filesystem access.
