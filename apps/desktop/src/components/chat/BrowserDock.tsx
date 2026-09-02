@@ -499,7 +499,10 @@ export default function BrowserDock({
                 draggable={false}
               />
             ) : null}
-            <div className="browser-live-placeholder" aria-hidden />
+            <div
+              className={`browser-live-placeholder${screenshot ? " has-underlay" : ""}`}
+              aria-hidden
+            />
           </>
         ) : screenshot ? (
           <img
