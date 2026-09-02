@@ -145,9 +145,9 @@ raw output
 
 `content` 保留原文；`compressed_content` 只是 Provider 视图。
 
-## 8. 历史 Code Mode
+## 8. Code Mode runtime 与模型投影
 
-> 当前已从模型可见工具和运行时配置中下线；以下仅为历史设计记录。
+Direct 路径是当前 Provider 默认；QuickJS runtime 已实现，但 `CodeModeOnly` 的模型目录选择和 Provider 工具投影仍待接线。
 
 Code Mode 原先将多步确定性编排放入一个 JavaScript cell；保留的兼容运行时现已改为进程内 QuickJS：
 
@@ -157,6 +157,9 @@ Code Mode 原先将多步确定性编排放入一个 JavaScript cell；保留的
 - 共享 `store/load` 位于 Session 服务而不是 QuickJS context；
 - `yield_control()` 使 cell 保持存活，`wait` 负责 resume/terminate；
 - 嵌套工具通过 Rust 异步通道回到 Host。
+- `ALL_TOOLS` 只投影名称和描述，`getToolSchema(name)` 按需返回单个工具的完整参数或 grammar 合同。
+
+Direct 模式在 Provider `tools` 中传递每个工具的完整 Schema；CodeModeOnly 顶层只传递 `exec` / `wait`，业务工具只能从 cell 的冻结快照调用。CodeModeOnly 宿主不可用时必须 fail closed，不能自动扩大为 Direct 工具集。
 
 Code Mode 不是绕过 Harness 的后门；它是 Harness 内的另一种工具调度器。
 
@@ -259,5 +262,5 @@ Harness 使用两类存储：
 
 1. `agent-protocol::Op` 中部分控制操作尚是预留分支，`submission_loop` 会返回 unsupported；协议存在不等于 runtime 已实现。
 2. Provider-hosted `WebSearch` 已有协议表示，但当前 Registry 实际暴露的 `web_search` 是客户端 Deferred Function。
-3. 历史 Code Mode 运行时代码仍待清理，但模型配置与工具注册路径已经下线。
+3. QuickJS Code Mode runtime 已实现，但模型目录选择与 Provider 端 `CodeModeOnly` 投影仍待接入；当前生产采样仍以 Direct 为准。
 4. 工作流、Cron 和多模型对比使用 Harness 能力，但各自还有独立调度契约，不应混入单个 regular turn 状态机。

@@ -1013,6 +1013,8 @@ fn code_mode_nested_tools(
                 name,
                 wire_name,
                 description: entry.description.clone(),
+                parameters: tools::sanitize_tool_schema(entry.schema.clone()),
+                format: entry.freeform_format.clone(),
             }
         });
     }

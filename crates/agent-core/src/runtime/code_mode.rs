@@ -548,12 +548,10 @@ impl CodeModeService {
             .get(cell_id)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Code Mode cell not found: {cell_id}"))?;
-        let resume = cell.control.resume.lock().await.take();
-        let resume = resume
-            .ok_or_else(|| anyhow::anyhow!("Code Mode cell is not waiting to resume: {cell_id}"))?;
-        resume
-            .send(())
-            .map_err(|_| anyhow::anyhow!("Code Mode cell closed before resume"))
+        if let Some(resume) = cell.control.resume.lock().await.take() {
+            let _ = resume.send(());
+        }
+        Ok(())
     }
 
     pub(crate) async fn update_store(&self, key: String, value: serde_json::Value) {
@@ -833,6 +831,26 @@ mod tests {
         assert!(matches!(
             next(&service, &load_id).await,
             RuntimeEvent::Content { value, .. } if value == "42"
+        ));
+    }
+
+    #[tokio::test]
+    async fn resume_is_a_noop_when_cell_is_running_without_yielding() {
+        let service = CodeModeService::default();
+        let source = parse_exec_source(
+            "await new Promise(resolve => setTimeout(resolve, 5)); text('still-running');",
+        )
+        .unwrap();
+        let cwd = std::env::current_dir().unwrap();
+        let cell_id = service.execute(&source, &[], &cwd).await.unwrap();
+        service.resume(&cell_id).await.unwrap();
+        assert!(matches!(
+            next(&service, &cell_id).await,
+            RuntimeEvent::Content { value, .. } if value == "still-running"
+        ));
+        assert!(matches!(
+            next(&service, &cell_id).await,
+            RuntimeEvent::Result { error: None }
         ));
     }
 

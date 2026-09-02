@@ -1,14 +1,14 @@
-# Codex 原生工具协议与 Tool Search 详细设计
+# Codex 原生工具协议、Tool Search 与 Code Mode 详细设计
 
-> **Harness 当前基线（2026-09-02）**：模型直接获得内置工具和原生 `tool_search`。Astro 不再注册 `exec` / `wait`，也不再按模型选择 `CodeMode` / `CodeModeOnly`。本文 Code Mode 章节仅保留为历史设计记录，不代表当前运行时能力。
+> **Harness 当前基线（2026-09-02）**：Direct 工具链已完整接入；进程内 QuickJS Code Mode runtime 及 `getToolSchema(name)` 按需 Schema 查询已实现。模型目录的 `CodeModeOnly` 选择和仅暴露 `exec` / `wait` 的 Provider 投影仍是待接线项，不应把“runtime 存在”误写为“模型已启用”。
 
 > 阶段：详细设计
 >
-> 状态：已实现
+> 状态：部分实现（Direct 与 QuickJS runtime 已落地，CodeModeOnly 模型投影待接线）
 >
 > 基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
 >
-> 范围：Provider 工具协议、延迟工具发现、Responses 事件回放，以及历史 Code Mode 设计
+> 范围：Provider 工具协议、延迟工具发现、Responses 事件回放、Direct / CodeModeOnly 模式合同与 QuickJS Code Mode runtime
 
 ## 1. 文档目标
 
@@ -18,7 +18,7 @@
 2. 为什么不再把所有工具都压成普通 JSON Function；
 3. 从工具注册、Provider 请求、流式事件、执行到历史回放，完整语义如何保持。
 
-这不是计划稿。文中的类型、字段、分支与降级规则均对应当前仓库实现。
+已实现部分的类型、字段、分支与降级规则均对应当前仓库；尚未接线的模式选择会在文中显式标记，不当作现有行为。
 
 ## 2. 原始问题
 
@@ -244,7 +244,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 
 ### 5.2 当前实际给模型的工具
 
-工具列表不是全局常量。每次 sampling 前，Registry 还会受 toolset 开关、`check_fn` 环境检测、Skill additive override、已激活 Deferred 集合、当前 MCP 连接和 `ToolMode` 影响。因此“实际列表”应以当前 Step 的 `ResponsesRequest.tools` 为准，而不是把注册表中的所有 handler 等同于模型可见工具。
+工具列表不是全局常量。每次 sampling 前，Registry 还会受 toolset 开关、`check_fn` 环境检测、Skill additive override、已发现 Deferred 集合和当前 MCP 连接影响。因此“实际列表”应以当前 Step 的 `ResponsesRequest.tools` 与可信 `tool_search_output` 为准，而不是把注册表中的所有 handler 等同于模型可见工具。
 
 在 toolset 启用、运行条件满足且尚未进行 Deferred 激活的默认状态下：
 
@@ -294,9 +294,9 @@ client searches name x2 + toolset + description
                            |
 returns complete loadable definitions (defer_loading=true)
                            |
-ToolRegistry.activate_deferred(name)
+next Step 从可信 tool_search_output 提取名称
                            |
-next sampling step includes the activated schemas
+next sampling step routes only discovered schemas
 ```
 
 具体语义：
@@ -389,9 +389,9 @@ Responses API 使用不同的 call/output item 表示不同工具。下一轮采
 }
 ```
 
-## 7. 历史设计：Code Mode `exec` / `wait`
+## 7. Code Mode `exec` / `wait`
 
-> 当前不再注册或暴露这两个工具；以下内容仅记录原实现方案。
+> 本节描述已实现的 QuickJS runtime 合同。当前 Provider 默认仍走 Direct；只有完成第 9 节的模型模式投影后，`CodeModeOnly` 模型才会在采样请求中看到 `exec` / `wait`。
 
 ### 7.1 解决的问题
 
@@ -442,6 +442,7 @@ text(result);
 | --- | --- |
 | `tools.<normalized_name>(input)` | 调用 Astro 工具 |
 | `ALL_TOOLS` | 列出可用嵌套工具的名称和描述 |
+| `getToolSchema(name)` | 按 `ALL_TOOLS[].name` 查询单个工具的完整 Function parameters 或 Freeform format；未命中返回 `undefined` |
 | `text(value)` | 追加文本输出 |
 | `image(value, detail)` / `audio(value)` | 输出媒体事件 |
 | `generatedImage(value)` | 输出生成图片事件 |
@@ -469,7 +470,57 @@ oneshot result: Ok(value) | Err(error)
 resolve/reject JavaScript Promise
 ```
 
-### 7.4 `yield` / `wait` 生命周期
+### 7.4 两阶段工具发现与按需 Schema
+
+CodeModeOnly 不把所有业务工具 Schema 注入 Provider 请求。工具发现分为两阶段：
+
+1. `ALL_TOOLS` 是轻量索引，每项只含 `name` 和 `description`，用于在 JavaScript 内筛选候选工具。
+2. 选定后调用 `getToolSchema(name)`，只把该工具的完整定义输出给模型。
+
+Function 工具返回：
+
+```json
+{
+  "type": "function",
+  "name": "exec_command",
+  "description": "...",
+  "parameters": {
+    "type": "object",
+    "properties": {}
+  }
+}
+```
+
+Freeform 工具返回：
+
+```json
+{
+  "type": "custom",
+  "name": "apply_patch",
+  "description": "...",
+  "format": {
+    "type": "grammar",
+    "syntax": "lark",
+    "definition": "..."
+  }
+}
+```
+
+典型编排：
+
+```javascript
+const candidates = ALL_TOOLS.filter(({ name, description }) =>
+  /calendar|schedule/i.test(`${name} ${description}`)
+);
+if (candidates.length === 0) throw new Error("no matching tool");
+
+const definition = getToolSchema(candidates[0].name);
+text(definition); // 模型获得精确参数合同
+```
+
+Schema 在 Rust 侧从当前 `ToolRegistry.available_tools()` 快照生成，Function parameters 经过 `sanitize_tool_schema()` 清理。`Hidden`、`exec`、`wait` 和 `tool_search` 不进入 cell 目录。`ALL_TOOLS` 和 `getToolSchema()` 的返回对象均冻结，脚本不能篡改后续查询结果。完整 Schema 仅存在本地 QuickJS 内存，除非脚本显式调用 `text()`，不会进入模型上下文。
+
+### 7.5 `yield` / `wait` 生命周期
 
 `exec` 在三种情况下返回：
 
@@ -480,6 +531,7 @@ resolve/reject JavaScript Promise
 第三种情况下，cell 仍由 Session 级 `CodeModeService` 持有。后续 `wait` 可以：
 
 - 发送 `resume` 并继续读取新事件；
+- 若上次只是达到等待时限而非显式 `yield_control()`，`resume` 是无害空操作，`wait` 继续轮询原 cell；
 - 再次超时后返回同一 cell id；
 - 通过 `terminate: true` 设置中断信号并移除 cell；
 - 完成或失败时从 `cells` map 中清理。
@@ -527,24 +579,41 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 - 嵌套调用经过同一路由和审计链；
 - 取消会终止 cell，不把孤儿进程留在会话外。
 
-## 9. 当前 Direct 策略
+## 9. Direct / CodeModeOnly 模式合同
 
-### 9.1 语义
+### 9.1 Provider 可见面
 
-Astro 始终使用 Direct 工具集：
+| 模式 | Provider `tools` 中直接可见 | 业务工具发现 | 调用路径 |
+| --- | --- | --- | --- |
+| `Direct` | Direct Function / Freeform / Namespace + `tool_search`；每个工具带完整 Schema | Deferred 经 Provider 原生 `tool_search` 按需返回 | 模型直接产生原生 tool call |
+| `CodeModeOnly` | 仅 `exec` / `wait` | JS 内先查 `ALL_TOOLS`，再用 `getToolSchema(name)` 按需取完整定义 | 模型产生 JavaScript，cell 通过 `tools.<name>(input)` 嵌套调用 |
 
-- 常用内置工具以原生 Function / Freeform / Namespace schema 直接暴露；
-- `tool_search` 以 Responses 原生 ToolSearch schema 暴露；
-- Deferred 工具经 `tool_search` 发现后在后续 sampling step 可见；
-- `exec` / `wait` 不注册、不发给模型。
+`ToolExposure` 与模式正交：它描述工具条目在注册表中的披露策略，模式决定该策略如何投影到本次 Provider step。两者都不是授权；执行仍必须经过工具 gate、approval 和 sandbox。
 
-### 9.2 模型选择
+### 9.2 模式决策与快照
 
-工具暴露不再跟随 Codex 模型目录的 `tool_mode`；GPT-5.6 与其他模型都使用同一 Direct 路径。
+- 模式由受信任的模型目录/模型配置决定，不允许模型输出自行切换。
+- 每个 sampling step 冻结一份 `StepContext` 工具快照，避免 MCP 热重载或 Skill 加载改变已生成调用的路由边界。
+- `CodeModeOnly` 必须 fail closed：QuickJS runtime、`exec`/`wait` 规格或快照构建失败时终止当次 step，不得悄然退回 Direct 并扩大模型可见面。
+- `Direct` 不需要 QuickJS，Code Mode runtime 故障不影响 Direct 模型。
 
-### 9.3 兼容边界
+### 9.3 请求与执行不变量
 
-底层历史 Code Mode 运行时暂保留以便平滑清理，但不存在模型选择入口，工具注册表也不再包含 `exec` / `wait`。
+1. Direct 模型调用必须命中 `model_visible_specs`。
+2. CodeModeOnly 模型不得伪造业务工具的顶层 call；顶层只接受 `exec` / `wait`。
+3. cell 嵌套调用只能命中该 step 冻结的可路由工具快照，不允许按名称直接穿透全局 Registry。
+4. `ALL_TOOLS`、`getToolSchema()` 和 `tools` 必须来自同一份快照，避免“看见 A Schema、却调用 B handler”。
+5. 无论哪种模式，tool result 都使用同一持久化、spill、Hook 和审计链。
+
+### 9.4 当前接线状态
+
+| 能力 | 状态 |
+| --- | --- |
+| Direct Function / Freeform / Namespace | 已接入 |
+| Direct `tool_search` + Deferred 路由 | 已接入 |
+| QuickJS cell、`exec/wait` 调度、按需 Schema 查询 | 已实现 runtime |
+| 模型目录 `tool_mode=CodeModeOnly` | 待接入 |
+| Provider step 仅投影 `exec/wait` | 待接入 |
 
 ## 10. 关键不变量
 
@@ -554,6 +623,7 @@ Astro 始终使用 Direct 工具集：
 4. `tool_search` 激活在下一次 sampling step 生效，MCP 热重载不丢失状态。
 5. 模型直调只能命中当前 Step 真正可见的路由。
 6. 历史只回放已有匹配结果的 tool call，避免孤立调用破坏 Provider 请求。
+7. CodeModeOnly 的轻量目录不带完整 Schema；完整定义只能通过 `getToolSchema(name)` 按需读取。
 
 ## 11. 实现映射
 
@@ -565,6 +635,8 @@ Astro 始终使用 Direct 工具集：
 | MCP 动态注册 | `crates/agent-core/src/runtime/mod.rs::attach_mcp_tools` |
 | Responses 请求 / SSE / 历史 | `crates/agent-providers/src/openai/responses.rs` |
 | Step 级可见/可路由快照 | `crates/agent-core/src/runtime/step_context.rs` / `tool_router.rs` |
+| QuickJS cell 与 `getToolSchema` | `crates/agent-core/src/runtime/code_mode.rs` |
+| Code Mode 嵌套工具快照与调度 | `crates/agent-core/src/streaming/tools_exec.rs` |
 
 ## 12. 验证与回归
 
@@ -577,6 +649,10 @@ Astro 始终使用 Direct 工具集：
 - `crates/agent-tools/tests/code_mode_alignment.rs`
   - Direct 工具和原生 `tool_search` 保持可见；
   - `exec` / `wait` 不进入模型 schema。
+- `crates/agent-core/src/runtime/code_mode.rs` 单元测试
+  - QuickJS 嵌套工具调用与 `yield/wait` 恢复；
+  - `ALL_TOOLS` 保持轻量，`getToolSchema(name)` 按需返回完整定义；
+  - 定时器、宿主全局隐藏和忙循环中断。
 - `crates/agent-providers/src/openai/responses.rs` 单元测试
   - custom call/output 回放；
   - `exec` custom 回放；
@@ -597,6 +673,6 @@ CARGO_TARGET_DIR=/tmp/astro-tool-align cargo test -p tools --test tool_search_al
 以下内容必须与“已实现”能力区分：
 
 1. `ToolDefinition::WebSearch` 已具备原生传输能力，但当前没有 Provider profile 将它注册到模型工具列表；当前实际搜索走本地 Deferred Function。
-2. 历史 Code Mode 核心代码尚待后续删除，但已从模型配置和工具注册路径下线。
+2. QuickJS Code Mode runtime 已存在，但模型目录 `tool_mode` 和 Provider 端 `CodeModeOnly` 工具投影尚待接入；在此之前当前采样仍使用 Direct。
 
-这些边界不影响当前的原生 schema、ToolSearch 和 Responses 回放。
+这些边界不影响当前的原生 schema、ToolSearch、Responses 回放和 Code Mode runtime 单元合同。
