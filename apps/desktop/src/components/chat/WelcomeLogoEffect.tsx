@@ -10,6 +10,8 @@ struct Viewport {
   resolution: vec2f,
   dark_mode: f32,
   padding: f32,
+  tone: vec4f,
+  accent: vec4f,
 }
 
 struct Motion {
@@ -32,17 +34,20 @@ struct Motion {
   let specular = pow(max(dot(normal, half_direction), 0.0), 34.0);
   let rim = pow(1.0 - max(normal.z, 0.0), 2.2);
 
-  let blue = vec3f(0.03, 0.42, 1.0);
-  let violet = vec3f(0.39, 0.08, 1.0);
-  let cyan = vec3f(0.02, 0.88, 0.98);
-  let base = mix(mix(blue, violet, smoothstep(0.08, 0.88, uv.x)), cyan, smoothstep(0.58, 1.0, uv.y) * 0.32);
+  let tone = viewport.tone.rgb;
+  let accent = viewport.accent.rgb;
+  let base = mix(
+    mix(tone * 0.48, tone, smoothstep(0.08, 0.88, uv.x)),
+    accent,
+    smoothstep(0.58, 1.0, uv.y) * 0.34,
+  );
   let sweep_position = fract(motion.time * 0.075) * 2.5 - 0.35;
   let sweep = exp(-abs(uv.x + uv.y * 0.42 - sweep_position) * 28.0);
   let pointer_glow = motion.pointer_active * exp(-distance(uv, motion.pointer) * 5.4);
   let theme_lift = mix(0.92, 1.08, viewport.dark_mode);
   let colour = base * diffuse * theme_lift
     + vec3f(1.0, 0.98, 0.96) * specular * 1.18
-    + cyan * (sweep * 0.38 + rim * 0.34 + pointer_glow * 0.28);
+    + accent * (sweep * 0.38 + rim * 0.34 + pointer_glow * 0.28);
 
   return vec4f(colour, 0.96);
 }
@@ -53,6 +58,37 @@ type PointerState = {
   y: number;
   active: number;
 };
+
+type RgbaVector = [number, number, number, number];
+
+function resolveThemeColor(
+  root: HTMLElement,
+  variable: "--tone" | "--accent-2",
+  fallback: string,
+): RgbaVector {
+  const probe = document.createElement("span");
+  probe.style.cssText = `position:absolute;visibility:hidden;color:var(${variable}, ${fallback})`;
+  root.append(probe);
+  const channels = getComputedStyle(probe)
+    .color.match(/[\d.]+/g)
+    ?.map(Number);
+  probe.remove();
+
+  if (!channels || channels.length < 3) {
+    return variable === "--tone"
+      ? [0.145, 0.388, 0.922, 1]
+      : [0.231, 0.51, 0.965, 1];
+  }
+
+  return [channels[0] / 255, channels[1] / 255, channels[2] / 255, 1];
+}
+
+function readThemeColors(root: HTMLElement) {
+  return {
+    tone: resolveThemeColor(root, "--tone", "#2563eb"),
+    accent: resolveThemeColor(root, "--accent-2", "#3b82f6"),
+  };
+}
 
 function isDarkTheme(): boolean {
   return document.documentElement.dataset.theme === "dark";
@@ -87,12 +123,16 @@ export function WelcomeLogoEffect() {
       canvasSurface.clearColor = [0, 0, 0, 0];
 
       const pointer: PointerState = { x: 0.38, y: 0.28, active: 0 };
+      const themeRoot = canvas.parentElement ?? document.documentElement;
+      const themeColors = readThemeColors(themeRoot);
       const ledEffect = effect(gpu, LED_SHADER, {
         set: {
           viewport: {
             resolution: [canvasSurface.size[0], canvasSurface.size[1]],
             dark_mode: isDarkTheme() ? 1 : 0,
             padding: 0,
+            tone: themeColors.tone,
+            accent: themeColors.accent,
           },
           motion: {
             pointer: [pointer.x, pointer.y],
@@ -154,11 +194,23 @@ export function WelcomeLogoEffect() {
       let dark = isDarkTheme();
       const themeObserver = new MutationObserver(() => {
         dark = isDarkTheme();
-        ledEffect.set({ viewport: { dark_mode: dark ? 1 : 0 } });
+        const colors = readThemeColors(themeRoot);
+        ledEffect.set({
+          viewport: {
+            dark_mode: dark ? 1 : 0,
+            tone: colors.tone,
+            accent: colors.accent,
+          },
+        });
       });
       themeObserver.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["data-theme"],
+        attributeFilter: [
+          "data-theme",
+          "data-tone",
+          "data-color-style",
+          "style",
+        ],
       });
 
       const reducedMotion = window.matchMedia(

@@ -3794,7 +3794,7 @@ html[data-theme="dark"] .chat-welcome-illust {
 
 html[data-theme="dark"] .chat-welcome-logo--front {
   filter: drop-shadow(
-    0 4px 14px color-mix(in srgb, var(--tone-blue) 18%, transparent)
+    0 4px 14px color-mix(in srgb, var(--tone) 18%, transparent)
   );
 }
 
@@ -4040,6 +4040,13 @@ html[data-theme="dark"] .chat-welcome-logo--front {
 
 .chat-welcome-logo-stack {
   --welcome-logo-mask: none;
+  --astro-mark-c0: color-mix(in srgb, var(--tone, #2563eb) 82%, #0b1020 18%);
+  --astro-mark-c1: var(--tone, #2563eb);
+  --astro-mark-c2: color-mix(
+    in srgb,
+    var(--accent-2, var(--tone, #2563eb)) 64%,
+    #ffffff 36%
+  );
   position: relative;
   width: 72px;
   height: 72px;
@@ -4059,20 +4066,28 @@ html[data-theme="dark"] .chat-welcome-logo--front {
 }
 
 .chat-welcome-logo--depth-far {
-  --astro-mark-c0: #071b48;
-  --astro-mark-c1: #15104d;
-  --astro-mark-c2: #2c0b62;
+  --astro-mark-c0: color-mix(in srgb, var(--tone, #2563eb) 28%, #020617 72%);
+  --astro-mark-c1: color-mix(in srgb, var(--tone, #2563eb) 44%, #070b18 56%);
+  --astro-mark-c2: color-mix(
+    in srgb,
+    var(--accent-2, var(--tone, #2563eb)) 52%,
+    #111827 48%
+  );
   opacity: 0.78;
   transform: translate3d(0, 7px, -18px) scale(0.985);
   filter: drop-shadow(
-    0 12px 13px color-mix(in srgb, var(--tone-purple) 30%, transparent)
+    0 12px 13px color-mix(in srgb, var(--tone) 30%, transparent)
   );
 }
 
 .chat-welcome-logo--depth-near {
-  --astro-mark-c0: #0a4fb8;
-  --astro-mark-c1: #3120a6;
-  --astro-mark-c2: #4b1cc0;
+  --astro-mark-c0: color-mix(in srgb, var(--tone, #2563eb) 58%, #07111f 42%);
+  --astro-mark-c1: color-mix(in srgb, var(--tone, #2563eb) 78%, #111827 22%);
+  --astro-mark-c2: color-mix(
+    in srgb,
+    var(--accent-2, var(--tone, #2563eb)) 82%,
+    #ffffff 18%
+  );
   opacity: 0.9;
   transform: translate3d(0, 3.5px, -8px) scale(0.994);
 }
@@ -4081,7 +4096,7 @@ html[data-theme="dark"] .chat-welcome-logo--front {
   position: relative;
   transform: translateZ(10px);
   filter: drop-shadow(
-    0 8px 18px color-mix(in srgb, var(--tone-blue, #2563eb) 22%, transparent)
+    0 8px 18px color-mix(in srgb, var(--tone, #2563eb) 22%, transparent)
   );
   transition:
     transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -4121,14 +4136,14 @@ html[data-theme="dark"] .chat-welcome-logo--front {
     radial-gradient(
       circle at var(--welcome-glare-x) var(--welcome-glare-y),
       rgba(255, 255, 255, 0.92) 0,
-      rgba(102, 196, 255, 0.34) 18%,
+      color-mix(in srgb, var(--accent-2, var(--tone)) 34%, transparent) 18%,
       transparent 42%
     ),
     linear-gradient(
       112deg,
       transparent 26%,
       rgba(255, 255, 255, 0.72) 43%,
-      rgba(52, 211, 235, 0.36) 51%,
+      color-mix(in srgb, var(--tone) 36%, transparent) 51%,
       transparent 66%
     );
   background-size:
@@ -4149,7 +4164,7 @@ html[data-theme="dark"] .chat-welcome-logo--front {
 .chat-welcome-mark:focus-visible .chat-welcome-logo--front {
   transform: translateZ(16px);
   filter: drop-shadow(
-    0 12px 22px color-mix(in srgb, var(--tone-cyan, #06b6d4) 36%, transparent)
+    0 12px 22px color-mix(in srgb, var(--accent-2, var(--tone)) 36%, transparent)
   );
 }
 
@@ -4179,9 +4194,13 @@ html[data-theme="dark"] .chat-welcome-logo--front {
   line-height: 1;
   background: linear-gradient(
     115deg,
-    var(--tone-purple, #6020fc) 0%,
-    var(--tone-blue, #2563eb) 46%,
-    color-mix(in srgb, var(--tone-cyan, #06b6d4) 58%, var(--tone-blue, #2563eb))
+    color-mix(in srgb, var(--tone, #2563eb) 78%, var(--ink)) 0%,
+    var(--tone, #2563eb) 48%,
+    color-mix(
+        in srgb,
+        var(--accent-2, var(--tone, #2563eb)) 68%,
+        #ffffff
+      )
       100%
   );
   -webkit-background-clip: text;
@@ -4218,7 +4237,7 @@ html[data-theme="dark"] .chat-welcome-logo--front {
   background: linear-gradient(
     118deg,
     var(--ink) 0%,
-    color-mix(in srgb, var(--tone-blue) 42%, var(--ink)) 100%
+    color-mix(in srgb, var(--tone) 42%, var(--ink)) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -4231,8 +4250,8 @@ html[data-theme="dark"] .chat-welcome-logo--front {
   position: relative;
   background: linear-gradient(
     118deg,
-    color-mix(in srgb, var(--tone-blue) 62%, var(--ink)) 0%,
-    color-mix(in srgb, var(--tone-purple) 58%, var(--ink)) 100%
+    color-mix(in srgb, var(--tone) 62%, var(--ink)) 0%,
+    color-mix(in srgb, var(--accent-2, var(--tone)) 58%, var(--ink)) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -4243,9 +4262,9 @@ html[data-theme="dark"] .chat-welcome-logo--front {
 html[data-theme="dark"] .chat-welcome-wordmark {
   background-image: linear-gradient(
     115deg,
-    color-mix(in srgb, var(--tone-purple) 72%, var(--ink-soft)) 0%,
-    color-mix(in srgb, var(--tone-blue) 78%, var(--ink-soft)) 48%,
-    color-mix(in srgb, var(--tone-cyan) 55%, var(--tone-blue)) 100%
+    color-mix(in srgb, var(--tone) 72%, var(--ink-soft)) 0%,
+    color-mix(in srgb, var(--tone) 86%, var(--ink-soft)) 48%,
+    color-mix(in srgb, var(--accent-2, var(--tone)) 72%, var(--tone)) 100%
   );
 }
 
@@ -4253,15 +4272,15 @@ html[data-theme="dark"] .chat-welcome-greeting {
   background-image: linear-gradient(
     118deg,
     color-mix(in srgb, var(--ink) 92%, transparent) 0%,
-    color-mix(in srgb, var(--tone-blue) 52%, var(--ink)) 100%
+    color-mix(in srgb, var(--tone) 52%, var(--ink)) 100%
   );
 }
 
 html[data-theme="dark"] .chat-welcome-title-brand {
   background-image: linear-gradient(
     118deg,
-    color-mix(in srgb, var(--tone-blue) 62%, var(--ink)) 0%,
-    color-mix(in srgb, var(--tone-purple) 52%, var(--ink)) 100%
+    color-mix(in srgb, var(--tone) 62%, var(--ink)) 0%,
+    color-mix(in srgb, var(--accent-2, var(--tone)) 56%, var(--ink)) 100%
   );
 }
 
