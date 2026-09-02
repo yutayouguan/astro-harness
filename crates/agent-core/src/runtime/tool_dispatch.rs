@@ -119,7 +119,8 @@ impl AgentLoop {
         // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
         // 构建 MCP 动态 handler，持有 Peer（Send + Sync），无需跨 await 持锁。
         let mcp_handler: Option<DynToolHandler> = if is_mcp_tool_name(name) {
-            let (peer, native, timeout_secs) = self.mcp_hub.lock().await.resolve_tool_peer(name)?;
+            let (peer, native, timeout_secs, output_token_limit) =
+                self.mcp_hub.lock().await.resolve_tool_peer(name)?;
             let qname = name.to_string();
             Some(std::sync::Arc::new(
                 move |_name: &str, args: &serde_json::Value| {
@@ -128,7 +129,15 @@ impl AgentLoop {
                     let native = native.clone();
                     let a = args.clone();
                     Box::pin(async move {
-                        call_tool_with_peer(&peer, &qname, &native, &a, timeout_secs).await
+                        call_tool_with_peer(
+                            &peer,
+                            &qname,
+                            &native,
+                            &a,
+                            timeout_secs,
+                            output_token_limit,
+                        )
+                        .await
                     })
                         as std::pin::Pin<
                             Box<
@@ -179,6 +188,16 @@ impl AgentLoop {
             .and_then(|step| step.turn.extension_snapshot())
             .map(|snapshot| snapshot.skill_configs().to_vec())
             .unwrap_or(skill_config_overrides);
+        let service_tier = step_context
+            .and_then(|step| step.turn.provider_settings())
+            .and_then(|settings| {
+                settings
+                    .base_config
+                    .additional_params
+                    .get("service_tier")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            });
         let mut ctx = ToolContext {
             memory: &self.services.memory,
             sessions,
@@ -194,6 +213,7 @@ impl AgentLoop {
             session_id,
             turn_id,
             credentials: &model_ctx.credentials,
+            service_tier,
             model_targets: &model_ctx.model_targets,
             execution,
             permission_profile: step_context
@@ -564,6 +584,20 @@ impl AgentLoop {
                 model_text.push_str(&feedback);
             }
         }
+        let output_token_limit = self
+            .services
+            .tool_registry
+            .read()
+            .expect("tool registry lock poisoned")
+            .get(name)
+            .and_then(|entry| entry.output_token_limit);
+        if let Some(tokens) = output_token_limit {
+            let max_bytes = tokens
+                .saturating_mul(24)
+                .div_ceil(5)
+                .min(types::MAX_TOOL_RESULT_BYTES);
+            model_text = types::truncate_tool_result(&model_text, max_bytes);
+        }
         if model_text == result.text() {
             result
         } else {
@@ -615,6 +649,41 @@ mod tests {
         assert!(output.text().contains("safe replacement context"));
         assert!(output.text().contains("review this failure"));
         assert!(!output.text().contains("raw side-effect result"));
+    }
+
+    #[tokio::test]
+    async fn mcp_output_limit_is_reapplied_after_post_tool_hooks() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = AgentLoop::new(super::super::Config::with_defaults(
+            dir.path().to_path_buf(),
+        ))
+        .await
+        .unwrap();
+        session
+            .services
+            .tool_registry
+            .write()
+            .unwrap()
+            .register(types::ToolEntry {
+                name: "mcp__demo__read".into(),
+                toolset: mcp::MCP_TOOLSET.into(),
+                output_token_limit: Some(1),
+                ..types::ToolEntry::lifecycle_defaults()
+            });
+        session.hook_bus().register(::hooks::POST_TOOL_USE, |_| {
+            ::hooks::HookOutcome::InjectContext("hook-expanded-context".repeat(20))
+        });
+
+        let output = session
+            .finalize_tool_call_result(
+                "mcp__demo__read",
+                &serde_json::json!({}),
+                types::ToolOutput::from("short"),
+            )
+            .await;
+
+        assert!(output.text().starts_with("short"));
+        assert!(output.text().contains("[truncated]"));
     }
 
     #[test]

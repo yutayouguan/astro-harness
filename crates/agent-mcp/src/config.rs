@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 use agent_config::loader::{load_local_config, LocalConfigOptions};
@@ -129,6 +130,13 @@ pub struct McpToolSettings {
     pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_mode: Option<McpToolApprovalMode>,
+    /// 该工具文本输出的 token 预算，必须为正整数。
+    #[serde(
+        default,
+        alias = "outputTokenLimit",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub output_token_limit: Option<NonZeroUsize>,
 }
 
 impl McpToolConfig {
@@ -156,11 +164,27 @@ impl McpToolConfig {
         }
     }
 
+    pub fn with_output_token_limit(self, limit: Option<NonZeroUsize>) -> Self {
+        match self {
+            Self::Enabled(enabled) if limit.is_some() => Self::Settings(McpToolSettings {
+                enabled: (!enabled).then_some(false),
+                approval_mode: None,
+                output_token_limit: limit,
+            }),
+            Self::Enabled(enabled) => Self::Enabled(enabled),
+            Self::Settings(mut settings) => {
+                settings.output_token_limit = limit;
+                Self::Settings(settings)
+            }
+        }
+    }
+
     pub fn from_parts(enabled: bool, approval_mode: Option<McpToolApprovalMode>) -> Self {
         match approval_mode {
             Some(approval_mode) => Self::Settings(McpToolSettings {
                 enabled: (!enabled).then_some(false),
                 approval_mode: Some(approval_mode),
+                output_token_limit: None,
             }),
             None => Self::Enabled(enabled),
         }
@@ -300,6 +324,16 @@ impl McpServerConfig {
             .get(tool_name)
             .and_then(McpToolConfig::approval_mode)
             .unwrap_or(self.default_tools_approval_mode)
+    }
+
+    pub fn tool_output_token_limit(&self, tool_name: &str) -> Option<usize> {
+        self.tools
+            .get(tool_name)
+            .and_then(|config| match config {
+                McpToolConfig::Enabled(_) => None,
+                McpToolConfig::Settings(settings) => settings.output_token_limit,
+            })
+            .map(NonZeroUsize::get)
     }
 
     /// 应用默认值与安全边界后的启动超时。
@@ -923,6 +957,7 @@ default_tools_approval_mode = "writes"
 
 [mcp_servers.docs.tools.read]
 approval_mode = "approve"
+output_token_limit = 300
 
 [mcp_servers.docs.tools.publish]
 enabled = false
@@ -945,6 +980,7 @@ tools = { read = true, write = false }
             docs.tool_approval_mode("read"),
             McpToolApprovalMode::Approve
         );
+        assert_eq!(docs.tool_output_token_limit("read"), Some(300));
         assert_eq!(
             docs.tool_approval_mode("publish"),
             McpToolApprovalMode::Prompt
@@ -958,6 +994,7 @@ tools = { read = true, write = false }
         save_mcp_servers(&loaded).unwrap();
         let reloaded = load_mcp_servers().unwrap();
         let docs = reloaded.iter().find(|server| server.id == "docs").unwrap();
+        assert_eq!(docs.tool_output_token_limit("read"), Some(300));
         assert_eq!(
             docs.tool_approval_mode("read"),
             McpToolApprovalMode::Approve

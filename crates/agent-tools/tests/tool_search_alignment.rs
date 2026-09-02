@@ -43,6 +43,7 @@ async fn search_returns_full_schema_without_mutating_deferred_dynamic_tool() {
         session_id: "test".into(),
         turn_id: None,
         credentials: &credentials,
+        service_tier: None,
         model_targets: &[],
         execution: None,
         permission_profile: None,

@@ -338,6 +338,7 @@ mod tests {
             session_id: session_id.into(),
             turn_id: None,
             credentials: creds,
+            service_tier: None,
             model_targets: &[],
             execution: None,
             permission_profile: None,

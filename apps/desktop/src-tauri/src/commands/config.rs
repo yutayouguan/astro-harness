@@ -185,6 +185,9 @@ pub struct McpServerDto {
     /// 单工具审批模式覆盖。
     #[serde(default, rename = "toolApprovalModes")]
     pub tool_approval_modes: HashMap<String, String>,
+    /// 单工具文本输出 token 上限。
+    #[serde(default, rename = "toolOutputTokenLimits")]
+    pub tool_output_token_limits: HashMap<String, u64>,
     /// 最近一次 list_tools 缓存
     #[serde(default)]
     pub discovered: Vec<McpDiscoveredToolDto>,
@@ -241,6 +244,17 @@ fn dto_from_config_scoped(c: mcp::McpServerConfig, scope: &str) -> McpServerDto 
                 .map(|mode| (name.clone(), mode.as_str().to_string()))
         })
         .collect();
+    let tool_output_token_limits = c
+        .tools
+        .iter()
+        .filter_map(|(name, config)| {
+            let limit = match config {
+                mcp::McpToolConfig::Enabled(_) => None,
+                mcp::McpToolConfig::Settings(settings) => settings.output_token_limit,
+            }?;
+            Some((name.clone(), u64::try_from(limit.get()).ok()?))
+        })
+        .collect();
     McpServerDto {
         id: c.id,
         name: c.name,
@@ -265,6 +279,7 @@ fn dto_from_config_scoped(c: mcp::McpServerConfig, scope: &str) -> McpServerDto 
         default_tools_approval_mode: c.default_tools_approval_mode.as_str().to_string(),
         tools,
         tool_approval_modes,
+        tool_output_token_limits,
         discovered: c
             .discovered
             .into_iter()
@@ -334,6 +349,16 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
             name,
             mcp::McpToolConfig::from_parts(true, Some(types::McpToolApprovalMode::parse(&mode)?)),
         );
+    }
+    for (name, raw_limit) in d.tool_output_token_limits {
+        let limit = usize::try_from(raw_limit)
+            .ok()
+            .and_then(std::num::NonZeroUsize::new)
+            .ok_or_else(|| format!("tool output token limit for {name:?} must be positive"))?;
+        let entry = tools
+            .entry(name)
+            .or_insert(mcp::McpToolConfig::Enabled(true));
+        *entry = entry.clone().with_output_token_limit(Some(limit));
     }
     Ok(mcp::McpServerConfig {
         id: mcp::sanitize_server_id(&d.id),
@@ -660,6 +685,7 @@ mod mcp_config_tests {
             default_tools_approval_mode: "auto".into(),
             tools: HashMap::new(),
             tool_approval_modes: HashMap::new(),
+            tool_output_token_limits: HashMap::new(),
             discovered: Vec::new(),
             scope: default_global_scope(),
             provenance: default_user_provenance(),
@@ -744,6 +770,7 @@ mod mcp_config_tests {
         dto.tools.insert("publish".into(), false);
         dto.tool_approval_modes
             .insert("publish".into(), "prompt".into());
+        dto.tool_output_token_limits.insert("publish".into(), 512);
         dto.discovered.push(McpDiscoveredToolDto {
             name: "publish".into(),
             description: "Publish a document".into(),
@@ -763,6 +790,7 @@ mod mcp_config_tests {
             config.tool_approval_mode("publish"),
             types::McpToolApprovalMode::Prompt
         );
+        assert_eq!(config.tool_output_token_limit("publish"), Some(512));
         assert!(!config.is_tool_enabled("publish"));
 
         let dto = dto_from_config(config);
@@ -771,6 +799,7 @@ mod mcp_config_tests {
             dto.tool_approval_modes.get("publish").map(String::as_str),
             Some("prompt")
         );
+        assert_eq!(dto.tool_output_token_limits.get("publish"), Some(&512));
         assert_eq!(dto.discovered[0].destructive_hint, Some(true));
     }
 

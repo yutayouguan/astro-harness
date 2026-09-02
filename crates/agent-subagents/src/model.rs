@@ -155,6 +155,7 @@ pub struct SpawnRuntimeV2Request {
     pub skills_config: Vec<crate::SkillConfigEntry>,
     pub model_targets: Vec<types::ModelTarget>,
     pub model_spec: Option<types::ModelSpec>,
+    pub root_service_tier: Option<String>,
     pub project_root: Option<PathBuf>,
     pub workspace_roots: Vec<PathBuf>,
     pub hook_runtime: Option<Arc<hooks::HookRuntime>>,

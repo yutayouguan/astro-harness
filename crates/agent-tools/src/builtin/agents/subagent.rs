@@ -301,6 +301,7 @@ fn parent_runtime_material(ctx: &ToolContext<'_>) -> ParentRuntimeMaterial {
         memory_dir: ctx.memory_dir.clone(),
         parent_agent_id: ctx.agent_id(),
         parent_model,
+        root_service_tier: ctx.service_tier.clone(),
         parent_sandbox_mode: current_sandbox_mode(ctx),
         inherited_skill_config: ctx.skill_config_overrides.to_vec(),
         model_targets: ctx.model_targets.to_vec(),

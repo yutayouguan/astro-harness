@@ -85,6 +85,8 @@ pub struct ThreadSettingsSnapshot {
     pub temperature: f32,
     pub thinking_enabled: bool,
     pub reasoning_effort: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
     pub max_tokens: u32,
 }
 

@@ -258,6 +258,7 @@ function McpAddDialog({
         defaultToolsApprovalMode: "auto",
         tools: {},
         toolApprovalModes: {},
+        toolOutputTokenLimits: {},
         discovered: [],
         scope: "global",
         provenance: "user",

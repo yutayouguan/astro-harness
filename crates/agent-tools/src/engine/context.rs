@@ -39,6 +39,8 @@ pub struct ToolContext<'a> {
     pub turn_id: Option<String>,
     /// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
     pub credentials: &'a ModelCredentials,
+    /// Root turn 当前选择的 service tier；只作为进程内继承材料。
+    pub service_tier: Option<String>,
     /// 含 primary 的聊天 fallback 链，供子 Agent thread 继承。
     pub model_targets: &'a [types::ModelTarget],
     /// 子 Agent 执行调度器（由 AgentLoop 注入；工具层测试可为 None）。
@@ -307,6 +309,7 @@ permissions:
             session_id: "test".into(),
             turn_id: None,
             credentials: &credentials,
+            service_tier: None,
             model_targets: &[],
             execution: None,
             permission_profile: None,

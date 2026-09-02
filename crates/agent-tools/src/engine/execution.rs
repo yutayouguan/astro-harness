@@ -17,6 +17,7 @@ pub struct ParentRuntimeMaterial {
     pub memory_dir: PathBuf,
     pub parent_agent_id: String,
     pub parent_model: Option<String>,
+    pub root_service_tier: Option<String>,
     pub parent_sandbox_mode: String,
     pub inherited_skill_config: Vec<(PathBuf, bool)>,
     pub model_targets: Vec<types::ModelTarget>,

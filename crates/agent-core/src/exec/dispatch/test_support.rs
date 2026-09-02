@@ -246,6 +246,7 @@ impl LifecycleTestApp {
             memory_dir: self.memory_dir.clone(),
             parent_agent_id: home::DEFAULT_AGENT_ID.into(),
             parent_model: Some("openai:test".into()),
+            root_service_tier: None,
             parent_sandbox_mode: "workspace-write".into(),
             inherited_skill_config: Vec::new(),
             model_targets: vec![types::ModelTarget {

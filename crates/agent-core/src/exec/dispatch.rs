@@ -127,6 +127,7 @@ async fn active_root_runtime_material_with_upgrade_hook(
             memory_dir: session.memory_dir().to_path_buf(),
             parent_agent_id: session.agent_id().to_string(),
             parent_model,
+            root_service_tier: session.thread_provider_options().service_tier,
             parent_sandbox_mode: session
                 .permission_profile()
                 .unwrap_or_else(|| types::WORKSPACE_PROFILE.to_string()),
@@ -954,6 +955,7 @@ fn build_runtime_request(
         skills_config: skills,
         model_targets: material.model_targets,
         model_spec: material.model_spec,
+        root_service_tier: material.root_service_tier,
         project_root: material.project_root,
         workspace_roots: material.workspace_roots,
         hook_runtime: material.hook_runtime,
@@ -1773,6 +1775,7 @@ mod tests {
                 memory_dir: memory_dir.to_path_buf(),
                 parent_agent_id: home::DEFAULT_AGENT_ID.into(),
                 parent_model: Some("openai:test".into()),
+                root_service_tier: None,
                 parent_sandbox_mode: "workspace-write".into(),
                 inherited_skill_config: Vec::new(),
                 model_targets: vec![types::ModelTarget {
@@ -6457,6 +6460,7 @@ enabled = true
                     memory_dir: dir.path().to_path_buf(),
                     parent_agent_id: "parent-agent".into(),
                     parent_model: Some("openai:gpt-5.6".into()),
+                    root_service_tier: Some("priority".into()),
                     parent_sandbox_mode: "locked".into(),
                     inherited_skill_config: vec![(PathBuf::from("parent/SKILL.md"), true)],
                     model_targets: Vec::new(),
@@ -6477,6 +6481,7 @@ enabled = true
         assert_eq!(runtime.developer_instructions, "review carefully");
         assert!(runtime.mcp_servers.contains_key("docs"));
         assert_eq!(runtime.skills_config.len(), 2);
+        assert_eq!(runtime.root_service_tier.as_deref(), Some("priority"));
         assert_eq!(
             runtime.model_request.model.as_deref(),
             Some("openai:gpt-5.6")

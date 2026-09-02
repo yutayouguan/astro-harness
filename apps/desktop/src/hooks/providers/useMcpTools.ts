@@ -201,6 +201,8 @@ export type McpServer = {
   tools: Record<string, boolean>;
   /** 单工具审批模式覆盖；缺失时继承 Server 默认值 */
   toolApprovalModes: Record<string, McpToolApprovalMode>;
+  /** 单工具文本输出 token 上限 */
+  toolOutputTokenLimits: Record<string, number>;
   /** 最近一次 list_tools 缓存 */
   discovered: McpDiscoveredTool[];
   scope: McpConfigScope;
@@ -317,9 +319,11 @@ function readApprovalMode(value: unknown): McpToolApprovalMode | undefined {
 function readToolSettings(raw: Record<string, unknown>): {
   enabled: Record<string, boolean>;
   approvalModes: Record<string, McpToolApprovalMode>;
+  outputTokenLimits: Record<string, number>;
 } {
   const enabled: Record<string, boolean> = {};
   const approvalModes: Record<string, McpToolApprovalMode> = {};
+  const outputTokenLimits: Record<string, number> = {};
   const source = raw.tools;
   if (source && typeof source === "object" && !Array.isArray(source)) {
     for (const [name, value] of Object.entries(
@@ -334,6 +338,12 @@ function readToolSettings(raw: Record<string, unknown>): {
           settings.approvalMode ?? settings.approval_mode,
         );
         if (mode) approvalModes[name] = mode;
+        const limit = Number(
+          settings.outputTokenLimit ?? settings.output_token_limit,
+        );
+        if (Number.isSafeInteger(limit) && limit > 0) {
+          outputTokenLimits[name] = limit;
+        }
       }
     }
   }
@@ -350,7 +360,23 @@ function readToolSettings(raw: Record<string, unknown>): {
       if (mode) approvalModes[name] = mode;
     }
   }
-  return { enabled, approvalModes };
+  const explicitLimits =
+    raw.toolOutputTokenLimits ?? raw.tool_output_token_limits;
+  if (
+    explicitLimits &&
+    typeof explicitLimits === "object" &&
+    !Array.isArray(explicitLimits)
+  ) {
+    for (const [name, value] of Object.entries(
+      explicitLimits as Record<string, unknown>,
+    )) {
+      const limit = Number(value);
+      if (Number.isSafeInteger(limit) && limit > 0) {
+        outputTokenLimits[name] = limit;
+      }
+    }
+  }
+  return { enabled, approvalModes, outputTokenLimits };
 }
 
 export function normalizeMcpServer(
@@ -439,6 +465,7 @@ export function normalizeMcpServer(
       ) ?? "auto",
     tools,
     toolApprovalModes: toolSettings.approvalModes,
+    toolOutputTokenLimits: toolSettings.outputTokenLimits,
     discovered,
     scope:
       config.scope === "builtin" || config.scope === "project"
@@ -579,6 +606,9 @@ export function parseMcpJson(raw: string): McpServer[] {
         toolApprovalModes: (cfg.toolApprovalModes ??
           cfg.tool_approval_modes ??
           {}) as Record<string, McpToolApprovalMode>,
+        toolOutputTokenLimits: (cfg.toolOutputTokenLimits ??
+          cfg.tool_output_token_limits ??
+          {}) as Record<string, number>,
         enabled: true,
       }),
     );

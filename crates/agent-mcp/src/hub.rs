@@ -141,6 +141,8 @@ pub struct ToolEntrySpec {
     pub approval_mode: types::McpToolApprovalMode,
     /// Server 声明的非授权性风险提示。
     pub annotations: types::McpToolAnnotations,
+    /// 用户/扩展策略解析后的输出 token 预算。
+    pub output_token_limit: Option<usize>,
 }
 
 /// 已连接 Server 在 initialize 阶段返回的 guidance 快照。
@@ -854,6 +856,7 @@ impl McpHub {
                     schema,
                     approval_mode: rs.config.tool_approval_mode(native),
                     annotations: tool_annotations(tool),
+                    output_token_limit: rs.config.tool_output_token_limit(native),
                 });
             }
         }
@@ -976,12 +979,12 @@ impl McpHub {
 
     /// 校验工具调用权限并返回 peer 克隆 + 超时配置，供 lock 外异步调用。
     ///
-    /// 成功时返回 `(peer, native_tool_name, timeout_secs)`；调用方在释放
+    /// 成功时返回 `(peer, native_tool_name, timeout_secs, output_token_limit)`；调用方在释放
     /// `MutexGuard` 后再执行 `call_tool_with_peer`。
     pub fn resolve_tool_peer(
         &self,
         qualified_name: &str,
-    ) -> anyhow::Result<(Peer<RoleClient>, String, u64)> {
+    ) -> anyhow::Result<(Peer<RoleClient>, String, u64, Option<usize>)> {
         if !is_mcp_tool_name(qualified_name) {
             anyhow::bail!("不是 MCP 工具: {qualified_name}");
         }
@@ -1010,7 +1013,8 @@ impl McpHub {
         }
 
         let timeout_secs = rs.config.effective_tool_timeout_secs();
-        Ok((rs.peer.clone(), native, timeout_secs))
+        let output_token_limit = rs.config.tool_output_token_limit(&native);
+        Ok((rs.peer.clone(), native, timeout_secs, output_token_limit))
     }
 
     fn resolve_broker_peer(
@@ -1074,8 +1078,16 @@ impl McpHub {
         let qualified_name = qualified_name.to_string();
         let args = args.clone();
         Box::pin(async move {
-            let (peer, native, timeout_secs) = resolved?;
-            call_tool_with_peer(&peer, &qualified_name, &native, &args, timeout_secs).await
+            let (peer, native, timeout_secs, output_token_limit) = resolved?;
+            call_tool_with_peer(
+                &peer,
+                &qualified_name,
+                &native,
+                &args,
+                timeout_secs,
+                output_token_limit,
+            )
+            .await
         })
     }
 
@@ -1128,7 +1140,10 @@ impl McpHub {
 const MAX_MEDIA_ASSETS: usize = 20;
 
 /// 将 MCP content blocks 转为结构化 ToolOutput（保留 image/media 信息）。
-fn content_to_tool_output(blocks: &[ContentBlock]) -> types::ToolOutput {
+fn content_to_tool_output(
+    blocks: &[ContentBlock],
+    output_token_limit: Option<usize>,
+) -> types::ToolOutput {
     let mut text_parts = Vec::new();
     let mut media_assets = Vec::new();
 
@@ -1179,7 +1194,11 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> types::ToolOutput {
     } else {
         text_parts.join("\n")
     };
-    let text = types::truncate_tool_result(&text, types::MAX_TOOL_RESULT_BYTES);
+    let max_bytes = output_token_limit
+        .map(|tokens| tokens.saturating_mul(24).div_ceil(5))
+        .unwrap_or(types::MAX_TOOL_RESULT_BYTES)
+        .min(types::MAX_TOOL_RESULT_BYTES);
+    let text = types::truncate_tool_result(&text, max_bytes);
 
     if media_assets.is_empty() {
         types::ToolOutput::Text(text)
@@ -1191,11 +1210,6 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> types::ToolOutput {
     }
 }
 
-/// 向下兼容的纯文本格式化（保持旧接口）。
-fn format_content(blocks: &[ContentBlock]) -> String {
-    content_to_tool_output(blocks).into_text()
-}
-
 /// 使用已解析的 `Peer` 执行 MCP 工具调用（lock-free，供 `Arc<Mutex<McpHub>>` 场景使用）。
 ///
 /// `qualified_name` 仅用于错误消息；`native` 是原生工具名（不含 `mcp__` 前缀）。
@@ -1205,6 +1219,7 @@ pub async fn call_tool_with_peer(
     native: &str,
     args: &Value,
     timeout_secs: u64,
+    output_token_limit: Option<usize>,
 ) -> anyhow::Result<types::ToolOutput> {
     let arguments = mcp_tool_arguments(args)?;
 
@@ -1222,20 +1237,21 @@ pub async fn call_tool_with_peer(
     .with_context(|| format!("call_tool {qualified_name}"))?;
 
     if result.is_error == Some(true) {
-        let msg = format_content(&result.content);
-        anyhow::bail!(
-            "MCP tool error: {}",
-            types::truncate_tool_result(&msg, types::MAX_TOOL_RESULT_BYTES)
-        );
+        let msg = content_to_tool_output(&result.content, output_token_limit).into_text();
+        anyhow::bail!("MCP tool error: {msg}");
     }
 
     if let Some(structured) = result.structured_content {
+        let max_bytes = output_token_limit
+            .map(|tokens| tokens.saturating_mul(24).div_ceil(5))
+            .unwrap_or(types::MAX_TOOL_RESULT_BYTES)
+            .min(types::MAX_TOOL_RESULT_BYTES);
         return Ok(types::ToolOutput::Text(types::truncate_tool_result(
             &structured.to_string(),
-            types::MAX_TOOL_RESULT_BYTES,
+            max_bytes,
         )));
     }
-    Ok(content_to_tool_output(&result.content))
+    Ok(content_to_tool_output(&result.content, output_token_limit))
 }
 
 /// 按配置建立 MCP 连接并拉取工具列表。
@@ -1775,6 +1791,24 @@ fn mcp_tool_arguments(args: &Value) -> anyhow::Result<Option<serde_json::Map<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn per_tool_output_limit_truncates_mcp_text() {
+        let output = content_to_tool_output(
+            &[ContentBlock::Text(rmcp::model::TextContent::new(
+                "x".repeat(100),
+            ))],
+            Some(1),
+        );
+        assert!(output.text().starts_with("xxxxx"));
+        assert!(output.text().contains("[truncated]"));
+        assert!(content_to_tool_output(
+            &[ContentBlock::Text(rmcp::model::TextContent::new("short"))],
+            Some(10),
+        )
+        .text()
+        .eq("short"));
+    }
 
     fn stdio_server(command: &str) -> McpServerConfig {
         McpServerConfig {

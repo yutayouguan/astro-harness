@@ -1609,18 +1609,41 @@ pub(super) fn resolve_model_targets_for_model(
     Ok(resolved)
 }
 
+fn supports_inherited_service_tier(backend_id: &str) -> bool {
+    matches!(
+        backend_id.trim().to_ascii_lowercase().as_str(),
+        "openai" | "codex"
+    )
+}
+
 async fn run_request(
     request: &RunAgentTurnRequest,
     interrupt: Arc<AgentThreadControl>,
     prior_turn_was_interrupted: bool,
 ) -> anyhow::Result<String> {
+    let targets = resolve_model_targets_for_model(
+        &request.runtime.model_targets,
+        request.runtime.model_request.model.as_deref(),
+    )?;
+    let effective_service_tier = request.runtime.root_service_tier.clone().filter(|_| {
+        targets
+            .first()
+            .is_some_and(|target| supports_inherited_service_tier(&target.backend_id))
+    });
     let mut config = Config::with_defaults(request.memory_dir.clone());
     config.soul = format!(
         "{}\n\n## Subagent developer instructions\n{}",
         config.soul, request.runtime.developer_instructions
     );
+    let mut inherited_provider_params = serde_json::Map::new();
     if let Some(effort) = request.runtime.model_request.reasoning_effort.as_deref() {
-        config.additional_params = serde_json::json!({ "reasoning_effort": effort });
+        inherited_provider_params.insert("reasoning_effort".into(), effort.into());
+    }
+    if let Some(service_tier) = effective_service_tier.as_deref() {
+        inherited_provider_params.insert("service_tier".into(), service_tier.into());
+    }
+    if !inherited_provider_params.is_empty() {
+        config.additional_params = serde_json::Value::Object(inherited_provider_params);
     }
     let mut session = Session::with_session_id_for_agent_thread(
         config,
@@ -1667,11 +1690,13 @@ async fn run_request(
         "startup"
     });
 
-    let targets = resolve_model_targets_for_model(
-        &request.runtime.model_targets,
-        request.runtime.model_request.model.as_deref(),
-    )?;
     session.set_model_targets(targets.clone());
+    let mut provider_options = session.thread_provider_options();
+    if let Some(effort) = request.runtime.model_request.reasoning_effort.as_deref() {
+        provider_options.reasoning_effort = effort.to_string();
+    }
+    provider_options.service_tier = effective_service_tier;
+    session.set_thread_provider_options(provider_options);
     if let (Some(spec), Some(primary)) = (request.runtime.model_spec.as_ref(), targets.first()) {
         if spec.provider_id == primary.backend_id && spec.model_id == primary.model {
             session.set_model(spec.clone());
@@ -1758,10 +1783,18 @@ mod tests {
     use crate::streaming::ResponsesOverride;
 
     use super::{
-        sandbox_profile, wait_for_termination, AckSubscribeHook, ActiveAgentTurn,
-        AgentRuntimeManager, CloseThreadStart, RunAgentTurnRequest, RuntimeSlot,
+        sandbox_profile, supports_inherited_service_tier, wait_for_termination, AckSubscribeHook,
+        ActiveAgentTurn, AgentRuntimeManager, CloseThreadStart, RunAgentTurnRequest, RuntimeSlot,
         StartTurnOwnerGuard, StartingAgentTurn,
     };
+
+    #[test]
+    fn inherited_service_tier_is_limited_to_supported_backends() {
+        assert!(supports_inherited_service_tier("openai"));
+        assert!(supports_inherited_service_tier("Codex"));
+        assert!(!supports_inherited_service_tier("deepseek"));
+        assert!(!supports_inherited_service_tier("ollama"));
+    }
 
     #[test]
     fn custom_parent_sandbox_profile_is_preserved_for_child_session() {
@@ -2004,6 +2037,7 @@ mod tests {
                     base_url: "http://127.0.0.1.invalid".into(),
                 }],
                 model_spec: None,
+                root_service_tier: None,
                 project_root: None,
                 workspace_roots: Vec::new(),
                 hook_runtime: None,

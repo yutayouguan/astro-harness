@@ -452,6 +452,7 @@ struct ThreadControls {
 pub struct ThreadProviderOptions {
     pub thinking_enabled: bool,
     pub reasoning_effort: String,
+    pub service_tier: Option<String>,
     pub max_tokens: u32,
 }
 
@@ -460,6 +461,7 @@ impl Default for ThreadProviderOptions {
         Self {
             thinking_enabled: false,
             reasoning_effort: "high".into(),
+            service_tier: None,
             max_tokens: 8192,
         }
     }
@@ -1009,6 +1011,10 @@ impl Session {
             state.temperature = temperature;
         }
         if let Some(additional_params) = update.additional_params {
+            state.thread_provider_options.service_tier = additional_params
+                .get("service_tier")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
             state.additional_params = additional_params;
         }
         if update.thinking_enabled.is_some()
@@ -1045,6 +1051,7 @@ impl Session {
             temperature: state.temperature,
             thinking_enabled: state.thread_provider_options.thinking_enabled,
             reasoning_effort: state.thread_provider_options.reasoning_effort.clone(),
+            service_tier: state.thread_provider_options.service_tier.clone(),
             max_tokens: state.thread_provider_options.max_tokens,
         })
     }
@@ -2198,6 +2205,7 @@ impl Session {
                 icon: "plug",
                 needs_confirmation,
                 mcp_approval: Some(mcp_approval),
+                output_token_limit: spec.output_token_limit,
                 ..if defer_mcp_tools {
                     ToolEntry::lifecycle_defaults().deferred()
                 } else {

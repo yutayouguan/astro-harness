@@ -112,7 +112,7 @@ test("preserves server and per-tool approval modes", () => {
           command: "npx",
           default_tools_approval_mode: "writes",
           tools: {
-            read: { approval_mode: "approve" },
+            read: { approval_mode: "approve", output_token_limit: 300 },
             publish: { enabled: false, approval_mode: "prompt" },
             legacy: true,
           },
@@ -123,6 +123,7 @@ test("preserves server and per-tool approval modes", () => {
 
   assert.equal(server.defaultToolsApprovalMode, "writes");
   assert.equal(server.toolApprovalModes.read, "approve");
+  assert.equal(server.toolOutputTokenLimits.read, 300);
   assert.equal(server.toolApprovalModes.publish, "prompt");
   assert.equal(isMcpToolEnabled(server, "publish"), false);
   assert.equal(isMcpToolEnabled(server, "legacy"), true);
