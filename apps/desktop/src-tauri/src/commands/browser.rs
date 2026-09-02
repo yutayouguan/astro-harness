@@ -208,15 +208,8 @@ pub fn browser_live_webview_control(
     if !is_live_browser_webview(label) {
         return Err("非法的实时浏览器 WebView 标识".into());
     }
-    let main_window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "主窗口不存在".to_string())?;
-    let webview = main_window
-        .as_ref()
-        .window()
-        .webviews()
-        .into_iter()
-        .find(|webview| webview.label() == label)
+    let webview = app
+        .get_webview(label)
         .ok_or_else(|| "实时浏览器 WebView 不存在".to_string())?;
     match request.action.trim() {
         "navigate" => {

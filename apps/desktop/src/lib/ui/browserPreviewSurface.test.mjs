@@ -126,6 +126,8 @@ test("browser dock uses a native child WebView with a screenshot fallback", () =
   assert.match(hook, /browser-live-page-load/);
   assert.match(hook, /browser_live_webview_control/);
   assert.match(commands, /fn browser_live_webview_control/);
+  assert.match(commands, /app\s*\.get_webview\(label\)/);
+  assert.doesNotMatch(commands, /get_webview_window\("main"\)/);
   assert.match(commands, /fn live_browser_plugin/);
   assert.match(commands, /validate_live_webview_url/);
   for (const permission of [
