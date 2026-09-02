@@ -87,6 +87,7 @@ import {
   isParallelTaskActive,
 } from "../../lib/chat/parallelTasks";
 import { projectCanonicalTimelineSegments } from "../../lib/chat/chatTimeline";
+import { pendingAsyncQuestionsAt } from "../../lib/chat/asyncAgentUpdate";
 import { isLiveActivityStatus } from "../../lib/chat/toolActivityStatus";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
@@ -2801,17 +2802,10 @@ export default function ChatView({
               onScroll={updateConversationScrollState}
             >
               {messages.map((m, index) => {
-                const pendingAsyncQuestions =
-                  Boolean(m.asyncQuestions?.length) &&
-                  !messages
-                    .slice(index + 1)
-                    .some(
-                      (message) =>
-                        message.role === "user" ||
-                        Boolean(message.asyncQuestions?.length),
-                    )
-                    ? m.asyncQuestions
-                    : undefined;
+                const pendingAsyncQuestions = pendingAsyncQuestionsAt(
+                  messages,
+                  index,
+                );
                 const isStreamingBubble =
                   m.role === "assistant" &&
                   !m.error &&

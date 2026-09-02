@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { upsertAsyncAgentUpdate } from "./asyncAgentUpdate.ts";
+import {
+  pendingAsyncQuestionsAt,
+  upsertAsyncAgentUpdate,
+} from "./asyncAgentUpdate.ts";
 import type { ConversationEntry } from "../../types.ts";
 
 test("async message is inserted before the active response and deduplicated", () => {
@@ -51,4 +54,28 @@ test("async message preserves structured questions across replay", () => {
   );
 
   assert.deepEqual(inserted[0]?.asyncQuestions, questions);
+});
+
+test("only the latest unanswered async question group stays interactive", () => {
+  const first: ConversationEntry = {
+    id: "first",
+    role: "assistant",
+    content: "First?",
+    asyncQuestions: [{ title: "First?" }],
+  };
+  const latest: ConversationEntry = {
+    id: "latest",
+    role: "assistant",
+    content: "Latest?",
+    asyncQuestions: [{ title: "Latest?" }],
+  };
+  assert.equal(pendingAsyncQuestionsAt([first, latest], 0), undefined);
+  assert.deepEqual(pendingAsyncQuestionsAt([first, latest], 1), latest.asyncQuestions);
+  assert.equal(
+    pendingAsyncQuestionsAt(
+      [latest, { id: "reply", role: "user", content: "answer" }],
+      0,
+    ),
+    undefined,
+  );
 });

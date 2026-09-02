@@ -37,3 +37,17 @@ export function upsertAsyncAgentUpdate(
   if (active < 0) return [...messages, message];
   return [...messages.slice(0, active), message, ...messages.slice(active)];
 }
+
+/** Only the newest unanswered asynchronous question group remains interactive. */
+export function pendingAsyncQuestionsAt(
+  messages: ConversationEntry[],
+  index: number,
+): AsyncUserInputQuestion[] | undefined {
+  const questions = messages[index]?.asyncQuestions;
+  if (!questions?.length) return undefined;
+  const supersededOrAnswered = messages.slice(index + 1).some(
+    (message) =>
+      message.role === "user" || Boolean(message.asyncQuestions?.length),
+  );
+  return supersededOrAnswered ? undefined : questions;
+}
