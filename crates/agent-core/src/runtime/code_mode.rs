@@ -1013,9 +1013,11 @@ mod tests {
         )
         .unwrap();
 
-        assert!(tokio::time::timeout(Duration::from_millis(20), event_receiver.recv())
-            .await
-            .is_err());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), event_receiver.recv())
+                .await
+                .is_err()
+        );
         control.cancel().await;
         let event = tokio::time::timeout(Duration::from_secs(2), event_receiver.recv())
             .await
