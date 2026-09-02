@@ -35,11 +35,6 @@
   transition-delay: 0s;
 }
 
-/* 原生子 WebView 位于 DOM 浮层之上；菜单展开时预留高度，确保每个操作都能点击。 */
-.browser-dock.has-actions-menu {
-  padding-top: calc(var(--titlebar-control-row-h, 50px) + 112px);
-}
-
 .chat-layout-with-right.is-browser-expanded
   > .chat-main
   .composer-shell.is-capsule {
@@ -73,6 +68,16 @@
 .browser-dock-overflow {
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+.browser-dock-drag-region {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--titlebar-control-row-h);
+  cursor: default;
 }
 
 .browser-dock-header,

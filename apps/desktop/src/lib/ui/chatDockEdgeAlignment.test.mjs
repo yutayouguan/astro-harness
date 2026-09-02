@@ -10,6 +10,10 @@ const primitives = await readFile(
   new URL("../../styles/tokens/primitive.css", import.meta.url),
   "utf8",
 );
+const shellStyles = await readFile(
+  new URL("../../styles/features/shell/shell.css", import.meta.url),
+  "utf8",
+);
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -45,6 +49,13 @@ test("browser focus tabs clear the native sidebar control", () => {
   assert.match(
     headerStyles,
     /\.sidebar\.is-pinned\.is-labels\)[\s\S]*?\.browser-dock-header\s*\{\s*left:\s*16px;/,
+  );
+});
+
+test("browser titlebar controls receive pointer input above the drag surface", () => {
+  assert.match(
+    shellStyles,
+    /\.app-shell\.has-browser-surface > \.native-drag-region\s*\{\s*pointer-events:\s*none;/,
   );
 });
 

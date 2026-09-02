@@ -112,11 +112,14 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
 
   assert.doesNotMatch(appSource, /browserExpanded/);
   assert.match(appSource, /has-browser is-browser-expanded/);
+  assert.match(appSource, /has-browser-surface/);
   assert.match(appSource, /composerPresentation=\{/);
   assert.match(appSource, /onComposerHeightChange=\{/);
   assert.match(appSource, /onComposerOverlayOpenChange=\{/);
   assert.doesNotMatch(browserDock, /Maximize2/);
   assert.doesNotMatch(browserDock, /Minimize2/);
+  assert.match(browserDock, /onTitleMouseDown/);
+  assert.match(browserDock, /onTitleDoubleClick/);
   assert.match(chatView, /composerPresentation === "capsule"/);
   assert.match(chatView, /Boolean\(workspaceContent\)/);
   assert.doesNotMatch(chatView, /capsuleComposerExpanded/);

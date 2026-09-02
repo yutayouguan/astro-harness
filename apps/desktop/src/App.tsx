@@ -1150,7 +1150,7 @@ export default function App() {
   return (
     <div
       ref={shellRef}
-      className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}`}
+      className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}${activeChatRightDock === "browser" ? " has-browser-surface" : ""}`}
       data-tone={shellTone}
       data-color-style={colorStyle}
       data-sidebar-state={sidebar.sidebarVisible ? "visible" : "collapsed"}
@@ -2333,6 +2333,8 @@ export default function App() {
                       open={browserDockPresence.visible}
                       preview={chat.browserPreview}
                       onControl={chat.controlBrowser}
+                      onTitleMouseDown={winChrome.onTitleMouseDown}
+                      onTitleDoubleClick={winChrome.onTitleDoubleClick}
                       onClose={() => {
                         setBrowserComposerOverlayOpen(false);
                         setBrowserDockOpen(false);

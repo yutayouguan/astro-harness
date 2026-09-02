@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent,
   type WheelEvent,
 } from "react";
@@ -37,6 +38,8 @@ type Props = {
   open: boolean;
   preview: BrowserPreview | null;
   onControl: BrowserControl;
+  onTitleMouseDown?: (event: ReactMouseEvent) => void;
+  onTitleDoubleClick?: (event: ReactMouseEvent) => void;
   onClose: () => void;
 };
 
@@ -50,6 +53,8 @@ export default function BrowserDock({
   open,
   preview,
   onControl,
+  onTitleMouseDown,
+  onTitleDoubleClick,
   onClose,
 }: Props) {
   const { t } = useI18n();
@@ -86,6 +91,7 @@ export default function BrowserDock({
 
   const liveWebview = useBrowserLiveWebviews({
     active: open,
+    occluded: actionsOpen,
     preview,
     viewportRef,
     onUrlChange: setAddress,
@@ -245,10 +251,16 @@ export default function BrowserDock({
 
   return (
     <aside
-      className={`browser-dock${open ? " is-open" : ""}${actionsOpen ? " has-actions-menu" : ""}`}
+      className={`browser-dock${open ? " is-open" : ""}`}
       aria-label={t("chat.browserDock.title")}
       aria-hidden={!open}
     >
+      <div
+        className="browser-dock-drag-region"
+        onMouseDown={onTitleMouseDown}
+        onDoubleClick={onTitleDoubleClick}
+        aria-hidden
+      />
       <header className="browser-dock-header">
         <div
           className="browser-tabs"
@@ -471,7 +483,7 @@ export default function BrowserDock({
             {t("chat.browserDock.loading")}
           </div>
         ) : null}
-        {liveWebview.isLive && preview?.url ? (
+        {liveWebview.isLive && preview?.url && !actionsOpen ? (
           <div className="browser-live-placeholder" aria-hidden />
         ) : screenshot ? (
           <img

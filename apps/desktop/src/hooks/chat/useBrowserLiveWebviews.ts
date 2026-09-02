@@ -46,6 +46,7 @@ type ManagedWebview = {
 
 type LiveWebviewOptions = {
   active?: boolean;
+  occluded?: boolean;
   preview: BrowserPreview | null;
   viewportRef: RefObject<HTMLDivElement | null>;
   onUrlChange: (url: string) => void;
@@ -78,6 +79,7 @@ function viewportBounds(viewport: HTMLDivElement) {
 
 export function useBrowserLiveWebviews({
   active = true,
+  occluded = false,
   preview,
   viewportRef,
   onUrlChange,
@@ -88,10 +90,12 @@ export function useBrowserLiveWebviews({
     isTauri() ? "idle" : "unsupported",
   );
   const previewRef = useRef(preview);
+  const occludedRef = useRef(occluded);
   const callbacksRef = useRef({ onUrlChange, onNavigate, onError });
   const scheduleRef = useRef<() => void>(() => undefined);
 
   previewRef.current = preview;
+  occludedRef.current = occluded;
   callbacksRef.current = { onUrlChange, onNavigate, onError };
 
   useEffect(() => {
@@ -241,6 +245,10 @@ export function useBrowserLiveWebviews({
         }
         entry.ready = true;
         if (entry.failedUrl) return;
+        if (occludedRef.current) {
+          entry.visible = false;
+          void webview.hide().catch(reportError);
+        }
         setStatus("loading");
         scheduleRef.current();
       });
@@ -330,7 +338,10 @@ export function useBrowserLiveWebviews({
 
       for (const [label, candidate] of managed) {
         if (!candidate.ready) continue;
-        const shouldShow = label === activeLabel && !candidate.failedUrl;
+        const shouldShow =
+          !occludedRef.current &&
+          label === activeLabel &&
+          !candidate.failedUrl;
         if (candidate.visible !== shouldShow) {
           candidate.visible = shouldShow;
           void (
@@ -512,6 +523,7 @@ export function useBrowserLiveWebviews({
     scheduleRef.current();
   }, [
     active,
+    occluded,
     preview?.sessionId,
     preview?.activeTabId,
     preview?.url,

@@ -41,6 +41,7 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(dock, /disabled=\{!address\.trim\(\)\}/);
   assert.match(dock, /open \? " is-open" : ""/);
   assert.match(dock, /active: open/);
+  assert.match(dock, /occluded: actionsOpen/);
   assert.doesNotMatch(dock, /browser-dock-resizer/);
   assert.doesNotMatch(dock, /browser-dock-expand/);
   assert.doesNotMatch(dock, /BROWSER_DOCK_WIDTH_KEY/);
@@ -58,6 +59,13 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(dock, /browser-dock-overflow-trigger/);
   assert.match(dock, /role="menu"/);
   assert.match(dock, /MoreVertical/);
+  assert.match(dock, /className="browser-dock-drag-region"/);
+  assert.doesNotMatch(dock, /has-actions-menu/);
+
+  const liveWebviews = source("../../hooks/chat/useBrowserLiveWebviews.ts");
+  assert.match(liveWebviews, /occludedRef\.current = occluded/);
+  assert.match(liveWebviews, /!occludedRef\.current &&/);
+  assert.match(liveWebviews, /entry\.webview\.hide\(\)/);
 });
 
 test("browser dock uses a native child WebView with a screenshot fallback", () => {
