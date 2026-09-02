@@ -28,6 +28,8 @@ pub struct TurnSnapshot {
 pub struct ThreadSnapshot {
     pub thread_id: String,
     pub status: String,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub turns: Vec<TurnSnapshot>,
     pub active_turn: Option<TurnSnapshot>,
     pub pending_background_turn_ids: Vec<String>,

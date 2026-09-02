@@ -546,6 +546,8 @@ pub async fn run_listener_commands(
                     ThreadSnapshot {
                         thread_id: thread_id.clone(),
                         status: state.status.clone(),
+                        model: None,
+                        reasoning_effort: None,
                         turns: if include_turns {
                             state.history.completed_turns().to_vec()
                         } else {

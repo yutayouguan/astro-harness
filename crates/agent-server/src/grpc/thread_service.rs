@@ -84,6 +84,8 @@ fn snapshot_to_proto(snapshot: ThreadSnapshot) -> proto::ThreadSnapshot {
     proto::ThreadSnapshot {
         thread_id: snapshot.thread_id,
         status: snapshot.status,
+        model: snapshot.model,
+        reasoning_effort: snapshot.reasoning_effort,
         turns: snapshot.turns.into_iter().map(turn_to_proto).collect(),
         has_active_turn: active_turn.is_some(),
         active_turn,
@@ -153,9 +155,19 @@ pub(crate) async fn resume(
             reply,
         })
         .map_err(|_| Status::unavailable("thread listener stopped"))?;
-    receive
+    let mut snapshot = receive
         .await
-        .map_err(|_| Status::unavailable("thread listener stopped"))
+        .map_err(|_| Status::unavailable("thread listener stopped"))?;
+    let session = managed.runtime.session();
+    snapshot.model = session
+        .model_targets()
+        .first()
+        .map(|target| target.model.clone());
+    snapshot.reasoning_effort = snapshot.model.as_ref().and_then(|_| {
+        let effort = session.thread_provider_options().reasoning_effort;
+        (!effort.trim().is_empty()).then_some(effort)
+    });
+    Ok(snapshot)
 }
 
 fn submit_turn_response(
@@ -641,11 +653,15 @@ mod tests {
         let mapped = snapshot_to_proto(ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "idle".into(),
+            model: Some("gpt-5.6".into()),
+            reasoning_effort: Some("high".into()),
             turns: vec![],
             active_turn: None,
             pending_background_turn_ids: vec!["turn-1".into(), "turn-2".into()],
         });
         assert_eq!(mapped.pending_background_turn_ids, vec!["turn-1", "turn-2"]);
+        assert_eq!(mapped.model.as_deref(), Some("gpt-5.6"));
+        assert_eq!(mapped.reasoning_effort.as_deref(), Some("high"));
     }
 
     fn valid_chat_request() -> proto::ChatRequest {
@@ -675,6 +691,7 @@ mod tests {
                     session_id: "api-mode-thread".into(),
                     provider: "deepseek".into(),
                     model: "deepseek-v4-flash".into(),
+                    reasoning_effort: "max".into(),
                     tool_mode: "code_mode_only".into(),
                     chat_fallbacks: vec![
                         proto::ChatFallbackTarget {
@@ -702,6 +719,16 @@ mod tests {
             managed.runtime.session().model_spec().unwrap().tool_mode,
             Some(types::ToolMode::CodeModeOnly)
         );
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("metadata-connection".into())
+            .await;
+        let snapshot = resume(&managed, generation.key().clone(), false)
+            .await
+            .expect("resume metadata snapshot");
+        assert_eq!(snapshot.model.as_deref(), Some("deepseek-v4-flash"));
+        assert_eq!(snapshot.reasoning_effort.as_deref(), Some("max"));
+        service.connections.remove_generation(&generation).await;
 
         managed
             .runtime

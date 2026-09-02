@@ -295,6 +295,8 @@ message ThreadSnapshot {
   bool has_active_turn = 5;
   repeated string pending_background_turn_ids = 6;
   reserved 7;
+  optional string model = 8;
+  optional string reasoning_effort = 9;
 }
 
 message ThreadTurn {

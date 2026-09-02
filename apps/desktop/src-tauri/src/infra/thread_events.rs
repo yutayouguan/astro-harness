@@ -2686,6 +2686,8 @@ async fn recover_snapshot_extensions(
 struct ThreadSnapshotDto<'a> {
     thread_id: &'a str,
     status: &'a str,
+    model: Option<&'a str>,
+    reasoning_effort: Option<&'a str>,
     turns: Vec<ThreadTurnDto<'a>>,
     active_turn: Option<ThreadTurnDto<'a>>,
     has_active_turn: bool,
@@ -2745,6 +2747,8 @@ fn snapshot_dto(snapshot: &proto::ThreadSnapshot) -> ThreadSnapshotDto<'_> {
     ThreadSnapshotDto {
         thread_id: &snapshot.thread_id,
         status: &snapshot.status,
+        model: snapshot.model.as_deref(),
+        reasoning_effort: snapshot.reasoning_effort.as_deref(),
         turns: snapshot.turns.iter().map(turn_dto).collect(),
         active_turn: snapshot.active_turn.as_ref().map(turn_dto),
         has_active_turn: snapshot.has_active_turn,
@@ -3436,6 +3440,8 @@ mod tests {
         let mut snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "idle".into(),
+            model: None,
+            reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
                 id: "turn-1".into(),
                 status: "completed".into(),
@@ -3487,6 +3493,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "idle".into(),
+            model: None,
+            reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
                 id: "turn-1".into(),
                 status: "completed".into(),
@@ -3545,6 +3553,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            model: None,
+            reasoning_effort: None,
             turns: vec![],
             active_turn: Some(proto::ThreadTurn {
                 id: "turn-1".into(),
@@ -3567,6 +3577,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            model: None,
+            reasoning_effort: None,
             turns: vec![],
             active_turn: Some(proto::ThreadTurn {
                 id: "turn-1".into(),
@@ -3610,6 +3622,8 @@ mod tests {
         let snapshots = vec![proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            model: None,
+            reasoning_effort: None,
             turns: vec![],
             active_turn: None,
             has_active_turn: false,
@@ -3785,6 +3799,8 @@ mod tests {
         let mut snapshot = proto::ThreadSnapshot {
             thread_id: "session-offline".into(),
             status: "idle".into(),
+            model: None,
+            reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
                 id: "turn-offline".into(),
                 status: "completed".into(),
@@ -5766,6 +5782,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "completed".into(),
+            model: None,
+            reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
                 id: "turn-1".into(),
                 status: "completed".into(),
@@ -5813,6 +5831,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            model: None,
+            reasoning_effort: None,
             turns: vec![],
             active_turn: Some(proto::ThreadTurn {
                 id: "turn-1".into(),
@@ -6021,6 +6041,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "errored".into(),
+            model: Some("gpt-5.6".into()),
+            reasoning_effort: Some("high".into()),
             turns: vec![proto::ThreadTurn {
                 id: "turn-1".into(),
                 status: "failed".into(),
@@ -6044,6 +6066,8 @@ mod tests {
         let value = serde_json::to_value(snapshot_dto(&snapshot)).unwrap();
         assert_eq!(value["turns"][0]["items"][0]["id"], "tool-1");
         assert_eq!(value["turns"][0]["error"]["errorType"], "provider");
+        assert_eq!(value["model"], "gpt-5.6");
+        assert_eq!(value["reasoningEffort"], "high");
     }
 
     #[test]
