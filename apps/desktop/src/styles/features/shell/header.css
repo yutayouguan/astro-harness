@@ -1504,6 +1504,30 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
   padding: 0 var(--page-body-inline-padding) 22px;
 }
 
+/* Full-canvas tools should meet the pinned sidebar directly. Animate the
+   shared content inset so browser focus mode and the terminal drawer expand
+   with the same physical motion as the rest of the dock surface. */
+.content-pane > .page-body.page-body--chat {
+  transition: padding-left 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.content-pane
+  > .page-body.page-body--chat:has(
+    > .chat-layout-with-right.is-browser-expanded
+  ),
+.content-pane
+  > .page-body.page-body--chat:has(
+    > .chat-layout-with-right > .chat-main > .terminal-dock.is-open
+  ) {
+  padding-left: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content-pane > .page-body.page-body--chat {
+    transition: none;
+  }
+}
+
 /* 无页头的功能页：自己补出标题栏安全区 */
 .page-body--bare {
   padding-top: 18px;
