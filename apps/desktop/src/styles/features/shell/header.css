@@ -11,6 +11,12 @@
   app-region: no-drag;
 }
 
+/* Keep native traffic lights, the sidebar control, title, and header actions
+   on one optical row. The native controls establish this vertical center. */
+.titlebar-sidebar-toggle {
+  top: 6px;
+}
+
 /* 对话页标题栏默认只是无形的拖拽与控件层；消息滚到其下方时才增加可读性玻璃。
    标题栏不参与 content-pane 的 flex 高度分配，消息滚动视口因此可以延伸到窗顶；
    空白区域透传滚轮和窗口拖动，只有标题与操作控件恢复命中。 */
@@ -33,9 +39,10 @@
   right: 0;
   left: 0;
   gap: 12px;
-  min-height: 42px;
+  min-height: var(--titlebar-control-row-h);
   box-sizing: border-box;
-  padding: 4px 16px;
+  padding: 0 16px;
+  padding-inline-start: var(--window-chrome-safe-left);
   border: 0;
   border-bottom: 0.5px solid var(--chat-header-divider);
   border-radius: 0;
@@ -44,6 +51,16 @@
   backdrop-filter: var(--chat-header-filter);
   -webkit-backdrop-filter: var(--chat-header-filter);
   pointer-events: none;
+}
+
+.body-row:has(> .sidebar.is-pinned.is-icons) .content-header--chat {
+  padding-inline-start: calc(
+    var(--window-chrome-safe-left) - var(--sidebar-w)
+  );
+}
+
+.body-row:has(> .sidebar.is-pinned.is-labels) .content-header--chat {
+  padding-inline-start: 16px;
 }
 
 .content-header--chat.has-content-underlay {
@@ -1506,6 +1523,11 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
    native window chrome; content surfaces no longer carry a global safe inset. */
 .chat-layout-with-right.is-browser-expanded .browser-dock-title {
   left: var(--window-chrome-safe-left);
+  height: var(--titlebar-control-row-h);
+}
+
+.content-pane--chat .browser-dock-title {
+  height: var(--titlebar-control-row-h);
 }
 
 .body-row:has(> .sidebar.is-pinned.is-icons)
@@ -1517,7 +1539,7 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
 .body-row:has(> .sidebar.is-pinned.is-labels)
   .chat-layout-with-right.is-browser-expanded
   .browser-dock-title {
-  left: 12px;
+  left: 16px;
 }
 
 /* 无页头的功能页：自己补出标题栏安全区 */

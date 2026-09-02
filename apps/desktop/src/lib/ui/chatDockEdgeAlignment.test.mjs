@@ -6,6 +6,10 @@ const headerStyles = await readFile(
   new URL("../../styles/features/shell/header.css", import.meta.url),
   "utf8",
 );
+const primitives = await readFile(
+  new URL("../../styles/tokens/primitive.css", import.meta.url),
+  "utf8",
+);
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -40,6 +44,22 @@ test("browser focus title alone clears the native sidebar control", () => {
   );
   assert.match(
     headerStyles,
-    /\.sidebar\.is-pinned\.is-labels\)[\s\S]*?\.browser-dock-title\s*\{\s*left:\s*12px;/,
+    /\.sidebar\.is-pinned\.is-labels\)[\s\S]*?\.browser-dock-title\s*\{\s*left:\s*16px;/,
+  );
+});
+
+test("native controls and chat titles share one compact titlebar row", () => {
+  assert.match(primitives, /--titlebar-control-row-h:\s*34px;/);
+  assert.match(
+    headerStyles,
+    /\.titlebar-sidebar-toggle\s*\{\s*top:\s*6px;/,
+  );
+  assert.match(
+    headerStyles,
+    /\.content-header--chat\s*\{[\s\S]*?min-height:\s*var\(--titlebar-control-row-h\);[\s\S]*?padding:\s*0 16px;[\s\S]*?padding-inline-start:\s*var\(--window-chrome-safe-left\);/,
+  );
+  assert.match(
+    headerStyles,
+    /\.content-pane--chat \.browser-dock-title\s*\{\s*height:\s*var\(--titlebar-control-row-h\);/,
   );
 });
