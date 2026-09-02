@@ -46,6 +46,7 @@ type BrowserControl = (
 ) => Promise<unknown>;
 
 type Props = {
+  open: boolean;
   preview: BrowserPreview | null;
   expanded: boolean;
   onControl: BrowserControl;
@@ -63,6 +64,7 @@ function formatBytes(size: number): string {
 }
 
 export default function BrowserDock({
+  open,
   preview,
   expanded,
   onControl,
@@ -117,6 +119,7 @@ export default function BrowserDock({
   );
 
   const liveWebview = useBrowserLiveWebviews({
+    active: open,
     preview,
     viewportRef,
     onUrlChange: setAddress,
@@ -370,8 +373,9 @@ export default function BrowserDock({
   return (
     <aside
       ref={dockRef}
-      className={`browser-dock${resizing ? " is-resizing" : ""}${expanded ? " is-expanded" : ""}`}
+      className={`browser-dock${open ? " is-open" : ""}${resizing ? " is-resizing" : ""}${expanded ? " is-expanded" : ""}`}
       aria-label={t("chat.browserDock.title")}
+      aria-hidden={!open}
       style={{ "--browser-dock-width": `${dockWidth}px` } as CSSProperties}
     >
       {!expanded ? (

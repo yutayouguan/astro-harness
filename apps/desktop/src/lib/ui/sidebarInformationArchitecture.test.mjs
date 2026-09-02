@@ -22,6 +22,10 @@ const sidebarPolishStyles = await readFile(
   ),
   "utf8",
 );
+const shellStyles = await readFile(
+  new URL("../../styles/features/shell/shell.css", import.meta.url),
+  "utf8",
+);
 const unifiedColorStyles = await readFile(
   new URL("../../styles/tokens/unified-color.css", import.meta.url),
   "utf8",
@@ -114,6 +118,22 @@ test("project, automation, and recent sections keep distinct responsibilities", 
     /<span className="sidebar-section-title">[\s\S]*?<\/span>[\s\S]*?<ChevronRight/,
     "section chevrons should follow their labels",
   );
+});
+
+test("pinned sidebar reserves layout space with the project drawer motion curve", () => {
+  assert.match(
+    shellStyles,
+    /\.body-row:has\(> \.sidebar\.is-pinned\.is-icons\)[\s\S]*?padding-left:\s*var\(--sidebar-w\);/,
+  );
+  assert.match(
+    shellStyles,
+    /\.body-row:has\(> \.sidebar\.is-pinned\.is-labels\)[\s\S]*?padding-left:\s*var\(--sidebar-w-wide\);/,
+  );
+  assert.match(
+    shellStyles,
+    /padding-left 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
+  );
+  assert.match(shellStyles, /visibility 0s linear 300ms/);
 });
 
 test("project folders only expand while sessions own selection", () => {

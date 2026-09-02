@@ -2937,29 +2937,36 @@ impl AstroService for AstroServiceImpl {
                 )))
             }
         };
-        let manager = tools::shared_terminal_sessions();
-        let info = if req.client_token.trim().is_empty() {
-            manager.ensure_shell_with_options(
-                &scope,
-                &cwd,
-                &policy,
-                req.cols.min(u16::MAX.into()) as u16,
-                req.rows.min(u16::MAX.into()) as u16,
-                req.replace_mode_mismatch,
-            )
-        } else {
-            manager.open_desktop_shell(
-                &scope,
-                &cwd,
-                &policy,
-                &req.client_token,
-                req.agent_default,
-                tools::TerminalDimensions {
-                    cols: req.cols.min(u16::MAX.into()) as u16,
-                    rows: req.rows.min(u16::MAX.into()) as u16,
-                },
-            )
-        }
+        // PTY allocation and process startup are synchronous OS operations. Running them on a
+        // Tokio worker can stall the whole embedded gRPC service, which makes a second tab (and
+        // even its subsequent restart request) fail with `Cancelled: Timeout expired`.
+        let info = tokio::task::spawn_blocking(move || {
+            let manager = tools::shared_terminal_sessions();
+            if req.client_token.trim().is_empty() {
+                manager.ensure_shell_with_options(
+                    &scope,
+                    &cwd,
+                    &policy,
+                    req.cols.min(u16::MAX.into()) as u16,
+                    req.rows.min(u16::MAX.into()) as u16,
+                    req.replace_mode_mismatch,
+                )
+            } else {
+                manager.open_desktop_shell(
+                    &scope,
+                    &cwd,
+                    &policy,
+                    &req.client_token,
+                    req.agent_default,
+                    tools::TerminalDimensions {
+                        cols: req.cols.min(u16::MAX.into()) as u16,
+                        rows: req.rows.min(u16::MAX.into()) as u16,
+                    },
+                )
+            }
+        })
+        .await
+        .map_err(|error| Status::internal(format!("terminal startup task failed: {error}")))?
         .map_err(|error| Status::invalid_argument(error.to_string()))?;
         Ok(Response::new(terminal_session_response(info)))
     }
@@ -2996,9 +3003,12 @@ impl AstroService for AstroServiceImpl {
         if req.data.len() > 64 * 1024 {
             return Err(Status::invalid_argument("terminal write exceeds 64 KiB"));
         }
-        tools::shared_terminal_sessions()
-            .write(req.id, &req.data)
-            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        tokio::task::spawn_blocking(move || {
+            tools::shared_terminal_sessions().write(req.id, &req.data)
+        })
+        .await
+        .map_err(|error| Status::internal(format!("terminal write task failed: {error}")))?
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
         Ok(Response::new(Empty {}))
     }
 
@@ -3007,13 +3017,16 @@ impl AstroService for AstroServiceImpl {
         request: Request<TerminalResizeRequest>,
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
-        tools::shared_terminal_sessions()
-            .resize(
+        tokio::task::spawn_blocking(move || {
+            tools::shared_terminal_sessions().resize(
                 req.id,
                 req.cols.min(u16::MAX.into()) as u16,
                 req.rows.min(u16::MAX.into()) as u16,
             )
-            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        })
+        .await
+        .map_err(|error| Status::internal(format!("terminal resize task failed: {error}")))?
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
         Ok(Response::new(Empty {}))
     }
 
@@ -3021,8 +3034,10 @@ impl AstroService for AstroServiceImpl {
         &self,
         request: Request<TerminalIdRequest>,
     ) -> Result<Response<Empty>, Status> {
-        tools::shared_terminal_sessions()
-            .kill(request.into_inner().id)
+        let id = request.into_inner().id;
+        tokio::task::spawn_blocking(move || tools::shared_terminal_sessions().kill(id))
+            .await
+            .map_err(|error| Status::internal(format!("terminal kill task failed: {error}")))?
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
         Ok(Response::new(Empty {}))
     }
@@ -3031,8 +3046,10 @@ impl AstroService for AstroServiceImpl {
         &self,
         request: Request<TerminalIdRequest>,
     ) -> Result<Response<Empty>, Status> {
-        tools::shared_terminal_sessions()
-            .close(request.into_inner().id)
+        let id = request.into_inner().id;
+        tokio::task::spawn_blocking(move || tools::shared_terminal_sessions().close(id))
+            .await
+            .map_err(|error| Status::internal(format!("terminal close task failed: {error}")))?
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
         Ok(Response::new(Empty {}))
     }

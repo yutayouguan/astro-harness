@@ -11,10 +11,17 @@ test("terminal dock is a bottom surface independent from the exclusive right doc
   const css = source("styles/features/chat/terminal-dock.css");
 
   assert.match(app, /terminalDockOpen/);
+  assert.match(app, /const terminalDockPresence = useDeferredPresence/);
   assert.match(app, /<SquareTerminal/);
   assert.match(app, /<TerminalDock/);
+  assert.match(app, /open=\{terminalDockPresence\.visible\}/);
   assert.doesNotMatch(rightDock, /terminal/);
-  assert.match(css, /flex:\s*0 0 var\(--terminal-dock-height\)/);
+  assert.match(css, /\.terminal-dock\s*\{[\s\S]*?flex:\s*0 0 0;/);
+  assert.match(
+    css,
+    /\.terminal-dock\.is-open\s*\{[\s\S]*?flex-basis:\s*var\(--terminal-dock-height\);/,
+  );
+  assert.match(css, /flex-basis 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/);
   assert.match(css, /cursor:\s*ns-resize/);
 });
 
@@ -31,6 +38,7 @@ test("terminal dock uses one shared backend session for input, output, resize an
   assert.match(component, /WRITE_CHUNK_BYTES/);
   assert.match(component, /encoded\.subarray/);
   assert.match(component, /restartGeneration/);
+  assert.match(component, /if \(!open \|\| !host \|\| !projectRoot\) return;/);
   assert.match(component, /restartAfterExitRef/);
   assert.match(component, /<RefreshCw size=\{14\}/);
   assert.doesNotMatch(component, /<Square size=/);

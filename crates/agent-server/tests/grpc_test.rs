@@ -7,7 +7,8 @@ use proto::astro_service_client::AstroServiceClient;
 use proto::astro_service_server::AstroServiceServer;
 use proto::{
     ChatControlAction, ChatControlRequest, ChatRequest, McpReconnectRequest, McpServerListRequest,
-    MemoryQuery, SubmitTurnRequest, SubscribeThreadEventsRequest,
+    MemoryQuery, SubmitTurnRequest, SubscribeThreadEventsRequest, TerminalIdRequest,
+    TerminalOpenRequest,
 };
 use server::grpc::AstroServiceImpl;
 use tempfile::TempDir;
@@ -92,6 +93,68 @@ async fn release_session_runtime_is_idempotent() {
         .await
         .expect("first release");
     client.chat_control(request).await.expect("second release");
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn terminal_can_switch_to_ai_tab_and_restart_without_timing_out() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().to_string_lossy().into_owned();
+    let endpoint = spawn_test_server(dir.path().to_path_buf()).await;
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .expect("connect grpc");
+    let request =
+        |client_token: &str, execution_mode: &str, agent_default: bool| TerminalOpenRequest {
+            scope: root.clone(),
+            cwd: root.clone(),
+            cols: 120,
+            rows: 32,
+            execution_mode: execution_mode.into(),
+            replace_mode_mismatch: false,
+            client_token: client_token.into(),
+            agent_default,
+        };
+
+    let user = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        client.open_terminal(request("user-tab", "system", false)),
+    )
+    .await
+    .expect("user terminal RPC timed out")
+    .expect("open user terminal")
+    .into_inner();
+    let ai = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        client.open_terminal(request("ai-tab", "project", true)),
+    )
+    .await
+    .expect("AI terminal RPC timed out")
+    .expect("open AI terminal")
+    .into_inner();
+
+    client
+        .close_terminal(TerminalIdRequest { id: ai.id })
+        .await
+        .expect("close AI terminal");
+    let restarted = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        client.open_terminal(request("ai-tab", "project", true)),
+    )
+    .await
+    .expect("restarted AI terminal RPC timed out")
+    .expect("restart AI terminal")
+    .into_inner();
+
+    assert_ne!(ai.id, restarted.id);
+    client
+        .close_terminal(TerminalIdRequest { id: user.id })
+        .await
+        .expect("close user terminal");
+    client
+        .close_terminal(TerminalIdRequest { id: restarted.id })
+        .await
+        .expect("close restarted AI terminal");
 }
 
 /// Live：依赖本机 Ollama。未设置 `ASTRO_LIVE_OLLAMA=1` 时直接 return（默认套件仍绿）。

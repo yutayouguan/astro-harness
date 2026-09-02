@@ -77,6 +77,7 @@ import { useShellColorStyle } from "./hooks/app/useShellColorStyle";
 import { useSidebar } from "./hooks/app/useSidebar";
 import { useTheme } from "./hooks/app/useTheme";
 import { useTransientToast } from "./hooks/ui/useTransientToast";
+import { useDeferredPresence } from "./hooks/ui/useDeferredPresence";
 import { useWindowChrome } from "./hooks/app/useWindowChrome";
 import { useI18n } from "./i18n/LocaleContext";
 import type { MessageKey } from "./i18n/messages";
@@ -722,7 +723,8 @@ export default function App() {
   useEffect(() => {
     if (nav !== "chat" || !activeProjectRoot) return;
     const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey)
+        return;
       if (event.key.toLowerCase() !== "j" || event.isComposing) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, [contenteditable='true']")) return;
@@ -1131,6 +1133,12 @@ export default function App() {
     reviewOpen: reviewState != null,
   });
   const hasChatRightDock = activeChatRightDock !== null;
+  const browserDockPresence = useDeferredPresence(
+    activeChatRightDock === "browser",
+  );
+  const terminalDockPresence = useDeferredPresence(
+    terminalDockOpen && Boolean(activeProjectRoot && activeProject),
+  );
 
   useEffect(() => {
     if (activeChatRightDock === "browser") return;
@@ -2291,10 +2299,13 @@ export default function App() {
                           : null
                       }
                     />
-                    {terminalDockOpen && activeProjectRoot && activeProject ? (
+                    {terminalDockPresence.mounted &&
+                    activeProjectRoot &&
+                    activeProject ? (
                       <Suspense fallback={null}>
                         <TerminalDock
                           key={activeProject.id}
+                          open={terminalDockPresence.visible}
                           projectId={activeProject.id}
                           projectName={activeProject.name}
                           projectRoot={activeProjectRoot}
@@ -2314,8 +2325,9 @@ export default function App() {
                     workbench={projectFiles}
                     onWidthChange={setProjectFilesWidth}
                   />
-                  {activeChatRightDock === "browser" ? (
+                  {browserDockPresence.mounted ? (
                     <BrowserDock
+                      open={browserDockPresence.visible}
                       preview={chat.browserPreview}
                       expanded={browserExpanded}
                       onControl={chat.controlBrowser}

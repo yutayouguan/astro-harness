@@ -1154,6 +1154,77 @@ mod tests {
         manager.close(agent.id).unwrap();
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn desktop_can_open_system_then_project_terminal_and_restart_project_terminal() {
+        let dir = tempfile::tempdir().unwrap();
+        let scope = dir.path().canonicalize().unwrap();
+        let manager = TerminalSessionManager::default();
+        let system_policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::DangerFullAccess,
+            &scope,
+            Vec::new(),
+            true,
+        )
+        .unwrap();
+        let project_policy = crate::context::build_command_sandbox_policy_with_roots(
+            dir.path(),
+            &scope,
+            std::slice::from_ref(&scope),
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+
+        let system = manager
+            .open_desktop_shell(
+                &scope,
+                &scope,
+                &system_policy,
+                "user-tab",
+                false,
+                TerminalDimensions {
+                    cols: 120,
+                    rows: 32,
+                },
+            )
+            .unwrap();
+        let project = manager
+            .open_desktop_shell(
+                &scope,
+                &scope,
+                &project_policy,
+                "ai-tab",
+                true,
+                TerminalDimensions {
+                    cols: 120,
+                    rows: 32,
+                },
+            )
+            .unwrap();
+        assert_ne!(system.id, project.id);
+
+        manager.close(project.id).unwrap();
+        let restarted = manager
+            .open_desktop_shell(
+                &scope,
+                &scope,
+                &project_policy,
+                "ai-tab",
+                true,
+                TerminalDimensions {
+                    cols: 120,
+                    rows: 32,
+                },
+            )
+            .unwrap();
+        assert_ne!(project.id, restarted.id);
+
+        manager.close(system.id).unwrap();
+        manager.close(restarted.id).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn restricted_zsh_uses_an_isolated_startup_profile() {

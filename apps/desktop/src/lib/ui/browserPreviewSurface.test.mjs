@@ -40,11 +40,13 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.doesNotMatch(dock, /disabled=\{!sessionId/);
   assert.match(dock, /disabled=\{!address\.trim\(\)\}/);
   assert.match(dock, /className="browser-dock-resizer"/);
-  assert.match(dock, /setPointerCapture/);
+  assert.match(dock, /open \? " is-open" : ""/);
+  assert.match(dock, /active: open/);
   assert.match(dock, /className="browser-dock-expand"/);
   assert.match(dock, /aria-pressed=\{expanded\}/);
   assert.match(dock, /onExpandedChange\(!expanded\)/);
   assert.match(dock, /expanded \? \" is-expanded\" : \"\"/);
+  assert.match(dock, /setPointerCapture/);
   assert.match(dock, /BROWSER_DOCK_WIDTH_KEY/);
   assert.match(dock, /useBrowserLiveWebviews/);
   assert.match(dock, /browser-live-placeholder/);

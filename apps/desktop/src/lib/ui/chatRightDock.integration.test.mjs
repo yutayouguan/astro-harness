@@ -46,6 +46,29 @@ test("chat shell keeps the project files surface mounted for reversible motion",
   assert.doesNotMatch(appSource, /chatRightDockWidth/);
 });
 
+test("browser dock keeps an exit lifecycle and uses the project drawer motion", async () => {
+  const browserStyles = await readFile(
+    new URL("../../styles/features/chat/browser-dock.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(appSource, /const browserDockPresence = useDeferredPresence/);
+  assert.match(appSource, /browserDockPresence\.mounted \? \(/);
+  assert.match(appSource, /open=\{browserDockPresence\.visible\}/);
+  assert.match(
+    browserStyles,
+    /\.browser-dock\s*\{[\s\S]*?flex:\s*0 0 0;[\s\S]*?visibility:\s*hidden;/,
+  );
+  assert.match(
+    browserStyles,
+    /\.browser-dock\.is-open\s*\{[\s\S]*?visibility:\s*visible;/,
+  );
+  assert.match(
+    browserStyles,
+    /flex-basis 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
+  );
+});
+
 test("side chat has a persistent layout slot around its exit lifecycle", () => {
   assert.match(
     appSource,

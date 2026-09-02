@@ -31,6 +31,7 @@ type TerminalReadResultDto = {
 };
 
 type Props = {
+  open: boolean;
   projectId: string;
   projectName: string;
   projectRoot: string;
@@ -42,7 +43,9 @@ const WRITE_CHUNK_BYTES = 32 * 1024;
 const SCROLLBAR_WIDTH = 4;
 
 function initialHeight(projectId: string): number {
-  const stored = Number(localStorage.getItem(`${HEIGHT_KEY_PREFIX}${projectId}`));
+  const stored = Number(
+    localStorage.getItem(`${HEIGHT_KEY_PREFIX}${projectId}`),
+  );
   return Number.isFinite(stored) && stored >= 160 ? stored : 260;
 }
 
@@ -59,6 +62,7 @@ function terminalTheme() {
 }
 
 export default function TerminalDock({
+  open,
   projectId,
   projectName,
   projectRoot,
@@ -85,7 +89,7 @@ export default function TerminalDock({
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || !projectRoot) return;
+    if (!open || !host || !projectRoot) return;
     setSession(null);
     setError(null);
     restartAfterExitRef.current = false;
@@ -122,11 +126,17 @@ export default function TerminalDock({
           const data = pendingInput;
           pendingInput = "";
           const encoded = new TextEncoder().encode(data);
-          for (let offset = 0; offset < encoded.length; offset += WRITE_CHUNK_BYTES) {
+          for (
+            let offset = 0;
+            offset < encoded.length;
+            offset += WRITE_CHUNK_BYTES
+          ) {
             await invoke("terminal_write", {
               request: {
                 id: sessionRef.current.id,
-                data: Array.from(encoded.subarray(offset, offset + WRITE_CHUNK_BYTES)),
+                data: Array.from(
+                  encoded.subarray(offset, offset + WRITE_CHUNK_BYTES),
+                ),
               },
             });
           }
@@ -255,7 +265,7 @@ export default function TerminalDock({
       xtermRef.current = null;
       fitRef.current = null;
     };
-  }, [projectRoot, restartGeneration, settings.executionMode, t]);
+  }, [open, projectRoot, restartGeneration, settings.executionMode, t]);
 
   useEffect(() => {
     const terminal = xtermRef.current;
@@ -277,7 +287,12 @@ export default function TerminalDock({
       resizeDragCleanupRef.current?.();
       const move = (moveEvent: PointerEvent) => {
         const max = Math.min(720, Math.floor(window.innerHeight * 0.65));
-        setHeight(Math.max(160, Math.min(max, startHeight + startY - moveEvent.clientY)));
+        setHeight(
+          Math.max(
+            160,
+            Math.min(max, startHeight + startY - moveEvent.clientY),
+          ),
+        );
       };
       const cleanup = () => {
         window.removeEventListener("pointermove", move);
@@ -299,12 +314,15 @@ export default function TerminalDock({
   );
 
   useEffect(() => {
-    localStorage.setItem(`${HEIGHT_KEY_PREFIX}${projectId}`, String(Math.round(height)));
+    localStorage.setItem(
+      `${HEIGHT_KEY_PREFIX}${projectId}`,
+      String(Math.round(height)),
+    );
   }, [height, projectId]);
 
   const openExternal = useCallback(() => {
-    void invoke("terminal_open_external", { cwd: projectRoot }).catch((reason) =>
-      setError(String(reason)),
+    void invoke("terminal_open_external", { cwd: projectRoot }).catch(
+      (reason) => setError(String(reason)),
     );
   }, [projectRoot]);
 
@@ -326,9 +344,10 @@ export default function TerminalDock({
 
   return (
     <section
-      className="terminal-dock"
+      className={`terminal-dock${open ? " is-open" : ""}`}
       style={{ "--terminal-dock-height": `${height}px` } as React.CSSProperties}
       aria-label={t("chat.terminal.title")}
+      aria-hidden={!open}
     >
       <button
         type="button"

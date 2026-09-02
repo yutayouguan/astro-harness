@@ -23,12 +23,7 @@ const LIVE_PAGE_EVENT = "browser-live-page-load";
 const LOAD_STATUS_TIMEOUT_MS = 15_000;
 
 type LiveWebviewStatus =
-  | "unsupported"
-  | "idle"
-  | "creating"
-  | "loading"
-  | "ready"
-  | "error";
+  "unsupported" | "idle" | "creating" | "loading" | "ready" | "error";
 
 type LivePageEvent = {
   label: string;
@@ -50,6 +45,7 @@ type ManagedWebview = {
 };
 
 type LiveWebviewOptions = {
+  active?: boolean;
   preview: BrowserPreview | null;
   viewportRef: RefObject<HTMLDivElement | null>;
   onUrlChange: (url: string) => void;
@@ -81,6 +77,7 @@ function viewportBounds(viewport: HTMLDivElement) {
 }
 
 export function useBrowserLiveWebviews({
+  active = true,
   preview,
   viewportRef,
   onUrlChange,
@@ -98,6 +95,10 @@ export function useBrowserLiveWebviews({
   callbacksRef.current = { onUrlChange, onNavigate, onError };
 
   useEffect(() => {
+    if (!active) {
+      setStatus(isTauri() ? "idle" : "unsupported");
+      return;
+    }
     if (!isTauri()) {
       setStatus("unsupported");
       return;
@@ -317,7 +318,8 @@ export function useBrowserLiveWebviews({
       );
       if (
         entry.failedUrl &&
-        canonicalBrowserUrl(entry.failedUrl) === canonicalBrowserUrl(desiredUrl) &&
+        canonicalBrowserUrl(entry.failedUrl) ===
+          canonicalBrowserUrl(desiredUrl) &&
         entry.failedAt === current.updatedAt
       ) {
         setStatus("error");
@@ -331,9 +333,9 @@ export function useBrowserLiveWebviews({
         const shouldShow = label === activeLabel && !candidate.failedUrl;
         if (candidate.visible !== shouldShow) {
           candidate.visible = shouldShow;
-          void (shouldShow ? candidate.webview.show() : candidate.webview.hide()).catch(
-            reportError,
-          );
+          void (
+            shouldShow ? candidate.webview.show() : candidate.webview.hide()
+          ).catch(reportError);
         }
       }
 
@@ -351,7 +353,11 @@ export function useBrowserLiveWebviews({
         setStatus("loading");
         try {
           await invoke("browser_live_webview_control", {
-            request: { label: activeLabel, action: "navigate", url: desiredUrl },
+            request: {
+              label: activeLabel,
+              action: "navigate",
+              url: desiredUrl,
+            },
           });
           if (disposed) return;
         } catch (cause) {
@@ -499,11 +505,13 @@ export function useBrowserLiveWebviews({
       pendingCreates.clear();
       pendingNativeUrls.clear();
     };
-  }, [viewportRef]);
+  }, [active, viewportRef]);
 
   useLayoutEffect(() => {
+    if (!active) return;
     scheduleRef.current();
   }, [
+    active,
     preview?.sessionId,
     preview?.activeTabId,
     preview?.url,

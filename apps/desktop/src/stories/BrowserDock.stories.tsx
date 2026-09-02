@@ -37,6 +37,7 @@ const meta = {
     ),
   ],
   args: {
+    open: true,
     preview: {
       sessionId: "story-session",
       url: "http://127.0.0.1:5173",
