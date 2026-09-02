@@ -22,7 +22,7 @@ const MAX_SAFE_INTEGER: u64 = (1_u64 << 53) - 1;
 const QUICKJS_MEMORY_LIMIT_BYTES: usize = 64 * 1024 * 1024;
 const QUICKJS_STACK_LIMIT_BYTES: usize = 1024 * 1024;
 const EVENT_BUFFER_CAPACITY: usize = 256;
-const EXIT_SENTINEL: &str = "__ASTRO_CODE_MODE_EXIT__";
+const MAX_TIMER_DELAY_MS: u64 = i32::MAX as u64;
 
 const QUICKJS_BOOTSTRAP: &str = r#"
 (() => {
@@ -58,6 +58,7 @@ const hostEmit = globalThis.__astroEmit;
 const hostStore = globalThis.__astroStore;
 const hostYield = globalThis.__astroYield;
 const hostSleep = globalThis.__astroSleep;
+const exitToken = globalThis.__astroExitToken;
 const stores = new Map(Object.entries(JSON.parse(globalThis.__astroInitialStoresJson)));
 const tools = Object.create(null);
 const toolMetadata = JSON.parse(globalThis.__astroToolMetadataJson);
@@ -117,11 +118,18 @@ globalThis.store = (key, value) => {
   hostStore(String(key), encoded);
 };
 globalThis.load = (key) => stores.get(String(key));
-globalThis.yield_control = () => hostYield();
-globalThis.exit = () => { throw new Error('__ASTRO_CODE_MODE_EXIT__'); };
+let activeYield = null;
+globalThis.yield_control = () => {
+  if (activeYield === null) {
+    activeYield = hostYield().finally(() => { activeYield = null; });
+  }
+  return activeYield;
+};
+globalThis.exit = () => { throw new Error(exitToken); };
 
 delete globalThis.__astroInitialStoresJson;
 delete globalThis.__astroToolMetadataJson;
+delete globalThis.__astroExitToken;
 delete globalThis.__astroInvoke;
 delete globalThis.__astroEmit;
 delete globalThis.__astroStore;
@@ -182,6 +190,7 @@ pub(crate) enum NextEvent {
 struct CellControl {
     pending_tools: Mutex<HashMap<String, oneshot::Sender<Result<serde_json::Value, String>>>>,
     resume: Mutex<Option<oneshot::Sender<()>>>,
+    yielding: AtomicBool,
     cancelled: AtomicBool,
     cancel_notify: tokio::sync::Notify,
 }
@@ -226,6 +235,7 @@ fn parse_json(encoded: &str, label: &str) -> rquickjs::Result<serde_json::Value>
 
 async fn run_quickjs_cell(
     source: String,
+    exit_token: String,
     tools: Vec<NestedToolMetadata>,
     stores: HashMap<String, serde_json::Value>,
     events: mpsc::Sender<RuntimeEvent>,
@@ -255,6 +265,7 @@ async fn run_quickjs_cell(
                 "__astroToolMetadataJson",
                 serde_json::to_string(&tools).map_err(|error| json_error(error.to_string()))?,
             )?;
+            globals.set("__astroExitToken", exit_token)?;
 
             let invoke_events = events.clone();
             let invoke_control = Arc::clone(&control);
@@ -372,10 +383,18 @@ async fn run_quickjs_cell(
                         if control.cancelled.load(Ordering::Acquire) {
                             return;
                         }
+                        if control
+                            .yielding
+                            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                            .is_err()
+                        {
+                            return;
+                        }
                         let (sender, receiver) = oneshot::channel();
                         *control.resume.lock().await = Some(sender);
                         if events.send(RuntimeEvent::Yield).await.is_err() {
                             control.resume.lock().await.take();
+                            control.yielding.store(false, Ordering::Release);
                             return;
                         }
                         let cancelled = control.cancel_notify.notified();
@@ -386,6 +405,7 @@ async fn run_quickjs_cell(
                                 _ = &mut cancelled => {}
                             }
                         }
+                        control.yielding.store(false, Ordering::Release);
                     }
                 })),
             )?;
@@ -397,7 +417,7 @@ async fn run_quickjs_cell(
                     let control = Arc::clone(&sleep_control);
                     async move {
                         let delay_ms = if delay_ms.is_finite() && delay_ms > 0.0 {
-                            delay_ms.min(MAX_SAFE_INTEGER as f64) as u64
+                            delay_ms.min(MAX_TIMER_DELAY_MS as f64) as u64
                         } else {
                             0
                         };
@@ -421,11 +441,21 @@ async fn run_quickjs_cell(
                 .eval(wrapped)
                 .catch(&ctx)
                 .map_err(|error| json_error(error.to_string()))?;
-            promise
-                .into_future::<Value>()
-                .await
-                .catch(&ctx)
-                .map_err(|error| json_error(error.to_string()))?;
+            let cancelled = control.cancel_notify.notified();
+            tokio::pin!(cancelled);
+            if control.cancelled.load(Ordering::Acquire) {
+                return Err(json_error("Code Mode cell was terminated"));
+            }
+            tokio::select! {
+                result = promise.into_future::<Value>() => {
+                    result
+                        .catch(&ctx)
+                        .map_err(|error| json_error(error.to_string()))?;
+                }
+                _ = &mut cancelled => {
+                    return Err(json_error("Code Mode cell was terminated"));
+                }
+            }
             Ok::<(), rquickjs::Error>(())
         })
         .await
@@ -439,6 +469,7 @@ fn spawn_quickjs_cell(
     events: mpsc::Sender<RuntimeEvent>,
     control: Arc<CellControl>,
 ) -> anyhow::Result<()> {
+    let exit_token = format!("__ASTRO_CODE_MODE_EXIT_{}__", uuid::Uuid::new_v4());
     std::thread::Builder::new()
         .name("astro-code-mode-quickjs".into())
         .spawn(move || {
@@ -456,12 +487,13 @@ fn spawn_quickjs_cell(
             };
             let result = runtime.block_on(run_quickjs_cell(
                 source,
+                exit_token.clone(),
                 tools,
                 stores,
                 events.clone(),
                 control,
             ));
-            let error = result.err().filter(|error| !error.contains(EXIT_SENTINEL));
+            let error = result.err().filter(|error| !error.contains(&exit_token));
             let _ = runtime.block_on(events.send(RuntimeEvent::Result { error }));
         })
         .map(|_| ())
@@ -877,14 +909,59 @@ mod tests {
     async fn quickjs_cell_hides_host_bridge_globals() {
         let service = CodeModeService::default();
         let source = parse_exec_source(
-            "text([typeof __astroInvoke, typeof process, typeof require].join(','));",
+            "text([typeof __astroInvoke, typeof __astroExitToken, typeof process, typeof require].join(','));",
         )
         .unwrap();
         let cwd = std::env::current_dir().unwrap();
         let cell_id = service.execute(&source, &[], &cwd).await.unwrap();
         assert!(matches!(
             next(&service, &cell_id).await,
-            RuntimeEvent::Content { value, .. } if value == "undefined,undefined,undefined"
+            RuntimeEvent::Content { value, .. } if value == "undefined,undefined,undefined,undefined"
+        ));
+    }
+
+    #[tokio::test]
+    async fn only_exit_helper_produces_a_successful_early_exit() {
+        let service = CodeModeService::default();
+        let cwd = std::env::current_dir().unwrap();
+
+        let fake = parse_exec_source("throw new Error('__ASTRO_CODE_MODE_EXIT__');").unwrap();
+        let fake_id = service.execute(&fake, &[], &cwd).await.unwrap();
+        assert!(matches!(
+            next(&service, &fake_id).await,
+            RuntimeEvent::Result { error: Some(error) }
+                if error.contains("__ASTRO_CODE_MODE_EXIT__")
+        ));
+
+        let actual = parse_exec_source("exit(); text('unreachable');").unwrap();
+        let actual_id = service.execute(&actual, &[], &cwd).await.unwrap();
+        assert!(matches!(
+            next(&service, &actual_id).await,
+            RuntimeEvent::Result { error: None }
+        ));
+    }
+
+    #[tokio::test]
+    async fn concurrent_yields_share_one_resume_boundary() {
+        let service = CodeModeService::default();
+        let source = parse_exec_source(
+            "await Promise.all([yield_control(), yield_control()]); text('done');",
+        )
+        .unwrap();
+        let cwd = std::env::current_dir().unwrap();
+        let cell_id = service.execute(&source, &[], &cwd).await.unwrap();
+        assert!(matches!(
+            next(&service, &cell_id).await,
+            RuntimeEvent::Yield
+        ));
+        service.resume(&cell_id).await.unwrap();
+        assert!(matches!(
+            next(&service, &cell_id).await,
+            RuntimeEvent::Content { value, .. } if value == "done"
+        ));
+        assert!(matches!(
+            next(&service, &cell_id).await,
+            RuntimeEvent::Result { error: None }
         ));
     }
 
@@ -896,5 +973,55 @@ mod tests {
         let cell_id = service.execute(&source, &[], &cwd).await.unwrap();
         assert!(service.terminate(&cell_id).await.unwrap());
         assert!(!service.terminate(&cell_id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn cancellation_wakes_a_never_settling_promise() {
+        let (event_sender, mut event_receiver) = mpsc::channel(EVENT_BUFFER_CAPACITY);
+        let control = Arc::new(CellControl::default());
+        spawn_quickjs_cell(
+            "await new Promise(() => {});".into(),
+            Vec::new(),
+            HashMap::new(),
+            event_sender,
+            Arc::clone(&control),
+        )
+        .unwrap();
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), event_receiver.recv())
+                .await
+                .is_err()
+        );
+        control.cancel().await;
+        let event = tokio::time::timeout(Duration::from_secs(2), event_receiver.recv())
+            .await
+            .expect("cancelled cell should stop promptly")
+            .expect("runtime should send a terminal event");
+        assert!(matches!(event, RuntimeEvent::Result { error: Some(_) }));
+    }
+
+    #[tokio::test]
+    async fn oversized_timer_is_clamped_and_remains_cancellable() {
+        let (event_sender, mut event_receiver) = mpsc::channel(EVENT_BUFFER_CAPACITY);
+        let control = Arc::new(CellControl::default());
+        spawn_quickjs_cell(
+            "await new Promise(resolve => setTimeout(resolve, Number.MAX_SAFE_INTEGER));".into(),
+            Vec::new(),
+            HashMap::new(),
+            event_sender,
+            Arc::clone(&control),
+        )
+        .unwrap();
+
+        assert!(tokio::time::timeout(Duration::from_millis(20), event_receiver.recv())
+            .await
+            .is_err());
+        control.cancel().await;
+        let event = tokio::time::timeout(Duration::from_secs(2), event_receiver.recv())
+            .await
+            .expect("cancelled timer should stop promptly")
+            .expect("runtime should send a terminal event");
+        assert!(matches!(event, RuntimeEvent::Result { error: Some(_) }));
     }
 }
