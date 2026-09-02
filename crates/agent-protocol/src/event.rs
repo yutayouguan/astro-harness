@@ -417,6 +417,7 @@ mod tests {
                     id: "item-1".into(),
                     content: "done".into(),
                     delivery: None,
+                    questions: None,
                 }),
             }),
         };
@@ -473,8 +474,25 @@ mod tests {
                 id: "item-1".into(),
                 content: "done".into(),
                 delivery: None,
+                questions: None,
             })
         );
+    }
+
+    #[test]
+    fn async_agent_message_questions_roundtrip() {
+        let item = TurnItem::AgentMessage(AgentMessageItem {
+            id: "item-questions".into(),
+            content: "Choose\n- A\n- B".into(),
+            delivery: Some(crate::AgentMessageDelivery::Async),
+            questions: Some(vec![crate::AsyncUserInputQuestion {
+                title: "Choose".into(),
+                options: Some(vec!["A".into(), "B".into()]),
+            }]),
+        });
+
+        let json = serde_json::to_string(&item).unwrap();
+        assert_eq!(serde_json::from_str::<TurnItem>(&json).unwrap(), item);
     }
 
     #[test]

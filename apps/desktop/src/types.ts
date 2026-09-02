@@ -127,6 +127,11 @@ export type TurnTokenUsage = {
   reasoningReported: boolean;
 };
 
+export type AsyncUserInputQuestion = {
+  title: string;
+  options?: string[];
+};
+
 /** UI 会话时间线中的用户或助手展示条目。 */
 export type ConversationEntry = {
   id: string;
@@ -134,6 +139,8 @@ export type ConversationEntry = {
   content: string;
   /** Non-blocking assistant update emitted while the turn continues. */
   delivery?: "async";
+  /** Structured questions attached to a non-blocking assistant update. */
+  asyncQuestions?: AsyncUserInputQuestion[];
   /** DeepSeek 等 thinking 模式下的推理过程 */
   reasoning?: string;
   /** 思考耗时（秒），用于折叠头展示 */

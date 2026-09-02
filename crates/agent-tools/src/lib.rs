@@ -26,7 +26,7 @@ pub use interaction_mode::{
     check_tool_call, filter_schemas, tool_visible_in_mode, InteractionMode,
 };
 
-pub use builtin::hitl::send_user_message_async::parse_async_user_message;
+pub use builtin::hitl::request_user_input_async::parse_async_user_message;
 pub use builtin::shell::browser;
 pub use builtin::shell::jobs::{
     shutdown_all_jobs as shutdown_background_jobs,
@@ -195,7 +195,7 @@ mod inventory_register_tests {
             "video_gen",
             "speech_gen",
             "ask_user",
-            "send_user_message_async",
+            "request_user_input_async",
             "spawn_agent",
             "list_agents",
             "send_message",
@@ -210,6 +210,13 @@ mod inventory_register_tests {
                 "missing {expected}; got {names:?}"
             );
         }
+        let api_names = registry
+            .schemas_for_api()
+            .into_iter()
+            .filter_map(|schema| schema["name"].as_str().map(str::to_string))
+            .collect::<Vec<_>>();
+        assert!(api_names.contains(&"request_user_input_async".to_string()));
+        assert!(!api_names.contains(&"send_user_message_async".to_string()));
     }
 
     #[test]

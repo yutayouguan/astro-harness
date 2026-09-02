@@ -1,6 +1,7 @@
 //! 跨 crate 共享类型：消息、工具描述、统一错误与 SQLite 打开协议。
 
 pub mod approval;
+pub mod async_user_input;
 pub mod auxiliary_target;
 pub mod compact_scope;
 pub mod credentials;
@@ -61,6 +62,7 @@ pub use tool_spill::{
 };
 
 pub use approval::{ApprovalAction, ApprovalDecision, ApprovalMode};
+pub use async_user_input::AsyncUserInputQuestion;
 pub use credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 pub use interaction_mode::InteractionMode;
 pub use memory_citation::MemoryCitation;

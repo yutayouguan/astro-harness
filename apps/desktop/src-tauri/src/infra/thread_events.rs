@@ -924,14 +924,22 @@ impl ThreadEventsBridge {
                         recovered.push(ChatStreamEvent::ReasoningReconcile { content });
                     }
                 }
-                ChatStreamEvent::AsyncMessage { id, content } => {
+                ChatStreamEvent::AsyncMessage {
+                    id,
+                    content,
+                    questions,
+                } => {
                     if state
                         .delivered_async_messages
                         .entry(thread_id.into())
                         .or_default()
                         .insert(id.clone())
                     {
-                        recovered.push(ChatStreamEvent::AsyncMessage { id, content });
+                        recovered.push(ChatStreamEvent::AsyncMessage {
+                            id,
+                            content,
+                            questions,
+                        });
                     }
                 }
                 other => recovered.push(other),
@@ -2186,6 +2194,7 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
             vec![ChatStreamEvent::AsyncMessage {
                 id: message.id,
                 content: message.content,
+                questions: message.questions,
             }]
         }
         Ok(TurnItem::AgentMessage(message)) if started && message.delivery.is_none() => {
@@ -2587,6 +2596,7 @@ fn snapshot_turn_recovery_events(turn: &proto::ThreadTurn) -> Vec<ChatStreamEven
                 events.push(ChatStreamEvent::AsyncMessage {
                     id: message.id,
                     content: message.content,
+                    questions: message.questions,
                 });
                 continue;
             }
@@ -2868,6 +2878,7 @@ mod tests {
                     id: id.into(),
                     content: content.into(),
                     delivery: None,
+                    questions: None,
                 },
             ))
             .unwrap(),
@@ -2884,6 +2895,10 @@ mod tests {
                     id: id.into(),
                     content: content.into(),
                     delivery: Some(agent_protocol::AgentMessageDelivery::Async),
+                    questions: Some(vec![agent_protocol::AsyncUserInputQuestion {
+                        title: "Choose a target".into(),
+                        options: Some(vec!["A".into(), "B".into()]),
+                    }]),
                 },
             ))
             .unwrap(),
@@ -3082,8 +3097,9 @@ mod tests {
         .is_empty());
         assert!(matches!(
             map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
-            [ChatStreamEvent::AsyncMessage { id, content }]
+            [ChatStreamEvent::AsyncMessage { id, content, questions }]
                 if id == "call-1:async-message" && content == "Still working"
+                    && questions.as_ref().is_some_and(|questions| questions.len() == 1)
         ));
     }
 
@@ -3093,6 +3109,7 @@ mod tests {
         let event = ChatStreamEvent::AsyncMessage {
             id: "call-1:async-message".into(),
             content: "Still working".into(),
+            questions: None,
         };
 
         let first = bridge
@@ -3483,6 +3500,7 @@ mod tests {
                                 id: "message-1".into(),
                                 content: "almost ".into(),
                                 delivery: None,
+                                questions: None,
                             },
                         ))
                         .unwrap(),
@@ -3496,6 +3514,7 @@ mod tests {
                                 id: "message-2".into(),
                                 content: "done".into(),
                                 delivery: None,
+                                questions: None,
                             },
                         ))
                         .unwrap(),

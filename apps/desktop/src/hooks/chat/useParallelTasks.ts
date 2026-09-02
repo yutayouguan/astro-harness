@@ -516,6 +516,7 @@ export function useParallelTasks(deps: Deps) {
         const unlisten = await listen<{
           type: string;
           content?: string;
+          questions?: Array<{ title: string; options?: string[] }>;
           message?: string;
           id?: string;
           name?: string;
@@ -552,6 +553,7 @@ export function useParallelTasks(deps: Deps) {
                 assistantId,
                 payload.id!,
                 payload.content!,
+                payload.questions,
               ),
             );
           } else if (payload.type === "text_reconcile") {

@@ -1,4 +1,4 @@
-import type { ConversationEntry } from "../../types";
+import type { AsyncUserInputQuestion, ConversationEntry } from "../../types";
 
 /** Upsert a durable asynchronous agent update before the active response entry. */
 export function upsertAsyncAgentUpdate(
@@ -6,12 +6,20 @@ export function upsertAsyncAgentUpdate(
   activeAssistantId: string,
   id: string,
   content: string,
+  questions?: AsyncUserInputQuestion[],
   createdAt = Date.now(),
 ): ConversationEntry[] {
   const existing = messages.findIndex((message) => message.id === id);
   if (existing >= 0) {
     return messages.map((message, index) =>
-      index === existing ? { ...message, content, delivery: "async" } : message,
+      index === existing
+        ? {
+            ...message,
+            content,
+            delivery: "async",
+            ...(questions ? { asyncQuestions: questions } : {}),
+          }
+        : message,
     );
   }
 
@@ -20,6 +28,7 @@ export function upsertAsyncAgentUpdate(
     role: "assistant",
     content,
     delivery: "async",
+    ...(questions ? { asyncQuestions: questions } : {}),
     createdAt,
   };
   const active = messages.findIndex(

@@ -356,6 +356,7 @@ mod tests {
                 id: item_id.into(),
                 content: content.into(),
                 delivery: None,
+                questions: None,
             }),
         };
         Event {

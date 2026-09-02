@@ -33,7 +33,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "context_search",
     "pin_context",
     "ask_user",
-    "send_user_message_async",
+    "request_user_input_async",
     "switch_mode",
     "present",
     "subagents",
@@ -158,6 +158,14 @@ pub fn sync_tools_enabled_defaults_for_agent(
     ensure_default_workspace_dirs()?;
     let mut state = load_tools_enabled_for_agent(agent_id);
     let mut dirty = false;
+    if !state.contains_key("request_user_input_async") {
+        let enabled = state
+            .get("send_user_message_async")
+            .copied()
+            .unwrap_or(true);
+        state.insert("request_user_input_async".into(), enabled);
+        dirty = true;
+    }
     for id in KNOWN_TOOLSET_IDS {
         if !state.contains_key(*id) {
             state.insert((*id).to_string(), true);
@@ -208,7 +216,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "music_gen" => "music_gen",
         "skills" => "skills",
         "ask_user" => "ask_user",
-        "send_user_message_async" => "send_user_message_async",
+        "request_user_input_async" | "send_user_message_async" => "request_user_input_async",
         "switch_mode" => "switch_mode",
         "present" => "present",
         "spawn_agent" | "list_agents" | "followup_task" | "send_message" | "wait_agent"
@@ -272,6 +280,28 @@ mod tests {
     fn mcp_brokers_share_the_mcp_toolset_gate() {
         assert_eq!(tool_name_to_toolset("mcp_resources"), "mcp");
         assert_eq!(tool_name_to_toolset("mcp_prompts"), "mcp");
+    }
+
+    #[test]
+    fn async_user_input_uses_the_canonical_toolset() {
+        assert_eq!(
+            tool_name_to_toolset("request_user_input_async"),
+            "request_user_input_async"
+        );
+        assert_eq!(
+            tool_name_to_toolset("send_user_message_async"),
+            "request_user_input_async"
+        );
+    }
+
+    #[test]
+    fn async_user_input_migrates_the_legacy_gate() {
+        let dir = TempDir::new().unwrap();
+        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
+        save_tools_enabled(&HashMap::from([("send_user_message_async".into(), false)])).unwrap();
+
+        let state = sync_tools_enabled_defaults().unwrap();
+        assert_eq!(state.get("request_user_input_async"), Some(&false));
     }
 
     #[test]

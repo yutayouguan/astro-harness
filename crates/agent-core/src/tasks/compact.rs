@@ -64,6 +64,7 @@ impl SessionTask for CompactTask {
                         id: format!("compact-summary-{}", ctx.sub_id()),
                         content: summary.clone(),
                         delivery: None,
+                        questions: None,
                     }),
                 }),
             )

@@ -48,7 +48,7 @@ export type AgentToolId =
   | "context_search"
   | "pin_context"
   | "ask_user"
-  | "send_user_message_async"
+  | "request_user_input_async"
   | "switch_mode"
   | "present"
   | "subagents"
@@ -346,12 +346,12 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "send_user_message_async",
+    id: "request_user_input_async",
     titleKey: "agentTools.sendUserMessageAsync.title",
     descKey: "agentTools.sendUserMessageAsync.desc",
     Icon: IconClarify,
     tone: "blue",
-    params: [{ name: "message", type: "string" }],
+    params: [{ name: "questions", type: "array" }],
   },
   {
     id: "switch_mode",

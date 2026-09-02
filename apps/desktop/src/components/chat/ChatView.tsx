@@ -90,6 +90,7 @@ import { projectCanonicalTimelineSegments } from "../../lib/chat/chatTimeline";
 import { isLiveActivityStatus } from "../../lib/chat/toolActivityStatus";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
+import ClarifyWizard from "../../a2ui/ClarifyWizard";
 import TaskCompletionCelebration from "./TaskCompletionCelebration";
 import {
   attachmentsFromOsClipboard,
@@ -2800,6 +2801,17 @@ export default function ChatView({
               onScroll={updateConversationScrollState}
             >
               {messages.map((m, index) => {
+                const pendingAsyncQuestions =
+                  Boolean(m.asyncQuestions?.length) &&
+                  !messages
+                    .slice(index + 1)
+                    .some(
+                      (message) =>
+                        message.role === "user" ||
+                        Boolean(message.asyncQuestions?.length),
+                    )
+                    ? m.asyncQuestions
+                    : undefined;
                 const isStreamingBubble =
                   m.role === "assistant" &&
                   !m.error &&
@@ -2898,6 +2910,34 @@ export default function ChatView({
                               node: ReactNode;
                             };
                             const steps: Step[] = [];
+                            if (pendingAsyncQuestions) {
+                              steps.push({
+                                key: `async-questions-${m.id}`,
+                                kind: "surface",
+                                active: true,
+                                node: (
+                                  <ClarifyWizard
+                                    steps={pendingAsyncQuestions.map(
+                                      (question, questionIndex) => ({
+                                        id: `${m.id}-q${questionIndex}`,
+                                        question: question.title,
+                                        options: question.options ?? [],
+                                      }),
+                                    )}
+                                    disabled={sendBlocked}
+                                    onAction={(name, context) => {
+                                      if (
+                                        name === "choose" &&
+                                        typeof context.value === "string" &&
+                                        context.value.trim()
+                                      ) {
+                                        onSend({ text: context.value.trim() });
+                                      }
+                                    }}
+                                  />
+                                ),
+                              });
+                            }
                             const pushActivity = (act: ChatActivity) => {
                               if (isTodoActivity(act)) return;
                               if (!isActivityVisible(act.kind, displayPrefs))
@@ -2949,7 +2989,9 @@ export default function ChatView({
                                 ),
                               });
                             };
-                            let hasTimelineText = false;
+                            let hasTimelineText = Boolean(
+                              pendingAsyncQuestions,
+                            );
                             const timelineSegments =
                               answerLayout === "timeline"
                                 ? projectCanonicalTimelineSegments(m)
@@ -3151,7 +3193,10 @@ export default function ChatView({
                                 ),
                               );
 
-                              if (groupedAnswer.text) {
+                              if (
+                                groupedAnswer.text &&
+                                !pendingAsyncQuestions
+                              ) {
                                 groupedViewSteps.push({
                                   key: `grouped-reply-${m.id}`,
                                   kind: "reply",
@@ -3192,7 +3237,9 @@ export default function ChatView({
                                 steps.length,
                                 ...groupedViewSteps,
                               );
-                              hasTimelineText = Boolean(groupedAnswer.text);
+                              hasTimelineText = Boolean(
+                                groupedAnswer.text || pendingAsyncQuestions,
+                              );
                             }
 
                             const showLoaderAlone =

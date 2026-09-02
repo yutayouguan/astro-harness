@@ -77,6 +77,7 @@ mod tests {
                 id: "item-1".into(),
                 content: "done".into(),
                 delivery: None,
+                questions: None,
             }),
         });
         let delta = EventMsg::AgentMessageContentDelta(DeltaEvent {

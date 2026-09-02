@@ -11,7 +11,7 @@ pub mod present;
 pub mod shell;
 
 pub use agents::{persona_create, subagent};
-pub use hitl::{ask_user, send_user_message_async, switch_mode};
+pub use hitl::{ask_user, request_user_input_async, switch_mode};
 pub use media::{
     audio_understand, image_gen, image_understand, music_gen, robotics, tts, video_gen,
     video_understand,

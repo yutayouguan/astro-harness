@@ -149,6 +149,8 @@ pub enum ChatStreamEvent {
     AsyncMessage {
         id: String,
         content: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        questions: Option<Vec<agent_protocol::AsyncUserInputQuestion>>,
     },
     ToolOutputDelta {
         id: String,

@@ -419,6 +419,7 @@ export function useSend(deps: UseSendDeps) {
         unlistenRef.current = await listen<{
           type: string;
           content?: string;
+          questions?: Array<{ title: string; options?: string[] }>;
           message?: string;
           id?: string;
           name?: string;
@@ -508,6 +509,7 @@ export function useSend(deps: UseSendDeps) {
                 assistantId,
                 payload.id!,
                 payload.content!,
+                payload.questions,
               ),
             );
             touchActivity();

@@ -426,12 +426,13 @@ async fn async_user_message_is_a_durable_item_separate_from_the_final_answer() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call-async".into(),
-                name: "send_user_message_async".into(),
+                name: "request_user_input_async".into(),
                 signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
-                arguments: r#"{"message":"Still working"}"#.into(),
+                arguments: r#"{"questions":[{"title":"Choose a target","options":["A","B"]}]}"#
+                    .into(),
             },
             StreamChunk::Done {
                 finish_reason: "tool_calls".into(),
@@ -464,7 +465,11 @@ async fn async_user_message_is_a_durable_item_separate_from_the_final_answer() {
                 TurnItem::AgentMessage(message)
                     if message.delivery == Some(agent_protocol::AgentMessageDelivery::Async) =>
                 {
-                    Some((message.id.as_str(), message.content.as_str()))
+                    Some((
+                        message.id.clone(),
+                        message.content.clone(),
+                        message.questions.clone(),
+                    ))
                 }
                 _ => None,
             },
@@ -474,8 +479,22 @@ async fn async_user_message_is_a_durable_item_separate_from_the_final_answer() {
     assert_eq!(
         async_events,
         vec![
-            ("call-async:async-message", "Still working"),
-            ("call-async:async-message", "Still working"),
+            (
+                "call-async:async-message".to_string(),
+                "Choose a target\n- A\n- B".to_string(),
+                Some(vec![agent_protocol::AsyncUserInputQuestion {
+                    title: "Choose a target".into(),
+                    options: Some(vec!["A".into(), "B".into()]),
+                }]),
+            ),
+            (
+                "call-async:async-message".to_string(),
+                "Choose a target\n- A\n- B".to_string(),
+                Some(vec![agent_protocol::AsyncUserInputQuestion {
+                    title: "Choose a target".into(),
+                    options: Some(vec!["A".into(), "B".into()]),
+                }]),
+            ),
         ]
     );
     assert!(events.iter().any(|event| matches!(

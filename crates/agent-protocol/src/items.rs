@@ -3,6 +3,8 @@ use quick_xml::se::to_string as to_xml_string;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub use types::AsyncUserInputQuestion;
+
 use crate::{ContentItem, ResponseItem, ResponseItemId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,6 +47,8 @@ pub struct AgentMessageItem {
     pub content: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivery: Option<AgentMessageDelivery>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub questions: Option<Vec<AsyncUserInputQuestion>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

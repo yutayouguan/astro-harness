@@ -386,6 +386,7 @@ pub(crate) async fn emit_assistant_completed(
                 id: item_id,
                 content,
                 delivery: None,
+                questions: None,
             }),
         }),
     )
@@ -397,11 +398,13 @@ pub(crate) async fn emit_async_agent_message(
     turn_context: &TurnContext,
     item_id: String,
     content: String,
+    questions: Option<Vec<agent_protocol::AsyncUserInputQuestion>>,
 ) {
     let item = TurnItem::AgentMessage(AgentMessageItem {
         id: item_id,
         content,
         delivery: Some(agent_protocol::AgentMessageDelivery::Async),
+        questions,
     });
     emit(
         session,
@@ -483,6 +486,7 @@ fn text_item(id: String, content: String, reasoning: bool) -> TurnItem {
             id: item.id,
             content: item.content,
             delivery: None,
+            questions: None,
         })
     }
 }
