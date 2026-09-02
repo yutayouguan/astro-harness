@@ -372,15 +372,11 @@ html[data-theme="light"] .msg-actions {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background:
-    linear-gradient(
-      145deg,
-      rgba(255, 255, 255, 0.22),
-      rgba(255, 255, 255, 0.06)
-    ),
-    color-mix(in srgb, var(--tone-soft, transparent) 70%, transparent);
-  border: 1px solid
-    color-mix(in srgb, var(--tone, var(--accent)) 22%, var(--glass-edge));
+  background: var(--glass-layer, var(--glass-panel));
+  border: 0.5px solid var(--glass-edge);
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: var(--backdrop-glass);
+  -webkit-backdrop-filter: var(--backdrop-glass);
   color: var(--tone, var(--ink));
   font-size: 11px;
   font-weight: 700;
@@ -403,21 +399,6 @@ html[data-theme="light"] .msg-actions {
   height: 20px;
   border-radius: 8px;
   object-fit: cover;
-}
-
-html[data-theme="dark"] .avatar {
-  background:
-    linear-gradient(
-      145deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.02)
-    ),
-    color-mix(in srgb, var(--tone-soft, transparent) 55%, rgba(8, 6, 18, 0.55));
-  border-color: color-mix(
-    in srgb,
-    var(--tone, var(--accent)) 28%,
-    rgba(255, 255, 255, 0.1)
-  );
 }
 
 .avatar.error {
