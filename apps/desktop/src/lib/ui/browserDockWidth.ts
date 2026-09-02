@@ -5,6 +5,26 @@ export const BROWSER_DOCK_MIN_WIDTH = 420;
 export const BROWSER_DOCK_MAX_WIDTH = 1_200;
 export const BROWSER_DOCK_MAIN_MIN_WIDTH = 320;
 export const BROWSER_DOCK_OVERLAY_BREAKPOINT = 840;
+export const BROWSER_DOCK_MIN_ZOOM = 0.5;
+export const BROWSER_DOCK_FIT_VIEWPORT_WIDTH = 1_200;
+
+/** Fit fixed-width desktop pages inside the side dock without shrinking expanded mode. */
+export function browserDockZoomScale(
+  viewportWidth: number,
+  fitToWidth: boolean,
+): number {
+  if (!fitToWidth || !Number.isFinite(viewportWidth) || viewportWidth <= 0) {
+    return 1;
+  }
+  const scale = Math.min(
+    1,
+    Math.max(
+      BROWSER_DOCK_MIN_ZOOM,
+      viewportWidth / BROWSER_DOCK_FIT_VIEWPORT_WIDTH,
+    ),
+  );
+  return scale;
+}
 
 export function maxBrowserDockWidth(
   containerWidth: number,

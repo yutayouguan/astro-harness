@@ -20,6 +20,7 @@ import {
   retireBrowserLiveWebview,
   resolveLiveDesiredUrl,
 } from "../../lib/browser/liveWebview";
+import { browserDockZoomScale } from "../../lib/ui/browserDockWidth";
 import type { BrowserPreview, BrowserPreviewTab } from "./useBrowserPreview";
 
 const LIVE_PAGE_EVENT = "browser-live-page-load";
@@ -72,6 +73,7 @@ type ManagedWebview = {
   loading: boolean;
   loadingTimer: number | null;
   boundsKey: string;
+  zoomFactor: number | null;
   failedUrl: string | null;
   failedAt: number | null;
 };
@@ -79,6 +81,7 @@ type ManagedWebview = {
 type LiveWebviewOptions = {
   active?: boolean;
   occluded?: boolean;
+  fitToWidth?: boolean;
   preview: BrowserPreview | null;
   viewportRef: RefObject<HTMLDivElement | null>;
   onUrlChange: (url: string) => void;
@@ -113,6 +116,7 @@ function viewportBounds(viewport: HTMLDivElement) {
 export function useBrowserLiveWebviews({
   active = true,
   occluded = false,
+  fitToWidth = false,
   preview,
   viewportRef,
   onUrlChange,
@@ -124,11 +128,13 @@ export function useBrowserLiveWebviews({
   );
   const previewRef = useRef(preview);
   const occludedRef = useRef(occluded);
+  const fitToWidthRef = useRef(fitToWidth);
   const callbacksRef = useRef({ onUrlChange, onNavigate, onError });
   const scheduleRef = useRef<() => void>(() => undefined);
 
   previewRef.current = preview;
   occludedRef.current = occluded;
+  fitToWidthRef.current = fitToWidth;
   callbacksRef.current = { onUrlChange, onNavigate, onError };
 
   useEffect(() => {
@@ -208,12 +214,29 @@ export function useBrowserLiveWebviews({
       const bounds = viewportBounds(viewport);
       if (bounds.width < 1 || bounds.height < 1) return;
       const boundsKey = browserWebviewBoundsKey(bounds);
-      if (entry.boundsKey === boundsKey) return;
-      await Promise.all([
-        entry.webview.setPosition(new LogicalPosition(bounds.x, bounds.y)),
-        entry.webview.setSize(new LogicalSize(bounds.width, bounds.height)),
-      ]);
-      entry.boundsKey = boundsKey;
+      const zoomFactor = browserDockZoomScale(
+        bounds.width,
+        fitToWidthRef.current,
+      );
+      const boundsChanged = entry.boundsKey !== boundsKey;
+      const zoomChanged = entry.zoomFactor !== zoomFactor;
+      if (!boundsChanged && !zoomChanged) return;
+      if (boundsChanged) {
+        await Promise.all([
+          entry.webview.setPosition(new LogicalPosition(bounds.x, bounds.y)),
+          entry.webview.setSize(new LogicalSize(bounds.width, bounds.height)),
+        ]);
+        entry.boundsKey = boundsKey;
+      }
+      if (zoomChanged) {
+        try {
+          await entry.webview.setZoom(zoomFactor);
+        } catch (cause) {
+          // Zoom is unavailable on older macOS WebKit; keep browsing usable at 100%.
+          console.warn("Unable to fit live browser WebView", cause);
+        }
+        entry.zoomFactor = zoomFactor;
+      }
     };
 
     const createWebview = async (
@@ -234,6 +257,7 @@ export function useBrowserLiveWebviews({
           loading: false,
           loadingTimer: null,
           boundsKey: "",
+          zoomFactor: null,
           failedUrl: null,
           failedAt: null,
         };
@@ -267,6 +291,7 @@ export function useBrowserLiveWebviews({
         loading: false,
         loadingTimer: null,
         boundsKey: browserWebviewBoundsKey(bounds),
+        zoomFactor: null,
         failedUrl: null,
         failedAt: null,
       };
@@ -564,6 +589,7 @@ export function useBrowserLiveWebviews({
     scheduleRef.current();
   }, [
     active,
+    fitToWidth,
     occluded,
     preview?.sessionId,
     preview?.activeTabId,

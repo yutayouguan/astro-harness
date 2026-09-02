@@ -41,6 +41,7 @@ import {
   BROWSER_DOCK_MIN_WIDTH,
   BROWSER_DOCK_OVERLAY_BREAKPOINT,
   BROWSER_DOCK_WIDTH_KEY,
+  browserDockZoomScale,
   clampBrowserDockWidth,
   maxBrowserDockWidth,
   parseStoredBrowserDockWidth,
@@ -121,6 +122,7 @@ export default function BrowserDock({
   const restoreTimerRef = useRef<number | null>(null);
   const lastViewportRef = useRef("");
   const controlRunRef = useRef(0);
+  const fitBrowserToWidth = !expanded || restoring;
   const [dockWidth, setDockWidth] = useState(() => {
     try {
       return parseStoredBrowserDockWidth(
@@ -153,6 +155,7 @@ export default function BrowserDock({
   const liveWebview = useBrowserLiveWebviews({
     active: open,
     occluded: actionsOpen,
+    fitToWidth: fitBrowserToWidth,
     preview,
     viewportRef: nativeViewportRef,
     onUrlChange: setAddress,
@@ -377,15 +380,16 @@ export default function BrowserDock({
       const width = Math.round(entry.contentRect.width);
       const height = Math.round(entry.contentRect.height);
       if (width < 1 || height < 1) return;
-      const key = `${width}x${height}:${preview.activeTabId}`;
+      const zoom = browserDockZoomScale(width, fitBrowserToWidth);
+      const key = `${width}x${height}@${zoom}:${preview.activeTabId}`;
       if (key === lastViewportRef.current) return;
       if (resizeTimerRef.current != null)
         window.clearTimeout(resizeTimerRef.current);
       resizeTimerRef.current = window.setTimeout(() => {
         lastViewportRef.current = key;
         void onControl("resize", {
-          width,
-          height,
+          width: Math.round(width / zoom),
+          height: Math.round(height / zoom),
           screenshot: !liveWebview.isLive,
         }).catch((cause) => {
           setError(cause instanceof Error ? cause.message : String(cause));
@@ -400,7 +404,7 @@ export default function BrowserDock({
         resizeTimerRef.current = null;
       }
     };
-  }, [liveWebview.isLive, onControl, preview?.activeTabId]);
+  }, [fitBrowserToWidth, liveWebview.isLive, onControl, preview?.activeTabId]);
 
   const run = async (action: string, args: Record<string, unknown> = {}) => {
     const runId = ++controlRunRef.current;
@@ -767,22 +771,8 @@ export default function BrowserDock({
             {t("chat.browserDock.loading")}
           </div>
         ) : null}
-        {liveWebview.isLive && preview?.url && !actionsOpen ? (
-          <>
-            {screenshot ? (
-              <img
-                className="browser-live-underlay"
-                src={screenshot}
-                alt=""
-                aria-hidden
-                draggable={false}
-              />
-            ) : null}
-            <div
-              className={`browser-live-placeholder${screenshot ? " has-underlay" : ""}`}
-              aria-hidden
-            />
-          </>
+        {liveWebview.isLive && preview?.url ? (
+          <div className="browser-live-placeholder" aria-hidden />
         ) : screenshot ? (
           <img
             ref={screenshotRef}

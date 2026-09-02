@@ -74,8 +74,10 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.ok(overflowStart > screenshotStart);
   assert.ok(overflowStart < addressEnd);
   assert.match(dock, /viewportRef: nativeViewportRef/);
+  assert.match(dock, /fitToWidth: fitBrowserToWidth/);
+  assert.match(dock, /browserDockZoomScale\(width, fitBrowserToWidth\)/);
   assert.match(dock, /className="browser-native-viewport"/);
-  assert.match(dock, /className="browser-live-underlay"/);
+  assert.doesNotMatch(dock, /className="browser-live-underlay"/);
   assert.match(dock, /browser-live-placeholder/);
   assert.match(dock, /liveWebview\.isLoading/);
 
@@ -115,7 +117,7 @@ test("browser restore animates toward the right edge before rejoining layout", (
   assert.match(restoringRule, /max-width:\s*calc\(100% - 320px\)/);
 });
 
-test("browser dock uses a native child WebView with a screenshot fallback", () => {
+test("browser dock uses a fitted native child WebView with a screenshot fallback", () => {
   const hook = source("../../hooks/chat/useBrowserLiveWebviews.ts");
   const commands = source("../../../src-tauri/src/commands/browser.rs");
   const capabilities = source("../../../src-tauri/capabilities/default.json");
@@ -123,6 +125,7 @@ test("browser dock uses a native child WebView with a screenshot fallback", () =
   assert.match(hook, /new Webview\(getCurrentWindow\(\), label/);
   assert.match(hook, /setPosition\(new LogicalPosition/);
   assert.match(hook, /setSize\(new LogicalSize/);
+  assert.match(hook, /setZoom\(zoomFactor\)/);
   assert.match(hook, /liveBrowserUserAgentOverride\(navigator\.userAgent\)/);
   assert.match(hook, /\.\.\.\(userAgent \? \{ userAgent \} : \{\}\)/);
   assert.match(hook, /browser-live-page-load/);
@@ -136,6 +139,7 @@ test("browser dock uses a native child WebView with a screenshot fallback", () =
     "core:webview:allow-create-webview",
     "core:webview:allow-set-webview-position",
     "core:webview:allow-set-webview-size",
+    "core:webview:allow-set-webview-zoom",
     "core:webview:allow-webview-show",
     "core:webview:allow-webview-hide",
     "core:webview:allow-webview-close",
