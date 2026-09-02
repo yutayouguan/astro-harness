@@ -214,7 +214,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 ### Agent Threads
 
-`crates/agent-subagents` 是唯一 Subagent 模型。模型只有六个工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。`send_message` 只入队，`followup_task` 入队并触发/恢复 turn，`wait_agent` 等待任意 mailbox/final/steer 活动。read 真实 Session 时间线和递归 close 只是 Desktop 控制面操作，不是模型工具。状态固定为 `PendingInit` / `Running` / `Interrupted` / `Completed` / `Errored` / `Shutdown`。Agent Graph/mailbox/status 写入 `~/.astro/data/subagents-v2.db`，真实对话写入 `~/.astro/data/state.db`；旧 V1 表仅在迁移时转为只读历史归档。凭证只在内存中传递，权限继承父任务且自定义 agent 仅可收窄，不隐式创建 git worktree。自定义 agent 和设置只从 `~/.astro/agents/*.toml`、`<project>/.astro/agents/*.toml`、`~/.astro/config.toml` 和可信项目的 `<project>/.astro/config.toml` 加载，project 定义优先；`.codex` 不作为 Astro 配置输入。
+`crates/agent-subagents` 是唯一 Subagent 模型。模型只有六个工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。`send_message` 只入队，`followup_task` 入队并触发/恢复 turn，`wait_agent` 等待任意 mailbox/final/steer 活动。read 真实 Session 时间线和递归 close 只是 Desktop 控制面操作，不是模型工具。状态固定为 `PendingInit` / `Running` / `Interrupted` / `Completed` / `Errored` / `Shutdown`。Agent Graph/mailbox/status 写入 `~/.astro/data/subagents-v2.db`，真实对话写入 `~/.astro/data/state.db`；旧 V1 表仅在迁移时转为只读历史归档。凭证只在内存中传递，权限继承父任务且自定义 agent 仅可收窄，不隐式创建 git worktree。root-scoped `AgentControl` 共享最新 service tier，子孙 Agent 的新 turn 在 OpenAI/Codex backend 上继承该 tier，不支持的 backend 不透传。自定义 agent 和设置只从 `~/.astro/agents/*.toml`、`<project>/.astro/agents/*.toml`、`~/.astro/config.toml` 和可信项目的 `<project>/.astro/config.toml` 加载，project 定义优先；`.codex` 不作为 Astro 配置输入。
 
 ### 可视化工作流引擎
 

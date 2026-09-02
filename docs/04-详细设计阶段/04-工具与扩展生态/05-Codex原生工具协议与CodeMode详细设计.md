@@ -319,6 +319,22 @@ next sampling step routes only discovered schemas
 
 `Session::attach_mcp_tools()` 会先判断 `tool_search` 是否可用。若可用，当前 MCP Hub 发现的工具以 Deferred 方式注册；若不可用，则回退为 Direct，避免“无搜索入口且工具不可见”的死锁。
 
+### 5.6 MCP 单工具输出预算
+
+`[mcp_servers.<id>.tools.<tool>]` 可声明正整数 `output_token_limit`。预算与
+`enabled` / `approval_mode` 独立，并被固化到 Step-scoped `ToolEntry`：
+
+```toml
+[mcp_servers.docs.tools.search]
+approval_mode = "approve"
+output_token_limit = 3000
+```
+
+Astro 以 4 bytes/token 加 20% 序列化余量换算文本上限，并与全局 64 KiB 上限取
+更严格值。限制在 MCP 原始/结构化/错误输出进入 Core 前执行，且在
+`TransformToolResult` / `PostToolUse` 之后再执行一次，防止 hook 扩展内容绕过预算。
+Desktop MCP DTO 使用 `toolOutputTokenLimits` 保持该配置的 round-trip。
+
 这里的“激活”只是改变下一次 sampling 的可见性，不是授权。MCP 工具调用时仍会进入：
 
 ```text
