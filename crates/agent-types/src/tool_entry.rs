@@ -262,6 +262,8 @@ pub struct ToolEntry {
     pub exclusive_access: bool,
     pub sandbox_preference: SandboxablePreference,
     pub mcp_approval: Option<McpToolApproval>,
+    /// MCP 工具的显式输出 token 预算；其他工具默认为 `None`。
+    pub output_token_limit: Option<usize>,
     pub approval_requirement: ExecApprovalRequirement,
     /// Tool visibility level: Direct (default), Deferred (discoverable via tool_search),
     /// or Hidden (internal only). Replaces the former `deferred: bool` flag.
@@ -287,6 +289,7 @@ impl ToolEntry {
             exclusive_access: false,
             sandbox_preference: SandboxablePreference::Forbid,
             mcp_approval: None,
+            output_token_limit: None,
             approval_requirement: ExecApprovalRequirement::Skip,
             exposure: ToolExposure::Direct,
             namespace: String::new(),
