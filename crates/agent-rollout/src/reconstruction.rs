@@ -191,6 +191,34 @@ mod tests {
         assert_eq!(realtime_history(&items), vec![realtime]);
     }
 
+    #[test]
+    fn realtime_history_preserves_multiple_session_boundaries() {
+        let contents = [
+            agent_protocol::RealtimeItemContent::RealtimeSessionStarted,
+            agent_protocol::RealtimeItemContent::RealtimeSessionClosed {
+                outcome: agent_protocol::RealtimeSessionOutcome::Ended,
+            },
+            agent_protocol::RealtimeItemContent::RealtimeSessionStarted,
+        ];
+        let items = contents
+            .into_iter()
+            .enumerate()
+            .map(|(index, content)| {
+                RolloutItem::RealtimeItem(agent_protocol::RealtimeItem {
+                    id: format!("rt-{index}"),
+                    realtime_session_id: if index < 2 { "one" } else { "two" }.into(),
+                    content,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let restored = realtime_history(&items);
+        assert_eq!(restored.len(), 3);
+        assert_eq!(restored[0].realtime_session_id, "one");
+        assert_eq!(restored[1].realtime_session_id, "one");
+        assert_eq!(restored[2].realtime_session_id, "two");
+    }
+
     #[tokio::test]
     async fn retains_valid_items_across_a_malformed_middle_line() {
         let temp = TempDir::new().unwrap();

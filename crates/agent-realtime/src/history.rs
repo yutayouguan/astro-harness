@@ -249,4 +249,36 @@ mod tests {
             RealtimeItemContent::RealtimeSessionClosed { .. }
         ));
     }
+
+    #[test]
+    fn starting_a_new_session_seals_the_previous_session_in_order() {
+        let mut history = RealtimeHistory::default();
+        history.start("session-1");
+        history.observe(&RealtimeEvent::InputTranscriptDelta(
+            RealtimeTranscriptDelta {
+                delta: "first".into(),
+            },
+        ));
+
+        let boundary = history.start("session-2");
+        assert!(matches!(
+            &boundary[0].content,
+            RealtimeItemContent::TranscriptSegment {
+                role: RealtimeTranscriptRole::User,
+                text,
+            } if text == "first"
+        ));
+        assert!(matches!(
+            boundary[1].content,
+            RealtimeItemContent::RealtimeSessionClosed {
+                outcome: RealtimeSessionOutcome::Ended
+            }
+        ));
+        assert!(matches!(
+            boundary[2].content,
+            RealtimeItemContent::RealtimeSessionStarted
+        ));
+        assert_eq!(boundary[0].realtime_session_id, "session-1");
+        assert_eq!(boundary[2].realtime_session_id, "session-2");
+    }
 }
