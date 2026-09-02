@@ -64,6 +64,7 @@ type Props = {
   streaming?: boolean;
   subagentRoots: AgentTreeNode[];
   subagentThreads: AgentThread[];
+  subagentRootServiceTier?: string | null;
   subagentError?: string | null;
   subagentsLoading: boolean;
   subagentsInitialized: boolean;
@@ -106,6 +107,7 @@ export default function ChatRightPanel({
   streaming = false,
   subagentRoots,
   subagentThreads,
+  subagentRootServiceTier = null,
   subagentError = null,
   subagentsLoading,
   subagentsInitialized,
@@ -444,6 +446,7 @@ export default function ChatRightPanel({
                   />
                   <SubagentActivityBar
                     rootSessionId={sessionId}
+                    rootServiceTier={subagentRootServiceTier}
                     roots={subagentRoots}
                     onRefresh={onRefreshSubagents}
                     showEmpty

@@ -44,8 +44,14 @@ function thread(
 function snapshot(
   threads: AgentThread[],
   activitySequence = 1,
+  rootServiceTier: string | null = null,
 ): AgentTreeSnapshot {
-  return { rootThreadId: "root-session", threads, activitySequence };
+  return {
+    rootThreadId: "root-session",
+    threads,
+    activitySequence,
+    rootServiceTier,
+  };
 }
 
 function changed(
@@ -286,6 +292,7 @@ test("normalizes the complete Tauri snapshot into camelCase V2 DTOs", () => {
   const normalized = normalizeAgentTreeSnapshot({
     root_thread_id: "root-session",
     activity_sequence: 9,
+    root_service_tier: "priority",
     threads: [
       {
         thread_id: "worker-id",
@@ -305,6 +312,7 @@ test("normalizes the complete Tauri snapshot into camelCase V2 DTOs", () => {
     ],
   });
   assert.equal(normalized.activitySequence, 9);
+  assert.equal(normalized.rootServiceTier, "priority");
   assert.deepEqual(normalized.threads[0], {
     threadId: "worker-id",
     rootThreadId: "root-session",
@@ -317,6 +325,27 @@ test("normalizes the complete Tauri snapshot into camelCase V2 DTOs", () => {
     createdAt: "created",
     updatedAt: "updated",
   });
+});
+
+test("preserves root service tier across live events and read projections", () => {
+  const worker = thread("/root/worker", { kind: "running" });
+  const state = fromSnapshot(snapshot([worker], 3, "priority"));
+  const updated = reduceAgentThreadEvent(
+    state,
+    changed(
+      thread("/root/worker", {
+        kind: "completed",
+        payload: { lastMessage: "done" },
+      }),
+      4,
+    ),
+  );
+
+  assert.equal(updated.rootServiceTier, "priority");
+  assert.equal(
+    markThreadRead(updated, "/root/worker").rootServiceTier,
+    "priority",
+  );
 });
 
 test("normalizes field 13 event status payload and empty root parent", () => {

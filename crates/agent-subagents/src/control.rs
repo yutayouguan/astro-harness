@@ -735,6 +735,7 @@ impl AgentControl {
         after_cursor().await;
         let mut snapshot = self.store.snapshot(&self.root_thread_id).await?;
         snapshot.activity_sequence = activity_sequence;
+        snapshot.root_service_tier = self.root_service_tier();
         Ok(snapshot)
     }
 
@@ -1059,6 +1060,10 @@ mod tests {
 
         control.set_root_service_tier(Some("priority".into()));
         assert_eq!(clone.root_service_tier().as_deref(), Some("priority"));
+        assert_eq!(
+            clone.snapshot().await.unwrap().root_service_tier.as_deref(),
+            Some("priority")
+        );
         clone.set_root_service_tier(None);
         assert_eq!(control.root_service_tier(), None);
     }

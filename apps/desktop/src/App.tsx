@@ -2404,6 +2404,9 @@ export default function App() {
                         streaming={chat.streaming}
                         subagentRoots={subagents.roots}
                         subagentThreads={subagents.threads}
+                        subagentRootServiceTier={
+                          subagents.state.rootServiceTier
+                        }
                         subagentError={subagents.error}
                         subagentsLoading={subagents.loading}
                         subagentsInitialized={subagents.initialized}

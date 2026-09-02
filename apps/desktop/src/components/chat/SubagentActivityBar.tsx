@@ -17,6 +17,7 @@ import { MorphToggleIcon } from "../icons/MorphIcon";
 
 type Props = {
   rootSessionId?: string | null;
+  rootServiceTier?: string | null;
   roots: AgentTreeNode[];
   onRefresh: () => Promise<void>;
   onOpenThread: (canonicalPath: string) => void;
@@ -38,6 +39,7 @@ function visibleNode(node: AgentTreeNode): AgentTreeNode | null {
 
 export default function SubagentActivityBar({
   rootSessionId,
+  rootServiceTier = null,
   roots,
   onRefresh,
   onOpenThread,
@@ -91,6 +93,14 @@ export default function SubagentActivityBar({
         })
       : null,
   ].filter(Boolean);
+  const serviceTier = rootServiceTier?.trim() ?? "";
+  const activitySummary =
+    summaryParts.length > 0
+      ? summaryParts.join(" · ")
+      : t("subagents.activity.done");
+  const summaryWithTier = serviceTier
+    ? `${activitySummary} · ${t("subagents.activity.serviceTier", { tier: serviceTier })}`
+    : activitySummary;
 
   const stopAll = async () => {
     if (running.length === 0 || stopping) return;
@@ -177,9 +187,7 @@ export default function SubagentActivityBar({
                   ? t("subagents.empty")
                   : stopping
                     ? t("subagents.activity.stopping")
-                    : summaryParts.length > 0
-                      ? summaryParts.join(" · ")
-                      : t("subagents.activity.done")}
+                    : summaryWithTier}
             </small>
           </span>
           <MorphToggleIcon

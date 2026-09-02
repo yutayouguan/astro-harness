@@ -108,6 +108,8 @@ pub struct AgentTreeSnapshotV2 {
     pub root_thread_id: String,
     pub threads: Vec<AgentThreadV2>,
     pub activity_sequence: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_service_tier: Option<String>,
 }
 
 /// 桌面控制面专用的原生 Responses 时间线项。
@@ -388,8 +390,10 @@ mod tests {
             root_thread_id: thread.root_thread_id.clone(),
             threads: vec![thread.clone()],
             activity_sequence: 7,
+            root_service_tier: Some("priority".into()),
         };
         assert_eq!(snapshot.activity_sequence, 7);
+        assert_eq!(snapshot.root_service_tier.as_deref(), Some("priority"));
         assert_eq!(
             SpawnAgentV2Result {
                 thread: thread.clone()

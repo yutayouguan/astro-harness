@@ -23,6 +23,7 @@ export type AgentTreeSnapshot = {
   rootThreadId: string;
   threads: AgentThread[];
   activitySequence: number;
+  rootServiceTier: string | null;
 };
 
 export type AgentThreadMessage = {
@@ -109,6 +110,7 @@ export type AgentTreeNode = {
 export type AgentTreeState = {
   rootThreadId: string;
   activitySequence: number;
+  rootServiceTier: string | null;
   byPath: Record<string, AgentTreeNode>;
   roots: AgentTreeNode[];
   threads: AgentThread[];
@@ -117,6 +119,7 @@ export type AgentTreeState = {
 export const EMPTY_AGENT_TREE: AgentTreeState = {
   rootThreadId: "",
   activitySequence: 0,
+  rootServiceTier: null,
   byPath: {},
   roots: [],
   threads: [],
@@ -233,6 +236,10 @@ export function normalizeAgentTreeSnapshot(value: unknown): AgentTreeSnapshot {
     activitySequence: numberField(
       snapshot.activitySequence ?? snapshot.activity_sequence,
       "snapshot activity sequence",
+    ),
+    rootServiceTier: nullableString(
+      snapshot.rootServiceTier ?? snapshot.root_service_tier,
+      "snapshot root service tier",
     ),
   };
 }
@@ -413,6 +420,7 @@ function compareCanonicalPath(left: string, right: string): number {
 function projectTree(
   rootThreadId: string,
   activitySequence: number,
+  rootServiceTier: string | null,
   threads: AgentThread[],
   unreadByPath: Readonly<Record<string, boolean>>,
 ): AgentTreeState {
@@ -448,7 +456,14 @@ function projectTree(
 
   for (const node of Object.values(byPath)) node.children.sort(compareNodes);
   roots.sort(compareNodes);
-  return { rootThreadId, activitySequence, byPath, roots, threads: ordered };
+  return {
+    rootThreadId,
+    activitySequence,
+    rootServiceTier,
+    byPath,
+    roots,
+    threads: ordered,
+  };
 }
 
 export function fromSnapshot(
@@ -461,6 +476,7 @@ export function fromSnapshot(
   return projectTree(
     snapshot.rootThreadId,
     snapshot.activitySequence,
+    snapshot.rootServiceTier,
     snapshot.threads,
     unreadByPath,
   );
@@ -528,6 +544,7 @@ export function reduceAgentThreadEvent(
   return projectTree(
     state.rootThreadId,
     event.activitySequence,
+    state.rootServiceTier,
     threads,
     unreadByPath,
   );
@@ -548,6 +565,7 @@ export function markThreadRead(
   return projectTree(
     state.rootThreadId,
     state.activitySequence,
+    state.rootServiceTier,
     state.threads,
     unreadByPath,
   );

@@ -576,6 +576,7 @@ impl AgentGraphStore {
             activity_sequence: activity_sequence.try_into().with_context(|| {
                 format!("invalid negative status activity sequence {activity_sequence}")
             })?,
+            root_service_tier: None,
         };
         tx.commit().await?;
         Ok(snapshot)
