@@ -307,69 +307,6 @@ export default function BrowserDock({
             ))}
           </div>
         </div>
-        <div className="browser-dock-overflow" ref={actionsRef}>
-          <button
-            ref={actionsTriggerRef}
-            type="button"
-            className={`browser-dock-overflow-trigger${actionsOpen ? " is-active" : ""}`}
-            aria-label={t("chat.browserDock.moreActions")}
-            title={t("chat.browserDock.moreActions")}
-            aria-haspopup="menu"
-            aria-expanded={actionsOpen}
-            aria-controls="browser-dock-actions-menu"
-            onClick={() => setActionsOpen((open) => !open)}
-          >
-            <MoreVertical size={15} aria-hidden />
-          </button>
-          {actionsOpen ? (
-            <div
-              id="browser-dock-actions-menu"
-              className="browser-dock-actions-menu"
-              role="menu"
-              aria-label={t("chat.browserDock.moreActions")}
-            >
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setActionsOpen(false);
-                  void run("new_tab");
-                }}
-              >
-                <Plus size={14} aria-hidden />
-                <span>{t("chat.browserDock.newTab")}</span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!preview}
-                onClick={() => {
-                  setActionsOpen(false);
-                  setDownloadsOpen((open) => !open);
-                  void run("downloads");
-                }}
-              >
-                <Download size={14} aria-hidden />
-                <span>{t("chat.browserDock.downloads")}</span>
-                {preview?.downloads.length ? (
-                  <small>{preview.downloads.length}</small>
-                ) : null}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="is-danger"
-                onClick={() => {
-                  setActionsOpen(false);
-                  onClose();
-                }}
-              >
-                <X size={14} aria-hidden />
-                <span>{t("chat.browserDock.close")}</span>
-              </button>
-            </div>
-          ) : null}
-        </div>
       </header>
 
       <form className="browser-address-row" onSubmit={submitAddress}>
@@ -436,6 +373,69 @@ export default function BrowserDock({
         >
           <Camera size={14} aria-hidden />
         </button>
+        <div className="browser-dock-overflow" ref={actionsRef}>
+          <button
+            ref={actionsTriggerRef}
+            type="button"
+            className={`browser-dock-overflow-trigger${actionsOpen ? " is-active" : ""}`}
+            aria-label={t("chat.browserDock.moreActions")}
+            title={t("chat.browserDock.moreActions")}
+            aria-haspopup="menu"
+            aria-expanded={actionsOpen}
+            aria-controls="browser-dock-actions-menu"
+            onClick={() => setActionsOpen((open) => !open)}
+          >
+            <MoreVertical size={15} aria-hidden />
+          </button>
+          {actionsOpen ? (
+            <div
+              id="browser-dock-actions-menu"
+              className="browser-dock-actions-menu"
+              role="menu"
+              aria-label={t("chat.browserDock.moreActions")}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setActionsOpen(false);
+                  void run("new_tab");
+                }}
+              >
+                <Plus size={14} aria-hidden />
+                <span>{t("chat.browserDock.newTab")}</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!preview}
+                onClick={() => {
+                  setActionsOpen(false);
+                  setDownloadsOpen((open) => !open);
+                  void run("downloads");
+                }}
+              >
+                <Download size={14} aria-hidden />
+                <span>{t("chat.browserDock.downloads")}</span>
+                {preview?.downloads.length ? (
+                  <small>{preview.downloads.length}</small>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="is-danger"
+                onClick={() => {
+                  setActionsOpen(false);
+                  onClose();
+                }}
+              >
+                <X size={14} aria-hidden />
+                <span>{t("chat.browserDock.close")}</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
         {error && liveWebview.isLive ? (
           <span
             className="browser-address-error"

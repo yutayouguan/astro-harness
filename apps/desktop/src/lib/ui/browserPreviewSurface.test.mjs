@@ -46,6 +46,20 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.doesNotMatch(dock, /browser-dock-expand/);
   assert.doesNotMatch(dock, /BROWSER_DOCK_WIDTH_KEY/);
   assert.match(dock, /useBrowserLiveWebviews/);
+  const addressStart = dock.indexOf('<form className="browser-address-row"');
+  const screenshotStart = dock.indexOf(
+    'aria-label={t("chat.browserDock.screenshot")}',
+    addressStart,
+  );
+  const overflowStart = dock.indexOf(
+    'className="browser-dock-overflow"',
+    addressStart,
+  );
+  const addressEnd = dock.indexOf("</form>", addressStart);
+  assert.ok(addressStart >= 0);
+  assert.ok(screenshotStart > addressStart);
+  assert.ok(overflowStart > screenshotStart);
+  assert.ok(overflowStart < addressEnd);
   assert.match(dock, /browser-live-placeholder/);
   assert.match(dock, /liveWebview\.isLoading/);
 
