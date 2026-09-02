@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XtermTerminal } from "@xterm/xterm";
-import { ExternalLink, RotateCcw, Square, Trash2, X } from "lucide-react";
+import { ExternalLink, RefreshCw, Trash2, X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 
 import { useI18n } from "../../i18n/LocaleContext";
@@ -68,10 +68,12 @@ export default function TerminalDock({
   const hostRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XtermTerminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const restartAfterExitRef = useRef(false);
   const resizeDragCleanupRef = useRef<(() => void) | null>(null);
   const [height, setHeight] = useState(() => initialHeight(projectId));
   const [session, setSession] = useState<TerminalSessionDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
   const [restartGeneration, setRestartGeneration] = useState(0);
   const [settings, setSettings] = useState(readTerminalSettings);
 
@@ -86,6 +88,7 @@ export default function TerminalDock({
     if (!host || !projectRoot) return;
     setSession(null);
     setError(null);
+    restartAfterExitRef.current = false;
     let disposed = false;
     let cursor = 0;
     let pendingInput = "";
@@ -184,6 +187,7 @@ export default function TerminalDock({
         sessionRef.current = opened;
         setSession(opened);
         setError(null);
+        setRestarting(false);
         cursor = opened.baseCursor;
         void flushInput();
         terminal.focus();
@@ -216,15 +220,21 @@ export default function TerminalDock({
               : current,
           );
           if (!result.running) {
-            terminal.writeln(
-              `\r\n[${t("chat.terminal.exited", { code: String(result.exitCode ?? "-") })}]`,
-            );
+            if (restartAfterExitRef.current) {
+              restartAfterExitRef.current = false;
+              setRestartGeneration((generation) => generation + 1);
+            } else {
+              terminal.writeln(
+                `\r\n[${t("chat.terminal.exited", { code: String(result.exitCode ?? "-") })}]`,
+              );
+            }
             break;
           }
         }
       } catch (reason) {
         if (!disposed) {
           const message = String(reason);
+          setRestarting(false);
           setError(message);
           terminal.writeln(`\r\n[${message}]`);
         }
@@ -298,16 +308,21 @@ export default function TerminalDock({
     );
   }, [projectRoot]);
 
-  const kill = useCallback(() => {
-    if (!session?.running) return;
-    void invoke("terminal_kill", { id: session.id }).catch((reason) =>
-      setError(String(reason)),
-    );
-  }, [session]);
-
   const restart = useCallback(() => {
-    setRestartGeneration((generation) => generation + 1);
-  }, []);
+    if (restarting) return;
+    setError(null);
+    setRestarting(true);
+    if (!session?.running) {
+      setRestartGeneration((generation) => generation + 1);
+      return;
+    }
+    restartAfterExitRef.current = true;
+    void invoke("terminal_kill", { id: session.id }).catch((reason) => {
+      restartAfterExitRef.current = false;
+      setRestarting(false);
+      setError(String(reason));
+    });
+  }, [restarting, session]);
 
   return (
     <section
@@ -361,18 +376,12 @@ export default function TerminalDock({
           </button>
           <button
             type="button"
-            onClick={session?.running ? kill : restart}
-            disabled={!session && !error}
-            title={t(session?.running ? "chat.terminal.kill" : "chat.terminal.restart")}
-            aria-label={t(
-              session?.running ? "chat.terminal.kill" : "chat.terminal.restart",
-            )}
+            onClick={restart}
+            disabled={restarting || (!session && !error)}
+            title={t("chat.terminal.restart")}
+            aria-label={t("chat.terminal.restart")}
           >
-            {session?.running ? (
-              <Square size={12} aria-hidden />
-            ) : (
-              <RotateCcw size={14} aria-hidden />
-            )}
+            <RefreshCw size={14} aria-hidden />
           </button>
           <button
             type="button"

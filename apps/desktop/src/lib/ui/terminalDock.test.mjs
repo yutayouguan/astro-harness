@@ -31,6 +31,9 @@ test("terminal dock uses one shared backend session for input, output, resize an
   assert.match(component, /WRITE_CHUNK_BYTES/);
   assert.match(component, /encoded\.subarray/);
   assert.match(component, /restartGeneration/);
+  assert.match(component, /restartAfterExitRef/);
+  assert.match(component, /<RefreshCw size=\{14\}/);
+  assert.doesNotMatch(component, /<Square size=/);
 });
 
 test("terminal dock resets ownership when the active project changes", () => {
