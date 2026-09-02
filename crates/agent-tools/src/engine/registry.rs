@@ -78,7 +78,7 @@ fn namespace_child_name(entry: &ToolEntry) -> String {
         .to_string()
 }
 
-fn is_removed_code_mode_control(name: &str) -> bool {
+fn is_code_mode_control(name: &str) -> bool {
     matches!(name, "exec" | "wait")
 }
 
@@ -343,9 +343,7 @@ impl ToolRegistry {
     pub fn searchable_deferred_tools(&self) -> Vec<&ToolEntry> {
         self.tools
             .values()
-            .filter(|entry| {
-                entry.exposure.is_deferred() && !is_removed_code_mode_control(&entry.name)
-            })
+            .filter(|entry| entry.exposure.is_deferred() && !is_code_mode_control(&entry.name))
             .filter(|entry| self.is_entry_available(entry))
             .collect()
     }
@@ -358,14 +356,48 @@ impl ToolRegistry {
     /// **非 Direct 工具不包含在返回列表中**。Deferred 工具由
     /// `tool_search` 以原生 output 形式返回，不改写注册表中的 exposure。
     pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        api_specs(
+        self.schemas_for_api_with_mode(types::ToolMode::Direct)
+            .expect("Direct 模式不依赖 Code Mode 运行时")
+    }
+
+    /// 解析 Code Mode 可用性，并应用仅允许混合模式降级的规则。
+    pub fn effective_tool_mode(
+        &self,
+        requested: types::ToolMode,
+    ) -> anyhow::Result<types::ToolMode> {
+        let controls_available = ["exec", "wait"].into_iter().all(|name| {
+            self.tools
+                .get(name)
+                .is_some_and(|entry| self.is_entry_available(entry))
+        });
+        match (requested, controls_available) {
+            (types::ToolMode::CodeMode, false) => Ok(types::ToolMode::Direct),
+            (types::ToolMode::CodeModeOnly, false) => {
+                anyhow::bail!(
+                    "CodeModeOnly requested but the embedded Code Mode runtime is unavailable"
+                )
+            }
+            _ => Ok(requested),
+        }
+    }
+
+    /// 按模型选择的工具模式生成模型可见 schema。
+    pub fn schemas_for_api_with_mode(
+        &self,
+        requested: types::ToolMode,
+    ) -> anyhow::Result<Vec<serde_json::Value>> {
+        let mode = self.effective_tool_mode(requested)?;
+        Ok(api_specs(
             self.tools
                 .values()
-                .filter(|entry| {
-                    entry.exposure.is_direct() && !is_removed_code_mode_control(&entry.name)
-                })
-                .filter(|entry| self.is_entry_available(entry)),
-        )
+                .filter(|entry| entry.exposure.is_direct())
+                .filter(|entry| self.is_entry_available(entry))
+                .filter(|entry| match mode {
+                    types::ToolMode::Direct => !is_code_mode_control(&entry.name),
+                    types::ToolMode::CodeMode => true,
+                    types::ToolMode::CodeModeOnly => is_code_mode_control(&entry.name),
+                }),
+        ))
     }
 
     /// 一次性构建当前 Step 的模型可见 schema 与额外可路由 Deferred schema。
@@ -377,25 +409,58 @@ impl ToolRegistry {
         &self,
         discovered_deferred: &HashSet<&str>,
     ) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
+        let (visible, callable, _) = self
+            .schemas_for_step_with_mode(types::ToolMode::Direct, discovered_deferred)
+            .expect("Direct 模式不依赖 Code Mode 运行时");
+        (visible, callable)
+    }
+
+    /// 构建某个工具模式下的模型可见、模型额外可调用和 Code Mode 嵌套路由。
+    ///
+    /// 第三个返回值只供 `exec` 内部使用，不能并入模型直接调用集合，否则模型可
+    /// 通过猜测名称绕过 `CodeModeOnly` 或 Deferred 发现边界。
+    pub fn schemas_for_step_with_mode(
+        &self,
+        requested: types::ToolMode,
+        discovered_deferred: &HashSet<&str>,
+    ) -> anyhow::Result<(
+        Vec<serde_json::Value>,
+        Vec<serde_json::Value>,
+        Vec<serde_json::Value>,
+    )> {
+        let mode = self.effective_tool_mode(requested)?;
         let mut direct = Vec::new();
         let mut discovered = Vec::new();
+        let mut nested = Vec::new();
         for entry in self.tools.values() {
-            if is_removed_code_mode_control(&entry.name) {
-                continue;
-            }
-            let is_direct = entry.exposure.is_direct();
-            let is_discovered =
-                entry.exposure.is_deferred() && discovered_deferred.contains(entry.name.as_str());
-            if (!is_direct && !is_discovered) || !self.is_entry_available(entry) {
+            let is_control = is_code_mode_control(&entry.name);
+            let is_direct = entry.exposure.is_direct()
+                && match mode {
+                    types::ToolMode::Direct => !is_control,
+                    types::ToolMode::CodeMode => true,
+                    types::ToolMode::CodeModeOnly => is_control,
+                };
+            let is_discovered = mode != types::ToolMode::CodeModeOnly
+                && !is_control
+                && entry.exposure.is_deferred()
+                && discovered_deferred.contains(entry.name.as_str());
+            let is_nested = mode != types::ToolMode::Direct
+                && !is_control
+                && entry.name != "tool_search"
+                && !entry.exposure.is_hidden();
+            if (!is_direct && !is_discovered && !is_nested) || !self.is_entry_available(entry) {
                 continue;
             }
             if is_direct {
                 direct.push(entry);
-            } else {
+            } else if is_discovered {
                 discovered.push(entry);
             }
+            if is_nested {
+                nested.push(entry);
+            }
         }
-        (api_specs(direct), api_specs(discovered))
+        Ok((api_specs(direct), api_specs(discovered), api_specs(nested)))
     }
 }
 

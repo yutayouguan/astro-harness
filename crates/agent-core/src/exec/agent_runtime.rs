@@ -1622,7 +1622,7 @@ async fn run_request(
     if let Some(effort) = request.runtime.model_request.reasoning_effort.as_deref() {
         config.additional_params = serde_json::json!({ "reasoning_effort": effort });
     }
-    let session = Session::with_session_id_for_agent_thread(
+    let mut session = Session::with_session_id_for_agent_thread(
         config,
         request.thread.session_id.clone(),
         &request.runtime.parent_agent_id,
@@ -1672,6 +1672,11 @@ async fn run_request(
         request.runtime.model_request.model.as_deref(),
     )?;
     session.set_model_targets(targets.clone());
+    if let (Some(spec), Some(primary)) = (request.runtime.model_spec.as_ref(), targets.first()) {
+        if spec.provider_id == primary.backend_id && spec.model_id == primary.model {
+            session.set_model(spec.clone());
+        }
+    }
     let prepared_system_prompt = if request.consume_mailbox {
         let turn = session.prepare_mailbox_turn().await?;
         let system_prompt = match turn {
@@ -1998,6 +2003,7 @@ mod tests {
                     api_key: "test".into(),
                     base_url: "http://127.0.0.1.invalid".into(),
                 }],
+                model_spec: None,
                 project_root: None,
                 workspace_roots: Vec::new(),
                 hook_runtime: None,

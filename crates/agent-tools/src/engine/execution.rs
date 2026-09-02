@@ -20,6 +20,7 @@ pub struct ParentRuntimeMaterial {
     pub parent_sandbox_mode: String,
     pub inherited_skill_config: Vec<(PathBuf, bool)>,
     pub model_targets: Vec<types::ModelTarget>,
+    pub model_spec: Option<types::ModelSpec>,
     pub project_root: Option<PathBuf>,
     pub workspace_roots: Vec<PathBuf>,
     pub hook_runtime: Option<Arc<hooks::HookRuntime>>,

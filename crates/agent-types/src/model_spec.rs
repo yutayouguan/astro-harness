@@ -5,6 +5,7 @@
 
 use crate::auxiliary_target::AuxiliaryTask;
 use crate::model_target::ModelTarget;
+use crate::{ToolMode, ToolModeFeatureFlags};
 use serde::{Deserialize, Serialize};
 
 /// 模型角色：主聊或辅助任务（对齐 Agno `ModelType`）。
@@ -30,6 +31,9 @@ pub struct ModelSpec {
     /// 可选 max_tokens；`None` 表示沿用默认。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
+    /// 模型目录提供的工具模式；存在时优先于 feature flag。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_mode: Option<ToolMode>,
 }
 
 impl ModelSpec {
@@ -39,6 +43,7 @@ impl ModelSpec {
             model_id: model_id.into(),
             temperature: None,
             max_tokens: None,
+            tool_mode: None,
         }
     }
 
@@ -50,6 +55,16 @@ impl ModelSpec {
     pub fn with_max_tokens(mut self, n: u32) -> Self {
         self.max_tokens = Some(n);
         self
+    }
+
+    pub fn with_tool_mode(mut self, mode: ToolMode) -> Self {
+        self.tool_mode = Some(mode);
+        self
+    }
+
+    /// 按“模型目录 > feature flag > Direct”解析请求模式。
+    pub fn requested_tool_mode(&self, features: ToolModeFeatureFlags) -> ToolMode {
+        self.tool_mode.unwrap_or_else(|| features.requested_mode())
     }
 
     /// 解析 `"provider:model_id"` 或 `"provider/model_id"`。
@@ -182,5 +197,15 @@ mod tests {
             .apply_to(&base);
         assert_eq!(t.backend_id, "google");
         assert_eq!(t.model, "gemini-2.5-flash");
+    }
+
+    #[test]
+    fn model_tool_mode_overrides_feature_flags() {
+        let spec = ModelSpec::new("openai", "gpt-test").with_tool_mode(ToolMode::Direct);
+        let features = ToolModeFeatureFlags {
+            code_mode: false,
+            code_mode_only: true,
+        };
+        assert_eq!(spec.requested_tool_mode(features), ToolMode::Direct);
     }
 }

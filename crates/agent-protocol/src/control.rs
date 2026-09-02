@@ -13,6 +13,8 @@ use crate::{AgentMessageInputContent, ResponseItem, ResponseItemId};
 #[derive(Clone, Default, PartialEq)]
 pub struct ThreadSettingsOverrides {
     pub model_targets: Option<Vec<types::ModelTarget>>,
+    /// 主模型目录元数据；用于保留不属于凭据目标的工具模式等能力。
+    pub model_spec: Option<types::ModelSpec>,
     pub auxiliary_targets: Option<HashMap<types::AuxiliaryTask, Vec<types::ModelTarget>>>,
     pub image_gen_targets: Option<types::ImageGenTargets>,
     pub context_window: Option<u32>,
@@ -41,6 +43,7 @@ impl fmt::Debug for ThreadSettingsOverrides {
                 "model_targets",
                 &self.model_targets.as_ref().map(|targets| targets.len()),
             )
+            .field("model_spec", &self.model_spec)
             .field(
                 "auxiliary_targets",
                 &self.auxiliary_targets.as_ref().map(HashMap::len),

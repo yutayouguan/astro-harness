@@ -752,6 +752,11 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
                 .filter(|n| *n > 0)
         })
         .unwrap_or(0);
+    let tool_mode = cached_model_info(&primary.provider_id, &primary.model)
+        .and_then(|info| info.tool_mode)
+        .map(types::ToolMode::as_str)
+        .unwrap_or_default()
+        .to_string();
 
     // OpenRouter default_parameters → 采样温度 + 扩展参数（top_p 等）
     let (temperature, additional_params_json) = {
@@ -877,6 +882,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         client_message_id: String::new(),
         project_id,
         workspace_roots,
+        tool_mode,
     };
 
     let bridge = managed_bridge(&app).inner().clone();

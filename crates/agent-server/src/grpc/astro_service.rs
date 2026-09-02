@@ -1307,6 +1307,13 @@ impl AstroServiceImpl {
             req.api_key.trim().to_string()
         };
         let base_url = req.base_url.trim().to_string();
+        let model_tool_mode = if req.tool_mode.trim().is_empty() {
+            None
+        } else {
+            Some(types::ToolMode::parse(&req.tool_mode).ok_or_else(|| {
+                Status::invalid_argument(format!("unsupported tool_mode: {}", req.tool_mode))
+            })?)
+        };
         let mut targets = vec![types::ModelTarget {
             provider_id: String::new(),
             backend_id: provider.into(),
@@ -1340,6 +1347,13 @@ impl AstroServiceImpl {
         }
         Ok(agent_protocol::ThreadSettingsOverrides {
             model_targets: Some(targets),
+            model_spec: Some(types::ModelSpec {
+                provider_id: provider.into(),
+                model_id: model,
+                temperature: req.temperature,
+                max_tokens: (req.max_output_tokens > 0).then_some(req.max_output_tokens),
+                tool_mode: model_tool_mode,
+            }),
             auxiliary_targets: Some(parse_auxiliary_targets(req.auxiliary_targets.clone())),
             image_gen_targets: Some(tools::image_gen_targets_from_parts(tools::ImageGenParts {
                 provider: &req.image_gen_provider,

@@ -10,6 +10,8 @@ const READONLY_ALLOW: &[&str] = &[
     "web_search",
     "web_fetch",
     "tool_search",
+    "exec",
+    "wait",
     "browser_open",
     "browser_snapshot",
     "browser_scroll",

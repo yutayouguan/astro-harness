@@ -292,6 +292,11 @@ fn parent_runtime_material(ctx: &ToolContext<'_>) -> ParentRuntimeMaterial {
                 ctx.credentials.provider, ctx.credentials.model
             ))
         };
+    let model_spec = parent_model.as_ref().map(|_| {
+        let mut spec = types::ModelSpec::new(&ctx.credentials.provider, &ctx.credentials.model);
+        spec.tool_mode = ctx.credentials.tool_mode;
+        spec
+    });
     ParentRuntimeMaterial {
         memory_dir: ctx.memory_dir.clone(),
         parent_agent_id: ctx.agent_id(),
@@ -299,6 +304,7 @@ fn parent_runtime_material(ctx: &ToolContext<'_>) -> ParentRuntimeMaterial {
         parent_sandbox_mode: current_sandbox_mode(ctx),
         inherited_skill_config: ctx.skill_config_overrides.to_vec(),
         model_targets: ctx.model_targets.to_vec(),
+        model_spec,
         project_root: ctx.project_root.clone(),
         workspace_roots: ctx.workspace_roots.clone(),
         hook_runtime: ctx.hook_runtime.clone(),

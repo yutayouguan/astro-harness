@@ -128,6 +128,10 @@ impl ToolExposure {
     pub fn is_hidden(&self) -> bool {
         matches!(self, Self::Hidden)
     }
+
+    pub fn is_model_only(&self) -> bool {
+        matches!(self, Self::DirectModelOnly | Self::DeferredModelOnly)
+    }
 }
 
 /// Format descriptor for freeform (non-JSON) tools like apply_patch.

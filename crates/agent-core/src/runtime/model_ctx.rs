@@ -55,6 +55,7 @@ impl ModelContext {
     pub fn set_credentials(&mut self, provider: &str, model: &str, api_key: &str, base_url: &str) {
         self.credentials.provider = provider.to_string();
         self.credentials.model = model.to_string();
+        self.credentials.tool_mode = None;
         self.credentials.api_key = api_key.to_string();
         self.credentials.base_url = base_url.to_string();
         if !provider.trim().is_empty() || !model.trim().is_empty() {
@@ -83,11 +84,21 @@ impl ModelContext {
     /// 设置含 primary 的聊天 fallback 链。
     pub fn set_model_targets(&mut self, targets: Vec<ModelTarget>) {
         if let Some(primary) = targets.first() {
+            let preserved_tool_mode = self
+                .model_spec
+                .as_ref()
+                .filter(|spec| {
+                    spec.provider_id == primary.backend_id && spec.model_id == primary.model
+                })
+                .and_then(|spec| spec.tool_mode);
             self.credentials.provider = primary.backend_id.clone();
             self.credentials.model = primary.model.clone();
+            self.credentials.tool_mode = preserved_tool_mode;
             self.credentials.api_key = primary.api_key.clone();
             self.credentials.base_url = primary.base_url.clone();
-            self.model_spec = Some(ModelSpec::new(&primary.backend_id, &primary.model));
+            let mut spec = ModelSpec::new(&primary.backend_id, &primary.model);
+            spec.tool_mode = preserved_tool_mode;
+            self.model_spec = Some(spec);
         }
         self.model_targets = targets;
     }
@@ -144,6 +155,11 @@ impl ModelContext {
 
     pub fn model_spec(&self) -> Option<&ModelSpec> {
         self.model_spec.as_ref()
+    }
+
+    pub fn set_model_spec(&mut self, spec: ModelSpec) {
+        self.credentials.tool_mode = spec.tool_mode;
+        self.model_spec = Some(spec);
     }
 
     // ── 上下文窗口 ─────────────────────────────────────────

@@ -961,6 +961,11 @@ impl Session {
     /// 与 Agent Thread 路径共享同一捕获入口。
     pub(crate) async fn capture_step_context(&self) -> anyhow::Result<Arc<StepContext>> {
         self.reload_tools_and_mcp().await?;
+        let extension_snapshot = self.extension_snapshot_for_current_turn().await?;
+        let feature_flags = types::ToolModeFeatureFlags {
+            code_mode: extension_snapshot.feature_enabled("code_mode"),
+            code_mode_only: extension_snapshot.feature_enabled("code_mode_only"),
+        };
         let mut history = self.provider_response_history().await;
         let prompt_context = self.prompt_context_history();
         if let Some(ctx) = self.take_inject_context().await {
@@ -992,6 +997,12 @@ impl Session {
             })
         };
         let interaction_mode = turn_context.mode();
+        let requested_tool_mode = self
+            .lock_state()
+            .model_ctx
+            .model_spec()
+            .map(|spec| spec.requested_tool_mode(feature_flags))
+            .unwrap_or_else(|| feature_flags.requested_mode());
         let discovered_deferred = discovered_deferred_tool_names(&history);
         let tool_router = {
             let registry = self
@@ -999,13 +1010,16 @@ impl Session {
                 .tool_registry
                 .read()
                 .expect("tool registry lock poisoned");
-            let (visible_specs, discovered_specs) = registry.schemas_for_step(&discovered_deferred);
+            let (visible_specs, discovered_specs, nested_specs) =
+                registry.schemas_for_step_with_mode(requested_tool_mode, &discovered_deferred)?;
             let visible_specs = tools::filter_schemas(interaction_mode, visible_specs);
             let discovered_specs = tools::filter_schemas(interaction_mode, discovered_specs);
-            Arc::new(crate::runtime::ToolRouter::from_registry(
+            let nested_specs = tools::filter_schemas(interaction_mode, nested_specs);
+            Arc::new(crate::runtime::ToolRouter::from_registry_with_nested(
                 &registry,
                 &discovered_specs,
                 visible_specs,
+                &nested_specs,
             ))
         };
         let step_context = Arc::new(StepContext::new(
@@ -1347,6 +1361,81 @@ mod tests {
         );
         assert!(!first.routes_tool("web_search"));
         assert!(!first.routes_tool("exec_command"));
+    }
+
+    fn visible_tool_names(step: &StepContext) -> Vec<String> {
+        step.tool_router
+            .model_visible_specs()
+            .iter()
+            .filter_map(|spec| spec.get("name").and_then(serde_json::Value::as_str))
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn code_mode_only_feature_keeps_business_tools_nested() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            "[features]\ncode_mode_only = true\n",
+        )
+        .unwrap();
+        let session = Session::with_session_id(
+            crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+            "code-mode-only-feature".into(),
+        )
+        .await
+        .unwrap();
+
+        let step = session.capture_step_context().await.unwrap();
+        let visible = visible_tool_names(&step);
+        assert_eq!(visible, vec!["exec", "wait"]);
+        assert!(step.routes_tool("exec_command"));
+        assert!(!step.tool_router.model_can_call("exec_command"));
+    }
+
+    #[tokio::test]
+    async fn model_catalog_tool_mode_overrides_feature_flag() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            "[features]\ncode_mode_only = true\n",
+        )
+        .unwrap();
+        let mut session = Session::with_session_id(
+            crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+            "model-tool-mode-override".into(),
+        )
+        .await
+        .unwrap();
+        session.set_model(
+            types::ModelSpec::new("openai", "gpt-test").with_tool_mode(types::ToolMode::Direct),
+        );
+
+        let step = session.capture_step_context().await.unwrap();
+        let visible = visible_tool_names(&step);
+        assert!(visible.contains(&"exec_command".to_string()));
+        assert!(!visible.contains(&"exec".to_string()));
+        assert!(!step.routes_tool("exec"));
+    }
+
+    #[tokio::test]
+    async fn code_mode_only_fails_closed_when_control_is_missing() {
+        let dir = TempDir::new().unwrap();
+        let mut session = Session::with_session_id(
+            crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+            "code-mode-only-unavailable".into(),
+        )
+        .await
+        .unwrap();
+        session.set_model(
+            types::ModelSpec::new("openai", "gpt-test")
+                .with_tool_mode(types::ToolMode::CodeModeOnly),
+        );
+        session.tool_registry_mut().unregister("wait");
+
+        let error = session.capture_step_context().await.unwrap_err();
+        assert!(error.to_string().contains("CodeModeOnly"));
     }
 
     #[test]

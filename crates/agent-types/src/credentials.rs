@@ -5,6 +5,8 @@
 pub struct ModelCredentials {
     pub provider: String,
     pub model: String,
+    /// 当前模型目录解析出的工具模式；不包含 feature flag 回退值。
+    pub tool_mode: Option<crate::ToolMode>,
     pub api_key: String,
     pub base_url: String,
 }

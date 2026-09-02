@@ -1,10 +1,10 @@
 # Codex 原生工具协议、Tool Search 与 Code Mode 详细设计
 
-> **Harness 当前基线（2026-09-02）**：Direct 工具链已完整接入；进程内 QuickJS Code Mode runtime 及自描述 `ALL_TOOLS` 目录已实现。模型目录的 `CodeModeOnly` 选择和仅暴露 `exec` / `wait` 的 Provider 投影仍是待接线项，不应把“runtime 存在”误写为“模型已启用”。
+> **Harness 当前基线（2026-09-02）**：Direct、CodeMode 与 CodeModeOnly 三种工具投影均已接入；JavaScript 由进程内 QuickJS 执行，不依赖用户安装 Node.js。
 
 > 阶段：详细设计
 >
-> 状态：部分实现（Direct 与 QuickJS runtime 已落地，CodeModeOnly 模型投影待接线）
+> 状态：已实现
 >
 > 基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
 >
@@ -18,7 +18,7 @@
 2. 为什么不再把所有工具都压成普通 JSON Function；
 3. 从工具注册、Provider 请求、流式事件、执行到历史回放，完整语义如何保持。
 
-已实现部分的类型、字段、分支与降级规则均对应当前仓库；尚未接线的模式选择会在文中显式标记，不当作现有行为。
+文中的类型、字段、分支与降级规则均对应当前仓库。
 
 ## 2. 原始问题
 
@@ -265,7 +265,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 - 媒体：`image_gen`、`image_analyze`、`audio_analyze`、`video_gen`、`video_analyze`、`speech_gen`、`music_gen`、`robotics`；
 - MCP：当 `tool_search` 可用时，当前 MCP Hub 发现的 `mcp__{server}__{tool}` 也默认进入 Deferred。
 
-`exec` / `wait` 已从注册表移除。模型始终直接获得当前启用的 Direct 工具和原生 `tool_search`；Deferred 工具由 `tool_search` 激活后进入下一次 sampling。
+`exec` / `wait` 以 `DirectModelOnly` 注册，但只有 CodeMode 或 CodeModeOnly 投影会把它们发给模型。Direct 模式仍直接获得普通 Direct 工具和原生 `tool_search`；Deferred 工具由 `tool_search` 激活后进入下一次 sampling。
 
 ### 5.3 暴露状态
 
@@ -391,7 +391,7 @@ Responses API 使用不同的 call/output item 表示不同工具。下一轮采
 
 ## 7. Code Mode `exec` / `wait`
 
-> 本节描述已实现的 QuickJS runtime 合同。当前 Provider 默认仍走 Direct；只有完成第 9 节的模型模式投影后，`CodeModeOnly` 模型才会在采样请求中看到 `exec` / `wait`。
+> 本节描述已实现的 QuickJS runtime 合同。Provider 根据模型目录与 feature flag 的结果选择 Direct、CodeMode 或 CodeModeOnly 投影。
 
 ### 7.1 解决的问题
 
@@ -473,7 +473,7 @@ resolve/reject JavaScript Promise
 
 CodeModeOnly 不把所有业务工具 Schema 注入 Provider 请求。声明按热路径分层披露：
 
-1. Direct 工具的精简 TypeScript 声明随 `exec` 描述预置，模型首次采样即可生成调用代码。
+1. 业务工具的精简 TypeScript 声明保存在 `ALL_TOOLS[].description`，模型可在 cell 内筛选后读取。
 2. Deferred 工具不进入初始 `exec` 描述，但仍存在于 cell 的 `ALL_TOOLS`。
 3. `ALL_TOOLS` 每项只含 `name` 和 `description`；description 末尾携带同形 TypeScript 调用声明，不再提供独立的 `getToolSchema()`。
 
@@ -569,20 +569,23 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 - 嵌套调用经过同一路由和审计链；
 - 取消会终止 cell，不把孤儿进程留在会话外。
 
-## 9. Direct / CodeModeOnly 模式合同
+## 9. Direct / CodeMode / CodeModeOnly 模式合同
 
 ### 9.1 Provider 可见面
 
 | 模式 | Provider `tools` 中直接可见 | 业务工具发现 | 调用路径 |
 | --- | --- | --- | --- |
 | `Direct` | Direct Function / Freeform / Namespace + `tool_search`；每个工具带完整 Schema | Deferred 经 Provider 原生 `tool_search` 按需返回 | 模型直接产生原生 tool call |
-| `CodeModeOnly` | 仅 `exec` / `wait` | Direct 声明预置于 `exec` 描述；Deferred 从 `ALL_TOOLS[].description` 检索 | 模型产生 JavaScript，cell 通过 `tools.<name>(input)` 嵌套调用 |
+| `CodeMode` | Direct 工具、`tool_search`、`exec`、`wait` | Deferred 可经 `tool_search` 直调，也可由 QuickJS 间接调用 | 模型可混合使用原生 tool call 与 JavaScript |
+| `CodeModeOnly` | 仅 `exec` / `wait` | 业务工具从 `ALL_TOOLS[].description` 检索声明 | 模型产生 JavaScript，cell 通过 `tools.<name>(input)` 嵌套调用 |
 
 `ToolExposure` 与模式正交：它描述工具条目在注册表中的披露策略，模式决定该策略如何投影到本次 Provider step。两者都不是授权；执行仍必须经过工具 gate、approval 和 sandbox。
 
 ### 9.2 模式决策与快照
 
-- 模式由受信任的模型目录/模型配置决定，不允许模型输出自行切换。
+- 模式按“模型目录 `tool_mode` > `[features]` > `Direct`”解析，不允许模型输出自行切换。
+- `[features] code_mode_only = true` 优先于 `code_mode = true`；模型目录显式值仍可覆盖两者。
+- CodeMode 控制工具不可用时可降级到 Direct；CodeModeOnly 不降级并终止当前 step。
 - 每个 sampling step 冻结一份 `StepContext` 工具快照，避免 MCP 热重载或 Skill 加载改变已生成调用的路由边界。
 - `CodeModeOnly` 必须 fail closed：QuickJS runtime、`exec`/`wait` 规格或快照构建失败时终止当次 step，不得悄然退回 Direct 并扩大模型可见面。
 - `Direct` 不需要 QuickJS，Code Mode runtime 故障不影响 Direct 模型。
@@ -601,9 +604,20 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 | --- | --- |
 | Direct Function / Freeform / Namespace | 已接入 |
 | Direct `tool_search` + Deferred 路由 | 已接入 |
-| QuickJS cell、`exec/wait` 调度、自描述 `ALL_TOOLS` | 已实现 runtime |
-| 模型目录 `tool_mode=CodeModeOnly` | 待接入 |
-| Provider step 仅投影 `exec/wait` | 待接入 |
+| QuickJS cell、`exec/wait` 调度、自描述 `ALL_TOOLS` | 已接入 |
+| 模型目录 `tool_mode` 覆盖 | 已接入 |
+| `[features]` 默认模式选择 | 已接入 |
+| Provider 三模式工具投影 | 已接入 |
+
+配置示例：
+
+```toml
+[features]
+code_mode = true
+# code_mode_only = true
+```
+
+模型目录中的对象可设置 `"tool_mode": "direct" | "code_mode" | "code_mode_only"`；该值优先于上述 feature flag。
 
 ## 10. 关键不变量
 
@@ -664,6 +678,6 @@ CARGO_TARGET_DIR=/tmp/astro-tool-align cargo test -p tools --test tool_search_al
 以下内容必须与“已实现”能力区分：
 
 1. `ToolDefinition::WebSearch` 已具备原生传输能力，但当前没有 Provider profile 将它注册到模型工具列表；当前实际搜索走本地 Deferred Function。
-2. QuickJS Code Mode runtime 已存在，但模型目录 `tool_mode` 和 Provider 端 `CodeModeOnly` 工具投影尚待接入；在此之前当前采样仍使用 Direct。
+2. CodeModeOnly 的业务工具只存在于嵌套路由，不进入模型直调集合；这两个集合必须继续分别维护。
 
 这些边界不影响当前的原生 schema、ToolSearch、Responses 回放和 Code Mode runtime 单元合同。

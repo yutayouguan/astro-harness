@@ -975,6 +975,9 @@ impl Session {
         if let Some(targets) = update.model_targets {
             state.model_ctx.set_model_targets(targets);
         }
+        if let Some(spec) = update.model_spec {
+            state.model_ctx.set_model_spec(spec);
+        }
         if let Some(targets) = update.auxiliary_targets {
             state.model_ctx.set_auxiliary_targets(targets);
         }
@@ -1753,6 +1756,7 @@ impl Session {
         if !spec.model_id.trim().is_empty() {
             model_ctx.credentials.model = spec.model_id.trim().to_string();
         }
+        model_ctx.credentials.tool_mode = spec.tool_mode;
         if let Some(primary) = model_ctx.model_targets.first_mut() {
             *primary = spec.apply_to(primary);
             model_ctx.credentials.api_key = primary.api_key.clone();

@@ -108,6 +108,7 @@ pub struct ExtensionDiagnostic {
 pub struct ExtensionSnapshot {
     version: String,
     config_version: String,
+    effective_config: toml::Value,
     working_dir: PathBuf,
     extensions: Vec<ResolvedExtension>,
     mcp_servers: Vec<mcp::McpServerConfig>,
@@ -124,6 +125,16 @@ impl ExtensionSnapshot {
 
     pub fn config_version(&self) -> &str {
         &self.config_version
+    }
+
+    /// 查询 `[features]` 下的布尔开关；缺失或类型错误都视为关闭。
+    pub fn feature_enabled(&self, name: &str) -> bool {
+        self.effective_config
+            .get("features")
+            .and_then(toml::Value::as_table)
+            .and_then(|features| features.get(name))
+            .and_then(toml::Value::as_bool)
+            .unwrap_or(false)
     }
 
     pub fn working_dir(&self) -> &Path {
@@ -322,6 +333,7 @@ pub fn discover_extension_snapshot(
     Ok(ExtensionSnapshot {
         version,
         config_version: options.config_version.clone(),
+        effective_config: options.effective_config.clone(),
         working_dir: options.working_dir.clone(),
         extensions: resolved,
         mcp_servers,

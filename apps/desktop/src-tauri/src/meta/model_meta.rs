@@ -92,6 +92,13 @@ pub struct ModelDefaultParams {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelInfo {
     pub id: String,
+    /// 模型目录指定的工具模式；存在时覆盖全局 feature flag。
+    #[serde(
+        default,
+        deserialize_with = "types::deserialize_optional_tool_mode",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tool_mode: Option<types::ToolMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -161,6 +168,7 @@ pub struct ApiModelHints {
 pub fn enrich_from_id(id: &str, kind: &str, hints: Option<ApiModelHints>) -> ModelInfo {
     let mut info = ModelInfo {
         id: id.to_string(),
+        tool_mode: None,
         display_name: None,
         description: None,
         canonical_slug: None,
@@ -438,6 +446,27 @@ fn looks_like_native_web_model(kind: &str, id_lower: &str, info: &ModelInfo) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn model_catalog_accepts_tool_mode() {
+        let mut info: ModelInfo = serde_json::from_value(serde_json::json!({
+            "id": "gpt-test",
+            "tool_mode": "code_mode_only"
+        }))
+        .unwrap();
+        enrich_model_info(&mut info, "openai", None);
+        assert_eq!(info.tool_mode, Some(types::ToolMode::CodeModeOnly));
+    }
+
+    #[test]
+    fn model_catalog_ignores_unknown_tool_mode() {
+        let info: ModelInfo = serde_json::from_value(serde_json::json!({
+            "id": "gpt-future",
+            "tool_mode": "future_tool_mode"
+        }))
+        .unwrap();
+        assert_eq!(info.tool_mode, None);
+    }
     use crate::meta::openrouter_meta;
 
     #[test]
@@ -528,6 +557,7 @@ mod tests {
             || {
                 let mut stale = ModelInfo {
                     id: "deepseek-v4-flash".into(),
+                    tool_mode: None,
                     display_name: None,
                     description: None,
                     canonical_slug: None,

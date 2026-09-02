@@ -153,6 +153,8 @@ message ChatRequest {
   // 当前项目全部可读写目录；第一个元素必须与 project_root（主 cwd）一致。
   repeated string workspace_roots = 39;
   reserved 40;
+  // 模型目录指定的工具暴露模式；空值表示使用 feature flag。
+  string tool_mode = 41;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

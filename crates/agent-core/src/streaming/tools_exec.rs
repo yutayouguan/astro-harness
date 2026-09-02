@@ -984,6 +984,7 @@ fn default_code_mode_max_tokens() -> usize {
 
 fn code_mode_nested_tools(
     session: &AgentLoop,
+    step_context: &StepContext,
 ) -> Vec<crate::runtime::code_mode::NestedToolMetadata> {
     let registry = session
         .services
@@ -1007,6 +1008,9 @@ fn code_mode_nested_tools(
         } else {
             format!("{}.{}", entry.namespace, child_name)
         };
+        if !step_context.routes_tool(&wire_name) {
+            continue;
+        }
         let name = crate::runtime::code_mode::normalize_identifier(&wire_name);
         by_identifier.entry(name.clone()).or_insert_with(|| {
             // 与 Codex 一致：ALL_TOOLS 只保留 name/description，但 description
@@ -1123,6 +1127,7 @@ async fn drive_code_mode_cell(
                             pause,
                             turn_context,
                             hitl_gate,
+                            ToolCallOrigin::CodeMode,
                         ))
                         .await
                         {
@@ -1203,7 +1208,7 @@ async fn execute_code_mode_tool(
                 .ok_or_else(|| anyhow::anyhow!("exec expects raw JavaScript source text"))?;
             let source =
                 crate::runtime::code_mode::parse_exec_source(source).map_err(anyhow::Error::msg)?;
-            let tools = code_mode_nested_tools(session);
+            let tools = code_mode_nested_tools(session, &step_context);
             let execution_root = step_context
                 .turn
                 .project_root()
@@ -1550,7 +1555,22 @@ pub(crate) async fn execute_tools_serial(
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<Vec<types::ToolOutput>> {
-    execute_tools_serial_inner(session, step_context, calls, pause, turn_context, hitl_gate).await
+    execute_tools_serial_inner(
+        session,
+        step_context,
+        calls,
+        pause,
+        turn_context,
+        hitl_gate,
+        ToolCallOrigin::Model,
+    )
+    .await
+}
+
+#[derive(Clone, Copy)]
+enum ToolCallOrigin {
+    Model,
+    CodeMode,
 }
 
 async fn execute_tools_serial_inner(
@@ -1560,6 +1580,7 @@ async fn execute_tools_serial_inner(
     pause: &Arc<PauseControl>,
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
+    origin: ToolCallOrigin,
 ) -> Option<Vec<types::ToolOutput>> {
     let mut out: Vec<types::ToolOutput> = Vec::with_capacity(calls.len());
     for call in calls {
@@ -1569,7 +1590,11 @@ async fn execute_tools_serial_inner(
         if !pause.wait_if_paused().await {
             return None;
         }
-        if !step_context.routes_tool(&call.name) {
+        let can_route = match origin {
+            ToolCallOrigin::Model => step_context.tool_router.model_can_call(&call.name),
+            ToolCallOrigin::CodeMode => step_context.routes_tool(&call.name),
+        };
+        if !can_route {
             out.push(format!("工具 `{}` 未在本次 StepContext 注册，无法执行。", call.name).into());
             continue;
         }
@@ -2411,16 +2436,22 @@ pub(crate) async fn execute_tools_concurrent(
     }
 
     let turn_context = Arc::clone(&step_context.turn);
-    let runtime = ToolCallRuntime::new(Arc::clone(session), step_context);
+    let runtime = ToolCallRuntime::new(Arc::clone(session), Arc::clone(&step_context));
 
     let mut join_set = JoinSet::new();
     for (idx, call) in calls.iter().cloned().enumerate() {
         let runtime = runtime.clone();
         let child_permit = turn_context.track_child();
+        let model_can_call = step_context.tool_router.model_can_call(&call.name);
         join_set.spawn_blocking(move || {
             let _child_permit = child_permit;
             let tool_name = call.name.clone();
-            let result = if call.args_parse_error {
+            let result = if !model_can_call {
+                Ok(types::ToolOutput::from(format!(
+                    "工具 `{}` 未在本次 StepContext 向模型开放，无法直接执行。",
+                    call.name
+                )))
+            } else if call.args_parse_error {
                 Ok(types::ToolOutput::from(format!(
                     "工具参数 JSON 解析失败: {}",
                     call.arguments

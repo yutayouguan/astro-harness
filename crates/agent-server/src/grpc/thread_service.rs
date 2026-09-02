@@ -675,6 +675,7 @@ mod tests {
                     session_id: "api-mode-thread".into(),
                     provider: "deepseek".into(),
                     model: "deepseek-v4-flash".into(),
+                    tool_mode: "code_mode_only".into(),
                     chat_fallbacks: vec![
                         proto::ChatFallbackTarget {
                             provider: "openai".into(),
@@ -697,6 +698,10 @@ mod tests {
         assert_eq!(targets.len(), 2);
         assert_eq!(targets[0].backend_id, "deepseek");
         assert_eq!(targets[1].backend_id, "openai");
+        assert_eq!(
+            managed.runtime.session().model_spec().unwrap().tool_mode,
+            Some(types::ToolMode::CodeModeOnly)
+        );
 
         managed
             .runtime

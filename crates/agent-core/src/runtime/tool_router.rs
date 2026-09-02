@@ -1,6 +1,6 @@
 //! 采样步骤级工具路由快照。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
@@ -21,25 +21,45 @@ struct ToolRoute {
 
 /// 不可变的注册表投影，与单次模型请求可见的工具规格配对。
 ///
-/// `routes` 是该步骤的可调用集合，是 `model_visible_specs` 的超集：
-/// 仅已由可信 `tool_search_output` 返回的 Deferred 工具会进入额外路由。
+/// `routes` 是该步骤的完整可调用集合，是模型直调集合的超集：除可信
+/// `tool_search_output` 激活的 Deferred 工具外，还可包含仅供 QuickJS cell 使用的
+/// 嵌套路由。`model_routes` 单独约束模型顶层调用，防止越过披露边界。
 pub(crate) struct ToolRouter {
     routes: HashMap<String, ToolRoute>,
+    /// 模型可以直接发起的路由；Code Mode 嵌套路由不在其中。
+    model_routes: HashSet<String>,
     model_visible_specs: Arc<[serde_json::Value]>,
 }
 
 impl ToolRouter {
+    #[cfg(test)]
     pub(crate) fn from_registry(
         registry: &ToolRegistry,
         additional_callable_specs: &[serde_json::Value],
         model_visible_specs: Vec<serde_json::Value>,
     ) -> Self {
+        Self::from_registry_with_nested(
+            registry,
+            additional_callable_specs,
+            model_visible_specs,
+            &[],
+        )
+    }
+
+    pub(crate) fn from_registry_with_nested(
+        registry: &ToolRegistry,
+        additional_callable_specs: &[serde_json::Value],
+        model_visible_specs: Vec<serde_json::Value>,
+        nested_callable_specs: &[serde_json::Value],
+    ) -> Self {
         let mut routes = HashMap::new();
+        let mut model_routes = HashSet::new();
         for spec in additional_callable_specs
             .iter()
             .chain(model_visible_specs.iter())
         {
             for (wire_name, registered_name) in spec_route_names(registry, spec) {
+                model_routes.insert(wire_name.clone());
                 let Some(entry) = registry.get(&registered_name) else {
                     continue;
                 };
@@ -58,8 +78,26 @@ impl ToolRouter {
                 );
             }
         }
+        for spec in nested_callable_specs {
+            for (wire_name, registered_name) in spec_route_names(registry, spec) {
+                let Some(entry) = registry.get(&registered_name) else {
+                    continue;
+                };
+                routes.entry(wire_name).or_insert_with(|| ToolRoute {
+                    registered_name: registered_name.clone(),
+                    dynamic_handler: registry.dynamic_handler(&registered_name),
+                    needs_confirmation: entry.needs_confirmation,
+                    stop_after_tool_call: entry.stop_after_tool_call,
+                    exclusive_access: entry.exclusive_access,
+                    sandbox_preference: entry.sandbox_preference,
+                    mcp_approval: entry.mcp_approval.clone(),
+                    approval_requirement: entry.approval_requirement,
+                });
+            }
+        }
         Self {
             routes,
+            model_routes,
             model_visible_specs: model_visible_specs.into(),
         }
     }
@@ -70,6 +108,10 @@ impl ToolRouter {
 
     pub(crate) fn has_tool(&self, name: &str) -> bool {
         self.routes.contains_key(name)
+    }
+
+    pub(crate) fn model_can_call(&self, name: &str) -> bool {
+        self.model_routes.contains(name)
     }
 
     pub(crate) fn registered_name<'a>(&'a self, wire_name: &'a str) -> &'a str {
@@ -193,6 +235,7 @@ impl fmt::Debug for ToolRouter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ToolRouter")
             .field("route_count", &self.routes.len())
+            .field("model_route_count", &self.model_routes.len())
             .field("model_visible_specs", &self.model_visible_specs)
             .finish()
     }
@@ -286,6 +329,34 @@ mod tests {
             })
             .collect();
         assert_eq!(advertised, vec!["direct_tool"]);
+    }
+
+    #[test]
+    fn code_mode_nested_routes_do_not_expand_model_permissions() {
+        let mut registry = ToolRegistry::new();
+        for name in ["exec", "business_tool"] {
+            registry.register(types::ToolEntry {
+                name: name.into(),
+                toolset: "core".into(),
+                description: name.into(),
+                ..types::ToolEntry::lifecycle_defaults()
+            });
+        }
+        let visible = vec![serde_json::json!({
+            "type": "function",
+            "name": "exec",
+            "parameters": {}
+        })];
+        let nested = vec![serde_json::json!({
+            "type": "function",
+            "name": "business_tool",
+            "parameters": {}
+        })];
+        let router = ToolRouter::from_registry_with_nested(&registry, &[], visible, &nested);
+
+        assert!(router.model_can_call("exec"));
+        assert!(!router.model_can_call("business_tool"));
+        assert!(router.has_tool("business_tool"));
     }
 
     #[test]

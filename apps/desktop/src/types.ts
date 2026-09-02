@@ -661,6 +661,8 @@ export type ModelDefaultParams = {
 /** 模型元信息（列表 / 选择器） */
 export type ModelInfo = {
   id: string;
+  /** 模型目录工具模式；存在时覆盖全局 feature flag。 */
+  tool_mode?: "direct" | "code_mode" | "code_mode_only" | null;
   display_name?: string | null;
   description?: string | null;
   canonical_slug?: string | null;

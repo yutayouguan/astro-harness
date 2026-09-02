@@ -18,6 +18,9 @@ use crate::types::{CompletionStream, ResponsesRequest};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomModelEntry {
     pub id: String,
+    /// 模型级工具模式，优先于全局 feature flag。
+    #[serde(default, deserialize_with = "::types::deserialize_optional_tool_mode")]
+    pub tool_mode: Option<::types::ToolMode>,
     #[serde(default)]
     pub display_name: Option<String>,
     #[serde(default)]

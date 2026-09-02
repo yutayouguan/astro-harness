@@ -185,6 +185,9 @@ pub fn catalog_for_ui(registry: &ToolRegistry) -> Vec<ToolCatalogItem> {
 
     let mut by_set: BTreeMap<String, Vec<&crate::registry::ToolEntry>> = BTreeMap::new();
     for entry in registry.all_tools() {
+        if entry.exposure.is_model_only() {
+            continue;
+        }
         by_set.entry(entry.toolset.clone()).or_default().push(entry);
     }
 
