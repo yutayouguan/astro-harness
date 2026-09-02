@@ -443,6 +443,22 @@ html[data-theme="light"] .msg-actions {
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
+/* 助手操作已内嵌在回答气泡中：常显并直接平铺，不再叠加一层悬浮容器。 */
+.bubble.assistant .assistant-message-footer .msg-actions {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: none;
+}
+
 .msg-row.is-focus-flash .bubble {
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--tone-cyan, #06b6d4) 55%, transparent),

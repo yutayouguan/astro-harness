@@ -61,6 +61,10 @@ test("hover actions exclude deletion and only the latest user question can be ed
   assert.match(source, /className="assistant-message-footer"/);
   assert.match(source, /<MessageTokenStats/);
   assert.match(styles, /\.assistant-message-footer/);
+  assert.match(
+    styles,
+    /\.bubble\.assistant \.assistant-message-footer \.msg-actions \{[\s\S]*?opacity: 1;[\s\S]*?background: transparent;/,
+  );
   assert.match(styles, /\.msg-token-stats\[open\]/);
   assert.match(messages, /"chat\.tokenSummary": "共 \{total\} tokens"/);
   assert.match(messages, /"chat\.tokenInput": "输入 \{tokens\}"/);
