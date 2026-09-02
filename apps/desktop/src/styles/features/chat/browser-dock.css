@@ -1,8 +1,13 @@
 .browser-dock {
-  position: absolute;
-  inset: 0;
+  --browser-dock-current-width: min(
+    var(--browser-dock-width, 680px),
+    calc(100% - 320px)
+  );
+  position: relative;
   z-index: 21;
-  width: 100%;
+  flex: 0 0 0;
+  width: 0;
+  max-width: 0;
   min-width: 0;
   min-height: 0;
   padding-top: var(
@@ -22,17 +27,39 @@
   transform: translateX(18px) scale(0.985);
   transform-origin: right center;
   transition:
+    flex-basis 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-left-width 300ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 180ms ease,
     transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
     visibility 0s linear 300ms;
 }
 
 .browser-dock.is-open {
+  flex-basis: var(--browser-dock-current-width);
+  width: var(--browser-dock-current-width);
+  max-width: calc(100% - 320px);
+  border-left-width: 0.5px;
+  border-left-color: color-mix(in srgb, var(--glass-edge) 62%, transparent);
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
   transform: translateX(0) scale(1);
   transition-delay: 0s;
+}
+
+.chat-layout-with-right.is-browser-expanded > .browser-dock {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  z-index: 21;
+  width: 100%;
+  max-width: none;
+  flex-basis: auto;
+  border-left-width: 0;
 }
 
 .chat-layout-with-right.is-browser-expanded
@@ -42,16 +69,20 @@
 }
 
 /* 原生子 WebView 只占据可交互区域，外层浏览器画布继续铺到窗口底边。 */
-.browser-native-viewport {
+.browser-dock.is-expanded .browser-native-viewport {
   position: absolute;
   inset: 0 0 calc(var(--browser-composer-height, 50px) + 36px);
 }
 
 .chat-layout-with-right.has-composer-overlay
+  .browser-dock.is-expanded
   .browser-native-viewport {
-  bottom: calc(
-    var(--browser-composer-height, 50px) + min(55vh, 480px) + 44px
-  );
+  bottom: calc(var(--browser-composer-height, 50px) + min(55vh, 480px) + 44px);
+}
+
+.browser-dock:not(.is-expanded) .browser-native-viewport {
+  position: absolute;
+  inset: 0 0 0 10px;
 }
 
 .content-header--chat.is-browser-expanded .content-heading {
@@ -113,7 +144,7 @@
   cursor: pointer;
 }
 
-.browser-dock button:hover:not(:disabled),
+.browser-dock button:hover:not(:disabled):not(.browser-dock-resizer),
 .browser-dock button.is-active {
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 7%, transparent);
@@ -132,6 +163,11 @@
   place-items: center;
   padding: 0;
   border-radius: 8px;
+}
+
+.browser-dock-expand[aria-pressed="true"] {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone-soft) 72%, transparent);
 }
 
 .browser-dock-overflow {
@@ -306,6 +342,55 @@
   color: var(--danger);
 }
 
+.browser-dock-resizer {
+  position: absolute;
+  z-index: 5;
+  top: var(--chat-header-overlay-height, 50px);
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.browser-dock-resizer::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone) 44%, transparent);
+  opacity: 0;
+  transform: scaleY(0.76);
+  transition:
+    opacity 140ms ease,
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms ease;
+}
+
+.browser-dock-resizer:hover::before,
+.browser-dock-resizer:focus-visible::before,
+.browser-dock.is-resizing .browser-dock-resizer::before {
+  opacity: 1;
+  transform: scaleY(1);
+  background: color-mix(in srgb, var(--tone) 74%, transparent);
+}
+
+.browser-dock-resizer:focus-visible {
+  outline: none;
+}
+
+.browser-dock.is-resizing {
+  user-select: none;
+  transition: none;
+}
+
 .browser-viewport {
   position: relative;
   flex: 1;
@@ -348,7 +433,7 @@
     ),
     linear-gradient(
       145deg,
-      color-mix(in srgb, var(--glass-card) 72%, transparent),
+      color-mix(in srgb, var(--glass-panel) 72%, transparent),
       color-mix(in srgb, var(--sidebar-bg) 92%, transparent)
     );
 }
@@ -371,6 +456,16 @@
 .browser-empty strong {
   color: var(--ink-soft);
   font-size: 12px;
+}
+
+.browser-empty > svg {
+  box-sizing: content-box;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, transparent);
+  border-radius: 14px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone-soft) 48%, transparent);
+  box-shadow: var(--glass-rim);
 }
 
 .browser-viewport-status {
@@ -456,6 +551,19 @@
 
 .browser-downloads-empty {
   padding: 8px 5px;
+}
+
+@media (max-width: 840px) {
+  .browser-dock {
+    position: absolute;
+    inset: 0 0 0 auto;
+    min-width: 0;
+  }
+
+  .browser-dock.is-open {
+    width: min(100%, var(--browser-dock-width, 680px));
+    max-width: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

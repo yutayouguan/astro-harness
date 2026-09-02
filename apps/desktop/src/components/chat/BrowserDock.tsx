@@ -1,8 +1,10 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -19,6 +21,8 @@ import {
   ExternalLink,
   Globe2,
   LoaderCircle,
+  Maximize2,
+  Minimize2,
   MoreVertical,
   Plus,
   RefreshCw,
@@ -28,6 +32,15 @@ import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
 import { useBrowserLiveWebviews } from "../../hooks/chat/useBrowserLiveWebviews";
 import { useI18n } from "../../i18n/LocaleContext";
 import { normalizeBrowserUrl } from "../../lib/browser/browserUrl";
+import {
+  BROWSER_DOCK_DEFAULT_WIDTH,
+  BROWSER_DOCK_MIN_WIDTH,
+  BROWSER_DOCK_OVERLAY_BREAKPOINT,
+  BROWSER_DOCK_WIDTH_KEY,
+  clampBrowserDockWidth,
+  maxBrowserDockWidth,
+  parseStoredBrowserDockWidth,
+} from "../../lib/ui/browserDockWidth";
 
 type BrowserControl = (
   action: string,
@@ -37,11 +50,16 @@ type BrowserControl = (
 type Props = {
   open: boolean;
   preview: BrowserPreview | null;
+  expanded: boolean;
   onControl: BrowserControl;
+  onExpandedChange: (expanded: boolean) => void;
   onTitleMouseDown?: (event: ReactMouseEvent) => void;
   onTitleDoubleClick?: (event: ReactMouseEvent) => void;
   onClose: () => void;
 };
+
+const RESIZE_KEYBOARD_STEP = 24;
+const RESIZE_KEYBOARD_LARGE_STEP = 64;
 
 function formatBytes(size: number): string {
   if (size < 1024) return `${size} B`;
@@ -52,7 +70,9 @@ function formatBytes(size: number): string {
 export default function BrowserDock({
   open,
   preview,
+  expanded,
   onControl,
+  onExpandedChange,
   onTitleMouseDown,
   onTitleDoubleClick,
   onClose,
@@ -64,6 +84,13 @@ export default function BrowserDock({
   const [error, setError] = useState<string | null>(null);
   const screenshotRef = useRef<HTMLImageElement>(null);
   const nativeViewportRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLElement>(null);
+  const dockWidthRef = useRef(BROWSER_DOCK_DEFAULT_WIDTH);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const actionsTriggerRef = useRef<HTMLButtonElement>(null);
   const wheelDeltaRef = useRef(0);
@@ -71,6 +98,17 @@ export default function BrowserDock({
   const resizeTimerRef = useRef<number | null>(null);
   const lastViewportRef = useRef("");
   const controlRunRef = useRef(0);
+  const [dockWidth, setDockWidth] = useState(() => {
+    try {
+      return parseStoredBrowserDockWidth(
+        localStorage.getItem(BROWSER_DOCK_WIDTH_KEY),
+      );
+    } catch {
+      return BROWSER_DOCK_DEFAULT_WIDTH;
+    }
+  });
+  const [maxDockWidth, setMaxDockWidth] = useState(BROWSER_DOCK_DEFAULT_WIDTH);
+  const [resizing, setResizing] = useState(false);
 
   const syncLiveNavigation = useCallback(
     async (url: string) => {
@@ -98,6 +136,123 @@ export default function BrowserDock({
     onNavigate: syncLiveNavigation,
     onError: setError,
   });
+
+  dockWidthRef.current = dockWidth;
+
+  const containerWidth = useCallback(() => {
+    const width =
+      dockRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
+    return width > 0 ? width : Number.POSITIVE_INFINITY;
+  }, []);
+
+  const usesOverlayLayout = useCallback(
+    () => window.innerWidth <= BROWSER_DOCK_OVERLAY_BREAKPOINT,
+    [],
+  );
+
+  const updateDockWidth = useCallback(
+    (nextWidth: number, persist = false) => {
+      const next = clampBrowserDockWidth(
+        nextWidth,
+        containerWidth(),
+        usesOverlayLayout(),
+      );
+      dockWidthRef.current = next;
+      setDockWidth(next);
+      if (!persist) return;
+      try {
+        localStorage.setItem(BROWSER_DOCK_WIDTH_KEY, String(next));
+      } catch {
+        // Storage is best-effort in private or locked-down webviews.
+      }
+    },
+    [containerWidth, usesOverlayLayout],
+  );
+
+  useLayoutEffect(() => {
+    const container = dockRef.current?.parentElement;
+    if (!container) return;
+    const syncBounds = () => {
+      const width = container.getBoundingClientRect().width;
+      if (width <= 0) return;
+      const overlayLayout = usesOverlayLayout();
+      const nextMax = maxBrowserDockWidth(width, overlayLayout);
+      setMaxDockWidth(nextMax);
+      const nextWidth = clampBrowserDockWidth(
+        dockWidthRef.current,
+        width,
+        overlayLayout,
+      );
+      dockWidthRef.current = nextWidth;
+      setDockWidth(nextWidth);
+    };
+    syncBounds();
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(syncBounds)
+        : null;
+    observer?.observe(container);
+    window.addEventListener("resize", syncBounds);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncBounds);
+    };
+  }, [usesOverlayLayout]);
+
+  const finishResize = useCallback((pointerId: number) => {
+    if (dragRef.current?.pointerId !== pointerId) return;
+    dragRef.current = null;
+    setResizing(false);
+    try {
+      localStorage.setItem(
+        BROWSER_DOCK_WIDTH_KEY,
+        String(dockWidthRef.current),
+      );
+    } catch {
+      // Storage is best-effort in private or locked-down webviews.
+    }
+  }, []);
+
+  const onResizePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || dragRef.current) return;
+    event.preventDefault();
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth:
+        dockRef.current?.getBoundingClientRect().width ?? dockWidthRef.current,
+    };
+    setResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onResizePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    updateDockWidth(drag.startWidth + drag.startX - event.clientX);
+  };
+
+  const onResizePointerUp = (event: PointerEvent<HTMLButtonElement>) => {
+    finishResize(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const onResizeKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const step = event.shiftKey
+      ? RESIZE_KEYBOARD_LARGE_STEP
+      : RESIZE_KEYBOARD_STEP;
+    let nextWidth: number | null = null;
+    if (event.key === "ArrowLeft") nextWidth = dockWidthRef.current + step;
+    else if (event.key === "ArrowRight")
+      nextWidth = dockWidthRef.current - step;
+    else if (event.key === "Home") nextWidth = BROWSER_DOCK_MIN_WIDTH;
+    else if (event.key === "End") nextWidth = maxDockWidth;
+    if (nextWidth == null) return;
+    event.preventDefault();
+    updateDockWidth(nextWidth, true);
+  };
 
   useEffect(() => {
     if (preview?.url) setAddress(preview.url);
@@ -251,10 +406,34 @@ export default function BrowserDock({
 
   return (
     <aside
-      className={`browser-dock${open ? " is-open" : ""}`}
+      ref={dockRef}
+      className={`browser-dock${open ? " is-open" : ""}${resizing ? " is-resizing" : ""}${expanded ? " is-expanded" : ""}`}
       aria-label={t("chat.browserDock.title")}
       aria-hidden={!open}
+      style={{ "--browser-dock-width": `${dockWidth}px` } as CSSProperties}
     >
+      {!expanded ? (
+        <button
+          type="button"
+          className="browser-dock-resizer"
+          role="separator"
+          aria-label={t("chat.browserDock.resize")}
+          aria-orientation="vertical"
+          aria-valuemin={Math.min(BROWSER_DOCK_MIN_WIDTH, maxDockWidth)}
+          aria-valuemax={maxDockWidth}
+          aria-valuenow={dockWidth}
+          title={t("chat.browserDock.resize")}
+          onDoubleClick={() =>
+            updateDockWidth(BROWSER_DOCK_DEFAULT_WIDTH, true)
+          }
+          onKeyDown={onResizeKeyDown}
+          onPointerDown={onResizePointerDown}
+          onPointerMove={onResizePointerMove}
+          onPointerUp={onResizePointerUp}
+          onPointerCancel={(event) => finishResize(event.pointerId)}
+          onLostPointerCapture={(event) => finishResize(event.pointerId)}
+        />
+      ) : null}
       <div
         className="browser-dock-drag-region"
         onMouseDown={onTitleMouseDown}
@@ -372,6 +551,24 @@ export default function BrowserDock({
           onClick={() => void run("snapshot", { screenshot: true })}
         >
           <Camera size={14} aria-hidden />
+        </button>
+        <button
+          type="button"
+          className="browser-dock-expand"
+          aria-label={t(
+            expanded ? "chat.browserDock.restore" : "chat.browserDock.expand",
+          )}
+          title={t(
+            expanded ? "chat.browserDock.restore" : "chat.browserDock.expand",
+          )}
+          aria-pressed={expanded}
+          onClick={() => onExpandedChange(!expanded)}
+        >
+          {expanded ? (
+            <Minimize2 size={14} aria-hidden />
+          ) : (
+            <Maximize2 size={14} aria-hidden />
+          )}
         </button>
         <div className="browser-dock-overflow" ref={actionsRef}>
           <button

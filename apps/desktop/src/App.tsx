@@ -406,6 +406,7 @@ export default function App() {
   }, []);
   const [projectFilesWidth, setProjectFilesWidth] = useState(264);
   const [browserDockOpen, setBrowserDockOpen] = useState(false);
+  const [browserExpanded, setBrowserExpanded] = useState(false);
   const [browserComposerHeight, setBrowserComposerHeight] = useState(50);
   const [browserComposerOverlayOpen, setBrowserComposerOverlayOpen] =
     useState(false);
@@ -1151,6 +1152,7 @@ export default function App() {
 
   useEffect(() => {
     if (activeChatRightDock === "browser") return;
+    setBrowserExpanded(false);
     setBrowserComposerHeight(50);
     setBrowserComposerOverlayOpen(false);
   }, [activeChatRightDock]);
@@ -1937,7 +1939,7 @@ export default function App() {
           ) : (
             <>
               <div
-                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}${projectFiles.tabs.length > 0 ? " has-project-file" : ""}${activeChatRightDock === "browser" ? " is-browser-expanded" : ""}${chat.emptyMode ? " is-welcome" : chatHeaderHasUnderlay || projectFiles.tabs.length > 0 ? " has-content-underlay" : ""}`}
+                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}${projectFiles.tabs.length > 0 ? " has-project-file" : ""}${browserExpanded ? " is-browser-expanded" : ""}${chat.emptyMode ? " is-welcome" : chatHeaderHasUnderlay || projectFiles.tabs.length > 0 ? " has-content-underlay" : ""}`}
               >
                 <div className="content-heading">
                   {projectFiles.tabs.length > 0 ? (
@@ -2146,7 +2148,7 @@ export default function App() {
                 className={`page-body page-body--chat${projectFiles.tabs.length > 0 ? " has-project-file" : ""}`}
               >
                 <div
-                  className={`chat-layout-with-right${activeChatRightDock === "project-files" ? " has-project-files" : ""}${activeChatRightDock === "browser" ? " has-browser is-browser-expanded" : ""}${browserComposerOverlayOpen ? " has-composer-overlay" : ""}${activeChatRightDock === "side-chat" ? " has-side-chat" : ""}${activeChatRightDock === "inspector" ? " has-chat-right" : ""}${activeChatRightDock === "review" ? " has-review" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
+                  className={`chat-layout-with-right${activeChatRightDock === "project-files" ? " has-project-files" : ""}${activeChatRightDock === "browser" ? " has-browser" : ""}${browserExpanded ? " is-browser-expanded" : ""}${browserComposerOverlayOpen ? " has-composer-overlay" : ""}${activeChatRightDock === "side-chat" ? " has-side-chat" : ""}${activeChatRightDock === "inspector" ? " has-chat-right" : ""}${activeChatRightDock === "review" ? " has-review" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
                   style={
                     {
                       "--project-files-current-width": `${projectFilesWidth}px`,
@@ -2198,17 +2200,13 @@ export default function App() {
                         ) : null
                       }
                       composerPresentation={
-                        activeChatRightDock === "browser"
-                          ? "capsule"
-                          : "default"
+                        browserExpanded ? "capsule" : "default"
                       }
                       onComposerHeightChange={
-                        activeChatRightDock === "browser"
-                          ? setBrowserComposerHeight
-                          : undefined
+                        browserExpanded ? setBrowserComposerHeight : undefined
                       }
                       onComposerOverlayOpenChange={
-                        activeChatRightDock === "browser"
+                        browserExpanded
                           ? setBrowserComposerOverlayOpen
                           : undefined
                       }
@@ -2341,10 +2339,13 @@ export default function App() {
                     <BrowserDock
                       open={browserDockPresence.visible}
                       preview={chat.browserPreview}
+                      expanded={browserExpanded}
                       onControl={chat.controlBrowser}
+                      onExpandedChange={setBrowserExpanded}
                       onTitleMouseDown={winChrome.onTitleMouseDown}
                       onTitleDoubleClick={winChrome.onTitleDoubleClick}
                       onClose={() => {
+                        setBrowserExpanded(false);
                         setBrowserComposerOverlayOpen(false);
                         setBrowserDockOpen(false);
                       }}

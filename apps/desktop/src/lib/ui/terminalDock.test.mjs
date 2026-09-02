@@ -24,6 +24,11 @@ test("terminal dock is a bottom surface independent from the exclusive right doc
   );
   assert.match(css, /flex-basis 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/);
   assert.match(css, /cursor:\s*ns-resize/);
+  assert.match(
+    css,
+    /\.terminal-dock\.is-resizing\s*\{[\s\S]*?transition:\s*none/,
+  );
+  assert.match(app, /<TerminalDock/);
 });
 
 test("terminal dock uses one shared backend session for input, output, resize and kill", () => {
@@ -57,6 +62,20 @@ test("terminal dock stays mounted after its first open so later toggles restore 
     /if \(activeTab && !activeSession && !activeError\) void openTab\(activeTab\)/,
   );
   assert.match(dock, /visible=\{open\}/);
+});
+
+test("terminal height dragging paints once per frame and commits state on release", () => {
+  const dock = source("components/chat/TerminalTabsDock.tsx");
+
+  assert.match(dock, /requestAnimationFrame\(paintHeight\)/);
+  assert.match(dock, /style\.setProperty\(\s*"--terminal-dock-height"/);
+  assert.match(dock, /setHeight\(finalHeight\)/);
+  const moveStart = dock.indexOf("const move =");
+  const stopStart = dock.indexOf("const stopListening", moveStart);
+  assert.ok(moveStart >= 0 && stopStart > moveStart);
+  assert.doesNotMatch(dock.slice(moveStart, stopStart), /setHeight\(/);
+  assert.match(dock, /role="separator"/);
+  assert.match(dock, /aria-valuenow=\{Math\.round\(height\)\}/);
 });
 
 test("terminal dock resets ownership when the active project changes", () => {

@@ -42,9 +42,10 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(dock, /open \? " is-open" : ""/);
   assert.match(dock, /active: open/);
   assert.match(dock, /occluded: actionsOpen/);
-  assert.doesNotMatch(dock, /browser-dock-resizer/);
-  assert.doesNotMatch(dock, /browser-dock-expand/);
-  assert.doesNotMatch(dock, /BROWSER_DOCK_WIDTH_KEY/);
+  assert.match(dock, /browser-dock-resizer/);
+  assert.match(dock, /browser-dock-expand/);
+  assert.match(dock, /BROWSER_DOCK_WIDTH_KEY/);
+  assert.match(dock, /expanded \? "chat\.browserDock\.restore"/);
   assert.match(dock, /useBrowserLiveWebviews/);
   const addressStart = dock.indexOf('<form className="browser-address-row"');
   const screenshotStart = dock.indexOf(

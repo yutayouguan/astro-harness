@@ -19,9 +19,10 @@ const meta = {
   title: "Chat/BrowserDock",
   component: BrowserDock,
   decorators: [
-    (Story) => (
+    (Story, context) => (
       <LocaleProvider>
         <div
+          className={`chat-layout-with-right${context.args.expanded ? " is-browser-expanded" : ""}`}
           style={{
             display: "flex",
             justifyContent: "flex-end",
@@ -38,6 +39,7 @@ const meta = {
   ],
   args: {
     open: true,
+    expanded: false,
     preview: {
       sessionId: "story-session",
       url: "http://127.0.0.1:5173",
@@ -72,6 +74,7 @@ const meta = {
       ],
     },
     onControl: async () => undefined,
+    onExpandedChange: () => undefined,
     onClose: () => undefined,
   },
 } satisfies Meta<typeof BrowserDock>;

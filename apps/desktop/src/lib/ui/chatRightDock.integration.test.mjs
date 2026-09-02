@@ -57,16 +57,15 @@ test("browser dock keeps an exit lifecycle and uses the project drawer motion", 
   assert.match(appSource, /open=\{browserDockPresence\.visible\}/);
   assert.match(
     browserStyles,
-    /\.browser-dock\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?inset:\s*0;[\s\S]*?width:\s*100%;[\s\S]*?visibility:\s*hidden;/,
-  );
-  assert.doesNotMatch(browserStyles, /flex-basis/);
-  assert.match(
-    browserStyles,
-    /\.browser-dock\.is-open\s*\{[\s\S]*?visibility:\s*visible;/,
+    /\.browser-dock\s*\{[\s\S]*?position:\s*relative;[\s\S]*?flex:\s*0 0 0;[\s\S]*?visibility:\s*hidden;/,
   );
   assert.match(
     browserStyles,
-    /transform 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
+    /\.browser-dock\.is-open\s*\{[\s\S]*?flex-basis:\s*var\(--browser-dock-current-width\);[\s\S]*?visibility:\s*visible;/,
+  );
+  assert.match(
+    browserStyles,
+    /flex-basis 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
   );
 });
 
@@ -110,14 +109,16 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
     "utf8",
   );
 
-  assert.doesNotMatch(appSource, /browserExpanded/);
-  assert.match(appSource, /has-browser is-browser-expanded/);
+  assert.match(appSource, /const \[browserExpanded, setBrowserExpanded\]/);
+  assert.match(appSource, /browserExpanded \? " is-browser-expanded" : ""/);
   assert.match(appSource, /has-browser-surface/);
   assert.match(appSource, /composerPresentation=\{/);
   assert.match(appSource, /onComposerHeightChange=\{/);
   assert.match(appSource, /onComposerOverlayOpenChange=\{/);
-  assert.doesNotMatch(browserDock, /Maximize2/);
-  assert.doesNotMatch(browserDock, /Minimize2/);
+  assert.match(browserDock, /Maximize2/);
+  assert.match(browserDock, /Minimize2/);
+  assert.match(appSource, /expanded=\{browserExpanded\}/);
+  assert.match(appSource, /onExpandedChange=\{setBrowserExpanded\}/);
   assert.match(browserDock, /onTitleMouseDown/);
   assert.match(browserDock, /onTitleDoubleClick/);
   assert.match(chatView, /composerPresentation === "capsule"/);
@@ -125,7 +126,14 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
   assert.doesNotMatch(chatView, /capsuleComposerExpanded/);
   assert.doesNotMatch(chatView, /input\.includes\("\\n"\)/);
   assert.match(browserStyles, /\.chat-layout-with-right\.is-browser-expanded/);
-  assert.match(browserStyles, /\.browser-native-viewport/);
+  assert.match(
+    browserStyles,
+    /\.chat-layout-with-right\.is-browser-expanded[\s\S]*?> \.browser-dock\s*\{[\s\S]*?right:\s*0;[\s\S]*?left:\s*auto;/,
+  );
+  assert.match(
+    browserStyles,
+    /\.browser-dock\.is-expanded \.browser-native-viewport/,
+  );
   assert.match(
     browserStyles,
     /inset:\s*0 0 calc\(var\(--browser-composer-height/,
@@ -135,6 +143,8 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
     /\.browser-viewport\s*\{[^}]*margin-bottom/s,
   );
   assert.match(browserStyles, /\.browser-live-underlay/);
+  assert.doesNotMatch(browserStyles, /background:\s*rgb\(255, 255, 255\)/);
+  assert.match(browserStyles, /\.browser-empty > svg/);
   assert.match(browserStyles, /--browser-composer-height/);
   assert.match(browserStyles, /\.has-composer-overlay/);
   assert.match(composerStyles, /\.composer-shell\.is-capsule/);
