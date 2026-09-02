@@ -2,6 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tauri::{
+    plugin::{Builder as PluginBuilder, TauriPlugin},
+    webview::PageLoadEvent,
+    AppHandle, Emitter, Manager, Runtime,
+};
+
+pub const LIVE_BROWSER_WEBVIEW_PREFIX: &str = "astro-browser-live-";
+pub const LIVE_BROWSER_PAGE_EVENT: &str = "browser-live-page-load";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +30,25 @@ pub struct BrowserPreviewFileRequest {
     pub content: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserLiveWebviewRequest {
+    pub label: String,
+    pub action: String,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserLivePageEvent {
+    label: String,
+    url: String,
+    status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserSettingsState {
@@ -37,6 +64,66 @@ pub struct BrowserSettingsState {
 pub struct BrowserApprovalRuleDto {
     pub origin: String,
     pub action_class: String,
+}
+
+fn is_live_browser_webview(label: &str) -> bool {
+    label
+        .strip_prefix(LIVE_BROWSER_WEBVIEW_PREFIX)
+        .is_some_and(|suffix| {
+            !suffix.is_empty()
+                && suffix.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'/' | b':')
+                })
+        })
+}
+
+fn emit_live_page_event<R: Runtime>(
+    webview: &tauri::Webview<R>,
+    url: &str,
+    status: &'static str,
+    error: Option<String>,
+) {
+    let _ = webview.emit(
+        LIVE_BROWSER_PAGE_EVENT,
+        BrowserLivePageEvent {
+            label: webview.label().to_string(),
+            url: url.to_string(),
+            status,
+            error,
+        },
+    );
+}
+
+/// Observe only Astro's remote browser surfaces. Other application WebViews
+/// keep their existing navigation behavior.
+pub fn live_browser_plugin<R: Runtime>() -> TauriPlugin<R> {
+    PluginBuilder::new("browser-live")
+        .on_navigation(|webview, url| {
+            if !is_live_browser_webview(webview.label()) {
+                return true;
+            }
+            match tools::builtin::shell::browser::validate_live_webview_url(
+                &home::default_memory_dir(),
+                url.as_str(),
+            ) {
+                Ok(_) => true,
+                Err(error) => {
+                    emit_live_page_event(webview, url.as_str(), "blocked", Some(error.to_string()));
+                    false
+                }
+            }
+        })
+        .on_page_load(|webview, payload| {
+            if !is_live_browser_webview(webview.label()) {
+                return;
+            }
+            let status = match payload.event() {
+                PageLoadEvent::Started => "started",
+                PageLoadEvent::Finished => "finished",
+            };
+            emit_live_page_event(webview, payload.url().as_str(), status, None);
+        })
+        .build()
 }
 
 fn browser_settings_state(
@@ -113,6 +200,42 @@ pub async fn browser_panel_control(request: BrowserPanelRequest) -> Result<Value
 }
 
 #[tauri::command]
+pub fn browser_live_webview_control(
+    app: AppHandle,
+    request: BrowserLiveWebviewRequest,
+) -> Result<(), String> {
+    let label = request.label.trim();
+    if !is_live_browser_webview(label) {
+        return Err("非法的实时浏览器 WebView 标识".into());
+    }
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口不存在".to_string())?;
+    let webview = main_window
+        .as_ref()
+        .window()
+        .webviews()
+        .into_iter()
+        .find(|webview| webview.label() == label)
+        .ok_or_else(|| "实时浏览器 WebView 不存在".to_string())?;
+    match request.action.trim() {
+        "navigate" => {
+            let raw = request.url.as_deref().unwrap_or_default();
+            let url = tools::builtin::shell::browser::validate_live_webview_url(
+                &home::default_memory_dir(),
+                raw,
+            )
+            .map_err(|error| error.to_string())?;
+            webview
+                .navigate(url::Url::parse(&url).map_err(|error| error.to_string())?)
+                .map_err(|error| error.to_string())
+        }
+        "reload" => webview.reload().map_err(|error| error.to_string()),
+        _ => Err("不支持的实时浏览器操作".into()),
+    }
+}
+
+#[tauri::command]
 pub async fn browser_preview_project_file(
     request: BrowserPreviewFileRequest,
 ) -> Result<Value, String> {
@@ -138,4 +261,21 @@ pub async fn browser_preview_project_file(
     .await
     .map_err(|error| error.to_string())?;
     serde_json::from_str(&raw).map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_live_browser_webview, LIVE_BROWSER_WEBVIEW_PREFIX};
+
+    #[test]
+    fn live_webview_labels_are_scoped_and_safe() {
+        assert!(is_live_browser_webview(&format!(
+            "{LIVE_BROWSER_WEBVIEW_PREFIX}session_tab-1"
+        )));
+        assert!(!is_live_browser_webview("main"));
+        assert!(!is_live_browser_webview(LIVE_BROWSER_WEBVIEW_PREFIX));
+        assert!(!is_live_browser_webview(&format!(
+            "{LIVE_BROWSER_WEBVIEW_PREFIX}bad label"
+        )));
+    }
 }

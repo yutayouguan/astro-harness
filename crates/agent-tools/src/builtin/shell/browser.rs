@@ -883,6 +883,15 @@ fn validate_url_for_settings(raw: &str, settings: &BrowserSettings) -> anyhow::R
     Ok(url)
 }
 
+/// Validate a URL before it is loaded by the desktop's native child WebView.
+///
+/// Keeping this at the browser-tool boundary makes the visible WebView follow
+/// the same public-network and loopback settings as the CDP automation session.
+pub fn validate_live_webview_url(memory_dir: &Path, raw: &str) -> anyhow::Result<String> {
+    let settings = load_browser_settings(memory_dir);
+    validate_url_for_settings(raw, &settings)
+}
+
 fn is_loopback_url(raw: &str) -> bool {
     reqwest::Url::parse(raw)
         .ok()

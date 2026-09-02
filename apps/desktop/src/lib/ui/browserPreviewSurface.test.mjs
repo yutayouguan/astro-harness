@@ -42,6 +42,9 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(dock, /className="browser-dock-resizer"/);
   assert.match(dock, /setPointerCapture/);
   assert.match(dock, /BROWSER_DOCK_WIDTH_KEY/);
+  assert.match(dock, /useBrowserLiveWebviews/);
+  assert.match(dock, /browser-live-placeholder/);
+  assert.match(dock, /liveWebview\.isLoading/);
 
   const headerStart = dock.indexOf('<header className="browser-dock-header">');
   const tabsStart = dock.indexOf('className="browser-tabs"', headerStart);
@@ -49,6 +52,31 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.ok(
     headerStart >= 0 && tabsStart > headerStart && tabsStart < headerEnd,
   );
+});
+
+test("browser dock uses a native child WebView with a screenshot fallback", () => {
+  const hook = source("../../hooks/chat/useBrowserLiveWebviews.ts");
+  const commands = source("../../../src-tauri/src/commands/browser.rs");
+  const capabilities = source("../../../src-tauri/capabilities/default.json");
+
+  assert.match(hook, /new Webview\(getCurrentWindow\(\), label/);
+  assert.match(hook, /setPosition\(new LogicalPosition/);
+  assert.match(hook, /setSize\(new LogicalSize/);
+  assert.match(hook, /browser-live-page-load/);
+  assert.match(hook, /browser_live_webview_control/);
+  assert.match(commands, /fn browser_live_webview_control/);
+  assert.match(commands, /fn live_browser_plugin/);
+  assert.match(commands, /validate_live_webview_url/);
+  for (const permission of [
+    "core:webview:allow-create-webview",
+    "core:webview:allow-set-webview-position",
+    "core:webview:allow-set-webview-size",
+    "core:webview:allow-webview-show",
+    "core:webview:allow-webview-hide",
+    "core:webview:allow-webview-close",
+  ]) {
+    assert.match(capabilities, new RegExp(permission));
+  }
 });
 
 test("floating browser preview supports direct manipulation and accessibility fallbacks", () => {

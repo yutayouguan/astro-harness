@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
+import { useBrowserLiveWebviews } from "../../hooks/chat/useBrowserLiveWebviews";
 import { useI18n } from "../../i18n/LocaleContext";
 import { normalizeBrowserUrl } from "../../lib/browser/browserUrl";
 import {
@@ -85,6 +86,27 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
   });
   const [maxDockWidth, setMaxDockWidth] = useState(BROWSER_DOCK_DEFAULT_WIDTH);
   const [resizing, setResizing] = useState(false);
+
+  const syncLiveNavigation = useCallback(
+    async (url: string) => {
+      setError(null);
+      setAddress(url);
+      try {
+        await onControl("open", { url, new_tab: false });
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      }
+    },
+    [onControl],
+  );
+
+  const liveWebview = useBrowserLiveWebviews({
+    preview,
+    viewportRef,
+    onUrlChange: setAddress,
+    onNavigate: syncLiveNavigation,
+    onError: setError,
+  });
 
   dockWidthRef.current = dockWidth;
 
@@ -453,7 +475,11 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
           disabled={!preview}
           onClick={() => void run("reload")}
         >
-          <RefreshCw size={14} aria-hidden />
+          {liveWebview.isLoading ? (
+            <LoaderCircle className="browser-spin" size={14} aria-hidden />
+          ) : (
+            <RefreshCw size={14} aria-hidden />
+          )}
         </button>
         <input
           value={address}
@@ -521,13 +547,15 @@ export default function BrowserDock({ preview, onControl, onClose }: Props) {
       ) : null}
 
       <div className="browser-viewport" ref={viewportRef}>
-        {preview?.status === "connecting" ? (
+        {!liveWebview.isLive && preview?.status === "connecting" ? (
           <div className="browser-viewport-status">
             <LoaderCircle className="browser-spin" size={20} aria-hidden />
             {t("chat.browserDock.loading")}
           </div>
         ) : null}
-        {screenshot ? (
+        {liveWebview.isLive && preview?.url ? (
+          <div className="browser-live-placeholder" aria-hidden />
+        ) : screenshot ? (
           <img
             ref={screenshotRef}
             src={screenshot}

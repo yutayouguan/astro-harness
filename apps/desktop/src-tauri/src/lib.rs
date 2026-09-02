@@ -203,6 +203,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard::init())
+        .plugin(commands::browser::live_browser_plugin())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -276,6 +277,7 @@ pub fn run() {
             commands::session::discard_side_session,
             commands::branches::get_chat_branch_graph,
             commands::browser::browser_panel_control,
+            commands::browser::browser_live_webview_control,
             commands::browser::browser_preview_project_file,
             commands::browser::browser_get_settings,
             commands::browser::browser_set_settings,
