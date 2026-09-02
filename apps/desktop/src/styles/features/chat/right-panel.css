@@ -325,6 +325,8 @@
 .chat-right-body {
   flex: 1;
   overflow: auto;
+  overflow-x: hidden;
+  overflow-y: scroll;
   scrollbar-gutter: stable;
   padding: 14px 12px 16px;
   min-height: 0;
