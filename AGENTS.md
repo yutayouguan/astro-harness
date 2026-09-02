@@ -53,7 +53,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 ## Workspace Crate Map
 
-仓库按职责分为 7 个顶层目录，共 25 个 crate：
+仓库按职责分为 7 个顶层目录，共 28 个 crate：
 
 ### core/ — Agent 大脑
 

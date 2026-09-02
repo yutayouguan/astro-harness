@@ -150,6 +150,11 @@ Realtime 会话只暴露两个窄范围内部动作：
 `agent_rollout::realtime_history()` 重建，既保持确定性，也不会重复存储每个
 Provider delta。关闭时可选择保留或丢弃未完成的 transcript tail。
 
+重复会话的边界顺序是显式契约：若新 `start` 到来时 reducer 仍有活跃 session，
+先按首次活跃 role 顺序封口未完成 transcript，再写入旧 session closed，最后写入
+新 session started。`agent_rollout::realtime_history()` 按 append order 恢复多个 session，
+不合并、不重排边界。
+
 ## 流控、失败与安全
 
 - command/event channel 都是有界队列；音频队列满时丢弃当前帧，不阻塞录音线程。
@@ -178,6 +183,7 @@ handoff mode、BEM prefixes 和 transcript-tail 策略。
   client-secret/raw SDP、WebSocket handshake、V2/V3 parser、
   UTF-8 分片、BEM parser、history reducer。
 - `agent-protocol` / `agent-rollout`：typed event serde、durable policy 和 history 重建。
+- 多 session：旧 transcript →旧 closed →新 started 的顺序，以及 rollout 跨 session 边界原样恢复。
 - Desktop：WebRTC 默认路径、`oai-events`、SDP answer、ExistingCall 不启动本地录音。
 - 组合检查：`agent` + `server` + `astro-agent`，并对共享工作区中的非 Realtime
   迁移失败单独归因。

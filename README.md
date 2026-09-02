@@ -141,6 +141,13 @@ cd apps/desktop && npm run tauri dev
 
 也可在 `~/.astro/.env` 写入 `ASTRO_EMBED_BACKEND=0` / `ASTRO_GRPC_ADDR=…`。
 
+### 结构化异步用户输入
+
+Agent 可在回合继续运行时调用 `request_user_input_async`，一次发出一个或多个自包含问题，
+并可提供建议选项。请求会以 `AgentMessageItem { delivery: async, questions }` 进入
+Thread item 时间线，先持久化再投影到 Desktop；用户回答作为普通 user input 进入当前
+turn。旧 `send_user_message_async` 只作为隐藏兼容别名，不再注入模型工具 Schema。
+
 ## Realtime 语音会话
 
 Realtime 已拆分为独立 `agent-realtime` crate，并通过统一 Thread 协议接入桌面端：
@@ -164,7 +171,7 @@ Realtime 已拆分为独立 `agent-realtime` crate，并通过统一 Thread 协�
 
 ```text
 astro/
-├── Cargo.toml              # Workspace 根（26 个 crate + 1 个桌面应用）
+├── Cargo.toml              # Workspace 根（28 个 crate + 1 个桌面应用）
 ├── crates/                 # 所有 Rust crate（扁平 agent-* 命名）
 │   ├── agent-core/         # Agent 运行时核心（Session、streaming、工具路由）
 │   ├── agent-types/        # 通用 DTO 与兼容投影（Message、ToolEntry、ToolExposure 等）
@@ -180,11 +187,12 @@ astro/
 │   ├── agent-session/      # 会话库（SQLite WAL + FTS5）
 │   ├── agent-sandbox/      # 沙箱权限控制
 │   ├── agent-network-proxy/ # 受管网络代理
+│   ├── agent-delegate/    # 显式桌面任务的 managed worktree
 │   ├── agent-skills/       # Skills 管理
 │   ├── agent-mcp/          # MCP 客户端
 │   ├── agent-hooks/        # typed Hook 生命周期与 Command/MCP 执行
 │   ├── agent-proto/        # Protobuf / tonic gRPC 契约
-│   └── ...                 # 另有 8 个 crate（artifacts/usage/cron/workflow/a2ui/delegate/evolution/home）
+│   └── ...                 # 另有 9 个 crate（db/extensions/artifacts/usage/cron/workflow/a2ui/evolution/home）
 └── apps/
     └── desktop/            # React + Vite UI + Tauri 2 壳
 ```
@@ -202,6 +210,7 @@ astro/
 | `usage` | 用量统计与 Tracing 洞察 |
 | `sandbox` | 沙箱权限控制（PermissionProfile） |
 | `network-proxy` | 受管网络代理 |
+| `worktree` | 显式桌面多任务的 detached managed worktree；Subagent 不隐式调用 |
 | `agent-config` | 分层配置原语 |
 | `agent-protocol` | Core 协议（Op、EventMsg、TurnItem、ResponseItem） |
 | `agent-rollout` | JSONL append-only 权威历史 |
@@ -210,7 +219,7 @@ astro/
 | `hooks` | Plugin、Command/MCP、Gateway、Shell 生命周期钩子 |
 | `proto` / `types` | gRPC 契约与公共类型 |
 
-运行时架构见 [`docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md`](./docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，Realtime 见 [`docs/realtime-subsystem.md`](./docs/realtime-subsystem.md)，钩子说明见 [`docs/hooks.md`](./docs/hooks.md)。
+运行时架构见 [`docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md`](./docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，Realtime 见 [`docs/realtime-subsystem.md`](./docs/realtime-subsystem.md)，钩子说明见 [`docs/hooks.md`](./docs/hooks.md)，本轮 Codex 对齐记录见 [`docs/更新说明/2026-09-03-Codex源码对齐.md`](./docs/更新说明/2026-09-03-Codex源码对齐.md)。
 
 Azure `gpt-image-2` 文档：
 

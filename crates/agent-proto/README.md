@@ -4,8 +4,8 @@ Protobuf / tonic gRPC 服务契约 -- Astro Agent 桌面壳与 backend 之间的
 
 ## 核心职责
 
-1. **定义 `AstroService`**：19 个 RPC 方法，覆盖 Thread 提交/订阅、聊天控制、图片生成、技能执行、MCP 管理、记忆查询、Token 计数与 Batch API
-2. **消息类型定义**：`ChatRequest`、`ThreadEvent`、`ThreadSnapshot` 等 50+ protobuf message，承载前后端全部数据交换
+1. **定义 `AstroService`**：35 个 RPC 方法，覆盖 Thread 提交/订阅、聊天控制、Realtime、图片生成、技能执行、MCP 管理、记忆查询、Token 计数与 Batch API
+2. **消息类型定义**：`ChatRequest`、`ThreadEvent`、`ThreadSnapshot` 等 73 个 protobuf message，承载前后端全部数据交换
 3. **双端代码生成**：`build.rs` 通过 `tonic_build` 同时生成 server trait（`AstroServiceServer`）和 client stub（`AstroServiceClient`），供 `agent-server` 实现、Tauri shell 调用
 4. **流式事件推送**：`SubscribeThreadEvents` 返回 `stream ThreadEvent`，支持 turn 开始/结束、item 完成、delta 增量、控制请求等实时推送
 
@@ -13,7 +13,7 @@ Protobuf / tonic gRPC 服务契约 -- Astro Agent 桌面壳与 backend 之间的
 
 | 文件 | 职责 |
 |------|------|
-| `proto/astro.proto` | Protobuf 服务与消息定义源文件（19 RPC + 50+ message） |
+| `proto/astro.proto` | Protobuf 服务与消息定义源文件（35 RPC + 73 message） |
 | `build.rs` | 编译 `.proto` 文件，生成 tonic server + client Rust 代码 |
 | `src/lib.rs` | 通过 `tonic::include_proto!("astro")` 导出生成代码 |
 
@@ -42,12 +42,12 @@ Protobuf / tonic gRPC 服务契约 -- Astro Agent 桌面壳与 backend 之间的
 
 | 类型 | 说明 |
 |------|------|
-| `ChatRequest` | 聊天发起请求：会话 ID、模型凭证、工具列表、图片附件、辅助模型目标等 37 个字段 |
+| `ChatRequest` | 聊天发起请求：会话 ID、模型凭证、图片附件、辅助模型目标、workspace roots 与 tool mode 等 41 个字段 |
 | `ChatFallbackTarget` | 聊天后备目标（provider / model / api_key / base_url） |
 | `AuxiliaryModelTarget` | 辅助任务模型目标（title_generation / compaction 等五类） |
 | `ChatControlAction` | 流控枚举：PAUSE / RESUME / CANCEL / NEW_CHAT / REFRESH_MEMORY / RELEASE_SESSION |
 | `ThreadEvent` | 事件推送载体，`oneof payload` 含 15 种事件变体 |
-| `ThreadSnapshot` | Thread 快照：状态、历史 turn 列表、活跃 turn、后台 turn ID |
+| `ThreadSnapshot` | Thread 快照：状态、当前 `model` / `reasoning_effort`、历史 turn 列表、活跃 turn、后台 turn ID |
 | `ThreadTurn` / `ThreadItem` | Turn 和 Item 的线协议表示 |
 | `ImageRequest` / `ImageEvent` | 图片生成请求与流式响应 |
 

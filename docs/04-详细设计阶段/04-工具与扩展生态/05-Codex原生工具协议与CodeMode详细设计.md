@@ -252,7 +252,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 | --- | --- |
 | Shell / 文件 | `terminal`、`exec_command`、`apply_patch`、`get_context_remaining`、`new_context_window`、`tool_search` |
 | Browser（本机有可用浏览器时） | `browser_open`、`browser_snapshot`、`browser_click`、`browser_type`、`browser_scroll`、`browser_wait`、`browser_screenshot`、`browser_close` |
-| HITL | `ask_user`、`send_user_message_async`、`switch_mode` |
+| HITL | `ask_user`、`request_user_input_async`、`switch_mode` |
 | 上下文 / 记忆 / Skill | `context_search`、`pin_context`、`memory`、`skills`、`todo` |
 | 自动化 | `cron.add`、`cron.list`、`cron.remove`、`cron.enable`、`cron.disable`（内部注册名为 `cron_*`） |
 | 展示 | `present` |
@@ -266,6 +266,12 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 - MCP：当 `tool_search` 可用时，当前 MCP Hub 发现的 `mcp__{server}__{tool}` 也默认进入 Deferred。
 
 `exec` / `wait` 以 `DirectModelOnly` 注册，但只有 CodeMode 或 CodeModeOnly 投影会把它们发给模型。Direct 模式仍直接获得普通 Direct 工具和原生 `tool_search`；Deferred 工具由 `tool_search` 激活后进入下一次 sampling。
+
+`request_user_input_async` 是非阻塞的结构化提问工具：`questions[]` 每项包含
+`title` 和可选 `options`，工具立即返回 `{"accepted":true}`，不 park 当前 turn。
+Core 把问题写为 durable `AgentMessageItem` 的 `questions` 字段，Desktop 只保留最新且
+未被后续 user message 回答的问题组可交互。`send_user_message_async` 仅保留为
+`Hidden` 兼容别名；可路由旧调用，但不出现在 API Schema 或用户工具目录。
 
 ### 5.3 暴露状态
 

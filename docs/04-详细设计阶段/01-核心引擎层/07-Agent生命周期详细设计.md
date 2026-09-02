@@ -165,7 +165,26 @@ Core 使用 typed request/outcome；Command/MCP handler 使用事件专属 JSON 
 
 交互控制操作都通过 `AstroThread::submit(Op)` 进入单一 submission queue。gRPC/Tauri 层只做 DTO 转换和应答映射，不直接修改 `Session`、`TurnContext` 或 MCP 状态。
 
-### 10.1 `ResolveElicitation`
+### 10.1 `request_user_input_async`
+
+`request_user_input_async` 在当前 turn 继续运行时向用户发送一组结构化问题。
+
+```text
+tool call { questions: [{ title, options? }] }
+  -> validate and render readable fallback text
+  -> ItemStarted(AgentMessage { delivery: Async, questions })
+  -> ItemCompleted(same stable item id)
+  -> rollout before live projection
+  -> { accepted: true }
+  -> current turn continues
+```
+
+- `questions` 和每个 `title` 不能为空；`options` 缺失表示纯自由文本。
+- Desktop 始终允许自由文本回答，回答作为普通 user input 进入 active turn。
+- started/completed 共用稳定 item id，断线 Resume 按 id 去重。
+- `send_user_message_async` 仅保留为隐藏兼容别名，不再发给模型。
+
+### 10.2 `ResolveElicitation`
 
 ```text
 MCP server: elicitation/create
@@ -182,7 +201,7 @@ MCP server: elicitation/create
 - broker 最多保留 128 个 pending request，UI channel 使用非阻塞有界入队；满载、重复 id、channel 关闭均 fail closed。
 - cleanup token 将超时/取消的旧 future 与同 key 的新请求区分，防止旧 cleanup 误删新 pending entry。
 
-### 10.2 `TurnSettings`
+### 10.3 `TurnSettings`
 
 `TurnSettingsUpdate` 可更新 `model`、`reasoning_effort`、`reasoning_summary` 和 `service_tier`。嵌套 `Option` 区分“不变”与“清空”。
 
@@ -193,7 +212,7 @@ MCP server: elicitation/create
 
 它不追溯修改已发出的 Provider 请求，也不更改 Thread 默认配置或其他 turn。
 
-### 10.3 Guardian assessment / retry
+### 10.4 Guardian assessment / retry
 
 Guardian 对高风险工具操作发送 `in_progress`、`approved`、`denied` 或 `aborted` assessment event。拒绝项以 assessment id 保留，并绑定 `SHA-256(tool_name + NUL + serialized_arguments)` 得到的 canonical action。
 
@@ -211,7 +230,7 @@ denied assessment
 - pending denied 和 authorized retry 各限 128 项，超限时淘汰旧项，避免 Session 常驻状态无界增长。
 - 当前后端、gRPC 和 Tauri command 已完整接线；桌面端仍需从 assessment 表面显式触发授权，不应将拒绝自动视为同意。
 
-### 10.4 独立用户 Shell
+### 10.5 独立用户 Shell
 
 `RunUserShellCommand` 只承载用户明确输入的命令，不注册为模型可见工具。运行时使用 `$SHELL -lc`；`$SHELL` 不是有效绝对文件时回退到 `/bin/sh`。cwd 依次取显式参数、turn project root、workspace dir。
 
@@ -220,7 +239,7 @@ denied assessment
 - stdout/stderr 都以 delta 事件流式输出，每路最多捕获 1 MiB；超限后只发送一次截断标记，完成项携带 `stdout_truncated` / `stderr_truncated`。
 - 取消时 kill 子进程、回收读取 task，并以 failed/cancelled 命令项收敛。
 
-### 10.5 Realtime 会话
+### 10.6 Realtime 会话
 
 Realtime 是 Thread 所有的会话级连接，并非一个普通 sampling step。`agent-realtime` 独立拥有 transport negotiation、Provider wire decoding、typed event、history reducer 和 handoff wire；`agent-core` 只负责把 handoff 转换为普通 Agent turn，并将完整历史写入 rollout。Provider 原始 JSON 不跨越 crate 边界。
 
@@ -233,7 +252,7 @@ Realtime 是 Thread 所有的会话级连接，并非一个普通 sampling step�
   frameless/live 协议。V3 sideband 支持有界指数退避重连；V2 断开即关闭，避免自动
   重放非幂等音频或 response request。
 - `HandoffRequested` 可 start/steer 普通 Agent turn，并把 assistant delta 按 `thinking`、`commentary` 或 `bem_tags` 模式回传。BEM 识别 `[ANALYSIS]`、`[COMMENTARY]`、`[FINAL]` 及配置前缀，区分 commentary 和 speakable output；turn terminal 后 handoff 只完成一次。
-- `RealtimeHistory` 只持久 session started、完整转录段、BEM item promotion 和 session closed outcome；原始 delta 与音频不落盘，并通过 `RolloutItem::RealtimeItem` 参与确定性恢复。
+- `RealtimeHistory` 只持久 session started、完整转录段、BEM item promotion 和 session closed outcome；原始 delta 与音频不落盘，并通过 `RolloutItem::RealtimeItem` 参与确定性恢复。同一 Thread 开启新 Realtime session 时，reducer 先封口上一 session 的完整 transcript 与 closed outcome，再追加新 session started，跨 session 顺序不丢失。
 - Desktop WebRTC 路径使用 browser media/data channel 和 unified SDP；ExistingCall 只要求 call id，不创建重复的本地采集链。
 - 连接和媒体通道必须有界；启动、传输或关闭失败通过 typed error/closed event 收敛，不留下伪活跃会话。
 

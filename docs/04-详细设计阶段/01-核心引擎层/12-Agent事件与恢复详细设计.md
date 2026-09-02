@@ -127,6 +127,11 @@ subscriber 和 retained logical ids 投递 `astro.background_expired`、稳定 e
 snapshot 都做 subtractive reconcile：清除本地有而 Server 没有的 turn。集合支持同 Thread
 多个 pending turn；协议不再提供旧 backend presence capability 分支。
 
+`ThreadSnapshot.model` 与 `reasoning_effort` 是 nullable 的当前设置投影。listener 先生成
+Turn/Item 权威快照，`ResumeThread` 再从已加载 Session 补全这两个字段。热更新后
+返回当前值；未配置模型的空 Thread 返回 `null`。Desktop 的 `thread_snapshot` 事件保持
+同样的 camelCase 字段，不从 UI 本地偏好反向覆盖 Server 快照。
+
 ## 6. Desktop provisional ACK barrier
 
 Tauri `ThreadEventsBridge` 用 activation generation 线性化 SubmitTurn ACK 与可能抢先到达的 live
