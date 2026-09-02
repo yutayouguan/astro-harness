@@ -12,6 +12,7 @@ test("terminal dock is a bottom surface independent from the exclusive right doc
 
   assert.match(app, /terminalDockOpen/);
   assert.match(app, /const terminalDockPresence = useDeferredPresence/);
+  assert.match(app, /persistAfterOpen:\s*true/);
   assert.match(app, /<SquareTerminal/);
   assert.match(app, /<TerminalDock/);
   assert.match(app, /open=\{terminalDockPresence\.visible\}/);
@@ -42,6 +43,20 @@ test("terminal dock uses one shared backend session for input, output, resize an
   assert.match(component, /restartAfterExitRef/);
   assert.match(component, /<RefreshCw size=\{14\}/);
   assert.doesNotMatch(component, /<Square size=/);
+});
+
+test("terminal dock stays mounted after its first open so later toggles restore it", () => {
+  const presence = source("hooks/ui/useDeferredPresence.ts");
+  const dock = source("components/chat/TerminalTabsDock.tsx");
+
+  assert.match(presence, /persistAfterOpen\?: boolean/);
+  assert.match(presence, /if \(!persistAfterOpen\)/);
+  assert.match(presence, /setMounted\(false\)/);
+  assert.match(
+    dock,
+    /if \(activeTab && !activeSession && !activeError\) void openTab\(activeTab\)/,
+  );
+  assert.match(dock, /visible=\{open\}/);
 });
 
 test("terminal dock resets ownership when the active project changes", () => {

@@ -1137,6 +1137,7 @@ export default function App() {
   );
   const terminalDockPresence = useDeferredPresence(
     terminalDockOpen && Boolean(activeProjectRoot && activeProject),
+    { persistAfterOpen: true },
   );
 
   useEffect(() => {

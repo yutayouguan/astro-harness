@@ -1,10 +1,23 @@
 import { useLayoutEffect, useState } from "react";
 
+type DeferredPresenceOptions = {
+  exitDurationMs?: number;
+  persistAfterOpen?: boolean;
+};
+
 /**
  * Keeps a surface mounted long enough to play its exit transition and delays
  * the visible state by one frame so newly mounted surfaces can animate in.
+ * Stateful surfaces can opt into `persistAfterOpen` to hide without losing
+ * their live component instance.
  */
-export function useDeferredPresence(open: boolean, exitDurationMs = 300) {
+export function useDeferredPresence(
+  open: boolean,
+  {
+    exitDurationMs = 300,
+    persistAfterOpen = false,
+  }: DeferredPresenceOptions = {},
+) {
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
 
@@ -17,14 +30,16 @@ export function useDeferredPresence(open: boolean, exitDurationMs = 300) {
       frame = window.requestAnimationFrame(() => setVisible(true));
     } else {
       setVisible(false);
-      timer = window.setTimeout(() => setMounted(false), exitDurationMs);
+      if (!persistAfterOpen) {
+        timer = window.setTimeout(() => setMounted(false), exitDurationMs);
+      }
     }
 
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       if (timer) window.clearTimeout(timer);
     };
-  }, [exitDurationMs, open]);
+  }, [exitDurationMs, open, persistAfterOpen]);
 
   return {
     mounted: open || mounted,
