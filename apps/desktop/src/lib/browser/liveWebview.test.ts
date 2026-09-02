@@ -9,6 +9,7 @@ import {
   canonicalBrowserUrl,
   createBrowserLiveSurfaceId,
   LIVE_BROWSER_WEBVIEW_PREFIX,
+  retireBrowserLiveWebview,
   resolveLiveDesiredUrl,
 } from "./liveWebview.ts";
 
@@ -18,8 +19,16 @@ test("live WebView labels are safe and unique across mounts and tabs", () => {
   const firstSurface = createBrowserLiveSurfaceId(1_000);
   const secondSurface = createBrowserLiveSurfaceId(1_000);
   const first = browserLiveWebviewLabel("session/one", "tab:one", firstSurface);
-  const second = browserLiveWebviewLabel("session/one", "tab:one", secondSurface);
-  const otherTab = browserLiveWebviewLabel("session/one", "tab:two", firstSurface);
+  const second = browserLiveWebviewLabel(
+    "session/one",
+    "tab:one",
+    secondSurface,
+  );
+  const otherTab = browserLiveWebviewLabel(
+    "session/one",
+    "tab:two",
+    firstSurface,
+  );
 
   assert.match(first, /^[a-zA-Z0-9_:/-]+$/);
   assert.ok(first.startsWith(LIVE_BROWSER_WEBVIEW_PREFIX));
@@ -43,7 +52,25 @@ test("pending native navigation wins until the automation session catches up", (
     resolveLiveDesiredUrl("https://new.example", "https://new.example/"),
     "https://new.example",
   );
-  assert.equal(canonicalBrowserUrl("https://new.example"), "https://new.example/");
+  assert.equal(
+    canonicalBrowserUrl("https://new.example"),
+    "https://new.example/",
+  );
+});
+
+test("retiring a live WebView hides it before close and tolerates either failure", async () => {
+  const calls: string[] = [];
+  await retireBrowserLiveWebview({
+    async hide() {
+      calls.push("hide");
+      throw new Error("already hidden");
+    },
+    async close() {
+      calls.push("close");
+      throw new Error("already closed");
+    },
+  });
+  assert.deepEqual(calls, ["hide", "close"]);
 });
 
 test("browser content fallback inherits the same glass material as its toolbar", () => {

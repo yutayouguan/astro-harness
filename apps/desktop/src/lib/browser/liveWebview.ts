@@ -1,5 +1,29 @@
 export const LIVE_BROWSER_WEBVIEW_PREFIX = "astro-browser-live-";
 
+export type BrowserLiveWebviewHandle = {
+  hide: () => Promise<void>;
+  close: () => Promise<void>;
+};
+
+/**
+ * Native child WebViews render above the DOM. Hide first so a failed or slow
+ * close cannot leave an interactive surface covering the rest of the app.
+ */
+export async function retireBrowserLiveWebview(
+  webview: BrowserLiveWebviewHandle,
+): Promise<void> {
+  try {
+    await webview.hide();
+  } catch {
+    // The WebView may still be finishing creation; closing remains worthwhile.
+  }
+  try {
+    await webview.close();
+  } catch {
+    // Cleanup is best-effort and is retried by the next orphan sweep.
+  }
+}
+
 let surfaceSequence = 0;
 
 function hashLabelPart(value: string): string {

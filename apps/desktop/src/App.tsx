@@ -70,6 +70,7 @@ import {
 import { useSessionStatusMap } from "./hooks/chat/useSessionStatusMap";
 import { useSubagentThreads } from "./hooks/chat/useSubagentThreads";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
+import { cleanupStaleBrowserLiveWebviews } from "./hooks/chat/useBrowserLiveWebviews";
 import { useBeautifyTips } from "./hooks/ui/useBeautifyTips";
 import { usePrompt } from "./hooks/ui/DialogContext";
 import { useProviders } from "./hooks/providers/useProviders";
@@ -418,6 +419,14 @@ export default function App() {
     selectedPath: string;
   } | null>(null);
   const activeProjectRoot = activeProject?.roots.find(Boolean) ?? null;
+
+  useEffect(() => {
+    void cleanupStaleBrowserLiveWebviews();
+  }, []);
+
+  useEffect(() => {
+    if (nav !== "chat") setBrowserDockOpen(false);
+  }, [nav]);
 
   const closeSideChat = useCallback(async () => {
     const sideId = sideSessionId;

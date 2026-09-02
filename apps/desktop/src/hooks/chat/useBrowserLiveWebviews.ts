@@ -11,16 +11,47 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Webview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  LIVE_BROWSER_WEBVIEW_PREFIX,
   browserLiveWebviewLabel,
   browserWebviewBoundsKey,
   canonicalBrowserUrl,
   createBrowserLiveSurfaceId,
+  retireBrowserLiveWebview,
   resolveLiveDesiredUrl,
 } from "../../lib/browser/liveWebview";
 import type { BrowserPreview, BrowserPreviewTab } from "./useBrowserPreview";
 
 const LIVE_PAGE_EVENT = "browser-live-page-load";
 const LOAD_STATUS_TIMEOUT_MS = 15_000;
+let staleWebviewCleanup: Promise<void> | null = null;
+
+/** Remove native browser surfaces left behind by a renderer reload or a close race. */
+export function cleanupStaleBrowserLiveWebviews(): Promise<void> {
+  if (!isTauri()) return Promise.resolve();
+  if (staleWebviewCleanup) return staleWebviewCleanup;
+
+  staleWebviewCleanup = (async () => {
+    try {
+      const currentWindowLabel = getCurrentWindow().label;
+      const webviews = await Webview.getAll();
+      await Promise.all(
+        webviews
+          .filter(
+            (webview) =>
+              webview.label.startsWith(LIVE_BROWSER_WEBVIEW_PREFIX) &&
+              webview.window.label === currentWindowLabel,
+          )
+          .map(retireBrowserLiveWebview),
+      );
+    } catch {
+      // The app may be running outside Tauri or shutting down already.
+    } finally {
+      staleWebviewCleanup = null;
+    }
+  })();
+
+  return staleWebviewCleanup;
+}
 
 type LiveWebviewStatus =
   "unsupported" | "idle" | "creating" | "loading" | "ready" | "error";
@@ -189,7 +220,7 @@ export function useBrowserLiveWebviews({
     ): Promise<ManagedWebview> => {
       const existing = await Webview.getByLabel(label);
       if (disposed) {
-        if (existing) void existing.close().catch(() => undefined);
+        if (existing) void retireBrowserLiveWebview(existing);
         throw new Error("实时浏览器 WebView 已停止");
       }
       if (existing) {
@@ -240,7 +271,7 @@ export function useBrowserLiveWebviews({
 
       void webview.once("tauri://created", () => {
         if (disposed) {
-          void webview.close();
+          void retireBrowserLiveWebview(webview);
           return;
         }
         entry.ready = true;
@@ -303,7 +334,8 @@ export function useBrowserLiveWebviews({
         if (entry.loadingTimer !== null) {
           window.clearTimeout(entry.loadingTimer);
         }
-        void entry.webview.close().catch(() => undefined);
+        entry.visible = false;
+        void retireBrowserLiveWebview(entry.webview);
       }
 
       let entry = managed.get(activeLabel);
@@ -339,9 +371,7 @@ export function useBrowserLiveWebviews({
       for (const [label, candidate] of managed) {
         if (!candidate.ready) continue;
         const shouldShow =
-          !occludedRef.current &&
-          label === activeLabel &&
-          !candidate.failedUrl;
+          !occludedRef.current && label === activeLabel && !candidate.failedUrl;
         if (candidate.visible !== shouldShow) {
           candidate.visible = shouldShow;
           void (
@@ -431,73 +461,79 @@ export function useBrowserLiveWebviews({
     window.addEventListener("resize", schedule);
     window.addEventListener("scroll", schedule, true);
 
-    void listen<LivePageEvent>(LIVE_PAGE_EVENT, ({ payload }) => {
+    void (async () => {
+      await cleanupStaleBrowserLiveWebviews();
       if (disposed) return;
-      const entry = managed.get(payload.label);
-      if (!entry) return;
-      if (payload.status === "blocked") {
-        entry.url = "";
-        setEntryLoading(entry, payload.label, false);
-        entry.failedUrl = payload.url;
-        entry.failedAt = previewRef.current?.updatedAt ?? null;
-        entry.visible = false;
-        void entry.webview.hide().catch(() => undefined);
-        reportError(payload.error || "该网址已被浏览器权限设置拦截");
-        return;
-      }
-
-      entry.url = payload.url;
-      setEntryLoading(entry, payload.label, payload.status === "started");
-      entry.failedUrl = null;
-      entry.failedAt = null;
-      const current = previewRef.current;
-      const tab = activeTab(current);
-      if (
-        !current ||
-        !tab ||
-        payload.label !== labelFor(current.sessionId, tab.id)
-      ) {
-        return;
-      }
-
-      const nativeUrl = canonicalBrowserUrl(payload.url);
-      if (nativeUrl && nativeUrl !== canonicalBrowserUrl(current.url)) {
-        pendingNativeUrls.set(payload.label, payload.url);
-      }
-      callbacksRef.current.onUrlChange(payload.url);
-      callbacksRef.current.onError(null);
-      setStatus(payload.status === "started" ? "loading" : "ready");
-      if (payload.status !== "finished") return;
-      if (!nativeUrl || nativeUrl === canonicalBrowserUrl(current.url)) return;
-      const syncKey = `${payload.label}:${nativeUrl}`;
-      if (syncKey === lastNativeSync) return;
-      lastNativeSync = syncKey;
-      nativeSyncQueue = nativeSyncQueue
-        .catch(() => undefined)
-        .then(async () => {
+      const stop = await listen<LivePageEvent>(
+        LIVE_PAGE_EVENT,
+        ({ payload }) => {
           if (disposed) return;
-          try {
-            await callbacksRef.current.onNavigate(payload.url);
-          } catch (cause) {
-            if (pendingNativeUrls.get(payload.label) === payload.url) {
-              pendingNativeUrls.delete(payload.label);
-            }
-            if (lastNativeSync === syncKey) lastNativeSync = "";
-            const message =
-              cause instanceof Error ? cause.message : String(cause);
-            callbacksRef.current.onError(message);
+          const entry = managed.get(payload.label);
+          if (!entry) return;
+          if (payload.status === "blocked") {
+            entry.url = "";
+            setEntryLoading(entry, payload.label, false);
+            entry.failedUrl = payload.url;
+            entry.failedAt = previewRef.current?.updatedAt ?? null;
+            entry.visible = false;
+            void entry.webview.hide().catch(() => undefined);
+            reportError(payload.error || "该网址已被浏览器权限设置拦截");
+            return;
           }
-        });
-    })
-      .then((stop) => {
-        if (disposed) stop();
-        else {
-          unlisten = stop;
-          listenerReady = true;
-          schedule();
-        }
-      })
-      .catch(reportError);
+
+          entry.url = payload.url;
+          setEntryLoading(entry, payload.label, payload.status === "started");
+          entry.failedUrl = null;
+          entry.failedAt = null;
+          const current = previewRef.current;
+          const tab = activeTab(current);
+          if (
+            !current ||
+            !tab ||
+            payload.label !== labelFor(current.sessionId, tab.id)
+          ) {
+            return;
+          }
+
+          const nativeUrl = canonicalBrowserUrl(payload.url);
+          if (nativeUrl && nativeUrl !== canonicalBrowserUrl(current.url)) {
+            pendingNativeUrls.set(payload.label, payload.url);
+          }
+          callbacksRef.current.onUrlChange(payload.url);
+          callbacksRef.current.onError(null);
+          setStatus(payload.status === "started" ? "loading" : "ready");
+          if (payload.status !== "finished") return;
+          if (!nativeUrl || nativeUrl === canonicalBrowserUrl(current.url))
+            return;
+          const syncKey = `${payload.label}:${nativeUrl}`;
+          if (syncKey === lastNativeSync) return;
+          lastNativeSync = syncKey;
+          nativeSyncQueue = nativeSyncQueue
+            .catch(() => undefined)
+            .then(async () => {
+              if (disposed) return;
+              try {
+                await callbacksRef.current.onNavigate(payload.url);
+              } catch (cause) {
+                if (pendingNativeUrls.get(payload.label) === payload.url) {
+                  pendingNativeUrls.delete(payload.label);
+                }
+                if (lastNativeSync === syncKey) lastNativeSync = "";
+                const message =
+                  cause instanceof Error ? cause.message : String(cause);
+                callbacksRef.current.onError(message);
+              }
+            });
+        },
+      );
+      if (disposed) {
+        stop();
+        return;
+      }
+      unlisten = stop;
+      listenerReady = true;
+      schedule();
+    })().catch(reportError);
     return () => {
       disposed = true;
       scheduleRef.current = () => undefined;
@@ -510,7 +546,8 @@ export function useBrowserLiveWebviews({
         if (entry.loadingTimer !== null) {
           window.clearTimeout(entry.loadingTimer);
         }
-        void entry.webview.close().catch(() => undefined);
+        entry.visible = false;
+        void retireBrowserLiveWebview(entry.webview);
       }
       managed.clear();
       pendingCreates.clear();
