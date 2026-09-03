@@ -2001,8 +2001,8 @@ impl Session {
     pub(crate) async fn extension_snapshot_for_current_turn(
         &self,
     ) -> anyhow::Result<Arc<crate::extensions::ExtensionSnapshot>> {
-        let (turn_context, project_root, mcp_overrides, skill_overrides) = {
-            let state = self.lock_state();
+        let (turn_context, pending) = {
+            let mut state = self.lock_state();
             if let Some(snapshot) = state
                 .current_turn_context
                 .as_ref()
@@ -2010,13 +2010,33 @@ impl Session {
             {
                 return Ok(snapshot);
             }
-            let turn_context = state.current_turn_context.clone();
+            (
+                state.current_turn_context.clone(),
+                state.pending_extension_snapshot.take(),
+            )
+        };
+        let snapshot = match pending {
+            Some(snapshot) => snapshot,
+            None => self.discover_extension_snapshot_from_disk(turn_context.as_ref())?,
+        };
+        let published = match turn_context {
+            Some(turn) => turn.publish_extension_snapshot(snapshot),
+            None => snapshot,
+        };
+        self.lock_state().extension_snapshot_baseline = Some(Arc::clone(&published));
+        Ok(published)
+    }
+
+    fn discover_extension_snapshot_from_disk(
+        &self,
+        turn_context: Option<&Arc<TurnContext>>,
+    ) -> anyhow::Result<Arc<crate::extensions::ExtensionSnapshot>> {
+        let (project_root, mcp_overrides, skill_overrides) = {
+            let state = self.lock_state();
             let project_root = turn_context
-                .as_ref()
                 .and_then(|turn| turn.project_root().map(ToOwned::to_owned))
                 .or_else(|| state.project_root.clone());
             (
-                turn_context,
                 project_root,
                 state.mcp_config_override.clone(),
                 state.skill_config_overrides.clone(),
@@ -2047,10 +2067,34 @@ impl Session {
                 "extension manifest skipped"
             );
         }
-        Ok(match turn_context {
-            Some(turn) => turn.publish_extension_snapshot(snapshot),
-            None => snapshot,
-        })
+        Ok(snapshot)
+    }
+
+    /// Discovers and validates the next extension snapshot without replacing the active turn's
+    /// frozen view. The validated snapshot becomes eligible at the next turn boundary.
+    pub async fn reconcile_extensions(
+        &self,
+    ) -> anyhow::Result<crate::extensions::ExtensionReconcileReport> {
+        let turn = self.lock_state().current_turn_context.clone();
+        let next = self.discover_extension_snapshot_from_disk(turn.as_ref())?;
+        let previous = {
+            let state = self.lock_state();
+            state
+                .current_turn_context
+                .as_ref()
+                .and_then(|turn| turn.extension_snapshot())
+                .or_else(|| state.extension_snapshot_baseline.clone())
+                .unwrap_or_else(|| Arc::clone(&next))
+        };
+        let report = crate::extensions::reconcile_extension_snapshots(&previous, &next)?;
+        let mut state = self.lock_state();
+        if previous.version() != next.version() {
+            state.pending_extension_snapshot = Some(next);
+        }
+        if state.extension_snapshot_baseline.is_none() {
+            state.extension_snapshot_baseline = Some(previous);
+        }
+        Ok(report)
     }
 
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。

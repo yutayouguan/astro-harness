@@ -21,7 +21,7 @@ fn default_true() -> bool {
 }
 
 /// 一个扩展包的声明文件。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExtensionManifest {
     #[serde(alias = "manifest_version")]
@@ -46,7 +46,7 @@ pub struct ExtensionManifest {
 }
 
 /// 扩展包内的 Skill；相对路径以 manifest 所在目录为根。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExtensionSkillContribution {
     pub path: PathBuf,
@@ -55,7 +55,7 @@ pub struct ExtensionSkillContribution {
 }
 
 /// 扩展配置契约。`schema` 指向 JSON Schema，`defaults` 是默认 TOML 值。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExtensionConfigContribution {
     #[serde(default)]
@@ -65,7 +65,7 @@ pub struct ExtensionConfigContribution {
 }
 
 /// 已编译工具集合贡献。Manifest 不加载任意动态库或本地原生代码。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExtensionToolContribution {
     pub toolset: String,
@@ -98,6 +98,31 @@ pub struct ExtensionDiagnostic {
     pub manifest_path: PathBuf,
     pub extension_id: Option<String>,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtensionChangeKind {
+    Added,
+    Updated,
+    Removed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExtensionChange {
+    pub extension_id: String,
+    pub kind: ExtensionChangeKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExtensionReconcileReport {
+    pub previous_version: String,
+    pub next_version: String,
+    pub changed_extensions: Vec<ExtensionChange>,
+    pub refresh_mcp: bool,
+    pub refresh_skills: bool,
+    pub refresh_hooks: bool,
+    pub refresh_toolsets: bool,
 }
 
 /// 单个 turn 使用的完整扩展投影。
@@ -186,6 +211,90 @@ impl ExtensionSnapshot {
     pub fn diagnostics(&self) -> &[ExtensionDiagnostic] {
         &self.diagnostics
     }
+}
+
+/// Compares two fully validated immutable snapshots without mutating the active turn.
+pub fn reconcile_extension_snapshots(
+    previous: &ExtensionSnapshot,
+    next: &ExtensionSnapshot,
+) -> Result<ExtensionReconcileReport> {
+    let previous_by_id = previous
+        .extensions
+        .iter()
+        .map(|extension| (extension.manifest.id.as_str(), extension))
+        .collect::<BTreeMap<_, _>>();
+    let next_by_id = next
+        .extensions
+        .iter()
+        .map(|extension| (extension.manifest.id.as_str(), extension))
+        .collect::<BTreeMap<_, _>>();
+    let mut ids = previous_by_id
+        .keys()
+        .chain(next_by_id.keys())
+        .copied()
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    ids.dedup();
+
+    let mut changed_extensions = Vec::new();
+    let mut refresh_mcp = false;
+    let mut refresh_skills = false;
+    let mut refresh_toolsets = false;
+    for id in ids {
+        let previous_extension = previous_by_id.get(id).copied();
+        let next_extension = next_by_id.get(id).copied();
+        let kind = match (previous_extension, next_extension) {
+            (None, Some(_)) => Some(ExtensionChangeKind::Added),
+            (Some(_), None) => Some(ExtensionChangeKind::Removed),
+            (Some(before), Some(after))
+                if resolved_extension_fingerprint(before)?
+                    != resolved_extension_fingerprint(after)? =>
+            {
+                Some(ExtensionChangeKind::Updated)
+            }
+            _ => None,
+        };
+        let Some(kind) = kind else { continue };
+        refresh_mcp |= contribution_changed(
+            previous_extension.map(|extension| &extension.mcp_servers),
+            next_extension.map(|extension| &extension.mcp_servers),
+        )?;
+        refresh_skills |= contribution_changed(
+            previous_extension.map(|extension| &extension.skill_configs),
+            next_extension.map(|extension| &extension.skill_configs),
+        )?;
+        refresh_toolsets |= contribution_changed(
+            previous_extension.map(|extension| &extension.toolsets),
+            next_extension.map(|extension| &extension.toolsets),
+        )?;
+        changed_extensions.push(ExtensionChange {
+            extension_id: id.to_string(),
+            kind,
+        });
+    }
+
+    Ok(ExtensionReconcileReport {
+        previous_version: previous.version.clone(),
+        next_version: next.version.clone(),
+        refresh_hooks: !changed_extensions.is_empty(),
+        changed_extensions,
+        refresh_mcp,
+        refresh_skills,
+        refresh_toolsets,
+    })
+}
+
+fn contribution_changed<T: Serialize>(before: Option<&T>, after: Option<&T>) -> Result<bool> {
+    Ok(serde_json::to_value(before)? != serde_json::to_value(after)?)
+}
+
+fn resolved_extension_fingerprint(extension: &ResolvedExtension) -> Result<String> {
+    let mut value = resolved_extension_value(extension);
+    canonicalize_json(&mut value);
+    Ok(format!(
+        "sha256:{:x}",
+        Sha256::digest(serde_json::to_vec(&value)?)
+    ))
 }
 
 /// 发现一次扩展快照所需的 session 输入。
@@ -612,21 +721,7 @@ fn snapshot_fingerprint(
 ) -> Result<String> {
     let extension_values = extensions
         .iter()
-        .map(|extension| {
-            serde_json::json!({
-                "id": &extension.manifest.id,
-                "name": &extension.manifest.name,
-                "version": &extension.manifest.version,
-                "description": &extension.manifest.description,
-                "root": &extension.root,
-                "scope": extension.scope,
-                "config_schema": &extension.config_schema,
-                "config": &extension.config,
-                "mcp_servers": &extension.mcp_servers,
-                "skill_configs": &extension.skill_configs,
-                "toolsets": &extension.toolsets,
-            })
-        })
+        .map(resolved_extension_value)
         .collect::<Vec<_>>();
     let mut value = serde_json::json!({
         "config_version": config_version,
@@ -641,6 +736,19 @@ fn snapshot_fingerprint(
     let bytes = serde_json::to_vec(&value)?;
     let digest = Sha256::digest(bytes);
     Ok(format!("sha256:{digest:x}"))
+}
+
+fn resolved_extension_value(extension: &ResolvedExtension) -> serde_json::Value {
+    serde_json::json!({
+        "manifest": &extension.manifest,
+        "root": &extension.root,
+        "scope": extension.scope,
+        "config_schema": &extension.config_schema,
+        "config": &extension.config,
+        "mcp_servers": &extension.mcp_servers,
+        "skill_configs": &extension.skill_configs,
+        "toolsets": &extension.toolsets,
+    })
 }
 
 fn canonicalize_json(value: &mut serde_json::Value) {
@@ -865,6 +973,60 @@ args = ["ready"]
             discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
         assert_eq!(second.extensions()[0].manifest.description, "after");
         assert_ne!(first.version(), second.version());
+    }
+
+    #[test]
+    fn reconcile_reports_updated_contributions_without_mutating_previous() {
+        let (_temp, home, project) = fixture();
+        let root = home.join("extensions");
+        write_demo_extension(&root, "before");
+        let previous =
+            discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
+        write_demo_extension(&root, "after");
+        let next = discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
+
+        let report = reconcile_extension_snapshots(&previous, &next).unwrap();
+
+        assert_eq!(previous.extensions()[0].manifest.description, "before");
+        assert_eq!(report.changed_extensions.len(), 1);
+        assert_eq!(report.changed_extensions[0].extension_id, "demo");
+        assert_eq!(
+            report.changed_extensions[0].kind,
+            ExtensionChangeKind::Updated
+        );
+        assert!(report.refresh_hooks);
+        assert!(!report.refresh_mcp);
+        assert!(!report.refresh_skills);
+        assert!(!report.refresh_toolsets);
+    }
+
+    #[test]
+    fn reconcile_reports_added_and_removed_extension_contributions() {
+        let (_temp, home, project) = fixture();
+        let empty = discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
+        write_demo_extension(&home.join("extensions"), "added");
+        let added = discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
+
+        let add_report = reconcile_extension_snapshots(&empty, &added).unwrap();
+        assert_eq!(
+            add_report.changed_extensions[0].kind,
+            ExtensionChangeKind::Added
+        );
+        assert!(add_report.refresh_mcp);
+        assert!(add_report.refresh_skills);
+        assert!(add_report.refresh_toolsets);
+
+        fs::remove_dir_all(home.join("extensions/demo")).unwrap();
+        let removed =
+            discover_extension_snapshot(&discovery_options(&home, &project, true)).unwrap();
+        let remove_report = reconcile_extension_snapshots(&added, &removed).unwrap();
+        assert_eq!(
+            remove_report.changed_extensions[0].kind,
+            ExtensionChangeKind::Removed
+        );
+        assert!(remove_report.refresh_mcp);
+        assert!(remove_report.refresh_skills);
+        assert!(remove_report.refresh_toolsets);
     }
 
     #[test]
