@@ -174,6 +174,7 @@ test("aggregates exact file snapshots within one assistant turn", () => {
         title: "apply_patch",
         fileChanges: [
           {
+            root: "/repo",
             path: "src/a.ts",
             kind: "update",
             before_content: "old\n",
@@ -190,6 +191,7 @@ test("aggregates exact file snapshots within one assistant turn", () => {
         title: "apply_patch",
         fileChanges: [
           {
+            root: "/repo",
             path: "src/a.ts",
             kind: "update",
             before_content: "middle\n",
@@ -207,6 +209,7 @@ test("aggregates exact file snapshots within one assistant turn", () => {
     deletions: 1,
     items: [
       {
+        root: "/repo",
         path: "src/a.ts",
         sourcePath: "src/a.ts",
         kind: "update",

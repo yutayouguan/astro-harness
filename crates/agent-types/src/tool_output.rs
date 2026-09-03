@@ -15,6 +15,8 @@ pub enum ToolFileChangeKind {
 /// Exact before/after state produced by one structured file mutation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolFileChange {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<String>,
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub move_path: Option<String>,
@@ -168,6 +170,7 @@ mod tests {
     #[test]
     fn file_changes_preserve_text_and_snapshots() {
         let change = ToolFileChange {
+            root: None,
             path: "a.txt".into(),
             move_path: None,
             kind: ToolFileChangeKind::Update,

@@ -126,6 +126,7 @@ function fileChangesFromMetadata(
       return [];
     return [
       {
+        root: typeof change.root === "string" ? change.root : undefined,
         path: change.path,
         move_path:
           typeof change.move_path === "string" ? change.move_path : undefined,

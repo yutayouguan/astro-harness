@@ -12,6 +12,7 @@ export type TodoPlan = {
 };
 
 export type FileChangeItem = {
+  root?: string;
   path: string;
   additions: number;
   deletions: number;
@@ -303,6 +304,7 @@ export function extractTurnFileChangeSummary(
         continue;
       }
       changes.set(path, {
+        root: change.root,
         path,
         sourcePath: change.path,
         kind: change.kind,

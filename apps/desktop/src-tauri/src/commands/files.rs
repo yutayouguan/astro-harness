@@ -42,6 +42,7 @@ pub struct ProjectGitDiffDto {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnFileChangeDto {
+    pub root: Option<String>,
     pub path: String,
     pub source_path: Option<String>,
     pub before_content: Option<String>,
@@ -55,6 +56,16 @@ pub struct TurnFileApplyResult {
     pub status: String,
     pub applied_paths: Vec<String>,
     pub conflicted_paths: Vec<String>,
+}
+
+fn rooted_turn_path(root: Option<&str>, path: &str) -> String {
+    if Path::new(path).is_absolute() {
+        path.to_string()
+    } else if let Some(root) = root {
+        Path::new(root).join(path).to_string_lossy().into_owned()
+    } else {
+        path.to_string()
+    }
 }
 
 fn turn_file_change_matches(
@@ -667,8 +678,10 @@ pub async fn apply_turn_file_changes(
             continue;
         }
         let source = change.source_path.as_deref().unwrap_or(&change.path);
-        let (_, source_path) = project_review_path(&roots, source)?;
-        let (_, target_path) = project_review_path(&roots, &change.path)?;
+        let source = rooted_turn_path(change.root.as_deref(), source);
+        let target = rooted_turn_path(change.root.as_deref(), &change.path);
+        let (_, source_path) = project_review_path(&roots, &source)?;
+        let (_, target_path) = project_review_path(&roots, &target)?;
         if !turn_file_change_matches(&change, &source_path, &target_path, !revert) {
             conflicts.push(change.path.clone());
             continue;
@@ -696,33 +709,43 @@ pub async fn apply_turn_file_changes(
             .source_path
             .as_deref()
             .is_some_and(|p| p != change.path);
-        if is_move {
-            if revert {
+        let apply_result = (|| -> Result<(), String> {
+            if is_move {
+                if revert {
+                    if let Some(parent) = source.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    }
+                    std::fs::write(&source, change.before_content.as_deref().unwrap_or(""))
+                        .map_err(|e| e.to_string())?;
+                    if target.exists() {
+                        std::fs::remove_file(&target).map_err(|e| e.to_string())?;
+                    }
+                } else {
+                    if let Some(parent) = target.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    }
+                    std::fs::write(&target, change.after_content.as_deref().unwrap_or(""))
+                        .map_err(|e| e.to_string())?;
+                    if source.exists() {
+                        std::fs::remove_file(&source).map_err(|e| e.to_string())?;
+                    }
+                }
+            } else if let Some(content) = desired {
                 if let Some(parent) = source.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                 }
-                std::fs::write(&source, change.before_content.as_deref().unwrap_or(""))
-                    .map_err(|e| e.to_string())?;
-                if target.exists() {
-                    std::fs::remove_file(&target).map_err(|e| e.to_string())?;
-                }
-            } else {
-                if let Some(parent) = target.parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-                }
-                std::fs::write(&target, change.after_content.as_deref().unwrap_or(""))
-                    .map_err(|e| e.to_string())?;
-                if source.exists() {
-                    std::fs::remove_file(&source).map_err(|e| e.to_string())?;
-                }
+                std::fs::write(&source, content).map_err(|e| e.to_string())?;
+            } else if source.exists() {
+                std::fs::remove_file(&source).map_err(|e| e.to_string())?;
             }
-        } else if let Some(content) = desired {
-            if let Some(parent) = source.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            std::fs::write(&source, content).map_err(|e| e.to_string())?;
-        } else if source.exists() {
-            std::fs::remove_file(&source).map_err(|e| e.to_string())?;
+            Ok(())
+        })();
+        if apply_result.is_err() {
+            return Ok(TurnFileApplyResult {
+                status: "partial".into(),
+                applied_paths: applied,
+                conflicted_paths: vec![change.path],
+            });
         }
         applied.push(change.path);
     }
@@ -745,8 +768,10 @@ pub async fn inspect_turn_file_changes(
     let mut conflicts = Vec::new();
     for change in changes {
         let source = change.source_path.as_deref().unwrap_or(&change.path);
-        let (_, source_path) = project_review_path(&roots, source)?;
-        let (_, target_path) = project_review_path(&roots, &change.path)?;
+        let source = rooted_turn_path(change.root.as_deref(), source);
+        let target = rooted_turn_path(change.root.as_deref(), &change.path);
+        let (_, source_path) = project_review_path(&roots, &source)?;
+        let (_, target_path) = project_review_path(&roots, &target)?;
         let applied = turn_file_change_matches(&change, &source_path, &target_path, false);
         let reverted = turn_file_change_matches(&change, &source_path, &target_path, true);
         all_applied &= applied;
@@ -1524,6 +1549,7 @@ mod turn_change_tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.txt");
         let change = TurnFileChangeDto {
+            root: None,
             path: "a.txt".into(),
             source_path: None,
             before_content: Some("before".into()),

@@ -59,12 +59,21 @@ export default function TurnChangeSummaryCard({ message, projectId, onReview }: 
     setApplying(true);
     setActionError(null);
     try {
-      const result = await invoke<{ status: string; conflictedPaths: string[] }>(
+      const result = await invoke<{
+        status: string;
+        appliedPaths: string[];
+        conflictedPaths: string[];
+      }>(
         "apply_turn_file_changes",
         { projectId, changes: summary.items, revert: !undone },
       );
       if (result.status !== "success") {
-        setActionError(`文件已变化，未覆盖：${result.conflictedPaths.join("、")}`);
+        const prefix = result.appliedPaths.length
+          ? `已处理 ${result.appliedPaths.length} 个文件；`
+          : "";
+        setActionError(
+          `${prefix}未覆盖：${result.conflictedPaths.join("、") || "文件状态不匹配"}`,
+        );
         return;
       }
       setUndone((value) => !value);

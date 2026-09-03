@@ -504,6 +504,7 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<types::Tool
                 std::fs::write(&full, contents)?;
                 affected.added.push(path.clone());
                 changes.push(types::ToolFileChange {
+                    root: Some(workspace.to_string_lossy().into_owned()),
                     path: path.to_string_lossy().into_owned(),
                     move_path: None,
                     kind: if existed {
@@ -531,6 +532,7 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<types::Tool
                 let (before_content, after_content, reversible) =
                     reversible_snapshots(before_content, None, has_before);
                 changes.push(types::ToolFileChange {
+                    root: Some(workspace.to_string_lossy().into_owned()),
                     path: path.to_string_lossy().into_owned(),
                     move_path: None,
                     kind: types::ToolFileChangeKind::Delete,
@@ -576,6 +578,7 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<types::Tool
                     move_path.is_none() || destination_before.is_none(),
                 );
                 changes.push(types::ToolFileChange {
+                    root: Some(workspace.to_string_lossy().into_owned()),
                     path: path.to_string_lossy().into_owned(),
                     move_path: move_path
                         .as_ref()

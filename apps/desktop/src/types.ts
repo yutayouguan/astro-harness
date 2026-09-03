@@ -42,6 +42,7 @@ export type ChatActivityKind =
   "tool" | "skill" | "mcp" | "hook" | "memory" | "status";
 export type ToolExecutionMode = "serial" | "parallel";
 export type ToolFileChange = {
+  root?: string;
   path: string;
   move_path?: string;
   kind: "add" | "update" | "delete" | "move";
