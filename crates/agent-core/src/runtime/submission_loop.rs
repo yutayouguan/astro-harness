@@ -607,6 +607,7 @@ impl Session {
                                     .as_ref()
                                     .map(ToString::to_string),
                             }],
+                            rollback_keep_chat_bubbles: None,
                             thread_settings: Default::default(),
                         },
                         TurnInputMode::StartOrSteer,
@@ -788,6 +789,7 @@ impl Session {
                             image_data_urls: Vec::new(),
                             client_message_id: None,
                         }],
+                        rollback_keep_chat_bubbles: None,
                         thread_settings: Default::default(),
                     },
                     agent_protocol::TurnInputMode::StartOrSteer,

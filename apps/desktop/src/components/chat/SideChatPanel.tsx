@@ -219,7 +219,6 @@ export default function SideChatPanel({
           onChatModeChange={setSideMode}
           onOpenContext={onOpenContext}
           onOpenFileReview={onOpenFileReview}
-          onRegenerateMessage={chat.regenerateMessage}
           onEditUserMessage={chat.editUserMessage}
           contextUsage={chat.contextUsage}
           contextWindow={contextWindow}

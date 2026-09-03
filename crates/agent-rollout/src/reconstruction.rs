@@ -93,7 +93,11 @@ pub fn effective_response_history(items: &[RolloutItem]) -> Vec<ResponseItem> {
                         .drain(..)
                         .map(|(_, item)| item),
                 );
-                drop_last_n_user_turns(&mut history, event.num_turns);
+                if let Some(keep) = event.keep_chat_bubbles {
+                    truncate_to_chat_bubbles(&mut history, keep as usize);
+                } else {
+                    drop_last_n_user_turns(&mut history, event.num_turns);
+                }
             }
             RolloutItem::EventMsg(agent_protocol::EventMsg::UserInputCommitted(event)) => {
                 if let Some(index) = pending_triggered_communications
@@ -128,6 +132,66 @@ pub fn effective_response_history(items: &[RolloutItem]) -> Vec<ResponseItem> {
             .map(|(_, item)| item),
     );
     history
+}
+
+/// Count durable user-turn boundaries using the same contract as relative rollback.
+pub fn user_turn_count(history: &[ResponseItem]) -> usize {
+    history
+        .iter()
+        .filter(|item| {
+            matches!(item, ResponseItem::Message { role, .. } if role == "user")
+                || matches!(item, ResponseItem::AgentMessage { .. })
+        })
+        .count()
+}
+
+/// Keep an absolute chat-bubble prefix, including tool/reasoning items belonging
+/// to the final retained assistant bubble.
+pub fn truncate_to_chat_bubbles(history: &mut Vec<ResponseItem>, keep: usize) {
+    if keep == 0 {
+        history.clear();
+        return;
+    }
+    let starts = response_item_bubble_starts(history);
+    if let Some(&remove_from) = starts.get(keep) {
+        history.truncate(remove_from);
+    }
+}
+
+fn response_item_bubble_starts(history: &[ResponseItem]) -> Vec<usize> {
+    let mut starts = Vec::new();
+    let mut assistant_bubble_open = false;
+    for (index, item) in history.iter().enumerate() {
+        match item {
+            ResponseItem::Message { role, .. } if role == "user" => {
+                starts.push(index);
+                assistant_bubble_open = false;
+            }
+            _ if is_assistant_response_item(item) && !assistant_bubble_open => {
+                starts.push(index);
+                assistant_bubble_open = true;
+            }
+            _ => {}
+        }
+    }
+    starts
+}
+
+fn is_assistant_response_item(item: &ResponseItem) -> bool {
+    matches!(
+        item,
+        ResponseItem::Message { role, .. } if role == "assistant"
+    ) || matches!(
+        item,
+        ResponseItem::FunctionCall { .. }
+            | ResponseItem::CustomToolCall { .. }
+            | ResponseItem::ToolSearchCall { .. }
+            | ResponseItem::Reasoning { .. }
+            | ResponseItem::LocalShellCall { .. }
+            | ResponseItem::WebSearchCall { .. }
+            | ResponseItem::ImageGenerationCall { .. }
+            | ResponseItem::AgentMessage { .. }
+    )
 }
 
 /// Drop instruction boundaries: ordinary user messages and structured agent messages.
@@ -284,7 +348,10 @@ mod tests {
             RolloutItem::ResponseItem(message("user", "two")),
             RolloutItem::ResponseItem(message("assistant", "answer two")),
             RolloutItem::EventMsg(agent_protocol::EventMsg::ThreadRolledBack(
-                agent_protocol::ThreadRolledBackEvent { num_turns: 1 },
+                agent_protocol::ThreadRolledBackEvent {
+                    num_turns: 1,
+                    keep_chat_bubbles: None,
+                },
             )),
         ];
 
@@ -300,6 +367,59 @@ mod tests {
         let mut history = vec![message("developer", "summary"), message("user", "one")];
         drop_last_n_user_turns(&mut history, 99);
         assert_eq!(history, vec![message("developer", "summary")]);
+    }
+
+    #[test]
+    fn absolute_bubble_rollback_is_idempotent_for_edited_resubmission() {
+        let call = agent_protocol::ResponseItem::FunctionCall {
+            id: None,
+            name: "exec_command".into(),
+            namespace: None,
+            arguments: "{}".into(),
+            encrypted_function_args: None,
+            call_id: "call-1".into(),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        let output = agent_protocol::ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: Some("call-1".into()),
+            name: Some("exec_command".into()),
+            namespace: None,
+            output: agent_protocol::FunctionCallOutputPayload::from_text("ok".into()),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        let rollback = || {
+            RolloutItem::EventMsg(agent_protocol::EventMsg::ThreadRolledBack(
+                agent_protocol::ThreadRolledBackEvent {
+                    num_turns: 0,
+                    keep_chat_bubbles: Some(2),
+                },
+            ))
+        };
+        let items = vec![
+            RolloutItem::ResponseItem(message("user", "one")),
+            RolloutItem::ResponseItem(call.clone()),
+            RolloutItem::ResponseItem(output.clone()),
+            RolloutItem::ResponseItem(message("assistant", "answer one")),
+            RolloutItem::ResponseItem(message("user", "old two")),
+            RolloutItem::ResponseItem(message("assistant", "old answer two")),
+            rollback(),
+            rollback(),
+            RolloutItem::ResponseItem(message("user", "new two")),
+            RolloutItem::ResponseItem(message("assistant", "new answer two")),
+        ];
+
+        assert_eq!(
+            effective_response_history(&items),
+            vec![
+                message("user", "one"),
+                call,
+                output,
+                message("assistant", "answer one"),
+                message("user", "new two"),
+                message("assistant", "new answer two"),
+            ]
+        );
     }
 
     #[test]
@@ -340,7 +460,10 @@ mod tests {
         let rolled_back = vec![
             RolloutItem::InterAgentCommunication(serde_json::to_value(&communication).unwrap()),
             RolloutItem::EventMsg(agent_protocol::EventMsg::ThreadRolledBack(
-                agent_protocol::ThreadRolledBackEvent { num_turns: 1 },
+                agent_protocol::ThreadRolledBackEvent {
+                    num_turns: 1,
+                    keep_chat_bubbles: None,
+                },
             )),
         ];
         assert!(effective_response_history(&rolled_back).is_empty());

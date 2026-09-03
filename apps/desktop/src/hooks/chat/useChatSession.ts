@@ -1463,42 +1463,6 @@ export function useChatSession({
   ]);
 
   // ── Message operations ────────────────────────────────────────────────────
-  const regenerateMessage = useCallback(
-    (assistantId: string) => {
-      if (
-        streaming ||
-        turnInFlightRef.current ||
-        sendStartLockRef.current
-      )
-        return;
-      const idx = messages.findIndex((m) => m.id === assistantId);
-      if (idx < 0 || messages[idx]?.role !== "assistant") return;
-      let userIdx = -1;
-      for (let i = idx - 1; i >= 0; i -= 1) {
-        if (messages[i].role === "user") {
-          userIdx = i;
-          break;
-        }
-      }
-      if (userIdx < 0) return;
-      const userMsg = messages[userIdx];
-      // 截断到 user 消息之前，让后端正常追加（避免重复）
-      pendingKeepChatBubblesRef.current = countChatBubbles(
-        messages.slice(0, userIdx),
-      );
-      void sendImmediate({
-        text: userMsg.content,
-        attachments: userMsg.attachments ?? [],
-        truncateTo: userIdx,
-        skipUserAppend: false,
-        reuseUserId: userMsg.id,
-      }).then((started) => {
-        if (!started) pendingKeepChatBubblesRef.current = null;
-      });
-    },
-    [messages, streaming, sendImmediate],
-  );
-
   const undoLastExchange = useCallback(() => {
     if (streaming) return;
     setMessages((prev) => {
@@ -1522,22 +1486,6 @@ export function useChatSession({
       return next;
     });
   }, [streaming, showTransientToast, t]);
-
-  const retryLastAssistant = useCallback(() => {
-    if (streaming) return;
-    let lastAssistantId: string | null = null;
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i].role === "assistant") {
-        lastAssistantId = messages[i].id;
-        break;
-      }
-    }
-    if (!lastAssistantId) {
-      showTransientToast(t("chat.slashRetryEmpty"));
-      return;
-    }
-    regenerateMessage(lastAssistantId);
-  }, [messages, streaming, regenerateMessage, showTransientToast, t]);
 
   const editUserMessage = useCallback(
     async (messageId: string, content: string): Promise<boolean> => {
@@ -2135,9 +2083,7 @@ export function useChatSession({
     pauseStream,
     resumeStream,
     stopStream,
-    regenerateMessage,
     undoLastExchange,
-    retryLastAssistant,
     editUserMessage,
     branchMessage,
     runCompactSession,

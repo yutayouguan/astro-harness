@@ -126,6 +126,12 @@ pub struct TurnAbortedEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreadRolledBackEvent {
     pub num_turns: u32,
+    /// Absolute chat-bubble boundary used by edited-input resubmission.
+    ///
+    /// Older relative rollback events omit this field and continue to use
+    /// `num_turns`; an absolute boundary makes retries idempotent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_chat_bubbles: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

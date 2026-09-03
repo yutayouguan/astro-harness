@@ -122,6 +122,13 @@ impl ThreadHistoryBuilder {
                     }
                 }
             }
+            EventMsg::ThreadRolledBack(rollback) => {
+                let keep = self
+                    .completed
+                    .len()
+                    .saturating_sub(rollback.num_turns as usize);
+                self.completed.truncate(keep);
+            }
             _ => {}
         }
     }
@@ -337,8 +344,8 @@ impl ThreadStateManager {
 mod tests {
     use super::*;
     use agent_protocol::{
-        DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem, TurnAbortReason,
-        TurnAbortedEvent, TurnCompleteEvent, TurnItem, TurnStartedEvent,
+        DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem, ThreadRolledBackEvent,
+        TurnAbortReason, TurnAbortedEvent, TurnCompleteEvent, TurnItem, TurnStartedEvent,
     };
     use tokio::sync::{mpsc, watch, Mutex};
 
@@ -494,6 +501,32 @@ mod tests {
         assert!(builder.active_turn_snapshot().is_none());
         assert_eq!(builder.completed_turns().len(), 1);
         assert_eq!(builder.completed_turns()[0].status, "completed");
+    }
+
+    #[test]
+    fn builder_removes_replaced_turns_after_history_rollback() {
+        let mut builder = ThreadHistoryBuilder::default();
+        for turn_id in ["turn-1", "turn-2"] {
+            builder.track(&started(turn_id));
+            builder.track(&Event {
+                id: turn_id.into(),
+                msg: EventMsg::TurnComplete(TurnCompleteEvent {
+                    turn_id: turn_id.into(),
+                    last_agent_message: Some(format!("answer {turn_id}")),
+                    error: None,
+                }),
+            });
+        }
+        builder.track(&Event {
+            id: "edit".into(),
+            msg: EventMsg::ThreadRolledBack(ThreadRolledBackEvent {
+                num_turns: 1,
+                keep_chat_bubbles: Some(2),
+            }),
+        });
+
+        assert_eq!(builder.completed_turns().len(), 1);
+        assert_eq!(builder.completed_turns()[0].id, "turn-1");
     }
 
     #[test]

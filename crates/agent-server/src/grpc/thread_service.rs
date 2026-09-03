@@ -480,6 +480,7 @@ fn turn_request_from_chat_with_requirement(
             client_message_id: (!chat.client_message_id.trim().is_empty())
                 .then(|| chat.client_message_id.trim().to_string()),
         }],
+        rollback_keep_chat_bubbles: chat.rollback_keep_chat_bubbles,
         thread_settings: Default::default(),
     })
 }
@@ -527,6 +528,11 @@ fn validate_chat_request(chat: &proto::ChatRequest) -> Result<ValidatedChatReque
         super::interrupt_store::parse_resume_items_json(&chat.resume_json)
             .map_err(Status::invalid_argument)?
     };
+    if !resume_items.is_empty() && chat.rollback_keep_chat_bubbles.is_some() {
+        return Err(Status::invalid_argument(
+            "history rollback cannot be combined with interrupt resume",
+        ));
+    }
     let turn_request = if resume_items.is_empty() {
         Some(turn_request_from_chat(chat)?)
     } else {
@@ -880,12 +886,14 @@ mod tests {
     fn turn_request_preserves_client_message_identity() {
         let mut chat = valid_chat_request();
         chat.client_message_id = "queued-message-7".into();
+        chat.rollback_keep_chat_bubbles = Some(4);
         let request = turn_request_from_chat(&chat).expect("valid turn input");
         assert_eq!(request.input.len(), 1);
         assert_eq!(
             request.input[0].client_message_id.as_deref(),
             Some("queued-message-7")
         );
+        assert_eq!(request.rollback_keep_chat_bubbles, Some(4));
     }
 
     #[test]
@@ -926,6 +934,14 @@ mod tests {
         let validated = validate_chat_request(&chat).expect("valid resume payload");
         assert_eq!(validated.resume_items.len(), 1);
         assert_eq!(validated.resume_items[0].interrupt_id, "request-1");
+
+        chat.rollback_keep_chat_bubbles = Some(2);
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("resume cannot also rewrite history")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
     }
 
     #[test]

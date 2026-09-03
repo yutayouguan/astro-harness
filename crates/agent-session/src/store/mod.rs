@@ -343,6 +343,15 @@ impl crate::ConversationStore for SessionStore {
     }
 
     #[allow(refining_impl_trait)]
+    async fn replace_response_items(
+        &self,
+        session_id: &str,
+        items: &[agent_protocol::ResponseItem],
+    ) -> Result<()> {
+        SessionStore::replace_response_items(self, session_id, items).await
+    }
+
+    #[allow(refining_impl_trait)]
     async fn update_response_item_compressed_content(
         &self,
         message_id: i64,

@@ -37,6 +37,9 @@ pub trait ConversationStore: Send + Sync {
     /// 获取指定会话的全部消息（按时间 + id 升序）。
     async fn get_response_items(&self, session_id: &str) -> Result<Vec<StoredResponseItem>>;
 
+    /// 用 canonical 原生历史替换会话投影。
+    async fn replace_response_items(&self, session_id: &str, items: &[ResponseItem]) -> Result<()>;
+
     /// 更新消息的 provider-facing 压缩视图或内部交付标记。
     ///
     /// `compressed` 为 `None` 时清除压缩视图（恢复原文）。

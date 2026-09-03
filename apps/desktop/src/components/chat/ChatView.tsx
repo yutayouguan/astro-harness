@@ -464,8 +464,6 @@ type Props = {
   contextUsage?: ContextUsageSnapshot | null;
   /** 模型上下文窗口（tokens），默认 128K */
   contextWindow?: number;
-  /** 重新生成该条 assistant 回复（基于前一条 user） */
-  onRegenerateMessage?: (messageId: string) => void;
   /** 原位修改最后一条用户消息，并截断旧回答后重新执行 */
   onEditUserMessage?: (messageId: string, content: string) => Promise<boolean>;
   /** 从该条消息分支新会话（复制历史到新 session） */
@@ -678,13 +676,12 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
   );
 }
 
-/** 消息悬停操作：AI 为复制/重新生成/分支，最后一条用户消息为复制/编辑。 */
+/** 消息悬停操作：AI 为复制/分支，最后一条用户消息为复制/编辑。 */
 export function MessageActions({
   messageId,
   content,
   role,
   disabled,
-  onRegenerate,
   onEdit,
   onBranch,
   onOpenMenu,
@@ -693,7 +690,6 @@ export function MessageActions({
   content: string;
   role: "user" | "assistant";
   disabled?: boolean;
-  onRegenerate?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
   onBranch?: (messageId: string) => void;
   onOpenMenu?: (anchor: HTMLButtonElement) => void;
@@ -737,16 +733,6 @@ export function MessageActions({
       </button>
       {role === "assistant" ? (
         <>
-          <button
-            type="button"
-            className="msg-action-btn"
-            disabled={disabled || !onRegenerate}
-            onClick={() => onRegenerate?.(messageId)}
-            aria-label={t("chat.regenerate")}
-            title={t("chat.regenerate")}
-          >
-            <RefreshCw size={14} strokeWidth={2} aria-hidden />
-          </button>
           <button
             type="button"
             className="msg-action-btn"
@@ -932,7 +918,6 @@ export default function ChatView({
   contextUsagePercent = null,
   contextUsage = null,
   contextWindow = 0,
-  onRegenerateMessage,
   onEditUserMessage,
   onBranchMessage,
   onSlashAction,
@@ -2718,10 +2703,6 @@ export default function ChatView({
         void copyAssistantTurnText(assistantProcessMarkdown(message));
         return;
       }
-      if (action === "regenerate") {
-        onRegenerateMessage?.(message.id);
-        return;
-      }
       onBranchMessage?.(message.id);
     },
     [
@@ -2731,7 +2712,6 @@ export default function ChatView({
       messages,
       onBranchMessage,
       onDefaultAnswerLayoutChange,
-      onRegenerateMessage,
     ],
   );
 
@@ -2767,9 +2747,6 @@ export default function ChatView({
               contextMenuMessage.activities?.length,
             )}
             canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
-            canRegenerate={
-              !streaming && !turnInFlight && Boolean(onRegenerateMessage)
-            }
             canBranch={!streaming && !turnInFlight && Boolean(onBranchMessage)}
             onAction={handleAssistantTurnMenuAction}
             onClose={closeAssistantTurnMenu}
@@ -3377,7 +3354,6 @@ export default function ChatView({
                               content={m.content}
                               role="assistant"
                               disabled={streaming || turnInFlight}
-                              onRegenerate={onRegenerateMessage}
                               onBranch={onBranchMessage}
                               onOpenMenu={(anchor) => {
                                 const rect = anchor.getBoundingClientRect();

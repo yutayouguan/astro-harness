@@ -92,7 +92,10 @@ async fn rollout_rebuild_applies_rollback_before_indexing() {
         RolloutItem::ResponseItem(ResponseItem::user_text("remove")),
         RolloutItem::ResponseItem(ResponseItem::assistant_text("removed answer")),
         RolloutItem::EventMsg(agent_protocol::EventMsg::ThreadRolledBack(
-            agent_protocol::ThreadRolledBackEvent { num_turns: 1 },
+            agent_protocol::ThreadRolledBackEvent {
+                num_turns: 1,
+                keep_chat_bubbles: None,
+            },
         )),
     ];
 

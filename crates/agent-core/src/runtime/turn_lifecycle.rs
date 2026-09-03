@@ -179,6 +179,7 @@ impl Session {
     ) -> Result<TurnInputSubmission, TurnInputError> {
         let TurnInputRequest {
             input,
+            rollback_keep_chat_bubbles,
             thread_settings,
         } = request;
         if input.is_empty()
@@ -191,6 +192,13 @@ impl Session {
             ));
         }
         let active_turn_id = self.active_turn_id().await;
+        if rollback_keep_chat_bubbles.is_some()
+            && (active_turn_id.is_some() || matches!(&mode, TurnInputMode::Steer { .. }))
+        {
+            return Err(TurnInputError::Invalid(
+                "history rollback requires an idle thread start".into(),
+            ));
+        }
         if active_turn_id.is_none()
             && matches!(
                 mode,
@@ -201,6 +209,11 @@ impl Session {
             return Ok(TurnInputSubmission::NotSubmitted {
                 reason: "terminating".into(),
             });
+        }
+        if let Some(keep_chat_bubbles) = rollback_keep_chat_bubbles {
+            self.rollback_thread_to_bubbles(submission_id.clone(), keep_chat_bubbles)
+                .await
+                .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
         }
         match mode {
             TurnInputMode::StartOrSteer => match active_turn_id {

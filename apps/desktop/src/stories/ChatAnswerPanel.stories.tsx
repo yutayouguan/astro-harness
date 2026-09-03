@@ -160,7 +160,6 @@ function ChatAnswerPanel() {
                     messageId="storybook-assistant"
                     content={answer}
                     role="assistant"
-                    onRegenerate={() => {}}
                     onBranch={() => {}}
                     onOpenMenu={() => {}}
                   />
@@ -343,7 +342,6 @@ function InlineUserEditPreview() {
               chatMode="agent"
               onChatModeChange={() => {}}
               onOpenContext={() => {}}
-              onRegenerateMessage={() => {}}
               onEditUserMessage={async (messageId, content) => {
                 setMessages((current) =>
                   current.map((message) =>

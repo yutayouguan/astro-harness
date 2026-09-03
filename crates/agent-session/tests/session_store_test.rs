@@ -194,6 +194,47 @@ async fn fork_and_truncate_preserve_complete_response_item_groups() {
 }
 
 #[tokio::test]
+async fn canonical_history_replacement_preserves_matching_prefix_metadata() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("source", "test").await.unwrap();
+    let first = ResponseItem::user_text("u1");
+    let second = ResponseItem::assistant_text("a1");
+    let removed = ResponseItem::user_text("u2");
+    store
+        .append_response_item(NewResponseItem {
+            session_id: "source",
+            item: &first,
+            token_count: Some(7),
+            finish_reason: None,
+        })
+        .await
+        .unwrap();
+    store
+        .append_response_items("source", &[second.clone(), removed])
+        .await
+        .unwrap();
+    let original = store.get_response_items("source").await.unwrap();
+
+    store
+        .replace_response_items("source", &[first.clone(), second.clone()])
+        .await
+        .unwrap();
+    let retained = store.get_response_items("source").await.unwrap();
+    assert_eq!(retained.len(), 2);
+    assert_eq!(retained[0].id, original[0].id);
+    assert_eq!(retained[0].token_count, Some(7));
+
+    let replacement = ResponseItem::developer_text("summary");
+    store
+        .replace_response_items("source", std::slice::from_ref(&replacement))
+        .await
+        .unwrap();
+    let rebuilt = store.get_response_items("source").await.unwrap();
+    assert_eq!(rebuilt.len(), 1);
+    assert_eq!(rebuilt[0].item, replacement);
+}
+
+#[tokio::test]
 async fn bubble_operations_coalesce_consecutive_assistant_response_items() {
     let (_dir, store) = test_store().await;
     store.ensure_session("source", "test").await.unwrap();

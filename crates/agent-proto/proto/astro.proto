@@ -155,6 +155,8 @@ message ChatRequest {
   reserved 40;
   // 模型目录指定的工具暴露模式；空值表示使用 feature flag。
   string tool_mode = 41;
+  // 编辑重提：提交新输入前保留的绝对 user/assistant 气泡数。
+  optional uint32 rollback_keep_chat_bubbles = 42;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

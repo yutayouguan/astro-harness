@@ -8,7 +8,6 @@ import {
   List,
   Maximize2,
   Minimize2,
-  RefreshCw,
   Settings2,
   type LucideIcon,
 } from "lucide-react";
@@ -32,7 +31,6 @@ export type AssistantTurnMenuAction =
   | "copy-answer"
   | "copy-markdown"
   | "copy-process"
-  | "regenerate"
   | "branch";
 
 type Props = {
@@ -44,7 +42,6 @@ type Props = {
   hasAnswer: boolean;
   hasProcess: boolean;
   canSetDefault: boolean;
-  canRegenerate: boolean;
   canBranch: boolean;
   onAction: (action: AssistantTurnMenuAction) => void;
   onClose: (restoreFocus?: boolean) => void;
@@ -68,7 +65,6 @@ export default function AssistantTurnContextMenu({
   hasAnswer,
   hasProcess,
   canSetDefault,
-  canRegenerate,
   canBranch,
   onAction,
   onClose,
@@ -182,17 +178,11 @@ export default function AssistantTurnContextMenu({
       disabled: !hasProcess,
     },
     {
-      action: "regenerate",
-      label: t("chat.regenerate"),
-      Icon: RefreshCw,
-      disabled: !canRegenerate,
-      separatorBefore: true,
-    },
-    {
       action: "branch",
       label: t("chat.branches.branchHere"),
       Icon: GitBranch,
       disabled: !canBranch,
+      separatorBefore: true,
     },
   ];
 

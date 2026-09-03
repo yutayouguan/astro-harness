@@ -2672,6 +2672,7 @@ impl AstroService for AstroServiceImpl {
                         client_message_id: (!req.client_message_id.trim().is_empty())
                             .then(|| req.client_message_id.trim().to_string()),
                     }],
+                    rollback_keep_chat_bubbles: None,
                     thread_settings: Default::default(),
                 },
                 agent_protocol::TurnInputMode::Steer { expected_turn_id },

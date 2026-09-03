@@ -115,6 +115,14 @@ impl ConversationStore for SharedConversationStore {
         self.inner.get_response_items(session_id).await
     }
 
+    async fn replace_response_items(
+        &self,
+        session_id: &str,
+        items: &[agent_protocol::ResponseItem],
+    ) -> Result<()> {
+        self.inner.replace_response_items(session_id, items).await
+    }
+
     async fn update_response_item_compressed_content(
         &self,
         message_id: i64,
@@ -220,6 +228,31 @@ impl ConversationStore for EphemeralConversationStore {
             .filter(|message| message.session_id == session_id)
             .cloned()
             .collect())
+    }
+
+    async fn replace_response_items(
+        &self,
+        session_id: &str,
+        items: &[agent_protocol::ResponseItem],
+    ) -> Result<()> {
+        let mut messages = self
+            .messages
+            .lock()
+            .expect("ephemeral conversation mutex poisoned");
+        messages.retain(|message| message.session_id != session_id);
+        let now = chrono::Utc::now().timestamp_millis() as f64 / 1_000.0;
+        for (index, item) in items.iter().enumerate() {
+            let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+            messages.push(StoredResponseItem {
+                id,
+                session_id: session_id.to_string(),
+                item: item.clone(),
+                timestamp: now + index as f64 * 0.000_001,
+                token_count: None,
+                finish_reason: None,
+            });
+        }
+        Ok(())
     }
 
     async fn update_response_item_compressed_content(

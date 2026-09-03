@@ -18,7 +18,7 @@ test("side chat mounts the complete main chat surface", async () => {
   assert.match(panel, /pendingInterrupts=\{chat\.sessionPendingInterrupts\}/);
   assert.match(panel, /onUiAction=\{chat\.onUiAction\}/);
   assert.match(panel, /onOpenMcpSettings=\{onOpenMcpSettings\}/);
-  assert.match(panel, /onRegenerateMessage=\{chat\.regenerateMessage\}/);
+  assert.doesNotMatch(panel, /onRegenerateMessage|regenerateMessage/);
   assert.match(panel, /onEditUserMessage=\{chat\.editUserMessage\}/);
   assert.doesNotMatch(panel, /onDeleteMessage|chat\.deleteMessage/);
 

@@ -373,11 +373,9 @@ export default function App() {
     startNewChat,
     runCompactSession,
     undoLastExchange,
-    retryLastAssistant,
     stopStream,
     pauseStream,
     resumeStream,
-    regenerateMessage,
     editUserMessage,
     branchMessage,
     onUiAction,
@@ -873,9 +871,6 @@ export default function App() {
         case "undo":
           undoLastExchange();
           break;
-        case "retry":
-          retryLastAssistant();
-          break;
         case "stop":
           void stopStream();
           break;
@@ -1073,7 +1068,6 @@ export default function App() {
       startNewChat,
       runCompactSession,
       undoLastExchange,
-      retryLastAssistant,
       stopStream,
       chat.tokenUsage,
       chat.contextUsage,
@@ -2278,7 +2272,6 @@ export default function App() {
                         openChatRightDock("context");
                       }}
                       onOpenFileReview={openFileReview}
-                      onRegenerateMessage={regenerateMessage}
                       onEditUserMessage={editUserMessage}
                       onBranchMessage={(id) => void branchMessage(id)}
                       onSlashAction={handleSlashAction}

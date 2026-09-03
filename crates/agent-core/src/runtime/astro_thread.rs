@@ -525,6 +525,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    rollback_keep_chat_bubbles: None,
                     thread_settings: Default::default(),
                 },
                 TurnInputMode::StartIfIdle,
@@ -591,6 +592,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    rollback_keep_chat_bubbles: None,
                     thread_settings: agent_protocol::ThreadSettingsOverrides {
                         model_targets: Some(vec![types::ModelTarget {
                             provider_id: "scripted".into(),
@@ -698,6 +700,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    rollback_keep_chat_bubbles: None,
                     thread_settings: Default::default(),
                 },
                 TurnInputMode::StartIfIdle,
@@ -717,6 +720,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    rollback_keep_chat_bubbles: None,
                     thread_settings: agent_protocol::ThreadSettingsOverrides {
                         interaction_mode: Some(types::InteractionMode::Plan),
                         temperature: Some(1.5),
@@ -813,6 +817,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    rollback_keep_chat_bubbles: None,
                     thread_settings: Default::default(),
                 },
                 TurnInputMode::StartIfIdle,
@@ -916,6 +921,7 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    rollback_keep_chat_bubbles: None,
                     thread_settings: Default::default(),
                 },
                 TurnInputMode::StartIfIdle,

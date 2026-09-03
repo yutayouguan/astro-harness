@@ -350,6 +350,61 @@ impl SessionStore {
         Ok(())
     }
 
+    /// Replace the SQLite projection with an exact canonical history.
+    /// Matching prefixes keep their row ids and metadata; divergent projections
+    /// are rebuilt transactionally.
+    pub async fn replace_response_items(
+        &self,
+        session_id: &str,
+        replacement: &[ResponseItem],
+    ) -> Result<()> {
+        self.ensure_session(session_id, "runtime").await?;
+        let mut tx = self.pool.begin().await?;
+        let current = fetch_response_items(&mut *tx, session_id).await?;
+        let prefix_matches = current.len() >= replacement.len()
+            && current
+                .iter()
+                .zip(replacement)
+                .all(|(stored, expected)| &stored.item == expected);
+
+        if prefix_matches {
+            match replacement.last() {
+                Some(_) if current.len() > replacement.len() => {
+                    let first_removed_id = current[replacement.len()].id;
+                    sqlx::query("DELETE FROM response_items WHERE session_id = ?1 AND id >= ?2")
+                        .bind(session_id)
+                        .bind(first_removed_id)
+                        .execute(&mut *tx)
+                        .await?;
+                }
+                None => {
+                    sqlx::query("DELETE FROM response_items WHERE session_id = ?1")
+                        .bind(session_id)
+                        .execute(&mut *tx)
+                        .await?;
+                }
+                _ => {}
+            }
+        } else {
+            sqlx::query("DELETE FROM response_items WHERE session_id = ?1")
+                .bind(session_id)
+                .execute(&mut *tx)
+                .await?;
+            let now = now_epoch_secs()?;
+            for (index, item) in replacement.iter().enumerate() {
+                insert_response_item_row(
+                    &mut *tx,
+                    NewResponseItem::new(session_id, item),
+                    now + index as f64 * 0.000_001,
+                )
+                .await?;
+            }
+        }
+        refresh_counts(&mut *tx, session_id).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn remove_chat_bubbles(
         &self,
         session_id: &str,

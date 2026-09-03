@@ -593,8 +593,8 @@ pub async fn list_realtime_voices(session_id: String) -> Result<RealtimeVoicesDt
 
 /// 启动流式聊天（内部走 Agent / Provider）。
 ///
-/// `keep_chat_bubbles`：若提供，则在开跑前将会话 DB 截断到该数量的 user/assistant 气泡
-///（编辑重发 / 再生用；缺失则不截断）。
+/// `keep_chat_bubbles`：若提供，由 Thread runtime 在接受新输入前统一回滚 rollout、
+/// 内存历史和 SQLite 投影（编辑重提用；缺失则不回滚）。
 #[tauri::command]
 pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<String, String> {
     let StartChatRequest {
@@ -699,19 +699,6 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         if !root.trim().is_empty() && !workspace_roots.contains(&root) {
             workspace_roots.push(root);
         }
-    }
-
-    if let Some(keep) = keep_chat_bubbles {
-        bootstrap_workspace()?;
-        let store = open_sessions().await?;
-        store
-            .ensure_session(&sid, "tauri")
-            .await
-            .map_err(|e| e.to_string())?;
-        store
-            .truncate_session_to_bubbles(&sid, keep.max(0) as usize)
-            .await
-            .map_err(|e| e.to_string())?;
     }
 
     // 从 providers.json + keyring 解析 primary 与聊天后备链
@@ -885,6 +872,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         project_id,
         workspace_roots,
         tool_mode,
+        rollback_keep_chat_bubbles: keep_chat_bubbles.map(|keep| keep.max(0) as u32),
     };
 
     let bridge = managed_bridge(&app).inner().clone();

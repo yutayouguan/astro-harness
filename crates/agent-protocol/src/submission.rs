@@ -24,6 +24,10 @@ pub struct TurnInput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TurnInputRequest {
     pub input: Vec<TurnInput>,
+    /// Replace the active history with this absolute chat-bubble prefix before
+    /// accepting the new input. Used by edited-input resubmission; absent for normal turns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollback_keep_chat_bubbles: Option<u32>,
     /// Persistent settings applied only after this input is accepted.
     #[serde(skip, default)]
     pub thread_settings: ThreadSettingsOverrides,
