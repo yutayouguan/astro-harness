@@ -16,14 +16,26 @@ type Props = {
 
 export default function TurnChangeSummaryCard({ message, projectId, onReview }: Props) {
   const summary = useMemo(() => extractTurnFileChangeSummary(message), [message]);
+  const artifacts = useMemo(
+    () => [
+      ...new Map(
+        (message.activities ?? [])
+          .flatMap((activity) => activity.media ?? [])
+          .map((asset) => [asset.path, asset] as const),
+      ).values(),
+    ],
+    [message],
+  );
   const [expanded, setExpanded] = useState(false);
   const [undone, setUndone] = useState(false);
   const [applying, setApplying] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  if (summary.items.length === 0) return null;
+  if (summary.items.length === 0 && artifacts.length === 0) return null;
   const visible = expanded ? summary.items : summary.items.slice(0, 3);
   const remaining = summary.items.length - visible.length;
-  const reversible = summary.items.every((item) => item.reversible === true);
+  const reversible =
+    summary.items.length > 0 &&
+    summary.items.every((item) => item.reversible === true);
   const applyChanges = async () => {
     if (!projectId || !reversible || applying) return;
     setApplying(true);
@@ -52,7 +64,11 @@ export default function TurnChangeSummaryCard({ message, projectId, onReview }: 
           <FileDiff size={18} strokeWidth={1.8} />
         </span>
         <span className="turn-change-card-title">
-          <strong>已编辑 {summary.items.length} 个文件</strong>
+          <strong>
+            {summary.items.length > 0
+              ? `已编辑 ${summary.items.length} 个文件`
+              : `已生成 ${artifacts.length} 个产物`}
+          </strong>
           <span>
             <b>+{summary.additions}</b> <em>−{summary.deletions}</em>
           </span>
@@ -65,7 +81,7 @@ export default function TurnChangeSummaryCard({ message, projectId, onReview }: 
         <button
           type="button"
           className="turn-change-review-btn"
-          disabled={!onReview}
+          disabled={!onReview || summary.items.length === 0}
           onClick={() => onReview?.(summary.items[0]!, summary.items)}
         >
           审核
@@ -99,6 +115,12 @@ export default function TurnChangeSummaryCard({ message, projectId, onReview }: 
             {expanded ? "收起文件" : `再显示 ${remaining} 个文件`}
           </button>
         ) : null}
+        {artifacts.map((asset) => (
+          <div className="turn-change-artifact" key={asset.path}>
+            <span title={asset.path}>{displayFileName(asset.path)}</span>
+            <span>{asset.kind}</span>
+          </div>
+        ))}
       </div>
       {reversible ? (
         <button
@@ -110,6 +132,9 @@ export default function TurnChangeSummaryCard({ message, projectId, onReview }: 
           <RotateCcw size={12} aria-hidden />
           {applying ? "正在应用…" : undone ? "重新应用" : "撤销本轮修改"}
         </button>
+      ) : null}
+      {artifacts.length > 0 ? (
+        <span className="turn-change-card-note">本地产物随文件变更显示；外部副作用不可撤销</span>
       ) : null}
       {actionError ? <p className="turn-change-action-error">{actionError}</p> : null}
     </section>

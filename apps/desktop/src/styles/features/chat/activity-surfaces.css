@@ -537,6 +537,8 @@ html[data-theme="dark"] .composer-shell .chat-scroll-latest {
 .turn-change-file-list > button:hover { background: var(--glass-hover); }
 .turn-change-file-list > button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .turn-change-file-list > button > span:last-child { display: inline-flex; flex: 0 0 auto; gap: 6px; }
+.turn-change-artifact { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 14px; color: var(--text-secondary); font-size: 12px; }
+.turn-change-artifact > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .turn-change-expand { justify-content: flex-start !important; }
 .turn-change-expand svg { transition: transform 160ms ease; }
 .turn-change-expand svg.is-expanded { transform: rotate(180deg); }
