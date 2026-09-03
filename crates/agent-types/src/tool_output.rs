@@ -96,7 +96,8 @@ impl ToolOutput {
                     + changes
                         .iter()
                         .map(|change| {
-                            change.path.len()
+                            change.root.as_ref().map_or(0, String::len)
+                                + change.path.len()
                                 + change.move_path.as_ref().map_or(0, String::len)
                                 + change.before_content.as_ref().map_or(0, String::len)
                                 + change.after_content.as_ref().map_or(0, String::len)

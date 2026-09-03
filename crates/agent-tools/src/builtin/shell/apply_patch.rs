@@ -555,9 +555,9 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<types::Tool
                 let new_contents = derive_new_contents(&original, &full, chunks)?;
                 let additions = chunks.iter().map(|chunk| chunk.additions).sum();
                 let deletions = chunks.iter().map(|chunk| chunk.deletions).sum();
-                let destination_before = move_path
+                let destination_exists = move_path
                     .as_ref()
-                    .and_then(|dest| std::fs::read_to_string(resolve_path(workspace, dest)).ok());
+                    .is_some_and(|dest| resolve_path(workspace, dest).exists());
 
                 if let Some(dest) = move_path {
                     let dest_full = resolve_path(workspace, dest);
@@ -575,7 +575,7 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<types::Tool
                 let (before_content, after_content, reversible) = reversible_snapshots(
                     Some(original),
                     Some(new_contents),
-                    move_path.is_none() || destination_before.is_none(),
+                    move_path.is_none() || !destination_exists,
                 );
                 changes.push(types::ToolFileChange {
                     root: Some(workspace.to_string_lossy().into_owned()),
