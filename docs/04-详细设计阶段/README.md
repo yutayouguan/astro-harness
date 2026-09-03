@@ -53,7 +53,7 @@
 | [02-工具系统详细设计.md](04-工具与扩展生态/02-工具系统详细设计.md) | ToolEntry/Registry/Definition/StepContext/Router/Output 执行链、动态暴露与审批边界 |
 | [03-MCP协议详细设计.md](04-工具与扩展生态/03-MCP协议详细设计.md) | Codex 对齐的 MCP Host/Client：STDIO/Streamable HTTP、分层配置、认证与 OAuth、Server Instructions、工具审批、连接状态机、迁移与验收 |
 | [04-PluginSDK开发者文档.md](04-工具与扩展生态/04-PluginSDK开发者文档.md) | Plugin SDK：Host API 参考（astro_*）、自定义工具/Hook/Skill 开发、测试调试、打包发布、完整示例 |
-| [05-Codex原生工具协议与CodeMode详细设计.md](04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md) | Codex 工具协议对齐：Function/Freeform/Namespace/ToolSearch/WebSearch、Direct / CodeModeOnly 分层投影、QuickJS `exec/wait`、TypeScript 工具声明与 Responses 回放 |
+| [05-Responses-API原生工具协议与Astro工具协议详细设计.md](04-工具与扩展生态/05-Responses-API原生工具协议与Astro工具协议详细设计.md) | Responses API 原生 Function/Freeform/Namespace/ToolSearch/WebSearch 契约与 Astro 工具协议：Direct / CodeModeOnly 分层投影、QuickJS `exec/wait`、TypeScript 工具声明与 Responses 回放 |
 
 ## 05-桌面端与交互
 

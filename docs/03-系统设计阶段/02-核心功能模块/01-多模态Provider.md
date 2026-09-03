@@ -1,6 +1,6 @@
 # 多模态 Provider 系统
 
-> **Harness 边界（2026-09-01）**：Provider 是 Model 网关和协议适配层，不拥有 Agent turn、工具权限或持久化生命周期。Agent 通过 `ResponsesRequest` 交付原生 Items/tool schemas；非 Agent 兼容调用使用 `ChatCompletionRequest`。两条请求类型不互相降级。原生工具契约见 [Codex 原生工具协议](../../04-详细设计阶段/04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md)。
+> **Harness 边界（2026-09-01）**：Provider 是 Model 网关和协议适配层，不拥有 Agent turn、工具权限或持久化生命周期。Agent 通过 `ResponsesRequest` 交付原生 Items/tool schemas；非 Agent 兼容调用使用 `ChatCompletionRequest`。两条请求类型不互相降级。契约详见 [Responses API 原生工具协议与 Astro 工具协议](../../04-详细设计阶段/04-工具与扩展生态/05-Responses-API原生工具协议与Astro工具协议详细设计.md)。
 
 > 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-09-01
 

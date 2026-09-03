@@ -18,7 +18,7 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 
 - [Agent Harness 总体架构](../03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)；
 - [Agent Harness 执行外壳详细设计](../04-详细设计阶段/01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)；
-- [Codex 原生工具协议与 Tool Search](../04-详细设计阶段/04-工具与扩展生态/05-Codex原生工具协议与CodeMode详细设计.md)；
+- [Responses API 原生工具协议与 Astro 工具协议](../04-详细设计阶段/04-工具与扩展生态/05-Responses-API原生工具协议与Astro工具协议详细设计.md)；
 - [术语统一规范](02-术语统一规范.md)。
 
 ## 2. 已统一的不变量

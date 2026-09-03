@@ -1,18 +1,18 @@
-# Codex 原生工具协议、Tool Search 与 Code Mode 详细设计
+# Responses API 原生工具协议与 Astro 工具协议详细设计
 
-> **Harness 当前基线（2026-09-02）**：Direct、CodeMode 与 CodeModeOnly 三种工具投影均已接入；JavaScript 由进程内 QuickJS 执行，不依赖用户安装 Node.js。
+> **Astro 当前基线（2026-09-02）**：Direct、CodeMode 与 CodeModeOnly 三种工具投影均已接入；JavaScript 由进程内 QuickJS 执行，不依赖用户安装 Node.js。
 
 > 阶段：详细设计
 >
-> 状态：已实现
+> 状态：主体已实现；Responses API 原生 namespaced call 的执行键规范化待闭环
 >
-> 基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
+> 参考实现基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
 >
-> 范围：Provider 工具协议、延迟工具发现、Responses 事件回放、Direct / CodeModeOnly 模式合同与 QuickJS Code Mode runtime
+> 范围：Responses API 原生工具协议、Astro 工具协议、延迟工具发现、Responses 事件回放、Direct / CodeModeOnly 模式合同与 QuickJS Code Mode runtime
 
 ## 1. 文档目标
 
-本文描述 Astro 已落地的 Codex 工具协议对齐，重点回答三个问题：
+本文描述 Responses API 原生工具协议以及 Astro 在注册、暴露、路由、执行和历史回放上的工具协议。Codex 仅作为 OpenAI 协议的参考实现，不作为协议名称或协议归属。本文重点回答三个问题：
 
 1. 这些机制解决了什么实际问题；
 2. 为什么不再把所有工具都压成普通 JSON Function；
@@ -81,7 +81,7 @@ next request: reconstruct the matching native call/output history pair
 
 核心原则是：工具定义、工具调用事件、工具结果和历史回放必须使用同一种语义。只对请求 schema 做“原生化”而不改响应解析和历史，是不完整的。
 
-## 4. Provider 无关的原生工具协议
+## 4. Responses API 原生工具协议
 
 ### 4.1 为什么需要 tagged union
 
@@ -147,9 +147,15 @@ Freeform 工具不强迫输入进入 JSON object，而是保留原始文本并�
 - grammar 在采样边界约束格式，而不是依赖 prompt 约定；
 - 历史使用 `custom_tool_call` / `custom_tool_call_output` 成对回放，不会被误当作 Function。
 
-### 4.4 Namespace
+### 4.4 Responses API 原生 Namespace
 
-Namespace 使一组工具共享稳定的域名，例如：
+Namespace 是 Responses API 的原生工具变体，不是在 Function 名称前拼接字符串的宿主约定。它作为 `tools` 数组中的顶层容器，用 `name` 声明稳定的能力域，用 `tools[]` 承载该域内的 Function 或 Custom 子工具。OpenAI 官方示例同时允许在子工具上设置 `defer_loading: true`，再由 `tool_search` 按需发现。
+
+官方参考：[OpenAI Tools - Tool search](https://developers.openai.com/api/docs/guides/tools#tool-search)。
+
+#### 4.4.1 定义和调用的 wire shape
+
+一个 `cron` 工具组的定义形如：
 
 ```json
 {
@@ -163,13 +169,86 @@ Namespace 使一组工具共享稳定的域名，例如：
 }
 ```
 
-模型看到的调用名是 `cron.add`，而 Astro 内部可继续使用 `cron_add`。`ToolRouter` 在 Step 快照中完成 wire name 到 registered name 的映射，避免为了协议形态强制重命名底层 handler。
+原生调用事件不应把它压成 `cron.add` 或 `cron__add` 一个字段，而应保留二元组身份：
 
-Namespace 解决的不只是“名字更好看”，还包括：
+```json
+{
+  "type": "function_call",
+  "call_id": "call_123",
+  "namespace": "cron",
+  "name": "add",
+  "arguments": "{\"schedule\":\"every:1h\",\"task\":\"sync\"}"
+}
+```
 
-- 降低同名工具冲突；
-- 让 Provider / 模型看到结构化的能力边界；
-- 可以在不改变内部注册名的情况下演进外部协议。
+因此工具的规范身份是 `(namespace, name)`，概念上可写为 `cron.add`，但点号形式不是 Responses 原生事件中的单一 `name` 字段。`call_id` 继续用于将 call 与 output 成对，`namespace` 则必须在原生历史中保留，不能在投影为 UI 或兼容消息时丢失。
+
+#### 4.4.2 Codex 的参考实现
+
+Codex 在内部直接使用结构化工具名：
+
+```rust
+pub struct ToolName {
+    pub name: String,
+    pub namespace: Option<String>,
+}
+```
+
+其关键规则是：
+
+- 顶层 Function / Custom 的默认 namespace 是 `functions`；`None`、空字符串和 `functions` 在路由时等价。
+- `ToolSpec::Namespace(ResponsesApiNamespace)` 原生序列化为 `type: "namespace"`，子工具保持自己的 `name`、schema 和 `defer_loading`。
+- Responses Lite 会把普通 Function / Custom 聚合到 `functions` namespace；完整 Responses 路径则可保留原始顶层变体。
+- 模型返回 call 后，路由器从独立的 `namespace` 和 `name` 重建 `ToolName`，再与注册表中的规范键匹配。
+- Code Mode 需要 JavaScript 可调用标识符时，才把非默认 namespace 临时展平为 `namespace__tool`；这是 Code Mode adapter，不是 Responses 协议的规范身份。
+
+Codex 当前的代表性 namespace 包括：
+
+| Namespace | 用途 | 示例子工具 |
+| --- | --- | --- |
+| `functions` | 默认顶层 Function / Custom | `exec_command`、`apply_patch` |
+| `clock` | 时间与等待 | `curr_time`、`sleep` |
+| `collaboration` | Multi-Agent V2，可配置改名 | `spawn_agent`、`send_message`、`wait_agent` |
+| `multi_agent_v1` | 旧版 Multi-Agent | `spawn_agent`、`send_input` |
+| `mcp__<server>` | MCP Server 工具组 | Server 暴露的原生工具名 |
+| `mcp__codex_apps__<connector>` | Codex Apps / Connector | Connector 的业务工具 |
+
+在 Codex 工具 UI 或调用语法中看到的 `functions.collaboration.spawn_agent` 不是三层 Responses namespace：`functions` 是宿主的工具调用通道，真正的 Responses 工具身份是 `namespace = collaboration` 和 `name = spawn_agent`。
+
+Codex 参考源码（本节核对 checkout `a0dcfe2ada`，2026-09-03）：
+
+- `codex-rs/protocol/src/tool_name.rs`：`ToolName` 和默认 `functions` namespace；
+- `codex-rs/tools/src/responses_api.rs`：`ResponsesApiNamespace` 及子工具聚合；
+- `codex-rs/tools/src/tool_spec.rs`：Responses / Responses Lite 的序列化；
+- `codex-rs/core/src/tools/router.rs`：从 call 的 `namespace + name` 重建路由键；
+- `codex-rs/tools/src/code_mode.rs`：Code Mode 的 `namespace__tool` 适配。
+
+#### 4.4.3 Namespace 解决的问题
+
+Namespace 不只是“名字更好看”，它同时解决：
+
+1. **同名冲突**：`calendar.list`、`files.list` 和 `agents.list` 可以并存，不必为全局唯一名不断增加前缀。
+2. **语义分组**：namespace 自身的 description 先告诉模型能力域，子工具再表达具体动作，降低大型工具集的选择干扰。
+3. **延迟发现**：子工具可标记 `defer_loading`，由 `tool_search` 按 namespace 和描述检索，降低首轮 token、请求体积和 Prompt Cache 波动。
+4. **所有权与路由**：宿主可以将 `mcp__github.search` 和 `mcp__linear.search` 稳定路由到不同 Server，并在历史、审批、日志和统计中保留来源。
+5. **内外命名解耦**：对外使用 `(namespace, child)`，对内 handler 可继续使用已稳定的注册名，协议演进无需重命名整条执行链。
+
+Namespace **不是安全边界**。它表达组织、唯一身份、发现与路由；工具是否可见、可调、需审批或可写仍由 StepContext、ToolRouter、exposure、权限 profile 和执行策略决定。
+
+#### 4.4.4 Astro 映射与当前边界
+
+Astro 的 `ToolEntry.namespace` 为空时表示默认域；非空条目由 `ToolRegistry` 按 namespace 合并为原生 schema。例如内部注册名 `cron_list` 对外应投影为 `(cron, list)`。兼容路径才使用两种展平名：
+
+| 边界 | 表示 |
+| --- | --- |
+| Responses 原生定义 / 调用 | `namespace: "cron"` + `name: "list"` |
+| 文档与人类可读记法 | `cron.list` |
+| Function-only Provider 兼容 | `cron__list` |
+| Astro 内部注册名 | `cron_list` |
+
+`default_api:image_gen` 也不是这个原生 namespace 协议：Astro 当前不把冒号解析为 `ToolName` namespace，该形式只能作为上游或兼容层传入的不透明名称处理。
+
+> **当前实现审计（2026-09-03）**：Astro 已实现 Namespace schema 生成、`namespace.child` / `namespace__child` 到 registered handler 的 StepContext 路由映射，并在原生 `ResponseItem` 中保留 `namespace`。但从 `ResponseItem` 转为 `ParsedToolCall` 后，当前执行入口仍主要用 `call.name` 查询 `ToolRouter`，没有像 Codex 一样先将 `namespace + name` 规范化为统一路由键。因此“模型返回分离字段的原生 namespaced call 可直接执行”尚不能视为已闭环；后续实现必须在模型直调校验、执行路由、审批、Hooks、日志和 output 回写前共用同一个规范化函数，不得丢弃 `namespace`。
 
 ### 4.5 ToolSearch
 
@@ -623,7 +702,8 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 
 | 能力 | 状态 |
 | --- | --- |
-| Direct Function / Freeform / Namespace | 已接入 |
+| Direct Function / Freeform / Namespace schema | 已接入 |
+| Responses 分离 `namespace + name` 的调用键规范化 | 待闭环 |
 | Direct `tool_search` + Deferred 路由 | 已接入 |
 | QuickJS cell、`exec/wait` 调度、自描述 `ALL_TOOLS` | 已接入 |
 | 模型目录 `tool_mode` 覆盖 | 已接入 |
@@ -649,6 +729,8 @@ code_mode = true
 5. 模型直调只能命中当前 Step 真正可见的路由。
 6. 历史只回放已有匹配结果的 tool call，避免孤立调用破坏 Provider 请求。
 7. CodeModeOnly 的 `ALL_TOOLS` 对象形状固定为 `{name, description}`；description 是包含 TypeScript 调用声明的自描述合同。
+8. Namespace 工具的规范身份是 `(namespace, name)`；点号、双下划线或其他展平形式只能存在于明确的 adapter 边界。
+9. Namespace 不扩大权限；调用仍必须同时命中当前 StepContext 的模型可见路由与执行策略。
 
 ## 11. 实现映射
 
@@ -700,5 +782,6 @@ CARGO_TARGET_DIR=/tmp/astro-tool-align cargo test -p tools --test tool_search_al
 
 1. `ToolDefinition::WebSearch` 已具备原生传输能力，但当前没有 Provider profile 将它注册到模型工具列表；当前实际搜索走本地 Deferred Function。
 2. CodeModeOnly 的业务工具只存在于嵌套路由，不进入模型直调集合；这两个集合必须继续分别维护。
+3. Namespace schema 和历史字段已保留原生语义，但执行入口尚需将分离的 `namespace + name` 统一规范化后再做可见性检查、审批和 handler 路由。
 
-这些边界不影响当前的原生 schema、ToolSearch、Responses 回放和 Code Mode runtime 单元合同。
+前两项不影响当前的原生 schema、ToolSearch、Responses 回放和 Code Mode runtime 单元合同；第三项是 Native Namespace 从“协议已保留”到“执行已闭环”之间的明确差距。
