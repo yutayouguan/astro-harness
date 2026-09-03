@@ -331,6 +331,11 @@
   overflow: hidden;
 }
 
+.terminal-dock-screen .xterm {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
 .terminal-dock-screen .xterm,
 .terminal-dock-screen .xterm-screen,
 .terminal-dock-screen .xterm-viewport {
