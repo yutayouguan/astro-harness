@@ -59,10 +59,20 @@ enum ApprovalRoute {
     Manual,
 }
 
-fn call_uses_managed_network(call: &types::ParsedToolCall) -> bool {
-    match call.name.as_str() {
+fn registered_call_name<'a>(
+    step_context: &'a StepContext,
+    call: &'a types::ParsedToolCall,
+) -> &'a str {
+    step_context
+        .tool_router
+        .registered_name(call.namespace.as_deref(), &call.name)
+        .unwrap_or(&call.name)
+}
+
+fn call_uses_managed_network(name: &str, arguments: &serde_json::Value) -> bool {
+    match name {
         "code_exec" => true,
-        "exec_command" => match call.arguments.get("action") {
+        "exec_command" => match arguments.get("action") {
             None => true,
             Some(serde_json::Value::String(action)) => {
                 let action = action.trim();
@@ -75,13 +85,14 @@ fn call_uses_managed_network(call: &types::ParsedToolCall) -> bool {
 }
 
 fn managed_network_policy_for_call(
+    step_context: &StepContext,
     call: &types::ParsedToolCall,
     settings: &memory::LoadedPermissionSettings,
     active_profile_id: &str,
 ) -> Option<types::NetworkPolicy> {
     if !settings.network_proxy_enabled
         || active_profile_id == types::DANGER_FULL_ACCESS_PROFILE
-        || !call_uses_managed_network(call)
+        || !call_uses_managed_network(registered_call_name(step_context, call), &call.arguments)
     {
         return None;
     }
@@ -108,7 +119,9 @@ async fn start_managed_network(
         .turn
         .permission_profile()
         .unwrap_or(settings.selection.profile_id.as_str());
-    let Some(policy) = managed_network_policy_for_call(call, &settings, active_profile_id) else {
+    let Some(policy) =
+        managed_network_policy_for_call(step_context, call, &settings, active_profile_id)
+    else {
         return Ok(None);
     };
     let state = Arc::new(network_proxy::NetworkProxyState::new(policy)?);
@@ -650,7 +663,7 @@ fn affected_write_paths(name: &str, _args: &serde_json::Value) -> Vec<String> {
         "memory" => "agent/MEMORY.md or USER.md",
         "skills" => "skills directory",
         "pin_context" => "workspace/pinned-context.json",
-        "cron" => "~/.astro/cron/jobs.json",
+        "cron_add" | "cron_remove" | "cron_enable" | "cron_disable" => "~/.astro/cron/jobs.json",
         "persona_create" => "~/.astro/agents",
         "image_gen" => "workspace/images",
         "video_gen" => "workspace/videos",
@@ -720,11 +733,13 @@ async fn audit_hardline_terminal_denial(
 
 async fn preflight_read_only_write(
     session: &Arc<AgentLoop>,
+    step_context: &StepContext,
     call: &types::ParsedToolCall,
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
-    if !tools::tool_requires_in_process_write(&call.name, &call.arguments) {
+    let registered_name = registered_call_name(step_context, call);
+    if !tools::tool_requires_in_process_write(registered_name, &call.arguments) {
         return Some(PermissionPreflight::NotRequired);
     }
 
@@ -749,16 +764,16 @@ async fn preflight_read_only_write(
     };
     let selection = settings.selection.clone();
 
-    let affected_paths = affected_write_paths(&call.name, &call.arguments);
+    let affected_paths = affected_write_paths(registered_name, &call.arguments);
     let request = types::PermissionRequest {
         request_id: uuid::Uuid::new_v4().to_string(),
         session_id: session_id.clone(),
         turn_id: turn_id.clone(),
         tool_call_id: call.id.clone(),
-        tool_name: call.name.clone(),
+        tool_name: call.display_name(),
         summary: format!(
             "Allow {} to modify the listed local state for this call",
-            call.name
+            call.display_name()
         ),
         capabilities: vec![types::PermissionCapability::FileWrite {
             paths: affected_paths.clone(),
@@ -773,7 +788,7 @@ async fn preflight_read_only_write(
     let paths = request.affected_paths.join("\n- ");
     let body = format!(
         "当前为只读模式。是否仅允许本次 `{}` 执行下列写入？\n\n影响路径：\n- {}\n\n不会修改全局权限，也不会提升为完全访问。",
-        call.name, paths
+        call.display_name(), paths
     );
     let audit = PermissionAuditReceipt::new(
         memory_dir,
@@ -1287,13 +1302,18 @@ async fn execute_code_mode_tool(
 
 async fn preflight_browser_action(
     session: &Arc<AgentLoop>,
+    step_context: &StepContext,
     call: &types::ParsedToolCall,
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
-    let Some(class) =
-        tools::browser::effective_approval_class(session.session_id(), &call.name, &call.arguments)
-            .await
+    let registered_name = registered_call_name(step_context, call);
+    let Some(class) = tools::browser::effective_approval_class(
+        session.session_id(),
+        registered_name,
+        &call.arguments,
+    )
+    .await
     else {
         return Some(PermissionPreflight::NotRequired);
     };
@@ -1335,10 +1355,10 @@ async fn preflight_browser_action(
         session_id,
         turn_id,
         tool_call_id: call.id.clone(),
-        tool_name: call.name.clone(),
+        tool_name: call.display_name(),
         summary: format!(
             "Allow browser {} on {} ({})",
-            call.name,
+            call.display_name(),
             origin,
             class.as_str()
         ),
@@ -1374,7 +1394,7 @@ async fn preflight_browser_action(
     );
     let hook_request = session.permission_request_hook(
         audit.request.turn_id.clone(),
-        call.name.clone(),
+        call.display_name(),
         call.id.clone(),
         serde_json::json!({
             "arguments": call.arguments,
@@ -1614,7 +1634,9 @@ async fn execute_tools_serial_inner(
         let mut workspace_write_grant = false;
         let mut permission_audits = Vec::new();
         if !call.args_parse_error {
-            match preflight_browser_action(session, call, turn_context, hitl_gate).await? {
+            match preflight_browser_action(session, &step_context, call, turn_context, hitl_gate)
+                .await?
+            {
                 PermissionPreflight::NotRequired => {}
                 PermissionPreflight::Granted(audit) => permission_audits.push(*audit),
                 PermissionPreflight::Denied(message) => {
@@ -1634,7 +1656,9 @@ async fn execute_tools_serial_inner(
                     continue;
                 }
             }
-            match preflight_read_only_write(session, call, turn_context, hitl_gate).await? {
+            match preflight_read_only_write(session, &step_context, call, turn_context, hitl_gate)
+                .await?
+            {
                 PermissionPreflight::NotRequired => {}
                 PermissionPreflight::Granted(audit) => {
                     workspace_write_grant = true;

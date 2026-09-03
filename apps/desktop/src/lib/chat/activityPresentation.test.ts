@@ -28,6 +28,11 @@ test("classifies native tool names into visual verbs", () => {
   assert.equal(activityVisualKind(activity("video_gen")), "video");
   assert.equal(activityVisualKind(activity("music_gen")), "music");
   assert.equal(activityVisualKind(activity("speech_gen")), "speech");
+  assert.equal(activityVisualKind(activity("media.image_gen")), "image");
+  assert.equal(activityVisualKind(activity("media.video_gen")), "video");
+  assert.equal(activityVisualKind(activity("media.music_gen")), "music");
+  assert.equal(activityVisualKind(activity("media.speech_gen")), "speech");
+  assert.equal(activityVisualKind(activity("browser.snapshot")), "browse");
   assert.equal(activityVisualKind(activity("render_media")), "media");
   assert.equal(activityVisualKind(activity("custom_tool")), "tool");
 });

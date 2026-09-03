@@ -1244,9 +1244,13 @@ pub(crate) async fn run_turn(
                     || step_context
                         .tool_router
                         .may_require_approval(call.namespace.as_deref(), &call.name)
-            }) || calls
-                .iter()
-                .any(|c| tool_may_require_permission(&c.name, &c.arguments))
+            }) || calls.iter().any(|call| {
+                let registered_name = step_context
+                    .tool_router
+                    .registered_name(call.namespace.as_deref(), &call.name)
+                    .unwrap_or(&call.name);
+                tool_may_require_permission(registered_name, &call.arguments)
+            })
         };
         let tool_execution = calls.first().map(|first| ToolExecutionMetadata {
             batch_id: format!("tool-batch-{}", first.id),

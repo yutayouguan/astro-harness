@@ -36,23 +36,24 @@ export type ActivityTitlePresentation = {
   target: string;
 };
 
-const SEARCH_NAMES = /(^|[_-])(search|grep|rg|find|glob|query)([_-]|$)/;
-const READ_NAMES = /(^|[_-])(read|open|list|view|inspect|stat)([_-]|$)/;
+const SEARCH_NAMES = /(^|[._-])(search|grep|rg|find|glob|query)([._-]|$)/;
+const READ_NAMES = /(^|[._-])(read|open|list|view|inspect|stat)([._-]|$)/;
 const RUN_NAMES =
-  /(^|[_-])(run|exec|execute|exec_command|shell|command|code_exec)([_-]|$)/;
+  /(^|[._-])(run|exec|execute|exec_command|shell|command|code_exec)([._-]|$)/;
 const EDIT_NAMES =
-  /(^|[_-])(edit|write|patch|apply|create|delete|remove|move|copy|rename)([_-]|$)/;
+  /(^|[._-])(edit|write|patch|apply|create|delete|remove|move|copy|rename)([._-]|$)/;
 const BROWSE_NAMES =
-  /(^|[_-])(browser|fetch|crawl|navigate|visit|http|url)([_-]|$)/;
-const MEDIA_NAMES = /(^|[_-])(image|video|audio|media|render|generate)([_-]|$)/;
+  /(^|[._-])(browser|fetch|crawl|navigate|visit|http|url)([._-]|$)/;
+const MEDIA_NAMES =
+  /(^|[._-])(image|video|audio|media|render|generate)([._-]|$)/;
 const IMAGE_GENERATION_NAMES =
-  /(^|[_:-])(image[_-]?(gen|generate|generation)|generate[_-]?image)([_:-]|$)/;
+  /(^|[_.:-])(image[_-]?(gen|generate|generation)|generate[_-]?image)([_.:-]|$)/;
 const VIDEO_GENERATION_NAMES =
-  /(^|[_:-])(video[_-]?(gen|generate|generation)|generate[_-]?video)([_:-]|$)/;
+  /(^|[_.:-])(video[_-]?(gen|generate|generation)|generate[_-]?video)([_.:-]|$)/;
 const MUSIC_GENERATION_NAMES =
-  /(^|[_:-])(music[_-]?(gen|generate|generation)|generate[_-]?music)([_:-]|$)/;
+  /(^|[_.:-])(music[_-]?(gen|generate|generation)|generate[_-]?music)([_.:-]|$)/;
 const SPEECH_GENERATION_NAMES =
-  /(^|[_:-])(speech[_-]?(gen|generate|generation)|audio[_-]?gen|tts|text[_-]?to[_-]?speech|voice[_-]?clone)([_:-]|$)/;
+  /(^|[_.:-])(speech[_-]?(gen|generate|generation)|audio[_-]?gen|tts|text[_-]?to[_-]?speech|voice[_-]?clone)([_.:-]|$)/;
 
 /** Map the native activity identity to a stable visual verb. */
 export function activityVisualKind(activity: ChatActivity): ActivityVisualKind {

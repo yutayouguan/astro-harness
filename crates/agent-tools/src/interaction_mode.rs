@@ -137,7 +137,7 @@ pub fn filter_schemas(
                     tool.get("name")
                         .and_then(serde_json::Value::as_str)
                         .is_some_and(|name| {
-                            tool_visible_in_mode(mode, &format!("{namespace}.{name}"))
+                            tool_visible_in_mode(mode, &format!("{namespace}_{name}"))
                         })
                 });
                 return (!tools.is_empty()).then_some(schema);
@@ -220,5 +220,23 @@ mod tests {
         ));
         assert!(tool_visible_in_mode(InteractionMode::Plan, "switch_mode"));
         assert!(!tool_visible_in_mode(InteractionMode::Plan, "memory"));
+    }
+
+    #[test]
+    fn plan_filters_native_browser_namespace_by_registered_policy_names() {
+        let schemas = vec![serde_json::json!({
+            "type": "namespace",
+            "name": "browser",
+            "description": "Browser tools",
+            "tools": [
+                {"type": "function", "name": "snapshot", "parameters": {}},
+                {"type": "function", "name": "click", "parameters": {}}
+            ]
+        })];
+
+        let filtered = filter_schemas(InteractionMode::Plan, schemas);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0]["tools"].as_array().map(Vec::len), Some(1));
+        assert_eq!(filtered[0]["tools"][0]["name"], "snapshot");
     }
 }

@@ -57,6 +57,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "speech_gen".to_string(),
         toolset: "speech_gen".to_string(),
+        namespace: super::MEDIA_GENERATION_NAMESPACE.to_string(),
         description: "Convert text to speech. Google: Gemini TTS (multi-speaker, style, stream). OpenAI: /audio/speech fallback. Advanced features are Google-only."
             .to_string(),
         schema: schema_for_args::<TtsArgs>(),

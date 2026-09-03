@@ -138,3 +138,50 @@ async fn metadata_tools_have_handlers_without_legacy_memory_aliases() {
         );
     }
 }
+
+#[test]
+fn browser_media_generation_and_cron_use_expected_namespaces() {
+    let mut registry = ToolRegistry::new();
+    register_all(&mut registry);
+
+    for (registered, expected) in [
+        (
+            "browser_open",
+            types::ToolName::namespaced("browser", "open"),
+        ),
+        (
+            "browser_tab_switch",
+            types::ToolName::namespaced("browser", "tab_switch"),
+        ),
+        (
+            "image_gen",
+            types::ToolName::namespaced("media", "image_gen"),
+        ),
+        (
+            "video_gen",
+            types::ToolName::namespaced("media", "video_gen"),
+        ),
+        (
+            "speech_gen",
+            types::ToolName::namespaced("media", "speech_gen"),
+        ),
+        (
+            "music_gen",
+            types::ToolName::namespaced("media", "music_gen"),
+        ),
+        ("cron_add", types::ToolName::namespaced("cron", "add")),
+    ] {
+        assert_eq!(
+            registry.get(registered).map(types::ToolEntry::tool_name),
+            Some(expected),
+            "unexpected namespace projection for {registered}"
+        );
+    }
+
+    assert_eq!(
+        registry
+            .get("image_analyze")
+            .map(types::ToolEntry::tool_name),
+        Some(types::ToolName::plain("image_analyze"))
+    );
+}

@@ -114,6 +114,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "music_gen".to_string(),
         toolset: "music_gen".to_string(),
+        namespace: super::MEDIA_GENERATION_NAMESPACE.to_string(),
         description: "Generate music via Google Lyria 3. model=clip (short) or pro (full song). Pass lyrics if already written or Lyria invents its own. Google only. Writes generated/audio/.".to_string(),
         schema: schema_for_args::<MusicGenArgs>(),
         check_fn: None,

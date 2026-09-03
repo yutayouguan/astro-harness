@@ -82,9 +82,10 @@ pub(crate) fn tool_turn_item_with_execution(
         batch_id: execution.map(|value| value.batch_id.clone()),
         execution_mode: execution.map(|value| value.mode),
     };
-    if name == "exec_command" || name == "code_exec" {
+    let child_name = name.rsplit('.').next().unwrap_or(&name);
+    if child_name == "exec_command" || child_name == "code_exec" {
         TurnItem::CommandExecution(item)
-    } else if name == "image_gen" {
+    } else if child_name == "image_gen" {
         TurnItem::ImageGeneration(item)
     } else if name.starts_with("mcp__") {
         TurnItem::McpToolCall(item)
@@ -735,6 +736,22 @@ mod tests {
         assert_eq!(item.id, "call-image-1");
         assert_eq!(item.name, "image_gen");
         assert_eq!(item.status, ToolStatus::InProgress);
+    }
+
+    #[test]
+    fn namespaced_image_gen_is_a_first_class_business_item() {
+        let TurnItem::ImageGeneration(item) = tool_turn_item_with_execution(
+            "img-ns",
+            "media.image_gen",
+            serde_json::json!({"prompt":"cat"}),
+            None,
+            Vec::new(),
+            ToolStatus::InProgress,
+            None,
+        ) else {
+            panic!("expected namespaced ImageGeneration item");
+        };
+        assert_eq!(item.name, "media.image_gen");
     }
 
     async fn session() -> (tempfile::TempDir, Arc<Session>, Arc<TurnContext>) {

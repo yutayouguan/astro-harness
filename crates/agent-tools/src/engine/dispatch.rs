@@ -129,7 +129,7 @@ pub fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> b
         "memory" | "todo" | "persona_create" => true,
         "skills" => action() == "manage",
         "pin_context" => matches!(action().as_str(), "pin" | "unpin" | "clear"),
-        "cron" => matches!(action().as_str(), "add" | "remove" | "enable" | "disable"),
+        "cron_add" | "cron_remove" | "cron_enable" | "cron_disable" => true,
         "image_gen" | "video_gen" | "speech_gen" | "music_gen" => true,
         _ => false,
     }
@@ -199,12 +199,12 @@ mod permission_tests {
             &serde_json::json!({"action": "list"})
         ));
         assert!(tool_requires_in_process_write(
-            "cron",
-            &serde_json::json!({"action": "disable"})
+            "cron_disable",
+            &serde_json::json!({})
         ));
         assert!(!tool_requires_in_process_write(
-            "cron",
-            &serde_json::json!({"action": "list"})
+            "cron_list",
+            &serde_json::json!({})
         ));
         assert!(tool_requires_in_process_write(
             "image_gen",

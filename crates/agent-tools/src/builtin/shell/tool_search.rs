@@ -233,4 +233,28 @@ mod tests {
         assert_eq!(specs.len(), 1);
         assert_eq!(specs[0]["tools"].as_array().map(Vec::len), Some(2));
     }
+
+    #[test]
+    fn media_generation_search_entries_share_one_namespace() {
+        let mut registry = ToolRegistry::new();
+        crate::register_all(&mut registry);
+        let matches = searchable_entries(&registry)
+            .into_iter()
+            .filter(|entry| entry.tool_name.namespace() == Some("media"))
+            .map(|entry| (entry.registered_name.clone(), entry.loadable_spec()))
+            .collect();
+        let specs = coalesce_loadable_specs(matches);
+
+        assert_eq!(specs.len(), 1);
+        let names = specs[0]["tools"]
+            .as_array()
+            .expect("media namespace tools")
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(
+            names,
+            std::collections::HashSet::from(["image_gen", "video_gen", "speech_gen", "music_gen"])
+        );
+    }
 }

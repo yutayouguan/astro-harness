@@ -486,6 +486,8 @@ pub async fn current_origin(session_id: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+const BROWSER_NAMESPACE: &str = "browser";
+
 pub fn register(registry: &mut ToolRegistry) {
     for (name, description, schema, icon) in [
         (
@@ -588,6 +590,7 @@ pub fn register(registry: &mut ToolRegistry) {
         registry.register(ToolEntry {
             name: name.to_string(),
             toolset: "browser".to_string(),
+            namespace: BROWSER_NAMESPACE.to_string(),
             description: description.to_string(),
             schema,
             check_fn: Some(Box::new(browser_available)),

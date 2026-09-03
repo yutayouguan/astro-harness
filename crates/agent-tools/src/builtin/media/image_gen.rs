@@ -170,6 +170,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
+        namespace: super::MEDIA_GENERATION_NAMESPACE.to_string(),
         description: "Generate or edit images. Gemini Interactions supports reference and advanced generation controls; OpenAI and Azure Foundry v1 currently support prompt-only generation. Saves under generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
