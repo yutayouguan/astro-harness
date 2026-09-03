@@ -3,11 +3,9 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XtermTerminal } from "@xterm/xterm";
 import {
   Bot,
-  createLucideIcon,
   ExternalLink,
   PanelBottomClose,
   Plus,
-  RefreshCw,
   UserRound,
   X,
 } from "lucide-react";
@@ -69,8 +67,6 @@ type TerminalPaneProps = {
   visible: boolean;
   session: TerminalSessionDto;
   settings: TerminalSettings;
-  startCursor: number;
-  clearGeneration: number;
   onSessionProgress: (clientId: string, session: TerminalSessionDto) => void;
   onError: (message: string | null) => void;
 };
@@ -85,19 +81,6 @@ const SCROLLBAR_WIDTH = 4;
 const TERMINAL_START_TIMEOUT_MS = 15_000;
 const READ_RETRY_DELAYS = [500, 1_000, 2_000, 4_000];
 const OPEN_RETRY_DELAYS = [1_000, 2_000, 4_000];
-
-const Broom = createLucideIcon("Broom", [
-  ["path", { d: "M13.5 10.5 22 2", key: "broom-handle" }],
-  [
-    "path",
-    {
-      d: "M14.734 13.841a2 2 0 0 0-.314-2.42L12.58 9.58a2 2 0 0 0-2.421-.314l-7.657 4.461A1 1 0 0 0 2.3 15.3l6.403 6.403a1 1 0 0 0 1.571-.204z",
-      key: "broom-head",
-    },
-  ],
-  ["path", { d: "m5 18 2-2", key: "broom-bristle-short" }],
-  ["path", { d: "m7.699 10.7 5.602 5.601", key: "broom-bristle-long" }],
-]);
 
 function withTimeout<T>(
   promise: Promise<T>,
@@ -159,8 +142,6 @@ function TerminalPane({
   visible,
   session,
   settings,
-  startCursor,
-  clearGeneration,
   onSessionProgress,
   onError,
 }: TerminalPaneProps) {
@@ -175,7 +156,7 @@ function TerminalPane({
     const host = hostRef.current;
     if (!host) return;
     let disposed = false;
-    let cursor = Math.max(session.baseCursor, startCursor);
+    let cursor = session.baseCursor;
     let pendingInput = "";
     let writing = false;
 
@@ -339,10 +320,6 @@ function TerminalPane({
     if (visible) window.requestAnimationFrame(() => fitRef.current?.fit());
   }, [visible]);
 
-  useEffect(() => {
-    if (clearGeneration > 0) xtermRef.current?.clear();
-  }, [clearGeneration]);
-
   return <div ref={hostRef} className="terminal-dock-screen" />;
 }
 
@@ -377,9 +354,6 @@ export default function TerminalTabsDock({
   const [closing, setClosing] = useState<Set<string>>(() => new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
-  const [clearState, setClearState] = useState<
-    Record<string, { cursor: number; generation: number }>
-  >({});
   const [height, setHeight] = useState(() => initialHeight(projectId));
   const [resizing, setResizing] = useState(false);
   const [settings, setSettings] = useState(initialSettings);
@@ -389,7 +363,6 @@ export default function TerminalTabsDock({
   const resizeFrameRef = useRef<number | null>(null);
   const tabsRef = useRef(tabs);
   const sessionsRef = useRef(sessions);
-  const cursorByClientRef = useRef<Record<string, number>>({});
   const openingRef = useRef(new Set<string>());
   const mutatingRef = useRef(new Set<string>());
   const removedTokensRef = useRef(new Set<string>());
@@ -449,7 +422,6 @@ export default function TerminalTabsDock({
             break;
           }
           setSessions((current) => ({ ...current, [tab.clientId]: opened }));
-          cursorByClientRef.current[tab.clientId] = opened.endCursor;
           setErrors((current) => {
             const next = { ...current };
             delete next[tab.clientId];
@@ -536,12 +508,6 @@ export default function TerminalTabsDock({
           delete next[clientId];
           return next;
         });
-        setClearState((current) => {
-          const next = { ...current };
-          delete next[clientId];
-          return next;
-        });
-        delete cursorByClientRef.current[clientId];
         if (activeClientId === clientId) {
           const oldIndex = tabsRef.current.findIndex(
             (candidate) => candidate.clientId === clientId,
@@ -566,54 +532,6 @@ export default function TerminalTabsDock({
     },
     [activeClientId, projectRoot, t],
   );
-
-  const restartActive = useCallback(async () => {
-    if (!activeTab || mutatingRef.current.has(activeTab.clientId)) return;
-    mutatingRef.current.add(activeTab.clientId);
-    openingRef.current.add(activeTab.clientId);
-    const session = sessionsRef.current[activeTab.clientId];
-    if (!session) {
-      setErrors((current) => {
-        const next = { ...current };
-        delete next[activeTab.clientId];
-        return next;
-      });
-      openingRef.current.delete(activeTab.clientId);
-      await openTab(activeTab);
-      mutatingRef.current.delete(activeTab.clientId);
-      return;
-    }
-    setClosing((current) => new Set(current).add(activeTab.clientId));
-    try {
-      await invoke("terminal_close", { id: session.id }).catch(() => undefined);
-      setSessions((current) => {
-        const next = { ...current };
-        delete next[activeTab.clientId];
-        return next;
-      });
-      delete cursorByClientRef.current[activeTab.clientId];
-      setErrors((current) => {
-        const next = { ...current };
-        delete next[activeTab.clientId];
-        return next;
-      });
-      openingRef.current.delete(activeTab.clientId);
-      await openTab(activeTab);
-    } catch (reason) {
-      openingRef.current.delete(activeTab.clientId);
-      setErrors((current) => ({
-        ...current,
-        [activeTab.clientId]: String(reason),
-      }));
-    } finally {
-      mutatingRef.current.delete(activeTab.clientId);
-      setClosing((current) => {
-        const next = new Set(current);
-        next.delete(activeTab.clientId);
-        return next;
-      });
-    }
-  }, [activeTab, openTab]);
 
   useEffect(() => {
     if (!open) return;
@@ -745,7 +663,6 @@ export default function TerminalTabsDock({
   const updateSessionProgress = useCallback(
     (clientId: string, next: TerminalSessionDto) => {
       if (sessionsRef.current[clientId]?.id !== next.id) return;
-      cursorByClientRef.current[clientId] = next.endCursor;
       setSessions((current) => {
         const previous = current[clientId];
         if (!previous || previous.id !== next.id) return current;
@@ -903,35 +820,6 @@ export default function TerminalTabsDock({
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (!activeTab || !activeSession) return;
-              setClearState((current) => ({
-                ...current,
-                [activeTab.clientId]: {
-                  cursor:
-                    cursorByClientRef.current[activeTab.clientId] ??
-                    activeSession.endCursor,
-                  generation:
-                    (current[activeTab.clientId]?.generation ?? 0) + 1,
-                },
-              }));
-            }}
-            title={t("chat.terminal.clear")}
-            aria-label={t("chat.terminal.clear")}
-          >
-            <Broom size={14} aria-hidden />
-          </button>
-          <button
-            type="button"
-            onClick={() => void restartActive()}
-            disabled={!activeTab || closing.has(activeTab?.clientId ?? "")}
-            title={t("chat.terminal.restart")}
-            aria-label={t("chat.terminal.restart")}
-          >
-            <RefreshCw size={14} aria-hidden />
-          </button>
-          <button
-            type="button"
             onClick={onClose}
             title={t("chat.terminal.close")}
             aria-label={t("chat.terminal.close")}
@@ -947,10 +835,6 @@ export default function TerminalTabsDock({
           visible={open}
           session={activeSession}
           settings={settings}
-          startCursor={
-            clearState[activeTab.clientId]?.cursor ?? activeSession.baseCursor
-          }
-          clearGeneration={clearState[activeTab.clientId]?.generation ?? 0}
           onSessionProgress={updateSessionProgress}
           onError={(message) => {
             if (!activeTab) return;

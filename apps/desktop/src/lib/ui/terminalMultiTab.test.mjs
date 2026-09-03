@@ -22,6 +22,14 @@ test("terminal dock routes to the multi-tab implementation", () => {
   assert.match(css, /\.terminal-tab\.is-active/);
 });
 
+test("terminal toolbar omits low-frequency clear and restart actions", () => {
+  assert.doesNotMatch(dock, /chat\.terminal\.clear/);
+  assert.doesNotMatch(dock, /chat\.terminal\.restart/);
+  assert.doesNotMatch(dock, /clearState|restartActive/);
+  assert.match(dock, /terminal_open_external/);
+  assert.match(dock, /<PanelBottomClose/);
+});
+
 test("new projects start with separate user and AI terminals", () => {
   assert.match(tabs, /executionMode: userExecutionMode/);
   assert.match(tabs, /executionMode: "project" as const/);

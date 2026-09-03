@@ -1239,7 +1239,6 @@ export const zh = {
   "chat.slashHelp": "显示可用命令",
   "chat.slashSkill": "调用该技能",
   "chat.slashUndo": "撤销上一轮对话",
-  "chat.slashRetry": "重新生成上一轮回复",
   "chat.slashStop": "停止当前生成",
   "chat.slashStatus": "查看会话状态",
   "chat.slashUsage": "查看 Token 用量",
@@ -1256,7 +1255,7 @@ export const zh = {
   "chat.slashSettings": "打开偏好设置",
   "chat.slashContext": "打开上下文面板",
   "chat.slashHelpInsert":
-    "可用命令：/new · /clear · /help · /undo · /retry · /stop · /status · /usage · /model · /verbose · /reasoning · /mode · /tools · /skills · /mcp · /memory · /insights · /providers · /settings · /context；也可 /技能名。用 @ 提及 Agent / 技能 / MCP。",
+    "可用命令：/new · /clear · /help · /undo · /stop · /status · /usage · /model · /verbose · /reasoning · /mode · /tools · /skills · /mcp · /memory · /insights · /providers · /settings · /context；也可 /技能名。用 @ 提及 Agent / 技能 / MCP。",
   "chat.slashUnknown": "未知命令：/{cmd}。输入 /help 查看列表。",
   "chat.slashStatusMsg":
     "会话 {session} · {provider} / {model} · 模式 {mode} · 思考 {thinking} · 详细度 {verbosity} · 上下文约 {ctx}%",
@@ -1268,7 +1267,6 @@ export const zh = {
   "chat.slashReasoningMsg": "思考档位：{level}",
   "chat.slashModeMsg": "交互模式：{mode}",
   "chat.slashUndoEmpty": "没有可撤销的对话",
-  "chat.slashRetryEmpty": "没有可重试的助手回复",
   "chat.mentionTitle": "提及",
   "chat.mentionAgent": "切换到该 Agent（写入活跃 Agent）",
   "chat.mentionSkill": "加载该技能全文到本轮（对齐 Hermes）",
@@ -1580,8 +1578,8 @@ export const zh = {
   "chat.terminal.tab.rename": "重命名终端",
   "chat.terminal.tab.starting": "正在启动终端…",
   "chat.terminal.tab.startTimeout":
-    "终端启动超时，请确认桌面后端已启动，然后点击重新启动。",
-  "chat.terminal.tab.readFailed": "终端输出读取失败，请尝试重启终端",
+    "终端启动超时，请确认桌面后端已启动，然后关闭并新建终端。",
+  "chat.terminal.tab.readFailed": "终端输出读取失败，请关闭并新建终端",
   "chat.terminal.tab.limit": "每个项目最多可打开 {count} 个终端",
   "chat.side.reasoning": "思考过程",
   "chat.side.stop": "停止生成",
@@ -1722,7 +1720,6 @@ export const zh = {
   "chat.copied": "已复制",
   "chat.copyCode": "复制代码",
   "chat.codeCopied": "已复制代码",
-  "chat.regenerate": "重新生成",
   "chat.editQuestion": "编辑最后一个问题",
   "chat.editCancel": "取消",
   "chat.editSubmit": "保存并重新生成",
@@ -4139,7 +4136,6 @@ export const en: Record<MessageKey, string> = {
   "chat.slashHelp": "Show available commands",
   "chat.slashSkill": "Invoke this skill",
   "chat.slashUndo": "Undo the last exchange",
-  "chat.slashRetry": "Regenerate the last reply",
   "chat.slashStop": "Stop generation",
   "chat.slashStatus": "Show session status",
   "chat.slashUsage": "Show token usage",
@@ -4156,7 +4152,7 @@ export const en: Record<MessageKey, string> = {
   "chat.slashSettings": "Open Preferences",
   "chat.slashContext": "Open context panel",
   "chat.slashHelpInsert":
-    "Commands: /new · /clear · /help · /undo · /retry · /stop · /status · /usage · /model · /verbose · /reasoning · /mode · /tools · /skills · /mcp · /memory · /insights · /providers · /settings · /context; or /skill-name. Use @ for Agent / Skill / MCP.",
+    "Commands: /new · /clear · /help · /undo · /stop · /status · /usage · /model · /verbose · /reasoning · /mode · /tools · /skills · /mcp · /memory · /insights · /providers · /settings · /context; or /skill-name. Use @ for Agent / Skill / MCP.",
   "chat.slashUnknown": "Unknown command: /{cmd}. Type /help for the list.",
   "chat.slashStatusMsg":
     "Session {session} · {provider} / {model} · mode {mode} · thinking {thinking} · verbosity {verbosity} · context ~{ctx}%",
@@ -4168,7 +4164,6 @@ export const en: Record<MessageKey, string> = {
   "chat.slashReasoningMsg": "Thinking level: {level}",
   "chat.slashModeMsg": "Interaction mode: {mode}",
   "chat.slashUndoEmpty": "Nothing to undo",
-  "chat.slashRetryEmpty": "No assistant reply to retry",
   "chat.mentionTitle": "Mentions",
   "chat.mentionAgent": "Switch to this Agent (set active)",
   "chat.mentionSkill": "Load full skill into this turn (Hermes-style)",
@@ -4492,9 +4487,9 @@ export const en: Record<MessageKey, string> = {
   "chat.terminal.tab.rename": "Rename terminal",
   "chat.terminal.tab.starting": "Starting terminal…",
   "chat.terminal.tab.startTimeout":
-    "Terminal startup timed out. Check that the desktop backend is running, then restart the terminal.",
+    "Terminal startup timed out. Check that the desktop backend is running, then close it and open a new terminal.",
   "chat.terminal.tab.readFailed":
-    "Failed to read terminal output. Try restarting the terminal.",
+    "Failed to read terminal output. Close it and open a new terminal.",
   "chat.terminal.tab.limit": "A project can have up to {count} terminals",
   "chat.side.reasoning": "Reasoning",
   "chat.side.stop": "Stop generating",
@@ -4639,7 +4634,6 @@ export const en: Record<MessageKey, string> = {
   "chat.copied": "Copied",
   "chat.copyCode": "Copy code",
   "chat.codeCopied": "Code copied",
-  "chat.regenerate": "Regenerate",
   "chat.editQuestion": "Edit the latest question",
   "chat.editCancel": "Cancel",
   "chat.editSubmit": "Save & regenerate",
