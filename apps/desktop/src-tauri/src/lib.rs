@@ -303,6 +303,7 @@ pub fn run() {
             commands::files::project_list_files,
             commands::files::project_read_file,
             commands::files::project_git_diff,
+            commands::files::apply_turn_file_changes,
             commands::files::project_open_path_externally,
             commands::files::project_write_file,
             commands::files::project_create_file,

@@ -1,6 +1,6 @@
 //! 文件系统 Tauri 命令：列目录、读写文件、剪贴板、下载、删除、移动、复制。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tauri::Manager;
@@ -37,6 +37,24 @@ pub struct ProjectGitDiffDto {
     pub additions: usize,
     pub deletions: usize,
     pub is_binary: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnFileChangeDto {
+    pub path: String,
+    pub source_path: Option<String>,
+    pub before_content: Option<String>,
+    pub after_content: Option<String>,
+    pub reversible: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnFileApplyResult {
+    pub status: String,
+    pub applied_paths: Vec<String>,
+    pub conflicted_paths: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -610,6 +628,79 @@ pub async fn project_git_diff(
         deletions,
         is_binary,
     })
+}
+
+/// 按 turn 冻结快照撤销或重新应用文件修改；预检失败时不写入任何文件。
+#[tauri::command]
+pub async fn apply_turn_file_changes(
+    project_id: String,
+    changes: Vec<TurnFileChangeDto>,
+    revert: bool,
+) -> Result<TurnFileApplyResult, String> {
+    let roots = project_roots(&project_id).await?;
+    let mut resolved = Vec::with_capacity(changes.len());
+    let mut conflicts = Vec::new();
+    for change in changes {
+        if change.reversible != Some(true) {
+            conflicts.push(change.path.clone());
+            continue;
+        }
+        let source = change.source_path.as_deref().unwrap_or(&change.path);
+        let (_, source_path) = project_review_path(&roots, source)?;
+        let (_, target_path) = project_review_path(&roots, &change.path)?;
+        let (expected_source, expected_target) = if change.source_path.as_deref().is_some_and(|p| p != change.path) {
+            if revert {
+                (None, change.after_content.clone())
+            } else {
+                (change.before_content.clone(), None)
+            }
+        } else if revert {
+            (change.after_content.clone(), change.before_content.clone())
+        } else {
+            (change.before_content.clone(), change.after_content.clone())
+        };
+        let current = std::fs::read_to_string(&source_path).ok();
+        let target_current = std::fs::read_to_string(&target_path).ok();
+        let is_move = source_path != target_path;
+        let matches = if is_move && revert {
+            current.is_none() && target_current.as_deref() == change.after_content.as_deref()
+        } else if is_move {
+            current.as_deref() == change.before_content.as_deref() && target_current.is_none()
+        } else {
+            current == expected_source
+        };
+        if !matches {
+            conflicts.push(change.path.clone());
+            continue;
+        }
+        resolved.push((change, source_path, target_path, expected_target));
+    }
+    if !conflicts.is_empty() {
+        return Ok(TurnFileApplyResult { status: "conflict".into(), applied_paths: Vec::new(), conflicted_paths: conflicts });
+    }
+    if revert { resolved.reverse(); }
+    let mut applied = Vec::new();
+    for (change, source, target, desired) in resolved {
+        let is_move = change.source_path.as_deref().is_some_and(|p| p != change.path);
+        if is_move {
+            if revert {
+                if let Some(parent) = source.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+                std::fs::write(&source, change.before_content.as_deref().unwrap_or("")).map_err(|e| e.to_string())?;
+                if target.exists() { std::fs::remove_file(&target).map_err(|e| e.to_string())?; }
+            } else {
+                if let Some(parent) = target.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+                std::fs::write(&target, change.after_content.as_deref().unwrap_or("")).map_err(|e| e.to_string())?;
+                if source.exists() { std::fs::remove_file(&source).map_err(|e| e.to_string())?; }
+            }
+        } else if let Some(content) = desired {
+            if let Some(parent) = source.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+            std::fs::write(&source, content).map_err(|e| e.to_string())?;
+        } else if source.exists() {
+            std::fs::remove_file(&source).map_err(|e| e.to_string())?;
+        }
+        applied.push(change.path);
+    }
+    Ok(TurnFileApplyResult { status: "success".into(), applied_paths: applied, conflicted_paths: Vec::new() })
 }
 
 /// 用系统默认应用打开项目根目录内的文件或目录。

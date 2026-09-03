@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, FileDiff, RotateCcw } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import type { ConversationEntry } from "../../types";
 import {
   displayFileName,
@@ -9,16 +10,40 @@ import {
 
 type Props = {
   message: ConversationEntry;
+  projectId?: string | null;
   onReview?: (file: FileChangeItem, files: FileChangeItem[]) => void;
 };
 
-export default function TurnChangeSummaryCard({ message, onReview }: Props) {
+export default function TurnChangeSummaryCard({ message, projectId, onReview }: Props) {
   const summary = useMemo(() => extractTurnFileChangeSummary(message), [message]);
   const [expanded, setExpanded] = useState(false);
+  const [undone, setUndone] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   if (summary.items.length === 0) return null;
   const visible = expanded ? summary.items : summary.items.slice(0, 3);
   const remaining = summary.items.length - visible.length;
   const reversible = summary.items.every((item) => item.reversible === true);
+  const applyChanges = async () => {
+    if (!projectId || !reversible || applying) return;
+    setApplying(true);
+    setActionError(null);
+    try {
+      const result = await invoke<{ status: string; conflictedPaths: string[] }>(
+        "apply_turn_file_changes",
+        { projectId, changes: summary.items, revert: !undone },
+      );
+      if (result.status !== "success") {
+        setActionError(`文件已变化，未覆盖：${result.conflictedPaths.join("、")}`);
+        return;
+      }
+      setUndone((value) => !value);
+    } catch (error) {
+      setActionError(String(error));
+    } finally {
+      setApplying(false);
+    }
+  };
 
   return (
     <section className="turn-change-card" aria-label="本轮文件改动">
@@ -76,10 +101,17 @@ export default function TurnChangeSummaryCard({ message, onReview }: Props) {
         ) : null}
       </div>
       {reversible ? (
-        <span className="turn-change-undo-hint">
-          <RotateCcw size={12} aria-hidden /> 已保存可撤销快照
-        </span>
+        <button
+          type="button"
+          className="turn-change-undo-hint"
+          disabled={!projectId || applying}
+          onClick={() => void applyChanges()}
+        >
+          <RotateCcw size={12} aria-hidden />
+          {applying ? "正在应用…" : undone ? "重新应用" : "撤销本轮修改"}
+        </button>
       ) : null}
+      {actionError ? <p className="turn-change-action-error">{actionError}</p> : null}
     </section>
   );
 }

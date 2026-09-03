@@ -165,6 +165,7 @@ export default function SideChatPanel({
 
       <div className="side-chat-body">
         <ChatView
+          projectId={activeProjectId}
           sessionId={chat.sessionId}
           messages={chat.messages}
           input={chat.input}

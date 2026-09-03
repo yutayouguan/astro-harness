@@ -595,6 +595,21 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<types::Tool
         }
     }
 
+    let snapshot_bytes = changes
+        .iter()
+        .map(|change| {
+            change.before_content.as_ref().map_or(0, String::len)
+                + change.after_content.as_ref().map_or(0, String::len)
+        })
+        .sum::<usize>();
+    if snapshot_bytes > MAX_REVERSIBLE_SNAPSHOT_BYTES {
+        for change in &mut changes {
+            change.before_content = None;
+            change.after_content = None;
+            change.reversible = false;
+        }
+    }
+
     Ok(types::ToolOutput::FileChanges {
         text: format_summary(&affected),
         changes,

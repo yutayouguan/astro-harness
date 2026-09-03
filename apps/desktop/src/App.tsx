@@ -2182,6 +2182,7 @@ export default function App() {
                       </div>
                     )}
                     <ChatView
+                      projectId={activeProjectId}
                       sessionId={chat.sessionId}
                       messages={chat.messages}
                       workspaceContent={

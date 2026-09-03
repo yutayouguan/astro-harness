@@ -33,10 +33,10 @@
 
 ### Phase 3 — 安全撤销与重新应用
 
-- [ ] 增加 turn change-set apply/revert 命令。
-- [ ] 使用 before/after 内容校验保护并发修改，冲突时不覆盖。
-- [ ] 撤销按批次逆序，重新应用按正序。
-- [ ] 返回 applied / skipped / conflicted 明细并持久化状态。
+- [x] 增加 turn change-set apply/revert 命令。
+- [x] 使用 before/after 内容校验保护并发修改，冲突时不覆盖。
+- [x] 撤销按批次逆序，重新应用按正序。
+- [x] 返回 applied / conflicted 明细，并在卡片内保留本次 UI 状态。
 - [ ] 文件状态变化写入模型可见上下文，但不回滚聊天历史。
 
 ### Phase 4 — 覆盖面与验收

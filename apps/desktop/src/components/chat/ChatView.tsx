@@ -344,6 +344,7 @@ export function MessageTokenStats({
 
 /** ChatView 入参：消息列表、输入态与流式控制回调 */
 type Props = {
+  projectId?: string | null;
   /** 当前父会话 id，用于展示其 Agent Threads。 */
   sessionId?: string | null;
   /** 当前会话消息（含欢迎占位） */
@@ -854,6 +855,7 @@ function InlineUserMessageEditor({
 }
 
 export default function ChatView({
+  projectId = null,
   sessionId = null,
   messages,
   workspaceContent = null,
@@ -3381,6 +3383,7 @@ export default function ChatView({
                         m.id !== "welcome" ? (
                           <TurnChangeSummaryCard
                             message={m}
+                            projectId={projectId}
                             onReview={onOpenFileReview}
                           />
                         ) : null}

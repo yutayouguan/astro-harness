@@ -540,7 +540,8 @@ html[data-theme="dark"] .composer-shell .chat-scroll-latest {
 .turn-change-expand { justify-content: flex-start !important; }
 .turn-change-expand svg { transition: transform 160ms ease; }
 .turn-change-expand svg.is-expanded { transform: rotate(180deg); }
-.turn-change-undo-hint { display: inline-flex; align-items: center; gap: 5px; padding: 0 14px 10px; }
+.turn-change-undo-hint { display: inline-flex; align-items: center; gap: 5px; margin: 0 10px 8px; padding: 4px; border: 0; background: transparent; }
+.turn-change-action-error { margin: 0; padding: 0 14px 10px; color: var(--danger); font-size: 11px; }
 
 @media (prefers-reduced-transparency: reduce) {
   .bubble.assistant .msg-reasoning,
