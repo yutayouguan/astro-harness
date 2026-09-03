@@ -12,6 +12,7 @@ export type ProjectGitDiff = {
   additions: number;
   deletions: number;
   isBinary: boolean;
+  tooLarge?: boolean;
 };
 
 export type ReviewDiffLoader = (
@@ -45,6 +46,17 @@ function frozenDiff(file: FileChangeItem): ProjectGitDiff | null {
   if (file.beforeContent == null && file.afterContent == null) return null;
   const before = file.beforeContent ?? "";
   const after = file.afterContent ?? "";
+  if (before.length + after.length > 200_000) {
+    return {
+      path: file.path,
+      relativePath: file.path,
+      patch: "",
+      additions: file.additions,
+      deletions: file.deletions,
+      isBinary: false,
+      tooLarge: true,
+    };
+  }
   const beforeLines = before.replace(/\n$/, "").split("\n").filter((_, i) => before.length > 0 || i > 0);
   const afterLines = after.replace(/\n$/, "").split("\n").filter((_, i) => after.length > 0 || i > 0);
   const oldPath = file.beforeContent == null ? "/dev/null" : `a/${file.sourcePath ?? file.path}`;
@@ -189,6 +201,8 @@ export default function ChatReviewPanel({
                 <strong>无法打开文件差异</strong>
                 <span>{error}</span>
               </div>
+            ) : review?.tooLarge ? (
+              <div className="chat-review-state">本轮冻结差异过大，请在编辑器中查看</div>
             ) : review?.isBinary ? (
               <div className="chat-review-state">
                 二进制文件无法显示文本差异

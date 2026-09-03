@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, FileDiff, RotateCcw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ConversationEntry } from "../../types";
@@ -36,6 +36,24 @@ export default function TurnChangeSummaryCard({ message, projectId, onReview }: 
   const reversible =
     summary.items.length > 0 &&
     summary.items.every((item) => item.reversible === true);
+  useEffect(() => {
+    if (!projectId || !reversible) return;
+    let active = true;
+    void invoke<{ status: string }>("inspect_turn_file_changes", {
+      projectId,
+      changes: summary.items,
+    })
+      .then((result) => {
+        if (!active) return;
+        if (result.status === "reverted") setUndone(true);
+        else if (result.status === "applied") setUndone(false);
+        else setActionError("文件状态已变化，无法安全撤销");
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [projectId, reversible, summary.items]);
   const applyChanges = async () => {
     if (!projectId || !reversible || applying) return;
     setApplying(true);

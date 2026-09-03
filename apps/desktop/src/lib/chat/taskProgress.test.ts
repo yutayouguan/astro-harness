@@ -203,8 +203,8 @@ test("aggregates exact file snapshots within one assistant turn", () => {
     ],
   };
   assert.deepEqual(extractTurnFileChangeSummary(message), {
-    additions: 2,
-    deletions: 2,
+    additions: 1,
+    deletions: 1,
     items: [
       {
         path: "src/a.ts",
@@ -212,8 +212,8 @@ test("aggregates exact file snapshots within one assistant turn", () => {
         kind: "update",
         beforeContent: "old\n",
         afterContent: "new\n",
-        additions: 2,
-        deletions: 2,
+        additions: 1,
+        deletions: 1,
         reversible: true,
       },
     ],

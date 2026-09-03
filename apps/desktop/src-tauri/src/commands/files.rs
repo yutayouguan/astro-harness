@@ -57,6 +57,27 @@ pub struct TurnFileApplyResult {
     pub conflicted_paths: Vec<String>,
 }
 
+fn turn_file_change_matches(
+    change: &TurnFileChangeDto,
+    source: &Path,
+    target: &Path,
+    reverted: bool,
+) -> bool {
+    let source_content = std::fs::read_to_string(source).ok();
+    let target_content = std::fs::read_to_string(target).ok();
+    if source != target {
+        if reverted {
+            source_content == change.before_content && target_content.is_none()
+        } else {
+            source_content.is_none() && target_content == change.after_content
+        }
+    } else if reverted {
+        source_content == change.before_content
+    } else {
+        source_content == change.after_content
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -648,32 +669,12 @@ pub async fn apply_turn_file_changes(
         let source = change.source_path.as_deref().unwrap_or(&change.path);
         let (_, source_path) = project_review_path(&roots, source)?;
         let (_, target_path) = project_review_path(&roots, &change.path)?;
-        let (expected_source, expected_target) = if change.source_path.as_deref().is_some_and(|p| p != change.path) {
-            if revert {
-                (None, change.after_content.clone())
-            } else {
-                (change.before_content.clone(), None)
-            }
-        } else if revert {
-            (change.after_content.clone(), change.before_content.clone())
-        } else {
-            (change.before_content.clone(), change.after_content.clone())
-        };
-        let current = std::fs::read_to_string(&source_path).ok();
-        let target_current = std::fs::read_to_string(&target_path).ok();
-        let is_move = source_path != target_path;
-        let matches = if is_move && revert {
-            current.is_none() && target_current.as_deref() == change.after_content.as_deref()
-        } else if is_move {
-            current.as_deref() == change.before_content.as_deref() && target_current.is_none()
-        } else {
-            current == expected_source
-        };
-        if !matches {
+        if !turn_file_change_matches(&change, &source_path, &target_path, !revert) {
             conflicts.push(change.path.clone());
             continue;
         }
-        resolved.push((change, source_path, target_path, expected_target));
+        let desired = if revert { change.before_content.clone() } else { change.after_content.clone() };
+        resolved.push((change, source_path, target_path, desired));
     }
     if !conflicts.is_empty() {
         return Ok(TurnFileApplyResult { status: "conflict".into(), applied_paths: Vec::new(), conflicted_paths: conflicts });
@@ -701,6 +702,30 @@ pub async fn apply_turn_file_changes(
         applied.push(change.path);
     }
     Ok(TurnFileApplyResult { status: "success".into(), applied_paths: applied, conflicted_paths: Vec::new() })
+}
+
+/// Inspect the authoritative workspace state for a persisted turn change set.
+#[tauri::command]
+pub async fn inspect_turn_file_changes(
+    project_id: String,
+    changes: Vec<TurnFileChangeDto>,
+) -> Result<TurnFileApplyResult, String> {
+    let roots = project_roots(&project_id).await?;
+    let mut all_applied = true;
+    let mut all_reverted = true;
+    let mut conflicts = Vec::new();
+    for change in changes {
+        let source = change.source_path.as_deref().unwrap_or(&change.path);
+        let (_, source_path) = project_review_path(&roots, source)?;
+        let (_, target_path) = project_review_path(&roots, &change.path)?;
+        let applied = turn_file_change_matches(&change, &source_path, &target_path, false);
+        let reverted = turn_file_change_matches(&change, &source_path, &target_path, true);
+        all_applied &= applied;
+        all_reverted &= reverted;
+        if !applied && !reverted { conflicts.push(change.path); }
+    }
+    let status = if all_applied { "applied" } else if all_reverted { "reverted" } else { "conflict" };
+    Ok(TurnFileApplyResult { status: status.into(), applied_paths: Vec::new(), conflicted_paths: conflicts })
 }
 
 /// 用系统默认应用打开项目根目录内的文件或目录。
@@ -1446,5 +1471,31 @@ mod project_path_tests {
     fn counts_only_changed_patch_lines() {
         let patch = "--- a/file.rs\n+++ b/file.rs\n@@ -1,2 +1,3 @@\n-old\n+new\n+extra\n context\n";
         assert_eq!(count_patch_changes(patch), (2, 1));
+    }
+}
+
+#[cfg(test)]
+mod turn_change_tests {
+    use super::*;
+
+    #[test]
+    fn detects_applied_reverted_and_conflicted_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.txt");
+        let change = TurnFileChangeDto {
+            path: "a.txt".into(),
+            source_path: None,
+            before_content: Some("before".into()),
+            after_content: Some("after".into()),
+            reversible: Some(true),
+        };
+        std::fs::write(&path, "after").unwrap();
+        assert!(turn_file_change_matches(&change, &path, &path, false));
+        assert!(!turn_file_change_matches(&change, &path, &path, true));
+        std::fs::write(&path, "before").unwrap();
+        assert!(turn_file_change_matches(&change, &path, &path, true));
+        std::fs::write(&path, "user edit").unwrap();
+        assert!(!turn_file_change_matches(&change, &path, &path, false));
+        assert!(!turn_file_change_matches(&change, &path, &path, true));
     }
 }
