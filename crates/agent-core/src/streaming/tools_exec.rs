@@ -69,6 +69,38 @@ fn registered_call_name<'a>(
         .unwrap_or(&call.name)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReviewerRoute {
+    Bypass,
+    Deny,
+    AutoReview,
+    UserReview,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NeverPolicyDisposition {
+    Bypass,
+    Deny,
+}
+
+fn reviewer_route(
+    selection: &types::SessionPermissions,
+    force_user: bool,
+    never: NeverPolicyDisposition,
+) -> ReviewerRoute {
+    if selection.approval_policy == types::ApprovalPolicy::Never {
+        return match never {
+            NeverPolicyDisposition::Bypass => ReviewerRoute::Bypass,
+            NeverPolicyDisposition::Deny => ReviewerRoute::Deny,
+        };
+    }
+    if force_user || selection.approvals_reviewer == types::ApprovalsReviewer::User {
+        ReviewerRoute::UserReview
+    } else {
+        ReviewerRoute::AutoReview
+    }
+}
+
 fn call_uses_managed_network(name: &str, arguments: &serde_json::Value) -> bool {
     match name {
         "code_exec" => true,
@@ -315,10 +347,11 @@ fn approval_route(
     } else if tools::matches_command_type_allowlist(command, risk, type_allowlist) {
         ApprovalRoute::TypeAllowlist
     } else {
-        match (selection.approval_policy, selection.approvals_reviewer) {
-            (types::ApprovalPolicy::Never, _) => ApprovalRoute::Off,
-            (_, types::ApprovalsReviewer::AutoReview) => ApprovalRoute::Smart,
-            (_, types::ApprovalsReviewer::User) => ApprovalRoute::Manual,
+        match reviewer_route(selection, false, NeverPolicyDisposition::Bypass) {
+            ReviewerRoute::Bypass => ApprovalRoute::Off,
+            ReviewerRoute::AutoReview => ApprovalRoute::Smart,
+            ReviewerRoute::UserReview => ApprovalRoute::Manual,
+            ReviewerRoute::Deny => ApprovalRoute::Deny,
         }
     }
 }
@@ -531,7 +564,8 @@ async fn review_once_permission(
         None => {}
     }
 
-    if selection.approval_policy == types::ApprovalPolicy::Never {
+    let reviewer_route = reviewer_route(selection, false, NeverPolicyDisposition::Deny);
+    if reviewer_route == ReviewerRoute::Deny {
         fire_post_permission_response(
             session,
             &request.session_id,
@@ -551,7 +585,7 @@ async fn review_once_permission(
         ));
     }
 
-    if selection.approvals_reviewer == types::ApprovalsReviewer::AutoReview {
+    if reviewer_route == ReviewerRoute::AutoReview {
         let targets = {
             let agent = session.as_ref();
             agent
@@ -845,8 +879,20 @@ async fn preflight_mcp_tool_approval(
         )
     };
     let mut selection = settings.selection.clone();
-    if route == types::McpToolApprovalRoute::UserReview {
-        selection.approvals_reviewer = types::ApprovalsReviewer::User;
+    let force_user = route == types::McpToolApprovalRoute::UserReview;
+    match reviewer_route(&selection, force_user, NeverPolicyDisposition::Bypass) {
+        ReviewerRoute::Bypass => return Some(PermissionPreflight::NotRequired),
+        ReviewerRoute::UserReview => {
+            selection.approvals_reviewer = types::ApprovalsReviewer::User;
+        }
+        ReviewerRoute::AutoReview => {
+            selection.approvals_reviewer = types::ApprovalsReviewer::AutoReview;
+        }
+        ReviewerRoute::Deny => {
+            return Some(PermissionPreflight::Denied(
+                "Permission denied: approval policy is never".to_string(),
+            ));
+        }
     }
 
     let target = format!("{}/{}", approval.server_id, approval.native_name);
@@ -1341,7 +1387,8 @@ async fn preflight_browser_action(
         )
     };
     let selection = settings.selection.clone();
-    if selection.approval_policy == types::ApprovalPolicy::Never {
+    let browser_reviewer = reviewer_route(&selection, false, NeverPolicyDisposition::Bypass);
+    if browser_reviewer == ReviewerRoute::Bypass {
         return Some(PermissionPreflight::NotRequired);
     }
     let target = call
@@ -1440,7 +1487,7 @@ async fn preflight_browser_action(
         return Some(PermissionPreflight::Granted(Box::new(audit)));
     }
     if class == tools::browser::BrowserApprovalClass::StateChanging
-        && selection.approvals_reviewer == types::ApprovalsReviewer::AutoReview
+        && browser_reviewer == ReviewerRoute::AutoReview
     {
         let targets = session
             .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
@@ -1723,7 +1770,7 @@ async fn execute_tools_serial_inner(
                                 approval_session_id,
                                 approval_turn_id,
                                 permissions.selection.clone(),
-                                permissions.legacy_command_allowlist.clone(),
+                                permissions.command_allowlist.clone(),
                                 permissions.command_type_allowlist.clone(),
                                 base,
                                 active_profile_id,
@@ -2723,6 +2770,34 @@ mod tests {
                 &type_allowlist,
             ),
             ApprovalRoute::TypeAllowlist
+        );
+    }
+
+    #[test]
+    fn reviewer_matrix_distinguishes_confirmation_from_escalation() {
+        let user = types::SessionPermissions::ask_for_approval();
+        let automatic = types::SessionPermissions::approve_for_me();
+        let full_access = types::SessionPermissions::full_access();
+
+        assert_eq!(
+            reviewer_route(&user, false, NeverPolicyDisposition::Bypass),
+            ReviewerRoute::UserReview
+        );
+        assert_eq!(
+            reviewer_route(&automatic, false, NeverPolicyDisposition::Bypass),
+            ReviewerRoute::AutoReview
+        );
+        assert_eq!(
+            reviewer_route(&automatic, true, NeverPolicyDisposition::Bypass),
+            ReviewerRoute::UserReview
+        );
+        assert_eq!(
+            reviewer_route(&full_access, false, NeverPolicyDisposition::Bypass),
+            ReviewerRoute::Bypass
+        );
+        assert_eq!(
+            reviewer_route(&full_access, false, NeverPolicyDisposition::Deny),
+            ReviewerRoute::Deny
         );
     }
 

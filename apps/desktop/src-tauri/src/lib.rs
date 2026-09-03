@@ -363,7 +363,6 @@ pub fn run() {
             commands::memory::get_security_audit_retention,
             commands::memory::list_security_audit_page,
             commands::memory::list_security_audits,
-            commands::memory::set_approval_mode,
             commands::memory::get_permission_settings,
             commands::memory::set_permission_preset,
             commands::memory::add_command_allowlist,

@@ -122,11 +122,7 @@ impl Default for LearningConfig {
     }
 }
 
-fn default_approval_mode() -> String {
-    "smart".to_string()
-}
-
-/// 危险命令审批配置（`config.yaml` 的 `approvals:` 段）。
+/// 命令审批规则（`config.yaml` 的 `command_approvals:` 段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandTypeRule {
     /// 可执行程序族，例如 `curl`。不包含参数，匹配时忽略大小写。
@@ -135,43 +131,14 @@ pub struct CommandTypeRule {
     pub risk: String,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct ApprovalsConfig {
-    /// 审批模式：`smart`（默认）| `manual` | `off`。仅作用于 Ask 级；hardline 永远拦。
-    #[serde(default = "default_approval_mode")]
-    pub mode: String,
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+pub struct CommandApprovalConfig {
     /// 用户永久放行的命令白名单（精确或 glob，含 `* ? [`）。
     #[serde(default)]
     pub command_allowlist: Vec<String>,
     /// 用户永久放行的低风险命令类型；同时匹配程序族与风险分类。
     #[serde(default)]
     pub command_type_allowlist: Vec<CommandTypeRule>,
-}
-
-impl Default for ApprovalsConfig {
-    fn default() -> Self {
-        Self {
-            mode: default_approval_mode(),
-            command_allowlist: Vec::new(),
-            command_type_allowlist: Vec::new(),
-        }
-    }
-}
-
-/// 统一审批粒度配置（`config.yaml` 的 `approval:` 段）。
-///
-/// 优先级低于各域的独立配置字段（向后兼容）。
-#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
-pub struct UnifiedApprovalConfig {
-    /// Terminal 审批模式：`smart` | `manual` | `off`
-    #[serde(default)]
-    pub terminal: Option<String>,
-    /// 全局审批策略：`on-request` | `untrusted` | `never`
-    #[serde(default)]
-    pub policy: Option<ApprovalPolicy>,
-    /// 审查者：`user` | `auto_review`
-    #[serde(default)]
-    pub reviewer: Option<ApprovalsReviewer>,
 }
 
 /// 命令网络代理开关。它与 profile 的 `network.enabled` 是两个独立维度。
@@ -186,16 +153,11 @@ struct NetworkProxyConfig {
 pub enum PermissionConfigSource {
     Default,
     ExplicitProfiles,
-    LegacyApprovals,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PermissionDiagnosticCode {
-    LegacySmartMigrated,
-    LegacyOffRestricted,
-    UnknownLegacyMode,
-    MixedLegacySandboxIgnored,
     InvalidProfileConfig,
     DomainRulesWithoutProxy,
 }
@@ -212,7 +174,7 @@ pub struct LoadedPermissionSettings {
     pub permissions: PermissionsConfig,
     pub selection: SessionPermissions,
     pub network_proxy_enabled: bool,
-    pub legacy_command_allowlist: Vec<String>,
+    pub command_allowlist: Vec<String>,
     pub command_type_allowlist: Vec<CommandTypeRule>,
     pub source: PermissionConfigSource,
     pub diagnostics: Vec<PermissionConfigDiagnostic>,
@@ -224,7 +186,7 @@ impl Default for LoadedPermissionSettings {
             permissions: PermissionsConfig::default(),
             selection: SessionPermissions::ask_for_approval(),
             network_proxy_enabled: false,
-            legacy_command_allowlist: Vec::new(),
+            command_allowlist: Vec::new(),
             command_type_allowlist: Vec::new(),
             source: PermissionConfigSource::Default,
             diagnostics: Vec::new(),
@@ -793,7 +755,7 @@ struct FileConfig {
     #[serde(default)]
     evolution: Option<EvolutionConfig>,
     #[serde(default)]
-    approvals: Option<ApprovalsConfig>,
+    command_approvals: Option<CommandApprovalConfig>,
     #[serde(default)]
     permissions: Option<PermissionsConfig>,
     #[serde(default)]
@@ -802,15 +764,8 @@ struct FileConfig {
     approvals_reviewer: Option<ApprovalsReviewer>,
     #[serde(default)]
     network_proxy: Option<NetworkProxyConfig>,
-    // 仅用于检测新 permission profiles 与旧 sandbox 配置混用。
-    #[serde(default)]
-    sandbox_mode: Option<String>,
-    #[serde(default)]
-    sandbox_workspace_write: Option<serde_yaml::Value>,
     #[serde(default)]
     compression: Option<CompressionConfig>,
-    #[serde(default)]
-    approval: Option<UnifiedApprovalConfig>,
 }
 
 fn read_file_config(base: &Path) -> FileConfig {
@@ -865,34 +820,23 @@ pub fn load_evolution_config(base: &Path) -> EvolutionConfig {
     cfg
 }
 
-/// 从 `{base}/config.yaml` 加载危险命令审批配置。
-pub fn load_approvals_config(base: &Path) -> ApprovalsConfig {
-    read_file_config(base).approvals.unwrap_or_default()
+/// 从 `{base}/config.yaml` 加载命令审批白名单。
+pub fn load_command_approval_config(base: &Path) -> CommandApprovalConfig {
+    read_file_config(base).command_approvals.unwrap_or_default()
 }
 
-pub fn load_unified_approval_config(base: &Path) -> UnifiedApprovalConfig {
-    read_file_config(base).approval.unwrap_or_default()
-}
-
-/// 加载新权限配置；旧 `approvals.mode` 只做安全迁移，不会把 `off` 扩大成完全访问。
+/// 加载权限 profile、审批策略与审查者。
 pub fn load_permission_settings(base: &Path) -> LoadedPermissionSettings {
     let file = read_file_config(base);
     if let Some(permissions) = file.permissions.clone() {
         return load_explicit_permissions(file, permissions);
     }
-
-    if let Some(legacy) = file.approvals {
-        return migrate_legacy_approvals(legacy);
-    }
-
+    let rules = file.command_approvals.unwrap_or_default();
     let mut loaded = LoadedPermissionSettings::default();
-    if file.sandbox_mode.is_some() || file.sandbox_workspace_write.is_some() {
-        loaded.diagnostics.push(PermissionConfigDiagnostic {
-            code: PermissionDiagnosticCode::MixedLegacySandboxIgnored,
-            message: "legacy sandbox settings are not activated until they are migrated to a permission profile"
-                .to_string(),
-        });
-    }
+    loaded.selection.approval_policy = file.approval_policy.unwrap_or_default();
+    loaded.selection.approvals_reviewer = file.approvals_reviewer.unwrap_or_default();
+    loaded.command_allowlist = rules.command_allowlist;
+    loaded.command_type_allowlist = rules.command_type_allowlist;
     loaded
 }
 
@@ -913,7 +857,6 @@ pub fn set_permission_preset(
             serde_yaml::Value::String("approval_policy".into()),
             serde_yaml::Value::String(
                 match selection.approval_policy {
-                    ApprovalPolicy::Untrusted => "untrusted",
                     ApprovalPolicy::OnRequest => "on-request",
                     ApprovalPolicy::Never => "never",
                 }
@@ -931,16 +874,6 @@ pub fn set_permission_preset(
             ),
         );
     }
-    // 迁移期兼容旧执行链；permission profile 仍是实际沙箱边界的唯一来源。
-    let legacy_mode = match preset {
-        PermissionPreset::ApproveForMe => "smart",
-        PermissionPreset::FullAccess => "off",
-        PermissionPreset::AskForApproval | PermissionPreset::ReadOnly => "manual",
-    };
-    ensure_mapping_path(&mut root, &["approvals"])?.insert(
-        serde_yaml::Value::String("mode".into()),
-        serde_yaml::Value::String(legacy_mode.into()),
-    );
     save_yaml_root(base, &root)?;
     Ok(load_permission_settings(base))
 }
@@ -950,14 +883,6 @@ fn load_explicit_permissions(
     permissions: PermissionsConfig,
 ) -> LoadedPermissionSettings {
     let mut diagnostics = Vec::new();
-    if file.sandbox_mode.is_some() || file.sandbox_workspace_write.is_some() {
-        diagnostics.push(PermissionConfigDiagnostic {
-            code: PermissionDiagnosticCode::MixedLegacySandboxIgnored,
-            message: "permission profiles are active; legacy sandbox_mode settings were ignored"
-                .to_string(),
-        });
-    }
-
     if let Err(error) = permissions.validate() {
         diagnostics.push(PermissionConfigDiagnostic {
             code: PermissionDiagnosticCode::InvalidProfileConfig,
@@ -986,86 +911,23 @@ fn load_explicit_permissions(
         };
     }
 
-    // 统一审批配置作为默认层；各域独立字段优先级更高
-    let unified = file.approval.unwrap_or_default();
-    let (terminal_policy, terminal_reviewer) = match unified
-        .terminal
-        .as_deref()
-        .map(|s| s.trim().to_ascii_lowercase())
-        .as_deref()
-    {
-        Some("off" | "yolo") => (Some(ApprovalPolicy::Never), None),
-        Some("smart") => (None, Some(ApprovalsReviewer::AutoReview)),
-        Some("manual") => (None, Some(ApprovalsReviewer::User)),
-        _ => (None, None),
-    };
     let selection = SessionPermissions {
         profile_id: permissions.default_profile.clone(),
-        approval_policy: file
-            .approval_policy
-            .or(unified.policy)
-            .or(terminal_policy)
-            .unwrap_or_default(),
-        approvals_reviewer: file
-            .approvals_reviewer
-            .or(unified.reviewer)
-            .or(terminal_reviewer)
-            .unwrap_or_default(),
+        approval_policy: file.approval_policy.unwrap_or_default(),
+        approvals_reviewer: file.approvals_reviewer.unwrap_or_default(),
     };
-    let (legacy_command_allowlist, command_type_allowlist) = file
-        .approvals
-        .map(|legacy| (legacy.command_allowlist, legacy.command_type_allowlist))
+    let (command_allowlist, command_type_allowlist) = file
+        .command_approvals
+        .map(|rules| (rules.command_allowlist, rules.command_type_allowlist))
         .unwrap_or_default();
     LoadedPermissionSettings {
         permissions,
         selection,
         network_proxy_enabled,
-        legacy_command_allowlist,
+        command_allowlist,
         command_type_allowlist,
         source: PermissionConfigSource::ExplicitProfiles,
         diagnostics,
-    }
-}
-
-fn migrate_legacy_approvals(legacy: ApprovalsConfig) -> LoadedPermissionSettings {
-    let normalized = legacy.mode.trim().to_ascii_lowercase();
-    let mut diagnostics = Vec::new();
-    let selection = match normalized.as_str() {
-        "manual" => SessionPermissions::ask_for_approval(),
-        "smart" => {
-            diagnostics.push(PermissionConfigDiagnostic {
-                code: PermissionDiagnosticCode::LegacySmartMigrated,
-                message: "legacy smart approval migrated to workspace profile with auto-review"
-                    .to_string(),
-            });
-            SessionPermissions::approve_for_me()
-        }
-        "off" | "yolo" => {
-            diagnostics.push(PermissionConfigDiagnostic {
-                code: PermissionDiagnosticCode::LegacyOffRestricted,
-                message: "legacy approval off was restricted to ask-for-approval; full access requires explicit selection"
-                    .to_string(),
-            });
-            SessionPermissions::ask_for_approval()
-        }
-        _ => {
-            diagnostics.push(PermissionConfigDiagnostic {
-                code: PermissionDiagnosticCode::UnknownLegacyMode,
-                message: format!(
-                    "unknown legacy approval mode {:?}; using ask-for-approval",
-                    legacy.mode
-                ),
-            });
-            SessionPermissions::ask_for_approval()
-        }
-    };
-    LoadedPermissionSettings {
-        selection,
-        legacy_command_allowlist: legacy.command_allowlist,
-        command_type_allowlist: legacy.command_type_allowlist,
-        source: PermissionConfigSource::LegacyApprovals,
-        diagnostics,
-        ..LoadedPermissionSettings::default()
     }
 }
 
@@ -1269,20 +1131,14 @@ pub fn set_write_approval(base: &Path, enabled: bool) -> anyhow::Result<MemoryCo
     Ok(load_memory_config(base))
 }
 
-/// 设置 `approvals.mode`（smart|manual|off）并返回最新审批配置。
-pub fn set_approval_mode(base: &Path, mode: &str) -> anyhow::Result<ApprovalsConfig> {
-    set_nested_string(base, &["approvals"], "mode", mode)?;
-    Ok(load_approvals_config(base))
-}
-
-/// 向 `approvals.command_allowlist` 追加一条（去重，保留其余键），返回最新审批配置。
-pub fn add_command_to_allowlist(base: &Path, entry: &str) -> anyhow::Result<ApprovalsConfig> {
+/// 向 `command_approvals.command_allowlist` 追加一条（去重，保留其余键）。
+pub fn add_command_to_allowlist(base: &Path, entry: &str) -> anyhow::Result<CommandApprovalConfig> {
     let entry = entry.trim();
     if entry.is_empty() {
-        return Ok(load_approvals_config(base));
+        return Ok(load_command_approval_config(base));
     }
     let mut root = load_yaml_root(base)?;
-    let map = ensure_mapping_path(&mut root, &["approvals"])?;
+    let map = ensure_mapping_path(&mut root, &["command_approvals"])?;
     let key = serde_yaml::Value::String("command_allowlist".to_string());
     let list = match map.get_mut(&key).and_then(|v| v.as_sequence_mut()) {
         Some(seq) => seq,
@@ -1298,14 +1154,17 @@ pub fn add_command_to_allowlist(base: &Path, entry: &str) -> anyhow::Result<Appr
         list.push(serde_yaml::Value::String(entry.to_string()));
         save_yaml_root(base, &root)?;
     }
-    Ok(load_approvals_config(base))
+    Ok(load_command_approval_config(base))
 }
 
-/// 从 `approvals.command_allowlist` 移除一条（按精确文本），返回最新审批配置。
-pub fn remove_command_from_allowlist(base: &Path, entry: &str) -> anyhow::Result<ApprovalsConfig> {
+/// 从 `command_approvals.command_allowlist` 移除一条（按精确文本）。
+pub fn remove_command_from_allowlist(
+    base: &Path,
+    entry: &str,
+) -> anyhow::Result<CommandApprovalConfig> {
     let entry = entry.trim();
     let mut root = load_yaml_root(base)?;
-    let map = ensure_mapping_path(&mut root, &["approvals"])?;
+    let map = ensure_mapping_path(&mut root, &["command_approvals"])?;
     let key = serde_yaml::Value::String("command_allowlist".to_string());
     if let Some(list) = map.get_mut(&key).and_then(|v| v.as_sequence_mut()) {
         let before = list.len();
@@ -1314,25 +1173,25 @@ pub fn remove_command_from_allowlist(base: &Path, entry: &str) -> anyhow::Result
             save_yaml_root(base, &root)?;
         }
     }
-    Ok(load_approvals_config(base))
+    Ok(load_command_approval_config(base))
 }
 
 /// 向 `approvals.command_type_allowlist` 追加一条低风险命令类型规则。
 pub fn add_command_type_to_allowlist(
     base: &Path,
     rule: &CommandTypeRule,
-) -> anyhow::Result<ApprovalsConfig> {
+) -> anyhow::Result<CommandApprovalConfig> {
     let family = rule.command_family.trim().to_ascii_lowercase();
     let risk = rule.risk.trim();
     if family.is_empty() || risk.is_empty() {
-        return Ok(load_approvals_config(base));
+        return Ok(load_command_approval_config(base));
     }
     let normalized = CommandTypeRule {
         command_family: family,
         risk: risk.to_string(),
     };
     let mut root = load_yaml_root(base)?;
-    let map = ensure_mapping_path(&mut root, &["approvals"])?;
+    let map = ensure_mapping_path(&mut root, &["command_approvals"])?;
     let key = serde_yaml::Value::String("command_type_allowlist".to_string());
     let list = match map.get_mut(&key).and_then(|value| value.as_sequence_mut()) {
         Some(sequence) => sequence,
@@ -1346,18 +1205,18 @@ pub fn add_command_type_to_allowlist(
         list.push(value);
         save_yaml_root(base, &root)?;
     }
-    Ok(load_approvals_config(base))
+    Ok(load_command_approval_config(base))
 }
 
 /// 从 `approvals.command_type_allowlist` 移除一条规则。
 pub fn remove_command_type_from_allowlist(
     base: &Path,
     rule: &CommandTypeRule,
-) -> anyhow::Result<ApprovalsConfig> {
+) -> anyhow::Result<CommandApprovalConfig> {
     let family = rule.command_family.trim();
     let risk = rule.risk.trim();
     let mut root = load_yaml_root(base)?;
-    let map = ensure_mapping_path(&mut root, &["approvals"])?;
+    let map = ensure_mapping_path(&mut root, &["command_approvals"])?;
     let key = serde_yaml::Value::String("command_type_allowlist".to_string());
     if let Some(list) = map.get_mut(&key).and_then(|value| value.as_sequence_mut()) {
         let before = list.len();
@@ -1372,7 +1231,7 @@ pub fn remove_command_type_from_allowlist(
             save_yaml_root(base, &root)?;
         }
     }
-    Ok(load_approvals_config(base))
+    Ok(load_command_approval_config(base))
 }
 
 /// Atomically write a single exact-host domain rule into a custom permission profile.
@@ -2065,10 +1924,9 @@ auxiliary:
     }
 
     #[test]
-    fn approvals_defaults_to_smart_empty() {
+    fn command_approval_rules_default_to_empty() {
         let dir = tempfile::tempdir().unwrap();
-        let cfg = load_approvals_config(dir.path());
-        assert_eq!(cfg.mode, "smart");
+        let cfg = load_command_approval_config(dir.path());
         assert!(cfg.command_allowlist.is_empty());
         assert!(cfg.command_type_allowlist.is_empty());
     }
@@ -2101,6 +1959,25 @@ auxiliary:
     }
 
     #[test]
+    fn canonical_approval_fields_apply_without_custom_profiles() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            "approval_policy: on-request\napprovals_reviewer: auto_review\n",
+        )
+        .unwrap();
+
+        let loaded = load_permission_settings(dir.path());
+
+        assert_eq!(loaded.selection.profile_id, types::WORKSPACE_PROFILE);
+        assert_eq!(loaded.selection.approval_policy, ApprovalPolicy::OnRequest);
+        assert_eq!(
+            loaded.selection.approvals_reviewer,
+            ApprovalsReviewer::AutoReview
+        );
+    }
+
+    #[test]
     fn permission_preset_roundtrips_and_preserves_unrelated_config() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
@@ -2111,33 +1988,39 @@ auxiliary:
         let loaded = set_permission_preset(dir.path(), PermissionPreset::ApproveForMe).unwrap();
         assert_eq!(loaded.selection, SessionPermissions::approve_for_me());
         assert_eq!(load_memory_config(dir.path()).memory_char_limit, 41);
-        assert_eq!(load_approvals_config(dir.path()).mode, "smart");
 
         let loaded = set_permission_preset(dir.path(), PermissionPreset::FullAccess).unwrap();
         assert_eq!(loaded.selection, SessionPermissions::full_access());
-        assert_eq!(load_approvals_config(dir.path()).mode, "off");
     }
 
     #[test]
-    fn legacy_approval_modes_migrate_without_expanding_access() {
+    fn permission_preset_changes_are_visible_on_the_next_load() {
+        let dir = tempfile::tempdir().unwrap();
+        set_permission_preset(dir.path(), PermissionPreset::ApproveForMe).unwrap();
+        assert_eq!(
+            load_permission_settings(dir.path()).selection,
+            SessionPermissions::approve_for_me()
+        );
+
+        set_permission_preset(dir.path(), PermissionPreset::AskForApproval).unwrap();
+        assert_eq!(
+            load_permission_settings(dir.path()).selection,
+            SessionPermissions::ask_for_approval()
+        );
+    }
+
+    #[test]
+    fn removed_approval_mode_is_not_migrated() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("config.yaml"),
             "approvals:\n  mode: smart\n  command_allowlist:\n    - git status\n",
         )
         .unwrap();
-        let smart = load_permission_settings(dir.path());
-        assert_eq!(smart.source, PermissionConfigSource::LegacyApprovals);
-        assert_eq!(smart.selection, SessionPermissions::approve_for_me());
-        assert_eq!(smart.legacy_command_allowlist, vec!["git status"]);
-
-        fs::write(dir.path().join("config.yaml"), "approvals:\n  mode: off\n").unwrap();
-        let off = load_permission_settings(dir.path());
-        assert_eq!(off.selection, SessionPermissions::ask_for_approval());
-        assert!(off
-            .diagnostics
-            .iter()
-            .any(|item| { item.code == PermissionDiagnosticCode::LegacyOffRestricted }));
+        let loaded = load_permission_settings(dir.path());
+        assert_eq!(loaded.source, PermissionConfigSource::Default);
+        assert_eq!(loaded.selection, SessionPermissions::ask_for_approval());
+        assert!(loaded.command_allowlist.is_empty());
     }
 
     #[test]
@@ -2154,7 +2037,7 @@ permissions:
       filesystem:
         workspace_roots:
           "**/*.env": deny
-approval_policy: untrusted
+approval_policy: on-request
 approvals_reviewer: auto_review
 network_proxy:
   enabled: false
@@ -2164,7 +2047,7 @@ network_proxy:
         let loaded = load_permission_settings(dir.path());
         assert_eq!(loaded.source, PermissionConfigSource::ExplicitProfiles);
         assert_eq!(loaded.selection.profile_id, "project-edit");
-        assert_eq!(loaded.selection.approval_policy, ApprovalPolicy::Untrusted);
+        assert_eq!(loaded.selection.approval_policy, ApprovalPolicy::OnRequest);
         assert_eq!(
             loaded.selection.approvals_reviewer,
             ApprovalsReviewer::AutoReview
@@ -2222,7 +2105,7 @@ network_proxy:
     }
 
     #[test]
-    fn profiles_win_explicitly_over_mixed_legacy_sandbox_keys() {
+    fn removed_sandbox_keys_do_not_change_explicit_profiles() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("config.yaml"),
@@ -2235,23 +2118,17 @@ sandbox_mode: danger-full-access
         .unwrap();
         let loaded = load_permission_settings(dir.path());
         assert_eq!(loaded.selection, SessionPermissions::read_only());
-        assert!(loaded
-            .diagnostics
-            .iter()
-            .any(|item| { item.code == PermissionDiagnosticCode::MixedLegacySandboxIgnored }));
+        assert!(loaded.diagnostics.is_empty());
     }
 
     #[test]
-    fn set_mode_and_append_allowlist_dedups_and_preserves() {
+    fn append_allowlist_dedups_and_preserves() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("config.yaml"),
             "memory:\n  memory_char_limit: 42\n",
         )
         .unwrap();
-        let cfg = set_approval_mode(dir.path(), "manual").unwrap();
-        assert_eq!(cfg.mode, "manual");
-
         add_command_to_allowlist(dir.path(), "rm -rf /tmp/x").unwrap();
         let cfg = add_command_to_allowlist(dir.path(), "rm -rf /tmp/x").unwrap(); // 去重
         assert_eq!(cfg.command_allowlist, vec!["rm -rf /tmp/x".to_string()]);

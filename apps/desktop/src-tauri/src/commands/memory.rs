@@ -233,7 +233,7 @@ pub async fn set_background_review_enabled(enabled: bool) -> Result<MemorySettin
     get_memory_settings().await
 }
 
-/// 危险命令审批设置（`approvals:` 段）。
+/// 危险命令审批设置（`command_approvals:` 段）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalSettingsDto {
@@ -259,7 +259,7 @@ pub struct BrowserApprovalRuleDto {
 
 fn approval_settings_dto() -> ApprovalSettingsDto {
     let root = home::default_memory_dir();
-    let approvals = memory::load_approvals_config(&root);
+    let approvals = memory::load_command_approval_config(&root);
     let permissions = memory::load_permission_settings(&root);
     let preset = types::PermissionPreset::from_selection(&permissions.selection)
         .map(|value| match value {
@@ -678,18 +678,6 @@ pub async fn clear_security_audits() -> Result<SecurityAuditClearResultDto, Stri
 /// 读取危险命令审批设置。
 #[tauri::command]
 pub async fn get_approval_settings() -> Result<ApprovalSettingsDto, String> {
-    Ok(approval_settings_dto())
-}
-
-/// 设置审批模式（`smart` | `manual` | `off`）。
-#[tauri::command]
-pub async fn set_approval_mode(mode: String) -> Result<ApprovalSettingsDto, String> {
-    let normalized = match mode.trim().to_ascii_lowercase().as_str() {
-        m @ ("smart" | "manual" | "off") => m.to_string(),
-        other => return Err(format!("无效的审批模式: {other}（应为 smart|manual|off）")),
-    };
-    let root = home::default_memory_dir();
-    memory::set_approval_mode(&root, &normalized).map_err(|e| e.to_string())?;
     Ok(approval_settings_dto())
 }
 
