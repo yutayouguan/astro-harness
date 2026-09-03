@@ -292,6 +292,8 @@ message ThreadSnapshot {
   reserved 7;
   optional string model = 8;
   optional string reasoning_effort = 9;
+  optional string provider_id = 10;
+  optional string backend_id = 11;
 }
 
 message ThreadTurn {

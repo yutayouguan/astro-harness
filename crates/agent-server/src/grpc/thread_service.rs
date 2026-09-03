@@ -84,6 +84,8 @@ fn snapshot_to_proto(snapshot: ThreadSnapshot) -> proto::ThreadSnapshot {
     proto::ThreadSnapshot {
         thread_id: snapshot.thread_id,
         status: snapshot.status,
+        provider_id: snapshot.provider_id,
+        backend_id: snapshot.backend_id,
         model: snapshot.model,
         reasoning_effort: snapshot.reasoning_effort,
         turns: snapshot.turns.into_iter().map(turn_to_proto).collect(),
@@ -159,10 +161,15 @@ pub(crate) async fn resume(
         .await
         .map_err(|_| Status::unavailable("thread listener stopped"))?;
     let session = managed.runtime.session();
-    snapshot.model = session
-        .model_targets()
-        .first()
-        .map(|target| target.model.clone());
+    if let Some(target) = session.model_targets().first() {
+        if snapshot.provider_id.is_none() && !target.provider_id.trim().is_empty() {
+            snapshot.provider_id = Some(target.provider_id.clone());
+        }
+        snapshot
+            .backend_id
+            .get_or_insert_with(|| target.backend_id.clone());
+        snapshot.model.get_or_insert_with(|| target.model.clone());
+    }
     snapshot.reasoning_effort = snapshot.model.as_ref().and_then(|_| {
         let effort = session.thread_provider_options().reasoning_effort;
         (!effort.trim().is_empty()).then_some(effort)
@@ -659,6 +666,8 @@ mod tests {
         let mapped = snapshot_to_proto(ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "idle".into(),
+            provider_id: Some("provider-profile".into()),
+            backend_id: Some("openai".into()),
             model: Some("gpt-5.6".into()),
             reasoning_effort: Some("high".into()),
             turns: vec![],
@@ -668,6 +677,8 @@ mod tests {
         assert_eq!(mapped.pending_background_turn_ids, vec!["turn-1", "turn-2"]);
         assert_eq!(mapped.model.as_deref(), Some("gpt-5.6"));
         assert_eq!(mapped.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(mapped.provider_id.as_deref(), Some("provider-profile"));
+        assert_eq!(mapped.backend_id.as_deref(), Some("openai"));
     }
 
     fn valid_chat_request() -> proto::ChatRequest {
@@ -734,6 +745,8 @@ mod tests {
             .expect("resume metadata snapshot");
         assert_eq!(snapshot.model.as_deref(), Some("deepseek-v4-flash"));
         assert_eq!(snapshot.reasoning_effort.as_deref(), Some("max"));
+        assert_eq!(snapshot.provider_id, None);
+        assert_eq!(snapshot.backend_id.as_deref(), Some("deepseek"));
         service.connections.remove_generation(&generation).await;
 
         managed

@@ -45,7 +45,7 @@ Protobuf / tonic gRPC 服务契约 -- Astro Agent 桌面壳与 backend 之间的
 | `AuxiliaryModelTarget` | 辅助任务模型目标（title_generation / compaction 等五类） |
 | `ChatControlAction` | 流控枚举：PAUSE / RESUME / CANCEL / NEW_CHAT / REFRESH_MEMORY / RELEASE_SESSION |
 | `ThreadEvent` | 事件推送载体，`oneof payload` 含 15 种事件变体 |
-| `ThreadSnapshot` | Thread 快照：状态、当前 `model` / `reasoning_effort`、历史 turn 列表、活跃 turn、后台 turn ID |
+| `ThreadSnapshot` | Thread 快照：状态、当前 `provider_id` / `backend_id` / `model` / `reasoning_effort`、历史 turn 列表、活跃 turn、后台 turn ID |
 | `ThreadTurn` / `ThreadItem` | Turn 和 Item 的线协议表示 |
 | `ImageRequest` / `ImageEvent` | 图片生成请求与流式响应 |
 

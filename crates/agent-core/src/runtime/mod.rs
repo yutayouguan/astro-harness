@@ -1035,6 +1035,7 @@ impl Session {
 
         let primary = state.model_ctx.primary_model_target();
         Ok(agent_protocol::ThreadSettingsSnapshot {
+            provider_id: (!primary.provider_id.trim().is_empty()).then_some(primary.provider_id),
             provider: primary.backend_id,
             model: primary.model,
             interaction_mode: state.interaction_mode,

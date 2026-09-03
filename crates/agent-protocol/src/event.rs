@@ -75,6 +75,9 @@ pub struct UserInputCommittedEvent {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ThreadSettingsSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+    /// Provider runtime/backend identifier.
     pub provider: String,
     pub model: String,
     pub interaction_mode: types::InteractionMode,

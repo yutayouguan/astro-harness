@@ -2688,6 +2688,8 @@ async fn recover_snapshot_extensions(
 struct ThreadSnapshotDto<'a> {
     thread_id: &'a str,
     status: &'a str,
+    provider_id: Option<&'a str>,
+    backend_id: Option<&'a str>,
     model: Option<&'a str>,
     reasoning_effort: Option<&'a str>,
     turns: Vec<ThreadTurnDto<'a>>,
@@ -2749,6 +2751,8 @@ fn snapshot_dto(snapshot: &proto::ThreadSnapshot) -> ThreadSnapshotDto<'_> {
     ThreadSnapshotDto {
         thread_id: &snapshot.thread_id,
         status: &snapshot.status,
+        provider_id: snapshot.provider_id.as_deref(),
+        backend_id: snapshot.backend_id.as_deref(),
         model: snapshot.model.as_deref(),
         reasoning_effort: snapshot.reasoning_effort.as_deref(),
         turns: snapshot.turns.iter().map(turn_dto).collect(),
@@ -3443,6 +3447,8 @@ mod tests {
         let mut snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "idle".into(),
+            provider_id: None,
+            backend_id: None,
             model: None,
             reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
@@ -3496,6 +3502,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "idle".into(),
+            provider_id: None,
+            backend_id: None,
             model: None,
             reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
@@ -3556,6 +3564,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            provider_id: None,
+            backend_id: None,
             model: None,
             reasoning_effort: None,
             turns: vec![],
@@ -3580,6 +3590,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            provider_id: None,
+            backend_id: None,
             model: None,
             reasoning_effort: None,
             turns: vec![],
@@ -3625,6 +3637,8 @@ mod tests {
         let snapshots = vec![proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            provider_id: None,
+            backend_id: None,
             model: None,
             reasoning_effort: None,
             turns: vec![],
@@ -3802,6 +3816,8 @@ mod tests {
         let mut snapshot = proto::ThreadSnapshot {
             thread_id: "session-offline".into(),
             status: "idle".into(),
+            provider_id: None,
+            backend_id: None,
             model: None,
             reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
@@ -5785,6 +5801,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "completed".into(),
+            provider_id: None,
+            backend_id: None,
             model: None,
             reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
@@ -5834,6 +5852,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            provider_id: None,
+            backend_id: None,
             model: None,
             reasoning_effort: None,
             turns: vec![],
@@ -6044,6 +6064,8 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "errored".into(),
+            provider_id: Some("provider-profile".into()),
+            backend_id: Some("openai".into()),
             model: Some("gpt-5.6".into()),
             reasoning_effort: Some("high".into()),
             turns: vec![proto::ThreadTurn {
@@ -6071,6 +6093,8 @@ mod tests {
         assert_eq!(value["turns"][0]["error"]["errorType"], "provider");
         assert_eq!(value["model"], "gpt-5.6");
         assert_eq!(value["reasoningEffort"], "high");
+        assert_eq!(value["providerId"], "provider-profile");
+        assert_eq!(value["backendId"], "openai");
     }
 
     #[test]
