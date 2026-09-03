@@ -3,12 +3,13 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XtermTerminal } from "@xterm/xterm";
 import {
   Bot,
+  createLucideIcon,
   ExternalLink,
+  PanelBottomClose,
   Plus,
   RefreshCw,
   Trash2,
   UserRound,
-  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -84,6 +85,19 @@ const SCROLLBAR_WIDTH = 4;
 const TERMINAL_START_TIMEOUT_MS = 15_000;
 const READ_RETRY_DELAYS = [500, 1_000, 2_000, 4_000];
 const OPEN_RETRY_DELAYS = [1_000, 2_000, 4_000];
+
+const Broom = createLucideIcon("Broom", [
+  ["path", { d: "M13.5 10.5 22 2", key: "broom-handle" }],
+  [
+    "path",
+    {
+      d: "M14.734 13.841a2 2 0 0 0-.314-2.42L12.58 9.58a2 2 0 0 0-2.421-.314l-7.657 4.461A1 1 0 0 0 2.3 15.3l6.403 6.403a1 1 0 0 0 1.571-.204z",
+      key: "broom-head",
+    },
+  ],
+  ["path", { d: "m5 18 2-2", key: "broom-bristle-short" }],
+  ["path", { d: "m7.699 10.7 5.602 5.601", key: "broom-bristle-long" }],
+]);
 
 function withTimeout<T>(
   promise: Promise<T>,
@@ -838,7 +852,7 @@ export default function TerminalTabsDock({
                     name: tab.title,
                   })}
                 >
-                  <X size={12} aria-hidden />
+                  <Trash2 size={12} aria-hidden />
                 </button>
               </div>
             );
@@ -905,7 +919,7 @@ export default function TerminalTabsDock({
             title={t("chat.terminal.clear")}
             aria-label={t("chat.terminal.clear")}
           >
-            <Trash2 size={14} aria-hidden />
+            <Broom size={14} aria-hidden />
           </button>
           <button
             type="button"
@@ -922,7 +936,7 @@ export default function TerminalTabsDock({
             title={t("chat.terminal.close")}
             aria-label={t("chat.terminal.close")}
           >
-            <X size={15} aria-hidden />
+            <PanelBottomClose size={15} aria-hidden />
           </button>
         </div>
       </header>
