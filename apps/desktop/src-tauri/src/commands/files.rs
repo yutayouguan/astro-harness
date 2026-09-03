@@ -673,35 +673,64 @@ pub async fn apply_turn_file_changes(
             conflicts.push(change.path.clone());
             continue;
         }
-        let desired = if revert { change.before_content.clone() } else { change.after_content.clone() };
+        let desired = if revert {
+            change.before_content.clone()
+        } else {
+            change.after_content.clone()
+        };
         resolved.push((change, source_path, target_path, desired));
     }
     if !conflicts.is_empty() {
-        return Ok(TurnFileApplyResult { status: "conflict".into(), applied_paths: Vec::new(), conflicted_paths: conflicts });
+        return Ok(TurnFileApplyResult {
+            status: "conflict".into(),
+            applied_paths: Vec::new(),
+            conflicted_paths: conflicts,
+        });
     }
-    if revert { resolved.reverse(); }
+    if revert {
+        resolved.reverse();
+    }
     let mut applied = Vec::new();
     for (change, source, target, desired) in resolved {
-        let is_move = change.source_path.as_deref().is_some_and(|p| p != change.path);
+        let is_move = change
+            .source_path
+            .as_deref()
+            .is_some_and(|p| p != change.path);
         if is_move {
             if revert {
-                if let Some(parent) = source.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
-                std::fs::write(&source, change.before_content.as_deref().unwrap_or("")).map_err(|e| e.to_string())?;
-                if target.exists() { std::fs::remove_file(&target).map_err(|e| e.to_string())?; }
+                if let Some(parent) = source.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                std::fs::write(&source, change.before_content.as_deref().unwrap_or(""))
+                    .map_err(|e| e.to_string())?;
+                if target.exists() {
+                    std::fs::remove_file(&target).map_err(|e| e.to_string())?;
+                }
             } else {
-                if let Some(parent) = target.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
-                std::fs::write(&target, change.after_content.as_deref().unwrap_or("")).map_err(|e| e.to_string())?;
-                if source.exists() { std::fs::remove_file(&source).map_err(|e| e.to_string())?; }
+                if let Some(parent) = target.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                std::fs::write(&target, change.after_content.as_deref().unwrap_or(""))
+                    .map_err(|e| e.to_string())?;
+                if source.exists() {
+                    std::fs::remove_file(&source).map_err(|e| e.to_string())?;
+                }
             }
         } else if let Some(content) = desired {
-            if let Some(parent) = source.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+            if let Some(parent) = source.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
             std::fs::write(&source, content).map_err(|e| e.to_string())?;
         } else if source.exists() {
             std::fs::remove_file(&source).map_err(|e| e.to_string())?;
         }
         applied.push(change.path);
     }
-    Ok(TurnFileApplyResult { status: "success".into(), applied_paths: applied, conflicted_paths: Vec::new() })
+    Ok(TurnFileApplyResult {
+        status: "success".into(),
+        applied_paths: applied,
+        conflicted_paths: Vec::new(),
+    })
 }
 
 /// Inspect the authoritative workspace state for a persisted turn change set.
@@ -722,10 +751,22 @@ pub async fn inspect_turn_file_changes(
         let reverted = turn_file_change_matches(&change, &source_path, &target_path, true);
         all_applied &= applied;
         all_reverted &= reverted;
-        if !applied && !reverted { conflicts.push(change.path); }
+        if !applied && !reverted {
+            conflicts.push(change.path);
+        }
     }
-    let status = if all_applied { "applied" } else if all_reverted { "reverted" } else { "conflict" };
-    Ok(TurnFileApplyResult { status: status.into(), applied_paths: Vec::new(), conflicted_paths: conflicts })
+    let status = if all_applied {
+        "applied"
+    } else if all_reverted {
+        "reverted"
+    } else {
+        "conflict"
+    };
+    Ok(TurnFileApplyResult {
+        status: status.into(),
+        applied_paths: Vec::new(),
+        conflicted_paths: conflicts,
+    })
 }
 
 /// 用系统默认应用打开项目根目录内的文件或目录。
