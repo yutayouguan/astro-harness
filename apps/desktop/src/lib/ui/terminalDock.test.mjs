@@ -100,9 +100,11 @@ test("terminal dock configures the xterm 6 custom scrollbar instead of the legac
 
 test("terminal content clips all four xterm corners to the inner radius", () => {
   const css = source("styles/features/chat/terminal-dock.css");
+  const outerDock = css.match(/\.terminal-dock\s*\{([\s\S]*?)\}/)?.[1] ?? "";
 
   assert.match(
     css,
     /\.terminal-dock-screen \.xterm\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border-radius:\s*12px;/,
   );
+  assert.doesNotMatch(outerDock, /border-radius/);
 });

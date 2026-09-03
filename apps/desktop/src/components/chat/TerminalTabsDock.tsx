@@ -8,8 +8,8 @@ import {
   PanelBottomClose,
   Plus,
   RefreshCw,
-  Trash2,
   UserRound,
+  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -852,7 +852,7 @@ export default function TerminalTabsDock({
                     name: tab.title,
                   })}
                 >
-                  <Trash2 size={12} aria-hidden />
+                  <X size={12} aria-hidden />
                 </button>
               </div>
             );

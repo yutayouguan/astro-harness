@@ -1575,8 +1575,8 @@ export const zh = {
   "chat.terminal.tab.aiManaged": "AI 默认",
   "chat.terminal.tab.number": "终端 {number}",
   "chat.terminal.tab.new": "新建终端（⌘/Ctrl+Shift+T）",
-  "chat.terminal.tab.close": "删除终端",
-  "chat.terminal.tab.closeNamed": "删除 {name}",
+  "chat.terminal.tab.close": "关闭终端",
+  "chat.terminal.tab.closeNamed": "关闭 {name}",
   "chat.terminal.tab.rename": "重命名终端",
   "chat.terminal.tab.starting": "正在启动终端…",
   "chat.terminal.tab.startTimeout":
@@ -4487,8 +4487,8 @@ export const en: Record<MessageKey, string> = {
   "chat.terminal.tab.aiManaged": "AI default",
   "chat.terminal.tab.number": "Terminal {number}",
   "chat.terminal.tab.new": "New terminal (⌘/Ctrl+Shift+T)",
-  "chat.terminal.tab.close": "Delete terminal",
-  "chat.terminal.tab.closeNamed": "Delete {name}",
+  "chat.terminal.tab.close": "Close terminal",
+  "chat.terminal.tab.closeNamed": "Close {name}",
   "chat.terminal.tab.rename": "Rename terminal",
   "chat.terminal.tab.starting": "Starting terminal…",
   "chat.terminal.tab.startTimeout":
