@@ -154,7 +154,6 @@ export default function BrowserDock({
 
   const liveWebview = useBrowserLiveWebviews({
     active: open,
-    occluded: actionsOpen,
     fitToWidth: fitBrowserToWidth,
     preview,
     viewportRef: nativeViewportRef,
@@ -224,6 +223,26 @@ export default function BrowserDock({
       window.removeEventListener("resize", syncBounds);
     };
   }, [usesOverlayLayout]);
+
+  useLayoutEffect(() => {
+    const dock = dockRef.current;
+    const pane = dock?.closest<HTMLElement>(".content-pane--chat");
+    if (!dock || !pane) return;
+    const syncHeaderWidth = () => {
+      const width = open ? Math.round(dock.getBoundingClientRect().width) : 0;
+      pane.style.setProperty("--browser-dock-visible-width", `${width}px`);
+    };
+    syncHeaderWidth();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(syncHeaderWidth);
+    observer?.observe(dock);
+    return () => {
+      observer?.disconnect();
+      pane.style.removeProperty("--browser-dock-visible-width");
+    };
+  }, [open]);
 
   const finishResize = useCallback((pointerId: number) => {
     if (dragRef.current?.pointerId !== pointerId) return;
@@ -406,17 +425,31 @@ export default function BrowserDock({
     };
   }, [fitBrowserToWidth, liveWebview.isLive, onControl, preview?.activeTabId]);
 
-  const run = async (action: string, args: Record<string, unknown> = {}) => {
+  const run = async (
+    action: string,
+    args: Record<string, unknown> = {},
+  ): Promise<string | null> => {
     const runId = ++controlRunRef.current;
     setError(null);
     try {
       await onControl(action, args);
       if (controlRunRef.current === runId) setError(null);
+      return null;
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
       if (controlRunRef.current === runId) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(message);
       }
+      return message;
     }
+  };
+
+  const captureScreenshot = async () => {
+    await run("snapshot", {
+      screenshot: true,
+      fallbackUrl: normalizeBrowserUrl(preview?.url || ""),
+      tabId: preview?.activeTabId,
+    });
   };
 
   const submitAddress = (event: FormEvent) => {
@@ -484,11 +517,25 @@ export default function BrowserDock({
       ? preview.screenshotPath
       : `${convertFileSrc(preview.screenshotPath)}?v=${preview.updatedAt}`
     : null;
+  const hasManagedTabs = Boolean(preview?.tabs.length);
+  const visibleTabs = hasManagedTabs
+    ? (preview?.tabs ?? [])
+    : preview?.url
+      ? [
+          {
+            id: preview.activeTabId || "current",
+            title: preview.title,
+            url: preview.url,
+            faviconUrl: null,
+            active: true,
+          },
+        ]
+      : [];
 
   return (
     <aside
       ref={dockRef}
-      className={`browser-dock${open ? " is-open" : ""}${resizing ? " is-resizing" : ""}${expanded ? " is-expanded" : ""}${restoring ? " is-restoring" : ""}`}
+      className={`browser-dock${open ? " is-open" : ""}${resizing ? " is-resizing" : ""}${expanded ? " is-expanded" : ""}${restoring ? " is-restoring" : ""}${actionsOpen ? " has-actions-menu" : ""}`}
       aria-label={t("chat.browserDock.title")}
       aria-hidden={!open}
       style={{ "--browser-dock-width": `${dockWidth}px` } as CSSProperties}
@@ -529,16 +576,21 @@ export default function BrowserDock({
           aria-label={t("chat.browserDock.tabs")}
         >
           <div className="browser-tabs-scroll">
-            {(preview?.tabs ?? []).map((tab) => (
+            {visibleTabs.map((tab) => (
               <div
                 key={tab.id}
                 role="tab"
-                tabIndex={0}
+                tabIndex={hasManagedTabs ? 0 : -1}
                 aria-selected={tab.active}
-                className={`browser-tab${tab.active ? " is-active" : ""}`}
+                aria-disabled={!hasManagedTabs}
+                className={`browser-tab${tab.active ? " is-active" : ""}${hasManagedTabs ? "" : " is-placeholder"}`}
                 title={tab.url}
-                onClick={() => void run("switch_tab", { tab_id: tab.id })}
+                onClick={() => {
+                  if (hasManagedTabs)
+                    void run("switch_tab", { tab_id: tab.id });
+                }}
                 onKeyDown={(event) => {
+                  if (!hasManagedTabs) return;
                   if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
                   void run("switch_tab", { tab_id: tab.id });
@@ -548,22 +600,24 @@ export default function BrowserDock({
                 <span>
                   {tab.title || tab.url || t("chat.browserDock.newTab")}
                 </span>
-                <button
-                  type="button"
-                  aria-label={`${t("chat.browserDock.closeTab")} ${tab.title || ""}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void run("close_tab", { tab_id: tab.id });
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void run("close_tab", { tab_id: tab.id });
-                  }}
-                >
-                  <X size={11} aria-hidden />
-                </button>
+                {hasManagedTabs ? (
+                  <button
+                    type="button"
+                    aria-label={`${t("chat.browserDock.closeTab")} ${tab.title || ""}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void run("close_tab", { tab_id: tab.id });
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void run("close_tab", { tab_id: tab.id });
+                    }}
+                  >
+                    <X size={11} aria-hidden />
+                  </button>
+                ) : null}
               </div>
             ))}
           </div>
@@ -630,7 +684,7 @@ export default function BrowserDock({
           type="button"
           aria-label={t("chat.browserDock.screenshot")}
           disabled={!preview}
-          onClick={() => void run("snapshot", { screenshot: true })}
+          onClick={() => void captureScreenshot()}
         >
           <Camera size={14} aria-hidden />
         </button>

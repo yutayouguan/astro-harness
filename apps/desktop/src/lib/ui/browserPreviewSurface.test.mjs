@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import vm from "node:vm";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = (relative) =>
@@ -43,7 +42,7 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(dock, /disabled=\{!address\.trim\(\)\}/);
   assert.match(dock, /open \? " is-open" : ""/);
   assert.match(dock, /active: open/);
-  assert.match(dock, /occluded: actionsOpen/);
+  assert.doesNotMatch(dock, /occluded: actionsOpen/);
   assert.match(dock, /browser-dock-resizer/);
   assert.match(dock, /browser-dock-expand/);
   assert.match(dock, /restoring \? " is-restoring" : ""/);
@@ -93,12 +92,17 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(dock, /role="menu"/);
   assert.match(dock, /MoreVertical/);
   assert.match(dock, /className="browser-dock-drag-region"/);
-  assert.doesNotMatch(dock, /has-actions-menu/);
+  assert.match(dock, /actionsOpen \? " has-actions-menu"/);
+  assert.match(css, /\.browser-dock\.has-actions-menu \.browser-viewport/);
+  assert.match(css, /margin-top:\s*112px/);
+  assert.match(dock, /normalizeBrowserUrl\(preview\?\.url \|\| ""\)/);
+  assert.match(dock, /fallbackUrl:/);
+  assert.match(dock, /tabId:\s*preview\?\.activeTabId/);
+  assert.match(dock, /visibleTabs/);
+  assert.match(dock, /--browser-dock-visible-width/);
 
   const liveWebviews = source("../../hooks/chat/useBrowserLiveWebviews.ts");
-  assert.match(liveWebviews, /occludedRef\.current = occluded/);
-  assert.match(liveWebviews, /!occludedRef\.current &&/);
-  assert.match(liveWebviews, /entry\.webview\.hide\(\)/);
+  assert.doesNotMatch(liveWebviews, /occludedRef/);
 });
 
 test("browser restore animates toward the right edge before rejoining layout", () => {
@@ -118,12 +122,15 @@ test("browser restore animates toward the right edge before rejoining layout", (
   assert.match(restoringRule, /max-width:\s*calc\(100% - 320px\)/);
 });
 
-test("browser dock uses a fitted native child WebView with a screenshot fallback", () => {
+test("browser dock uses a Rust-created native child WebView", () => {
   const hook = source("../../hooks/chat/useBrowserLiveWebviews.ts");
   const commands = source("../../../src-tauri/src/commands/browser.rs");
   const capabilities = source("../../../src-tauri/capabilities/default.json");
 
-  assert.match(hook, /new Webview\(getCurrentWindow\(\), label/);
+  assert.doesNotMatch(hook, /new Webview\(getCurrentWindow\(\), label/);
+  assert.match(hook, /action:\s*"create"/);
+  assert.match(hook, /Webview\.getByLabel\(label\)/);
+  assert.match(hook, /pendingPageEvents/);
   assert.match(hook, /setPosition\(new LogicalPosition/);
   assert.match(hook, /setSize\(new LogicalSize/);
   assert.match(hook, /setZoom\(zoomFactor\)/);
@@ -132,18 +139,17 @@ test("browser dock uses a fitted native child WebView with a screenshot fallback
   assert.match(hook, /browser-live-page-load/);
   assert.match(hook, /browser_live_webview_control/);
   assert.match(commands, /fn browser_live_webview_control/);
-  assert.match(commands, /LIVE_BROWSER_INTERACTION_SCRIPT/);
-  assert.match(
-    commands,
-    /webview\.eval\(LIVE_BROWSER_INTERACTION_SCRIPT\)/,
-  );
-  assert.match(commands, /window\.location\.assign/);
-  assert.match(commands, /app\s*\.get_webview\(label\)/);
+  assert.match(commands, /Window<R>/);
+  assert.match(commands, /WebviewBuilder::new/);
+  assert.match(commands, /\.on_new_window/);
+  assert.match(commands, /async_runtime::spawn_blocking/);
+  assert.match(commands, /NewWindowResponse::Deny/);
+  assert.match(commands, /\.add_child/);
   assert.doesNotMatch(commands, /get_webview_window\("main"\)/);
   assert.match(commands, /fn live_browser_plugin/);
   assert.match(commands, /validate_live_webview_url/);
+  assert.doesNotMatch(capabilities, /core:webview:allow-create-webview/);
   for (const permission of [
-    "core:webview:allow-create-webview",
     "core:webview:allow-set-webview-position",
     "core:webview:allow-set-webview-size",
     "core:webview:allow-set-webview-zoom",
@@ -153,75 +159,6 @@ test("browser dock uses a fitted native child WebView with a screenshot fallback
   ]) {
     assert.match(capabilities, new RegExp(permission));
   }
-});
-
-test("live browser keeps new-window links inside the current surface", () => {
-  const commands = source("../../../src-tauri/src/commands/browser.rs");
-  const script = commands.match(
-    /const LIVE_BROWSER_INTERACTION_SCRIPT: &str = r#"\n([\s\S]*?)\n"#;/,
-  )?.[1];
-  assert.ok(script, "missing live browser interaction script");
-
-  const listeners = new Map();
-  let assignedUrl = null;
-  class Anchor {
-    constructor(href, target = "_blank") {
-      this.href = href;
-      this.target = target;
-    }
-
-    hasAttribute() {
-      return false;
-    }
-  }
-  const windowObject = {
-    location: {
-      href: "https://www.bilibili.com/",
-      assign(url) {
-        assignedUrl = url;
-      },
-    },
-    open() {
-      return null;
-    },
-  };
-  const documentObject = {
-    addEventListener(type, listener) {
-      listeners.set(type, listener);
-    },
-  };
-  vm.runInNewContext(script, {
-    document: documentObject,
-    HTMLAnchorElement: Anchor,
-    Symbol,
-    URL,
-    window: windowObject,
-  });
-
-  let prevented = false;
-  let stopped = false;
-  const anchor = new Anchor("https://www.bilibili.com/video/BV1test");
-  listeners.get("click")({
-    button: 0,
-    composedPath: () => [anchor],
-    defaultPrevented: false,
-    preventDefault: () => {
-      prevented = true;
-    },
-    stopImmediatePropagation: () => {
-      stopped = true;
-    },
-  });
-  assert.equal(assignedUrl, anchor.href);
-  assert.equal(prevented, true);
-  assert.equal(stopped, true);
-
-  assignedUrl = null;
-  assert.equal(
-    windowObject.open("https://www.bilibili.com/video/BV2test", "_blank"),
-    windowObject,
-  );
-  assert.equal(assignedUrl, "https://www.bilibili.com/video/BV2test");
 });
 
 test("floating browser preview supports direct manipulation and accessibility fallbacks", () => {

@@ -290,6 +290,10 @@
   box-shadow: var(--glass-rim);
 }
 
+.browser-tab.is-placeholder {
+  cursor: default;
+}
+
 .browser-tab-favicon,
 .browser-tab-favicon-fallback {
   width: 12px;
@@ -428,6 +432,11 @@
   display: grid;
   place-items: center;
   background: transparent;
+}
+
+/* 三点菜单占用真实布局空间，不再隐藏整个原生 WebView。 */
+.browser-dock.has-actions-menu .browser-viewport {
+  margin-top: 112px;
 }
 
 .browser-viewport > img {

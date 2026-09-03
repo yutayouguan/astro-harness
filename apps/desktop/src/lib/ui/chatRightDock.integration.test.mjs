@@ -108,6 +108,10 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
     new URL("../../styles/features/chat/markdown.css", import.meta.url),
     "utf8",
   );
+  const headerStyles = await readFile(
+    new URL("../../styles/features/shell/header.css", import.meta.url),
+    "utf8",
+  );
 
   assert.match(appSource, /const \[browserExpanded, setBrowserExpanded\]/);
   assert.match(appSource, /browserExpanded \? " is-browser-expanded" : ""/);
@@ -145,6 +149,15 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
   assert.match(browserStyles, /\.browser-empty > svg/);
   assert.match(browserStyles, /--browser-composer-height/);
   assert.match(browserStyles, /\.has-composer-overlay/);
+  assert.match(browserDock, /--browser-dock-visible-width/);
+  assert.match(
+    headerStyles,
+    /\.content-pane--chat:has\(\.browser-dock\.is-open\)[\s\S]*?\.content-header--chat::before[\s\S]*?right:\s*var\(--browser-dock-visible-width\)/,
+  );
+  assert.match(
+    headerStyles,
+    /calc\(100% - var\(--browser-dock-visible-width\) - 20px\)/,
+  );
   assert.match(composerStyles, /\.composer-shell\.is-capsule/);
   assert.match(composerStyles, /--composer-capsule-frost/);
   assert.match(composerStyles, /var\(--glass-panel\) 78%/);

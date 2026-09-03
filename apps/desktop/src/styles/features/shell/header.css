@@ -21,6 +21,7 @@
    标题栏不参与 content-pane 的 flex 高度分配，消息滚动视口因此可以延伸到窗顶；
    空白区域透传滚轮和窗口拖动，只有标题与操作控件恢复命中。 */
 .content-pane--chat {
+  --browser-dock-visible-width: 0px;
   position: relative;
 }
 
@@ -77,6 +78,38 @@
 
 .content-header--chat.has-content-underlay::before {
   opacity: 1;
+}
+
+/* Browser drawer owns the right side of the titlebar. Keep the chat title and
+   its scrolling underlay out of that live tab region as the drawer resizes. */
+.content-pane--chat:has(.browser-dock.is-open)
+  .content-header--chat::before {
+  right: var(--browser-dock-visible-width);
+}
+
+.content-pane--chat:has(.browser-dock.is-open)
+  .content-header--chat
+  .content-heading {
+  flex: 0 1 auto;
+  width: max(
+    0px,
+    calc(100% - var(--browser-dock-visible-width) - 20px)
+  );
+  max-width: max(
+    0px,
+    calc(100% - var(--browser-dock-visible-width) - 20px)
+  );
+  overflow: hidden;
+}
+
+.content-pane--chat:has(.browser-dock.is-open)
+  .content-header--chat
+  .page-title-block {
+  max-width: calc(100% - 30px);
+}
+
+.content-header--chat.is-browser-expanded::before {
+  opacity: 0;
 }
 
 /* 文件编辑态与左侧栏共用同一套玻璃材质。 */

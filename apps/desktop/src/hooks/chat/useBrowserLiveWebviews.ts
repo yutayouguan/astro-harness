@@ -80,7 +80,6 @@ type ManagedWebview = {
 
 type LiveWebviewOptions = {
   active?: boolean;
-  occluded?: boolean;
   fitToWidth?: boolean;
   preview: BrowserPreview | null;
   viewportRef: RefObject<HTMLDivElement | null>;
@@ -115,7 +114,6 @@ function viewportBounds(viewport: HTMLDivElement) {
 
 export function useBrowserLiveWebviews({
   active = true,
-  occluded = false,
   fitToWidth = false,
   preview,
   viewportRef,
@@ -127,13 +125,11 @@ export function useBrowserLiveWebviews({
     isTauri() ? "idle" : "unsupported",
   );
   const previewRef = useRef(preview);
-  const occludedRef = useRef(occluded);
   const fitToWidthRef = useRef(fitToWidth);
   const callbacksRef = useRef({ onUrlChange, onNavigate, onError });
   const scheduleRef = useRef<() => void>(() => undefined);
 
   previewRef.current = preview;
-  occludedRef.current = occluded;
   fitToWidthRef.current = fitToWidth;
   callbacksRef.current = { onUrlChange, onNavigate, onError };
 
@@ -160,6 +156,7 @@ export function useBrowserLiveWebviews({
     const surfaceId = createBrowserLiveSurfaceId();
     const managed = new Map<string, ManagedWebview>();
     const pendingCreates = new Map<string, Promise<ManagedWebview>>();
+    const pendingPageEvents = new Map<string, LivePageEvent>();
     const pendingNativeUrls = new Map<string, string>();
     const labelFor = (sessionId: string, tabId: string) =>
       browserLiveWebviewLabel(sessionId, tabId, surfaceId);
@@ -206,6 +203,72 @@ export function useBrowserLiveWebviews({
       }
       setStatus("error");
       callbacksRef.current.onError(message);
+    };
+
+    const handlePageEvent = (payload: LivePageEvent) => {
+      if (disposed) return;
+      const entry = managed.get(payload.label);
+      if (!entry) {
+        if (pendingCreates.has(payload.label)) {
+          const pending = pendingPageEvents.get(payload.label);
+          if (payload.status === "blocked" || pending?.status !== "blocked") {
+            pendingPageEvents.set(payload.label, payload);
+          }
+        }
+        return;
+      }
+      if (payload.status === "blocked") {
+        entry.url = "";
+        setEntryLoading(entry, payload.label, false);
+        entry.failedUrl = payload.url;
+        entry.failedAt = previewRef.current?.updatedAt ?? null;
+        entry.visible = false;
+        void entry.webview.hide().catch(() => undefined);
+        reportError(payload.error || "该网址已被浏览器权限设置拦截");
+        return;
+      }
+
+      entry.url = payload.url;
+      setEntryLoading(entry, payload.label, payload.status === "started");
+      entry.failedUrl = null;
+      entry.failedAt = null;
+      const current = previewRef.current;
+      const tab = activeTab(current);
+      if (
+        !current ||
+        !tab ||
+        payload.label !== labelFor(current.sessionId, tab.id)
+      ) {
+        return;
+      }
+
+      const nativeUrl = canonicalBrowserUrl(payload.url);
+      if (nativeUrl && nativeUrl !== canonicalBrowserUrl(current.url)) {
+        pendingNativeUrls.set(payload.label, payload.url);
+      }
+      callbacksRef.current.onUrlChange(payload.url);
+      callbacksRef.current.onError(null);
+      setStatus(payload.status === "started" ? "loading" : "ready");
+      if (payload.status !== "finished") return;
+      if (!nativeUrl || nativeUrl === canonicalBrowserUrl(current.url)) return;
+      const syncKey = `${payload.label}:${nativeUrl}`;
+      if (syncKey === lastNativeSync) return;
+      lastNativeSync = syncKey;
+      nativeSyncQueue = nativeSyncQueue
+        .catch(() => undefined)
+        .then(async () => {
+          if (disposed) return;
+          try {
+            await callbacksRef.current.onNavigate(payload.url);
+          } catch (cause) {
+            if (pendingNativeUrls.get(payload.label) === payload.url) {
+              pendingNativeUrls.delete(payload.label);
+            }
+            if (lastNativeSync === syncKey) lastNativeSync = "";
+            const message = cause instanceof Error ? cause.message : String(cause);
+            callbacksRef.current.onError(message);
+          }
+        });
     };
 
     const updateBounds = async (entry: ManagedWebview) => {
@@ -275,18 +338,27 @@ export function useBrowserLiveWebviews({
 
       setStatus("creating");
       const userAgent = liveBrowserUserAgentOverride(navigator.userAgent);
-      const webview = new Webview(getCurrentWindow(), label, {
-        url,
-        ...bounds,
-        ...(userAgent ? { userAgent } : {}),
-        focus: false,
-        acceptFirstMouse: true,
-        zoomHotkeysEnabled: true,
+      await invoke("browser_live_webview_control", {
+        request: {
+          label,
+          action: "create",
+          url,
+          ...bounds,
+          ...(userAgent ? { userAgent } : {}),
+        },
       });
+      const webview = await Webview.getByLabel(label);
+      if (!webview) {
+        throw new Error("创建实时浏览器 WebView 失败");
+      }
+      if (disposed) {
+        void retireBrowserLiveWebview(webview);
+        throw new Error("实时浏览器 WebView 已停止");
+      }
       const entry = {
         webview,
         url,
-        ready: false,
+        ready: true,
         visible: true,
         loading: false,
         loadingTimer: null,
@@ -297,29 +369,13 @@ export function useBrowserLiveWebviews({
       };
       managed.set(label, entry);
       setEntryLoading(entry, label, true);
-
-      void webview.once("tauri://created", () => {
-        if (disposed) {
-          void retireBrowserLiveWebview(webview);
-          return;
-        }
-        entry.ready = true;
-        if (entry.failedUrl) return;
-        if (occludedRef.current) {
-          entry.visible = false;
-          void webview.hide().catch(reportError);
-        }
-        setStatus("loading");
-        scheduleRef.current();
-      });
-      void webview.once<string>("tauri://error", (event) => {
-        managed.delete(label);
-        if (entry.loadingTimer !== null) {
-          window.clearTimeout(entry.loadingTimer);
-          entry.loadingTimer = null;
-        }
-        reportError(event.payload || "创建实时浏览器 WebView 失败");
-      });
+      setStatus("loading");
+      const pendingPageEvent = pendingPageEvents.get(label);
+      if (pendingPageEvent) {
+        pendingPageEvents.delete(label);
+        handlePageEvent(pendingPageEvent);
+      }
+      scheduleRef.current();
       return entry;
     };
 
@@ -330,6 +386,7 @@ export function useBrowserLiveWebviews({
       if (pending) return pending;
       const creation = createWebview(label, url).finally(() => {
         pendingCreates.delete(label);
+        pendingPageEvents.delete(label);
       });
       pendingCreates.set(label, creation);
       return creation;
@@ -399,8 +456,7 @@ export function useBrowserLiveWebviews({
 
       for (const [label, candidate] of managed) {
         if (!candidate.ready) continue;
-        const shouldShow =
-          !occludedRef.current && label === activeLabel && !candidate.failedUrl;
+        const shouldShow = label === activeLabel && !candidate.failedUrl;
         if (candidate.visible !== shouldShow) {
           candidate.visible = shouldShow;
           void (
@@ -493,67 +549,8 @@ export function useBrowserLiveWebviews({
     void (async () => {
       await cleanupStaleBrowserLiveWebviews();
       if (disposed) return;
-      const stop = await listen<LivePageEvent>(
-        LIVE_PAGE_EVENT,
-        ({ payload }) => {
-          if (disposed) return;
-          const entry = managed.get(payload.label);
-          if (!entry) return;
-          if (payload.status === "blocked") {
-            entry.url = "";
-            setEntryLoading(entry, payload.label, false);
-            entry.failedUrl = payload.url;
-            entry.failedAt = previewRef.current?.updatedAt ?? null;
-            entry.visible = false;
-            void entry.webview.hide().catch(() => undefined);
-            reportError(payload.error || "该网址已被浏览器权限设置拦截");
-            return;
-          }
-
-          entry.url = payload.url;
-          setEntryLoading(entry, payload.label, payload.status === "started");
-          entry.failedUrl = null;
-          entry.failedAt = null;
-          const current = previewRef.current;
-          const tab = activeTab(current);
-          if (
-            !current ||
-            !tab ||
-            payload.label !== labelFor(current.sessionId, tab.id)
-          ) {
-            return;
-          }
-
-          const nativeUrl = canonicalBrowserUrl(payload.url);
-          if (nativeUrl && nativeUrl !== canonicalBrowserUrl(current.url)) {
-            pendingNativeUrls.set(payload.label, payload.url);
-          }
-          callbacksRef.current.onUrlChange(payload.url);
-          callbacksRef.current.onError(null);
-          setStatus(payload.status === "started" ? "loading" : "ready");
-          if (payload.status !== "finished") return;
-          if (!nativeUrl || nativeUrl === canonicalBrowserUrl(current.url))
-            return;
-          const syncKey = `${payload.label}:${nativeUrl}`;
-          if (syncKey === lastNativeSync) return;
-          lastNativeSync = syncKey;
-          nativeSyncQueue = nativeSyncQueue
-            .catch(() => undefined)
-            .then(async () => {
-              if (disposed) return;
-              try {
-                await callbacksRef.current.onNavigate(payload.url);
-              } catch (cause) {
-                if (pendingNativeUrls.get(payload.label) === payload.url) {
-                  pendingNativeUrls.delete(payload.label);
-                }
-                if (lastNativeSync === syncKey) lastNativeSync = "";
-                const message =
-                  cause instanceof Error ? cause.message : String(cause);
-                callbacksRef.current.onError(message);
-              }
-            });
-        },
+      const stop = await listen<LivePageEvent>(LIVE_PAGE_EVENT, ({ payload }) =>
+        handlePageEvent(payload),
       );
       if (disposed) {
         stop();
@@ -580,6 +577,7 @@ export function useBrowserLiveWebviews({
       }
       managed.clear();
       pendingCreates.clear();
+      pendingPageEvents.clear();
       pendingNativeUrls.clear();
     };
   }, [active, viewportRef]);
@@ -590,7 +588,6 @@ export function useBrowserLiveWebviews({
   }, [
     active,
     fitToWidth,
-    occluded,
     preview?.sessionId,
     preview?.activeTabId,
     preview?.url,

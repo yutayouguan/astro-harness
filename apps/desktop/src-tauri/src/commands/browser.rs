@@ -2,63 +2,18 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use tauri::{
     plugin::{Builder as PluginBuilder, TauriPlugin},
-    webview::PageLoadEvent,
-    AppHandle, Emitter, Manager, Runtime,
+    webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder},
+    Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewUrl, Window,
 };
 
 pub const LIVE_BROWSER_WEBVIEW_PREFIX: &str = "astro-browser-live-";
 pub const LIVE_BROWSER_PAGE_EVENT: &str = "browser-live-page-load";
-
-// 前端动态创建的子 WebView 无法注册 Tauri 的 `on_new_window` 回调。WebKit 默认会丢弃
-// `target="_blank"` 和 `window.open` 请求，因此需要把常规 http(s) 新窗口导航收回当前标签页。
-const LIVE_BROWSER_INTERACTION_SCRIPT: &str = r#"
-(() => {
-  const marker = Symbol.for("astro.browser.same-tab-navigation");
-  if (window[marker]) return;
-  window[marker] = true;
-
-  const navigateInCurrentTab = (value) => {
-    try {
-      const next = new URL(String(value), window.location.href);
-      if (next.protocol !== "http:" && next.protocol !== "https:") return false;
-      window.location.assign(next.href);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  document.addEventListener("click", (event) => {
-    if (
-      event.defaultPrevented ||
-      event.button !== 0
-    ) return;
-    const anchor = event.composedPath().find((node) => node instanceof HTMLAnchorElement);
-    if (
-      !anchor ||
-      anchor.target.trim().toLowerCase() !== "_blank" ||
-      anchor.hasAttribute("download")
-    ) return;
-    if (navigateInCurrentTab(anchor.href)) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
-  }, true);
-
-  const originalOpen = window.open.bind(window);
-  window.open = (url, target, features) => {
-    const normalizedTarget = typeof target === "string" ? target.trim().toLowerCase() : "";
-    if (
-      (!normalizedTarget || normalizedTarget === "_blank") &&
-      url &&
-      navigateInCurrentTab(url)
-    ) return window;
-    return originalOpen(url, target, features);
-  };
-})();
-"#;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,6 +41,16 @@ pub struct BrowserLiveWebviewRequest {
     pub action: String,
     #[serde(default)]
     pub url: Option<String>,
+    #[serde(default)]
+    pub x: Option<f64>,
+    #[serde(default)]
+    pub y: Option<f64>,
+    #[serde(default)]
+    pub width: Option<f64>,
+    #[serde(default)]
+    pub height: Option<f64>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -143,6 +108,83 @@ fn emit_live_page_event<R: Runtime>(
     );
 }
 
+async fn create_live_browser_webview<R: Runtime>(
+    window: Window<R>,
+    request: &BrowserLiveWebviewRequest,
+) -> Result<(), String> {
+    let label = request.label.trim().to_string();
+    let x = request.x.ok_or("缺少浏览器横坐标")?;
+    let y = request.y.ok_or("缺少浏览器纵坐标")?;
+    let width = request.width.ok_or("缺少浏览器宽度")?;
+    let height = request.height.ok_or("缺少浏览器高度")?;
+    if width <= 0.0
+        || height <= 0.0
+        || !x.is_finite()
+        || !y.is_finite()
+        || !width.is_finite()
+        || !height.is_finite()
+    {
+        return Err("浏览器显示区尺寸无效".into());
+    }
+    if window.app_handle().get_webview(&label).is_some() {
+        return Ok(());
+    }
+
+    let validated_url = tools::builtin::shell::browser::validate_live_webview_url(
+        &home::default_memory_dir(),
+        request.url.as_deref().unwrap_or_default().trim(),
+    )
+    .map_err(|error| error.to_string())?;
+    let initial_url = url::Url::parse(&validated_url).map_err(|error| error.to_string())?;
+
+    let app = window.app_handle().clone();
+    let target_label = label.clone();
+    let popup_generation = Arc::new(AtomicU64::new(0));
+    let mut builder = WebviewBuilder::new(label, WebviewUrl::External(initial_url))
+        .focused(false)
+        .accept_first_mouse(true)
+        .zoom_hotkeys_enabled(true)
+        .on_new_window(move |url, _features| {
+            let Some(webview) = app.get_webview(&target_label) else {
+                return NewWindowResponse::Deny;
+            };
+            let generation = popup_generation.fetch_add(1, Ordering::Relaxed) + 1;
+            let latest_generation = popup_generation.clone();
+            let requested_url = url.to_string();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                let Ok(validated_url) = tools::builtin::shell::browser::validate_live_webview_url(
+                    &home::default_memory_dir(),
+                    &requested_url,
+                ) else {
+                    return;
+                };
+                if latest_generation.load(Ordering::Relaxed) != generation {
+                    return;
+                }
+                if let Ok(destination) = url::Url::parse(&validated_url) {
+                    let _ = webview.navigate(destination);
+                }
+            });
+            NewWindowResponse::Deny
+        });
+    if let Some(user_agent) = request
+        .user_agent
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        builder = builder.user_agent(user_agent);
+    }
+
+    window
+        .add_child(
+            builder,
+            LogicalPosition::new(x, y),
+            LogicalSize::new(width, height),
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 /// Observe only Astro's remote browser surfaces. Other application WebViews
 /// keep their existing navigation behavior.
 pub fn live_browser_plugin<R: Runtime>() -> TauriPlugin<R> {
@@ -168,17 +210,7 @@ pub fn live_browser_plugin<R: Runtime>() -> TauriPlugin<R> {
             }
             let status = match payload.event() {
                 PageLoadEvent::Started => "started",
-                PageLoadEvent::Finished => {
-                    // 每次主文档导航后重新注入；页面跳转会销毁上一页的监听器和 window 包装。
-                    if let Err(error) = webview.eval(LIVE_BROWSER_INTERACTION_SCRIPT) {
-                        tracing::warn!(
-                            label = webview.label(),
-                            error = %error,
-                            "注入实时浏览器交互桥失败"
-                        );
-                    }
-                    "finished"
-                }
+                PageLoadEvent::Finished => "finished",
             };
             emit_live_page_event(webview, payload.url().as_str(), status, None);
         })
@@ -259,15 +291,19 @@ pub async fn browser_panel_control(request: BrowserPanelRequest) -> Result<Value
 }
 
 #[tauri::command]
-pub fn browser_live_webview_control(
-    app: AppHandle,
+pub async fn browser_live_webview_control<R: Runtime>(
+    window: Window<R>,
     request: BrowserLiveWebviewRequest,
 ) -> Result<(), String> {
     let label = request.label.trim();
     if !is_live_browser_webview(label) {
         return Err("非法的实时浏览器 WebView 标识".into());
     }
-    let webview = app
+    if request.action.trim() == "create" {
+        return create_live_browser_webview(window, &request).await;
+    }
+    let webview = window
+        .app_handle()
         .get_webview(label)
         .ok_or_else(|| "实时浏览器 WebView 不存在".to_string())?;
     match request.action.trim() {
@@ -317,9 +353,7 @@ pub async fn browser_preview_project_file(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        is_live_browser_webview, LIVE_BROWSER_INTERACTION_SCRIPT, LIVE_BROWSER_WEBVIEW_PREFIX,
-    };
+    use super::{is_live_browser_webview, LIVE_BROWSER_WEBVIEW_PREFIX};
 
     #[test]
     fn live_webview_labels_are_scoped_and_safe() {
@@ -331,15 +365,5 @@ mod tests {
         assert!(!is_live_browser_webview(&format!(
             "{LIVE_BROWSER_WEBVIEW_PREFIX}bad label"
         )));
-    }
-
-    #[test]
-    fn live_webview_redirects_new_window_links_into_the_current_tab() {
-        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("target.trim().toLowerCase()"));
-        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("window.open ="));
-        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("window.location.assign"));
-        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("event.stopImmediatePropagation()"));
-        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("http:"));
-        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("https:"));
     }
 }

@@ -90,6 +90,30 @@ struct BrowserDesktopNewTabArgs {
     wait_ms: Option<u64>,
 }
 
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct BrowserDesktopSnapshotArgs {
+    #[serde(default)]
+    screenshot: Option<bool>,
+    #[serde(default)]
+    wait_ms: Option<u64>,
+    #[serde(default)]
+    fallback_url: Option<String>,
+    #[serde(default)]
+    tab_id: Option<String>,
+}
+
+fn desktop_browser_tab_identity(preferred: Option<String>) -> (String, String) {
+    if let Some(tab_id) = preferred
+        .and_then(|value| uuid::Uuid::parse_str(value.trim()).ok())
+        .map(|value| value.to_string())
+    {
+        return (tab_id, uuid::Uuid::new_v4().to_string());
+    }
+    let tab_id = uuid::Uuid::new_v4().to_string();
+    (tab_id.clone(), tab_id)
+}
+
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct BrowserTabArgs {
     /// 标签页 id；由 browser_tabs 或任一浏览器结果返回。
@@ -988,6 +1012,15 @@ async fn open_for_session(
     memory_dir: &Path,
     args: BrowserOpenArgs,
 ) -> anyhow::Result<String> {
+    open_for_session_with_tab_id(session_id, memory_dir, args, None).await
+}
+
+async fn open_for_session_with_tab_id(
+    session_id: &str,
+    memory_dir: &Path,
+    args: BrowserOpenArgs,
+    preferred_tab_id: Option<String>,
+) -> anyhow::Result<String> {
     let settings = load_browser_settings(memory_dir);
     let url = validate_url_for_settings(&args.url, &settings)?;
     let existing = {
@@ -1015,8 +1048,8 @@ async fn open_for_session(
 
     let output_dir = session_dir_for(memory_dir, session_id);
     tokio::fs::create_dir_all(output_dir.join("downloads")).await?;
-    let tab_id = uuid::Uuid::new_v4().to_string();
-    let tab_dir = output_dir.join("tabs").join(&tab_id);
+    let (tab_id, tab_storage_id) = desktop_browser_tab_identity(preferred_tab_id);
+    let tab_dir = output_dir.join("tabs").join(tab_storage_id);
     let mut session =
         BrowserSession::launch(&url, tab_dir, output_dir.join("downloads"), &settings).await?;
     session.wait_ready(args.wait_ms).await?;
@@ -1377,7 +1410,23 @@ pub async fn desktop_control(
     match action {
         "open" => open_for_session(session_id, memory_dir, serde_json::from_value(args)?).await,
         "snapshot" => {
-            let args: BrowserSnapshotArgs = serde_json::from_value(args)?;
+            let args: BrowserDesktopSnapshotArgs = serde_json::from_value(args)?;
+            let session_exists = manager().lock().await.sessions.contains_key(session_id);
+            if !session_exists {
+                if let Some(url) = args.fallback_url.filter(|value| !value.trim().is_empty()) {
+                    return open_for_session_with_tab_id(
+                        session_id,
+                        memory_dir,
+                        BrowserOpenArgs {
+                            url,
+                            wait_ms: args.wait_ms,
+                            new_tab: false,
+                        },
+                        args.tab_id,
+                    )
+                    .await;
+                }
+            }
             snapshot_for_session(session_id, args.screenshot.unwrap_or(true), args.wait_ms).await
         }
         "new_tab" => {
@@ -2295,6 +2344,25 @@ mod tests {
             serde_json::from_value(json!({"width": 680, "height": 720, "screenshot": false}))
                 .unwrap();
         assert_eq!(live_args.screenshot, Some(false));
+    }
+
+    #[test]
+    fn desktop_snapshot_restore_preserves_a_valid_tab_id() {
+        let tab_id = uuid::Uuid::new_v4().to_string();
+        let args: BrowserDesktopSnapshotArgs = serde_json::from_value(json!({
+            "screenshot": true,
+            "fallbackUrl": "https://example.com/",
+            "tabId": tab_id.clone(),
+        }))
+        .unwrap();
+        assert_eq!(args.fallback_url.as_deref(), Some("https://example.com/"));
+        let (restored_tab_id, restored_storage_id) = desktop_browser_tab_identity(args.tab_id);
+        assert_eq!(restored_tab_id, tab_id);
+        assert_ne!(restored_storage_id, restored_tab_id);
+        let (generated_tab_id, generated_storage_id) =
+            desktop_browser_tab_identity(Some("invalid".into()));
+        assert_eq!(generated_storage_id, generated_tab_id);
+        assert!(uuid::Uuid::parse_str(&generated_tab_id).is_ok());
     }
 
     #[tokio::test]
