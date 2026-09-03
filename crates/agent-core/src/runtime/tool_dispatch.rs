@@ -74,15 +74,20 @@ impl AgentLoop {
     /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler。
     async fn dispatch_named_tool(
         &self,
+        namespace: Option<&str>,
         name: &str,
         args: &serde_json::Value,
         grants: ToolExecutionGrants,
         step_context: Option<&super::StepContext>,
     ) -> anyhow::Result<types::ToolOutput> {
-        let wire_name = name;
+        let call_name = name;
         let registered_name = step_context
-            .map(|step_context| step_context.tool_router.registered_name(wire_name))
-            .unwrap_or(wire_name)
+            .and_then(|step_context| {
+                step_context
+                    .tool_router
+                    .registered_name(namespace, call_name)
+            })
+            .unwrap_or(call_name)
             .to_string();
         let name = registered_name.as_str();
         let (agent_id, workspace_dir) = {
@@ -113,7 +118,7 @@ impl AgentLoop {
                     .expect("tool registry lock poisoned")
                     .is_tool_allowed(name)
             },
-            |step_context| step_context.tool_router.has_tool(wire_name),
+            |step_context| step_context.tool_router.has_tool(namespace, call_name),
         );
 
         // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
@@ -159,7 +164,11 @@ impl AgentLoop {
                         .expect("tool registry lock poisoned")
                         .dynamic_handler(name)
                 },
-                |step_context| step_context.tool_router.dynamic_handler(wire_name),
+                |step_context| {
+                    step_context
+                        .tool_router
+                        .dynamic_handler(namespace, call_name)
+                },
             )
         });
 
@@ -249,6 +258,7 @@ impl AgentLoop {
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
         self.handle_tool_call_scoped(
+            None,
             name,
             args,
             ToolExecutionGrants::default(),
@@ -278,6 +288,7 @@ impl AgentLoop {
             "dispatch tool invocation"
         );
         self.handle_tool_call_scoped(
+            invocation.tool_namespace.as_deref(),
             &invocation.tool_name,
             &invocation.payload,
             grants,
@@ -288,6 +299,7 @@ impl AgentLoop {
 
     fn handle_tool_call_scoped(
         &self,
+        namespace: Option<&str>,
         name: &str,
         args: &serde_json::Value,
         grants: ToolExecutionGrants,
@@ -302,6 +314,7 @@ impl AgentLoop {
                 ) =>
             {
                 let fut = self.handle_tool_call_async_scoped(
+                    namespace,
                     name,
                     args,
                     grants,
@@ -318,6 +331,7 @@ impl AgentLoop {
                             .build()
                             .map_err(|e| ToolCallError::Execution(e.into()))?;
                         rt.block_on(self.handle_tool_call_async_scoped(
+                            namespace,
                             name,
                             args,
                             grants,
@@ -338,6 +352,7 @@ impl AgentLoop {
                     .build()
                     .map_err(|e| ToolCallError::Execution(e.into()))?;
                 rt.block_on(self.handle_tool_call_async_scoped(
+                    namespace,
                     name,
                     args,
                     grants,
@@ -358,6 +373,7 @@ impl AgentLoop {
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
         self.handle_tool_call_async_scoped(
+            None,
             name,
             args,
             ToolExecutionGrants::default(),
@@ -369,6 +385,7 @@ impl AgentLoop {
 
     async fn handle_tool_call_async_scoped(
         &self,
+        namespace: Option<&str>,
         name: &str,
         args: &serde_json::Value,
         grants: ToolExecutionGrants,
@@ -380,8 +397,13 @@ impl AgentLoop {
         }
         self.increment_tool_round().await?;
         let turn_id = self.current_turn_id().await;
-        let pre_tool_use =
-            self.pre_tool_use_request(turn_id, name, format!("direct:{name}"), args.clone());
+        let display_name = types::ToolName::new(namespace, name).wire_name();
+        let pre_tool_use = self.pre_tool_use_request(
+            turn_id,
+            display_name.clone(),
+            format!("direct:{display_name}"),
+            args.clone(),
+        );
         let pre_tool_use = self.run_pre_tool_use_hook(pre_tool_use);
         let mut args_owned = args.clone();
         if pre_tool_use.should_block {
@@ -417,8 +439,8 @@ impl AgentLoop {
             },
             |step_context| {
                 (
-                    step_context.tool_router.has_tool(name),
-                    step_context.tool_router.has_tool("skills"),
+                    step_context.tool_router.has_tool(namespace, name),
+                    step_context.tool_router.has_tool(None, "skills"),
                 )
             },
         );
@@ -438,24 +460,39 @@ impl AgentLoop {
                         .any(|(skill, _)| skill == name)
                 },
             );
-        let (exec_name, exec_args) =
-            if !is_mcp_tool_name(name) && !has_tool && skills_allowed && skill_is_enabled {
-                (
-                    "skills",
-                    serde_json::json!({
-                        "action": "load",
-                        "skill_id": name,
-                        "input": args_owned,
-                    }),
-                )
-            } else {
-                (name, args_owned)
-            };
-        if let Err(msg) = tools::check_tool_call(interaction_mode, exec_name, &exec_args) {
+        let (exec_name, exec_args) = if namespace.is_none()
+            && !is_mcp_tool_name(name)
+            && !has_tool
+            && skills_allowed
+            && skill_is_enabled
+        {
+            (
+                "skills",
+                serde_json::json!({
+                    "action": "load",
+                    "skill_id": name,
+                    "input": args_owned,
+                }),
+            )
+        } else {
+            (name, args_owned)
+        };
+        let exec_namespace = (exec_name != "skills").then_some(namespace).flatten();
+        let policy_name = step_context
+            .as_ref()
+            .and_then(|step| step.tool_router.registered_name(exec_namespace, exec_name))
+            .unwrap_or(exec_name);
+        if let Err(msg) = tools::check_tool_call(interaction_mode, policy_name, &exec_args) {
             return Ok(msg.into());
         }
         let raw_result = self
-            .dispatch_named_tool(exec_name, &exec_args, grants, step_context.as_deref())
+            .dispatch_named_tool(
+                exec_namespace,
+                exec_name,
+                &exec_args,
+                grants,
+                step_context.as_deref(),
+            )
             .await?;
         if exec_name == "skills" {
             self.activate_skill_toolsets_from_args(&exec_args, step_context.as_deref());
@@ -484,11 +521,11 @@ impl AgentLoop {
                 .with_session(self.session_id.clone()),
             );
         }
-        if super::tool_writes_disk(exec_name, &exec_args) {
+        if super::tool_writes_disk(policy_name, &exec_args) {
             self.lock_state().turn.mark_wrote_disk();
         }
         Ok(self
-            .finalize_tool_call_result(exec_name, &exec_args, raw_result)
+            .finalize_tool_call_result(policy_name, &exec_args, raw_result)
             .await)
     }
 

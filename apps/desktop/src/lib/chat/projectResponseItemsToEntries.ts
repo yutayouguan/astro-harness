@@ -139,10 +139,8 @@ function fileChangesFromMetadata(
           typeof change.after_content === "string"
             ? change.after_content
             : undefined,
-        additions:
-          typeof change.additions === "number" ? change.additions : 0,
-        deletions:
-          typeof change.deletions === "number" ? change.deletions : 0,
+        additions: typeof change.additions === "number" ? change.additions : 0,
+        deletions: typeof change.deletions === "number" ? change.deletions : 0,
         reversible: change.reversible === true,
       },
     ];
@@ -244,7 +242,11 @@ function projectResponseItems(
       const assistant = ensureAssistant(stored.id);
       const callId =
         typeof item.call_id === "string" ? item.call_id : stored.id;
-      const title = typeof item.name === "string" ? item.name : "tool_search";
+      const name = typeof item.name === "string" ? item.name : "tool_search";
+      const title =
+        typeof item.namespace === "string" && item.namespace
+          ? `${item.namespace}.${name}`
+          : name;
       const input =
         typeof item.arguments === "string"
           ? item.arguments
@@ -320,7 +322,9 @@ function projectResponseItems(
         stored.id,
         typeof item.call_id === "string" ? item.call_id : undefined,
         typeof item.name === "string"
-          ? item.name
+          ? typeof item.namespace === "string" && item.namespace
+            ? `${item.namespace}.${item.name}`
+            : item.name
           : type === "tool_search_output"
             ? "tool_search"
             : undefined,

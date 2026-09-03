@@ -46,6 +46,16 @@ impl ParsedToolCall {
             signature: None,
         }
     }
+
+    /// Responses API 原生工具身份；namespace 与子工具名始终分开保存。
+    pub fn tool_name(&self) -> crate::ToolName {
+        crate::ToolName::new(self.namespace.as_deref(), self.name.clone())
+    }
+
+    /// 仅供日志、UI 和旧的字符串边界使用。
+    pub fn display_name(&self) -> String {
+        self.tool_name().wire_name()
+    }
 }
 
 /// 流式原生 function calling 的单个增量片段。

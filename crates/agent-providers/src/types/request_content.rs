@@ -103,14 +103,6 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
-/// 将 Responses API Namespace 子工具编码为 Legacy Function 的合法名称。
-///
-/// 点分名称只用于原生 Namespace 语义；Chat Completions 的 `function.name`
-/// 通常只接受字母、数字、下划线和连字符，因此用双下划线保留命名空间边界。
-pub fn legacy_namespace_function_name(namespace: &str, child: &str) -> String {
-    format!("{namespace}__{child}")
-}
-
 /// Responses API 自定义语法工具。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FreeformToolDefinition {
@@ -142,7 +134,7 @@ pub struct ToolNamespaceDefinition {
 /// 统一工具定义（provider 无关）。
 ///
 /// 序列化格式遵循 Responses API。仅支持普通函数调用的 provider
-/// 通过 `function_definitions()` 展平兼容条目，忽略不支持的自定义/命名空间工具。
+/// 不会获得原生命名空间工具，避免丢失 `namespace` 语义。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum ToolDefinition {
@@ -194,34 +186,7 @@ impl ToolDefinition {
     pub fn function_definitions(&self) -> Vec<FunctionToolDefinition> {
         match self {
             Self::Function(tool) => vec![tool.clone()],
-            Self::Namespace(namespace) => namespace
-                .tools
-                .iter()
-                .map(|tool| match tool {
-                    NamespaceToolDefinition::Function(tool) => {
-                        let mut tool = tool.clone();
-                        tool.name = legacy_namespace_function_name(&namespace.name, &tool.name);
-                        tool
-                    }
-                    NamespaceToolDefinition::Freeform(tool) => FunctionToolDefinition {
-                        name: legacy_namespace_function_name(&namespace.name, &tool.name),
-                        description: tool.description.clone(),
-                        parameters: serde_json::json!({
-                            "type": "object",
-                            "properties": {
-                                "input": {
-                                    "type": "string",
-                                    "description": "Raw custom-tool input matching the declared grammar."
-                                }
-                            },
-                            "required": ["input"],
-                            "additionalProperties": false
-                        }),
-                        strict: false,
-                        defer_loading: None,
-                    },
-                })
-                .collect(),
+            Self::Namespace(_) => Vec::new(),
             Self::Freeform(tool) => vec![FunctionToolDefinition {
                 name: tool.name.clone(),
                 description: tool.description.clone(),
@@ -478,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn namespace_flattens_to_functions_for_legacy_providers() {
+    fn namespace_is_not_downgraded_for_legacy_providers() {
         let namespace = ToolDefinition::Namespace(ToolNamespaceDefinition {
             name: "clock".into(),
             description: "Clock tools".into(),
@@ -500,13 +465,6 @@ mod tests {
         });
 
         let functions = namespace.function_definitions();
-        assert_eq!(functions.len(), 2);
-        assert_eq!(functions[0].name, "clock__now");
-        assert_eq!(functions[1].name, "clock__script");
-        assert!(functions.iter().all(|tool| tool
-            .name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))));
-        assert_eq!(functions[1].parameters["required"][0], "input");
+        assert!(functions.is_empty());
     }
 }

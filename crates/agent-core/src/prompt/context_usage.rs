@@ -210,8 +210,8 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         std::collections::HashMap::new();
     for item in input.messages {
         if let Some(call_id) = item.call_id() {
-            if let Some(name) = item.tool_name() {
-                call_names.insert(call_id.to_string(), name.to_string());
+            if let Some(name) = item.qualified_tool_name() {
+                call_names.insert(call_id.to_string(), name);
             }
         }
     }
@@ -235,7 +235,8 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
 
     for item in input.messages {
         let text = item.provider_view_text();
-        let tool_name = item.tool_name().or_else(|| {
+        let qualified_tool_name = item.qualified_tool_name();
+        let tool_name = qualified_tool_name.as_deref().or_else(|| {
             item.call_id()
                 .and_then(|id| call_names.get(id).map(String::as_str))
         });

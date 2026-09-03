@@ -14,6 +14,7 @@ pub(crate) struct ToolInvocation {
     pub(crate) cancellation_token: CancellationToken,
     pub(crate) call_id: String,
     pub(crate) tool_name: String,
+    pub(crate) tool_namespace: Option<String>,
     pub(crate) payload: serde_json::Value,
 }
 
@@ -37,7 +38,12 @@ impl ToolCallRuntime {
         call: types::ParsedToolCall,
         cancellation_token: CancellationToken,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        if let Some(denial) = Self::hardline_denial(&call.name, &call.arguments) {
+        let registered_name = self
+            .step_context
+            .tool_router
+            .registered_name(call.namespace.as_deref(), &call.name)
+            .unwrap_or(&call.name);
+        if let Some(denial) = Self::hardline_denial(registered_name, &call.arguments) {
             return Ok(denial);
         }
         let invocation = ToolInvocation {
@@ -46,6 +52,7 @@ impl ToolCallRuntime {
             cancellation_token,
             call_id: call.id,
             tool_name: call.name,
+            tool_namespace: call.namespace,
             payload: call.arguments,
         };
         let session = Arc::clone(&invocation.session);

@@ -40,8 +40,8 @@ pub(crate) fn response_item_text(item: &ResponseItem) -> String {
     item.text()
 }
 
-pub(crate) fn response_item_tool_name(item: &ResponseItem) -> Option<&str> {
-    item.tool_name()
+pub(crate) fn response_item_tool_name(item: &ResponseItem) -> Option<String> {
+    item.qualified_tool_name()
 }
 
 pub(crate) fn response_item_is_tool_output(item: &ResponseItem) -> bool {

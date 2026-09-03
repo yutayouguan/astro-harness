@@ -9,6 +9,9 @@ pub struct ToolCall {
     pub id: String,
     /// 工具名。
     pub name: String,
+    /// Responses API 原生工具命名空间。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
     /// JSON 参数。
     pub arguments: serde_json::Value,
     /// Google Interactions / Gemini 3：`function_call.signature`，无状态回放时必须原样回传。

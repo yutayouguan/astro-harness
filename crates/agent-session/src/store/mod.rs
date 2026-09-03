@@ -121,6 +121,10 @@ impl StoredResponseItem {
         self.item.tool_name()
     }
 
+    pub fn qualified_tool_name(&self) -> Option<String> {
+        self.item.qualified_tool_name()
+    }
+
     pub fn call_id(&self) -> Option<&str> {
         self.item.call_id()
     }

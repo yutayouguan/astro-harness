@@ -8,7 +8,7 @@
 use std::env;
 use std::path::PathBuf;
 
-use tools::{register_all, sanitize_tool_schema, ToolRegistry};
+use tools::{register_all, ToolRegistry};
 
 fn estimate_tokens(chars: usize) -> u32 {
     u32::try_from(chars.div_ceil(4)).unwrap_or(u32::MAX)
@@ -24,19 +24,10 @@ fn main() -> anyhow::Result<()> {
     register_all(&mut reg);
 
     let mut tools: Vec<serde_json::Value> = Vec::new();
-    for e in reg.all_tools() {
-        let api = serde_json::json!({
-            "type": "function",
-            "function": {
-                "name": e.name,
-                "description": e.description,
-                "parameters": sanitize_tool_schema(e.schema.clone()),
-            }
-        });
+    for api in reg.schemas_for_api() {
         let chars = api.to_string().len();
         tools.push(serde_json::json!({
-            "name": e.name,
-            "toolset": e.toolset,
+            "name": api.get("name").and_then(serde_json::Value::as_str).unwrap_or(""),
             "chars": chars,
             "est_tokens": estimate_tokens(chars),
             "schema": api,
@@ -61,7 +52,7 @@ fn main() -> anyhow::Result<()> {
     let total_tokens = estimate_tokens(total_chars);
 
     let doc = serde_json::json!({
-        "note": "内置工具 schema 导出（按 est_tokens 降序）。est_tokens = ceil(chars/4)，与上下文用量「工具定义」算法一致。不含 MCP。",
+        "note": "内置 Responses API 工具 schema 导出（按 est_tokens 降序）。namespace 保持原生嵌套结构；est_tokens = ceil(chars/4)。不含 MCP。",
         "count": tools.len(),
         "total_chars": total_chars,
         "total_est_tokens": total_tokens,

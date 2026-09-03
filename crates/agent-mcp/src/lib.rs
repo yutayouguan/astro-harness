@@ -30,8 +30,8 @@ pub use hub::{
     MAX_PARALLEL_MCP_STARTUPS, MAX_TOTAL_MCP_INSTRUCTIONS_CHARS,
 };
 pub use names::{
-    is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_PREFIX,
-    MCP_TOOLSET,
+    is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, tool_namespace,
+    MCP_PREFIX, MCP_TOOLSET,
 };
 pub use protocol::{
     call_prompt_broker, call_resource_broker, MCP_PROMPTS_TOOL, MCP_RESOURCES_TOOL,

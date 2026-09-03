@@ -45,23 +45,33 @@ crate::submit_builtin_tool! {
 }
 
 struct ToolSearchEntry {
-    name: String,
+    registered_name: String,
+    tool_name: types::ToolName,
     toolset: String,
     description: String,
     parameters: serde_json::Value,
 }
 
 impl ToolSearchEntry {
-    /// `tool_search` 返回的 Codex 兼容可加载函数 schema。
+    /// `tool_search` 返回的 Responses API 原生可加载 schema。
     fn loadable_spec(&self) -> serde_json::Value {
-        serde_json::json!({
+        let function = serde_json::json!({
             "type": "function",
-            "name": self.name,
+            "name": self.tool_name.name(),
             "description": self.description,
             "strict": false,
             "defer_loading": true,
             "parameters": self.parameters,
-        })
+        });
+        match self.tool_name.namespace() {
+            Some(namespace) => serde_json::json!({
+                "type": "namespace",
+                "name": namespace,
+                "description": format!("Tools in the {namespace} namespace."),
+                "tools": [function],
+            }),
+            None => function,
+        }
     }
 }
 
@@ -70,13 +80,14 @@ fn searchable_entries(registry: &ToolRegistry) -> Vec<ToolSearchEntry> {
         .searchable_deferred_tools()
         .into_iter()
         .map(|entry| ToolSearchEntry {
-            name: entry.name.clone(),
+            registered_name: entry.name.clone(),
+            tool_name: entry.tool_name(),
             toolset: entry.toolset.clone(),
             description: entry.description.clone(),
             parameters: crate::schema::sanitize_tool_schema(entry.schema.clone()),
         })
         .collect();
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    entries.sort_by(|a, b| a.registered_name.cmp(&b.registered_name));
     entries
 }
 
@@ -95,7 +106,10 @@ fn search(
             // 工具名重复一次以提升名称匹配权重。
             let text = format!(
                 "{} {} {} {}",
-                entry.name, entry.name, entry.toolset, entry.description
+                entry.registered_name,
+                entry.tool_name.wire_name(),
+                entry.toolset,
+                entry.description
             );
             Document::new(idx, text)
         })
@@ -107,9 +121,35 @@ fn search(
         .into_iter()
         .map(|result| {
             let entry = &entries[result.document.id];
-            (entry.name.clone(), entry.loadable_spec())
+            (entry.registered_name.clone(), entry.loadable_spec())
         })
         .collect()
+}
+
+fn coalesce_loadable_specs(matches: Vec<(String, serde_json::Value)>) -> Vec<serde_json::Value> {
+    let mut specs: Vec<serde_json::Value> = Vec::new();
+    for (_, mut spec) in matches {
+        if spec.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
+            let namespace = spec.get("name").and_then(serde_json::Value::as_str);
+            if let Some(existing) = specs.iter_mut().find(|existing| {
+                existing.get("type").and_then(serde_json::Value::as_str) == Some("namespace")
+                    && existing.get("name").and_then(serde_json::Value::as_str) == namespace
+            }) {
+                if let (Some(existing_tools), Some(tools)) = (
+                    existing
+                        .get_mut("tools")
+                        .and_then(serde_json::Value::as_array_mut),
+                    spec.get_mut("tools")
+                        .and_then(serde_json::Value::as_array_mut),
+                ) {
+                    existing_tools.append(tools);
+                }
+                continue;
+            }
+        }
+        specs.push(spec);
+    }
+    specs
 }
 
 /// 搜索当前 Step 的 deferred 工具并返回完整可加载 schema。
@@ -128,17 +168,14 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::R
             .read()
             .map_err(|_| anyhow::anyhow!("tool registry lock poisoned"))?;
         let matches = search(&searchable_entries(&registry), query, limit);
-        let specs: Vec<_> = matches.into_iter().map(|(_, spec)| spec).collect();
+        let specs = coalesce_loadable_specs(matches);
         return Ok(serde_json::to_string_pretty(&specs)?);
     }
 
     // 独立工具测试/调用没有 Session 注册表时，仍以全量内置工具构建一次性索引。
     let mut registry = ToolRegistry::new();
     crate::register_all(&mut registry);
-    let specs: Vec<_> = search(&searchable_entries(&registry), query, limit)
-        .into_iter()
-        .map(|(_, spec)| spec)
-        .collect();
+    let specs = coalesce_loadable_specs(search(&searchable_entries(&registry), query, limit));
     Ok(serde_json::to_string_pretty(&specs)?)
 }
 
@@ -154,11 +191,13 @@ mod tests {
 
         let web_search = entries
             .iter()
-            .find(|entry| entry.name == "web_search")
+            .find(|entry| entry.registered_name == "web_search")
             .expect("web_search");
         assert_eq!(web_search.toolset, "web_search");
         assert!(web_search.parameters["properties"]["query"].is_object());
-        assert!(entries.iter().any(|entry| entry.name == "web_fetch"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry.registered_name == "web_fetch"));
     }
 
     #[test]
@@ -174,5 +213,24 @@ mod tests {
         assert_eq!(spec["type"], "function");
         assert_eq!(spec["defer_loading"], true);
         assert!(spec["parameters"]["properties"]["query"].is_object());
+    }
+
+    #[test]
+    fn coalesces_tools_from_the_same_native_namespace() {
+        let spec = |name: &str| {
+            serde_json::json!({
+                "type": "namespace",
+                "name": "mcp__calendar",
+                "description": "Calendar tools",
+                "tools": [{"type": "function", "name": name}],
+            })
+        };
+        let specs = coalesce_loadable_specs(vec![
+            ("internal-list".into(), spec("list")),
+            ("internal-create".into(), spec("create")),
+        ]);
+
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0]["tools"].as_array().map(Vec::len), Some(2));
     }
 }

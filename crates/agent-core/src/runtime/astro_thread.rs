@@ -177,6 +177,7 @@ mod tests {
                 Some(vec![types::model_tool::ToolCall {
                     id: "call-search".into(),
                     name: "tool_search".into(),
+                    namespace: None,
                     arguments: serde_json::json!({"query": "image"}),
                     signature: None,
                 }]),

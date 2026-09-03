@@ -186,6 +186,7 @@ impl AgentLoop {
                     .map(|c| types::model_tool::ToolCall {
                         id: c.id.clone(),
                         name: c.name.clone(),
+                        namespace: c.namespace.clone(),
                         arguments: c.arguments.clone(),
                         signature: c.signature.clone(),
                     })
@@ -311,14 +312,22 @@ impl AgentLoop {
         tool_name: Option<&str>,
         content: &str,
     ) -> anyhow::Result<()> {
-        self.record_tool_result_with_id_and_media(tool_call_id, tool_name, content, &[], &[], None)
-            .await
+        let tool_name = tool_name.map(types::ToolName::plain);
+        self.record_tool_result_with_id_and_media(
+            tool_call_id,
+            tool_name.as_ref(),
+            content,
+            &[],
+            &[],
+            None,
+        )
+        .await
     }
 
     pub(crate) async fn record_tool_result_with_id_and_media(
         &self,
         tool_call_id: Option<&str>,
-        tool_name: Option<&str>,
+        tool_name: Option<&types::ToolName>,
         content: &str,
         additional_media: &[types::MediaAsset],
         file_changes: &[types::ToolFileChange],
@@ -359,8 +368,10 @@ impl AgentLoop {
                 }
                 serde_json::Value::Object(metadata)
             });
-        let mut item = match tool_name {
-            Some("tool_search") => ResponseItem::ToolSearchOutput {
+        let namespace = tool_name.and_then(types::ToolName::namespace);
+        let name = tool_name.map(types::ToolName::name);
+        let mut item = match (namespace, name) {
+            (None, Some("tool_search")) => ResponseItem::ToolSearchOutput {
                 id: None,
                 call_id: tool_call_id.map(str::to_string),
                 status: "completed".into(),
@@ -368,11 +379,13 @@ impl AgentLoop {
                 tools: serde_json::from_str(content).unwrap_or_default(),
                 internal_chat_message_metadata_passthrough: metadata,
             },
-            Some("apply_patch" | "exec") if tool_call_id.is_some_and(|id| !id.is_empty()) => {
+            (None, Some("apply_patch" | "exec"))
+                if tool_call_id.is_some_and(|id| !id.is_empty()) =>
+            {
                 ResponseItem::CustomToolCallOutput {
                     id: None,
                     call_id: tool_call_id.expect("guarded above").to_string(),
-                    name: tool_name.map(str::to_string),
+                    name: name.map(str::to_string),
                     output,
                     internal_chat_message_metadata_passthrough: metadata,
                 }
@@ -380,8 +393,8 @@ impl AgentLoop {
             _ => ResponseItem::FunctionCallOutput {
                 id: None,
                 call_id: tool_call_id.map(str::to_string),
-                name: tool_name.map(str::to_string),
-                namespace: None,
+                name: name.map(str::to_string),
+                namespace: namespace.map(str::to_string),
                 output,
                 internal_chat_message_metadata_passthrough: metadata,
             },
@@ -396,7 +409,7 @@ impl AgentLoop {
             match types::write_tool_spill(self.memory_dir(), &self.session_id, item_id, content) {
                 Ok(path) => {
                     let rel = types::spill_path_for_prompt(self.memory_dir(), &path);
-                    let view = types::make_spill_view(tool_name, &rel, content.len(), content);
+                    let view = types::make_spill_view(name, &rel, content.len(), content);
                     self.services
                         .sessions
                         .update_response_item_compressed_content(item_id, Some(&view))
@@ -470,8 +483,8 @@ fn response_items_for_assistant(
         });
     }
     for call in calls {
-        let item = match call.name.as_str() {
-            "tool_search" => ResponseItem::ToolSearchCall {
+        let item = match (call.namespace.as_deref(), call.name.as_str()) {
+            (None, "tool_search") => ResponseItem::ToolSearchCall {
                 id: Some(call.id.clone().into()),
                 call_id: Some(call.id.clone()),
                 status: Some("completed".into()),
@@ -479,12 +492,12 @@ fn response_items_for_assistant(
                 arguments: call.arguments.clone(),
                 internal_chat_message_metadata_passthrough: None,
             },
-            "apply_patch" | "exec" => ResponseItem::CustomToolCall {
+            (None, "apply_patch" | "exec") => ResponseItem::CustomToolCall {
                 id: Some(call.id.clone().into()),
                 status: Some("completed".into()),
                 call_id: call.id.clone(),
                 name: call.name.clone(),
-                namespace: None,
+                namespace: call.namespace.clone(),
                 input: call
                     .arguments
                     .as_str()
@@ -495,7 +508,7 @@ fn response_items_for_assistant(
             _ => ResponseItem::FunctionCall {
                 id: Some(call.id.clone().into()),
                 name: call.name.clone(),
-                namespace: None,
+                namespace: call.namespace.clone(),
                 arguments: match &call.arguments {
                     serde_json::Value::String(value) => value.clone(),
                     value => serde_json::to_string(value)?,

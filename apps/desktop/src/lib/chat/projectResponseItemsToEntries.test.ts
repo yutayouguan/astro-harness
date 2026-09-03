@@ -81,6 +81,37 @@ test("projectResponseItemsToEntries restores persisted terminal tool status", ()
   assert.equal(messages[0]?.activities?.[0]?.status, "declined");
 });
 
+test("projectResponseItemsToEntries preserves native tool namespaces", () => {
+  const messages = projectResponseItemsToEntries([
+    {
+      id: "1",
+      timestamp: 1,
+      item: {
+        type: "function_call",
+        call_id: "call_1",
+        namespace: "cron",
+        name: "list",
+        arguments: "{}",
+      },
+    },
+    {
+      id: "2",
+      timestamp: 2,
+      item: {
+        type: "function_call_output",
+        call_id: "call_1",
+        namespace: "cron",
+        name: "list",
+        output: "[]",
+      },
+    },
+  ]);
+
+  const activity = messages[0]?.activities?.[0];
+  assert.equal(activity?.title, "cron.list");
+  assert.equal(activity?.output, "[]");
+});
+
 test("projectResponseItemsToEntries renders native shell, web, image, and agent items", () => {
   const messages = projectResponseItemsToEntries([
     {

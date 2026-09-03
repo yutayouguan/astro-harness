@@ -21,6 +21,7 @@ async fn search_returns_full_schema_without_mutating_deferred_dynamic_tool() {
     registry.register(ToolEntry {
         name: "mcp__calendar__list_events".into(),
         toolset: "mcp".into(),
+        namespace: "mcp__calendar".into(),
         description: "List upcoming calendar events".into(),
         schema: serde_json::json!({
             "type": "object",
@@ -68,11 +69,12 @@ async fn search_returns_full_schema_without_mutating_deferred_dynamic_tool() {
     .await
     .unwrap();
     let specs: serde_json::Value = serde_json::from_str(&output).unwrap();
-    assert_eq!(specs[0]["type"], "function");
-    assert_eq!(specs[0]["name"], "mcp__calendar__list_events");
-    assert_eq!(specs[0]["defer_loading"], true);
+    assert_eq!(specs[0]["type"], "namespace");
+    assert_eq!(specs[0]["name"], "mcp__calendar");
+    assert_eq!(specs[0]["tools"][0]["name"], "list_events");
+    assert_eq!(specs[0]["tools"][0]["defer_loading"], true);
     assert_eq!(
-        specs[0]["parameters"]["properties"]["days"]["type"],
+        specs[0]["tools"][0]["parameters"]["properties"]["days"]["type"],
         "integer"
     );
 
@@ -83,13 +85,12 @@ async fn search_returns_full_schema_without_mutating_deferred_dynamic_tool() {
             .and_then(|name| name.as_str())
             == Some("mcp__calendar__list_events")
     }));
-    let discovered = HashSet::from(["mcp__calendar__list_events"]);
+    let discovered = HashSet::from([types::ToolName::namespaced("mcp__calendar", "list_events")]);
     let routable_deferred = registry.read().unwrap().schemas_for_step(&discovered).1;
     assert!(routable_deferred.iter().any(|spec| {
-        spec.get("name")
-            .or_else(|| spec.pointer("/function/name"))
-            .and_then(|name| name.as_str())
-            == Some("mcp__calendar__list_events")
+        spec["type"] == "namespace"
+            && spec["name"] == "mcp__calendar"
+            && spec["tools"][0]["name"] == "list_events"
     }));
 }
 
@@ -99,6 +100,7 @@ fn deferred_tool_remains_deferred_after_registry_reregistration() {
     let deferred = || ToolEntry {
         name: "mcp__calendar__list_events".into(),
         toolset: "mcp".into(),
+        namespace: "mcp__calendar".into(),
         description: "List upcoming calendar events".into(),
         icon: "plug",
         ..ToolEntry::lifecycle_defaults().deferred()

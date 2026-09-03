@@ -1,6 +1,6 @@
 //! MCP 连接池与工具调用。
 //!
-//! 按 Agent 加载配置、维持 RunningService，并向 ToolRegistry 暴露限定名工具。
+//! 按 Agent 加载配置、维持 RunningService，并向 ToolRegistry 暴露原生命名空间工具。
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -26,7 +26,8 @@ use crate::config::{
 };
 use crate::elicitation::McpElicitationBroker;
 use crate::names::{
-    is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_TOOLSET,
+    is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, tool_namespace,
+    MCP_TOOLSET,
 };
 
 /// 同时启动的 MCP Server 上限。
@@ -129,6 +130,8 @@ impl McpExecutionContext {
 pub struct ToolEntrySpec {
     /// `mcp__{server}__{tool}` 限定名。
     pub qualified_name: String,
+    /// Responses API 原生命名空间 `mcp__{server}`。
+    pub namespace: String,
     /// 服务器 id。
     pub server_id: String,
     /// 原生工具名。
@@ -846,6 +849,7 @@ impl McpHub {
                 let schema = Value::Object(tool.input_schema.as_ref().clone());
                 out.push(ToolEntrySpec {
                     qualified_name: qualify_tool_name(sid, native),
+                    namespace: tool_namespace(sid),
                     server_id: sid.clone(),
                     native_name: native.to_string(),
                     description: tool

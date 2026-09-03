@@ -70,12 +70,9 @@ pub struct ToolRegistry {
 }
 
 fn namespace_child_name(entry: &ToolEntry) -> String {
-    entry
-        .name
-        .strip_prefix(&format!("{}_", entry.namespace))
-        .or_else(|| entry.name.strip_prefix(&format!("{}.", entry.namespace)))
-        .unwrap_or(&entry.name)
-        .to_string()
+    match entry.tool_name() {
+        types::ToolName::Plain(name) | types::ToolName::Namespaced { name, .. } => name,
+    }
 }
 
 fn is_code_mode_control(name: &str) -> bool {
@@ -407,7 +404,7 @@ impl ToolRegistry {
     /// `check_fn`，其中浏览器等探测可能涉及文件系统查询。
     pub fn schemas_for_step(
         &self,
-        discovered_deferred: &HashSet<&str>,
+        discovered_deferred: &HashSet<types::ToolName>,
     ) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
         let (visible, callable, _) = self
             .schemas_for_step_with_mode(types::ToolMode::Direct, discovered_deferred)
@@ -422,7 +419,7 @@ impl ToolRegistry {
     pub fn schemas_for_step_with_mode(
         &self,
         requested: types::ToolMode,
-        discovered_deferred: &HashSet<&str>,
+        discovered_deferred: &HashSet<types::ToolName>,
     ) -> anyhow::Result<(
         Vec<serde_json::Value>,
         Vec<serde_json::Value>,
@@ -443,7 +440,7 @@ impl ToolRegistry {
             let is_discovered = mode != types::ToolMode::CodeModeOnly
                 && !is_control
                 && entry.exposure.is_deferred()
-                && discovered_deferred.contains(entry.name.as_str());
+                && discovered_deferred.contains(&entry.tool_name());
             let is_nested = mode != types::ToolMode::Direct
                 && !is_control
                 && entry.name != "tool_search"
@@ -541,7 +538,7 @@ mod tests {
         let discovered = reg
             .searchable_deferred_tools()
             .into_iter()
-            .map(|entry| entry.name.as_str())
+            .map(ToolEntry::tool_name)
             .collect();
         let (mut schemas, deferred) = reg.schemas_for_step(&discovered);
         schemas.extend(deferred);
@@ -699,7 +696,7 @@ mod tests {
 
         assert!(reg.is_tool_allowed("image_gen"));
         assert!(!schema_names(&reg).iter().any(|name| name == "image_gen"));
-        let discovered = HashSet::from(["image_gen"]);
+        let discovered = HashSet::from([types::ToolName::plain("image_gen")]);
         assert!(reg
             .schemas_for_step(&discovered)
             .1
@@ -731,7 +728,7 @@ mod tests {
             reg.register(entry);
         }
 
-        let discovered = HashSet::from(["found"]);
+        let discovered = HashSet::from([types::ToolName::plain("found")]);
         let (visible, routable_deferred) = reg.schemas_for_step(&discovered);
         let names = |specs: &[serde_json::Value]| {
             specs
@@ -758,7 +755,10 @@ mod tests {
         }
 
         assert!(reg.searchable_deferred_tools().is_empty());
-        let discovered = HashSet::from(["exec", "wait"]);
+        let discovered = HashSet::from([
+            types::ToolName::plain("exec"),
+            types::ToolName::plain("wait"),
+        ]);
         let (visible, routable_deferred) = reg.schemas_for_step(&discovered);
         assert!(visible.is_empty());
         assert!(routable_deferred.is_empty());

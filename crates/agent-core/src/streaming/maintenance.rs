@@ -270,8 +270,15 @@ pub(super) async fn post_tool_maintenance(
         }
     }
 
-    let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-    let stop_after = step_context.tool_router.any_stop_after(&names);
+    let names: Vec<String> = calls
+        .iter()
+        .map(types::ParsedToolCall::display_name)
+        .collect();
+    let stop_after = calls.iter().any(|call| {
+        step_context
+            .tool_router
+            .stop_after(call.namespace.as_deref(), &call.name)
+    });
     if stop_after {
         tracing::info!(
             ?names,
@@ -327,11 +334,12 @@ pub(super) async fn record_tool_outcomes(
         }
 
         let recorded = {
+            let tool_name = call.tool_name();
             let agent = session.as_ref();
             agent
                 .record_tool_result_with_id_and_media(
                     Some(&call.id),
-                    Some(&call.name),
+                    Some(&tool_name),
                     &result_for_history,
                     &tool_media,
                     &tool_file_changes,
@@ -361,7 +369,7 @@ pub(super) async fn record_tool_outcomes(
             bounded_tool_completed_event_with_execution(
                 turn_context.sub_id(),
                 &call.id,
-                &call.name,
+                &call.display_name(),
                 call.arguments.clone(),
                 Some(serde_json::Value::String(result_text.clone())),
                 tool_media,
@@ -372,7 +380,7 @@ pub(super) async fn record_tool_outcomes(
             bounded_tool_completed_event(
                 turn_context.sub_id(),
                 &call.id,
-                &call.name,
+                &call.display_name(),
                 call.arguments.clone(),
                 Some(serde_json::Value::String(result_text.clone())),
                 tool_media,

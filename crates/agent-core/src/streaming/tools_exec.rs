@@ -247,7 +247,9 @@ fn sandbox_policy_for_call(
     workspace_write_grant: bool,
     managed_network: Option<&Arc<network_proxy::StartedNetworkProxy>>,
 ) -> Result<Option<sandbox::SandboxPolicy>, crate::runtime::ToolCallError> {
-    let preference = step_context.tool_router.sandbox_preference(&call.name);
+    let preference = step_context
+        .tool_router
+        .sandbox_preference(call.namespace.as_deref(), &call.name);
     if preference == types::SandboxablePreference::Forbid {
         return Ok(None);
     }
@@ -802,7 +804,9 @@ async fn preflight_mcp_tool_approval(
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
-    let approval = step_context.tool_router.mcp_approval(&call.name);
+    let approval = step_context
+        .tool_router
+        .mcp_approval(call.namespace.as_deref(), &call.name);
     let Some(approval) = approval else {
         return Some(PermissionPreflight::NotRequired);
     };
@@ -1591,11 +1595,19 @@ async fn execute_tools_serial_inner(
             return None;
         }
         let can_route = match origin {
-            ToolCallOrigin::Model => step_context.tool_router.model_can_call(&call.name),
+            ToolCallOrigin::Model => step_context
+                .tool_router
+                .model_can_call(call.namespace.as_deref(), &call.name),
             ToolCallOrigin::CodeMode => step_context.routes_tool(&call.name),
         };
         if !can_route {
-            out.push(format!("工具 `{}` 未在本次 StepContext 注册，无法执行。", call.name).into());
+            out.push(
+                format!(
+                    "工具 `{}` 未在本次 StepContext 注册，无法执行。",
+                    call.display_name()
+                )
+                .into(),
+            );
             continue;
         }
 
@@ -2204,6 +2216,7 @@ async fn execute_tools_serial_inner(
                         cancellation_token: CancellationToken::new(),
                         call_id: call.id.clone(),
                         tool_name: call.name.clone(),
+                        tool_namespace: call.namespace.clone(),
                         payload: call.arguments.clone(),
                     },
                     ToolExecutionGrants {
@@ -2294,6 +2307,7 @@ async fn execute_tools_serial_inner(
                                         cancellation_token: CancellationToken::new(),
                                         call_id: call.id.clone(),
                                         tool_name: call.name.clone(),
+                                        tool_namespace: call.namespace.clone(),
                                         payload: call.arguments.clone(),
                                     },
                                     ToolExecutionGrants {
@@ -2443,10 +2457,12 @@ pub(crate) async fn execute_tools_concurrent(
     for (idx, call) in calls.iter().cloned().enumerate() {
         let runtime = runtime.clone();
         let child_permit = turn_context.track_child();
-        let model_can_call = step_context.tool_router.model_can_call(&call.name);
+        let model_can_call = step_context
+            .tool_router
+            .model_can_call(call.namespace.as_deref(), &call.name);
         join_set.spawn_blocking(move || {
             let _child_permit = child_permit;
-            let tool_name = call.name.clone();
+            let tool_name = call.display_name();
             let result = if !model_can_call {
                 Ok(types::ToolOutput::from(format!(
                     "工具 `{}` 未在本次 StepContext 向模型开放，无法直接执行。",

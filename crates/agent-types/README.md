@@ -78,7 +78,7 @@
 1. **零业务逻辑**：本 crate 仅定义类型与简单转换，不包含运行时逻辑或 I/O 操作
 2. **history 归属**：不在本 crate 恢复通用 `Message`；Agent history 唯一类型是 `agent-protocol::ResponseItem`
 3. **tool spill 阈值**：工具结果 >= `DEFAULT_SPILL_THRESHOLD_BYTES` 时必须落盘，provider view 使用 stub
-4. **MCP 工具名前缀**：`mcp__{server_id}__{tool_name}`，由 `is_mcp_tool_name()` 检测
+4. **MCP 工具身份**：模型侧使用原生 `namespace=mcp__{server_id}` + `name={tool_name}`；Hub 内部执行键仍为 `mcp__{server_id}__{tool_name}`
 5. **MAX_MODEL_FALLBACKS**：单条 fallback 链最多允许的备用目标数量
 
 ## 测试

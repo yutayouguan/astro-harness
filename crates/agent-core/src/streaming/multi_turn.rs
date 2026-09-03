@@ -136,6 +136,7 @@ async fn record_assistant_output(
             .map(|call| types::model_tool::ToolCall {
                 id: call.id.clone(),
                 name: call.name.clone(),
+                namespace: call.namespace.clone(),
                 arguments: call.arguments.clone(),
                 signature: call.signature.clone(),
             })
@@ -1233,13 +1234,19 @@ pub(crate) async fn run_turn(
         }
 
         let force_serial = {
-            let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-            step_context.tool_router.any_needs_confirmation(&names)
-                || step_context.tool_router.any_exclusive_access(&names)
-                || step_context.tool_router.any_may_require_approval(&names)
-                || calls
-                    .iter()
-                    .any(|c| tool_may_require_permission(&c.name, &c.arguments))
+            calls.iter().any(|call| {
+                step_context
+                    .tool_router
+                    .needs_confirmation(call.namespace.as_deref(), &call.name)
+                    || step_context
+                        .tool_router
+                        .exclusive_access(call.namespace.as_deref(), &call.name)
+                    || step_context
+                        .tool_router
+                        .may_require_approval(call.namespace.as_deref(), &call.name)
+            }) || calls
+                .iter()
+                .any(|c| tool_may_require_permission(&c.name, &c.arguments))
         };
         let tool_execution = calls.first().map(|first| ToolExecutionMetadata {
             batch_id: format!("tool-batch-{}", first.id),
@@ -1355,7 +1362,7 @@ pub(crate) async fn run_turn(
                     turn_id: turn_context.sub_id().to_string(),
                     item: tool_turn_item_with_execution(
                         call.id.clone(),
-                        call.name.clone(),
+                        call.display_name(),
                         call.arguments.clone(),
                         None,
                         Vec::new(),
@@ -1514,6 +1521,7 @@ mod tests {
         assert_eq!(calls[0].item_id.as_deref(), Some("item_7"));
         assert_eq!(calls[0].id, "call_7");
         assert_eq!(calls[0].namespace.as_deref(), Some("mcp"));
+        assert_eq!(calls[0].display_name(), "mcp.lookup");
         assert_eq!(
             calls[0].encrypted_arguments.as_deref(),
             Some(&["ciphertext".into()][..])

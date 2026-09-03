@@ -475,7 +475,7 @@ impl CompressionPolicy for StagedCompressionPolicy {
                 }
                 plan.prune.push(PruneTarget {
                     message_id: stored_msg.id,
-                    tool_name: stored_msg.tool_name().map(str::to_string),
+                    tool_name: stored_msg.qualified_tool_name(),
                     spill_rel,
                 });
                 continue;
@@ -495,7 +495,7 @@ impl CompressionPolicy for StagedCompressionPolicy {
             if content.chars().count() <= stage.max_compressed_chars {
                 plan.compress.push(CompressTarget {
                     message_id: stored_msg.id,
-                    tool_name: stored_msg.tool_name().map(str::to_string),
+                    tool_name: stored_msg.qualified_tool_name(),
                     content: content.clone(),
                     max_chars: stage.max_compressed_chars,
                     head_chars: stage.head_chars,
@@ -506,7 +506,7 @@ impl CompressionPolicy for StagedCompressionPolicy {
 
             plan.compress.push(CompressTarget {
                 message_id: stored_msg.id,
-                tool_name: stored_msg.tool_name().map(str::to_string),
+                tool_name: stored_msg.qualified_tool_name(),
                 content,
                 max_chars: stage.max_compressed_chars,
                 head_chars: stage.head_chars,

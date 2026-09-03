@@ -30,6 +30,6 @@ impl StepContext {
 
     /// 工具是否存在于本次 Step 捕获的完整可调用路由中。
     pub(crate) fn routes_tool(&self, name: &str) -> bool {
-        self.tool_router.has_tool(name)
+        self.tool_router.has_tool(None, name)
     }
 }

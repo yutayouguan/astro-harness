@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
-use providers::types::request_content::legacy_namespace_function_name;
 use tools::{DynToolHandler, ToolRegistry};
 
 #[derive(Clone)]
@@ -25,9 +24,9 @@ struct ToolRoute {
 /// `tool_search_output` 激活的 Deferred 工具外，还可包含仅供 QuickJS cell 使用的
 /// 嵌套路由。`model_routes` 单独约束模型顶层调用，防止越过披露边界。
 pub(crate) struct ToolRouter {
-    routes: HashMap<String, ToolRoute>,
+    routes: HashMap<types::ToolName, ToolRoute>,
     /// 模型可以直接发起的路由；Code Mode 嵌套路由不在其中。
-    model_routes: HashSet<String>,
+    model_routes: HashSet<types::ToolName>,
     model_visible_specs: Arc<[serde_json::Value]>,
 }
 
@@ -58,13 +57,13 @@ impl ToolRouter {
             .iter()
             .chain(model_visible_specs.iter())
         {
-            for (wire_name, registered_name) in spec_route_names(registry, spec) {
-                model_routes.insert(wire_name.clone());
+            for (tool_name, registered_name) in spec_route_names(registry, spec) {
+                model_routes.insert(tool_name.clone());
                 let Some(entry) = registry.get(&registered_name) else {
                     continue;
                 };
                 routes.insert(
-                    wire_name,
+                    tool_name,
                     ToolRoute {
                         registered_name: registered_name.clone(),
                         dynamic_handler: registry.dynamic_handler(&registered_name),
@@ -79,11 +78,14 @@ impl ToolRouter {
             }
         }
         for spec in nested_callable_specs {
-            for (wire_name, registered_name) in spec_route_names(registry, spec) {
+            for (tool_name, registered_name) in spec_route_names(registry, spec) {
                 let Some(entry) = registry.get(&registered_name) else {
                     continue;
                 };
-                routes.entry(wire_name).or_insert_with(|| ToolRoute {
+                let code_mode_name = types::ToolName::plain(
+                    super::code_mode::normalize_identifier(&tool_name.wire_name()),
+                );
+                routes.entry(code_mode_name).or_insert_with(|| ToolRoute {
                     registered_name: registered_name.clone(),
                     dynamic_handler: registry.dynamic_handler(&registered_name),
                     needs_confirmation: entry.needs_confirmation,
@@ -106,83 +108,96 @@ impl ToolRouter {
         Arc::clone(&self.model_visible_specs)
     }
 
-    pub(crate) fn has_tool(&self, name: &str) -> bool {
-        self.routes.contains_key(name)
-    }
-
-    pub(crate) fn model_can_call(&self, name: &str) -> bool {
-        self.model_routes.contains(name)
-    }
-
-    pub(crate) fn registered_name<'a>(&'a self, wire_name: &'a str) -> &'a str {
+    pub(crate) fn has_tool(&self, namespace: Option<&str>, name: &str) -> bool {
         self.routes
-            .get(wire_name)
-            .map_or(wire_name, |route| route.registered_name.as_str())
+            .contains_key(&types::ToolName::new(namespace, name))
     }
 
-    pub(crate) fn dynamic_handler(&self, name: &str) -> Option<DynToolHandler> {
+    pub(crate) fn model_can_call(&self, namespace: Option<&str>, name: &str) -> bool {
+        self.model_routes
+            .contains(&types::ToolName::new(namespace, name))
+    }
+
+    pub(crate) fn registered_name(&self, namespace: Option<&str>, name: &str) -> Option<&str> {
         self.routes
-            .get(name)
+            .get(&types::ToolName::new(namespace, name))
+            .map(|route| route.registered_name.as_str())
+    }
+
+    pub(crate) fn dynamic_handler(
+        &self,
+        namespace: Option<&str>,
+        name: &str,
+    ) -> Option<DynToolHandler> {
+        self.routes
+            .get(&types::ToolName::new(namespace, name))
             .and_then(|route| route.dynamic_handler.clone())
     }
 
-    pub(crate) fn any_needs_confirmation(&self, names: &[&str]) -> bool {
-        names.iter().any(|name| {
-            self.routes
-                .get(*name)
-                .is_some_and(|route| route.needs_confirmation)
-        })
-    }
-
-    pub(crate) fn any_stop_after(&self, names: &[&str]) -> bool {
-        names.iter().any(|name| {
-            self.routes
-                .get(*name)
-                .is_some_and(|route| route.stop_after_tool_call)
-        })
-    }
-
-    pub(crate) fn any_exclusive_access(&self, names: &[&str]) -> bool {
-        names.iter().any(|name| {
-            self.routes
-                .get(*name)
-                .is_some_and(|route| route.exclusive_access)
-        })
-    }
-
-    pub(crate) fn mcp_approval(&self, name: &str) -> Option<types::McpToolApproval> {
+    pub(crate) fn needs_confirmation(&self, namespace: Option<&str>, name: &str) -> bool {
         self.routes
-            .get(name)
+            .get(&types::ToolName::new(namespace, name))
+            .is_some_and(|route| route.needs_confirmation)
+    }
+
+    pub(crate) fn stop_after(&self, namespace: Option<&str>, name: &str) -> bool {
+        self.routes
+            .get(&types::ToolName::new(namespace, name))
+            .is_some_and(|route| route.stop_after_tool_call)
+    }
+
+    pub(crate) fn exclusive_access(&self, namespace: Option<&str>, name: &str) -> bool {
+        self.routes
+            .get(&types::ToolName::new(namespace, name))
+            .is_some_and(|route| route.exclusive_access)
+    }
+
+    pub(crate) fn mcp_approval(
+        &self,
+        namespace: Option<&str>,
+        name: &str,
+    ) -> Option<types::McpToolApproval> {
+        self.routes
+            .get(&types::ToolName::new(namespace, name))
             .and_then(|route| route.mcp_approval.clone())
     }
 
     #[allow(dead_code)]
-    pub(crate) fn approval_requirement(&self, name: &str) -> types::ExecApprovalRequirement {
+    pub(crate) fn approval_requirement(
+        &self,
+        namespace: Option<&str>,
+        name: &str,
+    ) -> types::ExecApprovalRequirement {
         self.routes
-            .get(name)
+            .get(&types::ToolName::new(namespace, name))
             .map_or(types::ExecApprovalRequirement::Skip, |route| {
                 route.approval_requirement
             })
     }
 
-    pub(crate) fn any_may_require_approval(&self, names: &[&str]) -> bool {
-        names.iter().any(|name| {
-            self.routes.get(*name).is_some_and(|route| {
-                route.approval_requirement != types::ExecApprovalRequirement::Skip
-            })
-        })
+    pub(crate) fn may_require_approval(&self, namespace: Option<&str>, name: &str) -> bool {
+        self.routes
+            .get(&types::ToolName::new(namespace, name))
+            .is_some_and(|route| route.approval_requirement != types::ExecApprovalRequirement::Skip)
     }
 
-    pub(crate) fn sandbox_preference(&self, name: &str) -> types::SandboxablePreference {
+    pub(crate) fn sandbox_preference(
+        &self,
+        namespace: Option<&str>,
+        name: &str,
+    ) -> types::SandboxablePreference {
         self.routes
-            .get(name)
+            .get(&types::ToolName::new(namespace, name))
             .map_or(types::SandboxablePreference::Forbid, |route| {
                 route.sandbox_preference
             })
     }
 }
 
-fn spec_route_names(registry: &ToolRegistry, spec: &serde_json::Value) -> Vec<(String, String)> {
+fn spec_route_names(
+    registry: &ToolRegistry,
+    spec: &serde_json::Value,
+) -> Vec<(types::ToolName, String)> {
     let kind = spec
         .get("type")
         .and_then(serde_json::Value::as_str)
@@ -201,20 +216,16 @@ fn spec_route_names(registry: &ToolRegistry, spec: &serde_json::Value) -> Vec<(S
             let Some(child_name) = child.get("name").and_then(serde_json::Value::as_str) else {
                 continue;
             };
-            let native_wire_name = format!("{namespace}.{child_name}");
-            let legacy_wire_name = legacy_namespace_function_name(namespace, child_name);
-            let Some(registered_name) = [
-                format!("{namespace}_{child_name}"),
-                legacy_wire_name.clone(),
-                native_wire_name.clone(),
-                child_name.to_string(),
-            ]
-            .into_iter()
-            .find(|candidate| registry.get(candidate).is_some()) else {
+            let tool_name = types::ToolName::namespaced(namespace, child_name);
+            let Some(registered_name) = registry
+                .all_tools()
+                .into_iter()
+                .find(|entry| entry.tool_name() == tool_name)
+                .map(|entry| entry.name.clone())
+            else {
                 continue;
             };
-            routes.push((native_wire_name, registered_name.clone()));
-            routes.push((legacy_wire_name, registered_name));
+            routes.push((tool_name, registered_name));
         }
         return routes;
     }
@@ -222,12 +233,10 @@ fn spec_route_names(registry: &ToolRegistry, spec: &serde_json::Value) -> Vec<(S
     let name = if kind == "tool_search" {
         Some("tool_search")
     } else {
-        spec.get("name")
-            .or_else(|| spec.pointer("/function/name"))
-            .and_then(serde_json::Value::as_str)
+        spec.get("name").and_then(serde_json::Value::as_str)
     };
     name.filter(|name| registry.get(name).is_some())
-        .map(|name| vec![(name.to_string(), name.to_string())])
+        .map(|name| vec![(types::ToolName::plain(name), name.to_string())])
         .unwrap_or_default()
 }
 
@@ -259,7 +268,8 @@ mod tests {
         });
         let specs = vec![serde_json::json!({
             "type": "function",
-            "function": {"name": "sandboxed", "parameters": {}}
+            "name": "sandboxed",
+            "parameters": {}
         })];
         let router = ToolRouter::from_registry(&registry, &specs, specs.clone());
         registry.register(types::ToolEntry {
@@ -273,11 +283,11 @@ mod tests {
         });
 
         assert_eq!(
-            router.sandbox_preference("sandboxed"),
+            router.sandbox_preference(None, "sandboxed"),
             types::SandboxablePreference::Auto
         );
         assert_eq!(
-            router.sandbox_preference("missing"),
+            router.sandbox_preference(None, "missing"),
             types::SandboxablePreference::Forbid
         );
     }
@@ -311,14 +321,15 @@ mod tests {
             ..types::ToolEntry::lifecycle_defaults().deferred()
         });
 
-        let discovered = std::collections::HashSet::from(["deferred_tool"]);
+        let discovered = std::collections::HashSet::from([types::ToolName::plain("deferred_tool")]);
         let (visible, routable_deferred) = registry.schemas_for_step(&discovered);
         let router = ToolRouter::from_registry(&registry, &routable_deferred, visible);
 
-        assert!(router.has_tool("direct_tool"));
-        assert!(router.has_tool("deferred_tool"));
-        assert!(!router.has_tool("unseen_deferred_tool"));
-        assert!(!router.has_tool("hidden_tool"));
+        assert!(router.has_tool(None, "direct_tool"));
+        assert!(router.has_tool(Some("functions"), "direct_tool"));
+        assert!(router.has_tool(None, "deferred_tool"));
+        assert!(!router.has_tool(None, "unseen_deferred_tool"));
+        assert!(!router.has_tool(None, "hidden_tool"));
         let specs = router.model_visible_specs();
         let advertised: Vec<&str> = specs
             .iter()
@@ -354,13 +365,13 @@ mod tests {
         })];
         let router = ToolRouter::from_registry_with_nested(&registry, &[], visible, &nested);
 
-        assert!(router.model_can_call("exec"));
-        assert!(!router.model_can_call("business_tool"));
-        assert!(router.has_tool("business_tool"));
+        assert!(router.model_can_call(None, "exec"));
+        assert!(!router.model_can_call(None, "business_tool"));
+        assert!(router.has_tool(None, "business_tool"));
     }
 
     #[test]
-    fn namespace_wire_name_resolves_to_registered_handler_name() {
+    fn native_namespace_identity_resolves_without_flattened_aliases() {
         let mut registry = ToolRegistry::new();
         registry.register(types::ToolEntry {
             name: "cron_list".into(),
@@ -373,10 +384,13 @@ mod tests {
             registry.schemas_for_step(&std::collections::HashSet::new());
         let router = ToolRouter::from_registry(&registry, &routable_deferred, visible);
 
-        assert!(router.has_tool("cron.list"));
-        assert_eq!(router.registered_name("cron.list"), "cron_list");
-        assert!(router.has_tool("cron__list"));
-        assert_eq!(router.registered_name("cron__list"), "cron_list");
+        assert!(router.has_tool(Some("cron"), "list"));
+        assert_eq!(
+            router.registered_name(Some("cron"), "list"),
+            Some("cron_list")
+        );
+        assert!(!router.has_tool(None, "cron.list"));
+        assert!(!router.has_tool(None, "cron__list"));
     }
 
     #[test]
@@ -396,21 +410,21 @@ mod tests {
             ..types::ToolEntry::lifecycle_defaults()
         });
         let specs = vec![
-            serde_json::json!({"type": "function", "function": {"name": "needs_approval", "parameters": {}}}),
-            serde_json::json!({"type": "function", "function": {"name": "auto_skip", "parameters": {}}}),
+            serde_json::json!({"type": "function", "name": "needs_approval", "parameters": {}}),
+            serde_json::json!({"type": "function", "name": "auto_skip", "parameters": {}}),
         ];
         let router = ToolRouter::from_registry(&registry, &specs, specs.clone());
 
         assert_eq!(
-            router.approval_requirement("needs_approval"),
+            router.approval_requirement(None, "needs_approval"),
             types::ExecApprovalRequirement::NeedsApproval
         );
         assert_eq!(
-            router.approval_requirement("auto_skip"),
+            router.approval_requirement(None, "auto_skip"),
             types::ExecApprovalRequirement::Skip
         );
-        assert!(router.any_may_require_approval(&["needs_approval", "auto_skip"]));
-        assert!(!router.any_may_require_approval(&["auto_skip"]));
-        assert!(!router.any_may_require_approval(&["unknown"]));
+        assert!(router.may_require_approval(None, "needs_approval"));
+        assert!(!router.may_require_approval(None, "auto_skip"));
+        assert!(!router.may_require_approval(None, "unknown"));
     }
 }

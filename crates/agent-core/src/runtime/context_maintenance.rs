@@ -272,6 +272,7 @@ mod tests {
                 Some(vec![types::model_tool::ToolCall {
                     id: "call-1".into(),
                     name: "echo".into(),
+                    namespace: None,
                     arguments: serde_json::json!({}),
                     signature: None,
                 }]),

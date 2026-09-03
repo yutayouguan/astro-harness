@@ -324,9 +324,23 @@ impl ResponseItem {
                 .collect::<Vec<_>>()
                 .join("\n"),
             Self::FunctionCall {
-                name, arguments, ..
-            } => format!("{name}: {arguments}"),
-            Self::CustomToolCall { name, input, .. } => format!("{name}: {input}"),
+                name,
+                namespace,
+                arguments,
+                ..
+            } => format!(
+                "{}: {arguments}",
+                qualified_tool_name(namespace.as_deref(), name)
+            ),
+            Self::CustomToolCall {
+                name,
+                namespace,
+                input,
+                ..
+            } => format!(
+                "{}: {input}",
+                qualified_tool_name(namespace.as_deref(), name)
+            ),
             Self::ToolSearchCall { arguments, .. } => arguments.to_string(),
             Self::LocalShellCall { action, .. } => action.to_string(),
             Self::WebSearchCall { action, .. } => {
@@ -375,6 +389,20 @@ impl ResponseItem {
             Self::ToolSearchCall { .. } | Self::ToolSearchOutput { .. } => Some("tool_search"),
             _ => None,
         }
+    }
+
+    pub fn tool_namespace(&self) -> Option<&str> {
+        match self {
+            Self::FunctionCall { namespace, .. }
+            | Self::FunctionCallOutput { namespace, .. }
+            | Self::CustomToolCall { namespace, .. } => namespace.as_deref(),
+            _ => None,
+        }
+    }
+
+    pub fn qualified_tool_name(&self) -> Option<String> {
+        self.tool_name()
+            .map(|name| qualified_tool_name(self.tool_namespace(), name))
     }
 
     pub fn call_id(&self) -> Option<&str> {
@@ -512,6 +540,15 @@ impl ResponseItem {
             Self::AdditionalTools { .. } | Self::CompactionTrigger {} | Self::Other => None,
         }
     }
+}
+
+fn qualified_tool_name(namespace: Option<&str>, name: &str) -> String {
+    namespace
+        .filter(|namespace| !namespace.is_empty() && *namespace != "functions")
+        .map_or_else(
+            || name.to_string(),
+            |namespace| format!("{namespace}.{name}"),
+        )
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

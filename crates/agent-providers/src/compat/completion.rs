@@ -279,7 +279,7 @@ mod tests {
     };
 
     #[test]
-    fn namespace_tools_use_function_compatible_names() {
+    fn namespace_tools_are_not_flattened_for_legacy_chat_providers() {
         let tools =
             openai_chat_function_tools(&[ToolDefinition::Namespace(ToolNamespaceDefinition {
                 name: "cron".into(),
@@ -293,11 +293,7 @@ mod tests {
                 })],
             })]);
 
-        let name = tools[0]["function"]["name"].as_str().unwrap();
-        assert_eq!(name, "cron__list");
-        assert!(name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')));
+        assert!(tools.is_empty());
     }
 
     #[test]

@@ -8,7 +8,7 @@ MCP（Model Context Protocol）客户端实现：配置加载、进程级连接�
 - **连接池（McpHub）** -- 按 Agent 维护 MCP Server 连接：并行启动（上限 `MAX_PARALLEL_MCP_STARTUPS=4`）、自动重连退避、生命周期状态管理
 - **工具发现** -- 连接成功后自动拉取 Server 工具列表，合并 discovered tool 配置（启用/禁用/超时），暴露 `ToolEntrySpec` 给 ToolRegistry
 - **工具调用** -- `call_tool_with_peer()` 执行远程工具调用，支持超时控制和沙盒策略
-- **限定名约定** -- `mcp__{server_id}__{tool_name}` 格式，自动 sanitize server_id 中的 `__` 避免歧义
+- **原生命名空间** -- 模型看到 `mcp__{server_id}` namespace 与原生子工具；Hub 内部仍用 `mcp__{server_id}__{tool_name}` 执行键
 - **Resources / Prompts** -- 显式按需适配 MCP resources 和 prompts 协议扩展
 - **OAuth 认证** -- `auth` 模块支持 keyring 凭据存取和 HTTP Bearer 认证
 
@@ -29,10 +29,11 @@ MCP（Model Context Protocol）客户端实现：配置加载、进程级连接�
 - `McpServerConfig` -- 单个 Server 配置：transport 类型、命令/URL、环境变量、超时、启用状态
 - `McpTransportType` -- 传输类型枚举：`Stdio`（子进程）/ `StreamableHttp`（HTTP SSE）
 - `McpExecutionContext` -- 连接建立时的沙盒策略快照
-- `ToolEntrySpec` -- 暴露给 ToolRegistry 的工具条目：限定名 + JSON Schema + 描述
+- `ToolEntrySpec` -- 暴露给 ToolRegistry 的工具条目：原生 namespace + 内部执行键 + JSON Schema + 描述
 - `ServerStatus` -- Server 连接状态：Starting / Connected / Failed / Stopped
 - `McpLifecycleState` -- 生命周期状态机
-- `qualify_tool_name(server_id, tool_name)` -- 生成限定名 `mcp__{sid}__{tool}`
+- `tool_namespace(server_id)` -- 生成模型可见 namespace `mcp__{sid}`
+- `qualify_tool_name(server_id, tool_name)` -- 生成 Hub 内部执行键 `mcp__{sid}__{tool}`
 - `parse_qualified_name(name)` -- 解析限定名为 `(server_id, tool_name)`
 - `is_mcp_tool_name(name)` -- 判断是否为 MCP 限定工具名
 

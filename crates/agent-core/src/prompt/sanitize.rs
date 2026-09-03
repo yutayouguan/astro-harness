@@ -85,14 +85,18 @@ pub fn sanitized_response_items(
         normalized.push(item.clone());
 
         let missing_output = match item {
-            ResponseItem::FunctionCall { id, call_id, .. }
-                if !function_outputs.contains(call_id.as_str()) =>
-            {
+            ResponseItem::FunctionCall {
+                id,
+                call_id,
+                name,
+                namespace,
+                ..
+            } if !function_outputs.contains(call_id.as_str()) => {
                 Some(ResponseItem::FunctionCallOutput {
                     id: synthetic_output_id("fco", id.as_ref()),
                     call_id: Some(call_id.clone()),
-                    name: None,
-                    namespace: None,
+                    name: Some(name.clone()),
+                    namespace: namespace.clone(),
                     output: agent_protocol::FunctionCallOutputPayload::from_text("aborted".into()),
                     internal_chat_message_metadata_passthrough: None,
                 })
@@ -181,11 +185,14 @@ mod tests {
             agent_protocol::ResponseItem::FunctionCallOutput {
                 id: Some(id),
                 call_id: Some(call_id),
-                namespace: None,
+                name: Some(name),
+                namespace: Some(namespace),
                 output,
                 ..
             } if id.as_str().starts_with("fco_")
                 && call_id == "call_1"
+                && name == "lookup"
+                && namespace == "mcp"
                 && output.text_content() == Some("aborted")
         ));
     }

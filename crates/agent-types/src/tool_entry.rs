@@ -4,6 +4,9 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+/// Responses API 顶层 function/custom 工具所属的默认命名空间。
+pub const DEFAULT_FUNCTION_NAMESPACE: &str = "functions";
+
 /// 工具名——支持普通名和命名空间。
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ToolName {
@@ -12,14 +15,28 @@ pub enum ToolName {
 }
 
 impl ToolName {
+    pub fn new(namespace: Option<&str>, name: impl Into<String>) -> Self {
+        match namespace
+            .filter(|namespace| !namespace.is_empty() && *namespace != DEFAULT_FUNCTION_NAMESPACE)
+        {
+            Some(namespace) => Self::namespaced(namespace, name),
+            None => Self::plain(name),
+        }
+    }
+
     pub fn plain(name: impl Into<String>) -> Self {
         Self::Plain(name.into())
     }
 
     pub fn namespaced(namespace: impl Into<String>, name: impl Into<String>) -> Self {
-        Self::Namespaced {
-            namespace: namespace.into(),
-            name: name.into(),
+        let namespace = namespace.into();
+        if namespace.is_empty() || namespace == DEFAULT_FUNCTION_NAMESPACE {
+            Self::Plain(name.into())
+        } else {
+            Self::Namespaced {
+                namespace,
+                name: name.into(),
+            }
         }
     }
 
@@ -30,13 +47,16 @@ impl ToolName {
         }
     }
 
-    pub fn parse(wire: &str) -> Self {
-        match wire.split_once('.') {
-            Some((ns, name)) if !ns.is_empty() && !name.is_empty() => Self::Namespaced {
-                namespace: ns.to_string(),
-                name: name.to_string(),
-            },
-            _ => Self::Plain(wire.to_string()),
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Plain(name) | Self::Namespaced { name, .. } => name,
+        }
+    }
+
+    pub fn namespace(&self) -> Option<&str> {
+        match self {
+            Self::Plain(_) => None,
+            Self::Namespaced { namespace, .. } => Some(namespace),
         }
     }
 }
@@ -276,6 +296,19 @@ pub struct ToolEntry {
 }
 
 impl ToolEntry {
+    /// 返回 Responses API 中的原生工具身份。
+    pub fn tool_name(&self) -> ToolName {
+        if self.namespace.is_empty() {
+            return ToolName::plain(self.name.clone());
+        }
+        let child_name = self
+            .name
+            .strip_prefix(&format!("{}__", self.namespace))
+            .or_else(|| self.name.strip_prefix(&format!("{}_", self.namespace)))
+            .unwrap_or(&self.name);
+        ToolName::namespaced(self.namespace.clone(), child_name)
+    }
+
     pub fn lifecycle_defaults() -> Self {
         Self {
             name: String::new(),
@@ -338,22 +371,14 @@ mod tests {
     fn tool_name_plain_roundtrips() {
         let name = ToolName::plain("exec_command");
         assert_eq!(name.wire_name(), "exec_command");
-        assert_eq!(ToolName::parse("exec_command"), name);
+        assert_eq!(ToolName::new(Some("functions"), "exec_command"), name);
     }
 
     #[test]
     fn tool_name_namespaced_roundtrips() {
         let name = ToolName::namespaced("clock", "curr_time");
         assert_eq!(name.wire_name(), "clock.curr_time");
-        assert_eq!(ToolName::parse("clock.curr_time"), name);
         assert_eq!(format!("{name}"), "clock.curr_time");
-    }
-
-    #[test]
-    fn tool_name_parse_edge_cases() {
-        assert_eq!(ToolName::parse(""), ToolName::Plain(String::new()));
-        assert_eq!(ToolName::parse(".name"), ToolName::Plain(".name".into()));
-        assert_eq!(ToolName::parse("ns."), ToolName::Plain("ns.".into()));
     }
 
     #[test]

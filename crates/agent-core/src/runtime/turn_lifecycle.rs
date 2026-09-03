@@ -36,24 +36,40 @@ where
     })
 }
 
-fn discovered_deferred_tool_names(history: &[agent_protocol::ResponseItem]) -> HashSet<&str> {
-    history
-        .iter()
-        .filter_map(|item| match item {
-            agent_protocol::ResponseItem::ToolSearchOutput { status, tools, .. }
-                if status == "completed" =>
-            {
-                Some(tools)
+fn discovered_deferred_tool_names(
+    history: &[agent_protocol::ResponseItem],
+) -> HashSet<types::ToolName> {
+    let mut discovered = HashSet::new();
+    for item in history {
+        let agent_protocol::ResponseItem::ToolSearchOutput { status, tools, .. } = item else {
+            continue;
+        };
+        if status != "completed" {
+            continue;
+        }
+        for tool in tools {
+            if tool.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
+                let Some(namespace) = tool.get("name").and_then(serde_json::Value::as_str) else {
+                    continue;
+                };
+                for child in tool
+                    .get("tools")
+                    .and_then(serde_json::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some(name) = child.get("name").and_then(serde_json::Value::as_str) {
+                        discovered.insert(types::ToolName::new(Some(namespace), name));
+                    }
+                }
+                continue;
             }
-            _ => None,
-        })
-        .flatten()
-        .filter_map(|tool| {
-            tool.get("name")
-                .or_else(|| tool.pointer("/function/name"))
-                .and_then(serde_json::Value::as_str)
-        })
-        .collect()
+            if let Some(name) = tool.get("name").and_then(serde_json::Value::as_str) {
+                discovered.insert(types::ToolName::plain(name));
+            }
+        }
+    }
+    discovered
 }
 
 fn response_item_for_turn_input(
@@ -1404,7 +1420,7 @@ mod tests {
         let visible = visible_tool_names(&step);
         assert_eq!(visible, vec!["exec", "wait"]);
         assert!(step.routes_tool("exec_command"));
-        assert!(!step.tool_router.model_can_call("exec_command"));
+        assert!(!step.tool_router.model_can_call(None, "exec_command"));
     }
 
     #[tokio::test]
@@ -1465,6 +1481,11 @@ mod tests {
                         "type": "function",
                         "function": {"name": "legacy_shape"}
                     }),
+                    serde_json::json!({
+                        "type": "namespace",
+                        "name": "mcp__calendar",
+                        "tools": [{"type": "function", "name": "list_events"}]
+                    }),
                 ],
                 internal_chat_message_metadata_passthrough: None,
             },
@@ -1480,7 +1501,10 @@ mod tests {
 
         assert_eq!(
             discovered_deferred_tool_names(&history),
-            HashSet::from(["legacy_shape", "web_search"])
+            HashSet::from([
+                types::ToolName::plain("web_search"),
+                types::ToolName::namespaced("mcp__calendar", "list_events"),
+            ])
         );
     }
 

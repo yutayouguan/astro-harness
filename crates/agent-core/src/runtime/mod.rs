@@ -2199,6 +2199,7 @@ impl Session {
             tool_registry.register(ToolEntry {
                 name: spec.qualified_name,
                 toolset: MCP_TOOLSET.to_string(),
+                namespace: spec.namespace,
                 description: spec.description,
                 schema: spec.schema,
                 check_fn: None,
@@ -2860,6 +2861,67 @@ mod tests {
             .unwrap();
 
         assert_eq!(output.text(), "dynamic:ok");
+    }
+
+    #[tokio::test]
+    async fn session_dispatches_and_records_native_namespaced_tool() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(Session::new(test_config(&dir)).await.unwrap());
+        session
+            .services
+            .tool_registry
+            .write()
+            .expect("tool registry lock poisoned")
+            .register_dynamic(
+                ToolEntry {
+                    name: "clock_probe".to_string(),
+                    toolset: "clock".to_string(),
+                    namespace: "clock".to_string(),
+                    description: "Test-only namespaced tool".to_string(),
+                    schema: serde_json::json!({"type": "object", "properties": {}}),
+                    ..ToolEntry::lifecycle_defaults()
+                },
+                Arc::new(|_name, _args| {
+                    Box::pin(async { Ok(types::ToolOutput::from("native-ok")) })
+                }),
+            );
+        session.set_current_turn_id("turn-native-namespace").await;
+        let step_context = session.capture_step_context().await.unwrap();
+
+        let output = session
+            .handle_tool_invocation(ToolInvocation {
+                session: Arc::clone(&session),
+                step_context,
+                cancellation_token: tokio_util::sync::CancellationToken::new(),
+                call_id: "call-native-namespace".to_string(),
+                tool_name: "probe".to_string(),
+                tool_namespace: Some("clock".to_string()),
+                payload: serde_json::json!({}),
+            })
+            .unwrap();
+        assert_eq!(output.text(), "native-ok");
+
+        let tool_name = types::ToolName::namespaced("clock", "probe");
+        session
+            .record_tool_result_with_id_and_media(
+                Some("call-native-namespace"),
+                Some(&tool_name),
+                output.text(),
+                &[],
+                &[],
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            session.clone_history().await.last(),
+            Some(agent_protocol::ResponseItem::FunctionCallOutput {
+                call_id: Some(call_id),
+                name: Some(name),
+                namespace: Some(namespace),
+                ..
+            }) if call_id == "call-native-namespace" && name == "probe" && namespace == "clock"
+        ));
     }
 
     #[test]
