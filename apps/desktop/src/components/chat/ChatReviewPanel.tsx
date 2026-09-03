@@ -41,6 +41,33 @@ function parentPath(path: string): string {
   return parts.slice(0, -1).join("/") || ".";
 }
 
+function frozenDiff(file: FileChangeItem): ProjectGitDiff | null {
+  if (file.beforeContent == null && file.afterContent == null) return null;
+  const before = file.beforeContent ?? "";
+  const after = file.afterContent ?? "";
+  const beforeLines = before.replace(/\n$/, "").split("\n").filter((_, i) => before.length > 0 || i > 0);
+  const afterLines = after.replace(/\n$/, "").split("\n").filter((_, i) => after.length > 0 || i > 0);
+  const oldPath = file.beforeContent == null ? "/dev/null" : `a/${file.sourcePath ?? file.path}`;
+  const newPath = file.afterContent == null ? "/dev/null" : `b/${file.path}`;
+  const patch = [
+    `diff --git a/${file.sourcePath ?? file.path} b/${file.path}`,
+    `--- ${oldPath}`,
+    `+++ ${newPath}`,
+    `@@ -1,${beforeLines.length} +1,${afterLines.length} @@`,
+    ...beforeLines.map((line) => `-${line}`),
+    ...afterLines.map((line) => `+${line}`),
+    "",
+  ].join("\n");
+  return {
+    path: file.path,
+    relativePath: file.path,
+    patch,
+    additions: file.additions,
+    deletions: file.deletions,
+    isBinary: false,
+  };
+}
+
 export default function ChatReviewPanel({
   projectId,
   files,
@@ -54,6 +81,7 @@ export default function ChatReviewPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const selectedFile = files.find((file) => file.path === selectedPath);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -68,7 +96,9 @@ export default function ChatReviewPanel({
     setLoading(true);
     setReview(null);
     setError(null);
-    loadDiff(projectId, selectedPath)
+    const frozen = selectedFile ? frozenDiff(selectedFile) : null;
+    const request = frozen ? Promise.resolve(frozen) : loadDiff(projectId, selectedPath);
+    request
       .then((next) => {
         if (!active) return;
         setReview(next);
@@ -84,7 +114,7 @@ export default function ChatReviewPanel({
     return () => {
       active = false;
     };
-  }, [loadDiff, projectId, reloadKey, selectedPath]);
+  }, [loadDiff, projectId, reloadKey, selectedFile, selectedPath]);
 
   const lines = useMemo(
     () => (review?.patch ? parseUnifiedDiff(review.patch) : []),

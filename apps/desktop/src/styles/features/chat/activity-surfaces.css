@@ -464,6 +464,84 @@ html[data-theme="dark"] .composer-shell .chat-scroll-latest {
   }
 }
 
+.turn-change-card {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg1) 88%, transparent);
+}
+
+.turn-change-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.turn-change-card-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--glass-subtle);
+  color: var(--text-secondary);
+}
+
+.turn-change-card-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.turn-change-card-title strong { font-size: 14px; font-weight: 650; }
+.turn-change-card-title b,
+.turn-change-file-list b { color: var(--success); font-weight: 600; }
+.turn-change-card-title em,
+.turn-change-file-list em { color: var(--danger); font-style: normal; font-weight: 600; }
+.turn-change-card-note,
+.turn-change-undo-hint { color: var(--text-tertiary); font-size: 11px; }
+
+.turn-change-review-btn {
+  min-height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.turn-change-file-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.turn-change-file-list > button {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.turn-change-file-list > button:hover { background: var(--glass-hover); }
+.turn-change-file-list > button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-change-file-list > button > span:last-child { display: inline-flex; flex: 0 0 auto; gap: 6px; }
+.turn-change-expand { justify-content: flex-start !important; }
+.turn-change-expand svg { transition: transform 160ms ease; }
+.turn-change-expand svg.is-expanded { transform: rotate(180deg); }
+.turn-change-undo-hint { display: inline-flex; align-items: center; gap: 5px; padding: 0 14px 10px; }
+
 @media (prefers-reduced-transparency: reduce) {
   .bubble.assistant .msg-reasoning,
   .bubble.assistant .msg-timeline-body > .msg-activity,

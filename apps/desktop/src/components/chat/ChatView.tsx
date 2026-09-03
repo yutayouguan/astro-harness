@@ -169,6 +169,7 @@ import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
+import TurnChangeSummaryCard from "./TurnChangeSummaryCard";
 import {
   isTodoActivity,
   isTodoOnlyActivityMessage,
@@ -3374,6 +3375,14 @@ export default function ChatView({
                               />
                             ) : null}
                           </div>
+                        ) : null}
+                        {m.role === "assistant" &&
+                        !isStreamingBubble &&
+                        m.id !== "welcome" ? (
+                          <TurnChangeSummaryCard
+                            message={m}
+                            onReview={onOpenFileReview}
+                          />
                         ) : null}
                       </div>
                       {!isStreamingBubble &&

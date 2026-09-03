@@ -15,6 +15,11 @@ export type FileChangeItem = {
   path: string;
   additions: number;
   deletions: number;
+  sourcePath?: string;
+  kind?: "add" | "update" | "delete" | "move";
+  beforeContent?: string;
+  afterContent?: string;
+  reversible?: boolean;
 };
 
 export type FileChangeSummary = {
@@ -272,6 +277,43 @@ export function extractFileChangeSummary(
     }
   }
 
+  const items = [...changes.values()];
+  return {
+    items,
+    additions: items.reduce((sum, item) => sum + item.additions, 0),
+    deletions: items.reduce((sum, item) => sum + item.deletions, 0),
+  };
+}
+
+/** 聚合单个 assistant turn 的结构化净变更。 */
+export function extractTurnFileChangeSummary(
+  message: ConversationEntry,
+): FileChangeSummary {
+  const changes = new Map<string, FileChangeItem>();
+  for (const activity of message.activities ?? []) {
+    for (const change of activity.fileChanges ?? []) {
+      const path = change.move_path || change.path;
+      const current = changes.get(path);
+      if (current) {
+        current.afterContent = change.after_content;
+        current.additions += change.additions;
+        current.deletions += change.deletions;
+        current.reversible = current.reversible === true && change.reversible;
+        current.kind = change.kind;
+        continue;
+      }
+      changes.set(path, {
+        path,
+        sourcePath: change.path,
+        kind: change.kind,
+        beforeContent: change.before_content,
+        afterContent: change.after_content,
+        additions: change.additions,
+        deletions: change.deletions,
+        reversible: change.reversible,
+      });
+    }
+  }
   const items = [...changes.values()];
   return {
     items,

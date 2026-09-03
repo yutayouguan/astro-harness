@@ -5,6 +5,7 @@ import {
   displayFileName,
   extractFileChangeSummary,
   extractLatestTodoPlan,
+  extractTurnFileChangeSummary,
   isTodoActivity,
   isTodoOnlyActivityMessage,
 } from "./taskProgress.ts";
@@ -158,5 +159,63 @@ test("accepts structured file_change records from the thread protocol", () => {
     additions: 9,
     deletions: 1,
     items: [{ path: "src/protocol.rs", additions: 9, deletions: 1 }],
+  });
+});
+
+test("aggregates exact file snapshots within one assistant turn", () => {
+  const message: ConversationEntry = {
+    id: "a-turn",
+    role: "assistant",
+    content: "done",
+    activities: [
+      {
+        id: "patch-1",
+        kind: "tool",
+        title: "apply_patch",
+        fileChanges: [
+          {
+            path: "src/a.ts",
+            kind: "update",
+            before_content: "old\n",
+            after_content: "middle\n",
+            additions: 1,
+            deletions: 1,
+            reversible: true,
+          },
+        ],
+      },
+      {
+        id: "patch-2",
+        kind: "tool",
+        title: "apply_patch",
+        fileChanges: [
+          {
+            path: "src/a.ts",
+            kind: "update",
+            before_content: "middle\n",
+            after_content: "new\n",
+            additions: 1,
+            deletions: 1,
+            reversible: true,
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(extractTurnFileChangeSummary(message), {
+    additions: 2,
+    deletions: 2,
+    items: [
+      {
+        path: "src/a.ts",
+        sourcePath: "src/a.ts",
+        kind: "update",
+        beforeContent: "old\n",
+        afterContent: "new\n",
+        additions: 2,
+        deletions: 2,
+        reversible: true,
+      },
+    ],
   });
 });
