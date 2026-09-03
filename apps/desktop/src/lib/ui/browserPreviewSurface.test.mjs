@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = (relative) =>
@@ -131,6 +132,12 @@ test("browser dock uses a fitted native child WebView with a screenshot fallback
   assert.match(hook, /browser-live-page-load/);
   assert.match(hook, /browser_live_webview_control/);
   assert.match(commands, /fn browser_live_webview_control/);
+  assert.match(commands, /LIVE_BROWSER_INTERACTION_SCRIPT/);
+  assert.match(
+    commands,
+    /webview\.eval\(LIVE_BROWSER_INTERACTION_SCRIPT\)/,
+  );
+  assert.match(commands, /window\.location\.assign/);
   assert.match(commands, /app\s*\.get_webview\(label\)/);
   assert.doesNotMatch(commands, /get_webview_window\("main"\)/);
   assert.match(commands, /fn live_browser_plugin/);
@@ -146,6 +153,75 @@ test("browser dock uses a fitted native child WebView with a screenshot fallback
   ]) {
     assert.match(capabilities, new RegExp(permission));
   }
+});
+
+test("live browser keeps new-window links inside the current surface", () => {
+  const commands = source("../../../src-tauri/src/commands/browser.rs");
+  const script = commands.match(
+    /const LIVE_BROWSER_INTERACTION_SCRIPT: &str = r#"\n([\s\S]*?)\n"#;/,
+  )?.[1];
+  assert.ok(script, "missing live browser interaction script");
+
+  const listeners = new Map();
+  let assignedUrl = null;
+  class Anchor {
+    constructor(href, target = "_blank") {
+      this.href = href;
+      this.target = target;
+    }
+
+    hasAttribute() {
+      return false;
+    }
+  }
+  const windowObject = {
+    location: {
+      href: "https://www.bilibili.com/",
+      assign(url) {
+        assignedUrl = url;
+      },
+    },
+    open() {
+      return null;
+    },
+  };
+  const documentObject = {
+    addEventListener(type, listener) {
+      listeners.set(type, listener);
+    },
+  };
+  vm.runInNewContext(script, {
+    document: documentObject,
+    HTMLAnchorElement: Anchor,
+    Symbol,
+    URL,
+    window: windowObject,
+  });
+
+  let prevented = false;
+  let stopped = false;
+  const anchor = new Anchor("https://www.bilibili.com/video/BV1test");
+  listeners.get("click")({
+    button: 0,
+    composedPath: () => [anchor],
+    defaultPrevented: false,
+    preventDefault: () => {
+      prevented = true;
+    },
+    stopImmediatePropagation: () => {
+      stopped = true;
+    },
+  });
+  assert.equal(assignedUrl, anchor.href);
+  assert.equal(prevented, true);
+  assert.equal(stopped, true);
+
+  assignedUrl = null;
+  assert.equal(
+    windowObject.open("https://www.bilibili.com/video/BV2test", "_blank"),
+    windowObject,
+  );
+  assert.equal(assignedUrl, "https://www.bilibili.com/video/BV2test");
 });
 
 test("floating browser preview supports direct manipulation and accessibility fallbacks", () => {
