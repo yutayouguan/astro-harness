@@ -2186,6 +2186,7 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
                 agent_protocol::ToolExecutionMode::Parallel => "parallel".into(),
             }),
             media: tool.media.into_iter().map(media_asset_dto).collect(),
+            file_changes: tool.file_changes,
         }],
         Ok(TurnItem::AgentMessage(message))
             if !started
@@ -2217,6 +2218,7 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
             batch_id: None,
             execution_mode: None,
             media: Vec::new(),
+            file_changes: Vec::new(),
         }],
         Ok(TurnItem::HookPrompt(prompt)) => vec![ChatStreamEvent::Hook {
             name: "hook_prompt".into(),
@@ -3054,6 +3056,7 @@ mod tests {
                         arguments: serde_json::json!({"path":"README.md"}),
                         output: Some(serde_json::json!(expected_phase)),
                         media: Vec::new(),
+                        file_changes: Vec::new(),
                         status,
                         batch_id: Some("batch-1".into()),
                         execution_mode: Some(agent_protocol::ToolExecutionMode::Parallel),

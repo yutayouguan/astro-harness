@@ -301,6 +301,7 @@ pub(super) async fn record_tool_outcomes(
         }
 
         let tool_media = result.media().to_vec();
+        let tool_file_changes = result.file_changes().to_vec();
         let result_text = result.text().to_string();
         let tool_status = tool_status_from_result(&result_text);
         let is_success = tool_status == ToolStatus::Completed;
@@ -333,6 +334,7 @@ pub(super) async fn record_tool_outcomes(
                     Some(&call.name),
                     &result_for_history,
                     &tool_media,
+                    &tool_file_changes,
                     Some(&tool_status),
                 )
                 .await
@@ -355,7 +357,7 @@ pub(super) async fn record_tool_outcomes(
             .await;
         }
 
-        let completed_event = if let Some(execution) = execution {
+        let mut completed_event = if let Some(execution) = execution {
             bounded_tool_completed_event_with_execution(
                 turn_context.sub_id(),
                 &call.id,
@@ -377,6 +379,11 @@ pub(super) async fn record_tool_outcomes(
                 tool_status,
             )
         };
+        super::lifecycle::attach_file_changes(
+            turn_context.sub_id(),
+            &mut completed_event,
+            tool_file_changes,
+        );
         emit_prepared(session, turn_context, completed_event).await;
 
         if call.name == "memory" && is_success {

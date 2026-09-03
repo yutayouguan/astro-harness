@@ -26,6 +26,8 @@ struct UpdateFileChunk {
     new_lines: Vec<String>,
     /// `*** End of File` 标记——表明 `old_lines` 应匹配文件末尾。
     is_end_of_file: bool,
+    additions: usize,
+    deletions: usize,
 }
 
 impl UpdateFileChunk {
@@ -85,6 +87,20 @@ const MOVE_TO_MARKER: &str = "*** Move to: ";
 const EOF_MARKER: &str = "*** End of File";
 const CHANGE_CONTEXT_MARKER: &str = "@@ ";
 const EMPTY_CHANGE_CONTEXT_MARKER: &str = "@@";
+const MAX_REVERSIBLE_SNAPSHOT_BYTES: usize = 512 * 1024;
+
+fn reversible_snapshots(
+    before: Option<String>,
+    after: Option<String>,
+    otherwise_reversible: bool,
+) -> (Option<String>, Option<String>, bool) {
+    let size = before.as_ref().map_or(0, String::len) + after.as_ref().map_or(0, String::len);
+    if otherwise_reversible && size <= MAX_REVERSIBLE_SNAPSHOT_BYTES {
+        (before, after, true)
+    } else {
+        (None, None, false)
+    }
+}
 
 // ─── 流式行解析器 ───────────────────────────────────────────────────────
 
@@ -331,6 +347,7 @@ impl PatchParser {
                         }
                         if let Some(chunk) = chunks.last_mut() {
                             chunk.new_lines.push(add_line.to_string());
+                            chunk.additions += 1;
                         }
                         return Ok(());
                     }
@@ -342,6 +359,7 @@ impl PatchParser {
                         }
                         if let Some(chunk) = chunks.last_mut() {
                             chunk.old_lines.push(del_line.to_string());
+                            chunk.deletions += 1;
                         }
                         return Ok(());
                     }
@@ -456,7 +474,7 @@ struct AffectedPaths {
 }
 
 /// 解析并应用 patch 到 `workspace` 下（或绝对路径）。
-fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<String> {
+fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<types::ToolOutput> {
     if hunks.is_empty() {
         anyhow::bail!("No files were modified.");
     }
@@ -466,22 +484,62 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<String> {
         modified: Vec::new(),
         deleted: Vec::new(),
     };
+    let mut changes = Vec::with_capacity(hunks.len());
 
     for hunk in hunks {
         match hunk {
             Hunk::Add { path, contents } => {
                 let full = resolve_path(workspace, path);
+                let existed = full.exists();
+                let before_content = std::fs::read_to_string(&full).ok();
+                let has_before = before_content.is_some();
+                let (before_content, after_content, reversible) = reversible_snapshots(
+                    before_content,
+                    Some(contents.clone()),
+                    !existed || has_before,
+                );
                 if let Some(parent) = full.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
                 std::fs::write(&full, contents)?;
                 affected.added.push(path.clone());
+                changes.push(types::ToolFileChange {
+                    path: path.to_string_lossy().into_owned(),
+                    move_path: None,
+                    kind: if existed {
+                        types::ToolFileChangeKind::Update
+                    } else {
+                        types::ToolFileChangeKind::Add
+                    },
+                    before_content,
+                    after_content,
+                    additions: contents.lines().count(),
+                    deletions: 0,
+                    reversible,
+                });
             }
             Hunk::Delete { path } => {
                 let full = resolve_path(workspace, path);
+                let before_content = std::fs::read_to_string(&full).ok();
                 std::fs::remove_file(&full)
                     .map_err(|e| anyhow::anyhow!("Failed to delete {}: {e}", full.display()))?;
                 affected.deleted.push(path.clone());
+                let deletions = before_content
+                    .as_deref()
+                    .map_or(0, |text| text.lines().count());
+                let has_before = before_content.is_some();
+                let (before_content, after_content, reversible) =
+                    reversible_snapshots(before_content, None, has_before);
+                changes.push(types::ToolFileChange {
+                    path: path.to_string_lossy().into_owned(),
+                    move_path: None,
+                    kind: types::ToolFileChangeKind::Delete,
+                    before_content: before_content.clone(),
+                    after_content,
+                    additions: 0,
+                    deletions,
+                    reversible,
+                });
             }
             Hunk::Update {
                 path,
@@ -493,6 +551,11 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<String> {
                     .map_err(|e| anyhow::anyhow!("Failed to read {}: {e}", full.display()))?;
 
                 let new_contents = derive_new_contents(&original, &full, chunks)?;
+                let additions = chunks.iter().map(|chunk| chunk.additions).sum();
+                let deletions = chunks.iter().map(|chunk| chunk.deletions).sum();
+                let destination_before = move_path
+                    .as_ref()
+                    .and_then(|dest| std::fs::read_to_string(resolve_path(workspace, dest)).ok());
 
                 if let Some(dest) = move_path {
                     let dest_full = resolve_path(workspace, dest);
@@ -507,11 +570,35 @@ fn apply_patches(workspace: &Path, hunks: &[Hunk]) -> anyhow::Result<String> {
                     std::fs::write(&full, &new_contents)?;
                 }
                 affected.modified.push(path.clone());
+                let (before_content, after_content, reversible) = reversible_snapshots(
+                    Some(original),
+                    Some(new_contents),
+                    move_path.is_none() || destination_before.is_none(),
+                );
+                changes.push(types::ToolFileChange {
+                    path: path.to_string_lossy().into_owned(),
+                    move_path: move_path
+                        .as_ref()
+                        .map(|path| path.to_string_lossy().into_owned()),
+                    kind: if move_path.is_some() {
+                        types::ToolFileChangeKind::Move
+                    } else {
+                        types::ToolFileChangeKind::Update
+                    },
+                    before_content,
+                    after_content,
+                    additions,
+                    deletions,
+                    reversible,
+                });
             }
         }
     }
 
-    Ok(format_summary(&affected))
+    Ok(types::ToolOutput::FileChanges {
+        text: format_summary(&affected),
+        changes,
+    })
 }
 
 /// 相对路径基于 workspace 解析，绝对路径直接使用。
@@ -680,7 +767,10 @@ crate::submit_builtin_tool! {
 }
 
 /// 分发入口：从 args 提取原始 patch 文本，解析并应用。
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+pub async fn dispatch(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+) -> anyhow::Result<types::ToolOutput> {
     // freeform 工具的输入可能以 JSON string 或 object.input 传入
     let patch_text = extract_patch_text(args)?;
 
@@ -915,7 +1005,18 @@ mod tests {
         ));
         let hunks = PatchParser::parse(&patch).unwrap();
         let result = apply_patches(dir.path(), &hunks).unwrap();
-        assert!(result.contains("A "));
+        assert!(result.text().contains("A "));
+        assert_eq!(result.file_changes().len(), 1);
+        assert_eq!(
+            result.file_changes()[0].kind,
+            types::ToolFileChangeKind::Add
+        );
+        assert_eq!(result.file_changes()[0].before_content, None);
+        assert_eq!(
+            result.file_changes()[0].after_content.as_deref(),
+            Some("hello\nworld\n")
+        );
+        assert!(result.file_changes()[0].reversible);
         let content = std::fs::read_to_string(dir.path().join("new.txt")).unwrap();
         assert_eq!(content, "hello\nworld\n");
     }
@@ -928,7 +1029,7 @@ mod tests {
         let patch = wrap_patch(&format!("*** Delete File: {}", path.display()));
         let hunks = PatchParser::parse(&patch).unwrap();
         let result = apply_patches(dir.path(), &hunks).unwrap();
-        assert!(result.contains("D "));
+        assert!(result.text().contains("D "));
         assert!(!path.exists());
     }
 
@@ -943,7 +1044,7 @@ mod tests {
         ));
         let hunks = PatchParser::parse(&patch).unwrap();
         let result = apply_patches(dir.path(), &hunks).unwrap();
-        assert!(result.contains("M "));
+        assert!(result.text().contains("M "));
         let content = std::fs::read_to_string(&path).unwrap();
         assert_eq!(content, "foo\nbaz\n");
     }

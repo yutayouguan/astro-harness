@@ -59,6 +59,8 @@ pub struct ToolItem {
     pub output: Option<Value>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<types::MediaAsset>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub file_changes: Vec<types::ToolFileChange>,
     pub status: ToolStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub batch_id: Option<String>,

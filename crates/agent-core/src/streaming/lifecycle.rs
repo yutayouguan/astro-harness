@@ -77,6 +77,7 @@ pub(crate) fn tool_turn_item_with_execution(
         arguments,
         output,
         media,
+        file_changes: Vec::new(),
         status,
         batch_id: execution.map(|value| value.batch_id.clone()),
         execution_mode: execution.map(|value| value.mode),
@@ -217,6 +218,45 @@ pub(crate) fn bounded_tool_completed_event_with_execution(
         status,
         Some(execution),
     )
+}
+
+/// Attach structured file changes while preserving the hard event-size limit.
+/// If snapshots make the event too large, retain summary metadata but disable undo.
+pub(crate) fn attach_file_changes(
+    turn_id: &str,
+    event: &mut EventMsg,
+    mut changes: Vec<types::ToolFileChange>,
+) {
+    if changes.is_empty() {
+        return;
+    }
+    set_event_file_changes(event, changes.clone());
+    if serialized_event_len(turn_id, event) <= TOOL_COMPLETED_EVENT_MAX_BYTES {
+        return;
+    }
+    for change in &mut changes {
+        change.before_content = None;
+        change.after_content = None;
+        change.reversible = false;
+    }
+    set_event_file_changes(event, changes);
+    if serialized_event_len(turn_id, event) > TOOL_COMPLETED_EVENT_MAX_BYTES {
+        set_event_file_changes(event, Vec::new());
+    }
+}
+
+fn set_event_file_changes(event: &mut EventMsg, changes: Vec<types::ToolFileChange>) {
+    let tool = match event {
+        EventMsg::ItemCompleted(ItemEvent {
+            item:
+                TurnItem::CommandExecution(tool)
+                | TurnItem::DynamicToolCall(tool)
+                | TurnItem::FileChange(tool),
+            ..
+        }) => tool,
+        _ => return,
+    };
+    tool.file_changes = changes;
 }
 
 #[allow(clippy::too_many_arguments)]

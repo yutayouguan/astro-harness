@@ -311,7 +311,7 @@ impl AgentLoop {
         tool_name: Option<&str>,
         content: &str,
     ) -> anyhow::Result<()> {
-        self.record_tool_result_with_id_and_media(tool_call_id, tool_name, content, &[], None)
+        self.record_tool_result_with_id_and_media(tool_call_id, tool_name, content, &[], &[], None)
             .await
     }
 
@@ -321,6 +321,7 @@ impl AgentLoop {
         tool_name: Option<&str>,
         content: &str,
         additional_media: &[types::MediaAsset],
+        file_changes: &[types::ToolFileChange],
         tool_status: Option<&ToolStatus>,
     ) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
@@ -335,22 +336,29 @@ impl AgentLoop {
             .ensure_session(&self.session_id, "tauri")
             .await?;
         let output = agent_protocol::FunctionCallOutputPayload::from_text(content.to_string());
-        let metadata = (!media.is_empty() || tool_status.is_some()).then(|| {
-            let mut metadata = serde_json::Map::new();
-            if !media.is_empty() {
-                metadata.insert(
-                    "astro_media".into(),
-                    serde_json::to_value(&media).unwrap_or_default(),
-                );
-            }
-            if let Some(status) = tool_status {
-                metadata.insert(
-                    "astro_tool_status".into(),
-                    serde_json::to_value(status).unwrap_or_default(),
-                );
-            }
-            serde_json::Value::Object(metadata)
-        });
+        let metadata = (!media.is_empty() || !file_changes.is_empty() || tool_status.is_some())
+            .then(|| {
+                let mut metadata = serde_json::Map::new();
+                if !media.is_empty() {
+                    metadata.insert(
+                        "astro_media".into(),
+                        serde_json::to_value(&media).unwrap_or_default(),
+                    );
+                }
+                if let Some(status) = tool_status {
+                    metadata.insert(
+                        "astro_tool_status".into(),
+                        serde_json::to_value(status).unwrap_or_default(),
+                    );
+                }
+                if !file_changes.is_empty() {
+                    metadata.insert(
+                        "astro_file_changes_v1".into(),
+                        serde_json::to_value(file_changes).unwrap_or_default(),
+                    );
+                }
+                serde_json::Value::Object(metadata)
+            });
         let mut item = match tool_name {
             Some("tool_search") => ResponseItem::ToolSearchOutput {
                 id: None,

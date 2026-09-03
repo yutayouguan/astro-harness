@@ -84,6 +84,8 @@ pub enum ChatStreamEvent {
         execution_mode: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         media: Vec<MediaAssetDto>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        file_changes: Vec<types::ToolFileChange>,
     },
     ToolCallDelta {
         index: u32,

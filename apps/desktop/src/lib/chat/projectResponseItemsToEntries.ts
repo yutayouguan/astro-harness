@@ -112,6 +112,43 @@ function mediaFromMetadata(
   return media.length > 0 ? media : undefined;
 }
 
+function fileChangesFromMetadata(
+  metadata: JsonRecord | null,
+): HistoryActivityProjection["fileChanges"] {
+  const raw = metadata?.astro_file_changes_v1;
+  if (!Array.isArray(raw)) return undefined;
+  const changes = raw.flatMap((entry) => {
+    const change = asRecord(entry);
+    if (
+      typeof change?.path !== "string" ||
+      !["add", "update", "delete", "move"].includes(String(change.kind))
+    )
+      return [];
+    return [
+      {
+        path: change.path,
+        move_path:
+          typeof change.move_path === "string" ? change.move_path : undefined,
+        kind: change.kind as "add" | "update" | "delete" | "move",
+        before_content:
+          typeof change.before_content === "string"
+            ? change.before_content
+            : undefined,
+        after_content:
+          typeof change.after_content === "string"
+            ? change.after_content
+            : undefined,
+        additions:
+          typeof change.additions === "number" ? change.additions : 0,
+        deletions:
+          typeof change.deletions === "number" ? change.deletions : 0,
+        reversible: change.reversible === true,
+      },
+    ];
+  });
+  return changes.length > 0 ? changes : undefined;
+}
+
 function projectResponseItems(
   items: StoredResponseItemDto[],
 ): ProjectedEntry[] {
@@ -134,6 +171,7 @@ function projectResponseItems(
     title: string | undefined,
     output: string,
     media: HistoryActivityProjection["media"],
+    fileChanges: HistoryActivityProjection["fileChanges"],
     status: ChatActivityStatus,
   ) => {
     const assistant = ensureAssistant(id);
@@ -146,6 +184,7 @@ function projectResponseItems(
       activity.output = output;
       activity.status = status;
       if (media) activity.media = media;
+      if (fileChanges) activity.fileChanges = fileChanges;
       return;
     }
     assistant.activities ??= [];
@@ -156,6 +195,7 @@ function projectResponseItems(
       output,
       status,
       media,
+      fileChanges,
     });
   };
 
@@ -167,6 +207,7 @@ function projectResponseItems(
       ChatTimelineSegment[] | undefined;
     const uiSurfaces = metadata?.astro_surfaces_v1 as UiSurface[] | undefined;
     const media = mediaFromMetadata(metadata);
+    const fileChanges = fileChangesFromMetadata(metadata);
     const type = item.type;
     if (
       type === "message" &&
@@ -256,6 +297,7 @@ function projectResponseItems(
         "image_generation",
         typeof item.revised_prompt === "string" ? item.revised_prompt : "",
         media ?? (imagePath ? [{ kind: "image", path: imagePath }] : undefined),
+        fileChanges,
         resolveToolActivityStatus(
           typeof item.status === "string" ? item.status : "completed",
           "",
@@ -283,6 +325,7 @@ function projectResponseItems(
             : undefined,
         output,
         media,
+        fileChanges,
         resolveToolActivityStatus(persistedStatus, output),
       );
     }

@@ -448,6 +448,7 @@ export function useSend(deps: UseSendDeps) {
             label?: string;
             id?: string;
           }>;
+          file_changes?: ChatActivity["fileChanges"];
           operation?: string;
           detail?: string;
           outcome?: string;
@@ -838,6 +839,7 @@ export function useSend(deps: UseSendDeps) {
               batchId: payload.batch_id,
               executionMode: payload.execution_mode,
               media: structuredMedia,
+              fileChanges: payload.file_changes,
             };
             setMessages((prev) =>
               prev.map((m) => {

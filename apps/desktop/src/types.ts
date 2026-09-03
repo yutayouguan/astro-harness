@@ -41,6 +41,16 @@ export type ChatAttachment = {
 export type ChatActivityKind =
   "tool" | "skill" | "mcp" | "hook" | "memory" | "status";
 export type ToolExecutionMode = "serial" | "parallel";
+export type ToolFileChange = {
+  path: string;
+  move_path?: string;
+  kind: "add" | "update" | "delete" | "move";
+  before_content?: string;
+  after_content?: string;
+  additions: number;
+  deletions: number;
+  reversible: boolean;
+};
 export type ChatActivityStatus =
   | "waiting"
   | "running"
@@ -77,6 +87,8 @@ export type ChatActivity = {
     kind: "image" | "video" | "audio" | "html" | "code";
     path: string;
   }>;
+  /** 写工具返回的精确 before/after 变更。 */
+  fileChanges?: ToolFileChange[];
 };
 
 /** A2UI surface 生命周期 */
@@ -211,6 +223,7 @@ export type HistoryActivityProjection = {
   status?: string | null;
   /** 结构化媒体（来自 ResponseItem metadata）；缺省时前端可从 output 解析 */
   media?: Array<{ kind: string; path: string }> | null;
+  fileChanges?: ToolFileChange[] | null;
 };
 
 export type ResponseItemDto = {

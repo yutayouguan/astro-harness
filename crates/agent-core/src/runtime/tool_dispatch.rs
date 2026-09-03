@@ -560,6 +560,9 @@ impl AgentLoop {
                 types::ToolOutput::Media { assets, .. } => {
                     types::ToolOutput::Media { text: s, assets }
                 }
+                types::ToolOutput::FileChanges { changes, .. } => {
+                    types::ToolOutput::FileChanges { text: s, changes }
+                }
                 _ => types::ToolOutput::from(s),
             },
             _ => raw_result,
@@ -612,6 +615,10 @@ impl AgentLoop {
                 types::ToolOutput::Media { assets, .. } => types::ToolOutput::Media {
                     text: model_text,
                     assets,
+                },
+                types::ToolOutput::FileChanges { changes, .. } => types::ToolOutput::FileChanges {
+                    text: model_text,
+                    changes,
                 },
                 _ => types::ToolOutput::from(model_text),
             }

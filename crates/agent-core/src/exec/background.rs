@@ -339,6 +339,7 @@ mod tests {
             arguments: serde_json::json!({"command": "pwd"}),
             output: None,
             media: Vec::new(),
+            file_changes: Vec::new(),
             status: ToolStatus::InProgress,
             batch_id: None,
             execution_mode: None,
