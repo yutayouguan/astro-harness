@@ -26,8 +26,14 @@ pub struct ToolParamInfo {
 /// 单个可调用函数的 UI 展示信息；`icon` 为 Lucide 图标 id（如 `calendar-check`）。
 #[derive(Debug, Clone, Serialize)]
 pub struct ToolFunctionInfo {
-    /// 工具函数名。
+    /// 模型可见调用名；namespace 工具为 `namespace.child`。
     pub name: String,
+    /// Responses API 原生 namespace；默认 `functions` 域为 `None`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
+    /// Rust Registry / handler 使用的内部名。
+    #[serde(rename = "registeredName")]
+    pub registered_name: String,
     /// 面向用户的工具说明。
     pub description: String,
     /// Lucide 图标 id（kebab-case），例如 `"calendar-check"` / `"folder-kanban"`。
@@ -41,8 +47,14 @@ pub struct ToolFunctionInfo {
 pub struct ToolCatalogItem {
     /// 与前端开关对齐的 toolset id。
     pub id: String,
-    /// 代表性工具名（通常与 id 相同）。
+    /// 代表性的模型可见调用名。
     pub name: String,
+    /// 代表性工具的 Responses API 原生 namespace。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
+    /// 代表性工具的内部注册名。
+    #[serde(rename = "registeredName")]
+    pub registered_name: String,
     /// 代表性工具的说明文本。
     pub description: String,
     /// Lucide 图标 id（kebab-case）。
@@ -157,18 +169,26 @@ fn entries_to_item(id: String, mut entries: Vec<&crate::registry::ToolEntry>) ->
 
     let functions: Vec<ToolFunctionInfo> = entries
         .iter()
-        .map(|e| ToolFunctionInfo {
-            name: e.name.clone(),
-            description: e.description.clone(),
-            icon: e.icon.to_string(),
-            params: params_from_schema(&e.schema),
+        .map(|entry| {
+            let tool_name = entry.tool_name();
+            ToolFunctionInfo {
+                name: tool_name.wire_name(),
+                namespace: tool_name.namespace().map(str::to_string),
+                registered_name: entry.name.clone(),
+                description: entry.description.clone(),
+                icon: entry.icon.to_string(),
+                params: params_from_schema(&entry.schema),
+            }
         })
         .collect();
     let tools: Vec<String> = functions.iter().map(|f| f.name.clone()).collect();
+    let primary_name = primary.tool_name();
 
     ToolCatalogItem {
         id,
-        name: primary.name.clone(),
+        name: primary_name.wire_name(),
+        namespace: primary_name.namespace().map(str::to_string),
+        registered_name: primary.name.clone(),
         description: primary.description.clone(),
         icon: primary.icon.to_string(),
         params: params_from_schema(&primary.schema),
@@ -307,9 +327,51 @@ mod tests {
         let cron = cat.iter().find(|c| c.id == "cron").expect("cron");
         assert_eq!(cron.functions.len(), 5);
         let names: Vec<&str> = cron.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(names.contains(&"cron_add"));
-        assert!(names.contains(&"cron_list"));
-        assert!(names.contains(&"cron_remove"));
+        assert_eq!(cron.namespace.as_deref(), Some("cron"));
+        assert!(names.contains(&"cron.add"));
+        assert!(names.contains(&"cron.list"));
+        assert!(names.contains(&"cron.remove"));
+        assert_eq!(
+            cron.functions
+                .iter()
+                .find(|function| function.name == "cron.add")
+                .map(|function| function.registered_name.as_str()),
+            Some("cron_add")
+        );
+    }
+
+    #[test]
+    fn catalog_serializes_frontend_namespace_contract_in_camel_case() {
+        let catalog = builtin_catalog();
+        let browser = catalog.iter().find(|item| item.id == "browser").unwrap();
+        let json = serde_json::to_value(browser).unwrap();
+
+        assert_eq!(json["namespace"], "browser");
+        assert_eq!(json["registeredName"], browser.registered_name);
+        assert!(json.get("registered_name").is_none());
+        let open = json["functions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|function| function["name"] == "browser.open")
+            .expect("browser.open catalog function");
+        assert_eq!(open["namespace"], "browser");
+        assert_eq!(open["registeredName"], "browser_open");
+    }
+
+    #[test]
+    fn browser_and_media_catalogs_expose_model_names_and_internal_names() {
+        let catalog = builtin_catalog();
+        let browser = catalog.iter().find(|item| item.id == "browser").unwrap();
+        assert_eq!(browser.namespace.as_deref(), Some("browser"));
+        assert!(browser.functions.iter().any(|function| {
+            function.name == "browser.open" && function.registered_name == "browser_open"
+        }));
+
+        let image = catalog.iter().find(|item| item.id == "image_gen").unwrap();
+        assert_eq!(image.name, "media.image_gen");
+        assert_eq!(image.namespace.as_deref(), Some("media"));
+        assert_eq!(image.registered_name, "image_gen");
     }
 
     #[test]

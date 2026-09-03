@@ -601,7 +601,8 @@ export const zh = {
   "terminal.settings.mode.projectNote":
     "项目沙箱使用轻量隔离提示符，不写入主目录历史、缓存或 P10k/gitstatus 临时文件；需要个人 Shell 配置时请使用系统终端 Tab。",
   "terminal.settings.font.title": "字体与字形",
-  "terminal.settings.font.sub": "优先使用 Nerd Font，正确显示 Powerlevel10k 图标和提示符。",
+  "terminal.settings.font.sub":
+    "优先使用 Nerd Font，正确显示 Powerlevel10k 图标和提示符。",
   "terminal.settings.font.preset": "字体预设",
   "terminal.settings.font.custom": "自定义字体栈",
   "terminal.settings.font.family": "字体族",
@@ -677,6 +678,8 @@ export const zh = {
   "tools.detail.selectHint": "从左侧选择一项查看详情",
   "tools.detail.apiName": "调用名",
   "tools.detail.toolset": "工具集",
+  "tools.detail.namespace": "命名空间",
+  "tools.detail.registeredName": "内部注册名",
   "tools.detail.apiSchema": "后端 Schema",
   "tools.detail.required": "必填",
   "tools.detail.optional": "可选",
@@ -3473,13 +3476,15 @@ export const en: Record<MessageKey, string> = {
   "terminal.settings.font.hint":
     "If the preview still shows boxes, install MesloLGS NF or another Nerd Font on macOS, then select it above.",
   "terminal.settings.behavior.title": "Display and interaction",
-  "terminal.settings.behavior.sub": "These changes apply to an open terminal immediately.",
+  "terminal.settings.behavior.sub":
+    "These changes apply to an open terminal immediately.",
   "terminal.settings.cursor.style": "Cursor style",
   "terminal.settings.cursor.bar": "Bar",
   "terminal.settings.cursor.block": "Block",
   "terminal.settings.cursor.underline": "Underline",
   "terminal.settings.cursor.blink": "Blinking cursor",
-  "terminal.settings.cursor.blinkDesc": "Keep the input position visible in long output.",
+  "terminal.settings.cursor.blinkDesc":
+    "Keep the input position visible in long output.",
   "terminal.settings.scrollback": "Scrollback lines",
   "terminal.settings.reset": "Restore defaults",
   "approvals.hardline.label": "Hardline blocklist",
@@ -3542,6 +3547,8 @@ export const en: Record<MessageKey, string> = {
   "tools.detail.selectHint": "Select an item on the left to view details",
   "tools.detail.apiName": "Call name",
   "tools.detail.toolset": "Toolset",
+  "tools.detail.namespace": "Namespace",
+  "tools.detail.registeredName": "Registered name",
   "tools.detail.apiSchema": "Backend schema",
   "tools.detail.required": "Required",
   "tools.detail.optional": "Optional",

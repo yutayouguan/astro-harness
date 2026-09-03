@@ -480,7 +480,17 @@ export default function ToolsPanel({
         .map((p) => `${p.name} ${p.type} ${p.description ?? ""}`)
         .join(" ")
         .toLowerCase();
-      const fnNames = (tool.tools ?? []).join(" ").toLowerCase();
+      const fnNames = [
+        ...(tool.tools ?? []),
+        tool.namespace ?? "",
+        tool.registeredName ?? "",
+        ...(tool.functions ?? []).flatMap((fn) => [
+          fn.namespace ?? "",
+          fn.registeredName ?? "",
+        ]),
+      ]
+        .join(" ")
+        .toLowerCase();
       return (
         title.includes(query) ||
         desc.includes(query) ||
@@ -531,6 +541,11 @@ export default function ToolsPanel({
   const detailParams = activeFn?.params ?? selectedTool?.params ?? [];
   const detailApiDesc =
     activeFn?.description ?? selectedTool?.apiDescription ?? null;
+  const detailApiName =
+    activeFn?.name ?? selectedTool?.tools?.[0] ?? selectedTool?.id ?? "";
+  const detailNamespace = activeFn?.namespace ?? selectedTool?.namespace;
+  const detailRegisteredName =
+    activeFn?.registeredName ?? selectedTool?.registeredName;
 
   return (
     <div className="agent-tools-page">
@@ -679,12 +694,31 @@ export default function ToolsPanel({
                                   <span className="tools-detail-id-label">
                                     {t("tools.detail.apiName")}
                                   </span>
-                                  <code>
-                                    {activeFn?.name ??
-                                      selectedTool.tools?.[0] ??
-                                      selectedTool.id}
-                                  </code>
+                                  <code>{detailApiName}</code>
                                 </span>
+                                {detailNamespace ? (
+                                  <span
+                                    className="tools-detail-id-chip"
+                                    title={t("tools.detail.namespace")}
+                                  >
+                                    <span className="tools-detail-id-label">
+                                      {t("tools.detail.namespace")}
+                                    </span>
+                                    <code>{detailNamespace}</code>
+                                  </span>
+                                ) : null}
+                                {detailRegisteredName &&
+                                detailRegisteredName !== detailApiName ? (
+                                  <span
+                                    className="tools-detail-id-chip"
+                                    title={t("tools.detail.registeredName")}
+                                  >
+                                    <span className="tools-detail-id-label">
+                                      {t("tools.detail.registeredName")}
+                                    </span>
+                                    <code>{detailRegisteredName}</code>
+                                  </span>
+                                ) : null}
                               </div>
                               <button
                                 type="button"

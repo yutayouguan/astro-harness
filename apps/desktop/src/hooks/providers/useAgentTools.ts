@@ -23,6 +23,10 @@ import {
   IconWebSearch,
 } from "../../components/icons/ToolIcons";
 import type { MessageKey } from "../../i18n/messages";
+import {
+  mergeToolCatalog,
+  type CatalogItemDto,
+} from "../../lib/tools/agentToolCatalog";
 
 const IS_TAURI =
   typeof window !== "undefined" &&
@@ -84,7 +88,10 @@ export type ToolParam = {
 };
 
 export type AgentToolFnDef = {
+  /** 模型可见调用名，namespace 工具为 namespace.child。 */
   name: string;
+  namespace?: string;
+  registeredName?: string;
   description?: string;
   emoji?: string;
   params?: ToolParam[];
@@ -105,6 +112,8 @@ export type AgentToolDef = {
   apiDescription?: string;
   /** toolset 下可切换的函数明细 */
   functions?: AgentToolFnDef[];
+  namespace?: string;
+  registeredName?: string;
 };
 
 /** UI 元数据（图标 / i18n / 色调）；params 为后端 schema 未就绪时的回退 */
@@ -480,31 +489,6 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   },
 ];
 
-type CatalogParamDto = {
-  name: string;
-  type: string;
-  optional: boolean;
-  description?: string | null;
-};
-
-type CatalogFnDto = {
-  name: string;
-  description: string;
-  icon: string;
-  params: CatalogParamDto[];
-};
-
-type CatalogItemDto = {
-  id: string;
-  name: string;
-  description: string;
-  /** Lucide 图标 id（kebab-case），来自后端 ToolEntry.icon */
-  icon: string;
-  params: CatalogParamDto[];
-  tools: string[];
-  functions?: CatalogFnDto[];
-};
-
 function defaultEnabled(): Record<AgentToolId, boolean> {
   return Object.fromEntries(
     AGENT_TOOLS.map((tool) => [tool.id, true]),
@@ -524,47 +508,8 @@ function mergeEnabled(
   return base;
 }
 
-function mapCatalogParam(p: CatalogParamDto): ToolParam {
-  return {
-    name: p.name,
-    type: p.type,
-    optional: p.optional,
-    description: p.description ?? undefined,
-  };
-}
-
-function mergeCatalog(catalog: CatalogItemDto[]): AgentToolDef[] {
-  const byId = new Map(catalog.map((c) => [c.id, c]));
-  return AGENT_TOOLS.map((tool) => {
-    const item = byId.get(tool.id);
-    if (!item) return tool;
-
-    const params = item.params.map(mapCatalogParam);
-    const functions: AgentToolFnDef[] =
-      item.functions && item.functions.length > 0
-        ? item.functions.map((fn) => ({
-            name: fn.name,
-            description: fn.description || undefined,
-            emoji: fn.icon || undefined,
-            params: fn.params.map(mapCatalogParam),
-          }))
-        : (item.tools ?? []).map((name) => ({
-            name,
-            description:
-              name === item.name ? item.description || undefined : undefined,
-            emoji: item.icon || undefined,
-            params: name === item.name ? params : undefined,
-          }));
-
-    return {
-      ...tool,
-      params,
-      tools: item.tools.length > 0 ? item.tools : functions.map((f) => f.name),
-      emoji: item.icon || tool.emoji,
-      apiDescription: item.description || tool.apiDescription,
-      functions: functions.length > 0 ? functions : tool.functions,
-    };
-  });
+export function mergeCatalog(catalog: CatalogItemDto[]): AgentToolDef[] {
+  return mergeToolCatalog(AGENT_TOOLS, catalog);
 }
 
 /** 拉取后端 schemars 目录，合并到 UI 工具定义（参数以后端为准） */
