@@ -63,7 +63,7 @@ reqwest      = { version = "0.12", features = ["json", "stream", "rustls-tls", "
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `crates/agent-types` | `types` | 跨 crate 共享类型：`ModelTarget`、`model_tool::ToolCall`、`ToolEntry`（含 `ToolExposure`、`namespace`）、`MediaAsset`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。Agent history 类型归 `agent-protocol`。 |
+| `crates/agent-types` | `types` | 跨 crate 共享类型：`ModelTarget`、`model_tool::ToolCall`、结构化 `ToolName`、`ToolEntry`（含 `ToolExposure`、`namespace`）、`MediaAsset`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。Agent history 类型归 `agent-protocol`。 |
 | `crates/agent-db` | `agent-db` | 统一 SQLite 基础层：`AstroDb`、`DbSpec`、WAL/同步/繁忙超时配置、连接池与迁移错误。 |
 | `crates/agent-config` | `agent-config` | 分层配置原语：`ConfigLayer`、`ConfigLayerSource`（4 级优先级）、`ConfigKeyPath`。无产品特有字段，不做文件系统发现。 |
 | `crates/agent-protocol` | `agent-protocol` | Core 领域事件协议：`Event`、`EventMsg`、`TurnItem`、`Submission`。运行时唯一事件格式。 |
@@ -77,7 +77,7 @@ reqwest      = { version = "0.12", features = ["json", "stream", "rustls-tls", "
 | `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v22，FTS5）— 原生 `ResponseItem`、会话、billing、FTS 召回、rollout 投影重建。 |
 | `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源注册文件，MIME 分类。 |
 | `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
-| `crates/agent-mcp` | `mcp` | MCP 客户端 — per-agent 进程级连接池（`McpHub`），工具发现与调用、OAuth 认证。工具名约定：`mcp__{server}__{tool}`。 |
+| `crates/agent-mcp` | `mcp` | MCP 客户端 — per-agent 进程级连接池（`McpHub`），工具发现与调用、OAuth 认证。模型侧使用 `namespace=mcp__{server}` + 原生子工具名；Hub 内部执行键为 `mcp__{server}__{tool}`。 |
 | `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap、权限审计。 |
 | `crates/agent-network-proxy` | `network-proxy` | 受管网络代理：HTTP CONNECT 策略、per-attempt 租约、网络审批流。 |
 | `crates/agent-sandbox` | `sandbox` | 沙箱权限控制：`PermissionProfile`（read-only/workspace-write/danger-full-access）、权限审计、网络策略。 |

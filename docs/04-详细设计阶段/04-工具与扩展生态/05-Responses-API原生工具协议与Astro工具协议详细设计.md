@@ -1,10 +1,10 @@
 # Responses API 原生工具协议与 Astro 工具协议详细设计
 
-> **Astro 当前基线（2026-09-02）**：Direct、CodeMode 与 CodeModeOnly 三种工具投影均已接入；JavaScript 由进程内 QuickJS 执行，不依赖用户安装 Node.js。
+> **Astro 当前基线（2026-09-03）**：Direct、CodeMode 与 CodeModeOnly 三种工具投影均已接入；Responses 定义、调用、路由、输出与恢复全链路保留结构化 `(namespace, name)`；JavaScript 由进程内 QuickJS 执行，不依赖用户安装 Node.js。
 
 > 阶段：详细设计
 >
-> 状态：主体已实现；Responses API 原生 namespaced call 的执行键规范化待闭环
+> 状态：已实现（对应提交 `9f04e810`）
 >
 > 参考实现基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
 >
@@ -66,8 +66,8 @@ ToolRegistry -- exposure + namespace + grammar --> native JSON schemas
           |                         +-----------------+------------------+
           |                         |                                    |
           |                         v                                    v
-          |                  Responses API                     legacy providers
-          |             preserve native variants          lower to JSON functions
+          |                  Responses API                  non-Agent adapters
+          |             preserve native variants       omit unsupported namespaces
           |                         |
           v                         v
 StepContext / ToolRouter <- streamed call events + accumulated arguments
@@ -237,18 +237,18 @@ Namespace **不是安全边界**。它表达组织、唯一身份、发现与路
 
 #### 4.4.4 Astro 映射与当前边界
 
-Astro 的 `ToolEntry.namespace` 为空时表示默认域；非空条目由 `ToolRegistry` 按 namespace 合并为原生 schema。例如内部注册名 `cron_list` 对外应投影为 `(cron, list)`。兼容路径才使用两种展平名：
+Astro 的 `ToolEntry.namespace` 为空时表示默认域；非空条目由 `ToolRegistry` 按 namespace 合并为原生 schema。例如内部注册名 `cron_list` 对外投影为 `(cron, list)`。`ToolName` 把 `None`、空字符串和 Responses 默认 namespace `functions` 视为同一默认域。
 
 | 边界 | 表示 |
 | --- | --- |
 | Responses 原生定义 / 调用 | `namespace: "cron"` + `name: "list"` |
 | 文档与人类可读记法 | `cron.list` |
-| Function-only Provider 兼容 | `cron__list` |
 | Astro 内部注册名 | `cron_list` |
+| Code Mode JavaScript 标识符 | 由当前 Step 快照临时规范化，不作为 Responses 调用名 |
 
-`default_api:image_gen` 也不是这个原生 namespace 协议：Astro 当前不把冒号解析为 `ToolName` namespace，该形式只能作为上游或兼容层传入的不透明名称处理。
+MCP 同样使用原生身份：模型看到 `namespace: "mcp__calendar"` + `name: "list_events"`；`McpHub` 内部仍用 `mcp__calendar__list_events` 作为唯一执行键。内部键不会出现在模型直调 schema 或 call 的 `name` 字段中。
 
-> **当前实现审计（2026-09-03）**：Astro 已实现 Namespace schema 生成、`namespace.child` / `namespace__child` 到 registered handler 的 StepContext 路由映射，并在原生 `ResponseItem` 中保留 `namespace`。但从 `ResponseItem` 转为 `ParsedToolCall` 后，当前执行入口仍主要用 `call.name` 查询 `ToolRouter`，没有像 Codex 一样先将 `namespace + name` 规范化为统一路由键。因此“模型返回分离字段的原生 namespaced call 可直接执行”尚不能视为已闭环；后续实现必须在模型直调校验、执行路由、审批、Hooks、日志和 output 回写前共用同一个规范化函数，不得丢弃 `namespace`。
+> **当前实现基线（2026-09-03）**：`ParsedToolCall` 保留分离的 `namespace` 和 `name`，`ToolRouter.routes` / `model_routes` 以结构化 `ToolName` 为键。模型直调、Code Mode 嵌套调用、MCP approval、sandbox 偏好、hook、执行分发、`function_call_output`、SQLite 索引与 UI 投影共用同一身份。顶层伪造 `name: "cron.list"` 或 `name: "cron__list"` 不会命中 `(namespace: "cron", name: "list")` 路由。
 
 ### 4.5 ToolSearch
 
@@ -291,7 +291,7 @@ WebSearch 表示由 Provider 托管的搜索：
 
 当前代码已能解析和传输原生 `WebSearch`，但 Registry 尚未注册 Provider-hosted WebSearch 实例。这是有意保留的能力边界：本地搜索可跨 Provider 稳定工作，托管搜索则必须先由具体 Provider profile 声明支持。
 
-### 4.7 非 Agent 兼容调用的工具降级
+### 4.7 非 Agent 兼容调用的工具边界
 
 > Agent primary、fallback 和辅助模型不进入本节路径：它们只使用 Responses 原生工具类型。以下 lowering 仅服务仍显式调用 Chat/Anthropic/Gemini adapter 的工具或独立 Provider 功能。
 
@@ -299,14 +299,14 @@ WebSearch 表示由 Provider 托管的搜索：
 | --- | --- |
 | Function | 保持为 Function |
 | Freeform | 降为带 `{ input: string }` 的 Function |
-| Namespace Function | 编码为 `namespace__child` Function；ToolRouter 回映射到原 registered handler |
-| Namespace Freeform | 编码为 `namespace__child` + `{ input: string }`；ToolRouter 使用相同回映射 |
+| Namespace Function | 省略；不丢弃 namespace 后伪装成全局 Function |
+| Namespace Freeform | 省略；不将原生层级降级为字符串前缀 |
 | ToolSearch | 降为普通 `tool_search` Function，仍由客户端执行 |
 | WebSearch | 不安全伪装，从通用 Function 列表中省略 |
 
 这个降级层的原则是“可无损转换才转换”。例如 Freeform 包成 `input` 虽然不再有 grammar 约束，但仍能保留原始文本；Provider-hosted WebSearch 则没有通用客户端函数能保留其执行主体和引用语义，因此不做伪降级。
 
-Namespace 的两种 wire name 属于明确的 Provider 边界：Responses API 原生路径继续使用 `namespace.child` 表达层级；Chat Completions 等 Function-only 路径使用 `namespace__child`，以满足常见的 `^[a-zA-Z0-9_-]+$` 名称约束。step-scoped ToolRouter 只为本轮已暴露的 Namespace 子工具登记这两个别名，并都指向同一 registered handler，因此既不通过全局字符清洗制造碰撞，也不扩大模型可调用的工具集合。
+Namespace 不再做 Function-only lowering。这会牺牲不支持 namespace 的非 Agent adapter 上的部分工具可用性，但避免把不同协议身份错认为同一全局 Function。Agent primary、fallback 和辅助任务只走 Responses，不受该限制。
 
 ## 5. `tool_search` 延迟工具与 MCP 激活
 
@@ -329,7 +329,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 
 | 类别 | 当前 Direct 工具 |
 | --- | --- |
-| Shell / 文件 | `terminal`、`exec_command`、`apply_patch`、`get_context_remaining`、`new_context_window`、`tool_search` |
+| Shell / 文件 | `exec_command`、`apply_patch`、`get_context_remaining`、`new_context_window`、`tool_search` |
 | Browser（本机有可用浏览器时） | `browser_open`、`browser_snapshot`、`browser_click`、`browser_type`、`browser_scroll`、`browser_wait`、`browser_screenshot`、`browser_close` |
 | HITL | `ask_user`、`request_user_input_async`、`switch_mode` |
 | 上下文 / 记忆 / Skill | `context_search`、`pin_context`、`memory`、`skills`、`todo` |
@@ -342,7 +342,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 - 终端与环境：`write_stdin`、`code_exec`、`request_permissions`、`request_plugin_install`、`wait_for_environment`；
 - Web：`web_search`、`web_fetch`；
 - 媒体：`image_gen`、`image_analyze`、`audio_analyze`、`video_gen`、`video_analyze`、`speech_gen`、`music_gen`、`robotics`；
-- MCP：当 `tool_search` 可用时，当前 MCP Hub 发现的 `mcp__{server}__{tool}` 也默认进入 Deferred。
+- MCP：当 `tool_search` 可用时，当前 MCP Hub 发现的 `(mcp__{server}, {tool})` 原生子工具也默认进入 Deferred。
 
 `exec` / `wait` 以 `DirectModelOnly` 注册，但只有 CodeMode 或 CodeModeOnly 投影会把它们发给模型。Direct 模式仍直接获得普通 Direct 工具和原生 `tool_search`；Deferred 工具由 `tool_search` 激活后进入下一次 sampling。
 
@@ -376,9 +376,9 @@ model emits tool_search_call(query, limit)
                            |
 client searches name x2 + toolset + description
                            |
-returns complete loadable definitions (defer_loading=true)
+returns complete native definitions (defer_loading=true)
                            |
-next Step 从可信 tool_search_output 提取名称
+next Step 从可信 tool_search_output 提取 ToolName
                            |
 next sampling step routes only discovered schemas
 ```
@@ -389,9 +389,9 @@ next sampling step routes only discovered schemas
 - BM25 检索中工具名重复一次，提高精确名称命中权重；
 - 检索文本由 `name + name + toolset + description` 组成；
 - `limit` 默认 10，执行时最大 50；
-- 返回的不是名称列表，而是含完整 `parameters` 的可加载 schema；
-- 激活结果保存在 Session Registry 的 `activated_deferred` 集合中；
-- MCP 每轮卸载并重注册时，会根据该集合恢复已激活状态。
+- 返回的不是名称列表，而是含完整 `parameters` 的原生可加载 schema；同一 namespace 的命中子工具会合并到一个容器；
+- 激活事实保存在 durable `ResponseItem::ToolSearchOutput`，不另建易漂移的 Session 状态；
+- 新 Step 从已完成的 `tool_search_output` 重建 `HashSet<ToolName>`，MCP 每轮重注册也不会丢失可路由身份。
 
 ### 5.5 MCP 为什么要默认延迟
 
@@ -451,13 +451,13 @@ Responses API 使用不同的 call/output item 表示不同工具。下一轮采
 
 ### 6.3 历史重建
 
-`to_responses_input()` 先收集已有结果的 `call_id`，再重建调用和输出：
+`sanitized_response_items()` 在发送前检查 call/output 边界：
 
-- 只有存在对应 Tool Result 的 Assistant ToolCall 才会回放；
-- `apply_patch` / `exec` 恢复为 custom pair；
-- `tool_search` 结果解析为 tools 数组，恢复 `status: completed` 和 `execution: client`；
-- 其余工具恢复为 function pair；
-- 没有结果的孤立调用不进入下一次请求，避免生成无效协议历史。
+- 丢弃找不到 call 的孤立 output；
+- 为没有 output 的中断 call 生成稳定 id 的 `aborted` output，避免重试时反复改变请求；
+- 合成 Function output 保留原 call 的 `name` 和 `namespace`；
+- `apply_patch` / `exec` 保持 custom pair，`tool_search` 保持 `status` / `execution` / native tools 数组；
+- 所有存活项按原始顺序进入下一次 Responses input，不经 Chat message 往返转换。
 
 ### 6.4 一个 ToolSearch 往返示例
 
@@ -480,10 +480,17 @@ Responses API 使用不同的 call/output item 表示不同工具。下一轮采
   "execution": "client",
   "tools": [
     {
-      "type": "function",
-      "name": "mcp__calendar__list_events",
-      "defer_loading": true,
-      "parameters": { "type": "object" }
+      "type": "namespace",
+      "name": "mcp__calendar",
+      "description": "Tools in the mcp__calendar namespace.",
+      "tools": [
+        {
+          "type": "function",
+          "name": "list_events",
+          "defer_loading": true,
+          "parameters": { "type": "object" }
+        }
+      ]
     }
   ]
 }
@@ -536,7 +543,7 @@ text(result);
 
 ### 7.3 Cell 运行时
 
-保留的兼容实现使用进程内 QuickJS 执行隔离 JavaScript cell。每个 cell 都在专用线程中创建新的 runtime/context，并设置内存、栈和中断限制；不依赖用户电脑安装 Node.js。模型代码不获得宿主全局对象，可用边界只有：
+当前实现使用进程内 QuickJS 执行隔离 JavaScript cell。每个 cell 都在专用线程中创建新的 runtime/context，并设置内存、栈和中断限制；不依赖用户电脑安装 Node.js。模型代码不获得宿主全局对象，可用边界只有：
 
 | 能力 | 用途 |
 | --- | --- |
@@ -703,7 +710,7 @@ Code Mode 不是“JavaScript 拥有所有权限”，而是两层边界：
 | 能力 | 状态 |
 | --- | --- |
 | Direct Function / Freeform / Namespace schema | 已接入 |
-| Responses 分离 `namespace + name` 的调用键规范化 | 待闭环 |
+| Responses 分离 `namespace + name` 的调用键规范化 | 已接入 |
 | Direct `tool_search` + Deferred 路由 | 已接入 |
 | QuickJS cell、`exec/wait` 调度、自描述 `ALL_TOOLS` | 已接入 |
 | 模型目录 `tool_mode` 覆盖 | 已接入 |
@@ -727,9 +734,9 @@ code_mode = true
 3. Deferred 仅表示可见性，不表示授权。
 4. `tool_search` 激活在下一次 sampling step 生效，MCP 热重载不丢失状态。
 5. 模型直调只能命中当前 Step 真正可见的路由。
-6. 历史只回放已有匹配结果的 tool call，避免孤立调用破坏 Provider 请求。
+6. 历史丢弃孤立 output，并为中断 call 合成稳定的 `aborted` output；合成项不得丢失 namespace。
 7. CodeModeOnly 的 `ALL_TOOLS` 对象形状固定为 `{name, description}`；description 是包含 TypeScript 调用声明的自描述合同。
-8. Namespace 工具的规范身份是 `(namespace, name)`；点号、双下划线或其他展平形式只能存在于明确的 adapter 边界。
+8. Namespace 工具的规范身份是 `(namespace, name)`；点号只用于人类可读投影，Code Mode 标识符只用于 cell 内部，二者都不得作为模型顶层直调别名。
 9. Namespace 不扩大权限；调用仍必须同时命中当前 StepContext 的模型可见路由与执行策略。
 
 ## 11. 实现映射
@@ -737,11 +744,13 @@ code_mode = true
 | 职责 | 当前实现 |
 | --- | --- |
 | Provider 工具联合类型 | `crates/agent-providers/src/types/request_content.rs` |
+| 规范工具身份 | `crates/agent-types/src/tool_entry.rs::ToolName` |
 | Registry schema 生成与暴露策略 | `crates/agent-tools/src/engine/registry.rs` |
 | `tool_search` 搜索与激活 | `crates/agent-tools/src/builtin/shell/tool_search.rs` |
-| MCP 动态注册 | `crates/agent-core/src/runtime/mod.rs::attach_mcp_tools` |
+| MCP namespace / 内部执行键 | `crates/agent-mcp/src/names.rs`、`hub.rs`、`crates/agent-core/src/runtime/mod.rs::attach_mcp_tools` |
 | Responses 请求 / SSE / 历史 | `crates/agent-providers/src/openai/responses.rs` |
 | Step 级可见/可路由快照 | `crates/agent-core/src/runtime/step_context.rs` / `tool_router.rs` |
+| call/output 持久化与 namespace 投影 | `crates/agent-core/src/runtime/recording.rs`、`crates/agent-protocol/src/response_item.rs` |
 | QuickJS cell 与 `ALL_TOOLS` | `crates/agent-core/src/runtime/code_mode.rs` |
 | JSON Schema 到 TypeScript 声明 | `crates/agent-tools/src/engine/code_mode.rs` |
 | Code Mode 嵌套工具快照与调度 | `crates/agent-core/src/streaming/tools_exec.rs` |
@@ -753,7 +762,11 @@ code_mode = true
 - `crates/agent-tools/tests/tool_search_alignment.rs`
   - 原生 schema 形态；
   - Deferred 搜索和激活；
-  - MCP 重注册后保留激活状态。
+  - MCP namespace 搜索结果与下一 Step 路由。
+- `crates/agent-core/src/runtime/tool_router.rs` / `runtime/mod.rs` 单元测试
+  - 分离 `namespace + name` 可执行；
+  - `namespace.child` / `namespace__child` 无法伪装模型直调；
+  - output 历史保留 namespace。
 - `crates/agent-tools/tests/code_mode_alignment.rs`
   - Direct 工具和原生 `tool_search` 保持可见；
   - `exec` / `wait` 不进入模型 schema。
@@ -782,6 +795,5 @@ CARGO_TARGET_DIR=/tmp/astro-tool-align cargo test -p tools --test tool_search_al
 
 1. `ToolDefinition::WebSearch` 已具备原生传输能力，但当前没有 Provider profile 将它注册到模型工具列表；当前实际搜索走本地 Deferred Function。
 2. CodeModeOnly 的业务工具只存在于嵌套路由，不进入模型直调集合；这两个集合必须继续分别维护。
-3. Namespace schema 和历史字段已保留原生语义，但执行入口尚需将分离的 `namespace + name` 统一规范化后再做可见性检查、审批和 handler 路由。
 
-前两项不影响当前的原生 schema、ToolSearch、Responses 回放和 Code Mode runtime 单元合同；第三项是 Native Namespace 从“协议已保留”到“执行已闭环”之间的明确差距。
+上述两项不影响当前的原生 Namespace schema、ToolSearch、Responses 回放和 Code Mode runtime 合同。

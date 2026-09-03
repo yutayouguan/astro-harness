@@ -45,7 +45,7 @@
 - 显式 `Run` / `Session` / 事件模型：run 有清晰状态机与事件流。
 
 ### Astro 现状
-- ToolRegistry + MCP 桥接（`mcp__server__tool`），有 hooks（`InjectContext` 等）。
+- ToolRegistry + MCP 桥接（模型侧为 `namespace=mcp__server` + 子工具，Hub 内部键为 `mcp__server__tool`），有 hooks（`InjectContext` 等）。
 - 有 session、streaming provider，但缺显式「Run 状态机 / requirements」一等模型。
 
 ### 可借鉴
@@ -276,7 +276,7 @@ messages 中 tool 结果超阈值
 - `MCPTools` / `MultiMCPTools`，挂到 `Agent.tools`。
 
 ### Astro（已更完整）
-- 独立 `mcp` crate：多服务器 Hub、按 Agent 配置持久化、工具发现缓存、`mcp__server__tool` 限定名桥接。
+- 独立 `mcp` crate：多服务器 Hub、按 Agent 配置持久化、工具发现缓存、Responses 原生 MCP namespace 与 Hub qualified key 桥接。
 - 传输：stdio + streamable HTTP。
 
 关键路径：`mcp/src/hub.rs`、`mcp/src/config.rs`、`mcp/src/names.rs`

@@ -55,7 +55,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | `runtime/context_maintenance.rs` | 上下文维护 — `maintain_tool_context` / `provider_history` |
 | `runtime/recording.rs` | `ResponseItem` 记录 — `record_assistant_*` / `record_tool_result_*` |
 | `runtime/tool_dispatch.rs` | 工具调度 — `handle_tool_call_async` / `finalize_tool_call_result` |
-| `runtime/tool_router.rs` | `ToolRouter` — 内置/MCP/动态工具统一路由 |
+| `runtime/tool_router.rs` | `ToolRouter` — 以结构化 `ToolName(namespace, name)` 冻结内置/MCP/动态工具的 Step 级路由 |
 | `runtime/system_prompt.rs` | Prompt 契约构建 — `build_prompt_contract` |
 | `runtime/submission_loop.rs` | 有序提交循环 |
 | `runtime/history_control.rs` | compact replacement、rollback、suspend/recover 历史控制 |
@@ -112,12 +112,13 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 ## 关键不变量
 
 1. **原生历史**：Agent sampling、SessionStore、rollout 和 Desktop history RPC 都使用 `ResponseItem`；UI 只在渲染边界生成 `ConversationEntry`
-2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 90）；`increment_tool_round()` 超限返回 `MaxDepthError`
-3. **streaming 不变量**：每轮 assistant 回复必须先写入 history 再执行工具；usage 覆盖式累加
-4. **取消信号**：`CancelSignal` 在工具调用前后均检查，已取消则立即中断
-5. **Session 是 Send + Sync**：所有可变状态封装在 `StdMutex` / `TokioMutex` 中，无裸 `RefCell`
-6. **事件有序性**：`event_dispatch` 锁保证 rollout 持久化与 live 投递严格有序
-7. **Provider 边界**：primary、fallback 和 Agent 辅助任务都必须支持 Responses，不回退 Chat Completions
+2. **原生命名空间**：模型工具以分离的 `namespace + name` 命中 `ToolRouter`；展平字符串只能作为展示或内部执行键
+3. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 90）；`increment_tool_round()` 超限返回 `MaxDepthError`
+4. **streaming 不变量**：每轮 assistant 回复必须先写入 history 再执行工具；usage 覆盖式累加
+5. **取消信号**：`CancelSignal` 在工具调用前后均检查，已取消则立即中断
+6. **Session 是 Send + Sync**：所有可变状态封装在 `StdMutex` / `TokioMutex` 中，无裸 `RefCell`
+7. **事件有序性**：`event_dispatch` 锁保证 rollout 持久化与 live 投递严格有序
+8. **Provider 边界**：primary、fallback 和 Agent 辅助任务都必须支持 Responses，不回退 Chat Completions
 
 ## 测试
 

@@ -4,7 +4,7 @@
 >
 > 状态：当前实现基线
 >
-> 更新：2026-09-01
+> 更新：2026-09-03
 >
 > 适用范围：`agent-core`、`agent-protocol`、`agent-providers`、`agent-rollout`、`agent-session`、`agent-hooks`
 
@@ -22,6 +22,7 @@ Astro 的 Agent 对话链路只接受 Responses API。`agent_protocol::ResponseI
 4. Function、custom、tool search 等 call/output 项必须保持原始类型、标识和顺序；output 紧邻对应 call，不能跨轮重排。
 5. 标题、压缩、记忆回顾、智能审批等 Agent 自有辅助任务同样走 Responses-only 入口。
 6. Provider 的显式 `api_mode` 不能绕过 Agent capability gate。
+7. Namespace 工具以分离的 `(namespace, name)` 作为规范身份；从 schema、call、StepContext 路由到 output 回放均不展平。
 
 ## 2. 端到端数据流
 
@@ -70,6 +71,23 @@ assistant call item 持久化
 ```
 
 这避免了 `No tool output found for tool call ...`：输出不是按文本或工具名猜测，而是按原生 call id 绑定；历史归一化只修复边界，不得把 output 移到不相关的 call 后。
+
+### 3.2 命名空间身份
+
+Responses Namespace 工具的 call 同时携带 `namespace` 和子工具 `name`。Astro 使用
+`types::ToolName` 作为 `ToolRouter.routes` / `model_routes` 的键，并把默认域
+`None` / `""` / `"functions"` 视为等价。模型顶层调用必须精确命中生成该 call 的
+StepContext；`cron.list` 和 `cron__list` 不能代替 `namespace="cron", name="list"`。
+
+MCP 模型工具也使用同一协议：
+
+```text
+model identity: namespace=mcp__calendar, name=list_events
+hub route key:  mcp__calendar__list_events
+```
+
+执行后的 `FunctionCallOutput`、SessionStore 索引、压缩元数据和 Desktop 投影继续保留
+namespace。点号形式只用于人类可读展示，不是 Provider call 的单一 `name` 字段。
 
 ## 4. Provider 路由边界
 
@@ -136,6 +154,8 @@ SQLite schema v22 的 `response_items.item_json` 是唯一会话内容列。升�
 | Responses 请求组装 | `crates/agent-core/src/streaming/provider.rs`、`prompt/response_input.rs` |
 | Agent capability gate | `crates/agent-providers/src/dispatch.rs`、`profile.rs` |
 | Responses 序列化 | `crates/agent-providers/src/compat/responses.rs` |
+| 工具命名空间与 Step 路由 | `crates/agent-types/src/tool_entry.rs`、`crates/agent-core/src/runtime/tool_router.rs` |
+| Deferred namespace 搜索与恢复 | `crates/agent-tools/src/builtin/shell/tool_search.rs`、`crates/agent-core/src/runtime/turn_lifecycle.rs` |
 | Rollout 策略与恢复 | `crates/agent-rollout/src/policy.rs`、`reconstruction.rs` |
 | Hook runtime | `crates/agent-hooks/src/lib.rs`、`command.rs`、`lifecycle_events.rs` |
 

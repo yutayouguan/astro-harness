@@ -203,7 +203,7 @@ astro/
 | `agent` | Agent 运行时核心（Session、AstroThread、streaming） |
 | `server` | gRPC 服务（可独立运行；桌面壳默认同进程内嵌） |
 | `providers` | Agent Responses-only 路由 + 工具/媒体 Provider 适配 |
-| `tools` | 工具实现 + ToolRegistry（ToolExposure 三级暴露、BM25 搜索） |
+| `tools` | 工具实现 + ToolRegistry（Responses 原生 Namespace、ToolExposure 三级暴露、BM25 搜索） |
 | `subagents` | V2 Agent Thread 子 Agent 系统 |
 | `memory` | 记忆管理（MEMORY.md/USER.md 快照） |
 | `session` | 会话消息与账单（SQLite WAL + FTS5） |
@@ -215,7 +215,7 @@ astro/
 | `agent-protocol` | Core 协议（Op、EventMsg、TurnItem、ResponseItem） |
 | `agent-rollout` | JSONL append-only 权威历史 |
 | `realtime` | Realtime 运输、typed event、transcript reducer 与 Codex handoff/BEM |
-| `skills` / `mcp` | 扩展能力（Skills 管理、MCP 客户端） |
+| `skills` / `mcp` | 扩展能力（Skills 管理、原生 namespaced MCP 客户端） |
 | `hooks` | Plugin、Command/MCP、Gateway、Shell 生命周期钩子 |
 | `proto` / `types` | gRPC 契约与公共类型 |
 

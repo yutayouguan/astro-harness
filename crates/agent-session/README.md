@@ -20,6 +20,7 @@
 
 `NewResponseItem` 与 `StoredResponseItem` 都持有原生 item；工具调用和输出不合并到
 assistant/tool message，call id、namespace、encrypted arguments、reasoning 和 metadata 均保持原样。
+`tool_name` 索引列可使用 `namespace.name` 便于 FTS/用量归类，但 `item_json` 仍是唯一权威内容。
 
 ## 模块
 

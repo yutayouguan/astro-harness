@@ -18,6 +18,7 @@
 
 - 检查 `ProviderProfile.supports_responses`，阻止不支持 Responses 的 Provider 进入 Agent target/fallback chain；
 - 将 `ResponseItem`、原生工具定义和 instructions 发送到 `/responses`；
+- Namespace 工具在 Responses 路径保留原生容器；非 Agent Function-only adapter 会省略不支持的 namespace，不再展平为伪 Function 名；
 - 解析 text、reasoning、tool-call、usage 和终态流式事件；
 - 为非 Agent 调用保留聊天、embedding、图像、音频、视频等能力；
 - 提供 Provider profile、API key 探测、HTTP/SSE、媒体转换和错误归一化。

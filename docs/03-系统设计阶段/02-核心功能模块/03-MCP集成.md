@@ -1,6 +1,6 @@
 # MCP 集成
 
-> **Harness 定位（2026-08-29）**：MCP 是 Harness 的外部工具 Gateway，而不是 Model 本身能力。当 `tool_search` 可用时，MCP 工具默认 Deferred；搜索激活只改变模型可见性，不跳过 MCP approval、HITL、`StepContext` 或审计。见 [Agent Harness 总体架构](../01-架构设计/11-Agent-Harness总体架构.md)。
+> **Harness 定位（2026-09-03）**：MCP 是 Harness 的外部工具 Gateway，而不是 Model 本身能力。模型侧使用 Responses 原生 `namespace=mcp__{server}` + `name={tool}`，Hub 内部才使用展平执行键。当 `tool_search` 可用时，MCP 工具默认 Deferred；搜索激活只改变模型可见性，不跳过 MCP approval、HITL、`StepContext` 或审计。见 [Agent Harness 总体架构](../01-架构设计/11-Agent-Harness总体架构.md)。
 
 > 文档状态：定稿 | 阶段：系统设计 | 拆分自：原 07-MCP与Skills与子Agent.md
 
@@ -8,27 +8,22 @@
 
 ## 一、MCP Client
 
-Agent 通过 `McpToolBridge` 将 MCP server 暴露的工具透明适配为内部 `Tool` trait，Agent 无需感知工具来源。
+`McpHub` 维持每 Agent 连接池并在 `tools/list` 后生成 `ToolEntrySpec`。
+`Session::attach_mcp_tools()` 将条目注册到 `ToolRegistry`：
 
-```rust
-// crates/agent-core/src/tools/mcp/bridge.rs
-
-pub struct McpToolBridge {
-    client: Arc<McpClient>,
-    tool_def: mcp_types::Tool,
-}
-
-#[async_trait]
-impl Tool for McpToolBridge {
-    fn name(&self) -> &str { &self.tool_def.name }
-    fn description(&self) -> &str { &self.tool_def.description }
-    fn input_schema(&self) -> Value { self.tool_def.input_schema.clone() }
-
-    async fn execute(&self, input: ToolInput) -> Result<ToolOutput, ToolError> {
-        self.client.call_tool(&self.tool_def.name, input).await
-    }
-}
+```text
+MCP tools/list
+  -> ToolEntrySpec { namespace, native_name, qualified_name, schema, approval }
+  -> ToolEntry { namespace, internal name = qualified_name }
+  -> Responses namespace schema
+  -> StepContext / ToolRouter (namespace, native_name)
+  -> qualified_name
+  -> McpHub::resolve_tool_peer
+  -> peer.call_tool(native_name, arguments)
 ```
+
+因此 Agent 执行循环无需根据工具名前缀猜测 Server，但调用仍会通过统一的
+approval、sandbox、hook、output budget 和持久化链路。
 
 ---
 

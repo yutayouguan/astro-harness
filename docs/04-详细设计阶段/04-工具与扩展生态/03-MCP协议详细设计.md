@@ -1,6 +1,6 @@
 # MCP 接入系统详细设计
 
-> **Harness 当前基线（2026-08-29）**：`McpHub` 是每 Agent 进程级连接池，工具以 `mcp__{server_id}__{tool_name}` 注册。当 `tool_search` 可用时默认 Deferred，否则回退 Direct；激活不等于授权。Server instructions 是不可信 dynamic context，MCP prompt/resource 不得被当作 system authority。
+> **Harness 当前基线（2026-09-03）**：`McpHub` 是每 Agent 进程级连接池。工具在模型侧以原生 `namespace=mcp__{server_id}` + `name={tool_name}` 暴露，Hub 内部才使用 `mcp__{server_id}__{tool_name}` 执行键。当 `tool_search` 可用时默认 Deferred，否则回退 Direct；激活不等于授权。Server instructions 是不可信 dynamic context，MCP prompt/resource 不得被当作 system authority。
 
 > 阶段：详细设计  
 > 状态：已决策，分阶段实施  
@@ -20,6 +20,36 @@ Astro 的 MCP 接入以 Codex MCP 配置与运行语义为兼容基线：
   不再读取 Agent 私有 MCP 配置。
 - Codex 公开文档只明确承诺 tools 与 initialize `instructions`；resources/resource templates/prompts 作为 Astro 扩展仅显式按需访问，不宣称为 Codex 自动行为。
 - 当前阶段只设计 Astro 作为 MCP Host/Client。将 Astro 自身暴露为 MCP Server 不属于本轮范围，后续若需要应单独立项。
+
+### 1.1 模型身份与内部执行键
+
+MCP 工具不再以展平函数名暴露给 Responses 模型：
+
+```json
+{
+  "type": "namespace",
+  "name": "mcp__calendar",
+  "description": "Tools in the mcp__calendar namespace.",
+  "tools": [
+    { "type": "function", "name": "list_events", "parameters": {} }
+  ]
+}
+```
+
+`ToolEntrySpec` 同时携带三种用途不同的字段：
+
+| 字段 | 用途 | 示例 |
+| --- | --- | --- |
+| `namespace` | Responses schema / call 的结构化所有权 | `mcp__calendar` |
+| `native_name` | Server `tools/list` 返回的子工具名 | `list_events` |
+| `qualified_name` | Hub 内部连接解析与唯一执行键 | `mcp__calendar__list_events` |
+
+`ToolRouter` 用 `(namespace, native_name)` 校验当前 Step 的模型调用，再回映射到
+`qualified_name` 调用 `McpHub`。模型直接输出展平名不会命中路由。
+
+Deferred MCP 工具由 `tool_search` 返回原生 namespace schema；同一 Server 的命中子工具
+会合并到同一 namespace 容器。新 Step 从 durable `ToolSearchOutput` 重建
+`ToolName` 集合，而不依赖独立的内存激活表。
 
 ## 2. 目标与非目标
 
@@ -75,7 +105,7 @@ crates/agent-mcp/src/
 ├── hub.rs             # 连接池、instructions 快照、tools 与 capability 发现
 ├── protocol.rs        # resources/resource templates/prompts 显式按需协议适配
 ├── policy.rs          # allow/deny、审批模式、required
-└── names.rs           # mcp__{server}__{tool}
+└── names.rs           # mcp__{server} namespace + Hub qualified key
 ```
 
 职责约束：
@@ -298,7 +328,9 @@ pub struct McpServerCapabilities {
 ```text
 native: search
 server: context7
-qualified: mcp__context7__search
+model namespace: mcp__context7
+model child: search
+hub qualified key: mcp__context7__search
 ```
 
 过滤顺序：

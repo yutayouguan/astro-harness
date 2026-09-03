@@ -4,7 +4,7 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 
 ## 核心职责
 
-- 提供 `ToolRegistry` 工具注册表：管理内置工具、MCP 工具与动态工具的 schema 与 handler
+- 提供 `ToolRegistry` 工具注册表：管理内置工具、MCP 工具与动态工具的 schema 与 handler，并将非空 namespace 聚合为 Responses 原生容器
 - 通过 `inventory` crate 实现工具自注册：新工具只需 `submit_builtin_tool!` 宏即可，无需修改入口
 - `register_all()` 一次性收集并注册全部内置工具
 - 统一分发入口 `dispatch_tool`：查表路由到对应 handler
@@ -65,7 +65,7 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 
 ## 核心类型与 API
 
-- `ToolRegistry` — 工具注册表：`register()` / `register_dynamic()` / `available_tools()` / `schemas_for_api()`
+- `ToolRegistry` — 工具注册表：`register()` / `register_dynamic()` / `available_tools()` / `schemas_for_api()`；Deferred namespace 由 `tool_search` 返回完整子工具 schema
 - `ToolContext` — 工具执行上下文：凭证、会话 ID、沙箱策略、项目根、MCP Hub
 - `register_all(registry)` — 一次性注册全部内置工具（通过 `inventory` 自动收集）
 - `dispatch_tool(name, ctx, args)` — 统一工具分发入口
