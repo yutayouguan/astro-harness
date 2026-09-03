@@ -5,16 +5,17 @@ checkout，不会隐式调用本 crate。
 
 ## 核心契约
 
-- `WorktreeManager::create` 从 `HEAD` 或显式 base 解析 commit，默认创建 detached checkout。
+- `WorktreeManager::create` 从 `HEAD` 或显式 base 解析 commit，默认创建 detached checkout；
+  只有显式 `branch` 请求才创建分支。
 - `ManagedWorktree.cwd` 保留源 checkout 内的嵌套工作目录；base 不包含该目录时创建失败。
 - Git 子进程清除继承的 `GIT_DIR` / `GIT_WORK_TREE` / index 等 repository selector，
   并在单次命令中强制显式 bare-repository 选择，禁用 hooks、filesystem monitor 和
   已配置 clean/smudge/process filters。
 - 创建或物化失败时删除不完整 worktree 与空 allocation bucket。
 - `cleanup()` 只自动移除干净 worktree；脏树保留供人工恢复。
-- Desktop cleanup 只接受 `.worktrees/<bucket>/<repo>` 下的 Astro 管理检出，拒绝任意路径。
-- 兼容入口 `create_task_worktree` 会复制 `.worktreeinclude` 中的普通文件/目录，
-  但跳过绝对路径、`..` 与符号链接。
+- Desktop cleanup 只接受 manager 生成的 opaque ID，根据 bucket manifest 重新校验
+  source/checkout，不接受前端提供的 repo/path。
+- `.worktreeinclude` 复制普通文件/目录，但跳过绝对路径、`..` 与符号链接。
 
 ## 验证
 

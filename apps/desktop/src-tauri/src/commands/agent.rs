@@ -37,9 +37,10 @@ pub struct AgentInfoDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskWorktreeDto {
+    pub id: String,
     pub path: String,
-    pub repo_root: String,
-    pub branch: String,
+    pub branch: Option<String>,
+    pub head_sha: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -205,18 +206,27 @@ pub async fn write_daily_memory(
 
 /// 独立任务：若能解析到 git root 则创建隔离 worktree；否则返回 `None`（降级共工作区）。
 #[tauri::command]
-pub fn prepare_task_worktree(task_id: String) -> Result<Option<TaskWorktreeDto>, String> {
+pub fn prepare_task_worktree() -> Result<Option<TaskWorktreeDto>, String> {
     let Some(root) = agent::git_worktree::resolve_project_root(None) else {
         return Ok(None);
     };
     let Some(repo) = agent::git_worktree::find_git_root(&root) else {
         return Ok(None);
     };
-    match agent::git_worktree::create_task_worktree(&repo, &task_id) {
+    let manager =
+        agent::git_worktree::WorktreeManager::new(agent::git_worktree::WorktreeSettings {
+            root: home::default_memory_dir().join("worktrees"),
+        });
+    match manager.create(&agent::git_worktree::CreateWorktree {
+        source_cwd: repo,
+        base: None,
+        branch: None,
+    }) {
         Ok(handle) => Ok(Some(TaskWorktreeDto {
+            id: handle.id.clone(),
             path: handle.path().to_string_lossy().into_owned(),
-            repo_root: handle.source_root.to_string_lossy().into_owned(),
-            branch: handle.branch.clone().unwrap_or(handle.head_sha.clone()),
+            branch: handle.branch.clone(),
+            head_sha: handle.head_sha.clone(),
         })),
         Err(e) => {
             tracing::warn!(error = %e, "prepare_task_worktree failed; continuing without");
@@ -227,18 +237,13 @@ pub fn prepare_task_worktree(task_id: String) -> Result<Option<TaskWorktreeDto>,
 
 /// 清理任务 worktree；脏树按 clean_only 保留。
 #[tauri::command]
-pub fn cleanup_task_worktree(
-    path: String,
-    repo_root: String,
-    branch: String,
-) -> Result<(), String> {
-    let path = std::path::PathBuf::from(path.trim());
-    let repo = std::path::PathBuf::from(repo_root.trim());
-    let branch = branch.trim().to_string();
-    if path.as_os_str().is_empty() || repo.as_os_str().is_empty() || branch.is_empty() {
-        return Ok(());
-    }
-    // 泄漏 handle 字段到 cleanup API（不 drop 原 handle）
-    agent::git_worktree::cleanup_task_worktree(&repo, &path, &branch, true)
+pub fn cleanup_task_worktree(worktree_id: String) -> Result<(), String> {
+    let manager =
+        agent::git_worktree::WorktreeManager::new(agent::git_worktree::WorktreeSettings {
+            root: home::default_memory_dir().join("worktrees"),
+        });
+    manager
+        .cleanup(worktree_id.trim(), true)
+        .map(|_| ())
         .map_err(|error| error.to_string())
 }

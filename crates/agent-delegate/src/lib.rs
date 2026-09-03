@@ -4,6 +4,7 @@
 //! tasks that request an isolated checkout.
 
 use anyhow::{bail, Context};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs;
@@ -12,6 +13,7 @@ use std::process::{Command, Output};
 
 const DISABLED_HOOKS_PATH: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
 const SAFE_BARE_REPOSITORY_CONFIG: &str = "safe.bareRepository=explicit";
+const MANIFEST_FILE: &str = "worktree.json";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorktreeSettings {
@@ -22,10 +24,12 @@ pub struct WorktreeSettings {
 pub struct CreateWorktree {
     pub source_cwd: PathBuf,
     pub base: Option<String>,
+    pub branch: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct ManagedWorktree {
+    pub id: String,
     pub root: PathBuf,
     pub cwd: PathBuf,
     pub source_root: PathBuf,
@@ -35,6 +39,17 @@ pub struct ManagedWorktree {
     clean_only: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct WorktreeManifest {
+    id: String,
+    root: PathBuf,
+    cwd: PathBuf,
+    source_root: PathBuf,
+    source_cwd: PathBuf,
+    head_sha: String,
+    branch: Option<String>,
+}
+
 impl ManagedWorktree {
     pub fn path(&self) -> &Path {
         &self.root
@@ -42,6 +57,12 @@ impl ManagedWorktree {
 
     pub fn cleanup(self) {
         cleanup_worktree(&self.source_root, &self.root, self.clean_only);
+        if !self.root.exists() {
+            if let Some(bucket) = self.root.parent() {
+                let _ = fs::remove_file(bucket.join(MANIFEST_FILE));
+            }
+            remove_empty_bucket(&self.root);
+        }
     }
 }
 
@@ -84,20 +105,28 @@ impl WorktreeManager {
                 revision.as_str(),
             ],
         )?;
-        let root = allocate_worktree_root(&self.settings.root, repository_name)?;
+        let (id, root) = allocate_worktree_root(&self.settings.root, repository_name)?;
 
-        if let Err(error) = git_output(
-            &source_root,
-            false,
-            [
-                OsStr::new("worktree"),
-                OsStr::new("add"),
-                OsStr::new("--detach"),
-                OsStr::new("--no-checkout"),
-                root.as_os_str(),
-                OsStr::new(&head_sha),
-            ],
-        ) {
+        let branch = request
+            .branch
+            .as_deref()
+            .map(str::trim)
+            .filter(|branch| !branch.is_empty())
+            .map(str::to_string);
+
+        let mut add_args = vec![OsStr::new("worktree"), OsStr::new("add")];
+        if let Some(branch) = branch.as_deref() {
+            add_args.extend([OsStr::new("-b"), OsStr::new(branch)]);
+        } else {
+            add_args.push(OsStr::new("--detach"));
+        }
+        add_args.extend([
+            OsStr::new("--no-checkout"),
+            root.as_os_str(),
+            OsStr::new(&head_sha),
+        ]);
+
+        if let Err(error) = git_output(&source_root, false, add_args) {
             remove_empty_bucket(&root);
             return Err(error).context("cannot create managed worktree");
         }
@@ -127,30 +156,63 @@ impl WorktreeManager {
             );
         }
 
-        Ok(ManagedWorktree {
+        copy_worktreeinclude(&source_root, &root)?;
+        let managed = ManagedWorktree {
+            id,
             root,
             cwd,
             source_root,
             source_cwd,
             head_sha,
-            branch: None,
+            branch,
             clean_only: true,
-        })
+        };
+        if let Err(error) = write_manifest(&managed) {
+            remove_worktree(&managed.source_root, &managed.root);
+            if let Some(bucket) = managed.root.parent() {
+                let _ = fs::remove_file(bucket.join(MANIFEST_FILE));
+            }
+            remove_empty_bucket(&managed.root);
+            return Err(error);
+        }
+        Ok(managed)
     }
-}
 
-/// Compatibility entry point for callers that previously used the Core helper.
-pub fn create_task_worktree(repo: &Path, _task_id: &str) -> anyhow::Result<ManagedWorktree> {
-    let root = repository_root(repo)?;
-    let managed_root = root.join(".worktrees");
-    ensure_worktrees_gitignore(&root)?;
-    let managed =
-        WorktreeManager::new(WorktreeSettings { root: managed_root }).create(&CreateWorktree {
-            source_cwd: repo.to_path_buf(),
-            base: None,
+    pub fn cleanup(&self, id: &str, clean_only: bool) -> anyhow::Result<bool> {
+        anyhow::ensure!(valid_worktree_id(id), "invalid managed worktree id");
+        let managed_root = fs::canonicalize(&self.settings.root).with_context(|| {
+            format!(
+                "cannot resolve managed worktree root {}",
+                self.settings.root.display()
+            )
         })?;
-    copy_worktreeinclude(&root, &managed.root)?;
-    Ok(managed)
+        let bucket = fs::canonicalize(managed_root.join(id))
+            .context("cannot resolve managed worktree allocation")?;
+        let manifest_path = bucket.join(MANIFEST_FILE);
+        let manifest: WorktreeManifest = serde_json::from_slice(
+            &fs::read(&manifest_path)
+                .with_context(|| format!("cannot read {}", manifest_path.display()))?,
+        )?;
+        anyhow::ensure!(manifest.id == id, "managed worktree manifest id mismatch");
+        let checkout =
+            fs::canonicalize(&manifest.root).context("cannot resolve managed worktree checkout")?;
+        anyhow::ensure!(
+            checkout.parent() == Some(bucket.as_path()),
+            "managed worktree escaped its bucket"
+        );
+        let source_root = repository_root(&manifest.source_root)?;
+        anyhow::ensure!(
+            source_root == manifest.source_root,
+            "managed worktree source root mismatch"
+        );
+        if clean_only && is_worktree_dirty(&checkout) {
+            return Ok(false);
+        }
+        remove_worktree(&source_root, &checkout);
+        let _ = fs::remove_file(manifest_path);
+        remove_empty_bucket(&checkout);
+        Ok(true)
+    }
 }
 
 pub fn find_git_root(start: &Path) -> Option<PathBuf> {
@@ -172,39 +234,6 @@ pub fn resolve_project_root(explicit: Option<&Path>) -> Option<PathBuf> {
     std::env::current_dir()
         .ok()
         .and_then(|path| find_git_root(&path))
-}
-
-pub fn cleanup_task_worktree(
-    repo: &Path,
-    path: &Path,
-    _branch: &str,
-    clean_only: bool,
-) -> anyhow::Result<()> {
-    let source_root = repository_root(repo)?;
-    let managed_root = source_root.join(".worktrees");
-    let managed_root = fs::canonicalize(&managed_root).with_context(|| {
-        format!(
-            "cannot resolve managed worktree root {}",
-            managed_root.display()
-        )
-    })?;
-    let checkout = fs::canonicalize(path)
-        .with_context(|| format!("cannot resolve managed worktree {}", path.display()))?;
-    let relative = checkout
-        .strip_prefix(&managed_root)
-        .context("worktree is outside Astro's managed worktree root")?;
-    let components = relative.components().collect::<Vec<_>>();
-    let expected_name = source_root
-        .file_name()
-        .context("repository root has no directory name")?;
-    anyhow::ensure!(
-        components.len() == 2
-            && components[0].as_os_str().to_string_lossy().len() == 4
-            && components[1].as_os_str() == expected_name,
-        "worktree does not use Astro's managed allocation layout"
-    );
-    cleanup_worktree(&source_root, &checkout, clean_only);
-    Ok(())
 }
 
 fn git_output(
@@ -325,19 +354,45 @@ fn repository_root(cwd: &Path) -> anyhow::Result<PathBuf> {
         .with_context(|| format!("cannot resolve repository root {}", root.display()))
 }
 
-fn allocate_worktree_root(root: &Path, repository_name: &OsStr) -> anyhow::Result<PathBuf> {
+fn allocate_worktree_root(
+    root: &Path,
+    repository_name: &OsStr,
+) -> anyhow::Result<(String, PathBuf)> {
     fs::create_dir_all(root)
         .with_context(|| format!("cannot create worktree root {}", root.display()))?;
     for _ in 0..=u16::MAX {
-        let id = uuid::Uuid::new_v4().simple().to_string();
-        let bucket = root.join(&id[..4]);
+        let id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
+        let bucket = root.join(&id);
         match fs::create_dir(&bucket) {
-            Ok(()) => return Ok(bucket.join(repository_name)),
+            Ok(()) => return Ok((id, bucket.join(repository_name))),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(error.into()),
         }
     }
     bail!("all managed worktree identifiers are in use")
+}
+
+fn valid_worktree_id(id: &str) -> bool {
+    id.len() == 12 && id.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn write_manifest(worktree: &ManagedWorktree) -> anyhow::Result<()> {
+    let manifest = WorktreeManifest {
+        id: worktree.id.clone(),
+        root: worktree.root.clone(),
+        cwd: worktree.cwd.clone(),
+        source_root: worktree.source_root.clone(),
+        source_cwd: worktree.source_cwd.clone(),
+        head_sha: worktree.head_sha.clone(),
+        branch: worktree.branch.clone(),
+    };
+    let path = worktree
+        .root
+        .parent()
+        .context("managed worktree has no allocation bucket")?
+        .join(MANIFEST_FILE);
+    fs::write(path, serde_json::to_vec_pretty(&manifest)?)?;
+    Ok(())
 }
 
 fn safe_worktree_cwd(root: &Path, cwd: &Path) -> bool {
@@ -381,21 +436,6 @@ fn is_worktree_dirty(path: &Path) -> bool {
     git_stdout(path, false, ["status", "--porcelain"])
         .map(|output| !output.is_empty())
         .unwrap_or(true)
-}
-
-fn ensure_worktrees_gitignore(repo: &Path) -> anyhow::Result<()> {
-    let path = repo.join(".gitignore");
-    let needle = ".worktrees/";
-    let mut contents = fs::read_to_string(&path).unwrap_or_default();
-    if contents.lines().any(|line| line.trim() == needle) {
-        return Ok(());
-    }
-    if !contents.is_empty() && !contents.ends_with('\n') {
-        contents.push('\n');
-    }
-    contents.push_str(needle);
-    contents.push('\n');
-    fs::write(path, contents).context("cannot update .gitignore")
 }
 
 fn copy_worktreeinclude(repo: &Path, worktree: &Path) -> anyhow::Result<()> {
@@ -512,6 +552,7 @@ mod tests {
         .create(&CreateWorktree {
             source_cwd: nested,
             base: None,
+            branch: None,
         })
         .unwrap();
 
@@ -542,6 +583,7 @@ mod tests {
         .create(&CreateWorktree {
             source_cwd: repo.path().to_path_buf(),
             base: Some(first.clone()),
+            branch: None,
         })
         .unwrap();
 
@@ -572,29 +614,37 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_rejects_paths_outside_the_managed_layout() {
+    fn cleanup_rejects_invalid_opaque_ids() {
         let repo = tempfile::tempdir().unwrap();
         init_git_repo(repo.path());
-        fs::create_dir(repo.path().join(".worktrees")).unwrap();
-        let unrelated = tempfile::tempdir().unwrap();
+        let storage = tempfile::tempdir().unwrap();
+        let manager = WorktreeManager::new(WorktreeSettings {
+            root: storage.path().to_path_buf(),
+        });
 
-        let error =
-            cleanup_task_worktree(repo.path(), unrelated.path(), "ignored", false).unwrap_err();
+        let error = manager.cleanup("../outside", false).unwrap_err();
 
-        assert!(error
-            .to_string()
-            .contains("outside Astro's managed worktree root"));
-        assert!(unrelated.path().exists());
+        assert!(error.to_string().contains("invalid managed worktree id"));
     }
 
     #[test]
     fn cleanup_accepts_an_astro_managed_checkout() {
         let repo = tempfile::tempdir().unwrap();
         init_git_repo(repo.path());
-        let managed = create_task_worktree(repo.path(), "cleanup-1").unwrap();
+        let storage = tempfile::tempdir().unwrap();
+        let manager = WorktreeManager::new(WorktreeSettings {
+            root: storage.path().to_path_buf(),
+        });
+        let managed = manager
+            .create(&CreateWorktree {
+                source_cwd: repo.path().to_path_buf(),
+                base: None,
+                branch: None,
+            })
+            .unwrap();
         let checkout = managed.root.clone();
 
-        cleanup_task_worktree(repo.path(), &checkout, "ignored", true).unwrap();
+        assert!(manager.cleanup(&managed.id, true).unwrap());
 
         assert!(!checkout.exists());
     }
@@ -611,7 +661,17 @@ mod tests {
         fs::write(repo.path().join(".env"), "TOKEN=test").unwrap();
         fs::create_dir(repo.path().join(".cache")).unwrap();
         fs::write(repo.path().join(".cache/data"), "cached").unwrap();
-        let managed = create_task_worktree(repo.path(), "dirty-1").unwrap();
+        let storage = tempfile::tempdir().unwrap();
+        let manager = WorktreeManager::new(WorktreeSettings {
+            root: storage.path().to_path_buf(),
+        });
+        let managed = manager
+            .create(&CreateWorktree {
+                source_cwd: repo.path().to_path_buf(),
+                base: None,
+                branch: None,
+            })
+            .unwrap();
         assert_eq!(
             fs::read_to_string(managed.root.join(".env")).unwrap(),
             "TOKEN=test"
@@ -623,8 +683,32 @@ mod tests {
         assert!(!managed.root.join("escape").exists());
         fs::write(managed.root.join("new.txt"), "x").unwrap();
         let root = managed.root.clone();
-        managed.cleanup();
+        assert!(!manager.cleanup(&managed.id, true).unwrap());
         assert!(root.exists());
+    }
+
+    #[test]
+    fn explicit_branch_mode_creates_the_requested_branch() {
+        let repo = tempfile::tempdir().unwrap();
+        init_git_repo(repo.path());
+        let storage = tempfile::tempdir().unwrap();
+        let manager = WorktreeManager::new(WorktreeSettings {
+            root: storage.path().to_path_buf(),
+        });
+        let managed = manager
+            .create(&CreateWorktree {
+                source_cwd: repo.path().to_path_buf(),
+                base: None,
+                branch: Some("codex/explicit-worktree".into()),
+            })
+            .unwrap();
+
+        assert_eq!(managed.branch.as_deref(), Some("codex/explicit-worktree"));
+        assert_eq!(
+            git_stdout(&managed.root, false, ["branch", "--show-current"]).unwrap(),
+            "codex/explicit-worktree"
+        );
+        assert!(manager.cleanup(&managed.id, true).unwrap());
     }
 
     #[test]
