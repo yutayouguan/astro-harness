@@ -10,7 +10,6 @@ use crate::schema::schema_for_args;
 use types::AsyncUserInputQuestion;
 
 const TOOL_NAME: &str = "request_user_input_async";
-const LEGACY_TOOL_NAME: &str = "send_user_message_async";
 const ASYNC_USER_MESSAGE_MARKER: &str = "astro_async_user_message";
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -30,17 +29,10 @@ struct AsyncUserInputQuestionArgs {
     options: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct LegacySendUserMessageAsyncArgs {
-    message: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AsyncUserMessagePayload {
     pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub questions: Option<Vec<AsyncUserInputQuestion>>,
+    pub questions: Vec<AsyncUserInputQuestion>,
 }
 
 pub fn register(registry: &mut ToolRegistry) {
@@ -55,63 +47,36 @@ pub fn register(registry: &mut ToolRegistry) {
         exclusive_access: true,
         ..crate::registry::ToolEntry::lifecycle_defaults()
     });
-
-    // Keep the retired name dispatchable for persisted/custom prompts without exposing it to
-    // current models or the user-facing catalog.
-    registry.register(crate::registry::ToolEntry {
-        name: LEGACY_TOOL_NAME.into(),
-        toolset: TOOL_NAME.into(),
-        description: "Legacy alias for request_user_input_async".into(),
-        schema: schema_for_args::<LegacySendUserMessageAsyncArgs>(),
-        check_fn: None,
-        icon: "message-circle",
-        exclusive_access: true,
-        exposure: types::ToolExposure::Hidden,
-        ..crate::registry::ToolEntry::lifecycle_defaults()
-    });
 }
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["request_user_input_async", "send_user_message_async"],
-    sync_named: dispatch,
+    names: ["request_user_input_async"],
+    sync_ctx: dispatch,
+    args: RequestUserInputAsyncArgs,
 }
 
 fn dispatch(
     _ctx: &mut ToolContext<'_>,
-    name: &str,
-    args: &serde_json::Value,
+    args: &RequestUserInputAsyncArgs,
 ) -> anyhow::Result<String> {
-    let payload = if name == LEGACY_TOOL_NAME {
-        let args: LegacySendUserMessageAsyncArgs = serde_json::from_value(args.clone())?;
-        let message = args.message.trim();
-        if message.is_empty() {
-            anyhow::bail!("send_user_message_async requires a non-empty message");
-        }
-        AsyncUserMessagePayload {
-            message: message.into(),
-            questions: None,
-        }
-    } else {
-        let args: RequestUserInputAsyncArgs = serde_json::from_value(args.clone())?;
-        validate_questions(&args.questions)?;
-        let questions = args
-            .questions
-            .into_iter()
-            .map(|question| AsyncUserInputQuestion {
-                title: question.title.trim().to_string(),
-                options: question.options.map(|options| {
-                    options
-                        .into_iter()
-                        .map(|option| option.trim().to_string())
-                        .collect()
-                }),
-            })
-            .collect::<Vec<_>>();
-        AsyncUserMessagePayload {
-            message: render_questions(&questions),
-            questions: Some(questions),
-        }
+    validate_questions(&args.questions)?;
+    let questions = args
+        .questions
+        .iter()
+        .map(|question| AsyncUserInputQuestion {
+            title: question.title.trim().to_string(),
+            options: question.options.as_ref().map(|options| {
+                options
+                    .iter()
+                    .map(|option| option.trim().to_string())
+                    .collect()
+            }),
+        })
+        .collect::<Vec<_>>();
+    let payload = AsyncUserMessagePayload {
+        message: render_questions(&questions),
+        questions,
     };
 
     Ok(json!({
@@ -164,8 +129,8 @@ pub fn parse_async_user_message(result: &str) -> Option<AsyncUserMessagePayload>
     }
     let questions = value
         .get("questions")
-        .filter(|value| !value.is_null())
-        .and_then(|value| serde_json::from_value(value.clone()).ok());
+        .and_then(|value| serde_json::from_value::<Vec<AsyncUserInputQuestion>>(value.clone()).ok())
+        .filter(|questions| !questions.is_empty())?;
     Some(AsyncUserMessagePayload {
         message: message.into(),
         questions,

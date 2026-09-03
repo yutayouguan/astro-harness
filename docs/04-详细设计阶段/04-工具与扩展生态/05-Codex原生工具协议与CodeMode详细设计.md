@@ -270,8 +270,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 `request_user_input_async` 是非阻塞的结构化提问工具：`questions[]` 每项包含
 `title` 和可选 `options`，工具立即返回 `{"accepted":true}`，不 park 当前 turn。
 Core 把问题写为 durable `AgentMessageItem` 的 `questions` 字段，Desktop 只保留最新且
-未被后续 user message 回答的问题组可交互。`send_user_message_async` 仅保留为
-`Hidden` 兼容别名；可路由旧调用，但不出现在 API Schema 或用户工具目录。
+未被后续 user message 回答的问题组可交互。旧工具名已移除，不再注册或迁移。
 
 ### 5.3 暴露状态
 

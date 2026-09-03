@@ -182,7 +182,7 @@ tool call { questions: [{ title, options? }] }
 - `questions` 和每个 `title` 不能为空；`options` 缺失表示纯自由文本。
 - Desktop 始终允许自由文本回答，回答作为普通 user input 进入 active turn。
 - started/completed 共用稳定 item id，断线 Resume 按 id 去重。
-- `send_user_message_async` 仅保留为隐藏兼容别名，不再发给模型。
+- `send_user_message_async` 已移除，模型和调用方只能使用 `request_user_input_async`。
 
 ### 10.2 `ResolveElicitation`
 

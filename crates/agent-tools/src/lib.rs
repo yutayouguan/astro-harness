@@ -217,6 +217,7 @@ mod inventory_register_tests {
             .collect::<Vec<_>>();
         assert!(api_names.contains(&"request_user_input_async".to_string()));
         assert!(!api_names.contains(&"send_user_message_async".to_string()));
+        assert!(registry.get("send_user_message_async").is_none());
     }
 
     #[test]

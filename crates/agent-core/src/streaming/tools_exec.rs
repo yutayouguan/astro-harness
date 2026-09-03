@@ -2403,10 +2403,7 @@ async fn execute_tools_serial_inner(
         }
 
         if let (true, Some(async_message)) = (
-            matches!(
-                call.name.as_str(),
-                "request_user_input_async" | "send_user_message_async"
-            ),
+            call.name == "request_user_input_async",
             tools::parse_async_user_message(result.text()),
         ) {
             emit_async_agent_message(
@@ -2414,7 +2411,7 @@ async fn execute_tools_serial_inner(
                 turn_context,
                 format!("{}:async-message", call.id),
                 async_message.message,
-                async_message.questions,
+                Some(async_message.questions),
             )
             .await;
             result = serde_json::json!({"accepted": true}).to_string().into();

@@ -10,26 +10,18 @@ fn parser_accepts_structured_questions() {
     assert_eq!(parsed.message, "Choose\n- A\n- B");
     assert_eq!(
         parsed.questions,
-        Some(vec![AsyncUserInputQuestion {
+        vec![AsyncUserInputQuestion {
             title: "Choose".into(),
             options: Some(vec!["A".into(), "B".into()]),
-        }])
+        }]
     );
 }
 
 #[test]
-fn parser_accepts_legacy_trimmed_async_message_marker() {
-    let parsed = parse_async_user_message(
-        r#"{"astro_async_user_message":true,"message":"  still working  "}"#,
-    )
-    .unwrap();
-
+fn parser_rejects_message_without_structured_questions() {
     assert_eq!(
-        parsed,
-        AsyncUserMessagePayload {
-            message: "still working".into(),
-            questions: None,
-        }
+        parse_async_user_message(r#"{"astro_async_user_message":true,"message":"still working"}"#),
+        None
     );
 }
 

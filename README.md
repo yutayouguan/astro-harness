@@ -146,7 +146,7 @@ cd apps/desktop && npm run tauri dev
 Agent 可在回合继续运行时调用 `request_user_input_async`，一次发出一个或多个自包含问题，
 并可提供建议选项。请求会以 `AgentMessageItem { delivery: async, questions }` 进入
 Thread item 时间线，先持久化再投影到 Desktop；用户回答作为普通 user input 进入当前
-turn。旧 `send_user_message_async` 只作为隐藏兼容别名，不再注入模型工具 Schema。
+turn。旧工具名不再注册，调用方必须直接使用 `request_user_input_async`。
 
 ## Realtime 语音会话
 

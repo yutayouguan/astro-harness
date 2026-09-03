@@ -30,7 +30,6 @@ const READONLY_ALLOW: &[&str] = &[
     "skills", // action 级仅 list/load/view/curate
     "ask_user",
     "request_user_input_async",
-    "send_user_message_async",
     "todo",
     "switch_mode",
     "present",
