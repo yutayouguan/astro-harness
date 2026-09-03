@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 const DISABLED_HOOKS_PATH: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
+const SAFE_BARE_REPOSITORY_CONFIG: &str = "safe.bareRepository=explicit";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorktreeSettings {
@@ -173,8 +174,37 @@ pub fn resolve_project_root(explicit: Option<&Path>) -> Option<PathBuf> {
         .and_then(|path| find_git_root(&path))
 }
 
-pub fn cleanup_task_worktree(repo: &Path, path: &Path, _branch: &str, clean_only: bool) {
-    cleanup_worktree(repo, path, clean_only);
+pub fn cleanup_task_worktree(
+    repo: &Path,
+    path: &Path,
+    _branch: &str,
+    clean_only: bool,
+) -> anyhow::Result<()> {
+    let source_root = repository_root(repo)?;
+    let managed_root = source_root.join(".worktrees");
+    let managed_root = fs::canonicalize(&managed_root).with_context(|| {
+        format!(
+            "cannot resolve managed worktree root {}",
+            managed_root.display()
+        )
+    })?;
+    let checkout = fs::canonicalize(path)
+        .with_context(|| format!("cannot resolve managed worktree {}", path.display()))?;
+    let relative = checkout
+        .strip_prefix(&managed_root)
+        .context("worktree is outside Astro's managed worktree root")?;
+    let components = relative.components().collect::<Vec<_>>();
+    let expected_name = source_root
+        .file_name()
+        .context("repository root has no directory name")?;
+    anyhow::ensure!(
+        components.len() == 2
+            && components[0].as_os_str().to_string_lossy().len() == 4
+            && components[1].as_os_str() == expected_name,
+        "worktree does not use Astro's managed allocation layout"
+    );
+    cleanup_worktree(&source_root, &checkout, clean_only);
+    Ok(())
 }
 
 fn git_output(
@@ -239,6 +269,8 @@ fn base_git_command(cwd: &Path) -> Command {
     }
     command
         .current_dir(cwd)
+        .arg("-c")
+        .arg(SAFE_BARE_REPOSITORY_CONFIG)
         .arg("-c")
         .arg(format!("core.hooksPath={DISABLED_HOOKS_PATH}"))
         .arg("-c")
@@ -532,6 +564,39 @@ mod tests {
         assert_eq!(overrides.get("GIT_DIR"), Some(&true));
         assert_eq!(overrides.get("GIT_WORK_TREE"), Some(&true));
         assert_eq!(overrides.get("GIT_INDEX_FILE"), Some(&true));
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(args.iter().any(|arg| arg == SAFE_BARE_REPOSITORY_CONFIG));
+    }
+
+    #[test]
+    fn cleanup_rejects_paths_outside_the_managed_layout() {
+        let repo = tempfile::tempdir().unwrap();
+        init_git_repo(repo.path());
+        fs::create_dir(repo.path().join(".worktrees")).unwrap();
+        let unrelated = tempfile::tempdir().unwrap();
+
+        let error =
+            cleanup_task_worktree(repo.path(), unrelated.path(), "ignored", false).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("outside Astro's managed worktree root"));
+        assert!(unrelated.path().exists());
+    }
+
+    #[test]
+    fn cleanup_accepts_an_astro_managed_checkout() {
+        let repo = tempfile::tempdir().unwrap();
+        init_git_repo(repo.path());
+        let managed = create_task_worktree(repo.path(), "cleanup-1").unwrap();
+        let checkout = managed.root.clone();
+
+        cleanup_task_worktree(repo.path(), &checkout, "ignored", true).unwrap();
+
+        assert!(!checkout.exists());
     }
 
     #[test]

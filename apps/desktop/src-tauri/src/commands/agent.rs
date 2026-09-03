@@ -239,6 +239,6 @@ pub fn cleanup_task_worktree(
         return Ok(());
     }
     // 泄漏 handle 字段到 cleanup API（不 drop 原 handle）
-    agent::git_worktree::cleanup_task_worktree(&repo, &path, &branch, true);
-    Ok(())
+    agent::git_worktree::cleanup_task_worktree(&repo, &path, &branch, true)
+        .map_err(|error| error.to_string())
 }
