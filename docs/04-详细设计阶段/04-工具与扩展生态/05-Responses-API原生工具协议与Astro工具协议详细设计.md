@@ -4,7 +4,7 @@
 
 > 阶段：详细设计
 >
-> 状态：已实现（对应提交 `9f04e810`）
+> 状态：已实现（对应提交 `9f04e810`、`4563aad2`）
 >
 > 参考实现基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
 >
@@ -250,6 +250,17 @@ MCP 同样使用原生身份：模型看到 `namespace: "mcp__calendar"` + `name
 
 > **当前实现基线（2026-09-03）**：`ParsedToolCall` 保留分离的 `namespace` 和 `name`，`ToolRouter.routes` / `model_routes` 以结构化 `ToolName` 为键。模型直调、Code Mode 嵌套调用、MCP approval、sandbox 偏好、hook、执行分发、`function_call_output`、SQLite 索引与 UI 投影共用同一身份。顶层伪造 `name: "cron.list"` 或 `name: "cron__list"` 不会命中 `(namespace: "cron", name: "list")` 路由。
 
+当前内置 namespace：
+
+| Namespace | 暴露策略 | 子工具 |
+| --- | --- | --- |
+| `browser` | Direct，受本机浏览器可用性和 Plan 模式过滤 | `open`、`snapshot`、`click`、`type`、`scroll`、`wait`、`screenshot`、`tabs`、`tab_open`、`tab_switch`、`tab_close`、`back`、`forward`、`reload`、`downloads`、`close` |
+| `media` | Deferred，由 `tool_search` 发现；Skill 可放宽对应 toolset 开关 | `image_gen`、`video_gen`、`speech_gen`、`music_gen` |
+| `cron` | Direct | `add`、`list`、`remove`、`enable`、`disable` |
+| `mcp__{server}` | 有 `tool_search` 时 Deferred，否则 Direct | Server 返回的原生工具名 |
+
+`image_analyze`、`audio_analyze`、`video_analyze` 和 `robotics` 不归入 `media`；理解/感知工具与生成工具的副作用、路由和授权语义不同。
+
 ### 4.5 ToolSearch
 
 ToolSearch 是一种原生工具类型，不是将工具列表塞进 system prompt 的文本技巧：
@@ -330,7 +341,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 | 类别 | 当前 Direct 工具 |
 | --- | --- |
 | Shell / 文件 | `exec_command`、`apply_patch`、`get_context_remaining`、`new_context_window`、`tool_search` |
-| Browser（本机有可用浏览器时） | `browser_open`、`browser_snapshot`、`browser_click`、`browser_type`、`browser_scroll`、`browser_wait`、`browser_screenshot`、`browser_close` |
+| Browser（本机有可用浏览器时） | `browser.open`、`browser.snapshot`、`browser.click`、`browser.type`、`browser.scroll`、`browser.wait`、`browser.screenshot`、`browser.tabs`、`browser.tab_*`、`browser.back`、`browser.forward`、`browser.reload`、`browser.downloads`、`browser.close` |
 | HITL | `ask_user`、`request_user_input_async`、`switch_mode` |
 | 上下文 / 记忆 / Skill | `context_search`、`pin_context`、`memory`、`skills`、`todo` |
 | 自动化 | `cron.add`、`cron.list`、`cron.remove`、`cron.enable`、`cron.disable`（内部注册名为 `cron_*`） |
@@ -341,7 +352,8 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 
 - 终端与环境：`write_stdin`、`code_exec`、`request_permissions`、`request_plugin_install`、`wait_for_environment`；
 - Web：`web_search`、`web_fetch`；
-- 媒体：`image_gen`、`image_analyze`、`audio_analyze`、`video_gen`、`video_analyze`、`speech_gen`、`music_gen`、`robotics`；
+- 媒体生成：`media.image_gen`、`media.video_gen`、`media.speech_gen`、`media.music_gen`；
+- 媒体理解：`image_analyze`、`audio_analyze`、`video_analyze`、`robotics`；
 - MCP：当 `tool_search` 可用时，当前 MCP Hub 发现的 `(mcp__{server}, {tool})` 原生子工具也默认进入 Deferred。
 
 `exec` / `wait` 以 `DirectModelOnly` 注册，但只有 CodeMode 或 CodeModeOnly 投影会把它们发给模型。Direct 模式仍直接获得普通 Direct 工具和原生 `tool_search`；Deferred 工具由 `tool_search` 激活后进入下一次 sampling。
