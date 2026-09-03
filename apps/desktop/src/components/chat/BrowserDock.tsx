@@ -457,7 +457,14 @@ export default function BrowserDock({
     const url = normalizeBrowserUrl(address);
     if (!url) return;
     setAddress(url);
-    void run("open", { url, new_tab: false });
+    if (!preview?.url) {
+      void run("open", { url, new_tab: false });
+      return;
+    }
+    setError(null);
+    void liveWebview.navigate(url).catch((cause) => {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    });
   };
 
   const clickPreview = (event: PointerEvent<HTMLImageElement>) => {

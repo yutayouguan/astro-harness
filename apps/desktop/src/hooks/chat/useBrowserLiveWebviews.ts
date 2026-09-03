@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -128,6 +129,10 @@ export function useBrowserLiveWebviews({
   const fitToWidthRef = useRef(fitToWidth);
   const callbacksRef = useRef({ onUrlChange, onNavigate, onError });
   const scheduleRef = useRef<() => void>(() => undefined);
+  const navigateRef = useRef<(url: string) => Promise<void>>(async () => {
+    throw new Error("实时浏览器 WebView 尚未就绪");
+  });
+  const navigate = useCallback((url: string) => navigateRef.current(url), []);
 
   previewRef.current = preview;
   fitToWidthRef.current = fitToWidth;
@@ -261,9 +266,8 @@ export function useBrowserLiveWebviews({
           try {
             await callbacksRef.current.onNavigate(payload.url);
           } catch (cause) {
-            if (pendingNativeUrls.get(payload.label) === payload.url) {
-              pendingNativeUrls.delete(payload.label);
-            }
+            // The native WebView is the visible source of truth. Keep its URL
+            // pending so a failed headless-browser sync cannot navigate it back.
             if (lastNativeSync === syncKey) lastNativeSync = "";
             const message = cause instanceof Error ? cause.message : String(cause);
             callbacksRef.current.onError(message);
@@ -390,6 +394,41 @@ export function useBrowserLiveWebviews({
       });
       pendingCreates.set(label, creation);
       return creation;
+    };
+
+    navigateRef.current = async (url: string) => {
+      if (disposed) throw new Error("实时浏览器 WebView 已停止");
+      const current = previewRef.current;
+      const tab = activeTab(current);
+      if (!current || !tab) throw new Error("需要先创建浏览器标签页");
+      const label = labelFor(current.sessionId, tab.id);
+      const entry =
+        managed.get(label) ??
+        (await ensureWebview(label, tab.url || current.url));
+      const previousUrl = entry.url;
+      if (!entry.visible) {
+        await entry.webview.show();
+        entry.visible = true;
+      }
+      entry.url = url;
+      pendingNativeUrls.set(label, url);
+      entry.failedUrl = null;
+      entry.failedAt = null;
+      setEntryLoading(entry, label, true);
+      setStatus("loading");
+      callbacksRef.current.onError(null);
+      try {
+        await invoke("browser_live_webview_control", {
+          request: { label, action: "navigate", url },
+        });
+      } catch (cause) {
+        entry.url = previousUrl;
+        if (pendingNativeUrls.get(label) === url) {
+          pendingNativeUrls.delete(label);
+        }
+        setEntryLoading(entry, label, false);
+        throw cause;
+      }
     };
 
     const sync = async () => {
@@ -563,6 +602,9 @@ export function useBrowserLiveWebviews({
     return () => {
       disposed = true;
       scheduleRef.current = () => undefined;
+      navigateRef.current = async () => {
+        throw new Error("实时浏览器 WebView 已停止");
+      };
       window.cancelAnimationFrame(animationFrame);
       window.removeEventListener("resize", schedule);
       window.removeEventListener("scroll", schedule, true);
@@ -601,5 +643,6 @@ export function useBrowserLiveWebviews({
     status,
     isLive: status !== "unsupported" && status !== "error",
     isLoading: status === "creating" || status === "loading",
+    navigate,
   };
 }

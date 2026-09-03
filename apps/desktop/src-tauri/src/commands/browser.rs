@@ -15,6 +15,42 @@ use tauri::{
 pub const LIVE_BROWSER_WEBVIEW_PREFIX: &str = "astro-browser-live-";
 pub const LIVE_BROWSER_PAGE_EVENT: &str = "browser-live-page-load";
 
+const LIVE_BROWSER_INTERACTION_SCRIPT: &str = r#"
+(() => {
+document.addEventListener("click", (event) => {
+  if (event.button !== 0) return;
+  const anchor = event.composedPath().find((node) => node instanceof HTMLAnchorElement);
+  if (
+    !anchor ||
+    anchor.target.trim().toLowerCase() !== "_blank" ||
+    anchor.hasAttribute("download")
+  ) return;
+  try {
+    const next = new URL(anchor.href, window.location.href);
+    if (next.protocol !== "http:" && next.protocol !== "https:") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    window.location.assign(next.href);
+  } catch {}
+}, true);
+
+const originalOpen = window.open.bind(window);
+window.open = (url, target, features) => {
+  const normalizedTarget = typeof target === "string" ? target.trim().toLowerCase() : "";
+  if (!normalizedTarget || normalizedTarget === "_blank") {
+    try {
+      const next = new URL(String(url || ""), window.location.href);
+      if (next.protocol === "http:" || next.protocol === "https:") {
+        window.location.assign(next.href);
+        return window;
+      }
+    } catch {}
+  }
+  return originalOpen(url, target, features);
+};
+})();
+"#;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserPanelRequest {
@@ -144,12 +180,12 @@ async fn create_live_browser_webview<R: Runtime>(
         .focused(false)
         .accept_first_mouse(true)
         .zoom_hotkeys_enabled(true)
+        .initialization_script(LIVE_BROWSER_INTERACTION_SCRIPT)
         .on_new_window(move |url, _features| {
-            let Some(webview) = app.get_webview(&target_label) else {
-                return NewWindowResponse::Deny;
-            };
             let generation = popup_generation.fetch_add(1, Ordering::Relaxed) + 1;
             let latest_generation = popup_generation.clone();
+            let navigation_app = app.clone();
+            let navigation_label = target_label.clone();
             let requested_url = url.to_string();
             let _ = tauri::async_runtime::spawn_blocking(move || {
                 let Ok(validated_url) = tools::builtin::shell::browser::validate_live_webview_url(
@@ -162,7 +198,24 @@ async fn create_live_browser_webview<R: Runtime>(
                     return;
                 }
                 if let Ok(destination) = url::Url::parse(&validated_url) {
-                    let _ = webview.navigate(destination);
+                    let app_for_main = navigation_app.clone();
+                    let latest_for_main = latest_generation.clone();
+                    let destination_text = destination.to_string();
+                    let _ = navigation_app.run_on_main_thread(move || {
+                        if latest_for_main.load(Ordering::Relaxed) != generation {
+                            return;
+                        }
+                        if let Some(webview) = app_for_main.get_webview(&navigation_label) {
+                            if let Err(error) = webview.navigate(destination) {
+                                tracing::warn!(
+                                    label = webview.label(),
+                                    url = %destination_text,
+                                    error = %error,
+                                    "navigate popup target in live browser failed"
+                                );
+                            }
+                        }
+                    });
                 }
             });
             NewWindowResponse::Deny
@@ -353,7 +406,9 @@ pub async fn browser_preview_project_file(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_live_browser_webview, LIVE_BROWSER_WEBVIEW_PREFIX};
+    use super::{
+        is_live_browser_webview, LIVE_BROWSER_INTERACTION_SCRIPT, LIVE_BROWSER_WEBVIEW_PREFIX,
+    };
 
     #[test]
     fn live_webview_labels_are_scoped_and_safe() {
@@ -365,5 +420,13 @@ mod tests {
         assert!(!is_live_browser_webview(&format!(
             "{LIVE_BROWSER_WEBVIEW_PREFIX}bad label"
         )));
+    }
+
+    #[test]
+    fn live_webview_intercepts_blank_anchors_at_document_start() {
+        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("target.trim().toLowerCase()"));
+        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("window.open ="));
+        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("window.location.assign"));
+        assert!(LIVE_BROWSER_INTERACTION_SCRIPT.contains("event.stopImmediatePropagation()"));
     }
 }

@@ -312,7 +312,11 @@ export function useBrowserPreview(sessionId: string | null) {
 
   const control = useCallback(
     async (action: string, args: Record<string, unknown> = {}) => {
-      const generation = ++controlGenerationRef.current;
+      // Operations already complete in controlQueue order. The generation only
+      // invalidates work from a previous browser session or a dismissed preview;
+      // incrementing it per action would discard a successful navigation when a
+      // queued resize starts before that navigation result is applied.
+      const generation = controlGenerationRef.current;
       setDismissed(false);
       setPreview((current) =>
         current?.sessionId === browserSessionId

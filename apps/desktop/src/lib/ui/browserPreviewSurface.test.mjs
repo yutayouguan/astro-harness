@@ -23,6 +23,11 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(hook, /DESKTOP_BROWSER_SESSION_ID = "desktop-browser-default"/);
   assert.match(hook, /sessionId \?\? DESKTOP_BROWSER_SESSION_ID/);
   assert.match(hook, /preview\?\.sessionId === browserSessionId/);
+  assert.match(hook, /const generation = controlGenerationRef\.current;/);
+  assert.doesNotMatch(
+    hook,
+    /const generation = \+\+controlGenerationRef\.current;/,
+  );
   assert.match(hook, /isNavigationAction\(action\)/);
   assert.match(hook, /isNavigationAction\(name\)/);
   const navigationActions = hook.slice(
@@ -123,6 +128,7 @@ test("browser restore animates toward the right edge before rejoining layout", (
 });
 
 test("browser dock uses a Rust-created native child WebView", () => {
+  const dock = source("../../components/chat/BrowserDock.tsx");
   const hook = source("../../hooks/chat/useBrowserLiveWebviews.ts");
   const commands = source("../../../src-tauri/src/commands/browser.rs");
   const capabilities = source("../../../src-tauri/capabilities/default.json");
@@ -131,6 +137,12 @@ test("browser dock uses a Rust-created native child WebView", () => {
   assert.match(hook, /action:\s*"create"/);
   assert.match(hook, /Webview\.getByLabel\(label\)/);
   assert.match(hook, /pendingPageEvents/);
+  assert.match(hook, /navigateRef\.current = async/);
+  assert.match(
+    hook,
+    /pendingNativeUrls\.set\(label, url\)[\s\S]*?action:\s*"navigate"/,
+  );
+  assert.match(dock, /liveWebview\.navigate\(url\)/);
   assert.match(hook, /setPosition\(new LogicalPosition/);
   assert.match(hook, /setSize\(new LogicalSize/);
   assert.match(hook, /setZoom\(zoomFactor\)/);
@@ -138,11 +150,21 @@ test("browser dock uses a Rust-created native child WebView", () => {
   assert.match(hook, /\.\.\.\(userAgent \? \{ userAgent \} : \{\}\)/);
   assert.match(hook, /browser-live-page-load/);
   assert.match(hook, /browser_live_webview_control/);
+  const backendSyncCatch = hook.slice(
+    hook.indexOf("await callbacksRef.current.onNavigate"),
+    hook.indexOf("const updateBounds"),
+  );
+  assert.doesNotMatch(backendSyncCatch, /pendingNativeUrls\.delete/);
   assert.match(commands, /fn browser_live_webview_control/);
   assert.match(commands, /Window<R>/);
   assert.match(commands, /WebviewBuilder::new/);
+  assert.match(
+    commands,
+    /\.initialization_script\(LIVE_BROWSER_INTERACTION_SCRIPT\)/,
+  );
   assert.match(commands, /\.on_new_window/);
   assert.match(commands, /async_runtime::spawn_blocking/);
+  assert.match(commands, /run_on_main_thread/);
   assert.match(commands, /NewWindowResponse::Deny/);
   assert.match(commands, /\.add_child/);
   assert.doesNotMatch(commands, /get_webview_window\("main"\)/);
