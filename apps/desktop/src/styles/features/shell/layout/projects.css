@@ -905,9 +905,9 @@ html[data-theme="dark"]
   display: flex;
   align-items: center;
   gap: 9px;
-  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
   color: var(--ink-mute);
   transition:
     border-color 140ms ease,
@@ -921,7 +921,7 @@ html[data-theme="dark"]
     var(--tone, var(--tone-blue)) 38%,
     transparent
   );
-  background: color-mix(in srgb, var(--bg-base) 88%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
   box-shadow: 0 0 0 3px
     color-mix(in srgb, var(--tone, var(--tone-blue)) 9%, transparent);
   color: var(--tone, var(--ink-soft));

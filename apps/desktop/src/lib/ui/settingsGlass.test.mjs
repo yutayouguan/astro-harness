@@ -61,6 +61,21 @@ test("settings sidebar uses grouped compact navigation and a quiet search field"
   assert.match(projectStyles, /\.sidebar-settings-search\s*\{/);
   assert.match(projectStyles, /\.sidebar-settings-group-label\s*\{/);
 
+  const search = rule(projectStyles, ".sidebar-settings-search");
+  const focusedSearch = rule(
+    projectStyles,
+    ".sidebar-settings-search:focus-within",
+  );
+  assert.ok(search, "missing settings search rule");
+  assert.ok(focusedSearch, "missing focused settings search rule");
+  assert.match(search, /background:\s*color-mix\([\s\S]*?var\(--ink\) 4%/);
+  assert.match(
+    focusedSearch,
+    /background:\s*color-mix\([\s\S]*?var\(--ink\) 5%/,
+  );
+  assert.doesNotMatch(search, /var\(--bg-base\)/);
+  assert.doesNotMatch(focusedSearch, /var\(--bg-base\)/);
+
   const item = rule(
     projectStyles,
     ".sidebar-settings-nav .settings-sidebar-item",
