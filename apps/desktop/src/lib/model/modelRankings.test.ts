@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  appFaviconUrl,
   isRankingsEnvelopeFresh,
   normalizeApps,
   normalizeBenchmarks,
@@ -144,6 +145,14 @@ test("normalizes public app rankings", () => {
 
   assert.equal(rows[0]?.name, "Astro");
   assert.equal(rows[0]?.tokens, 42);
+});
+
+test("app icons use a safe favicon resolver", () => {
+  const url = appFaviconUrl("https://nousresearch.com/");
+  assert.ok(url?.startsWith("https://t0.gstatic.com/faviconV2?"));
+  assert.ok(url?.includes("nousresearch.com"));
+  assert.equal(appFaviconUrl("javascript:alert(1)"), null);
+  assert.equal(appFaviconUrl("data:image/svg+xml,<svg/>"), null);
 });
 
 test("normalizes frontend task spend and model deltas", () => {

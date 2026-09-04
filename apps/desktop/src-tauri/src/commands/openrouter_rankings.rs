@@ -188,8 +188,6 @@ fn official_url(spec: &RequestSpec) -> Option<reqwest::Url> {
             "{OPENROUTER_ORIGIN}/api/v1/datasets/rankings-daily"
         ))
         .ok()?,
-        "apps" => reqwest::Url::parse(&format!("{OPENROUTER_ORIGIN}/api/v1/datasets/app-rankings"))
-            .ok()?,
         "benchmarks" => {
             reqwest::Url::parse(&format!("{OPENROUTER_ORIGIN}/api/v1/benchmarks")).ok()?
         }
@@ -197,17 +195,12 @@ fn official_url(spec: &RequestSpec) -> Option<reqwest::Url> {
     };
 
     match spec.dataset.as_str() {
-        "text" | "apps" => {
+        "text" => {
             let end = Utc::now().date_naive() - ChronoDuration::days(1);
             let start = end - ChronoDuration::days(6);
             url.query_pairs_mut()
                 .append_pair("start_date", &start.format("%Y-%m-%d").to_string())
                 .append_pair("end_date", &end.format("%Y-%m-%d").to_string());
-            if spec.dataset == "apps" {
-                url.query_pairs_mut()
-                    .append_pair("sort", "popular")
-                    .append_pair("limit", "50");
-            }
         }
         "benchmarks" => {
             url.query_pairs_mut()
@@ -442,6 +435,9 @@ mod tests {
             .unwrap()
             .path()
             .ends_with("/rankings/task-spend"));
+
+        let apps = RequestSpec::parse("apps", None).unwrap();
+        assert!(official_url(&apps).is_none());
     }
 
     #[test]
