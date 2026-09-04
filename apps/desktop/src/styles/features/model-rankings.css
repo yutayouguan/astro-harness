@@ -55,6 +55,23 @@
 }
 
 .mm-rankings-workspace {
+  --model-intel-card-border: var(
+    --model-market-card-border,
+    color-mix(in srgb, var(--glass-edge) 72%, transparent)
+  );
+  --model-intel-card-background: var(
+    --model-market-card-background,
+    color-mix(
+      in srgb,
+      var(--glass-panel, rgba(255, 255, 255, 0.45)) 92%,
+      transparent
+    )
+  );
+  --model-intel-card-filter: var(
+    --model-market-card-filter,
+    blur(calc(12px * var(--glass-blur-scale, 1)))
+      saturate(var(--glass-saturate, 1.1))
+  );
   min-height: 0;
   display: flex;
   flex: 1;
@@ -176,10 +193,12 @@
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(310px, 0.8fr);
   min-height: 0;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  border: 1px solid var(--model-intel-card-border);
   border-radius: 14px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--glass-panel) 62%, transparent);
+  background: var(--model-intel-card-background);
+  backdrop-filter: var(--model-intel-card-filter);
+  -webkit-backdrop-filter: var(--model-intel-card-filter);
 }
 
 .mm-rank-surface {
@@ -388,16 +407,11 @@
 .mm-task-layout,
 .mm-rank-table-surface,
 .mm-app-rankings {
-  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
-  border-radius: 16px;
-  background: color-mix(
-    in srgb,
-    var(--color-bg-base) 78%,
-    rgba(255, 255, 255, 0.62)
-  );
-  box-shadow:
-    0 10px 28px rgba(var(--shadow-ink), 0.045),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--model-intel-card-border);
+  border-radius: 14px;
+  background: var(--model-intel-card-background);
+  backdrop-filter: var(--model-intel-card-filter);
+  -webkit-backdrop-filter: var(--model-intel-card-filter);
 }
 
 .mm-task-metric-row {
@@ -774,15 +788,6 @@
   color: var(--ink-mute);
   font-size: 10px;
   text-align: right;
-}
-
-html[data-theme="dark"]
-  :is(.mm-task-layout, .mm-rank-table-surface, .mm-app-rankings) {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(13, 10, 24, 0.74);
-  box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
 html[data-theme="dark"]
