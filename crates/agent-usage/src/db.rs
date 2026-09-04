@@ -109,6 +109,11 @@ pub struct UsageKpis {
     pub tokens: i64,
     pub cost_usd: f64,
     pub active_agents: i64,
+    pub llm_calls: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_tokens: i64,
+    pub reasoning_tokens: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -447,7 +452,12 @@ impl UsageDb {
                 COALESCE(SUM({CALLS_KIND_SQL}), 0),
                 COALESCE(SUM(total_tokens), 0),
                 COALESCE(SUM({COST_SUM_SQL}), 0.0),
-                COUNT(DISTINCT agent_id)
+                COUNT(DISTINCT agent_id),
+                COALESCE(SUM(CASE WHEN kind = 'llm' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN kind = 'llm' THEN input_tokens ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN kind = 'llm' THEN output_tokens ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN kind = 'llm' THEN cache_read_tokens + cache_write_tokens ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN kind = 'llm' THEN reasoning_tokens ELSE 0 END), 0)
              FROM usage_events
              WHERE ts >= ?1 AND ts < ?2{agent_clause}"
         );
@@ -461,6 +471,11 @@ impl UsageDb {
             tokens: row.get(1),
             cost_usd: row.get(2),
             active_agents: row.get(3),
+            llm_calls: row.get(4),
+            input_tokens: row.get(5),
+            output_tokens: row.get(6),
+            cache_tokens: row.get(7),
+            reasoning_tokens: row.get(8),
         })
     }
 

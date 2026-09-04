@@ -177,6 +177,11 @@ async fn insert_and_count_events() {
     assert_eq!(insights.kpis.tokens, 150);
     assert!((insights.kpis.cost_usd - 0.001).abs() < 1e-9);
     assert_eq!(insights.kpis.active_agents, 1);
+    assert_eq!(insights.kpis.llm_calls, 1);
+    assert_eq!(insights.kpis.input_tokens, 100);
+    assert_eq!(insights.kpis.output_tokens, 50);
+    assert_eq!(insights.kpis.cache_tokens, 0);
+    assert_eq!(insights.kpis.reasoning_tokens, 0);
 }
 
 #[tokio::test]
