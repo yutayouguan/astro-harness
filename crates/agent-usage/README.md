@@ -27,8 +27,8 @@
 
 - `UsageDb` -- SQLite 访问层；`new(path)` / `open_default()` / `insert(NewUsageEvent)` / `try_record(NewUsageEvent)` / `query_insights(UsageInsightsQuery)`
 - `NewUsageEvent` -- 插入事件的输入（ts / kind / name / agent_id / token 四桶 / cost_usd / billing 字段等）
-- `UsageInsights` -- 聚合查询结果（`UsageKpis` + `Vec<UsageSeriesPoint>` + `UsageRankings` + `unpriced_llm_events`）
-- `UsageKpis` -- 汇总指标：calls / tokens / cost_usd / active_agents
+- `UsageInsights` -- 聚合查询结果（`UsageKpis` + `Vec<UsageSeriesPoint>` + `UsageRankings` + `unpriced_llm_events`）；KPI 同时包含 LLM 调用数以及输入、输出、缓存、推理 Token 构成，供 Desktop 展示费用覆盖率与用量结构。
+- `UsageKpis` -- 汇总指标：calls / tokens / cost_usd / active_agents / llm_calls / input_tokens / output_tokens / cache_tokens / reasoning_tokens
 - `AgentUsageStats` -- JSON 级工具集与技能计数快照
 - `AgentUsageSummary` -- 面向 API 的用量摘要（含 tool_total / skill_total）
 - `UsageTokens` -- 四桶 token 用量（input / output / cache_read / cache_write / request_count）

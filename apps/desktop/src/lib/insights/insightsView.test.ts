@@ -3,11 +3,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   aggregateByProvider,
+  costCoveragePercent,
   DEFAULT_INSIGHTS_VIEW,
   inferProvider,
   INSIGHTS_VIEW_ORDER,
   needsUsageInsights,
-  providerSpendTop,
+  providerDisplayName,
+  rankByMetric,
+  usageBucketState,
   type InsightsRankItem,
 } from "./insightsView.ts";
 
@@ -28,17 +31,53 @@ test("needsUsageInsights covers overview, models, tools only", () => {
   assert.equal(needsUsageInsights("tracing"), false);
 });
 
-test("providerSpendTop sorts by cost then tokens and caps length", () => {
+test("rankByMetric keeps provider order aligned with the selected metric", () => {
   const items: InsightsRankItem[] = [
-    { kind: "provider", name: "a", calls: 1, tokens: 10, cost_usd: 1 },
-    { kind: "provider", name: "b", calls: 1, tokens: 90, cost_usd: 5 },
-    { kind: "provider", name: "c", calls: 1, tokens: 50, cost_usd: 5 },
-    { kind: "provider", name: "d", calls: 1, tokens: 1, cost_usd: 0.1 },
+    { kind: "provider", name: "openai", calls: 3, tokens: 20, cost_usd: 1 },
+    {
+      kind: "provider",
+      name: "deepseek",
+      calls: 2,
+      tokens: 90,
+      cost_usd: 0.1,
+    },
   ];
-  const top = providerSpendTop(items, 2);
-  assert.equal(top.length, 2);
-  assert.equal(top[0]?.name, "b"); // cost tie → higher tokens first
-  assert.equal(top[1]?.name, "c");
+  assert.deepEqual(
+    rankByMetric(items, "calls").map((item) => item.name),
+    ["openai", "deepseek"],
+  );
+  assert.deepEqual(
+    rankByMetric(items, "tokens").map((item) => item.name),
+    ["deepseek", "openai"],
+  );
+  assert.deepEqual(
+    rankByMetric(items, "cost").map((item) => item.name),
+    ["openai", "deepseek"],
+  );
+});
+
+test("costCoveragePercent distinguishes no data from partial coverage", () => {
+  assert.equal(costCoveragePercent(0, 0), null);
+  assert.equal(costCoveragePercent(10, 0), 100);
+  assert.equal(costCoveragePercent(10, 3), 70);
+  assert.equal(costCoveragePercent(10, 20), 0);
+});
+
+test("usageBucketState separates current, past, and future buckets", () => {
+  const asOf = "2026-09-04T12:00:00.000Z";
+  assert.equal(usageBucketState("2026-09-03", "month", asOf), "past");
+  assert.equal(usageBucketState("2026-09-04", "month", asOf), "current");
+  assert.equal(usageBucketState("2026-09-05", "month", asOf), "future");
+  assert.equal(usageBucketState("2026-08", "year", asOf), "past");
+  assert.equal(usageBucketState("2026-09", "quarter", asOf), "current");
+  assert.equal(usageBucketState("2026-10", "year", asOf), "future");
+});
+
+test("providerDisplayName normalizes brands and localizes fallbacks", () => {
+  assert.equal(providerDisplayName("openai"), "OpenAI");
+  assert.equal(providerDisplayName("deepseek"), "DeepSeek");
+  assert.equal(providerDisplayName("other", "其他", "未知"), "其他");
+  assert.equal(providerDisplayName("unknown", "其他", "未知"), "未知");
 });
 
 test("inferProvider maps Google models/ resource path to google", () => {

@@ -1,5 +1,7 @@
 // apps/desktop/src/lib/insightsView.ts
 export type InsightsViewMode = "overview" | "models" | "tools" | "tracing";
+export type InsightsMetric = "calls" | "tokens" | "cost";
+export type UsageBucketState = "past" | "current" | "future";
 
 export const DEFAULT_INSIGHTS_VIEW: InsightsViewMode = "overview";
 
@@ -22,17 +24,78 @@ export type InsightsRankItem = {
   cost_usd: number;
 };
 
-/** 按费用（估）降序，同费用再按 tokens；截断为 Top N。 */
-export function providerSpendTop(
+export function rankValue(
+  item: InsightsRankItem,
+  metric: InsightsMetric,
+): number {
+  if (metric === "tokens") return item.tokens;
+  if (metric === "cost") return item.cost_usd;
+  return item.calls;
+}
+
+/** 排行与当前展示指标保持一致，并用其他用量字段稳定破平。 */
+export function rankByMetric(
   items: InsightsRankItem[],
+  metric: InsightsMetric,
   n = 5,
 ): InsightsRankItem[] {
   return [...items]
     .sort(
       (a, b) =>
-        b.cost_usd - a.cost_usd || b.tokens - a.tokens || b.calls - a.calls,
+        rankValue(b, metric) - rankValue(a, metric) ||
+        b.tokens - a.tokens ||
+        b.calls - a.calls ||
+        a.name.localeCompare(b.name),
     )
     .slice(0, Math.max(0, n));
+}
+
+export function costCoveragePercent(
+  llmCalls: number,
+  unpricedLlmEvents: number,
+): number | null {
+  if (llmCalls <= 0) return null;
+  const priced = Math.max(0, llmCalls - Math.max(0, unpricedLlmEvents));
+  return Math.round((Math.min(llmCalls, priced) / llmCalls) * 100);
+}
+
+export function usageBucketState(
+  bucket: string,
+  period: "month" | "quarter" | "year",
+  asOfIso = new Date().toISOString(),
+): UsageBucketState {
+  const currentBucket =
+    period === "month" ? asOfIso.slice(0, 10) : asOfIso.slice(0, 7);
+  if (bucket === currentBucket) return "current";
+  return bucket > currentBucket ? "future" : "past";
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: "OpenAI",
+  deepseek: "DeepSeek",
+  google: "Google",
+  anthropic: "Anthropic",
+  openrouter: "OpenRouter",
+  azure: "Azure OpenAI",
+  bailian: "Bailian",
+  zhipu: "Zhipu AI",
+  moonshot: "Moonshot",
+  minimax: "MiniMax",
+  meta: "Meta",
+  volcengine: "Volcengine",
+  ollama: "Ollama",
+  mimo: "MiMo",
+};
+
+export function providerDisplayName(
+  name: string,
+  otherLabel = "Other",
+  unknownLabel = "Unknown",
+): string {
+  const key = name.trim().toLowerCase();
+  if (key === "other") return otherLabel;
+  if (key === "unknown" || !key) return unknownLabel;
+  return PROVIDER_LABELS[key] ?? name;
 }
 
 /**
