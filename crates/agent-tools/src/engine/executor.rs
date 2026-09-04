@@ -84,7 +84,7 @@ fn tool_spec_from_entry(entry: &types::ToolEntry) -> ToolSpec {
 /// 将现有 `BuiltinToolHandler` 函数指针适配为 `ToolExecutor`。
 ///
 /// `register_all()` 为每个 `BuiltinToolRegistrar` 自动创建此适配器，
-/// 现有 28 个工具无需任何修改。
+/// 现有 inventory 工具无需修改即可进入新运行时链。
 pub struct LegacyToolAdapter {
     name: String,
     entry: types::ToolEntry,
