@@ -60,7 +60,7 @@
   flex: 1;
   flex-direction: column;
   gap: 14px;
-  padding: 14px 18px 18px;
+  padding: 14px 0 18px;
   overflow: auto;
 }
 
@@ -536,8 +536,8 @@
   position: sticky;
   bottom: -18px;
   z-index: 2;
-  margin: auto -18px -18px;
-  padding: 9px 18px;
+  margin: auto 0 -18px;
+  padding: 9px 0;
   border-top: 1px solid color-mix(in srgb, var(--glass-edge) 64%, transparent);
   color: var(--ink-mute);
   background: color-mix(in srgb, var(--glass-panel) 94%, transparent);
@@ -593,7 +593,7 @@
   }
 
   .mm-rankings-workspace {
-    padding: 12px;
+    padding: 12px 0;
   }
 
   .mm-rankings-commandbar {
@@ -619,7 +619,7 @@
 
   .mm-rank-attribution {
     bottom: -12px;
-    margin: auto -12px -12px;
-    padding-inline: 12px;
+    margin: auto 0 -12px;
+    padding-inline: 0;
   }
 }
