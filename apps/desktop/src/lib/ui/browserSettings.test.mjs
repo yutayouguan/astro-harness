@@ -16,7 +16,10 @@ const [app, tabs, panel, dock, css, tauriCommands, tauriLib] =
   );
 
 test("browser settings has a dedicated settings route and panel", () => {
-  assert.match(tabs, /id:\s*"browser",\s*label:\s*"浏览器"/);
+  assert.match(
+    tabs,
+    /id:\s*"browser",\s*labelKey:\s*"settings\.sidebar\.tab\.browser"/,
+  );
   assert.match(app, /settingsTab === "browser"/);
   assert.match(app, /<BrowserSettingsPanel/);
 });

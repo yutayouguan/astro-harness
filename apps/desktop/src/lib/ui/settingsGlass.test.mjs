@@ -18,6 +18,10 @@ const settingsTabsSource = await readFile(
   new URL("settingsTabs.ts", import.meta.url),
   "utf8",
 );
+const appSource = await readFile(
+  new URL("../../App.tsx", import.meta.url),
+  "utf8",
+);
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -88,6 +92,8 @@ test("settings sidebar uses grouped compact navigation and a quiet search field"
 test("settings navigation uses one Astro icon family and one optical canvas", () => {
   assert.match(settingsTabsSource, /from "\.\.\/\.\.\/components\/icons"/);
   assert.doesNotMatch(settingsTabsSource, /from "lucide-react"/);
+  assert.match(settingsTabsSource, /labelKey:\s*MessageKey/);
+  assert.doesNotMatch(settingsTabsSource, /label:\s*"[^"\n]*[\u3400-\u9fff]/);
   assert.match(settingsTabsSource, /IconContext/);
   assert.match(settingsTabsSource, /IconDiagnostics/);
 
@@ -99,6 +105,17 @@ test("settings navigation uses one Astro icon family and one optical canvas", ()
   assert.match(icon, /flex:\s*0 0 20px;/);
   assert.match(iconSvg, /width:\s*18px;/);
   assert.match(iconSvg, /stroke-width:\s*1\.7;/);
+});
+
+test("settings sidebar labels and search follow the active locale", () => {
+  assert.match(appSource, /const label = t\(group\.labelKey\);/);
+  assert.match(appSource, /label: t\(item\.labelKey\)/);
+  assert.match(appSource, /const settingsTitle = t\(settingsTitleKey\);/);
+  assert.match(
+    appSource,
+    /placeholder=\{t\("settings\.sidebar\.searchPlaceholder"\)\}/,
+  );
+  assert.match(appSource, /\[settingsQuery, t\]/);
 });
 
 test("preference category navigation keeps the shared glass material", () => {

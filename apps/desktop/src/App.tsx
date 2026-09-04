@@ -197,17 +197,24 @@ export default function App() {
   const [settingsQuery, setSettingsQuery] = useState("");
   const visibleSettingsGroups = useMemo(() => {
     const query = settingsQuery.trim().toLocaleLowerCase();
-    if (!query) return SETTINGS_TAB_GROUPS;
-
-    return SETTINGS_TAB_GROUPS.map((group) => ({
-      ...group,
-      items: group.label.toLocaleLowerCase().includes(query)
-        ? group.items
-        : group.items.filter((item) =>
-            item.label.toLocaleLowerCase().includes(query),
-          ),
-    })).filter((group) => group.items.length > 0);
-  }, [settingsQuery]);
+    return SETTINGS_TAB_GROUPS.map((group) => {
+      const label = t(group.labelKey);
+      const items = group.items.map((item) => ({
+        ...item,
+        label: t(item.labelKey),
+      }));
+      return {
+        ...group,
+        label,
+        items:
+          !query || label.toLocaleLowerCase().includes(query)
+            ? items
+            : items.filter((item) =>
+                item.label.toLocaleLowerCase().includes(query),
+              ),
+      };
+    }).filter((group) => group.items.length > 0);
+  }, [settingsQuery, t]);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   // 选中的项目决定工具执行目录，重启后必须沿用上次的选择，否则会退回默认空间。
   const [activeProjectId, setActiveProjectId] = useState(
@@ -1126,8 +1133,9 @@ export default function App() {
     showTransientToast,
     t,
   ]);
-  const { label: settingsTitle, Icon: SettingsIcon } =
+  const { labelKey: settingsTitleKey, Icon: SettingsIcon } =
     settingsTabMeta(settingsTab);
+  const settingsTitle = t(settingsTitleKey);
   const activeChatRightDock = resolveChatRightDock({
     projectFilesOpen: projectFiles.panelOpen,
     browserOpen: browserDockOpen,
@@ -1245,7 +1253,9 @@ export default function App() {
                 onClick={() => setNav("chat")}
               >
                 <ArrowLeft size={16} strokeWidth={2} aria-hidden />
-                <span className="sidebar-item-label">返回</span>
+                <span className="sidebar-item-label">
+                  {t("settings.sidebar.back")}
+                </span>
               </button>
               <label className="sidebar-settings-search">
                 <IconSearch width={16} height={16} aria-hidden />
@@ -1253,11 +1263,14 @@ export default function App() {
                   type="search"
                   value={settingsQuery}
                   onChange={(event) => setSettingsQuery(event.target.value)}
-                  placeholder="搜索设置…"
-                  aria-label="搜索设置"
+                  placeholder={t("settings.sidebar.searchPlaceholder")}
+                  aria-label={t("settings.sidebar.searchAria")}
                 />
               </label>
-              <nav className="sidebar-settings-nav" aria-label="设置分类">
+              <nav
+                className="sidebar-settings-nav"
+                aria-label={t("settings.sidebar.categoriesAria")}
+              >
                 {visibleSettingsGroups.map((group) => (
                   <div className="sidebar-settings-group" key={group.id}>
                     <div className="sidebar-settings-group-label">
@@ -1282,7 +1295,9 @@ export default function App() {
                   </div>
                 ))}
                 {visibleSettingsGroups.length === 0 ? (
-                  <p className="sidebar-settings-empty">没有匹配的设置</p>
+                  <p className="sidebar-settings-empty">
+                    {t("settings.sidebar.empty")}
+                  </p>
                 ) : null}
               </nav>
             </>

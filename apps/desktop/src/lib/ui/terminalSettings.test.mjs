@@ -2,21 +2,25 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [app, tabs, panel, dock, settings, css, proto, server] = await Promise.all(
-  [
-    "../../App.tsx",
-    "./settingsTabs.ts",
-    "../../components/settings/TerminalSettingsPanel.tsx",
-    "../../components/chat/TerminalDock.tsx",
-    "../terminal/terminalSettings.ts",
-    "../../styles/features/terminal-settings.css",
-    "../../../../../crates/agent-proto/proto/astro.proto",
-    "../../../../../crates/agent-server/src/grpc/astro_service.rs",
-  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
-);
+const [app, tabs, panel, dock, settings, css, proto, server] =
+  await Promise.all(
+    [
+      "../../App.tsx",
+      "./settingsTabs.ts",
+      "../../components/settings/TerminalSettingsPanel.tsx",
+      "../../components/chat/TerminalDock.tsx",
+      "../terminal/terminalSettings.ts",
+      "../../styles/features/terminal-settings.css",
+      "../../../../../crates/agent-proto/proto/astro.proto",
+      "../../../../../crates/agent-server/src/grpc/astro_service.rs",
+    ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
 
 test("terminal settings has a dedicated route and panel", () => {
-  assert.match(tabs, /id:\s*"terminal",\s*label:\s*"终端"/);
+  assert.match(
+    tabs,
+    /id:\s*"terminal",\s*labelKey:\s*"settings\.sidebar\.tab\.terminal"/,
+  );
   assert.match(app, /settingsTab === "terminal"/);
   assert.match(app, /<TerminalSettingsPanel/);
 });

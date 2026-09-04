@@ -15,17 +15,18 @@ import {
   IconTerminal,
   IconTools,
 } from "../../components/icons";
+import type { MessageKey } from "../../i18n/messages";
 import type { SettingsTabId } from "./navConfig";
 
 export type SettingsTabMeta = {
   id: SettingsTabId;
-  label: string;
+  labelKey: MessageKey;
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
 };
 
 export type SettingsTabGroup = {
   id: "basics" | "intelligence" | "extensions" | "system";
-  label: string;
+  labelKey: MessageKey;
   items: SettingsTabMeta[];
 };
 
@@ -33,39 +34,91 @@ export type SettingsTabGroup = {
 export const SETTINGS_TAB_GROUPS: SettingsTabGroup[] = [
   {
     id: "basics",
-    label: "基础",
+    labelKey: "settings.sidebar.group.basics",
     items: [
-      { id: "preferences", label: "通用", Icon: IconSettings },
-      { id: "preferences:appearance", label: "外观", Icon: IconSparkles },
-      { id: "preferences:conversation", label: "对话", Icon: IconChat },
-      { id: "terminal", label: "终端", Icon: IconTerminal },
+      {
+        id: "preferences",
+        labelKey: "settings.sidebar.tab.general",
+        Icon: IconSettings,
+      },
+      {
+        id: "preferences:appearance",
+        labelKey: "settings.sidebar.tab.appearance",
+        Icon: IconSparkles,
+      },
+      {
+        id: "preferences:conversation",
+        labelKey: "settings.sidebar.tab.conversation",
+        Icon: IconChat,
+      },
+      {
+        id: "terminal",
+        labelKey: "settings.sidebar.tab.terminal",
+        Icon: IconTerminal,
+      },
     ],
   },
   {
     id: "intelligence",
-    label: "智能",
+    labelKey: "settings.sidebar.group.intelligence",
     items: [
-      { id: "preferences:context", label: "上下文与压缩", Icon: IconContext },
-      { id: "providers", label: "模型配置", Icon: IconProviders },
-      { id: "tools", label: "工具", Icon: IconTools },
-      { id: "memory", label: "记忆", Icon: IconMemory },
+      {
+        id: "preferences:context",
+        labelKey: "settings.sidebar.tab.context",
+        Icon: IconContext,
+      },
+      {
+        id: "providers",
+        labelKey: "settings.sidebar.tab.providers",
+        Icon: IconProviders,
+      },
+      {
+        id: "tools",
+        labelKey: "settings.sidebar.tab.tools",
+        Icon: IconTools,
+      },
+      {
+        id: "memory",
+        labelKey: "settings.sidebar.tab.memory",
+        Icon: IconMemory,
+      },
     ],
   },
   {
     id: "extensions",
-    label: "扩展",
+    labelKey: "settings.sidebar.group.extensions",
     items: [
-      { id: "browser", label: "浏览器", Icon: IconBrowser },
-      { id: "models", label: "模型市场", Icon: IconModelMarket },
-      { id: "insights", label: "洞察", Icon: IconInsights },
+      {
+        id: "browser",
+        labelKey: "settings.sidebar.tab.browser",
+        Icon: IconBrowser,
+      },
+      {
+        id: "models",
+        labelKey: "settings.sidebar.tab.models",
+        Icon: IconModelMarket,
+      },
+      {
+        id: "insights",
+        labelKey: "settings.sidebar.tab.insights",
+        Icon: IconInsights,
+      },
     ],
   },
   {
     id: "system",
-    label: "系统",
+    labelKey: "settings.sidebar.group.system",
     items: [
-      { id: "preferences:diagnostics", label: "诊断", Icon: IconDiagnostics },
-      { id: "preferences:about", label: "关于", Icon: IconAtom },
+      {
+        id: "preferences:diagnostics",
+        labelKey: "settings.sidebar.tab.diagnostics",
+        Icon: IconDiagnostics,
+      },
+      {
+        id: "preferences:about",
+        labelKey: "settings.sidebar.tab.about",
+        Icon: IconAtom,
+      },
     ],
   },
 ];
@@ -77,7 +130,11 @@ export const SETTINGS_TABS: SettingsTabMeta[] = SETTINGS_TAB_GROUPS.flatMap(
 
 /** 不在侧栏平铺，只能由跳转进入的 tab */
 const EXTRA_SETTINGS_TABS: SettingsTabMeta[] = [
-  { id: "evolution", label: "自进化", Icon: IconSparkles },
+  {
+    id: "evolution",
+    labelKey: "settings.sidebar.tab.evolution",
+    Icon: IconSparkles,
+  },
 ];
 
 export function settingsTabMeta(tab: SettingsTabId): SettingsTabMeta {
