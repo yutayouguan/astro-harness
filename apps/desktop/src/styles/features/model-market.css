@@ -1,6 +1,20 @@
 /* ── Model Market ────────────────────────────────── */
 
 .model-market {
+  --model-market-switcher-border: color-mix(
+    in srgb,
+    var(--glass-edge) 72%,
+    transparent
+  );
+  --model-market-switcher-background: color-mix(
+    in srgb,
+    var(--glass-panel, rgba(255, 255, 255, 0.35)) 78%,
+    transparent
+  );
+  --model-market-switcher-filter: blur(
+      calc(12px * var(--glass-blur-scale, 1))
+    )
+    saturate(var(--glass-saturate, 1.1));
   --model-market-card-border: color-mix(
     in srgb,
     var(--glass-edge) 72%,

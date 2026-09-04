@@ -66,6 +66,15 @@ test("ranking navigation is one aligned rounded toolbar", () => {
     rankingsCss,
     /\.mm-rankings-commandbar \.model-market-refresh\s*\{[\s\S]*?height:\s*34px/,
   );
+  assert.match(marketCss, /--model-market-switcher-background:/);
+  assert.match(
+    rankingsCss,
+    /--model-intel-switcher-background:\s*var\(\s*--model-market-switcher-background/,
+  );
+  assert.match(
+    rankingsCss,
+    /\.model-market > \.mm-rankings-workspace\s*\{[\s\S]*?padding-top:\s*0/,
+  );
   assert.match(
     panelSource,
     /className="mm-rankings-sticky-nav"[\s\S]*?className="mm-rankings-commandbar"[\s\S]*?<\/div>\s*<\/div>\s*\{section === "usage"/,

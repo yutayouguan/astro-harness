@@ -1,5 +1,6 @@
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { BarChart3, Grid2x2 } from "lucide-react";
 import ModelRankingsPanel from "../components/settings/ModelRankingsPanel";
 import { LocaleProvider } from "../i18n/LocaleContext";
 
@@ -169,3 +170,21 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Tasks: Story = {};
+
+export const EmbeddedInModelMarket: Story = {
+  render: (args) => (
+    <div className="model-market">
+      <div className="model-market-surface-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="false">
+          <Grid2x2 size={15} />
+          模型目录
+        </button>
+        <button type="button" role="tab" aria-selected="true" className="active">
+          <BarChart3 size={15} />
+          模型情报
+        </button>
+      </div>
+      <ModelRankingsPanel {...args} />
+    </div>
+  ),
+};

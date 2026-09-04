@@ -1,6 +1,10 @@
 .model-market {
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+}
+
+.model-market > .mm-rankings-workspace {
+  padding-top: 0;
 }
 
 .model-market-surface-tabs {
@@ -10,9 +14,11 @@
   width: fit-content;
   margin: 0;
   padding: 4px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  border: 1px solid var(--model-market-switcher-border);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--glass-panel) 78%, transparent);
+  background: var(--model-market-switcher-background);
+  backdrop-filter: var(--model-market-switcher-filter);
+  -webkit-backdrop-filter: var(--model-market-switcher-filter);
 }
 
 .model-market-surface-tabs button,
@@ -55,6 +61,23 @@
 }
 
 .mm-rankings-workspace {
+  --model-intel-switcher-border: var(
+    --model-market-switcher-border,
+    color-mix(in srgb, var(--glass-edge) 72%, transparent)
+  );
+  --model-intel-switcher-background: var(
+    --model-market-switcher-background,
+    color-mix(
+      in srgb,
+      var(--glass-panel, rgba(255, 255, 255, 0.35)) 78%,
+      transparent
+    )
+  );
+  --model-intel-switcher-filter: var(
+    --model-market-switcher-filter,
+    blur(calc(12px * var(--glass-blur-scale, 1)))
+      saturate(var(--glass-saturate, 1.1))
+  );
   --model-intel-card-border: var(
     --model-market-card-border,
     color-mix(in srgb, var(--glass-edge) 72%, transparent)
@@ -90,14 +113,14 @@
   flex-direction: column;
   gap: 6px;
   padding: 4px;
-  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border: 1px solid var(--model-intel-switcher-border);
   border-radius: 14px;
-  background: color-mix(in srgb, var(--color-bg-base) 70%, transparent);
+  background: var(--model-intel-switcher-background);
   box-shadow:
     0 6px 18px rgba(var(--shadow-ink), 0.035),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
-  backdrop-filter: blur(16px) saturate(1.08);
-  -webkit-backdrop-filter: blur(16px) saturate(1.08);
+  backdrop-filter: var(--model-intel-switcher-filter);
+  -webkit-backdrop-filter: var(--model-intel-switcher-filter);
 }
 
 .mm-rankings-commandbar {
