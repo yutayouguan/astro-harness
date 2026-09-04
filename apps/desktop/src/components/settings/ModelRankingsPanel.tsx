@@ -16,7 +16,14 @@ import {
   WalletCards,
   Wrench,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   humanNumber,
@@ -87,7 +94,21 @@ const MODALITY_ITEMS: Array<{
 ];
 
 const SERIES_COLORS = ["#8b5cf6", "#0ea5e9", "#10b981", "#f59e0b", "#f43f5e"];
+const TASK_CATEGORY_COLORS: Record<string, string> = {
+  code: "#8b5cf6",
+  data: "#0ea5e9",
+  agent: "#10b981",
+  general: "#f59e0b",
+};
+const TASK_CATEGORY_FALLBACK_COLORS = SERIES_COLORS;
 const rankingsMemoryCache = new Map<string, OpenRouterRankingsEnvelope>();
+
+function taskCategoryColor(id: string, index: number): string {
+  return (
+    TASK_CATEGORY_COLORS[id.toLowerCase()] ??
+    TASK_CATEGORY_FALLBACK_COLORS[index % TASK_CATEGORY_FALLBACK_COLORS.length]
+  );
+}
 
 function requestTarget(
   section: RankingsSection,
@@ -246,6 +267,9 @@ function RankedList({
           <strong>{valueLabel(item.value)}</strong>
           {item.change != null && (
             <span className={item.change >= 0 ? "is-up" : "is-down"}>
+              <span className="mm-rank-change-arrow" aria-hidden="true">
+                {item.change >= 0 ? "↑" : "↓"}
+              </span>
               {item.change >= 0 ? "+" : ""}
               {item.change.toFixed(1)}%
             </span>
@@ -518,11 +542,17 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
           {envelope?.dataSource === "frontend" && (
             <div className="mm-task-metric-row">
               <span>{t("modelRankings.tasks.metric" as never)}</span>
-              <div className="mm-rank-inline-tabs">
+              <div
+                className="mm-rank-inline-tabs"
+                role="tablist"
+                aria-label={t("modelRankings.tasks.metric" as never)}
+              >
                 {(["spend", "tokens"] as const).map((metric) => (
                   <button
                     key={metric}
                     type="button"
+                    role="tab"
+                    aria-selected={taskMetric === metric}
                     className={taskMetric === metric ? "active" : ""}
                     onClick={() => setTaskMetric(metric)}
                   >
@@ -532,10 +562,35 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
               </div>
             </div>
           )}
+          <div className="mm-task-composition" aria-hidden="true">
+            {tasks.categories.map((category, index) => (
+              <i
+                key={category.id}
+                style={
+                  {
+                    "--mm-task-category-color":
+                      taskCategoryColor(category.id, index),
+                    "--mm-task-category-share": Math.max(category.share, 0),
+                  } as CSSProperties
+                }
+              />
+            ))}
+          </div>
           <div className="mm-task-categories">
-            {tasks.categories.map((category) => (
-              <div key={category.id}>
-                <span>{category.label}</span>
+            {tasks.categories.map((category, index) => (
+              <div
+                key={category.id}
+                style={
+                  {
+                    "--mm-task-category-color":
+                      taskCategoryColor(category.id, index),
+                  } as CSSProperties
+                }
+              >
+                <span>
+                  <i aria-hidden="true" />
+                  {category.label}
+                </span>
                 <strong>{(category.share * 100).toFixed(1)}%</strong>
               </div>
             ))}
@@ -546,6 +601,7 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
                 <button
                   key={task.id}
                   type="button"
+                  aria-pressed={activeTask?.id === task.id}
                   className={activeTask?.id === task.id ? "active" : ""}
                   onClick={() => setSelectedTask(task.id)}
                 >
@@ -718,9 +774,7 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
 
       {envelope && (
         <footer className="mm-rank-attribution">
-          Source: OpenRouter (openrouter.ai/rankings), as of{" "}
-          {formatDate(envelope.asOf ?? envelope.fetchedAt)}. Licensed under CC
-          BY 4.0.
+          {t("modelRankings.attribution" as never)}
         </footer>
       )}
     </div>
