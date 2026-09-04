@@ -19,6 +19,7 @@ pub(crate) mod mcp_oauth;
 pub(crate) mod media;
 pub(crate) mod memory;
 pub(crate) mod model_catalog;
+pub(crate) mod openrouter_rankings;
 pub(crate) mod providers;
 pub(crate) mod session;
 pub(crate) mod skills;

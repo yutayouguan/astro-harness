@@ -98,6 +98,7 @@
 @import "./features/loop.css" layer(features);
 @import "./features/insights.css" layer(features);
 @import "./features/model-market.css" layer(features);
+@import "./features/model-rankings.css" layer(features);
 @import "./foundation/transitions.css" layer(base);
 @import "./components/illustrations.css" layer(features);
 

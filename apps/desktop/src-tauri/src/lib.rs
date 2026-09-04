@@ -345,6 +345,7 @@ pub fn run() {
             commands::cron::list_cron_job_runs,
             // — model catalog —
             commands::model_catalog::list_model_catalog,
+            commands::openrouter_rankings::get_openrouter_rankings,
             // — memory —
             commands::memory::refresh_memory,
             commands::memory::list_pending_memory_writes,
