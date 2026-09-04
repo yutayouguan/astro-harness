@@ -45,6 +45,8 @@ pub struct ModelReasoningMeta {
     pub mandatory: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supports_max_tokens: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persistent_instructions: Option<String>,
 }
 
 impl ModelReasoningMeta {
@@ -55,6 +57,7 @@ impl ModelReasoningMeta {
             && self.default_enabled.is_none()
             && self.mandatory.is_none()
             && self.supports_max_tokens.is_none()
+            && self.persistent_instructions.is_none()
     }
 }
 
@@ -214,6 +217,16 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
     let retained_display = info.display_name.clone();
     let retained_description = info.description.clone();
     let retained_canonical = info.canonical_slug.clone();
+    let retained_persistent_instructions = if kind == "openai" {
+        info.reasoning
+            .as_ref()
+            .and_then(|reasoning| reasoning.persistent_instructions.as_deref())
+            .map(str::trim)
+            .filter(|instructions| !instructions.is_empty())
+            .map(str::to_string)
+    } else {
+        None
+    };
 
     info.context_window = retained_api_ctx;
     info.max_output_tokens = retained_api_out;
@@ -343,6 +356,21 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
     if apply_known_capability_overrides(&kind, &id_lower, info) {
         sources.push("known");
     }
+    if let Some(instructions) = retained_persistent_instructions {
+        info.capabilities.reasoning = true;
+        let reasoning = info
+            .reasoning
+            .get_or_insert_with(ModelReasoningMeta::default);
+        if !reasoning
+            .supported_efforts
+            .iter()
+            .any(|effort| effort == "persistent")
+        {
+            reasoning.supported_efforts.push("persistent".into());
+        }
+        reasoning.persistent_instructions = Some(instructions);
+        sources.push("api");
+    }
 
     sources.sort();
     sources.dedup();
@@ -379,6 +407,7 @@ fn apply_known_capability_overrides(kind: &str, id_lower: &str, info: &mut Model
                     default_enabled: Some(true),
                     mandatory: Some(false),
                     supports_max_tokens: None,
+                    persistent_instructions: None,
                 });
             }
             changed = true;
@@ -466,6 +495,33 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(info.tool_mode, None);
+    }
+
+    #[test]
+    fn model_catalog_keeps_persistent_reasoning_only_for_openai() {
+        let value = serde_json::json!({
+            "id": "gpt-test",
+            "reasoning": {
+                "supported_efforts": ["high"],
+                "persistent_instructions": "  keep working  "
+            }
+        });
+        let mut openai: ModelInfo =
+            serde_json::from_value(value.clone()).expect("OpenAI model metadata");
+        enrich_model_info(&mut openai, "openai", None);
+        let reasoning = openai.reasoning.expect("OpenAI persistent metadata");
+        assert_eq!(
+            reasoning.persistent_instructions.as_deref(),
+            Some("keep working")
+        );
+        assert!(reasoning.supported_efforts.contains(&"persistent".into()));
+
+        let mut azure: ModelInfo = serde_json::from_value(value).expect("Azure model metadata");
+        enrich_model_info(&mut azure, "azure", None);
+        assert!(azure
+            .reasoning
+            .as_ref()
+            .is_none_or(|reasoning| reasoning.persistent_instructions.is_none()));
     }
     use crate::meta::openrouter_meta;
 

@@ -47,3 +47,16 @@ test("defaultThinkingLevelFromMeta respects default_enabled and default_effort",
     "high",
   );
 });
+
+test("persistent effort requires persistent instructions", () => {
+  assert.deepEqual(
+    thinkingLevelsFromMeta({ supported_efforts: ["high", "persistent"] }),
+    ["off", "high"],
+  );
+  assert.deepEqual(
+    thinkingLevelsFromMeta({
+      persistent_instructions: "continue autonomously",
+    }),
+    ["off", "low", "high", "max", "persistent"],
+  );
+});

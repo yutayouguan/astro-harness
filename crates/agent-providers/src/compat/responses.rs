@@ -22,6 +22,7 @@ pub trait OpenAIResponsesCompatible: ProviderExt {
     const PARALLEL_TOOLS: bool = false;
     const REASONING_SUMMARY: bool = false;
     const EFFORT_MAP: &'static [(&'static str, &'static str)] = &[];
+    const SUPPORTS_PERSISTENT_REASONING: bool = false;
 
     fn finalize_responses_body(&self, _body: &mut Value) {}
 
@@ -37,13 +38,41 @@ fn build_responses_body<Ext: OpenAIResponsesCompatible>(
 ) -> Result<Value> {
     let input = crate::openai::responses::to_native_responses_input(&request.input)?;
 
+    let mut additional_params = request.additional_params.clone();
+    let persistent_instructions = additional_params
+        .as_object_mut()
+        .and_then(|params| params.remove("astro_persistent_instructions"))
+        .and_then(|value| value.as_str().map(str::trim).map(str::to_string))
+        .filter(|value| !value.is_empty());
+    let persistent_requested = request
+        .thinking
+        .as_ref()
+        .is_some_and(|thinking| thinking.enabled && thinking.effort.trim() == "persistent");
+    if persistent_requested && !Ext::SUPPORTS_PERSISTENT_REASONING {
+        return Err(anyhow!(
+            "{} does not support persistent reasoning",
+            Ext::NAME
+        ));
+    }
+    let instructions = if persistent_requested {
+        let persistent = persistent_instructions
+            .ok_or_else(|| anyhow!("persistent reasoning requires persistent instructions"))?;
+        if request.instructions.trim().is_empty() {
+            persistent
+        } else {
+            format!("{}\n\n{}", request.instructions.trim(), persistent)
+        }
+    } else {
+        request.instructions.clone()
+    };
+
     let mut body = json!({
         "model": model,
         "input": input,
         "stream": true,
     });
-    if !request.instructions.is_empty() {
-        body["instructions"] = json!(&request.instructions);
+    if !instructions.is_empty() {
+        body["instructions"] = json!(instructions);
     }
     if let Some(temp) = request.temperature {
         let has_reasoning = request.thinking.as_ref().is_some_and(|tc| tc.enabled);
@@ -74,11 +103,15 @@ fn build_responses_body<Ext: OpenAIResponsesCompatible>(
     if let Some(ref tc) = request.thinking {
         if tc.enabled {
             let raw = tc.effort.trim();
-            let effort = Ext::EFFORT_MAP
-                .iter()
-                .find(|(k, _)| *k == raw)
-                .map(|(_, v)| *v)
-                .unwrap_or(if raw.is_empty() { "high" } else { raw });
+            let effort = if raw == "persistent" {
+                "disabled"
+            } else {
+                Ext::EFFORT_MAP
+                    .iter()
+                    .find(|(k, _)| *k == raw)
+                    .map(|(_, v)| *v)
+                    .unwrap_or(if raw.is_empty() { "high" } else { raw })
+            };
             if Ext::REASONING_SUMMARY {
                 body["reasoning"] = json!({"effort": effort, "summary": "auto"});
             } else {
@@ -88,7 +121,7 @@ fn build_responses_body<Ext: OpenAIResponsesCompatible>(
     }
 
     ext.finalize_responses_body(&mut body);
-    crate::shared::http::merge_additional_params(&mut body, &request.additional_params);
+    crate::shared::http::merge_additional_params(&mut body, &additional_params);
 
     if let Some(cache) = &request.prompt_cache {
         if let Some(key) = cache
@@ -271,6 +304,89 @@ mod tests {
     }
 
     impl OpenAIResponsesCompatible for FakeResponses {}
+
+    #[derive(Debug, Clone, Copy, Default)]
+    struct PersistentResponses;
+
+    impl ProviderExt for PersistentResponses {
+        const NAME: &'static str = "openai";
+        const BASE_URL: &'static str = "http://localhost:9999";
+        fn auth_headers(&self, _key: &str) -> reqwest::header::HeaderMap {
+            reqwest::header::HeaderMap::new()
+        }
+    }
+
+    impl OpenAIResponsesCompatible for PersistentResponses {
+        const SUPPORTS_PERSISTENT_REASONING: bool = true;
+    }
+
+    #[test]
+    fn persistent_reasoning_maps_wire_effort_and_consumes_internal_instructions() {
+        let request = ResponsesRequest {
+            instructions: "base".into(),
+            thinking: Some(ThinkingConfig {
+                enabled: true,
+                budget_tokens: None,
+                effort: "persistent".into(),
+            }),
+            additional_params: json!({
+                "astro_persistent_instructions": "keep working across turns",
+                "top_p": 0.8
+            }),
+            ..ResponsesRequest::default()
+        };
+
+        let body = build_responses_body(&PersistentResponses, &request, "gpt-test")
+            .expect("persistent request body");
+
+        assert_eq!(body["reasoning"]["effort"], "disabled");
+        assert_eq!(body["instructions"], "base\n\nkeep working across turns");
+        assert_eq!(body["top_p"], 0.8);
+        assert!(body.get("astro_persistent_instructions").is_none());
+    }
+
+    #[test]
+    fn persistent_reasoning_requires_provider_capability_and_instructions() {
+        let request = ResponsesRequest {
+            thinking: Some(ThinkingConfig {
+                enabled: true,
+                budget_tokens: None,
+                effort: "persistent".into(),
+            }),
+            additional_params: json!({"astro_persistent_instructions": "persist"}),
+            ..ResponsesRequest::default()
+        };
+        assert!(build_responses_body(&FakeResponses, &request, "gpt-test").is_err());
+
+        let missing = ResponsesRequest {
+            thinking: request.thinking.clone(),
+            ..ResponsesRequest::default()
+        };
+        assert!(build_responses_body(&PersistentResponses, &missing, "gpt-test").is_err());
+    }
+
+    #[test]
+    fn inactive_persistent_reasoning_instructions_do_not_leak_to_the_wire() {
+        let request = ResponsesRequest {
+            instructions: "base".into(),
+            thinking: Some(ThinkingConfig {
+                enabled: true,
+                budget_tokens: None,
+                effort: "high".into(),
+            }),
+            additional_params: json!({
+                "astro_persistent_instructions": "keep working across turns"
+            }),
+            ..ResponsesRequest::default()
+        };
+
+        let body = build_responses_body(&PersistentResponses, &request, "gpt-test")
+            .expect("normal request body");
+
+        assert_eq!(body["reasoning"]["effort"], "high");
+        assert_eq!(body["instructions"], "base");
+        assert!(body.get("astro_persistent_instructions").is_none());
+    }
 
     #[test]
     fn responses_model_from_client() {

@@ -47,6 +47,7 @@ impl OpenAIResponsesCompatible for OpenAI {
     const STORE_FALSE: bool = true;
     const PARALLEL_TOOLS: bool = true;
     const REASONING_SUMMARY: bool = true;
+    const SUPPORTS_PERSISTENT_REASONING: bool = true;
     const EFFORT_MAP: &'static [(&'static str, &'static str)] =
         &[("max", "high"), ("xhigh", "high")];
 }

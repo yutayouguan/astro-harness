@@ -9,7 +9,14 @@ import {
 export type ModelContextSize = "default" | "300k" | "1m";
 /** 与后端 ReasoningEffort / OpenRouter supported_efforts 一致 */
 export type ModelEffort =
-  "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max"
+  | "persistent";
 
 export type ModelRuntimePrefs = {
   thinking: boolean;
@@ -216,6 +223,7 @@ export function modelSupportsReasoning(
   if (!meta) return false;
   if (meta.mandatory) return true;
   if (meta.default_enabled === true) return true;
+  if (meta.persistent_instructions?.trim()) return true;
   return (meta.supported_efforts ?? []).some((e) =>
     Boolean(parseEffortLevel(e)),
   );
@@ -232,11 +240,22 @@ export function effortChoicesFromMeta(
   if (!modelSupportsReasoning(capsReasoning, meta)) return [];
   const raw = (meta?.supported_efforts ?? [])
     .map((e) => parseEffortLevel(e))
-    .filter((e): e is ThinkingLevel => e != null && e !== "off");
+    .filter(
+      (e): e is ThinkingLevel =>
+        e != null &&
+        e !== "off" &&
+        (e !== "persistent" || Boolean(meta?.persistent_instructions?.trim())),
+    );
   if (raw.length > 0) {
-    return EFFORT_ORDER_FOR_PICKER.filter((e) => raw.includes(e));
+    const efforts = EFFORT_ORDER_FOR_PICKER.filter((e) => raw.includes(e));
+    if (meta?.persistent_instructions?.trim() && !efforts.includes("persistent")) {
+      efforts.push("persistent");
+    }
+    return efforts;
   }
-  return ["low", "high", "max"];
+  const efforts: ModelEffort[] = ["low", "high", "max"];
+  if (meta?.persistent_instructions?.trim()) efforts.push("persistent");
+  return efforts;
 }
 
 const EFFORT_ORDER_FOR_PICKER: ModelEffort[] = [
@@ -247,6 +266,7 @@ const EFFORT_ORDER_FOR_PICKER: ModelEffort[] = [
   "high",
   "xhigh",
   "max",
+  "persistent",
 ];
 
 /**

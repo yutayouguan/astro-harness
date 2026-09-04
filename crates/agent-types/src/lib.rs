@@ -48,10 +48,10 @@ pub use notify::{
 };
 pub use permissions::{
     is_builtin_profile, ApprovalPolicy, ApprovalsReviewer, FilesystemAccess, FilesystemPolicy,
-    GrantScope, NetworkAccess, NetworkPolicy, PermissionCapability, PermissionPreset,
-    PermissionProfile, PermissionProfileError, PermissionReason, PermissionRequest,
-    PermissionsConfig, SandboxMode, SessionPermissions, DANGER_FULL_ACCESS_PROFILE,
-    READ_ONLY_PROFILE, WORKSPACE_PROFILE,
+    GrantScope, NetworkAccess, NetworkHeaderInjection, NetworkPolicy, PermissionCapability,
+    PermissionPreset, PermissionProfile, PermissionProfileError, PermissionReason,
+    PermissionRequest, PermissionsConfig, SandboxMode, SessionPermissions,
+    DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE,
 };
 pub use sqlite::{AstroDb, DbSpec, SqlitePool, SqliteStore};
 pub use title::sanitize_title;

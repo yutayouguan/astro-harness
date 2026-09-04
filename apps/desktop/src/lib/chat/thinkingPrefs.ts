@@ -6,7 +6,15 @@ import type { ModelReasoningMeta, ReasoningEffort } from "../../types";
 
 /** UI 思考级别（含 off + OpenRouter supported_efforts） */
 export type ThinkingLevel =
-  "off" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  | "off"
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max"
+  | "persistent";
 
 /** 聊天思考偏好 */
 export type ChatThinkingPrefs = {
@@ -21,6 +29,7 @@ const EFFORT_ORDER: ThinkingLevel[] = [
   "high",
   "xhigh",
   "max",
+  "persistent",
 ];
 
 const DEFAULT_EFFORTS: ThinkingLevel[] = ["low", "high", "max"];
@@ -37,7 +46,8 @@ export function parseEffortLevel(
     s === "medium" ||
     s === "high" ||
     s === "xhigh" ||
-    s === "max"
+    s === "max" ||
+    s === "persistent"
   ) {
     return s;
   }
@@ -51,11 +61,19 @@ export function thinkingLevelsFromMeta(
   const mandatory = Boolean(meta?.mandatory);
   const raw = (meta?.supported_efforts ?? [])
     .map((e) => parseEffortLevel(e))
-    .filter((e): e is ThinkingLevel => e != null && e !== "off");
+    .filter(
+      (e): e is ThinkingLevel =>
+        e != null &&
+        e !== "off" &&
+        (e !== "persistent" || Boolean(meta?.persistent_instructions?.trim())),
+    );
   const efforts =
     raw.length > 0
       ? EFFORT_ORDER.filter((e) => raw.includes(e))
       : [...DEFAULT_EFFORTS];
+  if (meta?.persistent_instructions?.trim() && !efforts.includes("persistent")) {
+    efforts.push("persistent");
+  }
   return mandatory ? efforts : (["off", ...efforts] as ThinkingLevel[]);
 }
 

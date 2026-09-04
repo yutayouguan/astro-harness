@@ -678,6 +678,7 @@ fn sync_custom_provider_models() {
                         default_enabled: Some(true),
                         mandatory: Some(false),
                         supports_max_tokens: None,
+                        persistent_instructions: None,
                     })
                 } else {
                     None
@@ -1779,11 +1780,33 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                         max_output_tokens: m["max_output_tokens"].as_u64(),
                         supported_methods: Vec::new(),
                     };
-                    Some(crate::meta::model_meta::enrich_from_id(
+                    let mut info = crate::meta::model_meta::enrich_from_id(
                         &id,
                         kind,
                         if ctx.is_some() { Some(hints) } else { None },
-                    ))
+                    );
+                    if kind == "openai" {
+                        let persistent_instructions = m
+                            .pointer("/model_messages/persistent_instructions")
+                            .or_else(|| m.pointer("/reasoning/persistent_instructions"))
+                            .or_else(|| m.get("persistent_instructions"))
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::trim)
+                            .filter(|instructions| !instructions.is_empty());
+                        if let Some(instructions) = persistent_instructions {
+                            info.capabilities.reasoning = true;
+                            let reasoning = info.reasoning.get_or_insert_with(Default::default);
+                            if !reasoning
+                                .supported_efforts
+                                .iter()
+                                .any(|effort| effort == "persistent")
+                            {
+                                reasoning.supported_efforts.push("persistent".into());
+                            }
+                            reasoning.persistent_instructions = Some(instructions.into());
+                        }
+                    }
+                    Some(info)
                 })
                 .collect::<Vec<_>>();
             (models, format!("{}:/models", provider.kind.as_str()))
@@ -1865,22 +1888,6 @@ pub fn cached_model_info(
     } else {
         Some(info)
     }
-}
-
-/// 从 models.json 缓存读取某模型的 context_window（与前端展示同源，不做 128K 臆测）。
-pub fn cached_model_context_window(provider_id: &str, model_id: &str) -> Option<u32> {
-    cached_model_info(provider_id, model_id)
-        .and_then(|info| info.context_window)
-        .and_then(|n| u32::try_from(n).ok())
-        .filter(|n| *n > 0)
-}
-
-/// 从 models.json 缓存读取某模型的 max_output_tokens（与 context_window 同源）。
-pub fn cached_model_max_output_tokens(provider_id: &str, model_id: &str) -> Option<u32> {
-    cached_model_info(provider_id, model_id)
-        .and_then(|info| info.max_output_tokens)
-        .and_then(|n| u32::try_from(n).ok())
-        .filter(|n| *n > 0)
 }
 
 /// Tauri 命令：get_cached_provider_models。
