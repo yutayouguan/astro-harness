@@ -6,6 +6,8 @@ import Bailian from "@lobehub/icons/es/Bailian/components/Mono";
 import Cohere from "@lobehub/icons/es/Cohere/components/Mono";
 import DeepSeek from "@lobehub/icons/es/DeepSeek/components/Mono";
 import ByteDance from "@lobehub/icons/es/ByteDance/components/Mono";
+import ClaudeCode from "@lobehub/icons/es/ClaudeCode/components/Mono";
+import Cline from "@lobehub/icons/es/Cline/components/Mono";
 import Doubao from "@lobehub/icons/es/Doubao/components/Mono";
 import Fireworks from "@lobehub/icons/es/Fireworks/components/Mono";
 import Gemini from "@lobehub/icons/es/Gemini/components/Mono";
@@ -13,7 +15,9 @@ import Google from "@lobehub/icons/es/Google/components/Mono";
 import Groq from "@lobehub/icons/es/Groq/components/Mono";
 import HuggingFace from "@lobehub/icons/es/HuggingFace/components/Mono";
 import Hunyuan from "@lobehub/icons/es/Hunyuan/components/Mono";
+import HermesAgent from "@lobehub/icons/es/HermesAgent/components/Mono";
 import InternLM from "@lobehub/icons/es/InternLM/components/Mono";
+import KiloCode from "@lobehub/icons/es/KiloCode/components/Mono";
 import Kimi from "@lobehub/icons/es/Kimi/components/Mono";
 import Meta from "@lobehub/icons/es/Meta/components/Mono";
 import Minimax from "@lobehub/icons/es/Minimax/components/Mono";
@@ -21,10 +25,14 @@ import Mistral from "@lobehub/icons/es/Mistral/components/Mono";
 import Moonshot from "@lobehub/icons/es/Moonshot/components/Mono";
 import Nvidia from "@lobehub/icons/es/Nvidia/components/Mono";
 import Ollama from "@lobehub/icons/es/Ollama/components/Mono";
+import OpenClaw from "@lobehub/icons/es/OpenClaw/components/Mono";
+import OpenCode from "@lobehub/icons/es/OpenCode/components/Mono";
+import OpenHands from "@lobehub/icons/es/OpenHands/components/Mono";
 import OpenAI from "@lobehub/icons/es/OpenAI/components/Mono";
 import OpenRouter from "@lobehub/icons/es/OpenRouter/components/Mono";
 import Perplexity from "@lobehub/icons/es/Perplexity/components/Mono";
 import Qwen from "@lobehub/icons/es/Qwen/components/Mono";
+import RooCode from "@lobehub/icons/es/RooCode/components/Mono";
 import Stepfun from "@lobehub/icons/es/Stepfun/components/Mono";
 import Together from "@lobehub/icons/es/Together/components/Mono";
 import Volcengine from "@lobehub/icons/es/Volcengine/components/Mono";
@@ -32,6 +40,12 @@ import XAI from "@lobehub/icons/es/XAI/components/Mono";
 import XiaomiMiMo from "@lobehub/icons/es/XiaomiMiMo/components/Mono";
 import Yi from "@lobehub/icons/es/Yi/components/Mono";
 import Zhipu from "@lobehub/icons/es/Zhipu/components/Mono";
+import Codex from "@lobehub/icons/es/Codex/components/Mono";
+import Cursor from "@lobehub/icons/es/Cursor/components/Mono";
+import Lovable from "@lobehub/icons/es/Lovable/components/Mono";
+import Trae from "@lobehub/icons/es/Trae/components/Mono";
+import V0 from "@lobehub/icons/es/V0/components/Mono";
+import Windsurf from "@lobehub/icons/es/Windsurf/components/Mono";
 
 type IconProps = SVGProps<SVGSVGElement> & {
   size?: number | string;
@@ -265,6 +279,65 @@ export function ModelBrandIcon({
     );
   }
   const letter = (modelId.match(/[a-zA-Z0-9]/)?.[0] ?? "?").toUpperCase();
+  return (
+    <span
+      className={
+        className
+          ? `model-brand-icon is-letter ${className}`
+          : "model-brand-icon is-letter"
+      }
+      aria-hidden
+    >
+      {letter}
+    </span>
+  );
+}
+
+const APP_ICONS: Array<{
+  matches: string[];
+  Icon: LobeMonoIcon;
+}> = [
+  { matches: ["hermes agent", "hermes-agent"], Icon: HermesAgent },
+  { matches: ["claude code", "claude-code"], Icon: ClaudeCode },
+  { matches: ["kilo code", "kilo-code"], Icon: KiloCode },
+  { matches: ["roo code", "roo-code"], Icon: RooCode },
+  { matches: ["openclaw", "open-claw"], Icon: OpenClaw },
+  { matches: ["opencode", "open-code"], Icon: OpenCode },
+  { matches: ["openhands", "open-hands"], Icon: OpenHands },
+  { matches: ["windsurf"], Icon: Windsurf },
+  { matches: ["cursor"], Icon: Cursor },
+  { matches: ["lovable"], Icon: Lovable },
+  { matches: ["trae"], Icon: Trae },
+  { matches: ["v0", "v0.dev"], Icon: V0 },
+  { matches: ["cline"], Icon: Cline },
+  { matches: ["codex"], Icon: Codex },
+  { matches: ["deepseek harness"], Icon: DeepSeek },
+];
+
+/** Apps 排行榜图标：优先使用 @lobehub/icons，未收录项回退为首字母。 */
+export function AppBrandIcon({
+  appId,
+  appName,
+  className,
+  ...props
+}: IconProps & { appId: string; appName: string; className?: string }) {
+  const lookup = `${appId} ${appName}`.toLowerCase();
+  const entry = APP_ICONS.find(({ matches }) =>
+    matches.some((candidate) => lookup.includes(candidate)),
+  );
+  if (entry) {
+    const Icon = entry.Icon;
+    return (
+      <span
+        className={className ? `model-brand-icon ${className}` : "model-brand-icon"}
+        aria-hidden
+      >
+        <Icon {...toIconProps(props)} />
+      </span>
+    );
+  }
+
+  const letter = (appName.match(/[a-zA-Z0-9]/)?.[0] ?? "?").toUpperCase();
   return (
     <span
       className={

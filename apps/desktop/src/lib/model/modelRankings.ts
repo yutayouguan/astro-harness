@@ -1,5 +1,3 @@
-import { normalizeBrowserFaviconUrl } from "../browser/browserFavicon.ts";
-
 export type RankingsDataSource = "official" | "frontend";
 export type RankingsFreshness = "fresh" | "stale";
 
@@ -83,7 +81,6 @@ export interface AppRanking {
   requests: number;
   rank: number;
   categories: string[];
-  iconUrl: string | null;
 }
 
 export interface SessionCostRanking {
@@ -425,12 +422,6 @@ export function normalizePerformance(
     .sort((a, b) => b.throughput - a.throughput);
 }
 
-export function appFaviconUrl(value: unknown): string | null {
-  const safe = normalizeBrowserFaviconUrl(value);
-  if (!safe || !safe.startsWith("http")) return null;
-  return `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(safe)}&size=64`;
-}
-
 export function normalizeApps(
   envelope: OpenRouterRankingsEnvelope,
 ): AppRanking[] {
@@ -460,7 +451,6 @@ export function normalizeApps(
           categories: array(app?.categories).filter(
             (value): value is string => typeof value === "string",
           ),
-          iconUrl: appFaviconUrl(app?.favicon_url),
         },
       ];
     })

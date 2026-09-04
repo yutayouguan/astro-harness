@@ -33,7 +33,7 @@ import {
   type RankingItem,
   type RankingPoint,
 } from "../../lib/model/modelRankings";
-import { ModelBrandIcon } from "../icons/ProviderIcons";
+import { AppBrandIcon, ModelBrandIcon } from "../icons/ProviderIcons";
 
 type RankingsSection =
   | "usage"
@@ -376,6 +376,7 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
 
   return (
     <div className="mm-rankings-workspace">
+      <div className="mm-rankings-sticky-nav">
       <div className="mm-rankings-commandbar">
         <div className="mm-rankings-sections" role="tablist">
           {SECTION_ITEMS.map(({ id, Icon }) => (
@@ -420,6 +421,7 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
           ))}
         </div>
       )}
+      </div>
 
       <div className="mm-rank-statusbar" aria-live="polite">
         <span>{t(`modelRankings.title.${section}` as never)}</span>
@@ -661,20 +663,12 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
                 <span className="mm-rank-position">
                   {app.rank || index + 1}
                 </span>
-                <span className="mm-app-icon" aria-hidden="true">
-                  <AppWindow size={19} />
-                  {app.iconUrl && (
-                    <img
-                      src={app.iconUrl}
-                      alt=""
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(event) => {
-                        event.currentTarget.hidden = true;
-                      }}
-                    />
-                  )}
-                </span>
+                <AppBrandIcon
+                  className="mm-app-icon"
+                  appId={app.id}
+                  appName={app.name}
+                  size={22}
+                />
                 <div>
                   <h4>{app.name}</h4>
                   {app.categories.length > 0 && (
