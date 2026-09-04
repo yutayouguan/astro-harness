@@ -41,6 +41,8 @@ pub use multi_turn::{
     run_multi_turn_events_with_responses_fn, run_multi_turn_stream_with_responses_fn,
     run_thread_turn_events, ThreadTurnEventArgs,
 };
+#[cfg(test)]
+pub(crate) use provider::build_prompt;
 pub use provider::{ProviderStreamer, ResponsesOverride, ResponsesOverrideInput};
 pub use run_state::{RunPhase, RunRequirements, RunState};
 pub use traits::StreamingResponses;

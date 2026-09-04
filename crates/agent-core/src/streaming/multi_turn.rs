@@ -57,66 +57,6 @@ struct PendingToolArgumentEvents {
     deltas: Vec<types::ToolCallDelta>,
 }
 
-fn response_item_calls(items: &[ResponseItem]) -> Vec<types::ParsedToolCall> {
-    items
-        .iter()
-        .filter_map(|item| match item {
-            ResponseItem::FunctionCall {
-                id,
-                name,
-                namespace,
-                arguments,
-                encrypted_function_args,
-                call_id,
-                ..
-            } => Some(types::ParsedToolCall {
-                item_id: id.as_ref().map(ToString::to_string),
-                id: call_id.clone(),
-                name: name.clone(),
-                namespace: namespace.clone(),
-                arguments: serde_json::from_str(arguments)
-                    .unwrap_or_else(|_| serde_json::Value::String(arguments.clone())),
-                encrypted_arguments: encrypted_function_args.clone(),
-                args_parse_error: false,
-                signature: None,
-            }),
-            ResponseItem::CustomToolCall {
-                id,
-                call_id,
-                name,
-                namespace,
-                input,
-                ..
-            } => Some(types::ParsedToolCall {
-                item_id: id.as_ref().map(ToString::to_string),
-                id: call_id.clone(),
-                name: name.clone(),
-                namespace: namespace.clone(),
-                arguments: serde_json::Value::String(input.clone()),
-                encrypted_arguments: None,
-                args_parse_error: false,
-                signature: None,
-            }),
-            ResponseItem::ToolSearchCall {
-                id,
-                call_id: Some(call_id),
-                arguments,
-                ..
-            } => Some(types::ParsedToolCall {
-                item_id: id.as_ref().map(ToString::to_string),
-                id: call_id.clone(),
-                name: "tool_search".into(),
-                namespace: None,
-                arguments: arguments.clone(),
-                encrypted_arguments: None,
-                args_parse_error: false,
-                signature: None,
-            }),
-            _ => None,
-        })
-        .collect()
-}
-
 async fn record_assistant_output(
     agent: &Session,
     content: &str,
@@ -706,7 +646,7 @@ pub(crate) async fn run_turn(
         );
         let history = step_context.history.clone();
         let prompt_context = step_context.prompt_context.clone();
-        let tool_specs = step_context.tool_router.model_visible_specs().to_vec();
+        let sampling_prompt = super::provider::build_prompt(&prompt, &step_context);
 
         let context_usage_snapshot = emit_context_usage(
             &session,
@@ -714,7 +654,7 @@ pub(crate) async fn run_turn(
             &prompt,
             &prompt_context,
             &history,
-            &tool_specs,
+            sampling_prompt.tools.as_ref(),
         )
         .await;
 
@@ -734,29 +674,20 @@ pub(crate) async fn run_turn(
             }
         }
 
-        let sampling = match run_sampling_request(
-            &session,
-            &streamer,
-            &prompt,
-            &prompt_context,
-            &history,
-            tool_specs,
-            raw_rounds,
-        )
-        .await
-        {
-            Ok(s) => s,
-            Err(err) => {
-                return finish_task_error(
-                    &session,
-                    &turn_context,
-                    &streamer,
-                    err,
-                    saw_usage.then_some(total_usage),
-                )
-                .await;
-            }
-        };
+        let sampling =
+            match run_sampling_request(&session, &streamer, &sampling_prompt, raw_rounds).await {
+                Ok(s) => s,
+                Err(err) => {
+                    return finish_task_error(
+                        &session,
+                        &turn_context,
+                        &streamer,
+                        err,
+                        saw_usage.then_some(total_usage),
+                    )
+                    .await;
+                }
+            };
         let SamplingRequest {
             stream: raw_stream,
             provider: sampling_provider,
@@ -1029,7 +960,10 @@ pub(crate) async fn run_turn(
             emit_tool_argument_events(&session, &turn_context, &item_id, buffered).await;
         }
 
-        let response_calls = response_item_calls(&completed_response_items);
+        let response_calls = completed_response_items
+            .iter()
+            .filter_map(crate::runtime::ToolRouter::build_tool_call)
+            .collect::<Vec<_>>();
         let mut accumulated_calls = tool_acc.finish();
         for (call, index) in accumulated_calls.iter_mut().zip(tool_call_indices) {
             if let Some(item_id) = tool_argument_events
@@ -1512,7 +1446,7 @@ mod tests {
 
     #[test]
     fn native_response_call_keeps_item_and_call_identity() {
-        let calls = response_item_calls(&[ResponseItem::FunctionCall {
+        let calls = [ResponseItem::FunctionCall {
             id: Some("item_7".into()),
             name: "lookup".into(),
             namespace: Some("mcp".into()),
@@ -1520,7 +1454,10 @@ mod tests {
             encrypted_function_args: Some(vec!["ciphertext".into()]),
             call_id: "call_7".into(),
             internal_chat_message_metadata_passthrough: None,
-        }]);
+        }]
+        .iter()
+        .filter_map(crate::runtime::ToolRouter::build_tool_call)
+        .collect::<Vec<_>>();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].item_id.as_deref(), Some("item_7"));
         assert_eq!(calls[0].id, "call_7");

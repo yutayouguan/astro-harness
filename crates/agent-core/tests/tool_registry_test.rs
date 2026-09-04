@@ -30,7 +30,7 @@ fn test_check_fn_filters_unavailable() {
         toolset: "test".to_string(),
         description: "不可用工具".to_string(),
         schema: serde_json::json!({}),
-        check_fn: Some(Box::new(|| false)),
+        check_fn: Some(std::sync::Arc::new(|| false)),
         icon: "❌",
         ..ToolEntry::lifecycle_defaults()
     });

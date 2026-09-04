@@ -270,12 +270,13 @@ impl McpToolApproval {
 }
 
 /// 单个可注册工具的完整元数据条目。
+#[derive(Clone)]
 pub struct ToolEntry {
     pub name: String,
     pub toolset: String,
     pub description: String,
     pub schema: serde_json::Value,
-    pub check_fn: Option<Box<dyn Fn() -> bool + Send + Sync>>,
+    pub check_fn: Option<std::sync::Arc<dyn Fn() -> bool + Send + Sync>>,
     pub icon: &'static str,
     pub needs_confirmation: bool,
     pub stop_after_tool_call: bool,

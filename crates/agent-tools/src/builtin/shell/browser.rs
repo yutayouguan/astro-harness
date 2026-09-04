@@ -593,7 +593,7 @@ pub fn register(registry: &mut ToolRegistry) {
             namespace: BROWSER_NAMESPACE.to_string(),
             description: description.to_string(),
             schema,
-            check_fn: Some(Box::new(browser_available)),
+            check_fn: Some(std::sync::Arc::new(browser_available)),
             icon,
             exclusive_access: true,
             ..ToolEntry::lifecycle_defaults()

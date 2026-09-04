@@ -105,7 +105,7 @@ pub async fn agent_responses_stream(
             ),
         });
     }
-    let prompt = ResponsesRequest {
+    let request = ResponsesRequest {
         model: config.model.clone(),
         instructions,
         input,
@@ -122,7 +122,7 @@ pub async fn agent_responses_stream(
         prompt_cache,
         additional_params,
     };
-    responses_stream_direct(provider, prompt, &config).await
+    responses_stream_direct(provider, request, &config).await
 }
 
 /// Convenience entry point for Agent-owned one-shot tasks such as title,

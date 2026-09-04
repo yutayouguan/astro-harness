@@ -13,6 +13,29 @@ use super::fallback::{try_stream_responses_with_fallback, ActiveTargetMeta};
 use super::traits::StreamingResponses;
 use super::types::{map_new_provider_stream, AssistantContentStream};
 
+/// 一次 Responses sampling 的完整、不可变请求投影。
+#[derive(Debug, Clone)]
+pub(crate) struct Prompt {
+    pub(crate) instructions: String,
+    pub(crate) input: Vec<agent_protocol::ResponseItem>,
+    pub(crate) tools: Arc<[serde_json::Value]>,
+}
+
+/// 从 StepContext 已冻结的输入和工具计划构建 Provider prompt。
+pub(crate) fn build_prompt(
+    contract: &crate::prompt::PromptContract,
+    step_context: &crate::runtime::StepContext,
+) -> Prompt {
+    Prompt {
+        instructions: contract.base_instructions.clone(),
+        input: crate::prompt::response_input::to_response_items_with_context_history(
+            &step_context.prompt_context,
+            &step_context.history,
+        ),
+        tools: step_context.tool_router.model_visible_specs(),
+    }
+}
+
 /// 测试用 Responses 调用快照，保留顶层 instructions 与原生 item 历史的边界。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ResponsesOverrideInput {
@@ -164,12 +187,27 @@ impl ProviderStreamer {
         history: &[agent_protocol::ResponseItem],
         tools: Vec<serde_json::Value>,
     ) -> anyhow::Result<AssistantContentStream> {
-        let input = crate::prompt::response_input::to_response_items_with_context_history(
-            prompt_context,
-            history,
-        );
-        self.stream_response(prompt.base_instructions.clone(), input, tools)
-            .await
+        let prompt = Prompt {
+            instructions: prompt.base_instructions.clone(),
+            input: crate::prompt::response_input::to_response_items_with_context_history(
+                prompt_context,
+                history,
+            ),
+            tools: tools.into(),
+        };
+        self.stream_prompt(&prompt).await
+    }
+
+    pub(crate) async fn stream_prompt(
+        &self,
+        prompt: &Prompt,
+    ) -> anyhow::Result<AssistantContentStream> {
+        self.stream_response(
+            prompt.instructions.clone(),
+            prompt.input.clone(),
+            prompt.tools.to_vec(),
+        )
+        .await
     }
 }
 

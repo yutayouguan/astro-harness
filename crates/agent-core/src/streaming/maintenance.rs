@@ -527,10 +527,7 @@ fn primary_sampling_identity(streamer: &ProviderStreamer) -> (Option<String>, St
 pub(super) async fn run_sampling_request(
     session: &Arc<AgentLoop>,
     streamer: &ProviderStreamer,
-    prompt: &crate::prompt::PromptContract,
-    prompt_context: &[crate::prompt::context_state::PromptContextEvent],
-    history: &[agent_protocol::ResponseItem],
-    tool_specs: Vec<serde_json::Value>,
+    prompt: &super::provider::Prompt,
     attempt: usize,
 ) -> Result<SamplingRequest, String> {
     let started_at = Instant::now();
@@ -559,10 +556,7 @@ pub(super) async fn run_sampling_request(
             },
         );
     }
-    match streamer
-        .stream_responses_with_contract(prompt, prompt_context, history, tool_specs)
-        .await
-    {
+    match streamer.stream_prompt(prompt).await {
         Ok(s) => {
             let (provider, model) = streamer
                 .last_hit_meta()

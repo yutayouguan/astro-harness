@@ -40,13 +40,17 @@ pub use context::{
     image_gen_targets_from_parts, ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials,
     ToolContext,
 };
-pub use dispatch::{builtin_handler_names, dispatch_tool, tool_requires_in_process_write};
+pub use dispatch::{
+    builtin_handler_names, dispatch_runtime, dispatch_tool, tool_requires_in_process_write,
+};
 pub use engine::code_mode::render_tool_description as render_code_mode_tool_description;
 pub use engine::execution::{
     AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
     SpawnAgentDispatchRequest,
 };
-pub use engine::executor::{LegacyToolAdapter, ToolExecutor, ToolExecutorFuture};
+pub use engine::executor::{
+    CoreToolRuntime, DynamicToolAdapter, LegacyToolAdapter, ToolExecutor, ToolExecutorFuture,
+};
 pub use path_safe::resolve_safe;
 pub use registry::DynToolHandler;
 pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};
@@ -172,6 +176,9 @@ macro_rules! submit_builtin_tool {
 pub fn register_all(registry: &mut ToolRegistry) {
     for hook in inventory::iter::<BuiltinToolRegistrar> {
         (hook.register)(registry);
+        for name in hook.names {
+            registry.bind_builtin_runtime(name, hook.handler);
+        }
     }
 }
 
@@ -229,6 +236,20 @@ mod inventory_register_tests {
             assert!(
                 handlers.binary_search(&entry.name.as_str()).is_ok(),
                 "metadata tool `{}` has no dispatch handler",
+                entry.name
+            );
+            assert!(
+                registry.runtime(&entry.name).is_some(),
+                "metadata tool `{}` has no CoreToolRuntime",
+                entry.name
+            );
+            assert_eq!(
+                registry
+                    .runtime(&entry.name)
+                    .expect("runtime checked above")
+                    .tool_name(),
+                entry.tool_name(),
+                "runtime identity differs from metadata for `{}`",
                 entry.name
             );
         }

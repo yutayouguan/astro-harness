@@ -1,13 +1,13 @@
-//! 工具统一分发：按名称从自注册 handler 表查找并执行。
+//! 工具执行的通用记账、权限与兼容分发逻辑。
 //!
-//! 所有 Agent 侧的工具执行均经 [`dispatch_tool`] 入口，确保禁用工具、
-//! 调用统计与错误格式保持一致。中央 match 已移除；内置路由由
-//! [`crate::registry::BuiltinToolRegistrar`] inventory 构建。
+//! Agent 主链由 `ToolRegistry::dispatch` 进入 [`dispatch_runtime`]。
+//! [`dispatch_tool`] 只为独立测试和旧调用边界保留。
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use crate::context::ToolContext;
+use crate::engine::executor::CoreToolRuntime;
 use crate::registry::{BuiltinToolHandler, BuiltinToolRegistrar};
 
 /// 从 inventory 构建的内置工具 name → handler 表（启动时检测重名）。
@@ -33,7 +33,7 @@ pub fn builtin_handler_names() -> Vec<&'static str> {
     names
 }
 
-/// 按工具名将调用路由到对应实现（内置 + 动态 MCP 统一入口）。
+/// 兼容入口：按工具名从旧 inventory handler 表分发。
 ///
 /// # 流程
 /// 1. 通过 `registry_allows` 闭包检查 toolset 是否启用
@@ -78,6 +78,56 @@ pub async fn dispatch_tool(
         && skills::list_installed()
             .into_iter()
             .any(|s| s.name == name && s.enabled)
+    {
+        let rewritten = serde_json::json!({
+            "action": "load",
+            "skill_id": name,
+            "input": args,
+        });
+        if let Some(handler) = handler_table().get("skills") {
+            return handler(ctx, "skills", &rewritten).await;
+        }
+    }
+
+    anyhow::bail!("未知工具: {name}")
+}
+
+/// 执行已由 [`crate::registry::ToolRegistry`] 解析的运行时。
+///
+/// 这是 Agent 主链的规范入口；[`dispatch_tool`] 仅保留给旧测试与
+/// 尚未迁移的独立调用方。
+pub async fn dispatch_runtime(
+    allowed: bool,
+    runtime: Option<&Arc<dyn CoreToolRuntime>>,
+    ctx: &mut ToolContext<'_>,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<types::ToolOutput> {
+    if !allowed {
+        let toolset = home::tool_name_to_toolset(name);
+        anyhow::bail!("工具已禁用（tools-enabled.json → {toolset}=false）: {name}");
+    }
+
+    let agent_id = ctx.agent_id();
+    let _ = home::record_tool_call(&agent_id, name, args);
+    let _ = usage::record_tool_call(
+        &agent_id,
+        name,
+        args,
+        Some(ctx.session_id.as_str()),
+        ctx.turn_id.as_deref(),
+    )
+    .await;
+    enforce_in_process_write_policy(ctx, name, args)?;
+
+    if let Some(runtime) = runtime {
+        return runtime.handle(ctx, args).await;
+    }
+
+    if home::is_tool_call_allowed("skills")
+        && skills::list_installed()
+            .into_iter()
+            .any(|skill| skill.name == name && skill.enabled)
     {
         let rewritten = serde_json::json!({
             "action": "load",

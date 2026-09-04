@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use mcp::{call_tool_with_peer, is_mcp_tool_name};
+use mcp::is_mcp_tool_name;
 use session::ConversationStore;
 use tokio_util::sync::CancellationToken;
-use tools::{dispatch_tool, DynToolHandler, ToolContext};
+use tools::ToolContext;
 
 use super::{AgentLoop, StepContext, ToolInvocation};
 
@@ -68,10 +68,10 @@ pub(crate) struct ToolExecutionGrants {
 }
 
 impl AgentLoop {
-    /// 按名称分发工具调用：MCP 走 Hub，内置工具走 [`dispatch_tool`]。
+    /// 按名称将调用分发给 Step 冻结的 [`tools::CoreToolRuntime`]。
     ///
     /// 调用前刷新 gate 与 MCP 注册；未启用或不存在的工具直接 bail。
-    /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler。
+    /// MCP 与内置工具都由 `ToolRegistry` 持有类型擦除运行时。
     async fn dispatch_named_tool(
         &self,
         namespace: Option<&str>,
@@ -110,66 +110,13 @@ impl AgentLoop {
             self.attach_mcp_tools().await;
         }
 
-        let allowed = step_context.map_or_else(
-            || {
-                self.services
-                    .tool_registry
-                    .read()
-                    .expect("tool registry lock poisoned")
-                    .is_tool_allowed(name)
-            },
-            |step_context| step_context.tool_router.has_tool(namespace, call_name),
-        );
-
-        // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
-        // 构建 MCP 动态 handler，持有 Peer（Send + Sync），无需跨 await 持锁。
-        let mcp_handler: Option<DynToolHandler> = if is_mcp_tool_name(name) {
-            let (peer, native, timeout_secs, output_token_limit) =
-                self.mcp_hub.lock().await.resolve_tool_peer(name)?;
-            let qname = name.to_string();
-            Some(std::sync::Arc::new(
-                move |_name: &str, args: &serde_json::Value| {
-                    let peer = peer.clone();
-                    let qname = qname.clone();
-                    let native = native.clone();
-                    let a = args.clone();
-                    Box::pin(async move {
-                        call_tool_with_peer(
-                            &peer,
-                            &qname,
-                            &native,
-                            &a,
-                            timeout_secs,
-                            output_token_limit,
-                        )
-                        .await
-                    })
-                        as std::pin::Pin<
-                            Box<
-                                dyn std::future::Future<Output = anyhow::Result<types::ToolOutput>>
-                                    + Send,
-                            >,
-                        >
-                },
-            ))
-        } else {
-            None
-        };
-        let dynamic_handler = mcp_handler.or_else(|| {
-            step_context.map_or_else(
-                || {
-                    self.services
-                        .tool_registry
-                        .read()
-                        .expect("tool registry lock poisoned")
-                        .dynamic_handler(name)
-                },
-                |step_context| {
-                    step_context
-                        .tool_router
-                        .dynamic_handler(namespace, call_name)
-                },
-            )
+        let live_registry = step_context.is_none().then(|| {
+            (*self
+                .services
+                .tool_registry
+                .read()
+                .expect("tool registry lock poisoned"))
+            .clone()
         });
 
         skills::set_workspace_override(&workspace_dir);
@@ -245,7 +192,20 @@ impl AgentLoop {
             context_tokens_used: None,
             tool_registry: Some(&self.services.tool_registry),
         };
-        dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler.as_ref()).await
+        match step_context {
+            Some(step_context) => {
+                step_context
+                    .tool_router
+                    .dispatch(&mut ctx, namespace, call_name, args)
+                    .await
+            }
+            None => {
+                live_registry
+                    .expect("live registry captured without StepContext")
+                    .dispatch(&mut ctx, name, args)
+                    .await
+            }
+        }
     }
 
     /// 同步执行工具调用：multi-thread runtime 使用 `block_in_place`；current-thread

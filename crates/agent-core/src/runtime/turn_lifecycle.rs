@@ -1039,17 +1039,12 @@ impl Session {
                 .tool_registry
                 .read()
                 .expect("tool registry lock poisoned");
-            let (visible_specs, discovered_specs, nested_specs) =
-                registry.schemas_for_step_with_mode(requested_tool_mode, &discovered_deferred)?;
-            let visible_specs = tools::filter_schemas(interaction_mode, visible_specs);
-            let discovered_specs = tools::filter_schemas(interaction_mode, discovered_specs);
-            let nested_specs = tools::filter_schemas(interaction_mode, nested_specs);
-            Arc::new(crate::runtime::ToolRouter::from_registry_with_nested(
+            Arc::new(crate::runtime::tool_router::build_tool_router(
                 &registry,
-                &discovered_specs,
-                visible_specs,
-                &nested_specs,
-            ))
+                interaction_mode,
+                requested_tool_mode,
+                &discovered_deferred,
+            )?)
         };
         let step_context = Arc::new(StepContext::new(
             turn_context,
@@ -1387,6 +1382,13 @@ mod tests {
         assert_eq!(
             first.tool_router.model_visible_specs().as_ref(),
             second.tool_router.model_visible_specs().as_ref()
+        );
+        let prompt_contract = crate::prompt::PromptContract::from_base_instructions("base");
+        let sampling_prompt = crate::streaming::build_prompt(&prompt_contract, first.as_ref());
+        assert_eq!(sampling_prompt.instructions, "base");
+        assert_eq!(
+            sampling_prompt.tools.as_ref(),
+            first.tool_router.model_visible_specs().as_ref()
         );
         assert!(!first.routes_tool("web_search"));
         assert!(!first.routes_tool("exec_command"));

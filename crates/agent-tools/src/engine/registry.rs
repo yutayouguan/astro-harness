@@ -1,7 +1,7 @@
 //! 工具注册表：集中管理内置与 MCP 工具的元数据、schema 与启用状态。
 //!
-//! `ToolRegistry` 是 Agent 与 LLM API 之间的桥梁，持有所有可调用工具的
-//! [`ToolEntry`]，并按当前 Agent 的 `tools_enabled`（或全局
+//! `ToolRegistry` 是 Agent 与 LLM API 之间的桥梁，同时持有可调用工具的
+//! [`ToolEntry`] 和 [`crate::CoreToolRuntime`]，并按当前 Agent 的 `tools_enabled`（或全局
 //! `~/.astro/tools-enabled.json`）与运行时 `check_fn` 过滤出当前会话实际可用的
 //! 工具列表，供 `schemas_for_api` 下发给模型。
 
@@ -56,11 +56,12 @@ pub type DynToolHandler = Arc<
         + Sync,
 >;
 
+#[derive(Clone)]
 pub struct ToolRegistry {
     /// 已注册的全部工具条目。
     tools: HashMap<String, ToolEntry>,
-    /// 运行时动态注册的 handler（MCP 工具等）— 按工具名查找。
-    dynamic_handlers: HashMap<String, DynToolHandler>,
+    /// 工具执行运行时；与元数据使用同一 registered name 索引。
+    runtimes: HashMap<String, Arc<dyn crate::engine::executor::CoreToolRuntime>>,
     /// 与当前 Agent / 全局 `tools-enabled` 对齐的 toolset 开关；缺失键视为启用。
     enabled: HashMap<String, bool>,
     /// Skill 加载后 additive 放宽的 toolset（即使 enabled 映射为 false 也允许）。
@@ -161,7 +162,7 @@ impl ToolRegistry {
     pub fn new() -> Self {
         ToolRegistry {
             tools: HashMap::new(),
-            dynamic_handlers: HashMap::new(),
+            runtimes: HashMap::new(),
             enabled: HashMap::new(),
             skill_override_enabled: std::collections::HashSet::new(),
             extension_override_enabled: std::collections::HashSet::new(),
@@ -171,18 +172,67 @@ impl ToolRegistry {
     /// 注册一个动态工具（含 handler 闭包）。MCP 工具用此方法注册。
     pub fn register_dynamic(&mut self, entry: ToolEntry, handler: DynToolHandler) {
         let name = entry.name.clone();
+        let runtime = Arc::new(crate::engine::executor::DynamicToolAdapter::new(
+            entry.clone(),
+            Arc::clone(&handler),
+        ));
         self.tools.insert(name.clone(), entry);
-        self.dynamic_handlers.insert(name, handler);
+        self.runtimes
+            .insert(runtime.registered_name().to_string(), runtime);
     }
 
-    /// 获取动态 handler 的共享快照（供释放注册表锁后执行）。
-    pub fn dynamic_handler(&self, name: &str) -> Option<DynToolHandler> {
-        self.dynamic_handlers.get(name).cloned()
+    /// 将 inventory 元数据与其执行器绑定到同一注册表。
+    pub fn bind_builtin_runtime(&mut self, name: &str, handler: BuiltinToolHandler) {
+        let Some(entry) = self.tools.get(name).cloned() else {
+            panic!("builtin tool handler has no registered metadata: {name}");
+        };
+        self.runtimes.insert(
+            name.to_string(),
+            Arc::new(crate::engine::executor::LegacyToolAdapter::new(
+                name.to_string(),
+                entry,
+                handler,
+            )),
+        );
     }
 
-    /// 克隆动态 handler 句柄，供调用方在释放注册表锁后执行。
-    pub fn dynamic_handler_cloned(&self, name: &str) -> Option<DynToolHandler> {
-        self.dynamic_handlers.get(name).cloned()
+    /// 注册一个原生执行器及其元数据。
+    pub fn register_runtime(
+        &mut self,
+        entry: ToolEntry,
+        runtime: Arc<dyn crate::engine::executor::CoreToolRuntime>,
+    ) {
+        assert_eq!(
+            runtime.tool_name(),
+            entry.tool_name(),
+            "CoreToolRuntime identity must match ToolEntry identity"
+        );
+        let name = entry.name.clone();
+        self.tools.insert(name.clone(), entry);
+        self.runtimes.insert(name, runtime);
+    }
+
+    /// 获取可跨 Step 快照共享的执行器。
+    pub fn runtime(&self, name: &str) -> Option<Arc<dyn crate::engine::executor::CoreToolRuntime>> {
+        self.runtimes.get(name).cloned()
+    }
+
+    /// 通过注册表中的 [`crate::CoreToolRuntime`] 执行工具。
+    pub async fn dispatch(
+        &self,
+        ctx: &mut ToolContext<'_>,
+        name: &str,
+        args: &serde_json::Value,
+    ) -> anyhow::Result<types::ToolOutput> {
+        let runtime = self.runtime(name);
+        crate::dispatch::dispatch_runtime(
+            self.is_tool_allowed(name),
+            runtime.as_ref(),
+            ctx,
+            name,
+            args,
+        )
+        .await
     }
 
     /// 用外部加载的 toolset 启用映射覆盖当前状态（通常来自 Tauri 或磁盘同步）。
@@ -256,9 +306,12 @@ impl ToolRegistry {
     ///
     /// MCP 工具（`mcp__` 前缀）以是否已注册为准；其余工具按名称映射到 toolset 后检查开关。
     pub fn is_tool_allowed(&self, name: &str) -> bool {
-        // MCP：已注册即允许（注册时已按 server/tool 开关过滤）
         if name.starts_with("mcp__") {
             return self.tools.contains_key(name);
+        }
+        if let Some(entry) = self.tools.get(name) {
+            // MCP broker 等不使用 `mcp__` 前缀的动态工具仍以 toolset 判定。
+            return entry.toolset == "mcp" || self.is_toolset_enabled(&entry.toolset);
         }
         let toolset = home::tool_name_to_toolset(name);
         self.is_toolset_enabled(toolset)
@@ -281,13 +334,14 @@ impl ToolRegistry {
             .collect();
         for name in &removed {
             self.tools.remove(name);
-            self.dynamic_handlers.remove(name);
+            self.runtimes.remove(name);
         }
     }
 
     /// 按名称移除单个工具（不存在则 no-op）。
     pub fn unregister(&mut self, name: &str) {
         self.tools.remove(name);
+        self.runtimes.remove(name);
     }
 
     /// 检查是否已注册指定名称的工具。
@@ -716,7 +770,7 @@ mod tests {
             let mut entry = ToolEntry {
                 name: name.into(),
                 toolset: "core".into(),
-                check_fn: Some(Box::new(move || {
+                check_fn: Some(Arc::new(move || {
                     checks.fetch_add(1, Ordering::Relaxed);
                     true
                 })),
@@ -775,8 +829,8 @@ mod tests {
         assert!(reg.get("pin_context").unwrap().exclusive_access);
     }
 
-    #[tokio::test]
-    async fn dynamic_handler_snapshot_survives_registry_reload() {
+    #[test]
+    fn dynamic_runtime_snapshot_survives_registry_reload() {
         let mut reg = ToolRegistry::new();
         reg.register_dynamic(
             ToolEntry {
@@ -793,10 +847,11 @@ mod tests {
             }),
         );
 
-        let handler = reg.dynamic_handler("dynamic").expect("handler snapshot");
+        let snapshot = reg.clone();
         reg.unregister_toolset("mcp");
 
-        let output = handler("dynamic", &serde_json::json!({})).await.unwrap();
-        assert_eq!(output.text(), "snapshot");
+        assert!(reg.runtime("dynamic").is_none());
+        let runtime = snapshot.runtime("dynamic").expect("runtime snapshot");
+        assert_eq!(runtime.tool_name(), types::ToolName::plain("dynamic"));
     }
 }

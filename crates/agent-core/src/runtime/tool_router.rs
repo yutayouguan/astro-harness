@@ -4,18 +4,11 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
-use tools::{DynToolHandler, ToolRegistry};
+use tools::{ToolContext, ToolRegistry};
 
 #[derive(Clone)]
 struct ToolRoute {
     registered_name: String,
-    dynamic_handler: Option<DynToolHandler>,
-    needs_confirmation: bool,
-    stop_after_tool_call: bool,
-    exclusive_access: bool,
-    sandbox_preference: types::SandboxablePreference,
-    mcp_approval: Option<types::McpToolApproval>,
-    approval_requirement: types::ExecApprovalRequirement,
 }
 
 /// 不可变的注册表投影，与单次模型请求可见的工具规格配对。
@@ -24,6 +17,8 @@ struct ToolRoute {
 /// `tool_search_output` 激活的 Deferred 工具外，还可包含仅供 QuickJS cell 使用的
 /// 嵌套路由。`model_routes` 单独约束模型顶层调用，防止越过披露边界。
 pub(crate) struct ToolRouter {
+    /// 与本次 sampling request 共享生命周期的工具注册表快照。
+    registry: ToolRegistry,
     routes: HashMap<types::ToolName, ToolRoute>,
     /// 模型可以直接发起的路由；Code Mode 嵌套路由不在其中。
     model_routes: HashSet<types::ToolName>,
@@ -31,6 +26,66 @@ pub(crate) struct ToolRouter {
 }
 
 impl ToolRouter {
+    /// 将 Provider 原生 ResponseItem 解析为保留 namespace 的执行调用。
+    pub(crate) fn build_tool_call(
+        item: &agent_protocol::ResponseItem,
+    ) -> Option<types::ParsedToolCall> {
+        match item {
+            agent_protocol::ResponseItem::FunctionCall {
+                id,
+                name,
+                namespace,
+                arguments,
+                encrypted_function_args,
+                call_id,
+                ..
+            } => Some(types::ParsedToolCall {
+                item_id: id.as_ref().map(ToString::to_string),
+                id: call_id.clone(),
+                name: name.clone(),
+                namespace: namespace.clone(),
+                arguments: serde_json::from_str(arguments)
+                    .unwrap_or_else(|_| serde_json::Value::String(arguments.clone())),
+                encrypted_arguments: encrypted_function_args.clone(),
+                args_parse_error: false,
+                signature: None,
+            }),
+            agent_protocol::ResponseItem::CustomToolCall {
+                id,
+                call_id,
+                name,
+                namespace,
+                input,
+                ..
+            } => Some(types::ParsedToolCall {
+                item_id: id.as_ref().map(ToString::to_string),
+                id: call_id.clone(),
+                name: name.clone(),
+                namespace: namespace.clone(),
+                arguments: serde_json::Value::String(input.clone()),
+                encrypted_arguments: None,
+                args_parse_error: false,
+                signature: None,
+            }),
+            agent_protocol::ResponseItem::ToolSearchCall {
+                id,
+                call_id: Some(call_id),
+                arguments,
+                ..
+            } => Some(types::ParsedToolCall {
+                item_id: id.as_ref().map(ToString::to_string),
+                id: call_id.clone(),
+                name: "tool_search".into(),
+                namespace: None,
+                arguments: arguments.clone(),
+                encrypted_arguments: None,
+                args_parse_error: false,
+                signature: None,
+            }),
+            _ => None,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn from_registry(
         registry: &ToolRegistry,
@@ -45,63 +100,37 @@ impl ToolRouter {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn from_registry_with_nested(
         registry: &ToolRegistry,
         additional_callable_specs: &[serde_json::Value],
         model_visible_specs: Vec<serde_json::Value>,
         nested_callable_specs: &[serde_json::Value],
     ) -> Self {
-        let mut routes = HashMap::new();
-        let mut model_routes = HashSet::new();
-        for spec in additional_callable_specs
-            .iter()
-            .chain(model_visible_specs.iter())
-        {
-            for (tool_name, registered_name) in spec_route_names(registry, spec) {
-                model_routes.insert(tool_name.clone());
-                let Some(entry) = registry.get(&registered_name) else {
-                    continue;
-                };
-                routes.insert(
-                    tool_name,
-                    ToolRoute {
-                        registered_name: registered_name.clone(),
-                        dynamic_handler: registry.dynamic_handler(&registered_name),
-                        needs_confirmation: entry.needs_confirmation,
-                        stop_after_tool_call: entry.stop_after_tool_call,
-                        exclusive_access: entry.exclusive_access,
-                        sandbox_preference: entry.sandbox_preference,
-                        mcp_approval: entry.mcp_approval.clone(),
-                        approval_requirement: entry.approval_requirement,
-                    },
-                );
-            }
-        }
-        for spec in nested_callable_specs {
-            for (tool_name, registered_name) in spec_route_names(registry, spec) {
-                let Some(entry) = registry.get(&registered_name) else {
-                    continue;
-                };
-                let code_mode_name = types::ToolName::plain(
-                    super::code_mode::normalize_identifier(&tool_name.wire_name()),
-                );
-                routes.entry(code_mode_name).or_insert_with(|| ToolRoute {
-                    registered_name: registered_name.clone(),
-                    dynamic_handler: registry.dynamic_handler(&registered_name),
-                    needs_confirmation: entry.needs_confirmation,
-                    stop_after_tool_call: entry.stop_after_tool_call,
-                    exclusive_access: entry.exclusive_access,
-                    sandbox_preference: entry.sandbox_preference,
-                    mcp_approval: entry.mcp_approval.clone(),
-                    approval_requirement: entry.approval_requirement,
-                });
-            }
-        }
-        Self {
-            routes,
-            model_routes,
-            model_visible_specs: model_visible_specs.into(),
-        }
+        finalize_tool_router(
+            registry.clone(),
+            additional_callable_specs,
+            model_visible_specs,
+            nested_callable_specs,
+        )
+    }
+
+    fn entry(&self, namespace: Option<&str>, name: &str) -> Option<&types::ToolEntry> {
+        let registered_name = self.registered_name(namespace, name)?;
+        self.registry.get(registered_name)
+    }
+
+    pub(crate) async fn dispatch(
+        &self,
+        ctx: &mut ToolContext<'_>,
+        namespace: Option<&str>,
+        name: &str,
+        args: &serde_json::Value,
+    ) -> anyhow::Result<types::ToolOutput> {
+        let registered_name = self
+            .registered_name(namespace, name)
+            .ok_or_else(|| anyhow::anyhow!("tool is not registered in this StepContext"))?;
+        self.registry.dispatch(ctx, registered_name, args).await
     }
 
     pub(crate) fn model_visible_specs(&self) -> Arc<[serde_json::Value]> {
@@ -124,32 +153,19 @@ impl ToolRouter {
             .map(|route| route.registered_name.as_str())
     }
 
-    pub(crate) fn dynamic_handler(
-        &self,
-        namespace: Option<&str>,
-        name: &str,
-    ) -> Option<DynToolHandler> {
-        self.routes
-            .get(&types::ToolName::new(namespace, name))
-            .and_then(|route| route.dynamic_handler.clone())
-    }
-
     pub(crate) fn needs_confirmation(&self, namespace: Option<&str>, name: &str) -> bool {
-        self.routes
-            .get(&types::ToolName::new(namespace, name))
-            .is_some_and(|route| route.needs_confirmation)
+        self.entry(namespace, name)
+            .is_some_and(|entry| entry.needs_confirmation)
     }
 
     pub(crate) fn stop_after(&self, namespace: Option<&str>, name: &str) -> bool {
-        self.routes
-            .get(&types::ToolName::new(namespace, name))
-            .is_some_and(|route| route.stop_after_tool_call)
+        self.entry(namespace, name)
+            .is_some_and(|entry| entry.stop_after_tool_call)
     }
 
     pub(crate) fn exclusive_access(&self, namespace: Option<&str>, name: &str) -> bool {
-        self.routes
-            .get(&types::ToolName::new(namespace, name))
-            .is_some_and(|route| route.exclusive_access)
+        self.entry(namespace, name)
+            .is_some_and(|entry| entry.exclusive_access)
     }
 
     pub(crate) fn mcp_approval(
@@ -157,9 +173,8 @@ impl ToolRouter {
         namespace: Option<&str>,
         name: &str,
     ) -> Option<types::McpToolApproval> {
-        self.routes
-            .get(&types::ToolName::new(namespace, name))
-            .and_then(|route| route.mcp_approval.clone())
+        self.entry(namespace, name)
+            .and_then(|entry| entry.mcp_approval.clone())
     }
 
     #[allow(dead_code)]
@@ -168,17 +183,15 @@ impl ToolRouter {
         namespace: Option<&str>,
         name: &str,
     ) -> types::ExecApprovalRequirement {
-        self.routes
-            .get(&types::ToolName::new(namespace, name))
-            .map_or(types::ExecApprovalRequirement::Skip, |route| {
-                route.approval_requirement
+        self.entry(namespace, name)
+            .map_or(types::ExecApprovalRequirement::Skip, |entry| {
+                entry.approval_requirement
             })
     }
 
     pub(crate) fn may_require_approval(&self, namespace: Option<&str>, name: &str) -> bool {
-        self.routes
-            .get(&types::ToolName::new(namespace, name))
-            .is_some_and(|route| route.approval_requirement != types::ExecApprovalRequirement::Skip)
+        self.entry(namespace, name)
+            .is_some_and(|entry| entry.approval_requirement != types::ExecApprovalRequirement::Skip)
     }
 
     pub(crate) fn sandbox_preference(
@@ -186,11 +199,90 @@ impl ToolRouter {
         namespace: Option<&str>,
         name: &str,
     ) -> types::SandboxablePreference {
-        self.routes
-            .get(&types::ToolName::new(namespace, name))
-            .map_or(types::SandboxablePreference::Forbid, |route| {
-                route.sandbox_preference
+        self.entry(namespace, name)
+            .map_or(types::SandboxablePreference::Forbid, |entry| {
+                entry.sandbox_preference
             })
+    }
+}
+
+/// 根据当前交互模式和已发现 Deferred 工具构建 Step 工具计划。
+pub(crate) fn build_tool_router(
+    registry: &ToolRegistry,
+    interaction_mode: types::InteractionMode,
+    requested_tool_mode: types::ToolMode,
+    discovered_deferred: &HashSet<types::ToolName>,
+) -> anyhow::Result<ToolRouter> {
+    let (model_visible_specs, discovered_specs, nested_specs) =
+        registry.schemas_for_step_with_mode(requested_tool_mode, discovered_deferred)?;
+    let model_visible_specs = tools::filter_schemas(interaction_mode, model_visible_specs);
+    let discovered_specs = tools::filter_schemas(interaction_mode, discovered_specs);
+    let nested_specs = tools::filter_schemas(interaction_mode, nested_specs);
+    for spec in discovered_specs
+        .iter()
+        .chain(model_visible_specs.iter())
+        .chain(nested_specs.iter())
+    {
+        for (_, registered_name) in spec_route_names(registry, spec) {
+            if registry.runtime(&registered_name).is_none() {
+                anyhow::bail!(
+                    "tool `{registered_name}` is model-visible but has no CoreToolRuntime"
+                );
+            }
+        }
+    }
+    Ok(finalize_tool_router(
+        (*registry).clone(),
+        &discovered_specs,
+        model_visible_specs,
+        &nested_specs,
+    ))
+}
+
+/// 将可见 schema 和执行 Registry 冻结为一个不可变 ToolRouter。
+pub(crate) fn finalize_tool_router(
+    registry: ToolRegistry,
+    additional_callable_specs: &[serde_json::Value],
+    model_visible_specs: Vec<serde_json::Value>,
+    nested_callable_specs: &[serde_json::Value],
+) -> ToolRouter {
+    let mut routes = HashMap::new();
+    let mut model_routes = HashSet::new();
+    for spec in additional_callable_specs
+        .iter()
+        .chain(model_visible_specs.iter())
+    {
+        for (tool_name, registered_name) in spec_route_names(&registry, spec) {
+            model_routes.insert(tool_name.clone());
+            if registry.get(&registered_name).is_none() {
+                continue;
+            }
+            routes.insert(
+                tool_name,
+                ToolRoute {
+                    registered_name: registered_name.clone(),
+                },
+            );
+        }
+    }
+    for spec in nested_callable_specs {
+        for (tool_name, registered_name) in spec_route_names(&registry, spec) {
+            if registry.get(&registered_name).is_none() {
+                continue;
+            }
+            let code_mode_name = types::ToolName::plain(super::code_mode::normalize_identifier(
+                &tool_name.wire_name(),
+            ));
+            routes.entry(code_mode_name).or_insert_with(|| ToolRoute {
+                registered_name: registered_name.clone(),
+            });
+        }
+    }
+    ToolRouter {
+        registry,
+        routes,
+        model_routes,
+        model_visible_specs: model_visible_specs.into(),
     }
 }
 
@@ -290,6 +382,27 @@ mod tests {
             router.sandbox_preference(None, "missing"),
             types::SandboxablePreference::Forbid
         );
+    }
+
+    #[test]
+    fn build_tool_router_rejects_visible_metadata_without_runtime() {
+        let mut registry = ToolRegistry::new();
+        registry.register(types::ToolEntry {
+            name: "metadata_only".into(),
+            toolset: "core".into(),
+            description: "missing runtime".into(),
+            ..types::ToolEntry::lifecycle_defaults()
+        });
+
+        let error = build_tool_router(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            &HashSet::new(),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("has no CoreToolRuntime"));
     }
 
     #[test]
