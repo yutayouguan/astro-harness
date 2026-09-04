@@ -122,6 +122,16 @@ test("ranked model icons expose brand identity and attribution is localized", ()
   assert.match(messagesSource, /"modelRankings\.attribution": "Source:/);
 });
 
+test("ranking tabs auto-load each request key only once per panel mount", () => {
+  assert.match(panelSource, /useRef\(new Set<string>\(\)\)/);
+  assert.match(panelSource, /autoLoadedKeys\.current\.add\(key\)/);
+  assert.match(
+    panelSource,
+    /shouldAutoLoadRankings\(envelope, autoLoadedKeys\.current\.has\(key\)\)/,
+  );
+  assert.doesNotMatch(panelSource, /attemptedAt/);
+});
+
 test("visible app rankings use contiguous display positions", () => {
   assert.match(
     panelSource,

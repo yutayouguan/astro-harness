@@ -7,6 +7,7 @@ import {
   normalizeSessionCosts,
   normalizeTasks,
   normalizeUsageRankings,
+  shouldAutoLoadRankings,
   type OpenRouterRankingsEnvelope,
 } from "./modelRankings.ts";
 
@@ -241,4 +242,21 @@ test("uses source-specific memory cache TTLs", () => {
     ),
     false,
   );
+});
+
+test("auto-loads each ranking key at most once while preserving stale data", () => {
+  const now = Date.parse("2026-09-04T06:00:00Z");
+  const stale = envelope(
+    {},
+    { dataSource: "frontend", fetchedAt: "2026-09-04T04:59:59Z" },
+  );
+  const fresh = envelope(
+    {},
+    { dataSource: "frontend", fetchedAt: "2026-09-04T05:30:00Z" },
+  );
+
+  assert.equal(shouldAutoLoadRankings(null, false, now), true);
+  assert.equal(shouldAutoLoadRankings(stale, false, now), true);
+  assert.equal(shouldAutoLoadRankings(stale, true, now), false);
+  assert.equal(shouldAutoLoadRankings(fresh, false, now), false);
 });

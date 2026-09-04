@@ -41,7 +41,6 @@ import {
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   humanNumber,
-  isRankingsEnvelopeFresh,
   normalizeApps,
   normalizeBenchmarks,
   normalizePerformance,
@@ -49,6 +48,7 @@ import {
   normalizeTasks,
   normalizeToolRankings,
   normalizeUsageRankings,
+  shouldAutoLoadRankings,
   type BenchmarkMetric,
   type OpenRouterRankingsEnvelope,
   type RankingItem,
@@ -348,7 +348,7 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
   >(() => Object.fromEntries(rankingsMemoryCache.entries()));
   const [loadingKeys, setLoadingKeys] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const attemptedAt = useRef(new Map<string, number>());
+  const autoLoadedKeys = useRef(new Set<string>());
 
   const target = useMemo(
     () => requestTarget(section, modality),
@@ -359,7 +359,7 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
 
   const load = useCallback(
     async (forceRefresh: boolean) => {
-      attemptedAt.current.set(key, Date.now());
+      autoLoadedKeys.current.add(key);
       setLoadingKeys((current) => ({ ...current, [key]: true }));
       setErrors((current) => {
         const next = { ...current };
@@ -387,13 +387,12 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
   );
 
   useEffect(() => {
-    const lastAttempt = attemptedAt.current.get(key) ?? 0;
     if (
       !active ||
-      (envelope && isRankingsEnvelopeFresh(envelope)) ||
-      Date.now() - lastAttempt < 60_000
-    )
+      !shouldAutoLoadRankings(envelope, autoLoadedKeys.current.has(key))
+    ) {
       return;
+    }
     void load(false);
   }, [active, envelope, key, load]);
 

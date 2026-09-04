@@ -24,6 +24,19 @@ export function isRankingsEnvelopeFresh(
   return now - fetchedAt <= ttlMs;
 }
 
+/**
+ * Auto-load a ranking key at most once per mounted panel. Cached stale data is
+ * still rendered immediately, then revalidated once in the background. Manual
+ * refreshes intentionally bypass this decision.
+ */
+export function shouldAutoLoadRankings(
+  envelope: OpenRouterRankingsEnvelope | null,
+  attempted: boolean,
+  now = Date.now(),
+): boolean {
+  return !attempted && (!envelope || !isRankingsEnvelopeFresh(envelope, now));
+}
+
 export interface RankingPoint {
   x: string;
   ys: Record<string, number>;
