@@ -773,9 +773,7 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
           <div className="mm-app-grid">
             {apps.slice(0, 20).map((app, index) => (
               <article key={app.id}>
-                <span className="mm-rank-position">
-                  {app.rank || index + 1}
-                </span>
+                <span className="mm-rank-position">{index + 1}</span>
                 <AppBrandIcon
                   className="mm-app-icon"
                   appId={app.id}

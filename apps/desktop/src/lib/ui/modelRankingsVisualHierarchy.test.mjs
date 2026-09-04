@@ -121,3 +121,11 @@ test("ranked model icons expose brand identity and attribution is localized", ()
   assert.match(messagesSource, /"modelRankings\.attribution": "数据来源：/);
   assert.match(messagesSource, /"modelRankings\.attribution": "Source:/);
 });
+
+test("visible app rankings use contiguous display positions", () => {
+  assert.match(
+    panelSource,
+    /apps\.slice\(0, 20\)\.map\(\(app, index\)[\s\S]*?className="mm-rank-position">\{index \+ 1\}<\/span>/,
+  );
+  assert.doesNotMatch(panelSource, /\{app\.rank \|\| index \+ 1\}/);
+});
