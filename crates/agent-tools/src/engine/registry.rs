@@ -319,7 +319,10 @@ impl ToolRegistry {
 
     /// 注册或覆盖一个工具条目（以 `entry.name` 为键）。
     pub fn register(&mut self, entry: ToolEntry) {
-        self.tools.insert(entry.name.clone(), entry);
+        let name = entry.name.clone();
+        // 元数据被替换后，旧 runtime 不得继续与新 schema 组合。
+        self.runtimes.remove(&name);
+        self.tools.insert(name, entry);
     }
 
     /// 移除指定 toolset 下的全部条目。
@@ -853,5 +856,29 @@ mod tests {
         assert!(reg.runtime("dynamic").is_none());
         let runtime = snapshot.runtime("dynamic").expect("runtime snapshot");
         assert_eq!(runtime.tool_name(), types::ToolName::plain("dynamic"));
+    }
+
+    #[test]
+    fn replacing_metadata_invalidates_the_previous_runtime() {
+        let mut reg = ToolRegistry::new();
+        reg.register_dynamic(
+            ToolEntry {
+                name: "dynamic".into(),
+                toolset: "mcp".into(),
+                description: "old".into(),
+                ..ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("old")) })),
+        );
+        assert!(reg.runtime("dynamic").is_some());
+
+        reg.register(ToolEntry {
+            name: "dynamic".into(),
+            toolset: "mcp".into(),
+            description: "new metadata without runtime".into(),
+            ..ToolEntry::lifecycle_defaults()
+        });
+
+        assert!(reg.runtime("dynamic").is_none());
     }
 }

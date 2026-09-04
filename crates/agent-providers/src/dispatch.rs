@@ -105,11 +105,12 @@ pub async fn agent_responses_stream(
             ),
         });
     }
+    let tool_definitions = parse_tool_definitions(provider, &tools)?;
     let request = ResponsesRequest {
         model: config.model.clone(),
         instructions,
         input,
-        tools: tools.iter().filter_map(parse_tool_definition).collect(),
+        tools: tool_definitions,
         tool_choice: None,
         parallel_tool_calls: None,
         temperature: Some(config.temperature),
@@ -202,7 +203,7 @@ pub(crate) async fn chat_stream_with_tool_policy(
             other => input.push(other),
         }
     }
-    let tool_defs = tools.iter().filter_map(parse_tool_definition).collect();
+    let tool_defs = parse_tool_definitions(provider, &tools)?;
 
     let request = ChatCompletionRequest {
         model: config.model.clone(),
@@ -238,6 +239,23 @@ fn parse_tool_definition(value: &Value) -> Option<ToolDefinition> {
         Some(_) => None,
         None => parse_function_tool(value),
     }
+}
+
+fn parse_tool_definitions(provider: &str, values: &[Value]) -> ProviderResult<Vec<ToolDefinition>> {
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            parse_tool_definition(value).ok_or_else(|| ProviderError::ModelError {
+                provider: provider.to_string(),
+                detail: format!(
+                    "invalid tool definition at index {index}: type={:?} name={:?}",
+                    value.get("type").and_then(Value::as_str),
+                    value.get("name").and_then(Value::as_str)
+                ),
+            })
+        })
+        .collect()
 }
 
 fn parse_function_tool(value: &Value) -> Option<ToolDefinition> {
@@ -1002,6 +1020,27 @@ mod tests {
         }))
         .unwrap();
         assert!(matches!(namespace, ToolDefinition::Namespace(_)));
+    }
+
+    #[test]
+    fn malformed_tool_definitions_fail_closed() {
+        let error = parse_tool_definitions(
+            "openai",
+            &[
+                serde_json::json!({
+                    "type": "function",
+                    "description": "missing name"
+                }),
+                serde_json::json!({
+                    "type": "unknown",
+                    "name": "mystery"
+                }),
+            ],
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, ProviderError::ModelError { .. }));
+        assert!(error.to_string().contains("index 0"));
     }
 
     #[test]

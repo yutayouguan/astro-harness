@@ -39,17 +39,29 @@ impl ToolRouter {
                 encrypted_function_args,
                 call_id,
                 ..
-            } => Some(types::ParsedToolCall {
-                item_id: id.as_ref().map(ToString::to_string),
-                id: call_id.clone(),
-                name: name.clone(),
-                namespace: namespace.clone(),
-                arguments: serde_json::from_str(arguments)
-                    .unwrap_or_else(|_| serde_json::Value::String(arguments.clone())),
-                encrypted_arguments: encrypted_function_args.clone(),
-                args_parse_error: false,
-                signature: None,
-            }),
+            } => {
+                let (arguments, args_parse_error) =
+                    match serde_json::from_str::<serde_json::Value>(arguments) {
+                        Ok(arguments) => (arguments, false),
+                        Err(error) => (
+                            serde_json::json!({
+                                "_parse_error": format!("invalid function arguments JSON: {error}"),
+                                "_raw": arguments,
+                            }),
+                            true,
+                        ),
+                    };
+                Some(types::ParsedToolCall {
+                    item_id: id.as_ref().map(ToString::to_string),
+                    id: call_id.clone(),
+                    name: name.clone(),
+                    namespace: namespace.clone(),
+                    arguments,
+                    encrypted_arguments: encrypted_function_args.clone(),
+                    args_parse_error,
+                    signature: None,
+                })
+            }
             agent_protocol::ResponseItem::CustomToolCall {
                 id,
                 call_id,
@@ -70,9 +82,10 @@ impl ToolRouter {
             agent_protocol::ResponseItem::ToolSearchCall {
                 id,
                 call_id: Some(call_id),
+                execution,
                 arguments,
                 ..
-            } => Some(types::ParsedToolCall {
+            } if execution == "client" => Some(types::ParsedToolCall {
                 item_id: id.as_ref().map(ToString::to_string),
                 id: call_id.clone(),
                 name: "tool_search".into(),
@@ -213,6 +226,18 @@ pub(crate) fn build_tool_router(
     requested_tool_mode: types::ToolMode,
     discovered_deferred: &HashSet<types::ToolName>,
 ) -> anyhow::Result<ToolRouter> {
+    let mut canonical_names = HashMap::<types::ToolName, String>::new();
+    for entry in registry.all_tools() {
+        let tool_name = entry.tool_name();
+        if let Some(existing) = canonical_names.insert(tool_name.clone(), entry.name.clone()) {
+            if existing != entry.name {
+                anyhow::bail!(
+                    "tool identity collision for `{tool_name}` between `{existing}` and `{}`",
+                    entry.name
+                );
+            }
+        }
+    }
     let (model_visible_specs, discovered_specs, nested_specs) =
         registry.schemas_for_step_with_mode(requested_tool_mode, discovered_deferred)?;
     let model_visible_specs = tools::filter_schemas(interaction_mode, model_visible_specs);
@@ -347,6 +372,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn build_tool_call_rejects_invalid_json_before_dispatch() {
+        let call = ToolRouter::build_tool_call(&agent_protocol::ResponseItem::FunctionCall {
+            id: Some("item-invalid".into()),
+            name: "lookup".into(),
+            namespace: Some("crm".into()),
+            arguments: "{invalid".into(),
+            encrypted_function_args: None,
+            call_id: "call-invalid".into(),
+            internal_chat_message_metadata_passthrough: None,
+        })
+        .expect("function call");
+
+        assert!(call.args_parse_error);
+        assert_eq!(call.namespace.as_deref(), Some("crm"));
+        assert_eq!(call.arguments["_raw"], "{invalid");
+    }
+
+    #[test]
+    fn build_tool_call_ignores_server_executed_tool_search() {
+        let item = agent_protocol::ResponseItem::ToolSearchCall {
+            id: Some("search-1".into()),
+            call_id: Some("call-search-1".into()),
+            status: Some("completed".into()),
+            execution: "server".into(),
+            arguments: serde_json::json!({"query": "calendar"}),
+            internal_chat_message_metadata_passthrough: None,
+        };
+
+        assert!(ToolRouter::build_tool_call(&item).is_none());
+    }
+
+    #[test]
     fn snapshots_sandbox_preference_from_registry() {
         let mut registry = ToolRegistry::new();
         registry.register(types::ToolEntry {
@@ -403,6 +460,30 @@ mod tests {
         .unwrap_err();
 
         assert!(error.to_string().contains("has no CoreToolRuntime"));
+    }
+
+    #[test]
+    fn build_tool_router_rejects_duplicate_canonical_identity() {
+        let mut registry = ToolRegistry::new();
+        for registered_name in ["cron_list", "cron__list"] {
+            registry.register(types::ToolEntry {
+                name: registered_name.into(),
+                namespace: "cron".into(),
+                toolset: "cron".into(),
+                description: "duplicate native identity".into(),
+                ..types::ToolEntry::lifecycle_defaults()
+            });
+        }
+
+        let error = build_tool_router(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            &HashSet::new(),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("tool identity collision"));
     }
 
     #[test]
