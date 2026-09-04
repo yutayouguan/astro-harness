@@ -52,6 +52,7 @@ pub enum RolloutItem {
 | 函数 | 说明 |
 |------|------|
 | `should_persist_event_msg(&EventMsg) -> bool` | 判断事件是否持久化（ItemCompleted / TurnStarted / TurnComplete / TurnAborted / TokenCount / ContextUsage / UserInputCommitted / ThreadSettingsApplied / ThreadRolledBack 为 true） |
+| `latest_token_usage(&[RolloutItem])` | 恢复最新 cumulative usage/checkpoint；fork 不复制父 Thread 的累计值 |
 | `is_persisted_rollout_item(&RolloutItem) -> bool` | 判断 rollout item 是否持久化（EventMsg 委托上述函数；其余 6 种 item 始终持久） |
 
 ### 路径管理（`path.rs`）

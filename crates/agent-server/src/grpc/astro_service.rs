@@ -1136,6 +1136,7 @@ impl AstroServiceImpl {
         }
         let session = self.get_session(thread_id).await?;
         session.restore_prompt_context_from_rollout(&existing_items);
+        session.restore_token_usage_from_rollout(&existing_items);
         let rollout = agent_rollout::RolloutRecorder::open(rollout_path)
             .await
             .map_err(|error| Status::internal(error.to_string()))?;

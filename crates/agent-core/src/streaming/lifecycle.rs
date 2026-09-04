@@ -670,6 +670,9 @@ pub(crate) async fn emit_usage(
         return;
     };
     record_llm_usage(session, streamer, &usage).await;
+    session
+        .record_token_usage(turn_context.sub_id(), usage)
+        .await;
     emit(
         session,
         turn_context,

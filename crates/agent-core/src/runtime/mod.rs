@@ -2406,6 +2406,87 @@ impl Session {
         }
     }
 
+    pub(crate) async fn record_token_usage(&self, turn_id: &str, usage: providers::Usage) {
+        let latest = agent_protocol::TokenUsageTotals {
+            input_tokens: u64::from(usage.prompt_tokens()),
+            uncached_input_tokens: u64::from(usage.input_tokens),
+            output_tokens: u64::from(usage.output_tokens),
+            total_tokens: u64::from(usage.total_tokens()),
+            cache_read_tokens: u64::from(usage.cache_read_tokens),
+            cache_write_tokens: u64::from(usage.cache_write_tokens),
+            reasoning_tokens: u64::from(usage.reasoning_tokens),
+            request_count: u64::from(usage.request_count.max(1)),
+        };
+        let record = {
+            let mut state = self.lock_state();
+            let mut cumulative = state
+                .token_usage
+                .as_ref()
+                .map(|record| record.cumulative.clone())
+                .unwrap_or_default();
+            cumulative.add_assign(&latest);
+            let record = agent_protocol::TokenUsageRecord {
+                record_id: uuid::Uuid::now_v7().to_string(),
+                session_id: self.session_id.clone(),
+                turn_id: turn_id.to_string(),
+                root_turn_id: turn_id.to_string(),
+                response_id: None,
+                latest,
+                cumulative,
+                compaction_response_id: None,
+            };
+            state.token_usage = Some(record.clone());
+            record
+        };
+        if let Some(bindings) = self.runtime_io.get() {
+            if let Err(error) = bindings
+                .rollout
+                .record(vec![RolloutItem::TokenUsage(record)])
+                .await
+            {
+                tracing::warn!(%error, "failed to persist token usage record");
+            }
+        }
+    }
+
+    pub fn restore_token_usage_from_rollout(&self, items: &[RolloutItem]) {
+        self.lock_state().token_usage = agent_rollout::latest_token_usage(items);
+    }
+
+    pub fn token_usage_record(&self) -> Option<agent_protocol::TokenUsageRecord> {
+        self.lock_state().token_usage.clone()
+    }
+
+    async fn record_token_usage_checkpoint(&self, compaction_response_id: String) {
+        let record = {
+            let mut state = self.lock_state();
+            let Some(previous) = state.token_usage.as_ref() else {
+                return;
+            };
+            let record = agent_protocol::TokenUsageRecord {
+                record_id: uuid::Uuid::now_v7().to_string(),
+                session_id: previous.session_id.clone(),
+                turn_id: previous.turn_id.clone(),
+                root_turn_id: previous.root_turn_id.clone(),
+                response_id: None,
+                latest: agent_protocol::TokenUsageTotals::default(),
+                cumulative: previous.cumulative.clone(),
+                compaction_response_id: Some(compaction_response_id),
+            };
+            state.token_usage = Some(record.clone());
+            record
+        };
+        if let Some(bindings) = self.runtime_io.get() {
+            if let Err(error) = bindings
+                .rollout
+                .record(vec![RolloutItem::TokenUsage(record)])
+                .await
+            {
+                tracing::warn!(%error, "failed to persist token usage checkpoint");
+            }
+        }
+    }
+
     fn record_response_items_unlocked(&self, items: Vec<agent_protocol::ResponseItem>) {
         self.lock_state().record_items(items);
     }
@@ -2505,9 +2586,12 @@ impl Session {
                 )]
             };
         }
+        let compaction_response_id = uuid::Uuid::now_v7().to_string();
         if let Some(bindings) = self.runtime_io.get() {
-            let compacted_item =
-                RolloutItem::Compacted(serde_json::json!({ "reason": "mid-run-summary" }));
+            let compacted_item = RolloutItem::Compacted(serde_json::json!({
+                "id": compaction_response_id.clone(),
+                "reason": "mid-run-summary"
+            }));
             let world_state_item =
                 crate::prompt::context_state::rollout_update(None, &rebased_snapshot, 0);
             let mut items = vec![compacted_item];
@@ -2518,6 +2602,8 @@ impl Session {
                 tracing::warn!(%err, "failed to persist rebased prompt context");
             }
         }
+        self.record_token_usage_checkpoint(compaction_response_id)
+            .await;
     }
 
     /// 从先前持久化的 rollout 条目恢复 prompt 上下文状态。
@@ -2742,6 +2828,70 @@ mod tests {
         session.increment_turn().await;
         let second = session.create_turn_context("turn-2".into()).await;
         assert_eq!(second.turn(), 2);
+    }
+
+    #[tokio::test]
+    async fn token_usage_accumulates_and_restores_from_rollout_records() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
+        session
+            .record_token_usage(
+                "turn-1",
+                providers::Usage {
+                    input_tokens: 10,
+                    output_tokens: 5,
+                    request_count: 1,
+                    ..Default::default()
+                },
+            )
+            .await;
+        session
+            .record_token_usage(
+                "turn-2",
+                providers::Usage {
+                    input_tokens: 20,
+                    output_tokens: 7,
+                    request_count: 1,
+                    ..Default::default()
+                },
+            )
+            .await;
+        let record = session.token_usage_record().unwrap();
+        assert_eq!(record.latest.input_tokens, 20);
+        assert_eq!(record.cumulative.input_tokens, 30);
+        assert_eq!(record.cumulative.output_tokens, 12);
+        assert_eq!(record.cumulative.request_count, 2);
+
+        let restored = Session::new(test_config(&dir)).await.unwrap();
+        restored.restore_token_usage_from_rollout(&[RolloutItem::TokenUsage(record.clone())]);
+        assert_eq!(restored.token_usage_record(), Some(record));
+    }
+
+    #[tokio::test]
+    async fn compaction_writes_a_token_usage_checkpoint() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
+        session.lock_state().prompt_context_snapshot = Some(serde_json::json!({}));
+        session
+            .record_token_usage(
+                "turn-1",
+                providers::Usage {
+                    input_tokens: 10,
+                    output_tokens: 5,
+                    request_count: 1,
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        session
+            .rebase_prompt_context_after_compaction("summary")
+            .await;
+
+        let record = session.token_usage_record().unwrap();
+        assert_eq!(record.cumulative.input_tokens, 10);
+        assert!(record.compaction_response_id.is_some());
+        assert_eq!(record.latest, agent_protocol::TokenUsageTotals::default());
     }
 
     #[tokio::test]

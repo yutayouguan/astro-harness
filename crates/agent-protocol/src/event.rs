@@ -169,6 +169,51 @@ pub struct TokenCountEvent {
     pub reasoning_reported: bool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TokenUsageTotals {
+    pub input_tokens: u64,
+    pub uncached_input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
+    pub reasoning_tokens: u64,
+    pub request_count: u64,
+}
+
+impl TokenUsageTotals {
+    pub fn add_assign(&mut self, other: &Self) {
+        self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
+        self.uncached_input_tokens = self
+            .uncached_input_tokens
+            .saturating_add(other.uncached_input_tokens);
+        self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
+        self.total_tokens = self.total_tokens.saturating_add(other.total_tokens);
+        self.cache_read_tokens = self
+            .cache_read_tokens
+            .saturating_add(other.cache_read_tokens);
+        self.cache_write_tokens = self
+            .cache_write_tokens
+            .saturating_add(other.cache_write_tokens);
+        self.reasoning_tokens = self.reasoning_tokens.saturating_add(other.reasoning_tokens);
+        self.request_count = self.request_count.saturating_add(other.request_count);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TokenUsageRecord {
+    pub record_id: String,
+    pub session_id: String,
+    pub turn_id: String,
+    pub root_turn_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_id: Option<String>,
+    pub latest: TokenUsageTotals,
+    pub cumulative: TokenUsageTotals,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compaction_response_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContextUsageSource {

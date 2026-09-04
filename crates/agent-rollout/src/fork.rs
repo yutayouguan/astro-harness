@@ -52,6 +52,9 @@ pub async fn fork_rollout(
     let mut copied_user_turns = 0usize;
     let mut has_meta = false;
     for item in items {
+        if matches!(item, RolloutItem::TokenUsage(_)) {
+            continue;
+        }
         if is_user_response(&item) {
             if copied_user_turns == keep_user_turns {
                 break;
@@ -174,6 +177,19 @@ mod tests {
         recorder
             .record(vec![
                 RolloutItem::SessionMeta(serde_json::json!({"thread_id": "source"})),
+                RolloutItem::TokenUsage(agent_protocol::TokenUsageRecord {
+                    record_id: "usage-1".into(),
+                    session_id: "source".into(),
+                    turn_id: "turn-1".into(),
+                    root_turn_id: "turn-1".into(),
+                    response_id: None,
+                    latest: Default::default(),
+                    cumulative: agent_protocol::TokenUsageTotals {
+                        input_tokens: 10,
+                        ..Default::default()
+                    },
+                    compaction_response_id: None,
+                }),
                 response("user", "first"),
                 RolloutItem::WorldState(serde_json::json!({
                     "full": true,
@@ -215,6 +231,9 @@ mod tests {
         assert_eq!(meta["forked_from"]["thread_id"], "source");
         assert_eq!(meta["ephemeral"], true);
         assert_eq!(meta["exclude_turns"], true);
+        assert!(items
+            .iter()
+            .all(|item| !matches!(item, RolloutItem::TokenUsage(_))));
         let copied_messages = items
             .iter()
             .filter_map(|item| match item {

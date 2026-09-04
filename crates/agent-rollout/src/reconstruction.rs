@@ -72,6 +72,13 @@ pub fn latest_thread_settings(
     })
 }
 
+pub fn latest_token_usage(items: &[RolloutItem]) -> Option<agent_protocol::TokenUsageRecord> {
+    items.iter().rev().find_map(|item| match item {
+        RolloutItem::TokenUsage(record) => Some(record.clone()),
+        _ => None,
+    })
+}
+
 /// Rebuild the effective model history after applying append-only compaction and rollback markers.
 pub fn effective_response_history(items: &[RolloutItem]) -> Vec<ResponseItem> {
     let mut history = Vec::new();
@@ -236,7 +243,7 @@ mod tests {
 
     use super::{
         drop_last_n_user_turns, effective_response_history, latest_thread_settings,
-        read_rollout_with_diagnostics, realtime_history,
+        latest_token_usage, read_rollout_with_diagnostics, realtime_history,
     };
     use crate::RolloutItem;
 
@@ -322,6 +329,33 @@ mod tests {
         assert_eq!(
             latest_thread_settings(&items).map(|snapshot| snapshot.model),
             Some("new".into())
+        );
+    }
+
+    #[test]
+    fn latest_token_usage_prefers_the_latest_checkpoint() {
+        let record = |input_tokens, checkpoint: Option<&str>| {
+            RolloutItem::TokenUsage(agent_protocol::TokenUsageRecord {
+                record_id: format!("usage-{input_tokens}"),
+                session_id: "thread-1".into(),
+                turn_id: "turn-1".into(),
+                root_turn_id: "turn-1".into(),
+                response_id: None,
+                latest: Default::default(),
+                cumulative: agent_protocol::TokenUsageTotals {
+                    input_tokens,
+                    ..Default::default()
+                },
+                compaction_response_id: checkpoint.map(str::to_string),
+            })
+        };
+        let items = vec![record(10, None), record(30, Some("compact-1"))];
+
+        let restored = latest_token_usage(&items).unwrap();
+        assert_eq!(restored.cumulative.input_tokens, 30);
+        assert_eq!(
+            restored.compaction_response_id.as_deref(),
+            Some("compact-1")
         );
     }
 

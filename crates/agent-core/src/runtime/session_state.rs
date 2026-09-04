@@ -42,6 +42,7 @@ pub(crate) struct SessionState {
     pub(crate) skill_config_overrides: Vec<(PathBuf, bool)>,
     pub(crate) temperature: f32,
     pub(crate) additional_params: Value,
+    pub(crate) token_usage: Option<agent_protocol::TokenUsageRecord>,
 }
 
 impl SessionState {
@@ -76,6 +77,7 @@ impl SessionState {
             skill_config_overrides: Vec::new(),
             temperature: 0.7,
             additional_params: Value::Null,
+            token_usage: None,
         }
     }
 

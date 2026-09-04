@@ -116,7 +116,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 1. **原生历史**：Agent sampling、SessionStore、rollout 和 Desktop history RPC 都使用 `ResponseItem`；UI 只在渲染边界生成 `ConversationEntry`
 2. **原生命名空间**：模型工具以分离的 `namespace + name` 命中 `ToolRouter`；展平字符串只能作为展示或内部执行键
 3. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 90）；`increment_tool_round()` 超限返回 `MaxDepthError`
-4. **streaming 不变量**：每轮 assistant 回复必须先写入 history 再执行工具；usage 覆盖式累加
+4. **streaming 不变量**：每轮 assistant 回复必须先写入 history 再执行工具；usage 覆盖式累加，并以 rollout `TokenUsageRecord` 保存 resume/compaction 累计基线
 5. **取消信号**：`CancelSignal` 在工具调用前后均检查，已取消则立即中断
 6. **Session 是 Send + Sync**：所有可变状态封装在 `StdMutex` / `TokioMutex` 中，无裸 `RefCell`
 7. **事件有序性**：`event_dispatch` 锁保证 rollout 持久化与 live 投递严格有序
