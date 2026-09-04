@@ -470,25 +470,25 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
             <RefreshCw size={14} className={busy ? "spin" : ""} />
           </button>
         </div>
-
-        {section === "usage" && (
-          <div className="mm-rank-modality-tabs" role="tablist">
-            {MODALITY_ITEMS.map(({ id, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={modality === id}
-                className={modality === id ? "active" : ""}
-                onClick={() => setModality(id)}
-              >
-                <Icon size={14} />
-                {t(`modelRankings.modality.${id}` as never)}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
+
+      {section === "usage" && (
+        <div className="mm-rank-modality-tabs" role="tablist">
+          {MODALITY_ITEMS.map(({ id, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={modality === id}
+              className={modality === id ? "active" : ""}
+              onClick={() => setModality(id)}
+            >
+              <Icon size={14} />
+              {t(`modelRankings.modality.${id}` as never)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mm-rank-statusbar" aria-live="polite">
         <span>{t(`modelRankings.title.${section}` as never)}</span>

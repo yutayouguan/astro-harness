@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [panelSource, iconSource, rankingsCss, messagesSource] =
+const [panelSource, iconSource, marketCss, rankingsCss, messagesSource] =
   await Promise.all([
     readFile(
       new URL(
@@ -13,6 +13,10 @@ const [panelSource, iconSource, rankingsCss, messagesSource] =
     ),
     readFile(
       new URL("../../components/icons/ProviderIcons.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../../styles/features/model-market.css", import.meta.url),
       "utf8",
     ),
     readFile(
@@ -62,6 +66,35 @@ test("ranking navigation is one aligned rounded toolbar", () => {
     rankingsCss,
     /\.mm-rankings-commandbar \.model-market-refresh\s*\{[\s\S]*?height:\s*34px/,
   );
+  assert.match(
+    panelSource,
+    /className="mm-rankings-sticky-nav"[\s\S]*?className="mm-rankings-commandbar"[\s\S]*?<\/div>\s*<\/div>\s*\{section === "usage"/,
+  );
+  assert.match(
+    rankingsCss,
+    /\.mm-rank-modality-tabs button\s*\{[\s\S]*?border-radius:\s*999px/,
+  );
+});
+
+test("intelligence cards share the catalog card material", () => {
+  assert.match(marketCss, /--model-market-card-background:/);
+  assert.match(
+    marketCss,
+    /\.model-market-card\s*\{[\s\S]*?background:\s*var\(--model-market-card-background\)/,
+  );
+  assert.match(
+    rankingsCss,
+    /--model-intel-card-background:\s*var\(\s*--model-market-card-background/,
+  );
+  assert.match(
+    rankingsCss,
+    /\.mm-rank-primary-grid\s*\{[\s\S]*?background:\s*var\(--model-intel-card-background\)/,
+  );
+  assert.match(
+    rankingsCss,
+    /\.mm-task-layout,[\s\S]*?\.mm-app-rankings\s*\{[\s\S]*?background:\s*var\(--model-intel-card-background\)/,
+  );
+  assert.doesNotMatch(rankingsCss, /background:\s*rgba\(13, 10, 24, 0\.74\)/);
 });
 
 test("ranked model icons expose brand identity and attribution is localized", () => {
