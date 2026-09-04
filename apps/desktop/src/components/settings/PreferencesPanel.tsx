@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Activity as ActivityData, Sparkles as SparklesData } from "lucide";
 import { invoke } from "@tauri-apps/api/core";
+import { motion, useReducedMotion } from "framer-motion";
 import { useAppIcon } from "../../hooks/settings/useAppIcon";
 import { useMorphicons } from "../../hooks/app/useMorphicons";
 import type { AppIconId } from "../../types";
@@ -242,6 +243,7 @@ export default function PreferencesPanel({
   const { locale, setLocale, t } = useI18n();
   const { glassLevel, setGlassLevel } = useTheme();
   const { spring, strokeWidth, setSpring, setStrokeWidth } = useMorphicons();
+  const reduceMotion = useReducedMotion();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
   const [morphPreviewActive, setMorphPreviewActive] = useState(false);
@@ -782,7 +784,21 @@ export default function PreferencesPanel({
                       playMorphPreview();
                     }}
                   >
-                    {t(MORPHICON_SPRING_LABEL[value])}
+                    {spring === value ? (
+                      <motion.span
+                        layoutId="morphicon-spring-selection"
+                        className="morphicon-selection-indicator"
+                        transition={
+                          reduceMotion
+                            ? { duration: 0 }
+                            : { type: "spring", bounce: 0, duration: 0.32 }
+                        }
+                        aria-hidden
+                      />
+                    ) : null}
+                    <span className="morphicon-segmented-label">
+                      {t(MORPHICON_SPRING_LABEL[value])}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -809,7 +825,19 @@ export default function PreferencesPanel({
                       playMorphPreview();
                     }}
                   >
-                    {value}
+                    {strokeWidth === value ? (
+                      <motion.span
+                        layoutId="morphicon-stroke-selection"
+                        className="morphicon-selection-indicator"
+                        transition={
+                          reduceMotion
+                            ? { duration: 0 }
+                            : { type: "spring", bounce: 0, duration: 0.32 }
+                        }
+                        aria-hidden
+                      />
+                    ) : null}
+                    <span className="morphicon-segmented-label">{value}</span>
                   </button>
                 ))}
               </div>
