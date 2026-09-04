@@ -942,11 +942,12 @@ mod tests {
     }
 
     #[test]
-    fn openrouter_registers_embedding_capability() {
+    fn openrouter_registers_embedding_and_responses_capabilities() {
         let mut registry = crate::registry::Registry::new();
         register_provider(&mut registry, "openrouter", &ProviderConfig::default());
         let provider = registry.get("openrouter").unwrap();
         assert!(provider.embedding_model().is_some());
+        assert!(provider.responses_model().is_some());
         assert!(
             crate::profile::resolve("openrouter").is_some_and(|profile| profile.supports_embedding)
         );

@@ -253,7 +253,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "openrouter",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://openrouter.ai/api/v1",
         auth: AuthKind::Bearer,
         env_keys: &["OPENROUTER_API_KEY"],
@@ -270,7 +270,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
+        supports_responses: true,
     },
     ProviderProfile {
         id: "bailian",
@@ -749,7 +749,15 @@ mod tests {
 
     #[test]
     fn supports_responses_flag() {
-        for id in ["openai", "deepseek", "minimax", "azure", "bailian", "mimo"] {
+        for id in [
+            "openai",
+            "deepseek",
+            "minimax",
+            "azure",
+            "bailian",
+            "mimo",
+            "openrouter",
+        ] {
             let profile = resolve(id).unwrap();
             assert!(profile.supports_responses, "{id} should support Responses");
             assert_eq!(

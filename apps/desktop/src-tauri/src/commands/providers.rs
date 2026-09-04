@@ -2042,6 +2042,7 @@ mod tests {
     fn agent_provider_capability_is_responses_only() {
         assert!(providers::dispatch::supports_agent_responses("deepseek"));
         assert!(providers::dispatch::supports_agent_responses("openai"));
+        assert!(providers::dispatch::supports_agent_responses("openrouter"));
         assert!(!providers::dispatch::supports_agent_responses("ollama"));
     }
 

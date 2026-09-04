@@ -37,8 +37,9 @@ pub async fn sse_stream(
 }
 
 /// Responses streams are successful only after a terminal response event.
-/// A clean TCP EOF before `response.completed`/`response.incomplete` is still
-/// a truncated response and must be surfaced as an error.
+/// A clean TCP EOF before `response.completed`/`response.done`/
+/// `response.incomplete` is still a truncated response and must be surfaced as
+/// an error.
 pub async fn sse_stream_with_terminal(
     response: reqwest::Response,
     extract: ChunkExtract,

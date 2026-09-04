@@ -108,7 +108,7 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
     }
 
     match event_type {
-        "response.output_text.delta" => {
+        "response.output_text.delta" | "response.content_part.delta" => {
             if let Some(delta) = v
                 .get("delta")
                 .and_then(|d| d.as_str())
@@ -118,7 +118,7 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
             }
         }
 
-        "response.reasoning_summary_text.delta" => {
+        "response.reasoning_summary_text.delta" | "response.reasoning.delta" => {
             if let Some(delta) = v
                 .get("delta")
                 .and_then(|d| d.as_str())
@@ -230,7 +230,7 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
 
         "response.function_call_arguments.done" => {}
 
-        "response.completed" => {
+        "response.completed" | "response.done" => {
             let resp = v.get("response");
             let usage = resp.and_then(parse_openai_usage);
             let has_tool_calls = resp
@@ -324,8 +324,24 @@ mod tests {
     }
 
     #[test]
+    fn extract_openrouter_content_part_delta() {
+        let data = r#"{"type":"response.content_part.delta","delta":"Hello"}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Text(t) if t == "Hello"));
+    }
+
+    #[test]
     fn extract_reasoning_delta() {
         let data = r#"{"type":"response.reasoning_summary_text.delta","delta":"Let me think..."}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Thinking(t) if t == "Let me think..."));
+    }
+
+    #[test]
+    fn extract_openrouter_reasoning_delta() {
+        let data = r#"{"type":"response.reasoning.delta","delta":"Let me think..."}"#;
         let chunks = extract_responses_chunks(data);
         assert_eq!(chunks.len(), 1);
         assert!(matches!(&chunks[0], StreamChunk::Thinking(t) if t == "Let me think..."));
@@ -387,6 +403,17 @@ mod tests {
     #[test]
     fn extract_completed_returns_usage_and_done() {
         let data = r#"{"type":"response.completed","response":{"output":[{"type":"message"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 2);
+        assert!(matches!(&chunks[0], StreamChunk::Usage(_)));
+        assert!(
+            matches!(&chunks[1], StreamChunk::Done { ref finish_reason } if finish_reason == "stop")
+        );
+    }
+
+    #[test]
+    fn extract_openrouter_done_returns_usage_and_done() {
+        let data = r#"{"type":"response.done","response":{"output":[{"type":"message"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#;
         let chunks = extract_responses_chunks(data);
         assert_eq!(chunks.len(), 2);
         assert!(matches!(&chunks[0], StreamChunk::Usage(_)));

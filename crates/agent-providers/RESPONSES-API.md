@@ -22,11 +22,12 @@ Agent 请求使用 `ResponsesRequest`：顶层 `instructions`、`Vec<ResponseIte
 
 ## 当前内置能力
 
-当前 profile 中标记为 Responses-capable 的 Provider 包括 OpenAI、DeepSeek、Azure OpenAI、百炼、MiniMax 和 Mimo。代码中的 `ProviderProfile.supports_responses` 是权威列表；文档列表只用于说明，新增或移除能力时必须同步更新测试。
+当前 profile 中标记为 Responses-capable 的 Provider 包括 OpenAI、OpenRouter、DeepSeek、Azure OpenAI、百炼、MiniMax 和 Mimo。代码中的 `ProviderProfile.supports_responses` 是权威列表；文档列表只用于说明，新增或移除能力时必须同步更新测试。
 
 | Provider | 端点约定 | 主要差异 |
 | --- | --- | --- |
 | OpenAI | `POST /v1/responses` | `store: false`、parallel tools、reasoning summary |
+| OpenRouter | `POST /api/v1/responses` | 无状态兼容层；共享解析器同时接受 `content_part.delta`、`reasoning.delta` 与 `response.done` |
 | DeepSeek | `POST /v1/responses` | OpenAI Responses 兼容；thinking 字段由 adapter 归一化 |
 | Azure OpenAI | `POST /openai/v1/responses` | 静态 API Key 以 `Authorization: Bearer` 发送；deployment name 位于 model 字段；强制 `store: false`；支持 v1 Embeddings |
 | 百炼 | `POST /compatible-mode/v1/responses` | thinking/cache 扩展参数；不支持 background |
@@ -35,7 +36,7 @@ Agent 请求使用 `ResponsesRequest`：顶层 `instructions`、`Vec<ResponseIte
 
 ## 暂不进入 Agent 路由
 
-Anthropic、Google/Gemini、Ollama、OpenRouter、智谱、Moonshot、火山、混元、NVIDIA 等 profile 当前未声明 Responses capability。即使它们拥有 Chat Completions、Messages、Interactions 或原生协议实现，也不能作为 Agent primary/fallback target。
+Anthropic、Google/Gemini、Ollama、智谱、Moonshot、火山、混元、NVIDIA 等 profile 当前未声明 Responses capability。即使它们拥有 Chat Completions、Messages、Interactions 或原生协议实现，也不能作为 Agent primary/fallback target。
 
 若上游后来提供 Responses，必须完成兼容验证后再打开 capability；不能仅因为端点名称存在就启用。
 
