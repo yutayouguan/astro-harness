@@ -134,7 +134,33 @@ test("normalizes public app rankings", () => {
               total_tokens: "42",
               total_requests: 3,
               rank: 1,
-              app: { slug: "astro", title: "Astro", categories: ["agent"] },
+              app: {
+                slug: "astro",
+                title: "Astro",
+                origin_url: "https://astro.example/",
+                main_url: "https://github.com/example/astro",
+                categories: ["agent"],
+              },
+            },
+            {
+              app_id: 8,
+              total_tokens: "21",
+              total_requests: 2,
+              rank: 2,
+              app: {
+                slug: "fallback",
+                title: "Fallback",
+                origin_url: "javascript:alert(1)",
+                main_url: "https://fallback.example/",
+                categories: [],
+              },
+            },
+            {
+              app_id: 9,
+              total_tokens: "10",
+              total_requests: 1,
+              rank: 3,
+              app: { slug: "missing-link", title: "Missing Link" },
             },
           ],
         },
@@ -145,6 +171,9 @@ test("normalizes public app rankings", () => {
 
   assert.equal(rows[0]?.name, "Astro");
   assert.equal(rows[0]?.tokens, 42);
+  assert.equal(rows[0]?.websiteUrl, "https://astro.example/");
+  assert.equal(rows[1]?.websiteUrl, "https://fallback.example/");
+  assert.equal(rows.length, 2);
 });
 
 test("normalizes frontend task spend and model deltas", () => {

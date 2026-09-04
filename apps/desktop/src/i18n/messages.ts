@@ -412,6 +412,7 @@ export const zh = {
   "modelRankings.benchmark.agentic": "Agent",
   "modelRankings.apps.title": "本周热门 Apps",
   "modelRankings.apps.subtitle": "按 OpenRouter Token 处理量排序",
+  "modelRankings.apps.openWebsite": "打开 {name} 官网",
   "modelRankings.cost.title": "Core 会话成本",
   "modelRankings.cost.subtitle": "近 30 天编程 Agent 中位数，从低到高",
   "modelRankings.column.model": "模型",
@@ -3390,6 +3391,7 @@ export const en: Record<MessageKey, string> = {
   "modelRankings.apps.title": "Popular apps this week",
   "modelRankings.apps.subtitle":
     "Ranked by tokens processed through OpenRouter",
+  "modelRankings.apps.openWebsite": "Open the official {name} website",
   "modelRankings.cost.title": "Core session cost",
   "modelRankings.cost.subtitle": "30-day coding-agent median, lowest first",
   "modelRankings.column.model": "Model",

@@ -139,3 +139,11 @@ test("visible app rankings use contiguous display positions", () => {
   );
   assert.doesNotMatch(panelSource, /\{app\.rank \|\| index \+ 1\}/);
 });
+
+test("every visible ranked app links to its validated official website", () => {
+  assert.match(panelSource, /className="mm-app-official-link"/);
+  assert.match(panelSource, /href=\{app\.websiteUrl\}/);
+  assert.match(panelSource, /target="_blank"/);
+  assert.match(panelSource, /rel="noreferrer noopener"/);
+  assert.match(rankingsCss, /\.mm-app-official-link:focus-visible/);
+});

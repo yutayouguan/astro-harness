@@ -10,6 +10,7 @@ import {
   Bug,
   Code2,
   Database,
+  ExternalLink,
   FileText,
   Files,
   Gauge,
@@ -780,7 +781,23 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
                   size={22}
                 />
                 <div>
-                  <h4>{app.name}</h4>
+                  <h4>
+                    <a
+                      className="mm-app-official-link"
+                      href={app.websiteUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      aria-label={t("modelRankings.apps.openWebsite" as never, {
+                        name: app.name,
+                      })}
+                      title={t("modelRankings.apps.openWebsite" as never, {
+                        name: app.name,
+                      })}
+                    >
+                      <span>{app.name}</span>
+                      <ExternalLink size={11} aria-hidden="true" />
+                    </a>
+                  </h4>
                   {app.categories.length > 0 && (
                     <p>{app.categories.join(" · ")}</p>
                   )}

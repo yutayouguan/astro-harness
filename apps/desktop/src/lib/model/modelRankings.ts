@@ -91,6 +91,7 @@ export interface AppRanking {
   id: string;
   name: string;
   description: string;
+  websiteUrl: string;
   tokens: number;
   requests: number;
   rank: number;
@@ -126,6 +127,22 @@ function number(value: unknown): number | null {
 
 function string(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function externalHttpUrl(...values: unknown[]): string | null {
+  for (const value of values) {
+    const candidate = string(value);
+    if (!candidate) continue;
+    try {
+      const url = new URL(candidate);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        return url.toString();
+      }
+    } catch {
+      // Ignore malformed upstream URLs and try the next official source.
+    }
+  }
+  return null;
 }
 
 function unwrapPayload(envelope: OpenRouterRankingsEnvelope): JsonRecord {
@@ -453,12 +470,21 @@ export function normalizeApps(
         string(app?.slug) ??
         (number(row?.app_id) ?? number(app?.id))?.toString() ??
         string(row?.app_name);
-      if (!row || !id) return [];
+      const websiteUrl = externalHttpUrl(
+        app?.origin_url,
+        app?.main_url,
+        app?.source_code_url,
+        row?.origin_url,
+        row?.main_url,
+        row?.source_code_url,
+      );
+      if (!row || !id || !websiteUrl) return [];
       return [
         {
           id,
           name: string(row.app_name) ?? string(app?.title) ?? id,
           description: string(app?.description) ?? "",
+          websiteUrl,
           tokens: number(row.total_tokens) ?? 0,
           requests: number(row.total_requests) ?? 0,
           rank: number(row.rank) ?? 0,

@@ -718,6 +718,46 @@
   font-size: 12px;
 }
 
+.mm-app-official-link {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.mm-app-official-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mm-app-official-link svg {
+  flex: 0 0 auto;
+  opacity: 0.5;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.mm-app-official-link:hover,
+.mm-app-official-link:focus-visible {
+  color: var(--tone);
+}
+
+.mm-app-official-link:hover svg,
+.mm-app-official-link:focus-visible svg {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+
+.mm-app-official-link:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid color-mix(in srgb, var(--tone) 54%, transparent);
+  outline-offset: 2px;
+}
+
 .mm-app-grid p,
 .mm-app-grid article > div > span {
   display: block;
