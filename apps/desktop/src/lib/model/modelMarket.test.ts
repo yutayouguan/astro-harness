@@ -4,6 +4,7 @@ import {
   matchesModelMarketFilter,
   matchesModelMarketType,
   providerSaveInputWithEmbedding,
+  shouldShowModelMarketCapabilities,
   type ModelCatalogEntry,
 } from "./modelMarket.ts";
 
@@ -77,6 +78,13 @@ test("media capability filters remain distinct", () => {
   const inputOnlyAudio = model({ supports_audio_input: true });
   assert.equal(matchesModelMarketFilter(inputOnlyAudio, "speech"), false);
   assert.equal(matchesModelMarketFilter(inputOnlyAudio, "transcription"), false);
+});
+
+test("specialized model types hide generation capability filters", () => {
+  assert.equal(shouldShowModelMarketCapabilities("all"), true);
+  assert.equal(shouldShowModelMarketCapabilities("generation"), true);
+  assert.equal(shouldShowModelMarketCapabilities("embedding"), false);
+  assert.equal(shouldShowModelMarketCapabilities("rerank"), false);
 });
 
 test("embedding setup preserves the provider contract", () => {

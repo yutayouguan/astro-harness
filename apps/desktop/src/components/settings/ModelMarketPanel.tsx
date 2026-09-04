@@ -36,6 +36,7 @@ import {
   matchesModelMarketFilter,
   matchesModelMarketType,
   providerSaveInputWithEmbedding,
+  shouldShowModelMarketCapabilities,
   type ModelCatalogEntry,
   type ModelMarketFilter,
   type ModelMarketTypeFilter,
@@ -601,6 +602,7 @@ export default function ModelMarketPanel({
       ) ?? null,
     [providersState],
   );
+  const showCapabilityFilters = shouldShowModelMarketCapabilities(modelType);
 
   const configureEmbedding = useCallback(
     async (model: ModelCatalogEntry) => {
@@ -634,7 +636,7 @@ export default function ModelMarketPanel({
       list = list.filter((model) => matchesModelMarketType(model, modelType));
     }
 
-    if (filter !== "all") {
+    if (showCapabilityFilters && filter !== "all") {
       list = list.filter((model) => matchesModelMarketFilter(model, filter));
     }
 
@@ -671,7 +673,7 @@ export default function ModelMarketPanel({
     });
 
     return list;
-  }, [models, modelType, filter, search, sort, sortAsc]);
+  }, [models, modelType, showCapabilityFilters, filter, search, sort, sortAsc]);
 
   const PAGE_SIZE = 50;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -888,23 +890,25 @@ export default function ModelMarketPanel({
           })}
         </div>
 
-        {/* Capability filters */}
-        <div className="model-market-filters">
-          {FILTERS.map(({ key, Icon }) => (
-            <button
-              key={key}
-              type="button"
-              className={`model-market-filter-btn ${filter === key ? "active" : ""}`}
-              onClick={() => setFilter(key)}
-            >
-              <Icon size={13} />
-              {t(`modelMarket.filter.${key}` as never)}
-            </button>
-          ))}
-          <span className="model-market-count">
-            {t("modelMarket.total", { count: String(filtered.length) })}
-          </span>
-        </div>
+        {/* Capability filters only apply to general generation models. */}
+        {showCapabilityFilters && (
+          <div className="model-market-filters">
+            {FILTERS.map(({ key, Icon }) => (
+              <button
+                key={key}
+                type="button"
+                className={`model-market-filter-btn ${filter === key ? "active" : ""}`}
+                onClick={() => setFilter(key)}
+              >
+                <Icon size={13} />
+                {t(`modelMarket.filter.${key}` as never)}
+              </button>
+            ))}
+            <span className="model-market-count">
+              {t("modelMarket.total", { count: String(filtered.length) })}
+            </span>
+          </div>
+        )}
 
         {/* List / Detail split */}
         {viewMode === "detail" ? (

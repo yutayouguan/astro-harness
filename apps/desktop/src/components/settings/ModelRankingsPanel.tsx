@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   humanNumber,
+  isRankingsEnvelopeFresh,
   normalizeApps,
   normalizeBenchmarks,
   normalizePerformance,
@@ -86,6 +87,7 @@ const MODALITY_ITEMS: Array<{
 ];
 
 const SERIES_COLORS = ["#8b5cf6", "#0ea5e9", "#10b981", "#f59e0b", "#f43f5e"];
+const rankingsMemoryCache = new Map<string, OpenRouterRankingsEnvelope>();
 
 function requestTarget(
   section: RankingsSection,
@@ -254,11 +256,15 @@ function RankedList({
   );
 }
 
-function LoadingState() {
+function LoadingState({ label }: { label: string }) {
   return (
     <div className="mm-rank-loading" aria-live="polite">
-      <RefreshCw className="spin" size={18} />
-      <span>Loading OpenRouter rankings…</span>
+      <div className="mm-rank-loading-bars" aria-hidden="true">
+        {Array.from({ length: 9 }, (_, index) => (
+          <i key={index} style={{ animationDelay: `${index * -70}ms` }} />
+        ))}
+      </div>
+      <span>{label}</span>
     </div>
   );
 }
@@ -272,10 +278,10 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
   const [taskMetric, setTaskMetric] = useState<"spend" | "tokens">("spend");
   const [responses, setResponses] = useState<
     Record<string, OpenRouterRankingsEnvelope>
-  >({});
+  >(() => Object.fromEntries(rankingsMemoryCache.entries()));
   const [loadingKeys, setLoadingKeys] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const attemptedKeys = useRef(new Set<string>());
+  const attemptedAt = useRef(new Map<string, number>());
 
   const target = useMemo(
     () => requestTarget(section, modality),
@@ -286,6 +292,7 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
 
   const load = useCallback(
     async (forceRefresh: boolean) => {
+      attemptedAt.current.set(key, Date.now());
       setLoadingKeys((current) => ({ ...current, [key]: true }));
       setErrors((current) => {
         const next = { ...current };
@@ -301,6 +308,7 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
             forceRefresh,
           },
         );
+        rankingsMemoryCache.set(key, result);
         setResponses((current) => ({ ...current, [key]: result }));
       } catch (reason) {
         setErrors((current) => ({ ...current, [key]: String(reason) }));
@@ -312,8 +320,13 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
   );
 
   useEffect(() => {
-    if (!active || envelope || attemptedKeys.current.has(key)) return;
-    attemptedKeys.current.add(key);
+    const lastAttempt = attemptedAt.current.get(key) ?? 0;
+    if (
+      !active ||
+      (envelope && isRankingsEnvelopeFresh(envelope)) ||
+      Date.now() - lastAttempt < 60_000
+    )
+      return;
     void load(false);
   }, [active, envelope, key, load]);
 
@@ -426,7 +439,9 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
         )}
       </div>
 
-      {busy && !envelope && <LoadingState />}
+      {busy && !envelope && (
+        <LoadingState label={t("modelRankings.loading" as never)} />
+      )}
       {error && !envelope && (
         <div className="mm-rank-error">
           <strong>{t("modelRankings.error.title" as never)}</strong>

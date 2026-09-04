@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isRankingsEnvelopeFresh,
   normalizeApps,
   normalizeBenchmarks,
   normalizeSessionCosts,
@@ -202,4 +203,25 @@ test("uses the core bucket for session cost comparison", () => {
   assert.deepEqual(rows, [
     { id: "a/model", harness: "Agent A", medianUsd: 0.5 },
   ]);
+});
+
+test("uses source-specific memory cache TTLs", () => {
+  const now = Date.parse("2026-09-04T00:10:00Z");
+  assert.equal(
+    isRankingsEnvelopeFresh(
+      envelope({}, { fetchedAt: "2026-09-04T00:00:30Z" }),
+      now,
+    ),
+    true,
+  );
+  assert.equal(
+    isRankingsEnvelopeFresh(
+      envelope(
+        {},
+        { dataSource: "frontend", fetchedAt: "2026-09-04T00:00:30Z" },
+      ),
+      now,
+    ),
+    false,
+  );
 });

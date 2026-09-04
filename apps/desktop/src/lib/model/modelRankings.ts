@@ -13,6 +13,16 @@ export interface OpenRouterRankingsEnvelope {
   payload: unknown;
 }
 
+export function isRankingsEnvelopeFresh(
+  envelope: OpenRouterRankingsEnvelope,
+  now = Date.now(),
+): boolean {
+  const fetchedAt = new Date(envelope.fetchedAt).getTime();
+  if (!Number.isFinite(fetchedAt)) return false;
+  const ttlMs = envelope.dataSource === "official" ? 15 * 60_000 : 5 * 60_000;
+  return now - fetchedAt <= ttlMs;
+}
+
 export interface RankingPoint {
   x: string;
   ys: Record<string, number>;

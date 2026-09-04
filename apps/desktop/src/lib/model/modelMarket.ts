@@ -45,6 +45,12 @@ export type ModelMarketFilter =
 
 export type ModelMarketTypeFilter = "all" | ModelCatalogKind;
 
+export function shouldShowModelMarketCapabilities(
+  type: ModelMarketTypeFilter,
+): boolean {
+  return type === "all" || type === "generation";
+}
+
 export function matchesModelMarketType(
   model: ModelCatalogEntry,
   type: ModelMarketTypeFilter,
