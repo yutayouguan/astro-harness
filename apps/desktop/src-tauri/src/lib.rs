@@ -242,6 +242,7 @@ pub fn run() {
             commands::chat::interrupt_resume,
             commands::chat::resolve_elicitation,
             commands::chat::update_turn_settings,
+            commands::chat::reconcile_extensions,
             commands::chat::approve_guardian_denied_action,
             commands::chat::run_user_shell_command,
             commands::terminal::terminal_open,

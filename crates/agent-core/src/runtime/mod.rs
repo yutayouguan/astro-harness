@@ -2745,6 +2745,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reconciled_extensions_activate_only_at_the_next_turn_boundary() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
+        let first_turn = session.create_turn_context("turn-1".into()).await;
+        session.bind_turn_context(first_turn).await;
+        let first = session.extension_snapshot_for_current_turn().await.unwrap();
+        assert!(first.extensions().is_empty());
+
+        let extension = dir.path().join("extensions/demo");
+        std::fs::create_dir_all(&extension).unwrap();
+        std::fs::write(
+            extension.join(crate::extensions::EXTENSION_MANIFEST_FILE),
+            "schema_version = 1\nid = 'demo'\n[[tools]]\ntoolset = 'image_gen'\n",
+        )
+        .unwrap();
+        let report = session.reconcile_extensions().await.unwrap();
+        assert_eq!(report.changed_extensions.len(), 1);
+        assert!(session
+            .current_extension_snapshot()
+            .await
+            .is_some_and(|snapshot| snapshot.extensions().is_empty()));
+
+        session.clear_current_turn_id().await;
+        let second_turn = session.create_turn_context("turn-2".into()).await;
+        session.bind_turn_context(second_turn).await;
+        let second = session.extension_snapshot_for_current_turn().await.unwrap();
+        assert_eq!(second.extensions()[0].manifest.id, "demo");
+    }
+
+    #[tokio::test]
     async fn session_groups_mutable_runtime_state_behind_its_internal_lock() {
         let dir = TempDir::new().unwrap();
         let session = Session::new(test_config(&dir)).await.unwrap();

@@ -72,7 +72,7 @@ listener 从 durable `ThreadSettingsApplied` 事件恢复 `provider_id`、`backe
 
 - **`agent`（agent-core）** — 调用 `AgentBuilder` / `Session` / `AstroThread` 构建和运行 Agent 循环
 - **`subagents`** — Agent Thread V2 控制面：`AgentControl` 活动观察和 watcher 管理
-- **`proto`** — Protobuf gRPC 服务契约（`AstroService` 35 RPC）
+- **`proto`** — Protobuf gRPC 服务契约（`AstroService` 36 RPC，含 Extension reconcile）
 - **`providers`** — 读取环境 API Key（`read_env_api_key`）和默认模型
 - **`session`** — `SessionStore` 打开会话存储
 - **`memory`** — `ensure_workspace` 初始化工作区、`MemoryManager` 记忆 review

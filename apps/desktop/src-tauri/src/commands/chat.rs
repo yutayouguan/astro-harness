@@ -5,8 +5,8 @@ use proto::{
     ApproveGuardianDeniedActionRequest, ChatControlAction, ChatControlRequest, ChatRequest,
     ImageRequest, MemoryQuery, RealtimeConversationAudioRequest, RealtimeConversationRequest,
     RealtimeConversationSpeechRequest, RealtimeConversationStartRequest,
-    RealtimeConversationTextRequest, ResolveElicitationRequest, RunUserShellCommandRequest,
-    SteerChatRequest, UpdateTurnSettingsRequest,
+    RealtimeConversationTextRequest, ReconcileExtensionsRequest, ResolveElicitationRequest,
+    RunUserShellCommandRequest, SteerChatRequest, UpdateTurnSettingsRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -1107,6 +1107,25 @@ pub struct TurnSettingsResultDto {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionReconcileChangeDto {
+    pub extension_id: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionReconcileResultDto {
+    pub previous_version: String,
+    pub next_version: String,
+    pub changed_extensions: Vec<ExtensionReconcileChangeDto>,
+    pub refresh_mcp: bool,
+    pub refresh_skills: bool,
+    pub refresh_hooks: bool,
+    pub refresh_toolsets: bool,
+}
+
 #[tauri::command]
 pub async fn update_turn_settings(
     session_id: String,
@@ -1134,6 +1153,36 @@ pub async fn update_turn_settings(
     Ok(TurnSettingsResultDto {
         status: response.status,
         message: response.message,
+    })
+}
+
+#[tauri::command]
+pub async fn reconcile_extensions(
+    session_id: String,
+) -> Result<ExtensionReconcileResultDto, String> {
+    let mut client = AstroServiceClient::connect(endpoint_url(&default_grpc_address()))
+        .await
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .reconcile_extensions(ReconcileExtensionsRequest { session_id })
+        .await
+        .map_err(|error| error.to_string())?
+        .into_inner();
+    Ok(ExtensionReconcileResultDto {
+        previous_version: response.previous_version,
+        next_version: response.next_version,
+        changed_extensions: response
+            .changed_extensions
+            .into_iter()
+            .map(|change| ExtensionReconcileChangeDto {
+                extension_id: change.extension_id,
+                kind: change.kind,
+            })
+            .collect(),
+        refresh_mcp: response.refresh_mcp,
+        refresh_skills: response.refresh_skills,
+        refresh_hooks: response.refresh_hooks,
+        refresh_toolsets: response.refresh_toolsets,
     })
 }
 
