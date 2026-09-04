@@ -104,6 +104,29 @@ impl Registry {
         self.providers.insert(Ext::NAME.to_string(), provider);
     }
 
+    /// 注册只支持 Chat + Embedding 的 OpenAI 兼容 provider。
+    pub fn register_compat_with_embedding<Ext>(
+        &mut self,
+        api_key: &str,
+        base_url: Option<&str>,
+        model: &str,
+    ) where
+        Ext: crate::compat::OpenAICompatible
+            + crate::traits::ProviderExt
+            + crate::traits::Capabilities<
+                Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>,
+                Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>,
+            > + Default
+            + Copy
+            + 'static,
+    {
+        let client = self.make_client(api_key, base_url, Ext::default());
+        let provider = DynProvider::new(Ext::NAME, Ext::NAME)
+            .with_chat_completion(client.chat_completion_model(model))
+            .with_embedding(client.embedding_model(model));
+        self.providers.insert(Ext::NAME.to_string(), provider);
+    }
+
     /// 注册 OpenAI provider（Chat + Embedding + ImageGen + TTS）。
     pub fn register_openai(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::openai::OpenAI;

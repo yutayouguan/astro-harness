@@ -267,7 +267,7 @@ export const zh = {
   "modelMarket.sort.context": "上下文",
   "modelMarket.sort.newest": "最新",
   "modelMarket.sort.name": "名称",
-  "modelMarket.filter.all": "全部",
+  "modelMarket.filter.all": "全部能力",
   "modelMarket.filter.tools": "工具调用",
   "modelMarket.filter.reasoning": "推理",
   "modelMarket.filter.vision": "视觉",
@@ -277,6 +277,11 @@ export const zh = {
   "modelMarket.filter.rerank": "重排模型",
   "modelMarket.filter.free": "免费",
   "modelMarket.capability.web": "网络搜索",
+  "modelMarket.type.label": "模型类型",
+  "modelMarket.type.all": "全部类型",
+  "modelMarket.type.generation": "生成模型",
+  "modelMarket.type.embedding": "嵌入模型",
+  "modelMarket.type.rerank": "重排模型",
   "modelMarket.context": "上下文",
   "modelMarket.inputPrice": "输入",
   "modelMarket.outputPrice": "输出",
@@ -288,6 +293,8 @@ export const zh = {
   "modelMarket.view.detail": "详情",
   "modelMarket.detail.description": "描述",
   "modelMarket.detail.specs": "规格",
+  "modelMarket.detail.type": "模型类型",
+  "modelMarket.detail.inputLimit": "输入上限",
   "modelMarket.detail.promptPrice": "输入价格",
   "modelMarket.detail.completionPrice": "输出价格",
   "modelMarket.detail.cacheRead": "缓存读取",
@@ -298,6 +305,18 @@ export const zh = {
   "modelMarket.detail.capabilities": "能力",
   "modelMarket.detail.modalities": "模态",
   "modelMarket.detail.selectHint": "从左侧列表选择一个模型",
+  "modelMarket.runtime.title": "Astro 集成",
+  "modelMarket.runtime.embeddingAvailable":
+    "Astro 支持通过 OpenRouter 调用该嵌入模型。",
+  "modelMarket.runtime.embeddingReady": "已配置且 OpenRouter 可用。",
+  "modelMarket.runtime.embeddingNeedsProvider":
+    "模型已配置；启用 OpenRouter 并配置 API Key 后可用。",
+  "modelMarket.runtime.rerankUnavailable":
+    "当前仅展示目录信息，Astro 尚未接入重排执行链。",
+  "modelMarket.runtime.openRouterMissing": "请先添加 OpenRouter 提供商",
+  "modelMarket.runtime.configure": "设为嵌入模型",
+  "modelMarket.runtime.configured": "已设置",
+  "modelMarket.runtime.saving": "保存中…",
 
   "common.close": "关闭",
 
@@ -3115,7 +3134,7 @@ export const en: Record<MessageKey, string> = {
   "modelMarket.sort.context": "Context",
   "modelMarket.sort.newest": "Newest",
   "modelMarket.sort.name": "Name",
-  "modelMarket.filter.all": "All",
+  "modelMarket.filter.all": "All capabilities",
   "modelMarket.filter.tools": "Tools",
   "modelMarket.filter.reasoning": "Reasoning",
   "modelMarket.filter.vision": "Vision",
@@ -3125,6 +3144,11 @@ export const en: Record<MessageKey, string> = {
   "modelMarket.filter.rerank": "Rerank",
   "modelMarket.filter.free": "Free",
   "modelMarket.capability.web": "Web search",
+  "modelMarket.type.label": "Model type",
+  "modelMarket.type.all": "All types",
+  "modelMarket.type.generation": "Generation",
+  "modelMarket.type.embedding": "Embedding",
+  "modelMarket.type.rerank": "Rerank",
   "modelMarket.context": "Context",
   "modelMarket.inputPrice": "Input",
   "modelMarket.outputPrice": "Output",
@@ -3136,6 +3160,8 @@ export const en: Record<MessageKey, string> = {
   "modelMarket.view.detail": "Detail",
   "modelMarket.detail.description": "Description",
   "modelMarket.detail.specs": "Specifications",
+  "modelMarket.detail.type": "Model type",
+  "modelMarket.detail.inputLimit": "Input limit",
   "modelMarket.detail.promptPrice": "Input price",
   "modelMarket.detail.completionPrice": "Output price",
   "modelMarket.detail.cacheRead": "Cache read",
@@ -3146,6 +3172,19 @@ export const en: Record<MessageKey, string> = {
   "modelMarket.detail.capabilities": "Capabilities",
   "modelMarket.detail.modalities": "Modalities",
   "modelMarket.detail.selectHint": "Select a model from the list",
+  "modelMarket.runtime.title": "Astro integration",
+  "modelMarket.runtime.embeddingAvailable":
+    "Astro can use this embedding model through OpenRouter.",
+  "modelMarket.runtime.embeddingReady":
+    "Configured and ready through OpenRouter.",
+  "modelMarket.runtime.embeddingNeedsProvider":
+    "Model saved. Enable OpenRouter and configure its API key to use it.",
+  "modelMarket.runtime.rerankUnavailable":
+    "Catalog information only. Astro does not yet have a reranking execution path.",
+  "modelMarket.runtime.openRouterMissing": "Add an OpenRouter provider first",
+  "modelMarket.runtime.configure": "Use for embeddings",
+  "modelMarket.runtime.configured": "Configured",
+  "modelMarket.runtime.saving": "Saving…",
 
   "common.close": "Close",
 

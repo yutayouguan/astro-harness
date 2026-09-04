@@ -768,7 +768,7 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
             register_media::<crate::impls::volcengine::Volcengine>(reg, key, base, model)
         }
         "openrouter" => {
-            register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
+            register_embedding::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
         }
         "minimax" => reg.register_minimax(key, base, model),
         "minimax-anthropic" => {
@@ -885,6 +885,24 @@ fn register_media<Ext>(
     reg.register_compat_with_media::<Ext>(api_key, base_url, model);
 }
 
+fn register_embedding<Ext>(
+    reg: &mut crate::registry::Registry,
+    api_key: &str,
+    base_url: Option<&str>,
+    model: &str,
+) where
+    Ext: crate::compat::OpenAICompatible
+        + crate::traits::ProviderExt
+        + crate::traits::Capabilities<
+            Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>,
+            Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>,
+        > + Default
+        + Copy
+        + 'static,
+{
+    reg.register_compat_with_embedding::<Ext>(api_key, base_url, model);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -921,6 +939,17 @@ mod tests {
                 "provider {id} should have a Responses or compatibility model"
             );
         }
+    }
+
+    #[test]
+    fn openrouter_registers_embedding_capability() {
+        let mut registry = crate::registry::Registry::new();
+        register_provider(&mut registry, "openrouter", &ProviderConfig::default());
+        let provider = registry.get("openrouter").unwrap();
+        assert!(provider.embedding_model().is_some());
+        assert!(
+            crate::profile::resolve("openrouter").is_some_and(|profile| profile.supports_embedding)
+        );
     }
 
     #[test]

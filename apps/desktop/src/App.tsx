@@ -1866,7 +1866,10 @@ export default function App() {
                     <InsightsPanel active={nav === "settings"} />
                   )}
                   {settingsTab === "models" && (
-                    <ModelMarketPanel active={nav === "settings"} />
+                    <ModelMarketPanel
+                      active={nav === "settings"}
+                      onProvidersStateChange={syncProvidersFromState}
+                    />
                   )}
                   {settingsTab === "providers" && (
                     <ProvidersPanel

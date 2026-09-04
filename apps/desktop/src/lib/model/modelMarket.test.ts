@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   matchesModelMarketFilter,
+  matchesModelMarketType,
+  providerSaveInputWithEmbedding,
   type ModelCatalogEntry,
 } from "./modelMarket.ts";
 
@@ -29,7 +31,7 @@ function model(overrides: Partial<ModelCatalogEntry> = {}): ModelCatalogEntry {
   };
 }
 
-test("embedding and rerank filters use the structured model type", () => {
+test("model type filters use the structured model type", () => {
   const embedding = model({
     id: "example/embed",
     model_type: "embedding",
@@ -41,15 +43,47 @@ test("embedding and rerank filters use the structured model type", () => {
     output_modalities: ["rerank"],
   });
 
-  assert.equal(matchesModelMarketFilter(embedding, "embedding"), true);
-  assert.equal(matchesModelMarketFilter(embedding, "rerank"), false);
-  assert.equal(matchesModelMarketFilter(reranker, "rerank"), true);
-  assert.equal(matchesModelMarketFilter(reranker, "embedding"), false);
+  assert.equal(matchesModelMarketType(embedding, "embedding"), true);
+  assert.equal(matchesModelMarketType(embedding, "rerank"), false);
+  assert.equal(matchesModelMarketType(reranker, "rerank"), true);
+  assert.equal(matchesModelMarketType(reranker, "embedding"), false);
 });
 
 test("specialized filters do not classify models from names", () => {
   const misleading = model({ id: "example/not-an-embedding-model" });
 
-  assert.equal(matchesModelMarketFilter(misleading, "embedding"), false);
-  assert.equal(matchesModelMarketFilter(misleading, "rerank"), false);
+  assert.equal(matchesModelMarketType(misleading, "embedding"), false);
+  assert.equal(matchesModelMarketType(misleading, "rerank"), false);
+});
+
+test("embedding setup preserves the provider contract", () => {
+  const input = providerSaveInputWithEmbedding(
+    {
+      id: "openrouter",
+      kind: "openrouter",
+      display_name: "OpenRouter",
+      endpoint: "https://openrouter.ai/api/v1",
+      model: "openai/gpt-5.6",
+      enabled: true,
+      has_api_key: true,
+      key_source: "keyring",
+      env_key_name: null,
+      backend_id: "openrouter",
+      fallback: [{ provider_id: "openai", model: "gpt-5.6" }],
+      image_model: "image-model",
+      video_model: "video-model",
+      tts_model: "tts-model",
+      vision_model: "vision-model",
+      music_model: "music-model",
+      embedding_model: "old-embedding",
+    },
+    " voyageai/voyage-4 ",
+  );
+
+  assert.equal(input.embedding_model, "voyageai/voyage-4");
+  assert.equal(input.model, "openai/gpt-5.6");
+  assert.deepEqual(input.fallback, [
+    { provider_id: "openai", model: "gpt-5.6" },
+  ]);
+  assert.equal(input.image_model, "image-model");
 });

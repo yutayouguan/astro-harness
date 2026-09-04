@@ -29,15 +29,16 @@ export interface ModelCatalogEntry {
 }
 
 export type ModelMarketFilter =
-  | "all"
-  | "tools"
-  | "reasoning"
-  | "vision"
-  | "audio"
-  | "image"
-  | "embedding"
-  | "rerank"
-  | "free";
+  "all" | "tools" | "reasoning" | "vision" | "audio" | "image" | "free";
+
+export type ModelMarketTypeFilter = "all" | ModelCatalogKind;
+
+export function matchesModelMarketType(
+  model: ModelCatalogEntry,
+  type: ModelMarketTypeFilter,
+): boolean {
+  return type === "all" || model.model_type === type;
+}
 
 export function matchesModelMarketFilter(
   model: ModelCatalogEntry,
@@ -56,10 +57,6 @@ export function matchesModelMarketFilter(
       return model.supports_audio_input || model.supports_audio_output;
     case "image":
       return model.supports_image_generation;
-    case "embedding":
-      return model.model_type === "embedding";
-    case "rerank":
-      return model.model_type === "rerank";
     case "free":
       return (
         model.pricing?.prompt_per_million === 0 &&
@@ -67,3 +64,25 @@ export function matchesModelMarketFilter(
       );
   }
 }
+
+export function providerSaveInputWithEmbedding(
+  provider: ProviderDto,
+  embeddingModel: string,
+) {
+  return {
+    id: provider.id,
+    kind: provider.kind,
+    display_name: provider.display_name,
+    endpoint: provider.endpoint,
+    model: provider.model,
+    enabled: provider.enabled,
+    fallback: provider.fallback ?? [],
+    image_model: provider.image_model?.trim() ?? "",
+    video_model: provider.video_model?.trim() ?? "",
+    tts_model: provider.tts_model?.trim() ?? "",
+    vision_model: provider.vision_model?.trim() ?? "",
+    music_model: provider.music_model?.trim() ?? "",
+    embedding_model: embeddingModel.trim(),
+  };
+}
+import type { ProviderDto } from "../../types";

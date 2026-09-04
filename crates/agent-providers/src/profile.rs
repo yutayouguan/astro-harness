@@ -260,7 +260,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         azure_deployment_style: false,
         default_model: "openai/gpt-5.6",
         supports_image_gen: false,
-        supports_embedding: false,
+        supports_embedding: true,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",

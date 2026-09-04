@@ -30,9 +30,13 @@ import {
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   matchesModelMarketFilter,
+  matchesModelMarketType,
+  providerSaveInputWithEmbedding,
   type ModelCatalogEntry,
   type ModelMarketFilter,
+  type ModelMarketTypeFilter,
 } from "../../lib/model/modelMarket";
+import type { ProviderDto, ProvidersStateDto } from "../../types";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
 
 type SortKey = "price" | "context" | "newest" | "name";
@@ -96,6 +100,13 @@ function timeSince(ts: number | null): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
+const MODEL_TYPES: { key: ModelMarketTypeFilter; Icon: typeof Brain }[] = [
+  { key: "all", Icon: Sparkles },
+  { key: "generation", Icon: Brain },
+  { key: "embedding", Icon: Binary },
+  { key: "rerank", Icon: ListOrdered },
+];
+
 const FILTERS: { key: ModelMarketFilter; Icon: typeof Brain }[] = [
   { key: "all", Icon: Sparkles },
   { key: "tools", Icon: Wrench },
@@ -103,10 +114,19 @@ const FILTERS: { key: ModelMarketFilter; Icon: typeof Brain }[] = [
   { key: "vision", Icon: Eye },
   { key: "audio", Icon: Headphones },
   { key: "image", Icon: Image },
-  { key: "embedding", Icon: Binary },
-  { key: "rerank", Icon: ListOrdered },
   { key: "free", Icon: Globe },
 ];
+
+type ModelMarketPanelProps = {
+  active: boolean;
+  onProvidersStateChange?: (state: ProvidersStateDto) => void;
+};
+
+type EmbeddingSaveState = {
+  modelId: string;
+  status: "saving" | "saved" | "error";
+  message?: string;
+};
 
 function CapabilityBadges({ m }: { m: ModelCatalogEntry }) {
   return (
@@ -155,7 +175,17 @@ function CapabilityBadges({ m }: { m: ModelCatalogEntry }) {
   );
 }
 
-function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
+function ModelDetailPanel({
+  model,
+  openRouterProvider,
+  embeddingSave,
+  onConfigureEmbedding,
+}: {
+  model: ModelCatalogEntry;
+  openRouterProvider: ProviderDto | null;
+  embeddingSave: EmbeddingSaveState | null;
+  onConfigureEmbedding: (model: ModelCatalogEntry) => void;
+}) {
   const { t } = useI18n();
   const provider = providerFromId(model.id);
   const name = stripProviderPrefix(model.name ?? modelSlug(model.id), provider);
@@ -215,6 +245,18 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
     },
   ];
   const activeCaps = caps.filter((c) => c.has);
+  const isEmbedding = model.model_type === "embedding";
+  const isRerank = model.model_type === "rerank";
+  const embeddingConfigured =
+    isEmbedding && openRouterProvider?.embedding_model === model.id;
+  const embeddingReady = Boolean(
+    embeddingConfigured &&
+    openRouterProvider?.enabled &&
+    openRouterProvider.has_api_key &&
+    openRouterProvider.supports_embedding,
+  );
+  const savingThisModel =
+    embeddingSave?.modelId === model.id && embeddingSave.status === "saving";
 
   return (
     <div className="mm-detail-panel">
@@ -248,7 +290,20 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
         <div className="mm-detail-meta-grid">
           <div className="mm-detail-meta-item">
             <span className="mm-detail-meta-key">
-              <BookOpen size={12} /> {t("modelMarket.context")}
+              <Layers size={12} /> {t("modelMarket.detail.type" as never)}
+            </span>
+            <span className="mm-detail-meta-val">
+              {t(`modelMarket.type.${model.model_type}` as never)}
+            </span>
+          </div>
+          <div className="mm-detail-meta-item">
+            <span className="mm-detail-meta-key">
+              <BookOpen size={12} />{" "}
+              {t(
+                model.model_type === "generation"
+                  ? "modelMarket.context"
+                  : ("modelMarket.detail.inputLimit" as never),
+              )}
             </span>
             <span className="mm-detail-meta-val">
               {formatCtx(model.context_length)}
@@ -265,15 +320,17 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
                   {formatPrice(model.pricing.prompt_per_million)}/M
                 </span>
               </div>
-              <div className="mm-detail-meta-item">
-                <span className="mm-detail-meta-key">
-                  <Coins size={12} />{" "}
-                  {t("modelMarket.detail.completionPrice" as never)}
-                </span>
-                <span className="mm-detail-meta-val price">
-                  {formatPrice(model.pricing.completion_per_million)}/M
-                </span>
-              </div>
+              {model.model_type === "generation" && (
+                <div className="mm-detail-meta-item">
+                  <span className="mm-detail-meta-key">
+                    <Coins size={12} />{" "}
+                    {t("modelMarket.detail.completionPrice" as never)}
+                  </span>
+                  <span className="mm-detail-meta-val price">
+                    {formatPrice(model.pricing.completion_per_million)}/M
+                  </span>
+                </div>
+              )}
               {model.pricing.cache_read_per_million != null &&
                 model.pricing.cache_read_per_million > 0 && (
                   <div className="mm-detail-meta-item">
@@ -351,6 +408,58 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
         </div>
       )}
 
+      {(isEmbedding || isRerank) && (
+        <div className="mm-detail-section">
+          <span className="mm-detail-label">
+            <Zap size={13} /> {t("modelMarket.runtime.title" as never)}
+          </span>
+          {isRerank ? (
+            <p className="mm-runtime-copy is-unavailable">
+              {t("modelMarket.runtime.rerankUnavailable" as never)}
+            </p>
+          ) : (
+            <div className="mm-runtime-action">
+              <div>
+                <p
+                  className={`mm-runtime-copy ${embeddingReady ? "is-ready" : ""}`}
+                >
+                  {embeddingReady
+                    ? t("modelMarket.runtime.embeddingReady" as never)
+                    : embeddingConfigured
+                      ? t("modelMarket.runtime.embeddingNeedsProvider" as never)
+                      : t("modelMarket.runtime.embeddingAvailable" as never)}
+                </p>
+                {embeddingSave?.modelId === model.id &&
+                  embeddingSave.status === "error" && (
+                    <p className="mm-runtime-error">{embeddingSave.message}</p>
+                  )}
+              </div>
+              <button
+                type="button"
+                className="mm-runtime-button"
+                disabled={
+                  !openRouterProvider?.supports_embedding ||
+                  savingThisModel ||
+                  embeddingConfigured
+                }
+                onClick={() => onConfigureEmbedding(model)}
+                title={
+                  openRouterProvider
+                    ? undefined
+                    : t("modelMarket.runtime.openRouterMissing" as never)
+                }
+              >
+                {savingThisModel
+                  ? t("modelMarket.runtime.saving" as never)
+                  : embeddingConfigured
+                    ? t("modelMarket.runtime.configured" as never)
+                    : t("modelMarket.runtime.configure" as never)}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {(model.input_modalities.length > 0 ||
         model.output_modalities.length > 0) && (
         <div className="mm-detail-section">
@@ -381,7 +490,10 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
   );
 }
 
-export default function ModelMarketPanel({ active }: { active: boolean }) {
+export default function ModelMarketPanel({
+  active,
+  onProvidersStateChange,
+}: ModelMarketPanelProps) {
   const { t } = useI18n();
   const [models, setModels] = useState<ModelCatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -389,10 +501,16 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   const [sort, setSort] = useState<SortKey>("newest");
   const [sortAsc, setSortAsc] = useState(false);
   const [filter, setFilter] = useState<ModelMarketFilter>("all");
+  const [modelType, setModelType] = useState<ModelMarketTypeFilter>("all");
   const [viewMode, setViewMode] = useState<"gallery" | "list" | "detail">(
     "gallery",
   );
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [providersState, setProvidersState] =
+    useState<ProvidersStateDto | null>(null);
+  const [embeddingSave, setEmbeddingSave] = useState<EmbeddingSaveState | null>(
+    null,
+  );
 
   const load = useCallback(async (force: boolean) => {
     setLoading(true);
@@ -414,8 +532,53 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
     }
   }, [active, models.length, load]);
 
+  useEffect(() => {
+    if (!active) return;
+    void invoke<ProvidersStateDto>("get_providers_state")
+      .then(setProvidersState)
+      .catch(() => setProvidersState(null));
+  }, [active]);
+
+  const openRouterProvider = useMemo(
+    () =>
+      providersState?.providers.find(
+        (provider) =>
+          provider.kind === "openrouter" && provider.config_source !== "toml",
+      ) ?? null,
+    [providersState],
+  );
+
+  const configureEmbedding = useCallback(
+    async (model: ModelCatalogEntry) => {
+      if (!openRouterProvider || model.model_type !== "embedding") return;
+      setEmbeddingSave({ modelId: model.id, status: "saving" });
+      try {
+        const next = await invoke<ProvidersStateDto>("save_provider", {
+          provider: providerSaveInputWithEmbedding(
+            openRouterProvider,
+            model.id,
+          ),
+        });
+        setProvidersState(next);
+        onProvidersStateChange?.(next);
+        setEmbeddingSave({ modelId: model.id, status: "saved" });
+      } catch (error) {
+        setEmbeddingSave({
+          modelId: model.id,
+          status: "error",
+          message: String(error),
+        });
+      }
+    },
+    [onProvidersStateChange, openRouterProvider],
+  );
+
   const filtered = useMemo(() => {
     let list = models;
+
+    if (modelType !== "all") {
+      list = list.filter((model) => matchesModelMarketType(model, modelType));
+    }
 
     if (filter !== "all") {
       list = list.filter((model) => matchesModelMarketFilter(model, filter));
@@ -454,7 +617,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
     });
 
     return list;
-  }, [models, filter, search, sort, sortAsc]);
+  }, [models, modelType, filter, search, sort, sortAsc]);
 
   const PAGE_SIZE = 50;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -483,7 +646,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [filter, search, sort, sortAsc]);
+  }, [modelType, filter, search, sort, sortAsc]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -611,7 +774,32 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
           </button>
         </div>
 
-        {/* Filters */}
+        {/* Model types */}
+        <div
+          className="model-market-type-tabs"
+          aria-label={t("modelMarket.type.label" as never)}
+        >
+          {MODEL_TYPES.map(({ key, Icon }) => {
+            const count =
+              key === "all"
+                ? models.length
+                : models.filter((model) => model.model_type === key).length;
+            return (
+              <button
+                key={key}
+                type="button"
+                className={`model-market-type-btn ${modelType === key ? "active" : ""}`}
+                onClick={() => setModelType(key)}
+              >
+                <Icon size={14} />
+                {t(`modelMarket.type.${key}` as never)}
+                <span>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Capability filters */}
         <div className="model-market-filters">
           {FILTERS.map(({ key, Icon }) => (
             <button
@@ -673,7 +861,13 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
               })}
             </div>
             {selectedModel ? (
-              <ModelDetailPanel key={selectedModel.id} model={selectedModel} />
+              <ModelDetailPanel
+                key={selectedModel.id}
+                model={selectedModel}
+                openRouterProvider={openRouterProvider}
+                embeddingSave={embeddingSave}
+                onConfigureEmbedding={configureEmbedding}
+              />
             ) : (
               <div className="mm-detail-panel mm-detail-empty">
                 <span>{t("modelMarket.detail.selectHint" as never)}</span>
@@ -732,10 +926,14 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                       <span className="model-market-chip price">
                         {formatPrice(m.pricing.prompt_per_million)}
                       </span>
-                      <span className="model-market-chip-sep">/</span>
-                      <span className="model-market-chip price">
-                        {formatPrice(m.pricing.completion_per_million)}
-                      </span>
+                      {m.model_type === "generation" && (
+                        <>
+                          <span className="model-market-chip-sep">/</span>
+                          <span className="model-market-chip price">
+                            {formatPrice(m.pricing.completion_per_million)}
+                          </span>
+                        </>
+                      )}
                     </>
                   )}
                   <CapabilityBadges m={m} />
