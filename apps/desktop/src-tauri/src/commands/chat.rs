@@ -1352,26 +1352,6 @@ pub async fn query_memory(query: String, limit: Option<i32>) -> Result<MemorySna
     })
 }
 
-#[tauri::command]
-pub async fn count_tokens(model: String) -> Result<u32, String> {
-    let grpc_address = default_grpc_address();
-    let endpoint = endpoint_url(&grpc_address);
-    let mut client = AstroServiceClient::connect(endpoint)
-        .await
-        .map_err(|e| friendly_error(&e.to_string()))?;
-    let result = client
-        .count_tokens(proto::CountTokensRequest {
-            agent_id: String::new(),
-            model,
-            messages_json: String::new(),
-            tools_json: String::new(),
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .into_inner();
-    Ok(result.input_tokens)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{

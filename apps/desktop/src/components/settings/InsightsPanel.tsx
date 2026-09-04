@@ -11,16 +11,12 @@ import {
   CalendarDays,
   CalendarRange,
   Coins,
-  Code2,
   Cpu,
   DollarSign,
   GitBranch,
-  Hash,
   Layers,
   LayoutDashboard,
-  ListChecks,
   Puzzle,
-  RefreshCw,
   Timer,
   UserRound,
   Wrench,
@@ -145,7 +141,6 @@ const VIEW_TAB_META: Record<
   models: { labelKey: "insights.view.models", Icon: Cpu },
   tools: { labelKey: "insights.view.tools", Icon: Wrench },
   tracing: { labelKey: "insights.view.tracing", Icon: Activity },
-  api: { labelKey: "insights.view.api" as MessageKey, Icon: Code2 },
 };
 
 const VIEW_TABS = INSIGHTS_VIEW_ORDER.map((id) => ({
@@ -1064,8 +1059,6 @@ export default function InsightsPanel({ active }: { active: boolean }) {
             </div>
           </>
         )}
-
-        {view === "api" && <ApiToolsPanel />}
       </div>
     </div>
   );
@@ -1288,164 +1281,5 @@ function RankList({
         </ul>
       )}
     </section>
-  );
-}
-
-function ApiToolsPanel() {
-  const [tokenCount, setTokenCount] = useState<number | null>(null);
-  const [tokenModel, setTokenModel] = useState("claude-opus-4-8");
-  const [tokenLoading, setTokenLoading] = useState(false);
-  const [batches, setBatches] = useState<string | null>(null);
-  const [batchLoading, setBatchLoading] = useState(false);
-  const [batchError, setBatchError] = useState<string | null>(null);
-
-  const handleCountTokens = async () => {
-    setTokenLoading(true);
-    try {
-      const count = await invoke<number>("count_tokens", { model: tokenModel });
-      setTokenCount(count);
-    } catch (e) {
-      setTokenCount(null);
-      setBatchError(String(e));
-    } finally {
-      setTokenLoading(false);
-    }
-  };
-
-  const handleListBatches = async () => {
-    setBatchLoading(true);
-    setBatchError(null);
-    try {
-      const result = await invoke<string>("list_batches");
-      setBatches(result);
-    } catch (e) {
-      setBatchError(String(e));
-    } finally {
-      setBatchLoading(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="insights-kpis">
-        <KpiCard
-          icon={<Hash size={16} strokeWidth={2.25} aria-hidden />}
-          label="Token Counter"
-          value={tokenCount != null ? formatTokens(tokenCount) : "—"}
-        />
-        <KpiCard
-          icon={<ListChecks size={16} strokeWidth={2.25} aria-hidden />}
-          label="Batches"
-          value={batches ? "Loaded" : "—"}
-        />
-      </div>
-
-      <section className="insights-hbar-panel">
-        <h3 className="insights-rank-title">
-          <Hash size={14} strokeWidth={2.25} aria-hidden />
-          Token Counter (Anthropic)
-        </h3>
-        <div
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            alignItems: "center",
-            padding: "0.5rem 0",
-          }}
-        >
-          <input
-            type="text"
-            value={tokenModel}
-            onChange={(e) => setTokenModel(e.target.value)}
-            placeholder="Model ID"
-            style={{
-              flex: 1,
-              padding: "0.4rem 0.6rem",
-              borderRadius: 8,
-              border: "1px solid var(--glass-edge)",
-              background: "var(--surface-raised, rgba(255,255,255,0.06))",
-              color: "var(--ink)",
-              fontSize: "0.82rem",
-            }}
-          />
-          <button
-            type="button"
-            onClick={handleCountTokens}
-            disabled={tokenLoading}
-            className="insights-more-btn"
-          >
-            {tokenLoading ? "..." : "Count"}
-          </button>
-        </div>
-        {tokenCount != null && (
-          <p
-            style={{
-              fontSize: "0.82rem",
-              color: "var(--ink-soft)",
-              padding: "0.25rem 0",
-            }}
-          >
-            Input tokens: <strong>{tokenCount.toLocaleString()}</strong>
-          </p>
-        )}
-      </section>
-
-      <section className="insights-hbar-panel">
-        <div className="insights-rank-title-row">
-          <h3 className="insights-rank-title">
-            <ListChecks size={14} strokeWidth={2.25} aria-hidden />
-            Message Batches (Anthropic)
-          </h3>
-          <button
-            type="button"
-            onClick={handleListBatches}
-            disabled={batchLoading}
-            className="insights-more-btn"
-          >
-            <RefreshCw size={13} strokeWidth={2.25} aria-hidden />
-            {batchLoading ? "Loading..." : "Refresh"}
-          </button>
-        </div>
-        {batchError && (
-          <p
-            style={{
-              fontSize: "0.78rem",
-              color: "var(--danger, #ef4444)",
-              padding: "0.25rem 0",
-            }}
-          >
-            {batchError}
-          </p>
-        )}
-        {batches && (
-          <pre
-            style={{
-              fontSize: "0.72rem",
-              color: "var(--ink-soft)",
-              maxHeight: "16rem",
-              overflow: "auto",
-              padding: "0.5rem",
-              borderRadius: 8,
-              background: "var(--surface-raised, rgba(255,255,255,0.04))",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-all",
-            }}
-          >
-            {(() => {
-              try {
-                return JSON.stringify(JSON.parse(batches), null, 2);
-              } catch {
-                return batches;
-              }
-            })()}
-          </pre>
-        )}
-        {!batches && !batchError && (
-          <p className="insights-rank-empty">
-            Click Refresh to load batch list
-          </p>
-        )}
-      </section>
-    </>
   );
 }

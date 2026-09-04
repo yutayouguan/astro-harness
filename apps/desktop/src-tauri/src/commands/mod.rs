@@ -1,7 +1,6 @@
 pub(crate) mod agent;
 pub(crate) mod artifacts;
 pub(crate) mod auxiliary;
-pub(crate) mod batch;
 pub(crate) mod branches;
 pub(crate) mod browser;
 pub(crate) mod chat;
@@ -19,6 +18,7 @@ pub(crate) mod loops;
 pub(crate) mod mcp_oauth;
 pub(crate) mod media;
 pub(crate) mod memory;
+pub(crate) mod model_catalog;
 pub(crate) mod providers;
 pub(crate) mod session;
 pub(crate) mod skills;

@@ -35,8 +35,6 @@ Protobuf / tonic gRPC 服务契约 -- Astro Agent 桌面壳与 backend 之间的
 | `ListMcpServers` / `ReconnectMcpServer` | MCP 服务器状态查询与重连 |
 | `QueryMemory` | 记忆召回（MEMORY/USER + 会话摘要） |
 | `ListFiles` | 沙箱内文件列举 |
-| `CountTokens` | Anthropic token 计数 |
-| `CreateBatch` / `GetBatch` / `ListBatches` / `GetBatchResults` | Message Batches API |
 
 ### 关键 message 类型
 

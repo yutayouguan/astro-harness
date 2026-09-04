@@ -1,6 +1,5 @@
 // apps/desktop/src/lib/insightsView.ts
-export type InsightsViewMode =
-  "overview" | "models" | "tools" | "tracing" | "api";
+export type InsightsViewMode = "overview" | "models" | "tools" | "tracing";
 
 export const DEFAULT_INSIGHTS_VIEW: InsightsViewMode = "overview";
 
@@ -9,7 +8,6 @@ export const INSIGHTS_VIEW_ORDER: readonly InsightsViewMode[] = [
   "models",
   "tools",
   "tracing",
-  "api",
 ] as const;
 
 export function needsUsageInsights(view: InsightsViewMode): boolean {

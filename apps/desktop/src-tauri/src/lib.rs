@@ -253,7 +253,6 @@ pub fn run() {
             commands::terminal::terminal_open_external,
             commands::chat::generate_image,
             commands::chat::query_memory,
-            commands::chat::count_tokens,
             // — agent —
             commands::agent::prepare_task_worktree,
             commands::agent::cleanup_task_worktree,
@@ -344,12 +343,8 @@ pub fn run() {
             commands::cron::delete_cron_run,
             commands::cron::list_cron_runs,
             commands::cron::list_cron_job_runs,
-            // — batch & model catalog —
-            commands::batch::create_batch,
-            commands::batch::get_batch,
-            commands::batch::list_batches,
-            commands::batch::get_batch_results,
-            commands::batch::list_model_catalog,
+            // — model catalog —
+            commands::model_catalog::list_model_catalog,
             // — memory —
             commands::memory::refresh_memory,
             commands::memory::list_pending_memory_writes,

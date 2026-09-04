@@ -18,7 +18,6 @@ test("default view is overview and sits first in tab order", () => {
     "models",
     "tools",
     "tracing",
-    "api",
   ]);
 });
 
@@ -27,7 +26,6 @@ test("needsUsageInsights covers overview, models, tools only", () => {
   assert.equal(needsUsageInsights("models"), true);
   assert.equal(needsUsageInsights("tools"), true);
   assert.equal(needsUsageInsights("tracing"), false);
-  assert.equal(needsUsageInsights("api"), false);
 });
 
 test("providerSpendTop sorts by cost then tokens and caps length", () => {
