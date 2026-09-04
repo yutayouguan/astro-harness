@@ -53,13 +53,23 @@ impl ModelContext {
     // ── 凭证 ───────────────────────────────────────────────
 
     pub fn set_credentials(&mut self, provider: &str, model: &str, api_key: &str, base_url: &str) {
+        let preserved_profile = self
+            .model_spec
+            .as_ref()
+            .filter(|spec| spec.provider_id == provider && spec.model_id == model)
+            .map(|spec| (spec.tool_mode, spec.profile.clone()));
         self.credentials.provider = provider.to_string();
         self.credentials.model = model.to_string();
-        self.credentials.tool_mode = None;
+        self.credentials.tool_mode = preserved_profile.as_ref().and_then(|(mode, _)| *mode);
         self.credentials.api_key = api_key.to_string();
         self.credentials.base_url = base_url.to_string();
         if !provider.trim().is_empty() || !model.trim().is_empty() {
-            self.model_spec = Some(ModelSpec::new(provider, model));
+            let mut spec = ModelSpec::new(provider, model);
+            if let Some((tool_mode, profile)) = preserved_profile {
+                spec.tool_mode = tool_mode;
+                spec.profile = profile;
+            }
+            self.model_spec = Some(spec);
         }
     }
 
@@ -84,20 +94,23 @@ impl ModelContext {
     /// 设置含 primary 的聊天 fallback 链。
     pub fn set_model_targets(&mut self, targets: Vec<ModelTarget>) {
         if let Some(primary) = targets.first() {
-            let preserved_tool_mode = self
+            let preserved_profile = self
                 .model_spec
                 .as_ref()
                 .filter(|spec| {
                     spec.provider_id == primary.backend_id && spec.model_id == primary.model
                 })
-                .and_then(|spec| spec.tool_mode);
+                .map(|spec| (spec.tool_mode, spec.profile.clone()));
             self.credentials.provider = primary.backend_id.clone();
             self.credentials.model = primary.model.clone();
-            self.credentials.tool_mode = preserved_tool_mode;
+            self.credentials.tool_mode = preserved_profile.as_ref().and_then(|(mode, _)| *mode);
             self.credentials.api_key = primary.api_key.clone();
             self.credentials.base_url = primary.base_url.clone();
             let mut spec = ModelSpec::new(&primary.backend_id, &primary.model);
-            spec.tool_mode = preserved_tool_mode;
+            if let Some((tool_mode, profile)) = preserved_profile {
+                spec.tool_mode = tool_mode;
+                spec.profile = profile;
+            }
             self.model_spec = Some(spec);
         }
         self.model_targets = targets;
@@ -188,5 +201,36 @@ impl ModelContext {
 
     pub fn image_gen_targets(&self) -> &ImageGenTargets {
         &self.image_gen_targets
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refreshing_same_credentials_preserves_model_profile() {
+        let mut context = ModelContext::default();
+        context.set_model_spec(
+            ModelSpec::new("deepseek", "deepseek-v4-flash").with_profile(types::ModelProfile {
+                supports_search_tool: false,
+                ..types::ModelProfile::default()
+            }),
+        );
+
+        context.set_credentials(
+            "deepseek",
+            "deepseek-v4-flash",
+            "new-key",
+            "https://api.deepseek.com/v1",
+        );
+
+        assert!(
+            !context
+                .model_spec()
+                .expect("model spec")
+                .profile
+                .supports_search_tool
+        );
     }
 }

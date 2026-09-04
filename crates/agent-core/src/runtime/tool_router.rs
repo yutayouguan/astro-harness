@@ -224,12 +224,30 @@ pub(crate) fn build_tool_router(
     registry: &ToolRegistry,
     interaction_mode: types::InteractionMode,
     requested_tool_mode: types::ToolMode,
+    supports_search_tool: bool,
     discovered_deferred: &HashSet<types::ToolName>,
 ) -> anyhow::Result<ToolRouter> {
+    let eager_deferred = (!supports_search_tool).then(|| {
+        registry
+            .searchable_deferred_tools()
+            .into_iter()
+            .map(types::ToolEntry::tool_name)
+            .collect::<HashSet<_>>()
+    });
+    let discovered_deferred = eager_deferred.as_ref().unwrap_or(discovered_deferred);
     let (model_visible_specs, discovered_specs, nested_specs) =
         registry.schemas_for_step_with_mode(requested_tool_mode, discovered_deferred)?;
-    let model_visible_specs = tools::filter_schemas(interaction_mode, model_visible_specs);
-    let discovered_specs = tools::filter_schemas(interaction_mode, discovered_specs);
+    let mut model_visible_specs = tools::filter_schemas(interaction_mode, model_visible_specs);
+    if !supports_search_tool {
+        model_visible_specs.retain(|spec| {
+            spec.get("type").and_then(serde_json::Value::as_str) != Some("tool_search")
+        });
+    }
+    let mut discovered_specs = tools::filter_schemas(interaction_mode, discovered_specs);
+    if !supports_search_tool {
+        model_visible_specs =
+            merge_model_visible_specs(model_visible_specs, std::mem::take(&mut discovered_specs));
+    }
     let nested_specs = tools::filter_schemas(interaction_mode, nested_specs);
     let routed_identities = discovered_specs
         .iter()
@@ -264,6 +282,34 @@ pub(crate) fn build_tool_router(
         model_visible_specs,
         &nested_specs,
     ))
+}
+
+fn merge_model_visible_specs(
+    mut visible: Vec<serde_json::Value>,
+    discovered: Vec<serde_json::Value>,
+) -> Vec<serde_json::Value> {
+    for mut spec in discovered {
+        if spec.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
+            let namespace = spec.get("name").and_then(serde_json::Value::as_str);
+            if let Some(existing) = visible.iter_mut().find(|existing| {
+                existing.get("type").and_then(serde_json::Value::as_str) == Some("namespace")
+                    && existing.get("name").and_then(serde_json::Value::as_str) == namespace
+            }) {
+                if let (Some(existing_tools), Some(tools)) = (
+                    existing
+                        .get_mut("tools")
+                        .and_then(serde_json::Value::as_array_mut),
+                    spec.get_mut("tools")
+                        .and_then(serde_json::Value::as_array_mut),
+                ) {
+                    existing_tools.append(tools);
+                }
+                continue;
+            }
+        }
+        visible.push(spec);
+    }
+    visible
 }
 
 /// 将可见 schema 和执行 Registry 冻结为一个不可变 ToolRouter。
@@ -459,6 +505,7 @@ mod tests {
             &registry,
             types::InteractionMode::Agent,
             types::ToolMode::Direct,
+            true,
             &HashSet::new(),
         )
         .unwrap_err();
@@ -483,11 +530,64 @@ mod tests {
             &registry,
             types::InteractionMode::Agent,
             types::ToolMode::Direct,
+            true,
             &HashSet::new(),
         )
         .unwrap_err();
 
         assert!(error.to_string().contains("tool identity collision"));
+    }
+
+    #[test]
+    fn model_profile_controls_search_and_eager_deferred_tools() {
+        let mut registry = ToolRegistry::new();
+        tools::register_all(&mut registry);
+
+        let with_search = build_tool_router(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            true,
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert!(with_search.model_visible_specs().iter().any(|spec| {
+            spec.get("type").and_then(serde_json::Value::as_str) == Some("tool_search")
+        }));
+        assert!(!with_search.model_can_call(None, "web_search"));
+
+        let without_search = build_tool_router(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            false,
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert!(!without_search.model_visible_specs().iter().any(|spec| {
+            spec.get("type").and_then(serde_json::Value::as_str) == Some("tool_search")
+        }));
+        assert!(without_search.model_visible_specs().iter().any(|spec| {
+            spec.get("name").and_then(serde_json::Value::as_str) == Some("web_search")
+        }));
+        assert!(without_search.model_can_call(None, "web_search"));
+    }
+
+    #[test]
+    fn eager_deferred_tools_merge_into_existing_namespace() {
+        let visible = vec![serde_json::json!({
+            "type": "namespace",
+            "name": "media",
+            "tools": [{"type": "function", "name": "image_gen"}]
+        })];
+        let discovered = vec![serde_json::json!({
+            "type": "namespace",
+            "name": "media",
+            "tools": [{"type": "function", "name": "video_gen"}]
+        })];
+        let merged = merge_model_visible_specs(visible, discovered);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0]["tools"].as_array().map(Vec::len), Some(2));
     }
 
     #[test]

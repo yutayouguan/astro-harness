@@ -686,6 +686,7 @@ fn sync_custom_provider_models() {
                 crate::meta::model_meta::ModelEntryCompat::Full(Box::new(
                     crate::meta::model_meta::ModelInfo {
                         id: m.id.clone(),
+                        profile: types::ModelProfile::default(),
                         tool_mode: m.tool_mode,
                         display_name: m.display_name.clone(),
                         description: None,

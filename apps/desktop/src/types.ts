@@ -26,6 +26,20 @@ export type ModelReasoningMeta = {
   persistent_instructions?: string | null;
 };
 
+export type ModelRuntimeProfile = {
+  supports_search_tool: boolean;
+  supports_parallel_tool_calls: boolean;
+  support_verbosity: boolean;
+  default_verbosity?: "low" | "medium" | "high" | null;
+  apply_patch_tool_type?: "freeform" | null;
+  web_search_tool_type: "text" | "text_and_image";
+  input_modalities: Array<"text" | "image" | "audio" | "file">;
+  effective_context_window_percent: number;
+  auto_compact_token_limit?: number | null;
+  supports_reasoning_summaries: boolean;
+  multi_agent_version?: "v1" | "v2" | null;
+};
+
 /** 聊天附件媒体类型 */
 export type ChatAttachmentKind =
   "image" | "video" | "audio" | "file" | "folder";
@@ -694,6 +708,7 @@ export type ModelDefaultParams = {
 /** 模型元信息（列表 / 选择器） */
 export type ModelInfo = {
   id: string;
+  profile?: ModelRuntimeProfile;
   /** 模型目录工具模式；存在时覆盖全局 feature flag。 */
   tool_mode?: "direct" | "code_mode" | "code_mode_only" | null;
   display_name?: string | null;

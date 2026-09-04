@@ -1032,6 +1032,11 @@ impl Session {
             .model_spec()
             .map(|spec| spec.requested_tool_mode(feature_flags))
             .unwrap_or_else(|| feature_flags.requested_mode());
+        let supports_search_tool = self
+            .lock_state()
+            .model_ctx
+            .model_spec()
+            .is_none_or(|spec| spec.profile.supports_search_tool);
         let discovered_deferred = discovered_deferred_tool_names(&history);
         let tool_router = {
             let registry = self
@@ -1043,6 +1048,7 @@ impl Session {
                 &registry,
                 interaction_mode,
                 requested_tool_mode,
+                supports_search_tool,
                 &discovered_deferred,
             )?)
         };

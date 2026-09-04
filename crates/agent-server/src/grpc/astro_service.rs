@@ -1338,6 +1338,13 @@ impl AstroServiceImpl {
                 Status::invalid_argument(format!("unsupported tool_mode: {}", req.tool_mode))
             })?)
         };
+        let model_profile = if req.model_profile_json.trim().is_empty() {
+            types::ModelProfile::default()
+        } else {
+            serde_json::from_str(&req.model_profile_json).map_err(|error| {
+                Status::invalid_argument(format!("invalid model_profile_json: {error}"))
+            })?
+        };
         let mut targets = vec![types::ModelTarget {
             provider_id: String::new(),
             backend_id: provider.into(),
@@ -1377,6 +1384,7 @@ impl AstroServiceImpl {
                 temperature: req.temperature,
                 max_tokens: (req.max_output_tokens > 0).then_some(req.max_output_tokens),
                 tool_mode: model_tool_mode,
+                profile: model_profile,
             }),
             auxiliary_targets: Some(parse_auxiliary_targets(req.auxiliary_targets.clone())),
             image_gen_targets: Some(tools::image_gen_targets_from_parts(tools::ImageGenParts {

@@ -1034,10 +1034,16 @@ impl Session {
         }
 
         let primary = state.model_ctx.primary_model_target();
+        let model_profile = state
+            .model_ctx
+            .model_spec()
+            .map(|spec| spec.profile.clone())
+            .unwrap_or_default();
         Ok(agent_protocol::ThreadSettingsSnapshot {
             provider_id: (!primary.provider_id.trim().is_empty()).then_some(primary.provider_id),
             provider: primary.backend_id,
             model: primary.model,
+            model_profile,
             interaction_mode: state.interaction_mode,
             project_root: state
                 .project_root

@@ -724,40 +724,33 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
     // 单个任务解析失败时静默跳过，不阻塞主聊天（见 auxiliary_resolver 内部注释）。
     let auxiliary_targets =
         crate::meta::auxiliary_resolver::build_auxiliary_model_targets(&primary);
-    let cached_info = cached_model_info(&primary.provider_id, &primary.model);
+    let primary_model_info =
+        cached_model_info(&primary.provider_id, &primary.model).or_else(|| {
+            let enriched =
+                crate::meta::model_meta::enrich_from_id(&primary.model, &primary.backend_id, None);
+            (!enriched.meta_source.is_empty()).then_some(enriched)
+        });
     // 优先用 models.json 缓存（与前端展示同源）；否则 LiteLLM/enrich；未知为 0（agent 侧再兜底）。
-    let context_window = cached_info
+    let context_window = primary_model_info
         .as_ref()
-        .and_then(|info| info.context_window)
+        .and_then(crate::meta::model_meta::ModelInfo::usable_context_window)
         .and_then(|n| u32::try_from(n).ok())
         .filter(|n| *n > 0)
-        .or_else(|| {
-            crate::meta::model_meta::enrich_from_id(&primary.model, &primary.backend_id, None)
-                .context_window
-                .and_then(|n| u32::try_from(n).ok())
-                .filter(|n| *n > 0)
-        })
         .unwrap_or(0);
     // 当前模型最大输出 token（与 context_window 同源）；未知为 0，后端兜底默认。
-    let max_output_tokens = cached_info
+    let max_output_tokens = primary_model_info
         .as_ref()
         .and_then(|info| info.max_output_tokens)
         .and_then(|n| u32::try_from(n).ok())
         .filter(|n| *n > 0)
-        .or_else(|| {
-            crate::meta::model_meta::enrich_from_id(&primary.model, &primary.backend_id, None)
-                .max_output_tokens
-                .and_then(|n| u32::try_from(n).ok())
-                .filter(|n| *n > 0)
-        })
         .unwrap_or(0);
-    let tool_mode = cached_info
+    let tool_mode = primary_model_info
         .as_ref()
         .and_then(|info| info.tool_mode)
         .map(types::ToolMode::as_str)
         .unwrap_or_default()
         .to_string();
-    let persistent_instructions = cached_info
+    let persistent_instructions = primary_model_info
         .as_ref()
         .and_then(|info| info.reasoning.as_ref())
         .and_then(|reasoning| reasoning.persistent_instructions.as_deref())
@@ -774,19 +767,20 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
             return Err("persistent reasoning requires model persistent_instructions".into());
         }
     }
+    let model_profile_json = serde_json::to_string(
+        &primary_model_info
+            .as_ref()
+            .map(|info| info.profile.clone())
+            .unwrap_or_default(),
+    )
+    .map_err(|error| format!("序列化模型能力失败: {error}"))?;
 
     // OpenRouter default_parameters → 采样温度 + 扩展参数（top_p 等）
     let (temperature, additional_params_json) = {
-        let info = cached_info.clone().or_else(|| {
-            let enriched =
-                crate::meta::model_meta::enrich_from_id(&primary.model, &primary.backend_id, None);
-            if enriched.meta_source.is_empty() {
-                None
-            } else {
-                Some(enriched)
-            }
-        });
-        match info.as_ref().and_then(|m| m.default_parameters.as_ref()) {
+        match primary_model_info
+            .as_ref()
+            .and_then(|m| m.default_parameters.as_ref())
+        {
             Some(dp) => {
                 let temperature = dp.temperature.and_then(|t| {
                     let f = t as f32;
@@ -902,6 +896,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         tool_mode,
         rollback_keep_chat_bubbles: keep_chat_bubbles.map(|keep| keep.max(0) as u32),
         persistent_instructions: persistent_instructions.unwrap_or_default(),
+        model_profile_json,
     };
 
     let bridge = managed_bridge(&app).inner().clone();
