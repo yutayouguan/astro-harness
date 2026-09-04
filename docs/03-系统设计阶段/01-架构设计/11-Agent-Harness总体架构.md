@@ -4,7 +4,7 @@
 >
 > 状态：当前实现基线
 >
-> 更新：2026-09-01
+> 更新：2026-09-04
 >
 > 适用范围：Astro 中包裹模型、驱动多步任务并把意图落到真实环境的工程化运行系统
 
@@ -221,6 +221,10 @@ provider_reported  >  provider_recomputed  >  local_estimate
 
 `reasoning_tokens` 是 `output_tokens` 的子集，不再加到 total；`cached_input_tokens` 是 input 的子集，用于缓存命中率和差异化计价，不是额外上下文 segment。
 
+每次完成模型响应后，Session 追加 `RolloutItem::TokenUsage(TokenUsageRecord)`：`latest`
+保存最后一次 sampling，`cumulative` 保存 Thread 内累计，`compaction_response_id` 标记压缩
+checkpoint。resume 读取最后一条 record；fork 不复制父 Thread 的累计值，避免跨分支重复计费。
+
 ## 11. 多 Agent 编排
 
 `agent-subagents` 是当前唯一的子 Agent 模型。父 Agent 通过六个模型工具与 Agent Graph 交互：
@@ -248,6 +252,11 @@ Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真�
 - Function/Freeform/Namespace/ToolSearch/WebSearch 原生工具定义；
 - 内置工具直接调用、`tool_search`、Deferred tools 和 MCP 激活；
 - hooks、approval、sandbox、tool-round 和 cancellation 传播。
+- `request_user_input_async` 结构化异步问题与 durable questions；旧名不再注册；
+- durable `ThreadSettingsApplied`、冷/热 Thread 元数据恢复与 active-turn 原子设置；
+- turn-frozen `ExtensionSnapshot`、next-turn reconcile 与 process-owned MCP event-stream manager 基础；
+- durable usage checkpoint、Realtime 多 session 边界与 fork 清零累计值；
+- gated OpenAI `persistent` reasoning：目录指令存在才暴露，wire 映射为 `disabled`。
 
 ### 12.2 Astro 的扩展和差异
 
@@ -255,6 +264,8 @@ Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真�
 - Astro 支持多 Provider 及媒体 Provider；Agent target 只接受 Responses，其他协议仅保留给工具、媒体和非 Agent 调用。
 - Astro 增加了 MemoryManager、Knowledge DB、Workflow、Cron、A2UI 和用量成本子系统。
 - Astro 直接向模型暴露内置工具和原生 `tool_search`，不要求用户安装 Node.js 作为工具编排宿主。
+- Remote Extension Marketplace 仍等待 Astro 自有服务/认证/bundle 信任根；native voice helper
+  仍等待签名的三平台 runtime。两者已完成设计审查，但不作为当前可用能力展示。
 - `Op` 中已声明但 `submission_loop` 尚未实现的控制分支，必须标记为协议预留，不得写成已落地功能。
 
 ## 13. 实现映射
@@ -273,6 +284,8 @@ Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真�
 | Session 投影 | `agent-session/src/store/rollout_projection.rs` |
 | 子 Agent | `agent-subagents/src/` |
 | 沙箱 / 网络 | `agent-sandbox/src/`、`agent-network-proxy/src/` |
+| Extension / MCP 生命周期 | `agent-extensions/src/lib.rs`、`agent-mcp/src/event_stream.rs`、`agent-core/src/runtime/mod.rs` |
+| Realtime / usage | `agent-realtime/src/`、`agent-protocol/src/event.rs`、`agent-rollout/src/reconstruction.rs` |
 | Server 投影 | `agent-server/src/thread_listener.rs`、`thread_manager.rs`、`grpc/thread_service.rs` |
 
 ## 14. 文档状态规则

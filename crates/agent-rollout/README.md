@@ -8,7 +8,7 @@ JSONL append-only 历史记录 -- Thread 历史的权威事实源，负责 rollo
 2. **持久化策略（policy）**：`should_persist_event_msg()` 按事件变体精确划分持久/瞬态边界 -- ItemCompleted、TurnStarted、TurnComplete 等为持久，Delta 增量和 Error 通知为瞬态
 3. **路径管理（path）**：日期分区目录结构（`YYYY/MM/DD/rollout-{timestamp}-{encoded_thread_id}.jsonl`），thread_id 百分号编码防止路径穿越攻击
 4. **历史重建（reconstruction）**：`read_rollout()` / `read_rollout_with_diagnostics()` 逐行解析 JSONL，容忍中间行损坏或末尾截断，保留有效前缀
-5. **统一 Item 模型（RolloutItem）**：7 种变体覆盖线程全生命周期数据；`ResponseItem` 直接保存 Responses 原生类型
+5. **统一 Item 模型（RolloutItem）**：9 种变体覆盖线程全生命周期数据；`ResponseItem` 直接保存 Responses 原生类型，Realtime 与累计 usage 使用独立 durable record
 
 ## 模块结构
 
@@ -29,6 +29,8 @@ JSONL append-only 历史记录 -- Thread 历史的权威事实源，负责 rollo
 pub enum RolloutItem {
     SessionMeta(Value),               // 会话元数据
     ResponseItem(agent_protocol::ResponseItem), // Responses 原生消息/调用/输出条目
+    RealtimeItem(agent_protocol::RealtimeItem), // 完整 transcript/session boundary/BEM
+    TokenUsage(agent_protocol::TokenUsageRecord), // latest/cumulative/checkpoint
     EventMsg(agent_protocol::EventMsg),    // 领域事件
     TurnContext(Value),                // 轮次上下文快照
     WorldState(Value),                 // 世界状态快照
@@ -53,7 +55,7 @@ pub enum RolloutItem {
 |------|------|
 | `should_persist_event_msg(&EventMsg) -> bool` | 判断事件是否持久化（ItemCompleted / TurnStarted / TurnComplete / TurnAborted / TokenCount / ContextUsage / UserInputCommitted / ThreadSettingsApplied / ThreadRolledBack 为 true） |
 | `latest_token_usage(&[RolloutItem])` | 恢复最新 cumulative usage/checkpoint；fork 不复制父 Thread 的累计值 |
-| `is_persisted_rollout_item(&RolloutItem) -> bool` | 判断 rollout item 是否持久化（EventMsg 委托上述函数；其余 6 种 item 始终持久） |
+| `is_persisted_rollout_item(&RolloutItem) -> bool` | 判断 rollout item 是否持久化（EventMsg 委托上述函数；其余 8 种 item 始终持久） |
 
 ### 路径管理（`path.rs`）
 
@@ -100,4 +102,4 @@ cargo test -p agent-rollout retains_valid_items
 cargo test -p agent-rollout durable_policy
 ```
 
-> 测试分布：`path.rs`（4 个）、`recorder.rs`（3 个）、`policy.rs`（6 个）、`reconstruction.rs`（3 个），共 16 个单元测试，覆盖路径安全、写入顺序、容错解析与持久化策略。
+> 测试覆盖路径安全、写入顺序、容错解析、持久化策略、Realtime 顺序、Thread settings、usage checkpoint 与 fork 过滤；具体数量以当前测试输出为准。

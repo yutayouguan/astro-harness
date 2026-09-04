@@ -2,6 +2,8 @@
 
 > 状态：已实现
 >
+> 更新：2026-09-04
+>
 > 对应 crate：`crates/agent-realtime`
 >
 > 适用 wire 协议：Astro `v2`（OpenAI/Azure GA）/ Astro `v3`（Codex live）
@@ -181,6 +183,17 @@ React useRealtimeConversation
 前端默认 WebRTC，仍可显式选择 WebSocket；ExistingCall 路径只接管 sideband，
 不重新开启本地录音。Tauri/gRPC DTO 暴露 transport、SDP/call id、version、
 handoff mode、BEM prefixes 和 transcript-tail 策略。
+
+## Native voice helper 边界
+
+Astro 当前生产路径由 WebView `getUserMedia` / WebRTC 或 PCM WebSocket 完成采集与播放，
+没有打包 native voice helper。Codex 当前新增的 helper 仍是 lifecycle/runtime projection
+基础：长度前缀控制帧、同 build 握手、初始化与关闭，不承载设备或音频。
+
+因此 Astro 不暴露一个只会握手的空入口。未来接入必须同时满足：包内 canonical path、
+协议/build 完全匹配、分片无关的有界 frame reader、子进程环境白名单、三平台 runtime
+依赖/签名校验，以及失败时回退现有 WebView 路径且不改变 durable `RealtimeItem`。完整设计见
+[Native Voice Helper 对齐设计](superpowers/specs/2026-09-04-native-voice-helper-alignment-design.md)。
 
 ## 验证矩阵
 

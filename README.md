@@ -148,6 +148,18 @@ Agent 可在回合继续运行时调用 `request_user_input_async`，一次发�
 Thread item 时间线，先持久化再投影到 Desktop；用户回答作为普通 user input 进入当前
 turn。旧工具名不再注册，调用方必须直接使用 `request_user_input_async`。
 
+### Durable Thread 设置与 Persistent reasoning
+
+`ThreadSettingsApplied` 将 provider/backend/model/reasoning 设置写入 rollout。热 Session
+读取当前设置，冷 Thread 读取最后一条持久设置，`start/resume/fork/list/history` 使用同一
+投影。用量另以 `TokenUsageRecord { latest, cumulative, compaction_response_id }` 保存；resume
+恢复累计基线，fork 不继承父 Thread 的累计值。
+
+OpenAI 模型目录只有提供非空 `persistent_instructions` 时，Desktop 才显示
+`persistent` effort。Astro 本地保持该名称，OpenAI Responses wire 映射为 `disabled`，并把
+目录指令合并进 instructions；Azure、OpenRouter、DeepSeek 和自定义 Provider 明确拒绝该
+effort，不做兼容降级。
+
 ## Realtime 语音会话
 
 Realtime 已拆分为独立 `agent-realtime` crate，并通过统一 Thread 协议接入桌面端：
@@ -162,10 +174,26 @@ Realtime 已拆分为独立 `agent-realtime` crate，并通过统一 Thread 协�
   `background_agent` 与 `remain_silent` 两个内部控制动作；
 - 完整 transcript、会话边界和 BEM promotion 以 `RealtimeItem` 持久化到 rollout，原始音频和 delta 不落盘；
 - Codex handoff 可把语音请求转为普通 Agent turn，再按 `thinking` / `commentary` / `bem_tags` 返回 Realtime call。
+- 生产音频路径仍由 WebView/WebRTC 或 PCM WebSocket 提供；native voice helper 已完成设计审查，
+  在三平台 runtime 产物、签名和打包链就绪前不暴露空入口。
 
 设计与恢复契约见 [Realtime 子系统](./docs/realtime-subsystem.md)，Azure 来源快照与映射见
 [Azure OpenAI Realtime 参考](./docs/azure/realtime/README.md)，整体 Agent 边界见
 [架构总览](./docs/03-系统设计阶段/01-架构设计/01-架构总览.md)。
+
+## Extension、MCP 与受管网络
+
+- `ExtensionSnapshot` 在 turn 内冻结；`ReconcileExtensions` 比较内容指纹并报告 MCP、Skills、
+  Hooks、toolsets 影响，新快照从下一 turn 激活。
+- `McpEventStreamManager` 已提供 `thread_id + subscription_id` 所有权、active 握手、单调
+  attempt id、有界队列和权限/Server 取消基础；具体 MCP Server opener 与 UI 订阅入口尚未接线。
+- managed network 的 `header_injections` 只作为 host/method/path/header requirement 被保留，
+  Debug 不输出 header value。当前 CONNECT 隧道无法观察 TLS 内部 method/path，因此不宣称
+  已对 HTTPS 执行注入。
+- Remote Extension Marketplace 已完成服务、供应链与回滚设计；Astro 尚无对应产品服务与
+  bundle 信任根，因此当前只激活本地用户扩展和可信项目扩展。
+
+详见 [Extension Manifest](./docs/extensions.md)、[Remote Marketplace 设计](./docs/superpowers/specs/2026-09-04-remote-marketplace-alignment-design.md) 与 [Native Voice Helper 设计](./docs/superpowers/specs/2026-09-04-native-voice-helper-alignment-design.md)。
 
 ## 仓库结构
 
@@ -174,7 +202,7 @@ astro/
 ├── Cargo.toml              # Workspace 根（28 个 crate + 1 个桌面应用）
 ├── crates/                 # 所有 Rust crate（扁平 agent-* 命名）
 │   ├── agent-core/         # Agent 运行时核心（Session、streaming、工具路由）
-│   ├── agent-types/        # 通用 DTO 与兼容投影（Message、ToolEntry、ToolExposure 等）
+│   ├── agent-types/        # 跨 crate DTO（权限、模型、ToolEntry、ToolExposure 等）
 │   ├── agent-config/       # 分层配置原语
 │   ├── agent-protocol/     # Core 协议与 canonical ResponseItem
 │   ├── agent-rollout/      # JSONL append-only 历史
@@ -209,13 +237,14 @@ astro/
 | `session` | 会话消息与账单（SQLite WAL + FTS5） |
 | `usage` | 用量统计与 Tracing 洞察 |
 | `sandbox` | 沙箱权限控制（PermissionProfile） |
-| `network-proxy` | 受管网络代理 |
-| `worktree` | 显式桌面多任务的 detached managed worktree；Subagent 不隐式调用 |
+| `network-proxy` | attempt-scoped CONNECT 代理、审批与脱敏 header requirements |
+| `worktree` | 显式桌面多任务的 detached managed worktree；opaque ID/manifest 校验清理，Subagent 不隐式调用 |
 | `agent-config` | 分层配置原语 |
 | `agent-protocol` | Core 协议（Op、EventMsg、TurnItem、ResponseItem） |
 | `agent-rollout` | JSONL append-only 权威历史 |
 | `realtime` | Realtime 运输、typed event、transcript reducer 与 Codex handoff/BEM |
-| `skills` / `mcp` | 扩展能力（Skills 管理、原生 namespaced MCP 客户端） |
+| `skills` / `mcp` | 扩展能力（Skills、原生 namespaced MCP、process-owned event streams） |
+| `agent-extensions` | Extension manifest、turn-frozen snapshot 与 next-turn reconcile |
 | `hooks` | Plugin、Command/MCP、Gateway、Shell 生命周期钩子 |
 | `proto` / `types` | gRPC 契约与公共类型 |
 

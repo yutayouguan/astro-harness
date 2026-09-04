@@ -14,6 +14,8 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 - 提供声明式 `AgentBuilder` 构建可运行 Agent 实例
 - 管理工具结果压缩（原文保留，压缩视图给 provider）
 - HITL 闸门、中断状态机、schema 校验、smart approval 审批
+- 冻结 turn-scoped `ExtensionSnapshot`，reconcile 只把新快照排到下一 turn
+- 恢复 durable Thread settings 与 `TokenUsageRecord` 累计/checkpoint
 - Cron 定时任务执行、子 Agent 委派、记忆回顾、标题生成等辅助执行域
 
 ## 模块结构
@@ -121,6 +123,9 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 6. **Session 是 Send + Sync**：所有可变状态封装在 `StdMutex` / `TokioMutex` 中，无裸 `RefCell`
 7. **事件有序性**：`event_dispatch` 锁保证 rollout 持久化与 live 投递严格有序
 8. **Provider 边界**：primary、fallback 和 Agent 辅助任务都必须支持 Responses，不回退 Chat Completions
+9. **Persistent 门禁**：只有 OpenAI backend 且模型目录存在非空 persistent instructions 时可启用；wire effort 为 `disabled`
+10. **Extension 冻结**：当前 turn 的 snapshot 不可替换，pending reconcile 只能在下一 turn 发布
+11. **Usage 恢复**：resume 使用最后一条 cumulative checkpoint，fork 不继承父 Thread 累计值
 
 ## 测试
 

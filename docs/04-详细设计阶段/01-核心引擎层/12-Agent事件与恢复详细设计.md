@@ -1,9 +1,9 @@
 # Agent 事件与恢复详细设计
 
-> **Harness 当前基线（2026-09-01）**：Core 产生 `agent-protocol::EventMsg/TurnItem`，Session 在 `event_dispatch` 中序列化状态归约、rollout 持久化和 live 交付。模型历史以原生 `ResponseItem` 单独写入 rollout。Server listener 投影到 gRPC/Tauri，恢复使用 rollout snapshot + live boundary。Core EventBus、SessionEventHub 及独立转换链仅是已被取代的历史架构。
+> **Harness 当前基线（2026-09-04）**：Core 产生 `agent-protocol::EventMsg/TurnItem`，Session 在 `event_dispatch` 中序列化状态归约、rollout 持久化和 live 交付。模型历史以原生 `ResponseItem` 单独写入 rollout。Server listener 投影到 gRPC/Tauri，恢复使用 rollout snapshot + live boundary。Core EventBus、SessionEventHub 及独立转换链仅是已被取代的历史架构。
 
 > 版本：v1.0
-> 日期：2026-08-20
+> 日期：2026-09-04
 > 状态：已实现
 > 适用范围：`agent-protocol`、`agent-rollout`、`agent-core`、`agent-server`、
 > `agent-session`、`astro-agent`（Tauri）
@@ -127,10 +127,12 @@ subscriber 和 retained logical ids 投递 `astro.background_expired`、稳定 e
 snapshot 都做 subtractive reconcile：清除本地有而 Server 没有的 turn。集合支持同 Thread
 多个 pending turn；协议不再提供旧 backend presence capability 分支。
 
-`ThreadSnapshot.model` 与 `reasoning_effort` 是 nullable 的当前设置投影。listener 先生成
-Turn/Item 权威快照，`ResumeThread` 再从已加载 Session 补全这两个字段。热更新后
-返回当前值；未配置模型的空 Thread 返回 `null`。Desktop 的 `thread_snapshot` 事件保持
-同样的 camelCase 字段，不从 UI 本地偏好反向覆盖 Server 快照。
+`ThreadSnapshot.provider_id`、`backend_id`、`model` 与 `reasoning_effort` 是 nullable 的当前
+设置投影。listener 在 rollout 重建时按追加顺序读取最后一条 durable
+`ThreadSettingsApplied`；unloaded Thread 直接使用该持久值，loaded Session 只补齐或覆盖为
+当前运行设置。start/resume/fork/list/history 使用同一投影；未配置模型的空 Thread 返回
+`null`。Desktop 的 `thread_snapshot` 事件保持同样的 camelCase 字段，不从 UI 本地偏好、
+草稿或布局状态反向覆盖 Server 快照。
 
 ## 6. Desktop provisional ACK barrier
 
@@ -166,6 +168,11 @@ rebuild 结果幂等；失败时 rollback，不影响其他 session。
 SQLite 保存完整 `ResponseItem` JSON，不将 call/output、reasoning 或多模态 content 压成
 `Message`。冷启动直接恢复这些 items；Desktop RPC 也直接返回 items，React 在渲染时
 临时关联 call/output 和气泡。schema v22 不兼容迁移旧 `messages` 表，旧库直接重建。
+
+累计用量不从 SQLite 消息或 `TokenCount` 事件猜测。rollout 直接追加
+`TokenUsageRecord { latest, cumulative, compaction_response_id }`，resume 取最后一条记录作为
+下一次采样的累计基线；compaction 写 checkpoint，fork 明确过滤父 Thread 的 usage record，
+使新分支从零累计。
 
 ## 8. 故障与清理不变量
 
