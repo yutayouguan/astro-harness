@@ -1029,18 +1029,19 @@ mod tests {
             &[
                 serde_json::json!({
                     "type": "function",
-                    "description": "missing name"
+                    "name": "valid",
+                    "parameters": {"type": "object"}
                 }),
                 serde_json::json!({
-                    "type": "unknown",
-                    "name": "mystery"
+                    "type": "function",
+                    "description": "missing name"
                 }),
             ],
         )
         .unwrap_err();
 
         assert!(matches!(error, ProviderError::ModelError { .. }));
-        assert!(error.to_string().contains("index 0"));
+        assert!(error.to_string().contains("index 1"));
     }
 
     #[test]

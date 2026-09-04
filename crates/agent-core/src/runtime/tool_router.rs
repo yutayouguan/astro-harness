@@ -226,8 +226,23 @@ pub(crate) fn build_tool_router(
     requested_tool_mode: types::ToolMode,
     discovered_deferred: &HashSet<types::ToolName>,
 ) -> anyhow::Result<ToolRouter> {
+    let (model_visible_specs, discovered_specs, nested_specs) =
+        registry.schemas_for_step_with_mode(requested_tool_mode, discovered_deferred)?;
+    let model_visible_specs = tools::filter_schemas(interaction_mode, model_visible_specs);
+    let discovered_specs = tools::filter_schemas(interaction_mode, discovered_specs);
+    let nested_specs = tools::filter_schemas(interaction_mode, nested_specs);
+    let routed_identities = discovered_specs
+        .iter()
+        .chain(model_visible_specs.iter())
+        .chain(nested_specs.iter())
+        .flat_map(spec_tool_names)
+        .collect::<HashSet<_>>();
     let mut canonical_names = HashMap::<types::ToolName, String>::new();
-    for entry in registry.all_tools() {
+    for entry in registry
+        .all_tools()
+        .into_iter()
+        .filter(|entry| routed_identities.contains(&entry.tool_name()))
+    {
         let tool_name = entry.tool_name();
         if let Some(existing) = canonical_names.insert(tool_name.clone(), entry.name.clone()) {
             if existing != entry.name {
@@ -238,22 +253,9 @@ pub(crate) fn build_tool_router(
             }
         }
     }
-    let (model_visible_specs, discovered_specs, nested_specs) =
-        registry.schemas_for_step_with_mode(requested_tool_mode, discovered_deferred)?;
-    let model_visible_specs = tools::filter_schemas(interaction_mode, model_visible_specs);
-    let discovered_specs = tools::filter_schemas(interaction_mode, discovered_specs);
-    let nested_specs = tools::filter_schemas(interaction_mode, nested_specs);
-    for spec in discovered_specs
-        .iter()
-        .chain(model_visible_specs.iter())
-        .chain(nested_specs.iter())
-    {
-        for (_, registered_name) in spec_route_names(registry, spec) {
-            if registry.runtime(&registered_name).is_none() {
-                anyhow::bail!(
-                    "tool `{registered_name}` is model-visible but has no CoreToolRuntime"
-                );
-            }
+    for registered_name in canonical_names.values() {
+        if registry.runtime(registered_name).is_none() {
+            anyhow::bail!("tool `{registered_name}` is model-visible but has no CoreToolRuntime");
         }
     }
     Ok(finalize_tool_router(
@@ -315,6 +317,19 @@ fn spec_route_names(
     registry: &ToolRegistry,
     spec: &serde_json::Value,
 ) -> Vec<(types::ToolName, String)> {
+    spec_tool_names(spec)
+        .into_iter()
+        .filter_map(|tool_name| {
+            registry
+                .all_tools()
+                .into_iter()
+                .find(|entry| entry.tool_name() == tool_name)
+                .map(|entry| (tool_name, entry.name.clone()))
+        })
+        .collect()
+}
+
+fn spec_tool_names(spec: &serde_json::Value) -> Vec<types::ToolName> {
     let kind = spec
         .get("type")
         .and_then(serde_json::Value::as_str)
@@ -323,28 +338,18 @@ fn spec_route_names(
         let Some(namespace) = spec.get("name").and_then(serde_json::Value::as_str) else {
             return Vec::new();
         };
-        let mut routes = Vec::new();
-        for child in spec
+        return spec
             .get("tools")
             .and_then(serde_json::Value::as_array)
             .into_iter()
             .flatten()
-        {
-            let Some(child_name) = child.get("name").and_then(serde_json::Value::as_str) else {
-                continue;
-            };
-            let tool_name = types::ToolName::namespaced(namespace, child_name);
-            let Some(registered_name) = registry
-                .all_tools()
-                .into_iter()
-                .find(|entry| entry.tool_name() == tool_name)
-                .map(|entry| entry.name.clone())
-            else {
-                continue;
-            };
-            routes.push((tool_name, registered_name));
-        }
-        return routes;
+            .filter_map(|child| {
+                child
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|child_name| types::ToolName::namespaced(namespace, child_name))
+            })
+            .collect();
     }
 
     let name = if kind == "tool_search" {
@@ -352,8 +357,7 @@ fn spec_route_names(
     } else {
         spec.get("name").and_then(serde_json::Value::as_str)
     };
-    name.filter(|name| registry.get(name).is_some())
-        .map(|name| vec![(types::ToolName::plain(name), name.to_string())])
+    name.map(|name| vec![types::ToolName::plain(name)])
         .unwrap_or_default()
 }
 
