@@ -206,10 +206,10 @@ test("uses the core bucket for session cost comparison", () => {
 });
 
 test("uses source-specific memory cache TTLs", () => {
-  const now = Date.parse("2026-09-04T00:10:00Z");
+  const now = Date.parse("2026-09-04T06:00:00Z");
   assert.equal(
     isRankingsEnvelopeFresh(
-      envelope({}, { fetchedAt: "2026-09-04T00:00:30Z" }),
+      envelope({}, { fetchedAt: "2026-09-04T00:00:00Z" }),
       now,
     ),
     true,
@@ -218,7 +218,24 @@ test("uses source-specific memory cache TTLs", () => {
     isRankingsEnvelopeFresh(
       envelope(
         {},
-        { dataSource: "frontend", fetchedAt: "2026-09-04T00:00:30Z" },
+        { dataSource: "frontend", fetchedAt: "2026-09-04T05:00:00Z" },
+      ),
+      now,
+    ),
+    true,
+  );
+  assert.equal(
+    isRankingsEnvelopeFresh(
+      envelope({}, { fetchedAt: "2026-09-03T23:59:59Z" }),
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    isRankingsEnvelopeFresh(
+      envelope(
+        {},
+        { dataSource: "frontend", fetchedAt: "2026-09-04T04:59:59Z" },
       ),
       now,
     ),

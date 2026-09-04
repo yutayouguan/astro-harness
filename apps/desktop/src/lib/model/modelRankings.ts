@@ -19,7 +19,8 @@ export function isRankingsEnvelopeFresh(
 ): boolean {
   const fetchedAt = new Date(envelope.fetchedAt).getTime();
   if (!Number.isFinite(fetchedAt)) return false;
-  const ttlMs = envelope.dataSource === "official" ? 15 * 60_000 : 5 * 60_000;
+  const ttlMs =
+    envelope.dataSource === "official" ? 6 * 60 * 60_000 : 60 * 60_000;
   return now - fetchedAt <= ttlMs;
 }
 

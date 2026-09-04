@@ -14,8 +14,8 @@ use std::time::Duration;
 use super::providers::{find_provider_by_backend, resolve_api_key};
 
 const OPENROUTER_ORIGIN: &str = "https://openrouter.ai";
-const OFFICIAL_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
-const FRONTEND_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const OFFICIAL_CACHE_TTL: Duration = Duration::from_secs(6 * 60 * 60);
+const FRONTEND_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RankingSource {
@@ -405,6 +405,15 @@ mod tests {
         assert!(RequestSpec::parse("modality", Some("embeddings")).is_ok());
         assert!(RequestSpec::parse("modality", Some("music")).is_err());
         assert!(RequestSpec::parse("text", Some("image")).is_err());
+    }
+
+    #[test]
+    fn uses_source_specific_cache_ttls() {
+        assert_eq!(
+            RankingSource::Official.ttl(),
+            Duration::from_secs(6 * 60 * 60)
+        );
+        assert_eq!(RankingSource::Frontend.ttl(), Duration::from_secs(60 * 60));
     }
 
     #[test]
