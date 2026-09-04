@@ -314,6 +314,7 @@ export function ModelBrandIcon({
         className={
           className ? `model-brand-icon ${className}` : "model-brand-icon"
         }
+        data-brand={brand}
       >
         <Icon {...toIconProps(props)} />
       </span>
