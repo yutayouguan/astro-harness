@@ -8,8 +8,6 @@
   gap: 0;
   overflow: hidden;
   padding: 4px 2px 0;
-  --tone: var(--tone-indigo);
-  --tone-soft: var(--tone-indigo-soft);
 }
 
 .model-market-main {
