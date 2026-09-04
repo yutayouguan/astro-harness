@@ -1,10 +1,10 @@
 # Agent Harness 文档一致性审查
 
-> 审查日期：2026-08-30
+> 审查日期：2026-09-04
 >
 > 审查范围：`docs/03-系统设计阶段/`、`docs/04-详细设计阶段/` 的当前正式设计文档
 >
-> 对齐基线：Astro 当前源码、Codex `e24190caa9ee`、[术语统一规范](02-术语统一规范.md)
+> 对齐基线：Astro 当前源码、Codex `e24190caa9ee..a0dcfe2ada3`、[术语统一规范](02-术语统一规范.md)
 
 ## 1. 审查结论
 
@@ -19,6 +19,9 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 - [Agent Harness 总体架构](../03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)；
 - [Agent Harness 执行外壳详细设计](../04-详细设计阶段/01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)；
 - [Responses API 原生工具协议与 Astro 工具协议](../04-详细设计阶段/04-工具与扩展生态/05-Responses-API原生工具协议与Astro工具协议详细设计.md)；
+- [Extension Manifest](../extensions.md)；
+- [Realtime 子系统](../realtime-subsystem.md)；
+- [2026-09-03 Codex 源码对齐](../更新说明/2026-09-03-Codex源码对齐.md)；
 - [术语统一规范](02-术语统一规范.md)。
 
 ## 2. 已统一的不变量
@@ -37,6 +40,13 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 | Usage | turn aggregate 用于计费，latest sampling 校准上下文；保留 Provider total 和报告状态 | 已实现 |
 | 上下文 | provider reported/recomputed 优先，local estimate 保留分层解释与降级 | 已实现 |
 | 恢复 | rollout 是稳定事件事实源，SessionStore 是查询投影 | 已实现 |
+| 异步输入 | `request_user_input_async` 使用 durable questions；旧工具名不注册 | 已实现 |
+| Thread 设置 | provider/backend/model/reasoning 经 `ThreadSettingsApplied` 支持冷/热恢复 | 已实现 |
+| Usage checkpoint | `TokenUsageRecord` 保存 latest/cumulative/compaction；fork 不继承累计值 | 已实现 |
+| Extension | turn 内快照冻结，reconcile 只在下一 turn 激活并报告受影响能力 | 已实现 |
+| MCP event stream | process-owned manager、active 握手、attempt、有界队列和取消边界 | 基础已实现；opener/UI 待接线 |
+| Persistent reasoning | 非空模型目录指令 + OpenAI 三层门禁；wire effort 为 `disabled` | 已实现 |
+| Network header requirement | active leaf profile 解析、状态携带与 Debug 脱敏 | 已实现；CONNECT 不执行 TLS 内注入 |
 | 子 Agent | V2 Agent Threads + Graph/mailbox/status；真实对话仍进入 Session 时间线 | 已实现 |
 | 存储路径 | SQLite 职责库统一位于 `{base}/data/`；旧库只经启动迁移读取 | 已实现 |
 
@@ -50,6 +60,7 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 - 单一 `agent.db` 承载全部状态；当前是 rollout + 多职责数据库；
 - 固定“8 槽位 SystemPromptBuilder”代表当前 prompt；当前使用 `PromptContract`；
 - Provider 工具、客户端 Function 和 MCP 工具共享单一暴露语义；当前必须区分 wire type、exposure 和 authorization。
+- 把 `agent-mcp-server` 描述为当前 workspace crate；实际只实现 `agent-mcp` 客户端，Server 暴露仍是目标设计。
 
 ## 4. 有意保留的范围
 
@@ -63,10 +74,14 @@ Model 负责推理、决策、文本和工具调用意图；Harness 负责驱动
 
 ## 5. 已知未闭环项
 
-1. `agent-protocol::Op` 中部分控制分支仍返回 unsupported，不能因协议类型存在就宣称 runtime 已实现。
-2. Provider-hosted `WebSearch` 有协议表示；Registry 当前 `web_search` 仍是客户端 Deferred Function。
-3. 历史 Code Mode 运行时代码仍待清理，但已无模型配置入口，也不会注册 `exec` / `wait`。
-4. 旧文档正文保留的伪代码、表数量和性能目标需要在对应功能真正实现时逐项替换；顶部 Harness 基线只负责防止其被误读为现状。
+1. MCP event-stream manager 尚未连接具体 Server opener 与 Desktop 订阅 RPC。
+2. HTTP CONNECT 代理不能观察 TLS 内 method/path，header injection 目前仅 parse/carry/redact。
+3. Remote Extension Marketplace 需要 Astro 自有服务、认证与 bundle 信任根；当前只激活本地扩展。
+4. Native voice helper 需要签名的三平台 runtime 产物；当前生产路径仍是 WebView/WebRTC/PCM WebSocket。
+5. `agent-protocol::Op` 中部分控制分支仍返回 unsupported，不能因协议类型存在就宣称 runtime 已实现。
+6. Provider-hosted `WebSearch` 有协议表示；Registry 当前 `web_search` 仍是客户端 Deferred Function。
+7. 历史 Code Mode 运行时代码仍待清理，但已无模型配置入口，也不会注册 `exec` / `wait`。
+8. 历史正文中的旧伪代码和目录已显式标为历史参考；新增现行设计不得继续引用已删除 crate。
 
 ## 6. 后续维护规则
 

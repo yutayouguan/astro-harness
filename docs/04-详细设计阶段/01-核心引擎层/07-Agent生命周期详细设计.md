@@ -1,7 +1,7 @@
 # Agent 生命周期详细设计
 
-> 版本：v3.2
-> 日期：2026-09-01
+> 版本：v3.3
+> 日期：2026-09-04
 > 状态：当前实现基线
 > 适用范围：`agent-core`、`agent-protocol`、`agent-realtime`、`agent-rollout`、`agent-subagents`、`agent-hooks`、`agent-mcp`、`agent-server`、Desktop shell
 
@@ -212,6 +212,11 @@ MCP server: elicitation/create
 
 它不追溯修改已发出的 Provider 请求，也不更改 Thread 默认配置或其他 turn。
 
+`reasoning_effort = persistent` 有额外前置条件：当前 backend 必须是 OpenAI，且 Session 已从
+模型目录保存非空 `astro_persistent_instructions`。Server 在初始 Chat 配置与 active-turn 更新
+两个入口都校验；Provider 最终把 wire effort 映射为 `disabled` 并消费内部指令键。其他
+Provider 不做透传或降级。
+
 ### 10.4 Guardian assessment / retry
 
 Guardian 对高风险工具操作发送 `in_progress`、`approved`、`denied` 或 `aborted` assessment event。拒绝项以 assessment id 保留，并绑定 `SHA-256(tool_name + NUL + serialized_arguments)` 得到的 canonical action。
@@ -256,6 +261,20 @@ Realtime 是 Thread 所有的会话级连接，并非一个普通 sampling step�
 - Desktop WebRTC 路径使用 browser media/data channel 和 unified SDP；ExistingCall 只要求 call id，不创建重复的本地采集链。
 - 连接和媒体通道必须有界；启动、传输或关闭失败通过 typed error/closed event 收敛，不留下伪活跃会话。
 
+### 10.7 Extension reconcile
+
+`ReconcileExtensions` 通过同一 Thread control plane 请求重新发现扩展，但不修改 active turn：
+
+1. 发现并完整校验 next snapshot；
+2. 与当前/baseline snapshot 比较稳定 fingerprint；
+3. 返回 changed extension IDs 及 MCP/Skills/Hooks/toolsets refresh flags；
+4. 有差异时写入 `pending_extension_snapshot`；
+5. 下一 turn 首次请求扩展快照时一次性发布，当前 turn 的 `OnceLock` 保持不变。
+
+解析、安装或升级失败不替换已激活 snapshot。event-stream manager 已具备 Server 删除与权限
+generation 取消边界；普通 turn task 结束不等价于取消已托管订阅。具体 Server opener 与
+Desktop 订阅入口仍待接线。
+
 ## 11. 事件与持久化
 
 `Session::send_event` 在 `event_dispatch` guard 内执行：
@@ -272,6 +291,10 @@ normalize event identity
 SessionStore 是查询、FTS 和 UI read model，不是工具执行事实源。其消息可从 rollout 重建。
 
 Realtime 使用独立 `RealtimeItem` 持久化语义：会话启动、完整 transcript、BEM promotion 与关闭 outcome 是 durable；音频和逐字 delta 仍是 transient。
+
+模型用量使用独立 `RolloutItem::TokenUsage`，而不是从 `TokenCount` 反推。每条
+`TokenUsageRecord` 同时保存 latest 与 cumulative，compaction 后记录 checkpoint response id；
+resume 恢复最后一条记录，fork 不复制父 Thread 的累计值。
 
 ## 12. 核心不变量
 
@@ -290,6 +313,9 @@ Realtime 使用独立 `RealtimeItem` 持久化语义：会话启动、完整 tra
 13. 独立用户 Shell 不是模型工具；虽不进入 Agent sandbox，仍必须有任务归属、取消与输出上限。
 14. Realtime Provider wire JSON 不跨越 `agent-realtime` 边界，持久化只记录经 reducer 归并的 `RealtimeItem`。
 15. ExistingCall 不改写已建立会话的 session 配置；V3 可恢复 sideband，V2 不自动重放非幂等输入。
+16. Extension snapshot 在 turn 内不可替换；reconcile 结果只允许从下一 turn 生效。
+17. `persistent` reasoning 必须同时通过模型目录、Server 与 OpenAI adapter 三层门禁。
+18. usage cumulative 从 durable checkpoint 恢复，fork 不继承父 Thread 累计值。
 
 ## 13. 验证
 
@@ -299,9 +325,12 @@ cargo test -p agent-protocol
 cargo test -p agent-rollout
 cargo test -p subagents
 cargo test -p hooks
+cargo test -p agent-extensions
+cargo test -p mcp
+cargo test -p providers persistent_reasoning
 ```
 
-重点覆盖：task replacement、steer turn identity、interrupt terminal、suspend/recover、compact replacement、rollback replay、review cleanup、tool call/output pairing、Hook shutdown、rollout-before-live ordering、Realtime transport/version/parser/history/handoff/reconnect、Elicitation 重复/取消、TurnSettings 原子替换、Guardian 重复操作 FIFO 和 UserShell 输出截断。
+重点覆盖：task replacement、steer turn identity、interrupt terminal、suspend/recover、compact replacement、rollback replay、review cleanup、tool call/output pairing、Hook shutdown、rollout-before-live ordering、Realtime transport/version/parser/history/handoff/reconnect、Elicitation 重复/取消、TurnSettings 原子替换、persistent 门禁、Extension next-turn 激活、MCP event stream 取消边界、usage checkpoint、Guardian 重复操作 FIFO 和 UserShell 输出截断。
 
 ## 14. 相关设计
 

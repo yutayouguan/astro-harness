@@ -1,6 +1,6 @@
 # MCP 集成
 
-> **Harness 定位（2026-09-03）**：MCP 是 Harness 的外部工具 Gateway，而不是 Model 本身能力。模型侧使用 Responses 原生 `namespace=mcp__{server}` + `name={tool}`，Hub 内部才使用展平执行键。当 `tool_search` 可用时，MCP 工具默认 Deferred；搜索激活只改变模型可见性，不跳过 MCP approval、HITL、`StepContext` 或审计。见 [Agent Harness 总体架构](../01-架构设计/11-Agent-Harness总体架构.md)。
+> **Harness 定位（2026-09-04）**：MCP 是 Harness 的外部工具 Gateway，而不是 Model 本身能力。模型侧使用 Responses 原生 `namespace=mcp__{server}` + `name={tool}`，Hub 内部才使用展平执行键。当 `tool_search` 可用时，MCP 工具默认 Deferred；搜索激活只改变模型可见性，不跳过 MCP approval、HITL、`StepContext` 或审计。见 [Agent Harness 总体架构](../01-架构设计/11-Agent-Harness总体架构.md)。
 
 > 文档状态：定稿 | 阶段：系统设计 | 拆分自：原 07-MCP与Skills与子Agent.md
 
@@ -8,7 +8,8 @@
 
 ## 一、MCP Client
 
-`McpHub` 维持每 Agent 连接池并在 `tools/list` 后生成 `ToolEntrySpec`。
+`McpHub` 维持每 Agent 连接池并在 `tools/list` 后生成 `ToolEntrySpec`；进程级
+`McpEventStreamManager` 提供独立于 turn task 的长流所有权基础。
 `Session::attach_mcp_tools()` 将条目注册到 `ToolRegistry`：
 
 ```text
@@ -25,23 +26,34 @@ MCP tools/list
 因此 Agent 执行循环无需根据工具名前缀猜测 Server，但调用仍会通过统一的
 approval、sandbox、hook、output budget 和持久化链路。
 
+event stream manager 使用 `(thread_id, subscription_id)` 作为稳定所有权键，每次启动分配单调
+`stream_attempt_id`。只有收到首条 `notifications/events/active` 才算激活；通知走容量 64 的
+有界队列。普通 turn/task 卸载不结束长流，权限 generation 变化、Server 删除/禁用或 Hub
+shutdown 会取消对应 worker。当前尚未接入具体 MCP Server opener 和 Desktop 订阅 RPC。
+
 ---
 
-## 二、MCP 工具风险等级配置
+## 二、MCP 工具开关与审批
 
-McpToolBridge 默认风险等级为 `Medium`，但支持在 `mcp-servers.toml` 中按 Server 和工具名覆盖：
+MCP 使用 Server 默认审批模式与单工具覆盖；工具可见性和审批相互独立：
 
 ```toml
-[servers.github]
+[mcp_servers.github]
 command = "mcp-server-github"
-default_risk_level = "low"      # 该 Server 所有工具默认 Low
+default_tools_approval_mode = "writes"
+enabled_tools = ["list_issues", "create_issue"]
+disabled_tools = ["delete_repo"]
 
-[servers.github.risk_overrides]
-"create_issue" = "medium"       # 特定工具覆盖为 Medium
-"delete_repo" = "high"          # 危险操作覆盖为 High
+[mcp_servers.github.tools.create_issue]
+enabled = true
+approval_mode = "prompt"
+output_token_limit = 1200
 ```
 
-**默认风险等级**：未显式配置时，所有 MCP 工具统一默认为 `Medium`，不进行基于名称的自动推断。可通过 `default_risk_level`（Server 级）和 `risk_overrides`（工具级）在配置中显式覆盖。
+规则顺序是 `enabled_tools` allow list → `disabled_tools` deny list → 单工具 `enabled`。
+审批先读取单工具 `approval_mode`，缺失时使用 `default_tools_approval_mode`。annotations
+只能辅助审批路由，不能提升基础权限；`output_token_limit` 在原始输出、Hook 变换和最终回灌
+后都保持同一个预算上限。
 
 ---
 
@@ -62,29 +74,23 @@ mcp/
 
 ## 四、MCP Server 暴露
 
-`agent-mcp-server` crate 将 Agent 的 Skill/Tool 能力暴露为标准 MCP 接口，供其他 Agent 或工具调用。
+Astro 当前只实现 MCP Client，不提供独立 `agent-mcp-server` crate，也不把 Agent 的内部
+Skill/Tool 自动暴露成远端 MCP Server。需要对外暴露时必须另行设计认证、权限与生命周期，
+不能复用 client 配置暗中开放监听端口。
 
 ---
 
 ## 五、MCP Server 配置
 
 ```toml
-# mcp-servers/servers.toml
-
-[[servers]]
-name      = "filesystem"
-transport = "stdio"
+[mcp_servers.filesystem]
 command   = "npx"
 args      = ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
 
-[[servers]]
-name      = "postgres"
-transport = "streamable-http"
+[mcp_servers.postgres]
 url       = "http://localhost:5432/mcp"
 
-[[servers]]
-name      = "browser"
-transport = "stdio"
+[mcp_servers.browser]
 command   = "npx"
 args      = ["-y", "@modelcontextprotocol/server-puppeteer"]
 ```

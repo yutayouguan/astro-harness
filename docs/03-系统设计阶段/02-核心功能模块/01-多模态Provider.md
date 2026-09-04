@@ -1,8 +1,8 @@
 # 多模态 Provider 系统
 
-> **Harness 边界（2026-09-01）**：Provider 是 Model 网关和协议适配层，不拥有 Agent turn、工具权限或持久化生命周期。Agent 通过 `ResponsesRequest` 交付原生 Items/tool schemas；非 Agent 兼容调用使用 `ChatCompletionRequest`。两条请求类型不互相降级。契约详见 [Responses API 原生工具协议与 Astro 工具协议](../../04-详细设计阶段/04-工具与扩展生态/05-Responses-API原生工具协议与Astro工具协议详细设计.md)。
+> **Harness 边界（2026-09-04）**：Provider 是 Model 网关和协议适配层，不拥有 Agent turn、工具权限或持久化生命周期。Agent 通过 `ResponsesRequest` 交付原生 Items/tool schemas；非 Agent 兼容调用使用 `ChatCompletionRequest`。两条请求类型不互相降级。契约详见 [Responses API 原生工具协议与 Astro 工具协议](../../04-详细设计阶段/04-工具与扩展生态/05-Responses-API原生工具协议与Astro工具协议详细设计.md)。
 
-> 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-09-01
+> 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-09-04
 
 ## 架构概览
 
@@ -79,6 +79,7 @@ impl OpenAIResponsesCompatible for NewProvider {
     const STORE_FALSE: bool = false;
     const PARALLEL_TOOLS: bool = false;
     const REASONING_SUMMARY: bool = false;
+    const SUPPORTS_PERSISTENT_REASONING: bool = false;
 }
 ```
 
@@ -119,6 +120,8 @@ default_effort = "high"
 - 统一走 Responses API
 - 运行时读取，修改后无需重启
 - TOML 声明的模型启动时注入 `~/.astro/cache/models.json`
+- 自定义 Provider 不获得 `persistent` capability；该能力仅由 OpenAI 模型目录的
+  `persistent_instructions` 打开
 
 ---
 
@@ -157,7 +160,18 @@ API 厂商端点 (/models)  →  OpenRouter 模型表  →  已知能力补丁
      前端模型选择器          运行时 context_window 查询
 ```
 
-`ModelInfo` 字段：id、display_name、description、context_window、max_output_tokens、capabilities（tools/vision/web/reasoning/file/audio/image_gen/video_gen/music_gen）、reasoning（supported_efforts/default_effort）、pricing、default_parameters、meta_source。
+`ModelInfo` 字段：id、display_name、description、context_window、max_output_tokens、capabilities（tools/vision/web/reasoning/file/audio/image_gen/video_gen/music_gen）、reasoning（supported_efforts/default_effort/persistent_instructions）、pricing、default_parameters、meta_source。
+
+### Persistent reasoning
+
+`persistent` 是本地 reasoning effort，不是直接透传给所有 Provider 的 wire 值：
+
+1. 只有 `backend_id = openai` 且模型目录带非空 `persistent_instructions` 时，Desktop 才显示该档位；
+2. 目录 enrich 只为 OpenAI 保留并规范化该字段，Azure、OpenRouter 与自定义 Provider 不获得隐式能力；
+3. Desktop 经 `ChatRequest.persistent_instructions` 传给 Server，Server 在初始配置与 active-turn 切换时再次校验；
+4. Provider adapter 消费内部 `astro_persistent_instructions`，将其合并进 instructions，并从最终 JSON 删除该内部键；
+5. OpenAI Responses wire 使用 `reasoning.effort = "disabled"`；其他 adapter 收到 `persistent` 明确失败；
+6. 切回普通 effort 后指令可留在 Session 中供再次启用，但不会注入普通请求。
 
 ---
 
@@ -186,6 +200,7 @@ pub struct ChatTarget {
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | 聊天 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Responses API | — | ✓ | — | ✓ | ✓ | ✓ | — | — | — | — |
+| Persistent reasoning | — | 目录门控 | — | — | — | — | — | — | — | — |
 | 嵌入 | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | 图像生成 | — | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | TTS | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |

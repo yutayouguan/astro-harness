@@ -1,10 +1,10 @@
 # MCP 接入系统详细设计
 
-> **Harness 当前基线（2026-09-03）**：`McpHub` 是每 Agent 进程级连接池。工具在模型侧以原生 `namespace=mcp__{server_id}` + `name={tool_name}` 暴露，Hub 内部才使用 `mcp__{server_id}__{tool_name}` 执行键。当 `tool_search` 可用时默认 Deferred，否则回退 Direct；激活不等于授权。Server instructions 是不可信 dynamic context，MCP prompt/resource 不得被当作 system authority。
+> **Harness 当前基线（2026-09-04）**：`McpHub` 是每 Agent 进程级连接池。工具在模型侧以原生 `namespace=mcp__{server_id}` + `name={tool_name}` 暴露，Hub 内部才使用 `mcp__{server_id}__{tool_name}` 执行键。当 `tool_search` 可用时默认 Deferred，否则回退 Direct；激活不等于授权。Server instructions 是不可信 dynamic context，MCP prompt/resource 不得被当作 system authority。`McpEventStreamManager` 已提供 process-owned 生命周期基础，具体 opener/UI 接线仍待完成。
 
-> 阶段：详细设计  
-> 状态：已决策，分阶段实施  
-> 适用范围：Astro MCP Host/Client、桌面端 MCP 管理界面、工具注册与审批  
+> 阶段：详细设计
+> 状态：当前实现基线；剩余项显式标注
+> 适用范围：Astro MCP Host/Client、桌面端 MCP 管理界面、工具注册与审批
 > 外部基线：[Codex Model Context Protocol](https://learn.chatgpt.com/docs/extend/mcp)（2026-08-17）
 
 ## 1. 设计结论
@@ -70,7 +70,7 @@ Deferred MCP 工具由 `tool_search` 返回原生 namespace schema；同一 Serv
 - 不允许 MCP 自定义配置提升当前 Session 或 Subagent 的权限。
 - 不在 MCP 配置中保存 OAuth access token、refresh token 或可直接使用的长期密钥。
 
-## 3. 当前实现与目标差距
+## 3. 当前实现与剩余验收差距
 
 当前代码位于 `crates/agent-mcp`，已经具备 `rmcp` 客户端、STDIO/Streamable HTTP 连接、`tools/list_changed`、工具注册、Agent 级配置、启动/工具调用超时和基础沙箱约束。
 
@@ -79,13 +79,15 @@ Deferred MCP 工具由 `tool_search` 返回原生 namespace schema；同一 Serv
 | 领域 | 当前实现 | 目标状态 |
 | --- | --- | --- |
 | 传输 | 仅 STDIO、Streamable HTTP；旧 SSE 配置显式报迁移错误 | 仅 STDIO、Streamable HTTP |
-| 配置 | TOML；全局 → 显式可信项目 → Agent 整体覆盖；旧 JSON 只读迁移 | TOML 基础契约 + 全局/项目/Agent 分层 |
+| 配置 | TOML；全局 → 显式可信项目 → Agent 整体覆盖；旧 JSON 不作为输入 | 已实现 |
 | 认证 | 已支持环境凭据、OAuth Authorization Code + PKCE、系统 Keychain、登录/登出；显式 Authorization 优先，缺省先匿名连接 | 补齐固定 callback override 与企业会话认证边界 |
 | 初始化 | 已消费 initialize `instructions`，仅保留健康连接内存快照，经长度与安全边界注入 system prompt | 补充真实 Server 端到端验收 |
 | 超时 | 启动默认 10s、工具默认 60s；配置可完整 round-trip | 启动默认 10s、工具默认 60s |
 | 失败策略 | optional 降级；`required` 结构化失败阻止 LLM | `required` 控制是否阻止任务开始 |
 | 工具策略 | `enabled_tools` allow → `disabled_tools` deny → legacy bool gate；已接入 Server/Tool 审批策略与 annotations | 补充真实 Server 的端到端交互验收 |
 | UI | 增删、刷新、开关、超时、运行状态、错误、重连、环境凭据引用、OAuth 登录/登出及审批策略编辑 | 补充保存失败回滚和结构化错误 |
+| Event stream | manager 基础已完成：active 握手、attempt id、有界队列、权限/Server 生命周期取消 | 接入具体 Server opener、Desktop 订阅 RPC 与真实长流验收 |
+| Extension reconcile | 当前 turn 冻结；变更生成 pending snapshot，下一 turn 激活并报告受影响能力 | 已实现 |
 | 错误传播 | 部分 UI 保存错误被吞掉 | 所有持久化和连接错误可见 |
 
 ## 4. 模块边界
@@ -98,11 +100,11 @@ apps/desktop/
 
 crates/agent-mcp/src/
 ├── lib.rs
-├── config.rs          # TOML/旧 JSON 迁移、配置合并与校验
+├── config.rs          # 分层 TOML、inline 配置合并与严格校验
 ├── auth.rs            # Bearer、环境 Header、OAuth、Keychain 引用
-├── hub.rs             # Agent/Session 连接池与状态机
+├── event_stream.rs    # 进程级长流所有权、激活握手、attempt 与取消
+├── hub.rs             # Agent/Session 连接池、instructions、tools 与 capability 生命周期
 ├── session.rs         # 单 Server 生命周期、超时、中断、通知
-├── hub.rs             # 连接池、instructions 快照、tools 与 capability 发现
 ├── protocol.rs        # resources/resource templates/prompts 显式按需协议适配
 ├── policy.rs          # allow/deny、审批模式、required
 └── names.rs           # mcp__{server} namespace + Hub qualified key
@@ -272,6 +274,7 @@ Disabled
 Connected
   ├─ config/policy change → Draining → Connecting
   ├─ transport closed → Disconnected → Backoff → Connecting
+  ├─ event stream → Starting → Active → Ended
   ├─ disable → Draining → Disabled
   └─ shutdown → Closed
 ```
@@ -291,7 +294,9 @@ Connected
 - 认证失败、配置错误、权限拒绝不自动重试。
 - 用户点击 Reconnect 会清零退避，但不跳过权限或认证检查。
 - 当前实现采用事件驱动重试：活跃任务在每次 MCP reload 时检查到期 Server；空闲 Agent 不启动仅用于重连的后台线程。UI 显示连续失败次数和下一次重试时间。
-- 应用退出、Agent 切换、Server 删除时必须取消连接和未完成调用。
+- Server 删除/禁用或 Hub shutdown 时必须取消连接、未完成调用和对应 event streams。
+- Thread task 卸载不等于取消 process-owned event stream；订阅按
+  `(thread_id, subscription_id, stream_attempt_id)` 继续归属，权限 generation 变化时 fail closed。
 
 ## 8. 初始化与 Server Instructions
 
@@ -428,6 +433,10 @@ LLM tool_call
 - `is_error = true` 转换为可识别的工具错误，不能伪装成成功文本。
 - 超时取消当前 request；若协议层无法取消，结果到达后丢弃并记录 late response。
 
+Event stream 的首条通知必须是 `notifications/events/active`，并在 90 秒 activation deadline
+内到达；否则启动失败。`notifications/events/terminated` 正常收敛流，其他断开产生带 attempt
+identity 的 ended update，旧 attempt 的迟到通知不能覆盖新订阅。
+
 ## 12. Desktop 与 Tauri 设计
 
 ### 12.1 DTO
@@ -511,7 +520,7 @@ Composer MCP 菜单只展示真实状态，不把“配置存在”等同于“�
 - [x] 增加 `required`、allow/deny、执行根内 `cwd`、启动核心状态和并行连接（上限 4）。
 - [x] 增加可重试错误分类、带 jitter 的指数退避（最大 30s）、重试元数据和真实 Hub Reconnect；HTTP 401 进入独立 `auth-required` 状态。
 - [x] `ListMcpServers` 按 Agent/项目作用域返回带稳定 Server id 的 Hub 真实状态；Tauri 与工具设置页每 5 秒刷新连接状态并展示最近错误，不再把配置存在视为已连接。
-- [x] 保留只读旧 JSON 导入器，成功迁移后写入 TOML，并保留 `.migrated.bak` 备份。
+- [x] 配置硬切为 TOML；旧 JSON 不再读取或自动迁移。
 
 ### Phase 2：安全认证与审批
 
@@ -558,7 +567,7 @@ Composer MCP 菜单只展示真实状态，不把“配置存在”等同于“�
 - 添加、编辑、删除、启停和保存失败回滚。
 - AuthRequired → Authenticate → Connected。
 - 连接错误详情和 Reconnect。
-- 旧 SSE JSON 导入显示迁移错误。
+- legacy SSE transport 显示明确迁移错误。
 - 窄屏、键盘导航和敏感值不可见。
 
 ### 15.4 验收标准

@@ -2,7 +2,7 @@
 
 > 阶段：系统设计
 > 状态：当前实现基线
-> 更新：2026-09-01
+> 更新：2026-09-04
 
 ## 1. 边界
 
@@ -48,6 +48,11 @@ Agent 入口是 `agent_responses_stream()` 和 `agent_responses_prompt()`。它�
 
 `instructions` 是 Responses 顶层指令；不应改写成 system message。`tools` 是独立的
 tagged union；不应编码进指令文本。
+
+`persistent` reasoning 是受模型目录门控的本地 effort。只有 OpenAI adapter 声明
+`SUPPORTS_PERSISTENT_REASONING`；请求必须携带内部 persistent instructions，adapter 将
+wire effort 映射为 `disabled`、把指令合并进顶层 instructions，并在发送前移除内部键。
+其他 Responses adapter 必须返回不支持错误，不能把 `persistent` 原样发送或静默改成普通档位。
 
 ## 3. 非 Agent 兼容接口
 

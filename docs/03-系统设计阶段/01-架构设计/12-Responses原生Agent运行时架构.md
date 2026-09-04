@@ -4,7 +4,7 @@
 >
 > 状态：当前实现基线
 >
-> 更新：2026-09-03
+> 更新：2026-09-04
 >
 > 适用范围：`agent-core`、`agent-protocol`、`agent-providers`、`agent-rollout`、`agent-session`、`agent-hooks`
 
@@ -23,6 +23,9 @@ Astro 的 Agent 对话链路只接受 Responses API。`agent_protocol::ResponseI
 5. 标题、压缩、记忆回顾、智能审批等 Agent 自有辅助任务同样走 Responses-only 入口。
 6. Provider 的显式 `api_mode` 不能绕过 Agent capability gate。
 7. Namespace 工具以分离的 `(namespace, name)` 作为规范身份；从 schema、call、StepContext 路由到 output 回放均不展平。
+8. turn 内使用同一个 immutable `ExtensionSnapshot`；reconcile 只影响下一 turn。
+9. cumulative usage 由 durable `TokenUsageRecord` 恢复，不从消息文本或 UI 统计反推。
+10. `persistent` reasoning 只允许 OpenAI 且要求模型目录指令；wire effort 为 `disabled`。
 
 ## 2. 端到端数据流
 
@@ -103,6 +106,11 @@ Agent 调用入口是 `agent_responses_stream()` 和 `agent_responses_prompt()`�
 
 当前内置 Agent-capable provider 由 `profile.rs` 的 capability 标志决定；文档不复制一份独立白名单，避免配置与实现漂移。
 
+OpenAI 的 `persistent` effort 是本地控制语义：模型目录缺少非空
+`persistent_instructions` 时 UI 和 Server 都拒绝；存在时 adapter 将这些指令合并进
+Responses `instructions`，wire `reasoning.effort` 写为 `disabled`。内部
+`astro_persistent_instructions` 在发请求前被消费，不能作为未知字段泄漏给 Provider。
+
 ## 5. 生命周期与控制面
 
 每个 `AstroThread` 拥有一个长生命周期 submission loop。`Session` 只允许一个活跃 `SessionTask`：
@@ -138,7 +146,7 @@ canonical state transition
   -> live event delivery
 ```
 
-`event_dispatch` 串行化持久化与 live 投递。`ItemCompleted`、turn 终态、usage、settings、rollback 与原生 `ResponseItem` 可恢复；delta、approval prompt、Hook run 状态和诊断错误是瞬态。Server 使用 rollout snapshot + live boundary 重建客户端，不使用 Core EventBus 或最后一条 SQLite message 猜测执行状态。
+`event_dispatch` 串行化持久化与 live 投递。`ItemCompleted`、turn 终态、settings、rollback 与原生 `ResponseItem` 可恢复；累计 usage 使用独立 `RolloutItem::TokenUsage`，Realtime 使用独立 `RolloutItem::RealtimeItem`。delta、approval prompt、Hook run 状态和诊断错误是瞬态。Server 使用 rollout snapshot + live boundary 重建客户端，不使用 Core EventBus 或最后一条 SQLite message 猜测执行状态。
 
 SQLite schema v22 的 `response_items.item_json` 是唯一会话内容列。升级时不迁移旧
 `messages` 表：直接重建会话表和 FTS 索引，再由 rollout 回填可恢复历史。
@@ -157,6 +165,7 @@ SQLite schema v22 的 `response_items.item_json` 是唯一会话内容列。升�
 | 工具命名空间与 Step 路由 | `crates/agent-types/src/tool_entry.rs`、`crates/agent-core/src/runtime/tool_router.rs` |
 | Deferred namespace 搜索与恢复 | `crates/agent-tools/src/builtin/shell/tool_search.rs`、`crates/agent-core/src/runtime/turn_lifecycle.rs` |
 | Rollout 策略与恢复 | `crates/agent-rollout/src/policy.rs`、`reconstruction.rs` |
+| Extension / MCP snapshot | `crates/agent-extensions/src/lib.rs`、`crates/agent-mcp/src/event_stream.rs`、`crates/agent-core/src/runtime/mod.rs` |
 | Hook runtime | `crates/agent-hooks/src/lib.rs`、`command.rs`、`lifecycle_events.rs` |
 
 ## 9. 非目标
