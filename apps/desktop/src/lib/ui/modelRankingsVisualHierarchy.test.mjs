@@ -66,6 +66,14 @@ test("ranking navigation is one aligned rounded toolbar", () => {
     rankingsCss,
     /\.mm-rankings-commandbar \.model-market-refresh\s*\{[\s\S]*?height:\s*34px/,
   );
+  assert.match(
+    panelSource,
+    /className="mm-rankings-sticky-nav"[\s\S]*?className="mm-rankings-commandbar"[\s\S]*?<\/div>\s*<\/div>\s*\{section === "usage"/,
+  );
+  assert.match(
+    rankingsCss,
+    /\.mm-rank-modality-tabs button\s*\{[\s\S]*?border-radius:\s*999px/,
+  );
 });
 
 test("intelligence cards share the catalog card material", () => {
