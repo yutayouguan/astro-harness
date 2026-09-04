@@ -1,10 +1,12 @@
 # Responses API 原生工具协议与 Astro 工具协议详细设计
 
-> **Astro 当前基线（2026-09-03）**：Direct、CodeMode 与 CodeModeOnly 三种工具投影均已接入；Responses 定义、调用、路由、输出与恢复全链路保留结构化 `(namespace, name)`；JavaScript 由进程内 QuickJS 执行，不依赖用户安装 Node.js。
+> **Astro 当前基线（2026-09-04）**：工具主链已按 Codex 的 Step-scoped tool plan 结构重构；Direct、CodeMode 与 CodeModeOnly 三种投影均已接入，Responses 定义、调用、路由、输出与恢复全链路保留结构化 `(namespace, name)`。
 
 > 阶段：详细设计
 >
-> 状态：已实现（对应提交 `9f04e810`、`4563aad2`）
+> 状态：已实现（对应提交 `9f04e810`、`4563aad2`、`74f0c9b1`）
+>
+> Step-scoped tool plan 重构：`e3ac2c51`
 >
 > 参考实现基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
 >
@@ -52,34 +54,27 @@
 ## 3. 总体架构
 
 ```text
-ToolEntry / MCP discovered tool
-          |
-          v
-ToolRegistry -- exposure + namespace + grammar --> native JSON schemas
-          |                                           |
-          |                                           v
-          |                              dispatch::parse_tool_definition
-          |                                           |
-          |                                           v
-          |                              ResponsesRequest.tools
-          |                                           |
-          |                         +-----------------+------------------+
-          |                         |                                    |
-          |                         v                                    v
-          |                  Responses API                  non-Agent adapters
-          |             preserve native variants       omit unsupported namespaces
-          |                         |
-          v                         v
-StepContext / ToolRouter <- streamed call events + accumulated arguments
-          |
-          v
-approval -> sandbox -> hooks -> concrete handler -> persisted tool result
-          |
-          v
-next request: reconstruct the matching native call/output history pair
+CoreToolRuntime / ToolExecutor
+  -> ToolRegistry
+  -> build_tool_router / finalize_tool_router
+  -> ToolRouter { registry, model_visible_specs, routes }
+  -> StepContext { tool_router, history, prompt_context }
+  -> build_prompt()
+  -> Prompt { instructions, input, tools }
+  -> ResponsesRequest
+  -> Responses API
+  -> ResponseItem
+  -> ToolRouter::build_tool_call()
+  -> approval / sandbox / hooks
+  -> ToolRouter::dispatch()
+  -> ToolRegistry::dispatch()
+  -> CoreToolRuntime::handle()
+  -> ResponseItem output / durable history
 ```
 
-核心原则是：工具定义、工具调用事件、工具结果和历史回放必须使用同一种语义。只对请求 schema 做“原生化”而不改响应解析和历史，是不完整的。
+核心原则是：Registry 中的可执行 Runtime、本 Step 的模型可见 schema、Provider 请求和响应调用必须来自同一份冻结快照。`ToolRouter` 同时持有 `registry` 和 `model_visible_specs`，`StepContext` 再持有该 Router，因此 MCP 热重载或 Skill 激活不会改变已发出 sampling request 的执行边界。
+
+`Prompt.tools` 是 Agent Core 对本次请求的权威投影；Provider 层只负责将它解析为 `ResponsesRequest.tools`。返回的原生 item 必须由 `ToolRouter::build_tool_call()` 重建结构化工具身份，再交回同一 Router 内的 Registry 执行。
 
 ## 4. Responses API 原生工具协议
 
@@ -260,6 +255,21 @@ MCP 同样使用原生身份：模型看到 `namespace: "mcp__calendar"` + `name
 | `mcp__{server}` | 有 `tool_search` 时 Deferred，否则 Direct | Server 返回的原生工具名 |
 
 `image_analyze`、`audio_analyze`、`video_analyze` 和 `robotics` 不归入 `media`；理解/感知工具与生成工具的副作用、路由和授权语义不同。
+
+#### 4.4.5 Desktop Catalog 投影
+
+后端 `ToolCatalogItem` / `ToolFunctionInfo` 不再把内部注册名冒充为 API 调用名：
+
+| 字段 | 语义 | Browser 示例 |
+| --- | --- | --- |
+| `id` | toolset 开关 id | `browser` |
+| `name` | 模型可见调用名 | `browser.open` |
+| `namespace` | Responses namespace | `browser` |
+| `registeredName` | Rust Registry / handler 内部名 | `browser_open` |
+
+`functions[]` 同样携带这三种身份。Desktop `ToolsPanel` 使用 `id` 切换 toolset，
+用 `name` 展示真实调用名，并分开显示 namespace 与 registered name。搜索同时覆盖三者，
+因此 UI 与 Provider schema 对齐，又不会改变现有工具开关的存储键。
 
 ### 4.5 ToolSearch
 
@@ -755,14 +765,20 @@ code_mode = true
 
 | 职责 | 当前实现 |
 | --- | --- |
+| 类型擦除工具运行时 | `crates/agent-tools/src/engine/executor.rs::CoreToolRuntime` / `ToolExecutor` |
 | Provider 工具联合类型 | `crates/agent-providers/src/types/request_content.rs` |
 | 规范工具身份 | `crates/agent-types/src/tool_entry.rs::ToolName` |
-| Registry schema 生成与暴露策略 | `crates/agent-tools/src/engine/registry.rs` |
+| Registry runtime/schema 注册与执行 | `crates/agent-tools/src/engine/registry.rs::ToolRegistry` |
 | `tool_search` 搜索与激活 | `crates/agent-tools/src/builtin/shell/tool_search.rs` |
 | MCP namespace / 内部执行键 | `crates/agent-mcp/src/names.rs`、`hub.rs`、`crates/agent-core/src/runtime/mod.rs::attach_mcp_tools` |
+| Step 工具计划构建 | `crates/agent-core/src/runtime/tool_router.rs::build_tool_router` / `finalize_tool_router` |
+| Step 级 Registry / schema 快照 | `crates/agent-core/src/runtime/tool_router.rs::ToolRouter` / `step_context.rs` |
+| `Prompt.tools` 构建与 Provider 投影 | `crates/agent-core/src/streaming/provider.rs::build_prompt` / `Prompt` |
 | Responses 请求 / SSE / 历史 | `crates/agent-providers/src/openai/responses.rs` |
-| Step 级可见/可路由快照 | `crates/agent-core/src/runtime/step_context.rs` / `tool_router.rs` |
+| ResponseItem 到可执行调用 | `crates/agent-core/src/runtime/tool_router.rs::ToolRouter::build_tool_call` |
+| Registry 执行分发 | `ToolRouter::dispatch` → `ToolRegistry::dispatch` → `CoreToolRuntime::handle` |
 | call/output 持久化与 namespace 投影 | `crates/agent-core/src/runtime/recording.rs`、`crates/agent-protocol/src/response_item.rs` |
+| Desktop 工具目录 DTO 与投影 | `crates/agent-tools/src/engine/catalog.rs`、`apps/desktop/src/lib/tools/agentToolCatalog.ts`、`ToolsPanel.tsx` |
 | QuickJS cell 与 `ALL_TOOLS` | `crates/agent-core/src/runtime/code_mode.rs` |
 | JSON Schema 到 TypeScript 声明 | `crates/agent-tools/src/engine/code_mode.rs` |
 | Code Mode 嵌套工具快照与调度 | `crates/agent-core/src/streaming/tools_exec.rs` |

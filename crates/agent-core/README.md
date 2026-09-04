@@ -2,6 +2,8 @@
 
 Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> StepContext` 驱动 Responses-only 多轮执行、工具调用、typed hooks、持久化与恢复。
 
+工具链与 Codex 的 Step-scoped tool plan 对齐：`CoreToolRuntime / ToolExecutor -> ToolRegistry -> build_tool_router / finalize_tool_router -> ToolRouter { registry, model_visible_specs } -> StepContext { tool_router } -> build_prompt() -> Prompt.tools -> ResponsesRequest -> ResponseItem -> ToolRouter::build_tool_call() -> ToolRegistry::dispatch`。
+
 ## 核心职责
 
 - 维护原生 `ResponseItem` 会话历史、轮次预算与取消信号
@@ -55,14 +57,14 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | `runtime/context_maintenance.rs` | 上下文维护 — `maintain_tool_context` / `provider_history` |
 | `runtime/recording.rs` | `ResponseItem` 记录 — `record_assistant_*` / `record_tool_result_*` |
 | `runtime/tool_dispatch.rs` | 工具调度 — `handle_tool_call_async` / `finalize_tool_call_result` |
-| `runtime/tool_router.rs` | `ToolRouter` — 以结构化 `ToolName(namespace, name)` 冻结内置/MCP/动态工具的 Step 级路由 |
+| `runtime/tool_router.rs` | `build_tool_router` / `finalize_tool_router` / `ToolRouter` — 冻结 Registry、模型可见 schema 与结构化路由 |
 | `runtime/system_prompt.rs` | Prompt 契约构建 — `build_prompt_contract` |
 | `runtime/submission_loop.rs` | 有序提交循环 |
 | `runtime/history_control.rs` | compact replacement、rollback、suspend/recover 历史控制 |
 | `runtime/validate.rs` | `validate_message_order` 消息角色顺序校验 |
 | `streaming/multi_turn.rs` | 多轮工具循环编排（核心流式主循环） |
 | `streaming/traits.rs` | 三层 Streaming trait 定义 |
-| `streaming/provider.rs` | `ProviderStreamer` — trait 实现 + fallback 接入 |
+| `streaming/provider.rs` | `Prompt` / `build_prompt` / `ProviderStreamer` — 冻结 `instructions + input + tools` 并接入 fallback |
 | `streaming/fallback.rs` | Agent Responses 主模型首包前故障切换 |
 | `streaming/tools_exec.rs` | 单轮工具调用执行（串行 HITL / 并发普通） |
 | `streaming/hitl_bridge.rs` | `astro_hitl` 解析与会话 park/resume 桥 |

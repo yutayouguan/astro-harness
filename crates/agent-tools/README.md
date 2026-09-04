@@ -4,10 +4,10 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 
 ## 核心职责
 
-- 提供 `ToolRegistry` 工具注册表：管理内置工具、MCP 工具与动态工具的 schema 与 handler，并将非空 namespace 聚合为 Responses 原生容器
+- 提供 `CoreToolRuntime / ToolExecutor` 类型擦除执行合同，并由 `ToolRegistry` 统一持有内置、MCP 与动态工具的 schema 和 runtime
 - 通过 `inventory` crate 实现工具自注册：新工具只需 `submit_builtin_tool!` 宏即可，无需修改入口
 - `register_all()` 一次性收集并注册全部内置工具
-- 统一分发入口 `dispatch_tool`：查表路由到对应 handler
+- Agent 主链统一走 `ToolRegistry::dispatch -> CoreToolRuntime::handle`；`dispatch_tool` 仅保留为兼容入口
 - 命令审批系统：危险命令分类、allowlist 匹配、hardline 阻断
 - 交互模式门禁：按 `InteractionMode`（Agent/Plan）过滤可用工具 schema
 - 工具目录与 schema 清洗：`builtin_catalog` / `sanitize_tool_schema`
@@ -19,14 +19,14 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 | 文件/目录 | 职责 |
 |-----------|------|
 | **engine/** | |
-| `engine/registry.rs` | `ToolRegistry` — 工具注册表（内置 + MCP + 动态），含 schema、handler、toolset 分组 |
-| `engine/dispatch.rs` | `dispatch_tool` — 统一分发入口；`builtin_handler_names` — 已注册 handler 列表 |
+| `engine/registry.rs` | `ToolRegistry` — 工具注册表（内置 + MCP + 动态），持有 schema、`CoreToolRuntime`、toolset 与暴露状态 |
+| `engine/dispatch.rs` | Registry runtime 分发的记账/权限公共逻辑；`dispatch_tool` 是兼容入口 |
 | `engine/context.rs` | `ToolContext` — 工具执行上下文（凭证、会话、沙箱策略、项目根） |
 | `engine/catalog.rs` | `builtin_catalog` / `catalog_for_ui` — 工具目录与参数提取 |
 | `engine/schema.rs` | `sanitize_tool_schema` — schema 清洗（移除厂商扩展、修复 hazards） |
 | `engine/path_safe.rs` | `resolve_safe` — 路径安全解析，防止路径穿越 |
 | `engine/execution.rs` | `AgentThreadDispatch` trait — 子 Agent 线程分发接口 |
-| `engine/executor.rs` | `ToolExecutor` trait — 通用工具执行器抽象 |
+| `engine/executor.rs` | `CoreToolRuntime / ToolExecutor` — 类型擦除执行合同与 Legacy/Dynamic adapter |
 | `engine/network.rs` | `InProcessNetworkGrant` — 进程内网络访问授权 |
 | **builtin/shell/** | |
 | `builtin/shell/terminal.rs` | `terminal` 工具 — 沙箱化 shell 命令执行 |
@@ -65,13 +65,14 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 
 ## 核心类型与 API
 
-- `ToolRegistry` — 工具注册表：`register()` / `register_dynamic()` / `available_tools()` / `schemas_for_api()`；Deferred namespace 由 `tool_search` 返回完整子工具 schema
+- `ToolRegistry` — 工具注册表：`register_runtime()` / `register_dynamic()` / `available_tools()` / `schemas_for_api()` / `dispatch()`；Deferred namespace 由 `tool_search` 返回完整子工具 schema
+- `ToolCatalogItem` — 前端目录 DTO：`id` 是 toolset，`name` 是模型调用名，`namespace` 与 `registeredName` 显式区分协议身份和内部 handler
 - `ToolContext` — 工具执行上下文：凭证、会话 ID、沙箱策略、项目根、MCP Hub
 - `register_all(registry)` — 一次性注册全部内置工具（通过 `inventory` 自动收集）
-- `dispatch_tool(name, ctx, args)` — 统一工具分发入口
+- `ToolRegistry::dispatch(ctx, name, args)` — Agent 规范分发入口
 - `submit_builtin_tool!` — 宏：声明工具 handler 并自注册到 `inventory`
 - `AgentThreadDispatch` — trait：子 Agent 线程分发（spawn/followup/interrupt/wait）
-- `ToolExecutor` — trait：通用工具执行器抽象
+- `CoreToolRuntime / ToolExecutor` — trait：Registry 持有的执行运行时与工具实现合同
 - `classify_dangerous_command(cmd)` — 危险命令分类
 - `filter_schemas(mode, schemas)` — 按交互模式过滤工具 schema
 - `sanitize_tool_schema(schema)` — 移除厂商特定字段、修复 schema hazards
