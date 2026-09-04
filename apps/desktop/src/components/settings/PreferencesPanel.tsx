@@ -28,6 +28,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { motion, useReducedMotion } from "framer-motion";
 import { useAppIcon } from "../../hooks/settings/useAppIcon";
 import { useMorphicons } from "../../hooks/app/useMorphicons";
+import type { WallpaperController } from "../../hooks/app/useWallpaper";
 import type { AppIconId } from "../../types";
 import type { ShellColorStyle } from "../../hooks/app/useShellColorStyle";
 import {
@@ -66,6 +67,7 @@ import {
 import { SelectMenu } from "../ui/SelectMenu";
 import CompressionSettingsCard from "./CompressionSettingsCard";
 import ShellGradientEditor from "./ShellGradientEditor";
+import WallpaperSettingsCard from "./WallpaperSettingsCard";
 
 /** 查询返回的单行日志 */
 type AgentLogLine = { raw: string; source: string };
@@ -157,6 +159,7 @@ type Props = {
   onCommitCustomGradient: (gradient?: ShellGradient) => void;
   onCancelCustomGradient: () => void;
   onReshuffleDynamic: () => void;
+  wallpaper: WallpaperController;
   tone?: string;
   chatDisplayPrefs: ChatDisplayPrefs;
   onChatVerbosityChange: (verbosity: ChatVerbosity) => void;
@@ -232,6 +235,7 @@ export default function PreferencesPanel({
   onCommitCustomGradient,
   onCancelCustomGradient,
   onReshuffleDynamic,
+  wallpaper,
   tone = "twilight",
   chatDisplayPrefs: prefs,
   onChatVerbosityChange,
@@ -551,6 +555,8 @@ export default function PreferencesPanel({
               ))}
             </div>
           </section>
+
+          <WallpaperSettingsCard controller={wallpaper} tone={tone} />
 
           <section className="prefs-card">
             <div className="prefs-card-head">

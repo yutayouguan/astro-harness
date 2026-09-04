@@ -71,6 +71,43 @@
    */
 }
 
+.app-shell.has-wallpaper {
+  isolation: isolate;
+}
+
+.shell-wallpaper-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.shell-wallpaper-layer > img {
+  position: absolute;
+  inset: calc(var(--wallpaper-blur, 0) * -1px);
+  width: calc(100% + var(--wallpaper-blur, 0) * 2px);
+  height: calc(100% + var(--wallpaper-blur, 0) * 2px);
+  filter: blur(calc(var(--wallpaper-blur, 0) * 1px));
+}
+
+.shell-wallpaper-layer > span {
+  position: absolute;
+  inset: 0;
+  background: rgba(244, 246, 252, var(--wallpaper-shade, 0.34));
+}
+
+html[data-theme="dark"] .shell-wallpaper-layer > span {
+  background: rgba(5, 7, 14, var(--wallpaper-shade, 0.34));
+}
+
+.app-shell.has-wallpaper > .native-drag-region,
+.app-shell.has-wallpaper > .titlebar-sidebar-toggle,
+.app-shell.has-wallpaper > .sidebar-hotzone,
+.app-shell.has-wallpaper > .body-row {
+  z-index: 1;
+}
+
 /* 灵动色彩：主聊天页右下角的即时换色入口。 */
 .chat-main.has-dynamic-palette {
   position: relative;

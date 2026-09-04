@@ -418,6 +418,13 @@ pub struct GenerateImageResult {
     pub model: String,
 }
 
+pub(crate) struct GeneratedImageData {
+    pub data: Vec<u8>,
+    pub mime: String,
+    pub provider: String,
+    pub model: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartRealtimeConversationRequest {
@@ -1335,6 +1342,29 @@ async fn generate_image_via_grpc(
     }
 }
 
+pub(crate) async fn generate_image_data(
+    prompt: &str,
+    width: i32,
+    height: i32,
+) -> Result<GeneratedImageData, String> {
+    let targets = resolve_image_gen_targets()?;
+    let mut errors: Vec<String> = Vec::new();
+    for target in &targets {
+        match generate_image_via_grpc(target, prompt, width, height).await {
+            Ok((data, mime)) => {
+                return Ok(GeneratedImageData {
+                    data,
+                    mime,
+                    provider: target.provider.clone(),
+                    model: target.model.clone(),
+                });
+            }
+            Err(err) => errors.push(format!("{} ({}): {err}", target.display_name, target.model)),
+        }
+    }
+    Err(format!("图片生成失败：{}", errors.join("；")))
+}
+
 /// 按 providers 面板已开启的 Google→OpenAI 主备生成图片，写入 workspace/generated/images/
 #[tauri::command]
 pub async fn generate_image(
@@ -1346,39 +1376,26 @@ pub async fn generate_image(
         return Err("prompt 不能为空".to_string());
     }
 
-    let targets = resolve_image_gen_targets()?;
     let (width, height) = parse_size(size.as_deref());
-
-    let mut errors: Vec<String> = Vec::new();
-    for target in &targets {
-        match generate_image_via_grpc(target, &prompt, width, height).await {
-            Ok((data, mime)) => {
-                let dir = home::generated_dir(
-                    &home::default_agent_workspace_dir(),
-                    home::GeneratedKind::Images,
-                );
-                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-                let filename = format!(
-                    "img-{}-{}.{}",
-                    chrono::Local::now().format("%Y%m%d-%H%M%S"),
-                    &uuid::Uuid::new_v4().simple().to_string()[..8],
-                    mime_ext(&mime)
-                );
-                let path = dir.join(&filename);
-                std::fs::write(&path, &data).map_err(|e| e.to_string())?;
-                return Ok(GenerateImageResult {
-                    path: path.display().to_string(),
-                    provider: target.provider.clone(),
-                    model: target.model.clone(),
-                });
-            }
-            Err(err) => {
-                errors.push(format!("{} ({}): {err}", target.display_name, target.model));
-            }
-        }
-    }
-
-    Err(format!("图片生成失败：{}", errors.join("；")))
+    let generated = generate_image_data(&prompt, width, height).await?;
+    let dir = home::generated_dir(
+        &home::default_agent_workspace_dir(),
+        home::GeneratedKind::Images,
+    );
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let filename = format!(
+        "img-{}-{}.{}",
+        chrono::Local::now().format("%Y%m%d-%H%M%S"),
+        &uuid::Uuid::new_v4().simple().to_string()[..8],
+        mime_ext(&generated.mime)
+    );
+    let path = dir.join(&filename);
+    std::fs::write(&path, &generated.data).map_err(|e| e.to_string())?;
+    Ok(GenerateImageResult {
+        path: path.display().to_string(),
+        provider: generated.provider,
+        model: generated.model,
+    })
 }
 
 /// 解析图片尺寸字符串（如 1024x1024）。

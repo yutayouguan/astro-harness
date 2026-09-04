@@ -5,6 +5,7 @@ import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import { ThemeProvider } from "../hooks/app/useTheme";
 import { LocaleProvider } from "../i18n/LocaleContext";
 import { DEFAULT_SHELL_GRADIENT } from "../lib/ui/shellGradient";
+import { DEFAULT_WALLPAPER_PREFS } from "../lib/ui/wallpaper";
 
 const meta = {
   id: "preferences-panel",
@@ -54,6 +55,24 @@ const meta = {
     onCommitCustomGradient: () => {},
     onCancelCustomGradient: () => {},
     onReshuffleDynamic: () => {},
+    wallpaper: {
+      prefs: DEFAULT_WALLPAPER_PREFS,
+      busy: null,
+      error: null,
+      setMode: () => {},
+      setFit: () => {},
+      setShade: () => {},
+      setBlur: () => {},
+      select: () => {},
+      importImage: async () => {
+        throw new Error("not available in Storybook");
+      },
+      generate: async () => {
+        throw new Error("not available in Storybook");
+      },
+      clearError: () => {},
+      markCurrentUnavailable: () => {},
+    },
     tone: "twilight",
     chatDisplayPrefs: {
       verbosity: "normal",
@@ -77,3 +96,15 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Appearance: Story = {};
+
+export const Wallpaper: Story = {
+  args: {
+    wallpaper: {
+      ...meta.args.wallpaper,
+      prefs: {
+        ...DEFAULT_WALLPAPER_PREFS,
+        mode: "wallpaper",
+      },
+    },
+  },
+};

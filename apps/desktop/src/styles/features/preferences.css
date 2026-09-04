@@ -583,6 +583,508 @@ html[data-theme="dark"] .prefs-icon-badge {
   gap: 10px;
 }
 
+.wallpaper-settings-card {
+  position: relative;
+}
+
+.wallpaper-source-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wallpaper-editor {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.15fr) minmax(280px, 0.85fr);
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.wallpaper-preview-column {
+  min-width: 0;
+}
+
+.wallpaper-preview,
+.wallpaper-empty-preview {
+  position: relative;
+  width: 100%;
+  min-height: 250px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-edge));
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--tone-soft) 22%, var(--glass-fill));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    0 10px 28px color-mix(in srgb, var(--tone) 9%, transparent);
+}
+
+.wallpaper-preview > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.wallpaper-preview-shade {
+  position: absolute;
+  inset: 0;
+  background: #f4f6fc;
+}
+
+html[data-theme="dark"] .wallpaper-preview-shade {
+  background: #05070e;
+}
+
+.wallpaper-preview-shell {
+  position: absolute;
+  inset: 17px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 9px;
+}
+
+.wallpaper-preview-shell > i,
+.wallpaper-preview-shell > b {
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+}
+
+.wallpaper-preview-shell > i {
+  border-radius: 12px;
+}
+
+.wallpaper-preview-shell > b {
+  padding: 16px;
+  border-radius: 15px;
+}
+
+.wallpaper-preview-shell em,
+.wallpaper-preview-shell strong {
+  display: block;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 24%, transparent);
+}
+
+.wallpaper-preview-shell em:first-child {
+  width: 55%;
+  height: 10px;
+  margin-bottom: 10px;
+}
+
+.wallpaper-preview-shell em:nth-child(2) {
+  width: 40%;
+  height: 7px;
+}
+
+.wallpaper-preview-shell strong {
+  width: 70%;
+  height: 50px;
+  margin-top: 22px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.wallpaper-preview-name {
+  position: absolute;
+  left: 11px;
+  bottom: 11px;
+  max-width: calc(100% - 22px);
+  overflow: hidden;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(16, 18, 31, 0.56);
+  color: white;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(9px);
+}
+
+.wallpaper-empty-preview {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 7px;
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+
+.wallpaper-empty-preview strong {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.wallpaper-empty-preview span {
+  font-size: 11.5px;
+}
+
+.wallpaper-empty-preview:hover {
+  border-color: color-mix(in srgb, var(--tone) 35%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone-soft) 44%, var(--glass-fill));
+}
+
+.wallpaper-controls,
+.wallpaper-control-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.wallpaper-controls {
+  gap: 13px;
+}
+
+.wallpaper-control-group {
+  gap: 7px;
+}
+
+.wallpaper-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.wallpaper-primary-button,
+.wallpaper-secondary-button {
+  min-height: 37px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border-radius: 11px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 650;
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease,
+    opacity 150ms ease;
+}
+
+.wallpaper-secondary-button {
+  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
+  background: color-mix(in srgb, var(--glass-fill) 76%, transparent);
+  color: var(--ink-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.wallpaper-primary-button {
+  border: 1px solid color-mix(in srgb, var(--tone) 68%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tone) 82%, white),
+    var(--tone)
+  );
+  color: white;
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--tone) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.wallpaper-primary-button:hover:not(:disabled),
+.wallpaper-secondary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.wallpaper-primary-button:disabled,
+.wallpaper-secondary-button:disabled {
+  opacity: 0.54;
+  cursor: default;
+}
+
+.wallpaper-control-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+
+.wallpaper-control-label output {
+  color: var(--ink-mute);
+}
+
+.wallpaper-control-group input[type="range"] {
+  width: 100%;
+  accent-color: var(--tone);
+}
+
+.wallpaper-fit-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.wallpaper-fit-options button,
+.wallpaper-style-options button {
+  min-height: 30px;
+  border: 1px solid color-mix(in srgb, var(--tone) 8%, var(--glass-edge));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--glass-fill) 64%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.wallpaper-fit-options button.is-active,
+.wallpaper-style-options button.is-active {
+  border-color: color-mix(in srgb, var(--tone) 32%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone-soft) 70%, var(--glass-fill));
+  color: var(--tone);
+  font-weight: 650;
+}
+
+.wallpaper-recent-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.wallpaper-recent-list button {
+  aspect-ratio: 1.55;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--glass-edge);
+  border-radius: 9px;
+  background: var(--glass-fill);
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+
+.wallpaper-recent-list button.is-active {
+  border-color: var(--tone);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone) 42%, transparent);
+}
+
+.wallpaper-recent-list img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wallpaper-error,
+.wallpaper-applied {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 11.5px;
+}
+
+.wallpaper-error {
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+  color: #b42318;
+}
+
+.wallpaper-applied {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, #16a36a 10%, transparent);
+  color: #08764a;
+}
+
+.wallpaper-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(21, 21, 39, 0.24);
+  backdrop-filter: blur(7px);
+  animation: prefs-fade-in 180ms ease both;
+}
+
+.wallpaper-dialog {
+  width: min(610px, calc(100vw - 48px));
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-edge));
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--glass-panel) 92%, transparent);
+  color: var(--ink);
+  box-shadow:
+    0 28px 76px rgba(24, 22, 52, 0.28),
+    var(--glass-rim);
+  backdrop-filter: blur(30px) saturate(1.3);
+  -webkit-backdrop-filter: blur(30px) saturate(1.3);
+  animation: wallpaper-dialog-in 210ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.wallpaper-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.wallpaper-dialog-head > div:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.wallpaper-dialog h2 {
+  margin: 1px 0 4px;
+  font-size: 18px;
+}
+
+.wallpaper-dialog p {
+  margin: 0;
+  color: var(--ink-mute);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.wallpaper-dialog-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+
+.wallpaper-field-label {
+  display: block;
+  margin: 17px 0 7px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.wallpaper-prompt {
+  width: 100%;
+  min-height: 112px;
+  resize: vertical;
+  padding: 12px 13px;
+  border: 1px solid color-mix(in srgb, var(--tone) 16%, var(--glass-edge));
+  border-radius: 13px;
+  outline: none;
+  background: color-mix(in srgb, var(--glass-fill) 82%, transparent);
+  color: var(--ink);
+  line-height: 1.55;
+}
+
+.wallpaper-prompt:focus {
+  border-color: color-mix(in srgb, var(--tone) 48%, var(--glass-edge));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 10%, transparent);
+}
+
+.wallpaper-style-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.wallpaper-style-options button {
+  padding: 0 11px;
+}
+
+.wallpaper-auto-apply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 15px;
+  padding: 10px 11px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--tone-soft) 48%, transparent);
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+
+.wallpaper-auto-apply svg {
+  color: var(--tone);
+}
+
+.wallpaper-auto-apply small {
+  margin-left: auto;
+  color: var(--ink-mute);
+}
+
+.wallpaper-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 17px;
+}
+
+.wallpaper-generating {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 30px 18px;
+  text-align: center;
+}
+
+.wallpaper-spinner {
+  animation: wallpaper-spin 900ms linear infinite;
+}
+
+.wallpaper-generating .wallpaper-spinner {
+  color: var(--tone);
+}
+
+.wallpaper-progress {
+  width: 230px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone) 11%, transparent);
+}
+
+.wallpaper-progress i {
+  display: block;
+  width: 58%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tone);
+  animation: wallpaper-progress 1.35s ease-in-out infinite alternate;
+}
+
+@keyframes wallpaper-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes wallpaper-progress {
+  from {
+    transform: translateX(-54%);
+  }
+  to {
+    transform: translateX(92%);
+  }
+}
+
+@keyframes wallpaper-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px) scale(0.985);
+  }
+}
+
+@media (max-width: 900px) {
+  .wallpaper-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .wallpaper-preview,
+  .wallpaper-empty-preview {
+    min-height: 220px;
+  }
+}
+
 .app-icon-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1770,6 +2272,13 @@ html[data-theme="dark"] .prefs-context-budget-ico {
 
   .morphicon-segmented button:active {
     transform: none;
+  }
+
+  .wallpaper-dialog,
+  .wallpaper-dialog-backdrop,
+  .wallpaper-spinner,
+  .wallpaper-progress i {
+    animation: none;
   }
 }
 

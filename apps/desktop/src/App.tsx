@@ -77,6 +77,7 @@ import { useProviders } from "./hooks/providers/useProviders";
 import { useShellColorStyle } from "./hooks/app/useShellColorStyle";
 import { useSidebar } from "./hooks/app/useSidebar";
 import { useTheme } from "./hooks/app/useTheme";
+import { useWallpaper } from "./hooks/app/useWallpaper";
 import { useTransientToast } from "./hooks/ui/useTransientToast";
 import { useDeferredPresence } from "./hooks/ui/useDeferredPresence";
 import { useWindowChrome } from "./hooks/app/useWindowChrome";
@@ -135,6 +136,7 @@ import {
 } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import { dynamicGradientForTab } from "./lib/ui/dynamicGradient";
+import { resolveMediaSrc } from "./lib/media/resolveMediaSrc";
 import {
   applyShellGradientVars,
   clearShellGradientVars,
@@ -166,6 +168,7 @@ export default function App() {
     commitGradientEdit,
     cancelGradientEdit,
   } = useShellColorStyle();
+  const wallpaper = useWallpaper();
   useBeautifyTips();
   const { t } = useI18n();
   const promptForTitle = usePrompt();
@@ -788,6 +791,25 @@ export default function App() {
     }
     return null;
   }, [colorStyle, gradient, dynamicSeed, nav, resolved]);
+  const wallpaperSrc =
+    wallpaper.prefs.mode === "wallpaper" && wallpaper.prefs.current
+      ? resolveMediaSrc(wallpaper.prefs.current.path)
+      : null;
+  const wallpaperEnabled = Boolean(wallpaperSrc);
+  useEffect(() => {
+    if (
+      wallpaper.prefs.mode === "wallpaper" &&
+      wallpaper.prefs.current &&
+      !wallpaperSrc
+    ) {
+      wallpaper.markCurrentUnavailable();
+    }
+  }, [
+    wallpaper.prefs.mode,
+    wallpaper.prefs.current,
+    wallpaper.markCurrentUnavailable,
+    wallpaperSrc,
+  ]);
   // ── Tone crossfade overlay ─────────────────────────────────────────────
   const prevToneRef = useRef(shellTone);
   const prevDynamicSeedRef = useRef(dynamicSeed);
@@ -802,9 +824,13 @@ export default function App() {
   useLayoutEffect(() => {
     const root = document.documentElement;
     const colorfulToneChanged =
-      prevToneRef.current !== shellTone && colorStyle === "colorful";
+      prevToneRef.current !== shellTone &&
+      colorStyle === "colorful" &&
+      !wallpaperEnabled;
     const dynamicPaletteChanged =
-      prevDynamicSeedRef.current !== dynamicSeed && colorStyle === "dynamic";
+      prevDynamicSeedRef.current !== dynamicSeed &&
+      colorStyle === "dynamic" &&
+      !wallpaperEnabled;
     if ((colorfulToneChanged || dynamicPaletteChanged) && shellRef.current) {
       const bg = getComputedStyle(shellRef.current).background;
       if (bg) {
@@ -830,6 +856,7 @@ export default function App() {
     activeShellGradient,
     resolved,
     reassert,
+    wallpaperEnabled,
   ]);
   useEffect(() => {
     void syncWindowUnderlay(resolved, shellTone, activeShellGradient);
@@ -1163,11 +1190,36 @@ export default function App() {
   return (
     <div
       ref={shellRef}
-      className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}${activeChatRightDock === "browser" ? " has-browser-surface" : ""}`}
+      className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}${activeChatRightDock === "browser" ? " has-browser-surface" : ""}${wallpaperEnabled ? " has-wallpaper" : ""}`}
       data-tone={shellTone}
       data-color-style={colorStyle}
       data-sidebar-state={sidebar.sidebarVisible ? "visible" : "collapsed"}
     >
+      {wallpaperSrc ? (
+        <div
+          className="shell-wallpaper-layer"
+          style={
+            {
+              "--wallpaper-blur": wallpaper.prefs.blur,
+              "--wallpaper-shade": wallpaper.prefs.shade / 100,
+            } as CSSProperties
+          }
+          aria-hidden
+        >
+          <img
+            src={wallpaperSrc}
+            alt=""
+            style={{
+              objectFit:
+                wallpaper.prefs.fit === "stretch"
+                  ? "fill"
+                  : wallpaper.prefs.fit,
+            }}
+            onError={wallpaper.markCurrentUnavailable}
+          />
+          <span />
+        </div>
+      ) : null}
       {toneFade && (
         <div
           key={toneFade.revision}
@@ -1847,6 +1899,7 @@ export default function App() {
                       onCommitCustomGradient={commitGradientEdit}
                       onCancelCustomGradient={cancelGradientEdit}
                       onReshuffleDynamic={reshuffleDynamic}
+                      wallpaper={wallpaper}
                       tone={shellTone}
                       chatDisplayPrefs={chatDisplayPrefs}
                       onChatVerbosityChange={setVerbosity}
@@ -2335,7 +2388,7 @@ export default function App() {
                         />
                       </Suspense>
                     ) : null}
-                    {colorStyle === "dynamic" ? (
+                    {colorStyle === "dynamic" && !wallpaperEnabled ? (
                       <DynamicPaletteButton
                         label={t("prefs.colorStyle.reshuffle")}
                         onReshuffle={reshuffleDynamic}

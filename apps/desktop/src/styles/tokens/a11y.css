@@ -65,6 +65,14 @@
     background: var(--glass-panel);
   }
 
+  .shell-wallpaper-layer > span {
+    background: rgba(244, 246, 252, 0.68);
+  }
+
+  html[data-theme="dark"] .shell-wallpaper-layer > span {
+    background: rgba(5, 7, 14, 0.72);
+  }
+
   .body-row,
   .sidebar {
     --sidebar-chrome-sheen: none;
@@ -103,6 +111,14 @@
 }
 
 @media (prefers-contrast: more) {
+  .shell-wallpaper-layer > span {
+    background: rgba(244, 246, 252, 0.7);
+  }
+
+  html[data-theme="dark"] .shell-wallpaper-layer > span {
+    background: rgba(5, 7, 14, 0.76);
+  }
+
   html[data-theme="dark"] {
     --color-border: rgba(255, 255, 255, 0.28);
     --surface-panel-border: var(--color-border);

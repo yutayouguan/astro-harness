@@ -424,6 +424,7 @@ export const zh = {
   "modelRankings.column.median": "Core 中位成本",
 
   "common.close": "关闭",
+  "common.cancel": "取消",
 
   "aux.title": "辅助模型",
   "aux.subtitle":
@@ -2214,6 +2215,44 @@ export const zh = {
   "prefs.theme.auto": "自动",
   "prefs.theme.autoDesc": "跟随系统外观设置",
 
+  "prefs.wallpaper.title": "全局背景",
+  "prefs.wallpaper.sub":
+    "壁纸只改变底层画面；强调色、明暗主题与玻璃强度仍独立设置",
+  "prefs.wallpaper.colorMode": "氛围配色",
+  "prefs.wallpaper.colorModeDesc": "沿用多彩、统一与灵动配色",
+  "prefs.wallpaper.imageMode": "图片壁纸",
+  "prefs.wallpaper.imageModeDesc": "上传喜欢的图片，或让 AI 生成一张",
+  "prefs.wallpaper.upload": "上传图片",
+  "prefs.wallpaper.imageFiles": "图片",
+  "prefs.wallpaper.aiGenerate": "AI 生成",
+  "prefs.wallpaper.emptyTitle": "选择一张壁纸",
+  "prefs.wallpaper.emptySub": "支持 PNG、JPEG 和 WebP，最大 25 MB",
+  "prefs.wallpaper.fit": "填充方式",
+  "prefs.wallpaper.fit.cover": "填满",
+  "prefs.wallpaper.fit.contain": "适应",
+  "prefs.wallpaper.fit.stretch": "拉伸",
+  "prefs.wallpaper.shade": "内容保护",
+  "prefs.wallpaper.blur": "柔化背景",
+  "prefs.wallpaper.off": "关闭",
+  "prefs.wallpaper.recent": "最近使用",
+  "prefs.wallpaper.aiTitle": "AI 生成壁纸",
+  "prefs.wallpaper.aiSub":
+    "使用模型服务中选定的图片模型，按横向比例生成画面",
+  "prefs.wallpaper.prompt": "描述你想要的画面",
+  "prefs.wallpaper.promptPlaceholder":
+    "例如：宁静的未来山谷，柔和晨雾与紫蓝色天光，画面干净克制",
+  "prefs.wallpaper.style.natural": "自然摄影",
+  "prefs.wallpaper.style.abstract": "抽象流体",
+  "prefs.wallpaper.style.minimal": "极简插画",
+  "prefs.wallpaper.style.cinematic": "电影感",
+  "prefs.wallpaper.autoApply": "生成成功后自动应用",
+  "prefs.wallpaper.failureKeepsCurrent": "失败时保留当前壁纸",
+  "prefs.wallpaper.generateAndApply": "生成并应用",
+  "prefs.wallpaper.generating": "正在生成壁纸",
+  "prefs.wallpaper.generatingHint":
+    "当前壁纸会一直保留，生成成功后再自动替换",
+  "prefs.wallpaper.applied": "壁纸已应用",
+
   "prefs.colorStyle.title": "色彩风格",
   "prefs.colorStyle.sub": "多彩、统一渐变，或按页面灵动配色",
   "prefs.colorStyle.colorful": "多彩",
@@ -3403,6 +3442,7 @@ export const en: Record<MessageKey, string> = {
   "modelRankings.column.median": "Core median",
 
   "common.close": "Close",
+  "common.cancel": "Cancel",
 
   "aux.title": "Auxiliary Models",
   "aux.subtitle":
@@ -5282,6 +5322,44 @@ export const en: Record<MessageKey, string> = {
   "prefs.theme.darkDesc": "Deep purple glass for night use",
   "prefs.theme.auto": "Auto",
   "prefs.theme.autoDesc": "Follow system appearance",
+
+  "prefs.wallpaper.title": "Global background",
+  "prefs.wallpaper.sub":
+    "Wallpaper changes only the backdrop; accent, appearance, and glass remain independent",
+  "prefs.wallpaper.colorMode": "Ambient colors",
+  "prefs.wallpaper.colorModeDesc": "Keep colorful, unified, or dynamic palettes",
+  "prefs.wallpaper.imageMode": "Image wallpaper",
+  "prefs.wallpaper.imageModeDesc": "Upload an image or generate one with AI",
+  "prefs.wallpaper.upload": "Upload image",
+  "prefs.wallpaper.imageFiles": "Images",
+  "prefs.wallpaper.aiGenerate": "Generate with AI",
+  "prefs.wallpaper.emptyTitle": "Choose a wallpaper",
+  "prefs.wallpaper.emptySub": "PNG, JPEG, or WebP up to 25 MB",
+  "prefs.wallpaper.fit": "Fit",
+  "prefs.wallpaper.fit.cover": "Fill",
+  "prefs.wallpaper.fit.contain": "Fit",
+  "prefs.wallpaper.fit.stretch": "Stretch",
+  "prefs.wallpaper.shade": "Content protection",
+  "prefs.wallpaper.blur": "Soften background",
+  "prefs.wallpaper.off": "Off",
+  "prefs.wallpaper.recent": "Recently used",
+  "prefs.wallpaper.aiTitle": "Generate AI wallpaper",
+  "prefs.wallpaper.aiSub":
+    "Uses the image model selected in Model Providers and generates a landscape image",
+  "prefs.wallpaper.prompt": "Describe the scene you want",
+  "prefs.wallpaper.promptPlaceholder":
+    "For example: a quiet futuristic valley with soft mist and violet-blue morning light",
+  "prefs.wallpaper.style.natural": "Natural photo",
+  "prefs.wallpaper.style.abstract": "Abstract fluid",
+  "prefs.wallpaper.style.minimal": "Minimal illustration",
+  "prefs.wallpaper.style.cinematic": "Cinematic",
+  "prefs.wallpaper.autoApply": "Apply automatically after generation",
+  "prefs.wallpaper.failureKeepsCurrent": "Keep current wallpaper on failure",
+  "prefs.wallpaper.generateAndApply": "Generate and apply",
+  "prefs.wallpaper.generating": "Generating wallpaper",
+  "prefs.wallpaper.generatingHint":
+    "The current wallpaper stays visible until generation succeeds",
+  "prefs.wallpaper.applied": "Wallpaper applied",
 
   "prefs.colorStyle.title": "Color style",
   "prefs.colorStyle.sub":

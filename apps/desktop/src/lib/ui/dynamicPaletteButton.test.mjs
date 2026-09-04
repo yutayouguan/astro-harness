@@ -14,7 +14,10 @@ const styles = await readFile(
 
 test("dynamic palette button is limited to the main chat surface", () => {
   assert.match(app, /className=\{`chat-main\$\{colorStyle === "dynamic"/);
-  assert.match(app, /\{colorStyle === "dynamic" \? \(/);
+  assert.match(
+    app,
+    /\{colorStyle === "dynamic" && !wallpaperEnabled \? \(/,
+  );
   assert.match(app, /onReshuffle=\{reshuffleDynamic\}/);
   assert.match(app, /label=\{t\("prefs\.colorStyle\.reshuffle"\)\}/);
 });

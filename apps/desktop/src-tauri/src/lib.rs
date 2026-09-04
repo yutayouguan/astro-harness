@@ -253,6 +253,8 @@ pub fn run() {
             commands::terminal::terminal_close,
             commands::terminal::terminal_open_external,
             commands::chat::generate_image,
+            commands::wallpaper::import_wallpaper,
+            commands::wallpaper::generate_wallpaper,
             commands::chat::query_memory,
             // — agent —
             commands::agent::prepare_task_worktree,

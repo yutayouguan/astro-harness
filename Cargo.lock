@@ -266,6 +266,7 @@ dependencies = [
  "futures",
  "home",
  "hooks",
+ "image",
  "keyring",
  "mcp",
  "memory",
