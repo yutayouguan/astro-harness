@@ -2105,6 +2105,47 @@ network_proxy:
     }
 
     #[test]
+    fn network_header_injections_parse_without_exposing_values_in_debug() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+permissions:
+  default_profile: project-net
+  profiles:
+    project-net:
+      extends: ":workspace"
+      network:
+        enabled: true
+        domains:
+          api.example.com: allow
+        header_injections:
+          - host: api.example.com
+            methods: [POST]
+            path_prefixes: [/console/v1]
+            headers:
+              x-managed-source: secret-value
+network_proxy:
+  enabled: true
+"#,
+        )
+        .unwrap();
+
+        let loaded = load_permission_settings(dir.path());
+        let rules = &loaded.permissions.profiles["project-net"]
+            .network
+            .header_injections;
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].host, "api.example.com");
+        assert_eq!(rules[0].methods, ["POST"]);
+        assert_eq!(rules[0].path_prefixes, ["/console/v1"]);
+        assert_eq!(rules[0].headers["x-managed-source"], "secret-value");
+        let debug = format!("{:?}", rules[0]);
+        assert!(debug.contains("x-managed-source"));
+        assert!(!debug.contains("secret-value"));
+    }
+
+    #[test]
     fn removed_sandbox_keys_do_not_change_explicit_profiles() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(

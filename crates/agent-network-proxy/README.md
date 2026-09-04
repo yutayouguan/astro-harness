@@ -11,6 +11,7 @@
 3. **DNS 重绑定防护** -- `connect_checked` 在 TCP 连接前校验 DNS 解析结果，拒绝公网域名解析到私有/回环 IP 的重绑定攻击。
 4. **可插拔策略决策器** -- `NetworkPolicyDecider` trait 允许上层（如 HITL 审批 UI）异步介入未覆盖域名的放行/拦截决策。
 5. **拦截记录收集** -- `NetworkProxyState` 维护最近 64 条被拦截请求（`BlockedRequest`），供 UI 展示网络审批卡片。
+6. **Header requirement 保留** -- 从 active leaf profile 携带 host/method/path-prefix/header 规则，Debug 只显示 host 与 header 名。当前 CONNECT 隧道不能观察 TLS 内的 method/path，因此不会伪装成已执行注入；规则留给具备 HTTP 可见性的 transport。
 
 ## 模块结构
 
@@ -37,6 +38,7 @@
 - **`NetworkProxyState`** -- 运行时策略状态：GlobSet 匹配、域名阻断评估、被拦截请求队列
 - **`BlockedRequest`** -- 被拦截请求记录：host/port/protocol/reason/decision/source
 - **`NetworkPolicyRequest`** -- 策略评估请求描述
+- **`NetworkHeaderInjection`** -- header 注入要求；值可序列化但在 Debug 输出中始终脱敏
 
 ### 枚举
 

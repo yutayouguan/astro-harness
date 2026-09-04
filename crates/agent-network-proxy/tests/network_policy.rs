@@ -1,6 +1,6 @@
 use network_proxy::{HostBlockDecision, HostBlockReason, NetworkProxyState};
 use std::collections::BTreeMap;
-use types::{NetworkAccess, NetworkPolicy};
+use types::{NetworkAccess, NetworkHeaderInjection, NetworkPolicy};
 
 fn state(domains: &[(&str, NetworkAccess)], allow_local_binding: bool) -> NetworkProxyState {
     NetworkProxyState::new(NetworkPolicy {
@@ -115,4 +115,27 @@ fn disabled_policy_cannot_create_an_evaluable_proxy_state() {
     .unwrap_err();
 
     assert!(err.to_string().contains("disabled"));
+}
+
+#[test]
+fn header_injection_requirements_are_retained_and_debug_redacted() {
+    let rule = NetworkHeaderInjection {
+        host: "api.example.com".into(),
+        methods: vec!["POST".into()],
+        path_prefixes: vec!["/console/v1".into()],
+        headers: BTreeMap::from([("x-managed-source".into(), "secret-value".into())]),
+    };
+    let debug = format!("{rule:?}");
+    assert!(debug.contains("api.example.com"));
+    assert!(debug.contains("x-managed-source"));
+    assert!(!debug.contains("secret-value"));
+
+    let state = NetworkProxyState::new(NetworkPolicy {
+        enabled: true,
+        domains: BTreeMap::from([("api.example.com".into(), NetworkAccess::Allow)]),
+        header_injections: vec![rule.clone()],
+        ..NetworkPolicy::default()
+    })
+    .expect("enabled network policy");
+    assert_eq!(state.header_injections(), &[rule]);
 }
