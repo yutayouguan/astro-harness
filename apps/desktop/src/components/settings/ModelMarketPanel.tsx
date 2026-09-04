@@ -19,9 +19,12 @@ import {
   List,
   ListOrdered,
   BarChart3,
+  Mic,
+  Music2,
   RefreshCw,
   Search,
   Shield,
+  Video,
   Wrench,
   Globe,
   Sparkles,
@@ -113,8 +116,11 @@ const FILTERS: { key: ModelMarketFilter; Icon: typeof Brain }[] = [
   { key: "tools", Icon: Wrench },
   { key: "reasoning", Icon: Brain },
   { key: "vision", Icon: Eye },
-  { key: "audio", Icon: Headphones },
   { key: "image", Icon: Image },
+  { key: "video", Icon: Video },
+  { key: "speech", Icon: Headphones },
+  { key: "transcription", Icon: Mic },
+  { key: "music", Icon: Music2 },
   { key: "free", Icon: Globe },
 ];
 
@@ -130,6 +136,7 @@ type EmbeddingSaveState = {
 };
 
 function CapabilityBadges({ m }: { m: ModelCatalogEntry }) {
+  const { t } = useI18n();
   return (
     <div className="model-market-card-caps">
       {m.supports_function_calling && (
@@ -147,9 +154,36 @@ function CapabilityBadges({ m }: { m: ModelCatalogEntry }) {
           <Eye size={11} />
         </span>
       )}
-      {m.supports_audio_input && (
-        <span className="model-market-cap" title="Audio Input">
+      {m.supports_video_generation && (
+        <span
+          className="model-market-cap"
+          title={t("modelMarket.filter.video" as never)}
+        >
+          <Video size={11} />
+        </span>
+      )}
+      {m.supports_audio_output && (
+        <span
+          className="model-market-cap"
+          title={t("modelMarket.filter.speech" as never)}
+        >
           <Headphones size={11} />
+        </span>
+      )}
+      {m.supports_transcription && (
+        <span
+          className="model-market-cap"
+          title={t("modelMarket.filter.transcription" as never)}
+        >
+          <Mic size={11} />
+        </span>
+      )}
+      {m.supports_music_generation && (
+        <span
+          className="model-market-cap"
+          title={t("modelMarket.filter.music" as never)}
+        >
+          <Music2 size={11} />
         </span>
       )}
       {m.supports_image_generation && (
@@ -215,10 +249,28 @@ function ModelDetailPanel({
       has: model.supports_vision,
     },
     {
-      key: "audio",
-      label: t("modelMarket.filter.audio" as never),
+      key: "video",
+      label: t("modelMarket.filter.video" as never),
+      Icon: Video,
+      has: model.supports_video_generation,
+    },
+    {
+      key: "speech",
+      label: t("modelMarket.filter.speech" as never),
       Icon: Headphones,
-      has: model.supports_audio_input || model.supports_audio_output,
+      has: model.supports_audio_output,
+    },
+    {
+      key: "transcription",
+      label: t("modelMarket.filter.transcription" as never),
+      Icon: Mic,
+      has: model.supports_transcription,
+    },
+    {
+      key: "music",
+      label: t("modelMarket.filter.music" as never),
+      Icon: Music2,
+      has: model.supports_music_generation,
     },
     {
       key: "image",

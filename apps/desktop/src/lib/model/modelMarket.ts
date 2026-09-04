@@ -20,8 +20,11 @@ export interface ModelCatalogEntry {
   supports_reasoning: boolean;
   supports_web_search: boolean;
   supports_image_generation: boolean;
+  supports_video_generation: boolean;
   supports_audio_input: boolean;
   supports_audio_output: boolean;
+  supports_transcription: boolean;
+  supports_music_generation: boolean;
   input_modalities: string[];
   output_modalities: string[];
   knowledge_cutoff: string | null;
@@ -29,7 +32,16 @@ export interface ModelCatalogEntry {
 }
 
 export type ModelMarketFilter =
-  "all" | "tools" | "reasoning" | "vision" | "audio" | "image" | "free";
+  | "all"
+  | "tools"
+  | "reasoning"
+  | "vision"
+  | "image"
+  | "video"
+  | "speech"
+  | "transcription"
+  | "music"
+  | "free";
 
 export type ModelMarketTypeFilter = "all" | ModelCatalogKind;
 
@@ -53,10 +65,16 @@ export function matchesModelMarketFilter(
       return model.supports_reasoning;
     case "vision":
       return model.supports_vision;
-    case "audio":
-      return model.supports_audio_input || model.supports_audio_output;
     case "image":
       return model.supports_image_generation;
+    case "video":
+      return model.supports_video_generation;
+    case "speech":
+      return model.supports_audio_output;
+    case "transcription":
+      return model.supports_transcription;
+    case "music":
+      return model.supports_music_generation;
     case "free":
       return (
         model.pricing?.prompt_per_million === 0 &&

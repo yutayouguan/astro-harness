@@ -21,8 +21,11 @@ function model(overrides: Partial<ModelCatalogEntry> = {}): ModelCatalogEntry {
     supports_reasoning: false,
     supports_web_search: false,
     supports_image_generation: false,
+    supports_video_generation: false,
     supports_audio_input: false,
     supports_audio_output: false,
+    supports_transcription: false,
+    supports_music_generation: false,
     input_modalities: ["text"],
     output_modalities: ["text"],
     knowledge_cutoff: null,
@@ -54,6 +57,26 @@ test("specialized filters do not classify models from names", () => {
 
   assert.equal(matchesModelMarketType(misleading, "embedding"), false);
   assert.equal(matchesModelMarketType(misleading, "rerank"), false);
+});
+
+test("media capability filters remain distinct", () => {
+  const modelWithMedia = model({
+    supports_image_generation: true,
+    supports_video_generation: true,
+    supports_audio_output: true,
+    supports_transcription: true,
+    supports_music_generation: true,
+  });
+
+  assert.equal(matchesModelMarketFilter(modelWithMedia, "image"), true);
+  assert.equal(matchesModelMarketFilter(modelWithMedia, "video"), true);
+  assert.equal(matchesModelMarketFilter(modelWithMedia, "speech"), true);
+  assert.equal(matchesModelMarketFilter(modelWithMedia, "transcription"), true);
+  assert.equal(matchesModelMarketFilter(modelWithMedia, "music"), true);
+
+  const inputOnlyAudio = model({ supports_audio_input: true });
+  assert.equal(matchesModelMarketFilter(inputOnlyAudio, "speech"), false);
+  assert.equal(matchesModelMarketFilter(inputOnlyAudio, "transcription"), false);
 });
 
 test("embedding setup preserves the provider contract", () => {

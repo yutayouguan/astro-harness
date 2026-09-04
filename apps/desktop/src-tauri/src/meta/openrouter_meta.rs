@@ -31,6 +31,7 @@ pub struct OpenRouterEntry {
     pub supports_image_generation: bool,
     pub supports_video_generation: bool,
     pub supports_audio_output: bool,
+    pub supports_transcription: bool,
     pub supports_music_generation: bool,
     pub display_name: Option<String>,
     pub description: Option<String>,
@@ -192,7 +193,8 @@ impl RawModel {
 
         let image_out = has_mod(&outs, "image");
         let video_out = has_mod(&outs, "video");
-        let audio_out = has_mod(&outs, "audio");
+        let audio_out = has_mod(&outs, "audio") || has_mod(&outs, "speech");
+        let transcription_out = has_mod(&outs, "transcription");
         let music_hint = id_lower.contains("lyria")
             || id_lower.contains("music")
             || name_lower.contains("lyria")
@@ -277,6 +279,7 @@ impl RawModel {
             supports_image_generation: image_out,
             supports_video_generation: video_out,
             supports_audio_output: audio_out && !supports_music,
+            supports_transcription: transcription_out,
             supports_music_generation: supports_music,
             input_modalities: inns,
             output_modalities: outs,
@@ -700,8 +703,11 @@ pub struct ModelCatalogEntry {
     pub supports_reasoning: bool,
     pub supports_web_search: bool,
     pub supports_image_generation: bool,
+    pub supports_video_generation: bool,
     pub supports_audio_input: bool,
     pub supports_audio_output: bool,
+    pub supports_transcription: bool,
+    pub supports_music_generation: bool,
     pub input_modalities: Vec<String>,
     pub output_modalities: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -743,8 +749,11 @@ pub fn all_entries() -> Vec<ModelCatalogEntry> {
                 supports_reasoning: e.supports_reasoning,
                 supports_web_search: e.supports_web_search,
                 supports_image_generation: e.supports_image_generation,
+                supports_video_generation: e.supports_video_generation,
                 supports_audio_input: e.supports_audio_input,
                 supports_audio_output: e.supports_audio_output,
+                supports_transcription: e.supports_transcription,
+                supports_music_generation: e.supports_music_generation,
                 input_modalities: input_mods,
                 output_modalities: output_mods,
                 knowledge_cutoff: e.knowledge_cutoff.clone(),
@@ -865,6 +874,34 @@ mod tests {
                     "input_modalities": ["text"],
                     "output_modalities": ["rerank"]
                   }
+                },
+                {
+                  "id": "example/video",
+                  "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["video"]
+                  }
+                },
+                {
+                  "id": "example/speech",
+                  "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["speech"]
+                  }
+                },
+                {
+                  "id": "example/transcription",
+                  "architecture": {
+                    "input_modalities": ["audio"],
+                    "output_modalities": ["transcription"]
+                  }
+                },
+                {
+                  "id": "google/lyria-music",
+                  "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["audio"]
+                  }
                 }
               ]
             }"#,
@@ -884,6 +921,31 @@ mod tests {
                     .unwrap();
                 assert_eq!(reranker.model_type, ModelCatalogKind::Rerank);
                 assert_eq!(reranker.output_modalities, vec!["rerank"]);
+
+                let video = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/video")
+                    .unwrap();
+                assert!(video.supports_video_generation);
+
+                let speech = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/speech")
+                    .unwrap();
+                assert!(speech.supports_audio_output);
+
+                let transcription = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/transcription")
+                    .unwrap();
+                assert!(transcription.supports_transcription);
+
+                let music = entries
+                    .iter()
+                    .find(|entry| entry.id == "google/lyria-music")
+                    .unwrap();
+                assert!(music.supports_music_generation);
+                assert!(!music.supports_audio_output);
             },
         );
     }
