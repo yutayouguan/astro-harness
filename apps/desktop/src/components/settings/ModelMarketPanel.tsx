@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   ArrowDownAZ,
   ArrowUpAZ,
+  Binary,
   BookOpen,
   Brain,
   Calendar,
@@ -16,6 +17,7 @@ import {
   Columns2,
   Layers,
   List,
+  ListOrdered,
   RefreshCw,
   Search,
   Shield,
@@ -26,38 +28,14 @@ import {
   Zap,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
+import {
+  matchesModelMarketFilter,
+  type ModelCatalogEntry,
+  type ModelMarketFilter,
+} from "../../lib/model/modelMarket";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
 
-interface ModelPricing {
-  prompt_per_million: number | null;
-  completion_per_million: number | null;
-  cache_read_per_million: number | null;
-  cache_write_per_million: number | null;
-}
-
-interface ModelCatalogEntry {
-  id: string;
-  name: string | null;
-  description: string | null;
-  context_length: number | null;
-  created: number | null;
-  pricing: ModelPricing | null;
-  supports_vision: boolean;
-  supports_function_calling: boolean;
-  supports_reasoning: boolean;
-  supports_web_search: boolean;
-  supports_image_generation: boolean;
-  supports_audio_input: boolean;
-  supports_audio_output: boolean;
-  input_modalities: string[];
-  output_modalities: string[];
-  knowledge_cutoff: string | null;
-  expiration_date: string | null;
-}
-
 type SortKey = "price" | "context" | "newest" | "name";
-type FilterKey =
-  "all" | "tools" | "reasoning" | "vision" | "audio" | "image" | "free";
 
 function formatCtx(n: number | null): string {
   if (!n) return "—";
@@ -118,13 +96,15 @@ function timeSince(ts: number | null): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-const FILTERS: { key: FilterKey; Icon: typeof Brain }[] = [
+const FILTERS: { key: ModelMarketFilter; Icon: typeof Brain }[] = [
   { key: "all", Icon: Sparkles },
   { key: "tools", Icon: Wrench },
   { key: "reasoning", Icon: Brain },
   { key: "vision", Icon: Eye },
   { key: "audio", Icon: Headphones },
   { key: "image", Icon: Image },
+  { key: "embedding", Icon: Binary },
+  { key: "rerank", Icon: ListOrdered },
   { key: "free", Icon: Globe },
 ];
 
@@ -159,6 +139,16 @@ function CapabilityBadges({ m }: { m: ModelCatalogEntry }) {
       {m.supports_web_search && (
         <span className="model-market-cap" title="Web Search">
           <Globe size={11} />
+        </span>
+      )}
+      {m.model_type === "embedding" && (
+        <span className="model-market-cap" title="Embedding">
+          <Binary size={11} />
+        </span>
+      )}
+      {m.model_type === "rerank" && (
+        <span className="model-market-cap" title="Rerank">
+          <ListOrdered size={11} />
         </span>
       )}
     </div>
@@ -206,8 +196,20 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
       has: model.supports_image_generation,
     },
     {
+      key: "embedding",
+      label: t("modelMarket.filter.embedding" as never),
+      Icon: Binary,
+      has: model.model_type === "embedding",
+    },
+    {
+      key: "rerank",
+      label: t("modelMarket.filter.rerank" as never),
+      Icon: ListOrdered,
+      has: model.model_type === "rerank",
+    },
+    {
       key: "web",
-      label: t("modelMarket.filter.all" as never),
+      label: t("modelMarket.capability.web" as never),
       Icon: Globe,
       has: model.supports_web_search,
     },
@@ -386,7 +388,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
   const [sortAsc, setSortAsc] = useState(false);
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [filter, setFilter] = useState<ModelMarketFilter>("all");
   const [viewMode, setViewMode] = useState<"gallery" | "list" | "detail">(
     "gallery",
   );
@@ -416,25 +418,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
     let list = models;
 
     if (filter !== "all") {
-      list = list.filter((m) => {
-        switch (filter) {
-          case "tools":
-            return m.supports_function_calling;
-          case "reasoning":
-            return m.supports_reasoning;
-          case "vision":
-            return m.supports_vision;
-          case "audio":
-            return m.supports_audio_input || m.supports_audio_output;
-          case "image":
-            return m.supports_image_generation;
-          case "free":
-            return (
-              m.pricing?.prompt_per_million === 0 &&
-              m.pricing?.completion_per_million === 0
-            );
-        }
-      });
+      list = list.filter((model) => matchesModelMarketFilter(model, filter));
     }
 
     if (search.trim()) {

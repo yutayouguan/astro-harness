@@ -20,6 +20,8 @@ const CACHE_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 pub struct OpenRouterEntry {
     pub max_input_tokens: Option<u64>,
     pub max_output_tokens: Option<u64>,
+    pub input_modalities: Vec<String>,
+    pub output_modalities: Vec<String>,
     pub supports_vision: bool,
     pub supports_file_input: bool,
     pub supports_audio_input: bool,
@@ -276,6 +278,8 @@ impl RawModel {
             supports_video_generation: video_out,
             supports_audio_output: audio_out && !supports_music,
             supports_music_generation: supports_music,
+            input_modalities: inns,
+            output_modalities: outs,
             display_name: nonempty(self.name),
             description: nonempty(self.description),
             canonical_slug: nonempty(self.canonical_slug),
@@ -657,6 +661,25 @@ pub fn lookup(id: &str, kind: &str) -> Option<OpenRouterEntry> {
     best.cloned()
 }
 
+/// 模型市场的主用途分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelCatalogKind {
+    Generation,
+    Embedding,
+    Rerank,
+}
+
+fn catalog_kind(output_modalities: &[String]) -> ModelCatalogKind {
+    if output_modalities.iter().any(|m| m == "rerank") {
+        ModelCatalogKind::Rerank
+    } else if output_modalities.iter().any(|m| m == "embeddings") {
+        ModelCatalogKind::Embedding
+    } else {
+        ModelCatalogKind::Generation
+    }
+}
+
 /// 前端可序列化的模型目录条目。
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelCatalogEntry {
@@ -671,6 +694,7 @@ pub struct ModelCatalogEntry {
     pub created: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pricing: Option<super::model_meta::ModelPricingMeta>,
+    pub model_type: ModelCatalogKind,
     pub supports_vision: bool,
     pub supports_function_calling: bool,
     pub supports_reasoning: bool,
@@ -695,27 +719,16 @@ pub fn all_entries() -> Vec<ModelCatalogEntry> {
     guard
         .values()
         .map(|e| {
-            let mut input_mods = vec!["text".to_string()];
-            if e.supports_vision {
-                input_mods.push("image".to_string());
-            }
-            if e.supports_audio_input {
-                input_mods.push("audio".to_string());
-            }
-            if e.supports_file_input {
-                input_mods.push("file".to_string());
-            }
-
-            let mut output_mods = vec!["text".to_string()];
-            if e.supports_image_generation {
-                output_mods.push("image".to_string());
-            }
-            if e.supports_video_generation {
-                output_mods.push("video".to_string());
-            }
-            if e.supports_audio_output || e.supports_music_generation {
-                output_mods.push("audio".to_string());
-            }
+            let input_mods = if e.input_modalities.is_empty() {
+                vec!["text".to_string()]
+            } else {
+                e.input_modalities.clone()
+            };
+            let output_mods = if e.output_modalities.is_empty() {
+                vec!["text".to_string()]
+            } else {
+                e.output_modalities.clone()
+            };
 
             ModelCatalogEntry {
                 id: e.matched_key.clone(),
@@ -724,6 +737,7 @@ pub fn all_entries() -> Vec<ModelCatalogEntry> {
                 context_length: e.max_input_tokens,
                 created: e.created,
                 pricing: e.pricing.clone(),
+                model_type: catalog_kind(&output_mods),
                 supports_vision: e.supports_vision,
                 supports_function_calling: e.supports_function_calling,
                 supports_reasoning: e.supports_reasoning,
@@ -829,6 +843,47 @@ mod tests {
                     e.reasoning.supported_efforts,
                     vec!["xhigh".to_string(), "high".to_string()]
                 );
+            },
+        );
+    }
+
+    #[test]
+    fn catalog_preserves_modalities_and_classifies_specialized_models() {
+        with_fixture(
+            r#"{
+              "data": [
+                {
+                  "id": "example/embed",
+                  "architecture": {
+                    "input_modalities": ["text", "image"],
+                    "output_modalities": ["embeddings"]
+                  }
+                },
+                {
+                  "id": "example/reranker",
+                  "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["rerank"]
+                  }
+                }
+              ]
+            }"#,
+            || {
+                let entries = all_entries();
+                let embedding = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/embed")
+                    .unwrap();
+                assert_eq!(embedding.model_type, ModelCatalogKind::Embedding);
+                assert_eq!(embedding.input_modalities, vec!["text", "image"]);
+                assert_eq!(embedding.output_modalities, vec!["embeddings"]);
+
+                let reranker = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/reranker")
+                    .unwrap();
+                assert_eq!(reranker.model_type, ModelCatalogKind::Rerank);
+                assert_eq!(reranker.output_modalities, vec!["rerank"]);
             },
         );
     }
