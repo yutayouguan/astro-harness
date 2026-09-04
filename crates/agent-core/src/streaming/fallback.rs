@@ -1,4 +1,4 @@
-//! 聊天主模型故障切换：错误分类与首包前 fallback 流包装。
+//! Responses 主模型故障切换：错误分类与首包前 fallback 流包装。
 
 use futures::{stream, StreamExt};
 use providers::types::stream::{CompletionStream, StreamChunk};
@@ -90,33 +90,10 @@ fn is_error_only_pre_content_chunk(chunk: &StreamChunk) -> bool {
     matches!(chunk, StreamChunk::Error(_)) && !chunk_has_meaningful_content(chunk)
 }
 
-fn tools_for_target(target: &ModelTarget, tools: &[serde_json::Value]) -> Vec<serde_json::Value> {
-    if providers::dispatch::supports_native_tool_search(&target.backend_id, &target.model) {
-        return tools.to_vec();
-    }
-    tools
-        .iter()
-        .filter(|tool| tool.get("type").and_then(serde_json::Value::as_str) != Some("tool_search"))
-        .cloned()
-        .map(|mut tool| {
-            if let Some(object) = tool.as_object_mut() {
-                object.remove("defer_loading");
-                if object.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
-                    if let Some(children) = object
-                        .get_mut("tools")
-                        .and_then(serde_json::Value::as_array_mut)
-                    {
-                        for child in children {
-                            if let Some(child) = child.as_object_mut() {
-                                child.remove("defer_loading");
-                            }
-                        }
-                    }
-                }
-            }
-            tool
-        })
-        .collect()
+/// 所有进入 Agent fallback 链的目标都已通过 Responses capability gate；原生
+/// `tool_search`、namespace 与 `defer_loading` 必须逐跳原样保留。
+fn tools_for_responses_target(tools: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    tools.to_vec()
 }
 
 /// Peek 首个流事件：首包前错误（流 Err 或 error-only chunk）直接失败；否则还原含已 peek 项的流。
@@ -140,7 +117,7 @@ pub async fn probe_or_wrap_pre_content(
     }
 }
 
-/// 按 `targets` 链尝试 `chat_stream`；仅首包前可切；耗尽返回聚合错误。
+/// 按 `targets` 链尝试 Responses stream；仅首包前可切，绝不降级到 Chat Completions。
 pub async fn try_stream_responses_with_fallback(
     targets: &[ModelTarget],
     instructions: String,
@@ -174,7 +151,7 @@ pub async fn try_stream_responses_with_fallback(
             previous_interaction_id: None,
             api_mode: "responses".into(),
         };
-        let target_tools = tools_for_target(target, &tools);
+        let target_tools = tools_for_responses_target(&tools);
 
         let attempt = async {
             let stream = providers::dispatch::agent_responses_stream(
@@ -258,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn azure_tool_search_schema_is_filtered_per_fallback_target() {
+    fn responses_targets_preserve_tool_search_and_deferred_namespaces() {
         let tools = vec![
             serde_json::json!({"type": "tool_search", "execution": "client"}),
             serde_json::json!({
@@ -276,24 +253,7 @@ mod tests {
                 }]
             }),
         ];
-        let old = ModelTarget {
-            provider_id: "azure-old".into(),
-            backend_id: "azure".into(),
-            model: "gpt-5.3".into(),
-            api_key: "key".into(),
-            base_url: "https://example.invalid/openai/v1".into(),
-        };
-        let current = ModelTarget {
-            model: "gpt-5.6".into(),
-            ..old.clone()
-        };
-
-        let filtered = tools_for_target(&old, &tools);
-        assert_eq!(filtered.len(), 2);
-        assert_eq!(filtered[0]["name"], "terminal");
-        assert!(filtered[0].get("defer_loading").is_none());
-        assert!(filtered[1]["tools"][0].get("defer_loading").is_none());
-        assert_eq!(tools_for_target(&current, &tools), tools);
+        assert_eq!(tools_for_responses_target(&tools), tools);
     }
 
     #[tokio::test]

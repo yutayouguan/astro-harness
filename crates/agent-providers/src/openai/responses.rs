@@ -118,7 +118,9 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
             }
         }
 
-        "response.reasoning_summary_text.delta" | "response.reasoning.delta" => {
+        "response.reasoning_summary_text.delta"
+        | "response.reasoning.delta"
+        | "response.reasoning_text.delta" => {
             if let Some(delta) = v
                 .get("delta")
                 .and_then(|d| d.as_str())
@@ -342,6 +344,14 @@ mod tests {
     #[test]
     fn extract_openrouter_reasoning_delta() {
         let data = r#"{"type":"response.reasoning.delta","delta":"Let me think..."}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Thinking(t) if t == "Let me think..."));
+    }
+
+    #[test]
+    fn extract_deepseek_reasoning_text_delta() {
+        let data = r#"{"type":"response.reasoning_text.delta","delta":"Let me think..."}"#;
         let chunks = extract_responses_chunks(data);
         assert_eq!(chunks.len(), 1);
         assert!(matches!(&chunks[0], StreamChunk::Thinking(t) if t == "Let me think..."));

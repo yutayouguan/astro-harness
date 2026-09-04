@@ -88,22 +88,24 @@ pub async fn agent_responses_stream(
             capability: "Agent Responses API".to_string(),
         });
     }
-    let mut config = config.clone();
-    config.api_mode = "responses".to_string();
+    let config = force_agent_responses_config(config);
     let mut additional_params = config.additional_params.clone();
     let prompt_cache = PromptCacheConfig::take_from_additional_params(&mut additional_params)
         .map_err(|detail| ProviderError::ModelError {
             provider: provider.to_string(),
             detail,
         })?;
-    if prompt_cache.is_some() && explicitly_lacks_prompt_cache_controls(provider, &config.model) {
-        return Err(ProviderError::UnsupportedCapability {
-            provider: provider.to_string(),
-            capability: format!(
-                "GPT-5.6+ prompt cache controls for model `{}`",
-                config.model
-            ),
-        });
+    let has_prompt_cache_controls = prompt_cache.is_some()
+        || additional_params
+            .as_object()
+            .is_some_and(|params| params.keys().any(|key| key.starts_with("prompt_cache_")));
+    if has_prompt_cache_controls {
+        if let Some(capability) = unsupported_prompt_cache_controls(provider, &config.model) {
+            return Err(ProviderError::UnsupportedCapability {
+                provider: provider.to_string(),
+                capability,
+            });
+        }
     }
     let tool_definitions = parse_tool_definitions(provider, &tools)?;
     let request = ResponsesRequest {
@@ -159,6 +161,12 @@ pub fn supports_agent_responses(provider: &str) -> bool {
         || lookup_custom_provider(provider).is_some()
 }
 
+fn force_agent_responses_config(config: &ProviderConfig) -> ProviderConfig {
+    let mut config = config.clone();
+    config.api_mode = "responses".to_string();
+    config
+}
+
 fn parsed_gpt_version(model: &str) -> Option<(u16, u16)> {
     let lower = model.to_ascii_lowercase();
     let marker = lower.find("gpt-")?;
@@ -171,18 +179,16 @@ fn parsed_gpt_version(model: &str) -> Option<(u16, u16)> {
     Some((major, minor))
 }
 
-/// 当 Azure 部署名可识别为 GPT-5.4+ 时启用原生 Tool Search。
-///
-/// Azure 的 deployment name 可自定义；对无法判定的名称采用保守策略，
-/// 不发送可能导致 400 的 `tool_search` schema。其他 provider 保持现有行为。
-pub fn supports_native_tool_search(provider: &str, model: &str) -> bool {
-    normalize_provider_id(provider) != "azure"
-        || parsed_gpt_version(model).is_some_and(|version| version >= (5, 4))
-}
-
-fn explicitly_lacks_prompt_cache_controls(provider: &str, model: &str) -> bool {
-    normalize_provider_id(provider) == "azure"
-        && parsed_gpt_version(model).is_some_and(|version| version < (5, 6))
+fn unsupported_prompt_cache_controls(provider: &str, model: &str) -> Option<String> {
+    match normalize_provider_id(provider) {
+        "deepseek" => {
+            Some("显式 prompt cache 控制（DeepSeek 上下文缓存由服务端自动管理）".to_string())
+        }
+        "azure" if parsed_gpt_version(model).is_some_and(|version| version < (5, 6)) => Some(
+            format!("GPT-5.6+ prompt cache controls for model `{model}`"),
+        ),
+        _ => None,
+    }
 }
 
 pub(crate) async fn chat_stream_with_tool_policy(
@@ -1075,16 +1081,34 @@ mod tests {
     }
 
     #[test]
-    fn azure_tool_search_requires_gpt_5_4_or_newer() {
-        assert!(!supports_native_tool_search("azure", "gpt-4o"));
-        assert!(!supports_native_tool_search("azure", "gpt-5.3"));
-        assert!(supports_native_tool_search("azure", "gpt-5.4"));
-        assert!(supports_native_tool_search(
-            "azure",
-            "prod-gpt-5.6-deployment"
-        ));
-        assert!(!supports_native_tool_search("azure", "production-slot"));
-        assert!(supports_native_tool_search("openai", "deployment-alias"));
+    fn agent_entry_forces_responses_even_with_chat_compat_override() {
+        let config = ProviderConfig {
+            api_mode: "chat_completions".into(),
+            ..ProviderConfig::default()
+        };
+        let config = force_agent_responses_config(&config);
+        assert_eq!(config.api_mode, "responses");
+
+        let mut registry = crate::registry::Registry::new();
+        register_provider(&mut registry, "deepseek", &config);
+        assert!(registry.responses_model("deepseek").is_some());
+    }
+
+    #[tokio::test]
+    async fn agent_entry_rejects_chat_only_provider_without_fallback() {
+        let error = match agent_responses_stream(
+            "anthropic",
+            String::new(),
+            Vec::new(),
+            Vec::new(),
+            &ProviderConfig::default(),
+        )
+        .await
+        {
+            Ok(_) => panic!("chat-only provider must not enter the Agent Responses path"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, ProviderError::UnsupportedCapability { .. }));
     }
 
     #[tokio::test]
@@ -1107,5 +1131,38 @@ mod tests {
                 Err(error) => error,
             };
         assert!(matches!(error, ProviderError::UnsupportedCapability { .. }));
+    }
+
+    #[tokio::test]
+    async fn deepseek_rejects_prompt_cache_controls_before_http() {
+        for additional_params in [
+            serde_json::json!({
+                "prompt_cache_key": "agent:v1",
+                "prompt_cache_options": {"mode": "implicit"}
+            }),
+            serde_json::json!({"prompt_cache_retention": "24h"}),
+        ] {
+            let config = ProviderConfig {
+                api_key: "test-key".into(),
+                base_url: Some("https://example.invalid/v1".into()),
+                model: "deepseek-v4-flash".into(),
+                additional_params,
+                ..ProviderConfig::default()
+            };
+            let error = match agent_responses_stream(
+                "deepseek",
+                String::new(),
+                Vec::new(),
+                Vec::new(),
+                &config,
+            )
+            .await
+            {
+                Ok(_) => panic!("DeepSeek prompt cache controls must be rejected before HTTP"),
+                Err(error) => error,
+            };
+            assert!(matches!(error, ProviderError::UnsupportedCapability { .. }));
+            assert!(error.to_string().contains("服务端自动管理"));
+        }
     }
 }
