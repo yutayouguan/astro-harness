@@ -18,6 +18,7 @@ import {
   Layers,
   List,
   ListOrdered,
+  BarChart3,
   RefreshCw,
   Search,
   Shield,
@@ -38,6 +39,7 @@ import {
 } from "../../lib/model/modelMarket";
 import type { ProviderDto, ProvidersStateDto } from "../../types";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
+import ModelRankingsPanel from "./ModelRankingsPanel";
 
 type SortKey = "price" | "context" | "newest" | "name";
 
@@ -48,7 +50,6 @@ function formatCtx(n: number | null): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return String(n);
 }
-
 function formatPrice(n: number | null | undefined): string {
   if (n == null) return "—";
   if (n === 0) return "Free";
@@ -495,6 +496,7 @@ export default function ModelMarketPanel({
   onProvidersStateChange,
 }: ModelMarketPanelProps) {
   const { t } = useI18n();
+  const [surface, setSurface] = useState<"catalog" | "rankings">("catalog");
   const [models, setModels] = useState<ModelCatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -527,17 +529,17 @@ export default function ModelMarketPanel({
   }, []);
 
   useEffect(() => {
-    if (active && models.length === 0) {
+    if (active && surface === "catalog" && models.length === 0) {
       void load(false);
     }
-  }, [active, models.length, load]);
+  }, [active, models.length, load, surface]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || surface !== "catalog") return;
     void invoke<ProvidersStateDto>("get_providers_state")
       .then(setProvidersState)
       .catch(() => setProvidersState(null));
-  }, [active]);
+  }, [active, surface]);
 
   const openRouterProvider = useMemo(
     () =>
@@ -683,8 +685,43 @@ export default function ModelMarketPanel({
     { key: "name", labelKey: "modelMarket.sort.name" },
   ];
 
+  const surfaceTabs = (
+    <div className="model-market-surface-tabs" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={surface === "catalog"}
+        className={surface === "catalog" ? "active" : ""}
+        onClick={() => setSurface("catalog")}
+      >
+        <Grid2x2 size={15} />
+        {t("modelMarket.surface.catalog" as never)}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={surface === "rankings"}
+        className={surface === "rankings" ? "active" : ""}
+        onClick={() => setSurface("rankings")}
+      >
+        <BarChart3 size={15} />
+        {t("modelMarket.surface.rankings" as never)}
+      </button>
+    </div>
+  );
+
+  if (surface === "rankings") {
+    return (
+      <div className="model-market">
+        {surfaceTabs}
+        <ModelRankingsPanel active={active} />
+      </div>
+    );
+  }
+
   return (
     <div className="model-market">
+      {surfaceTabs}
       <div className="model-market-main">
         {/* Toolbar */}
         <div className="model-market-toolbar">
