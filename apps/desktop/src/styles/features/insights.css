@@ -15,13 +15,22 @@
   --insights-series-soft: var(--tone-soft);
   --insights-warn: #b45309;
   --insights-warn-soft: rgba(245, 158, 11, 0.1);
-  --insights-surface: color-mix(in srgb, var(--bg-base) 72%, transparent);
-  --insights-surface-strong: color-mix(
-    in srgb,
-    var(--bg-base) 84%,
-    transparent
+  /* 数字卡与内容卡共用同一层材质，避免顶部看起来更厚。 */
+  --insights-surface: var(
+    --surface-panel-background,
+    rgba(255, 255, 255, 0.24)
   );
-  --insights-edge: color-mix(in srgb, var(--ink) 11%, transparent);
+  --insights-surface-strong: var(
+    --surface-panel-hover,
+    rgba(255, 255, 255, 0.38)
+  );
+  --insights-edge: var(
+    --surface-panel-border,
+    rgba(148, 163, 184, 0.24)
+  );
+  --insights-panel-shadow:
+    0 2px 8px rgba(var(--shadow-ink), 0.05),
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.18));
 }
 
 /* 顶栏一行：左视图 Tab，右周期筛选；固定不随内容滚动 */
@@ -53,6 +62,27 @@
 .insights-period-tabs,
 .insights-metric-tabs {
   --color-accent: var(--tone);
+}
+
+/* 顶部两组分段控件共用一套外壳和选中态，与内容卡片保持层级一致。 */
+.insights-panel :is(.insights-view-tabs, .insights-period-tabs) {
+  border-color: var(--insights-edge);
+  background: var(--insights-surface);
+  box-shadow: var(--insights-panel-shadow);
+}
+
+.insights-panel
+  :is(.insights-view-tab, .insights-period-tab).ui-segmented-tabs__tab.is-active {
+  color: color-mix(in srgb, var(--tone) 72%, var(--ink));
+  background: color-mix(
+    in srgb,
+    var(--tone) 13%,
+    var(--insights-surface-strong)
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 44%, transparent),
+    0 2px 7px color-mix(in srgb, var(--tone) 9%, transparent);
 }
 
 /* View Tab 保持单行，避免 Tracing 被挤换行 */
@@ -129,9 +159,7 @@
     saturate(115%);
   -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
     saturate(115%);
-  box-shadow:
-    0 6px 18px rgba(var(--shadow-ink), 0.045),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: var(--insights-panel-shadow);
   overflow: hidden;
 }
 
@@ -845,15 +873,9 @@ html[data-theme="dark"] .insights-trace-chain-panel {
 .insights-collab-graph-panel {
   padding: 12px 14px;
   border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--glass-panel, rgba(255, 255, 255, 0.25)) 80%,
-    transparent
-  );
-  box-shadow:
-    0 2px 8px rgba(15, 23, 42, 0.05),
-    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.18));
+  border: 1px solid var(--insights-edge);
+  background: var(--insights-surface);
+  box-shadow: var(--insights-panel-shadow);
 }
 
 .insights-collab-list-panel {
@@ -1153,20 +1175,14 @@ html[data-theme="dark"] .insights-collab-label {
 .insights-trace-chain-panel {
   padding: 12px 14px;
   border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--glass-panel, rgba(255, 255, 255, 0.25)) 80%,
-    transparent
-  );
+  border: 1px solid var(--insights-edge);
+  background: var(--insights-surface);
   min-height: 360px;
   min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow:
-    0 2px 8px rgba(15, 23, 42, 0.05),
-    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.18));
+  box-shadow: var(--insights-panel-shadow);
 }
 
 .insights-trace-list-panel .insights-collab-list,
@@ -1497,7 +1513,8 @@ html[data-theme="dark"] .insights-collab-label {
   padding: 14px 16px 16px;
   border: 1px solid var(--insights-edge);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-base) 64%, transparent);
+  background: var(--insights-surface);
+  box-shadow: var(--insights-panel-shadow);
 }
 
 .insights-section-heading {
@@ -1607,11 +1624,17 @@ html[data-theme="dark"] .insights-collab-label {
 }
 
 @media (prefers-reduced-transparency: reduce) {
+  .insights-panel :is(.insights-view-tabs, .insights-period-tabs),
   .insights-kpi,
   .insights-models-chart,
   .insights-hbar-panel,
   .insights-rank,
   .insights-breakdown-section,
+  .insights-collab-list-panel,
+  .insights-collab-steps-panel,
+  .insights-collab-graph-panel,
+  .insights-trace-list-panel,
+  .insights-trace-chain-panel,
   .insights-bar-tooltip {
     background: var(--bg-base);
     backdrop-filter: none;
@@ -1620,11 +1643,17 @@ html[data-theme="dark"] .insights-collab-label {
 }
 
 @media (prefers-contrast: more) {
+  .insights-panel :is(.insights-view-tabs, .insights-period-tabs),
   .insights-kpi,
   .insights-models-chart,
   .insights-hbar-panel,
   .insights-rank,
-  .insights-breakdown-section {
+  .insights-breakdown-section,
+  .insights-collab-list-panel,
+  .insights-collab-steps-panel,
+  .insights-collab-graph-panel,
+  .insights-trace-list-panel,
+  .insights-trace-chain-panel {
     border-color: color-mix(in srgb, var(--ink) 35%, transparent);
   }
 }

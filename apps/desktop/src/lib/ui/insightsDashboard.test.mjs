@@ -42,6 +42,29 @@ test("insights layout has responsive KPI grids and accessible fallbacks", () => 
   assert.match(styles, /@media \(prefers-contrast: more\)/);
 });
 
+test("insights selections and cards share one scoped material hierarchy", () => {
+  assert.match(
+    styles,
+    /--insights-surface:\s*var\(\s*--surface-panel-background/,
+  );
+  assert.match(
+    styles,
+    /\.insights-panel :is\(\.insights-view-tabs, \.insights-period-tabs\)/,
+  );
+  assert.match(
+    styles,
+    /:is\(\.insights-view-tab, \.insights-period-tab\)\.ui-segmented-tabs__tab\.is-active/,
+  );
+  assert.match(
+    styles,
+    /\.insights-kpi\s*\{[\s\S]*?background: var\(--insights-surface\);[\s\S]*?box-shadow: var\(--insights-panel-shadow\)/,
+  );
+  assert.match(
+    styles,
+    /\.insights-trace-list-panel,\s*\.insights-trace-chain-panel\s*\{[\s\S]*?background: var\(--insights-surface\);[\s\S]*?box-shadow: var\(--insights-panel-shadow\)/,
+  );
+});
+
 test("future buckets and keyboard focus have distinct chart treatments", () => {
   assert.match(source, /usageBucketState/);
   assert.match(source, /tabIndex=\{bucketState === "future" \? -1 : 0\}/);
