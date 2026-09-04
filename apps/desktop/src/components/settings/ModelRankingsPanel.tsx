@@ -377,50 +377,50 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
   return (
     <div className="mm-rankings-workspace">
       <div className="mm-rankings-sticky-nav">
-      <div className="mm-rankings-commandbar">
-        <div className="mm-rankings-sections" role="tablist">
-          {SECTION_ITEMS.map(({ id, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={section === id}
-              className={section === id ? "active" : ""}
-              onClick={() => setSection(id)}
-            >
-              <Icon size={14} />
-              {t(`modelRankings.section.${id}` as never)}
-            </button>
-          ))}
+        <div className="mm-rankings-commandbar">
+          <div className="mm-rankings-sections" role="tablist">
+            {SECTION_ITEMS.map(({ id, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={section === id}
+                className={section === id ? "active" : ""}
+                onClick={() => setSection(id)}
+              >
+                <Icon size={14} />
+                {t(`modelRankings.section.${id}` as never)}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="model-market-refresh"
+            onClick={() => void load(true)}
+            disabled={busy}
+            title={t("modelMarket.refresh")}
+          >
+            <RefreshCw size={14} className={busy ? "spin" : ""} />
+          </button>
         </div>
-        <button
-          type="button"
-          className="model-market-refresh"
-          onClick={() => void load(true)}
-          disabled={busy}
-          title={t("modelMarket.refresh")}
-        >
-          <RefreshCw size={14} className={busy ? "spin" : ""} />
-        </button>
-      </div>
 
-      {section === "usage" && (
-        <div className="mm-rank-modality-tabs" role="tablist">
-          {MODALITY_ITEMS.map(({ id, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={modality === id}
-              className={modality === id ? "active" : ""}
-              onClick={() => setModality(id)}
-            >
-              <Icon size={14} />
-              {t(`modelRankings.modality.${id}` as never)}
-            </button>
-          ))}
-        </div>
-      )}
+        {section === "usage" && (
+          <div className="mm-rank-modality-tabs" role="tablist">
+            {MODALITY_ITEMS.map(({ id, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={modality === id}
+                className={modality === id ? "active" : ""}
+                onClick={() => setModality(id)}
+              >
+                <Icon size={14} />
+                {t(`modelRankings.modality.${id}` as never)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mm-rank-statusbar" aria-live="polite">

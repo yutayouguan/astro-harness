@@ -325,6 +325,7 @@ test("session activity preserves title space and progressively reveals tools", (
   const actions = rule(sessionStyles, ".sidebar-session-actions");
   const sessionMain = rule(sessionStyles, ".sidebar-session-main");
   const pinAction = rule(sessionStyles, ".sidebar-session-action-btn.is-pin");
+  const moreAction = rule(sessionStyles, ".sidebar-session-action-btn.is-more");
   const unreadDot = rule(sessionStyles, ".session-status-unread-dot");
   const titleWrap = rule(sessionStyles, ".sidebar-session-title-wrap");
   const title = rule(sessionStyles, ".sidebar-session-title");
@@ -366,6 +367,18 @@ test("session activity preserves title space and progressively reveals tools", (
   assert.match(
     sessionStyles,
     /\.sidebar-session-item:is\(:hover, :focus-within\)[\s\S]*?\.sidebar-session-action-btn\.is-pin\s*\{[\s\S]*?opacity:\s*1;/,
+  );
+  assert.ok(moreAction, "more action needs progressive disclosure styles");
+  assert.match(moreAction, /opacity:\s*0;/);
+  assert.match(moreAction, /pointer-events:\s*none;/);
+  assert.match(
+    sessionStyles,
+    /\.sidebar-session-item:is\(:hover, :focus-within\)[\s\S]*?\.sidebar-session-action-btn\.is-more\s*\{[\s\S]*?opacity:\s*1;[\s\S]*?pointer-events:\s*auto;/,
+  );
+  assert.match(
+    sessionStyles,
+    /@media \(hover: none\)[\s\S]*?\.sidebar-session-action-btn\.is-more\s*\{[\s\S]*?opacity:\s*0\.64;[\s\S]*?pointer-events:\s*auto;/,
+    "touch devices must retain an accessible session action",
   );
   const sessionItem = sessionList.slice(
     sessionList.indexOf("function SessionItem"),

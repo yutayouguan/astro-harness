@@ -268,12 +268,21 @@
 }
 
 .sidebar-session-action-btn.is-more {
-  opacity: 0.64;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.9);
+  transition:
+    background 80ms ease,
+    color 80ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
 }
 
 .sidebar-session-item:is(:hover, :focus-within)
   .sidebar-session-action-btn.is-more {
   opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
 }
 
 .sidebar-session-action-btn:hover {
@@ -290,5 +299,11 @@
 @media (hover: none) {
   .sidebar-session-action-btn.is-pin {
     display: none;
+  }
+
+  .sidebar-session-action-btn.is-more {
+    opacity: 0.64;
+    pointer-events: auto;
+    transform: none;
   }
 }

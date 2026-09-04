@@ -73,7 +73,8 @@
   flex-direction: column;
   gap: 10px;
   padding-bottom: 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 55%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 55%, transparent);
   background: color-mix(in srgb, var(--glass-panel) 92%, transparent);
   backdrop-filter: blur(16px) saturate(1.08);
   -webkit-backdrop-filter: blur(16px) saturate(1.08);
