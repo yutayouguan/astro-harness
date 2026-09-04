@@ -806,7 +806,13 @@ code_mode = true
 - `crates/agent-core/src/runtime/tool_router.rs` / `runtime/mod.rs` 单元测试
   - 分离 `namespace + name` 可执行；
   - `namespace.child` / `namespace__child` 无法伪装模型直调；
+  - 无 Runtime 的可见 metadata 与重复规范身份在构建阶段 fail closed；
+  - 无效 Function JSON 不进入 handler，server-executed Tool Search 不被本地重复执行；
   - output 历史保留 namespace。
+- `crates/agent-core/tests/streaming_test.rs`
+  - `namespaced_tool_round_trips_from_prompt_to_runtime_and_history` 覆盖 Registry 注册、`Prompt.tools`、Responses call、Runtime 执行和 namespaced output 历史的端到端闭环。
+- `crates/agent-providers/src/dispatch.rs` 单元测试
+  - 任一无效工具定义都终止请求，不使用 `filter_map` 静默丢弃。
 - `crates/agent-tools/tests/code_mode_alignment.rs`
   - Direct 工具和原生 `tool_search` 保持可见；
   - `exec` / `wait` 不进入模型 schema。

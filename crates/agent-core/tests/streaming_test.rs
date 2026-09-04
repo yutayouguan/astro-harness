@@ -976,6 +976,116 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
 }
 
 #[tokio::test]
+async fn namespaced_tool_round_trips_from_prompt_to_runtime_and_history() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut agent = AgentLoop::with_session_id(
+        AgentConfig::with_defaults(dir.path().to_path_buf()),
+        "namespaced-tool-round-trip".into(),
+    )
+    .await
+    .unwrap();
+    let executions = Arc::new(AtomicUsize::new(0));
+    let execution_count = Arc::clone(&executions);
+    agent.tool_registry_mut().register_dynamic(
+        types::ToolEntry {
+            name: "clock_probe".into(),
+            namespace: "clock".into(),
+            toolset: "clock".into(),
+            description: "Probe the clock namespace".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            ..types::ToolEntry::lifecycle_defaults()
+        },
+        Arc::new(move |_name, _args| {
+            execution_count.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Ok(types::ToolOutput::from("probe-ok")) })
+        }),
+    );
+    let session = Arc::new(agent);
+    session
+        .record_items(vec![agent_protocol::ResponseItem::user_text("probe")])
+        .await;
+
+    let seen_tools = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen_tools_for_response = Arc::clone(&seen_tools);
+    let round = Arc::new(AtomicUsize::new(0));
+    let response_round = Arc::clone(&round);
+    let responses_fn: ResponsesOverride = Arc::new(move |_input, tools, _config| {
+        seen_tools_for_response.lock().unwrap().push(tools);
+        let current = response_round.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            let chunks = if current == 0 {
+                vec![
+                    StreamChunk::ResponseItemDone(agent_protocol::ResponseItem::FunctionCall {
+                        id: Some("item-clock-probe".into()),
+                        name: "probe".into(),
+                        namespace: Some("clock".into()),
+                        arguments: "{}".into(),
+                        encrypted_function_args: None,
+                        call_id: "call-clock-probe".into(),
+                        internal_chat_message_metadata_passthrough: None,
+                    }),
+                    StreamChunk::Done {
+                        finish_reason: "tool_calls".into(),
+                    },
+                ]
+            } else {
+                vec![
+                    StreamChunk::Text("done".into()),
+                    StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    },
+                ]
+            };
+            Ok(Box::pin(futures::stream::iter(
+                chunks.into_iter().map(Ok::<_, anyhow::Error>),
+            )) as CompletionStream)
+        })
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn(run_projected_stream_with_responses_fn(
+        Arc::clone(&session),
+        responses_fn,
+        ProviderConfig::default(),
+        "system".into(),
+        PauseControl::new(),
+        None,
+        tx,
+    ));
+    while let Some(item) = rx.recv().await {
+        item.unwrap();
+    }
+    run.await.unwrap();
+
+    assert_eq!(executions.load(Ordering::SeqCst), 1);
+    let first_tools = seen_tools.lock().unwrap();
+    assert!(first_tools[0].iter().any(|spec| {
+        spec.get("type").and_then(serde_json::Value::as_str) == Some("namespace")
+            && spec.get("name").and_then(serde_json::Value::as_str) == Some("clock")
+            && spec
+                .get("tools")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|tools| {
+                    tools.iter().any(|tool| {
+                        tool.get("name").and_then(serde_json::Value::as_str) == Some("probe")
+                    })
+                })
+    }));
+    drop(first_tools);
+
+    let history = session.clone_history().await;
+    assert!(history.iter().any(|item| matches!(
+        item,
+        agent_protocol::ResponseItem::FunctionCallOutput {
+            call_id: Some(call_id),
+            name: Some(name),
+            namespace: Some(namespace),
+            ..
+        } if call_id == "call-clock-probe" && name == "probe" && namespace == "clock"
+    )));
+}
+
+#[tokio::test]
 async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
     const COMPLETED_EVENT_MAX_BYTES: usize = 1024 * 1024;
 
