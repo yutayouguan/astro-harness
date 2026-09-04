@@ -8,7 +8,7 @@
 >
 > Step-scoped tool plan 重构：`e3ac2c51`
 >
-> 全链路 fail-closed 审计：`cc1ddc63`
+> 全链路 fail-closed 审计：`cc1ddc63`、`1a841049`
 >
 > 参考实现基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
 >
