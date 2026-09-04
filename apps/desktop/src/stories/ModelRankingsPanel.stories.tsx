@@ -54,6 +54,66 @@ const taskData = {
       spendShareOfTotal: 0.06,
       models: models.slice(0, 5),
     },
+    {
+      tag: "code:debugging",
+      macroCategory: "code",
+      spendShareOfTotal: 0.056,
+      models: models.slice(1),
+    },
+    {
+      tag: "content_writing",
+      macroCategory: "general",
+      spendShareOfTotal: 0.043,
+      models: models.slice(2),
+    },
+    {
+      tag: "qa_knowledge",
+      macroCategory: "general",
+      spendShareOfTotal: 0.04,
+      models: models.slice(0, 4),
+    },
+    {
+      tag: "roleplay_fiction",
+      macroCategory: "general",
+      spendShareOfTotal: 0.038,
+      models: models.slice(3),
+    },
+    {
+      tag: "code:file_read_write",
+      macroCategory: "code",
+      spendShareOfTotal: 0.038,
+      models: models.slice(1),
+    },
+    {
+      tag: "code:shell_execution",
+      macroCategory: "code",
+      spendShareOfTotal: 0.034,
+      models: models.slice(2),
+    },
+    {
+      tag: "data:transformation",
+      macroCategory: "data",
+      spendShareOfTotal: 0.028,
+      models: models.slice(0, 5),
+    },
+    {
+      tag: "code:frontend_ui",
+      macroCategory: "code",
+      spendShareOfTotal: 0.027,
+      models: models.slice(1),
+    },
+    {
+      tag: "code:review_security",
+      macroCategory: "code",
+      spendShareOfTotal: 0.024,
+      models: models.slice(2),
+    },
+    {
+      tag: "conversational_reply",
+      macroCategory: "general",
+      spendShareOfTotal: 0.023,
+      models: models.slice(0, 4),
+    },
   ],
 };
 

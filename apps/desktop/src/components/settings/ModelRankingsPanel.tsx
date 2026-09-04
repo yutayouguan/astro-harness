@@ -3,17 +3,31 @@ import {
   Activity,
   AppWindow,
   AudioLines,
+  BadgeCheck,
   BarChart3,
   Binary,
+  Bot,
+  Bug,
+  Code2,
+  Database,
+  FileText,
+  Files,
   Gauge,
   Image,
   Layers3,
+  ListTree,
   ListChecks,
+  MessagesSquare,
+  PanelsTopLeft,
   RefreshCw,
+  ShieldCheck,
   Sparkles,
+  Tags,
+  TerminalSquare,
   Trophy,
   Video,
   WalletCards,
+  Workflow,
   Wrench,
 } from "lucide-react";
 import {
@@ -108,6 +122,35 @@ function taskCategoryColor(id: string, index: number): string {
     TASK_CATEGORY_COLORS[id.toLowerCase()] ??
     TASK_CATEGORY_FALLBACK_COLORS[index % TASK_CATEGORY_FALLBACK_COLORS.length]
   );
+}
+
+function taskIconFor(id: string, category: string): typeof BarChart3 {
+  const key = id.toLowerCase();
+  if (key.includes("workflow")) return Workflow;
+  if (key.includes("classification") || key.includes("tagging")) return Tags;
+  if (key.includes("planning")) return ListTree;
+  if (key.includes("debug")) return Bug;
+  if (key.includes("writing")) return FileText;
+  if (key.includes("qa") || key.includes("knowledge")) return BadgeCheck;
+  if (key.includes("roleplay") || key.includes("conversation")) {
+    return MessagesSquare;
+  }
+  if (key.includes("file")) return Files;
+  if (key.includes("shell") || key.includes("terminal")) return TerminalSquare;
+  if (key.includes("frontend") || key.includes("ui")) return PanelsTopLeft;
+  if (key.includes("security") || key.includes("review")) return ShieldCheck;
+  if (key.includes("extract") || key.includes("transform")) return Database;
+
+  switch (category.toLowerCase()) {
+    case "code":
+      return Code2;
+    case "data":
+      return Database;
+    case "agent":
+      return Bot;
+    default:
+      return Sparkles;
+  }
 }
 
 function requestTarget(
@@ -597,18 +640,32 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
           </div>
           <div className="mm-task-split">
             <div className="mm-task-list" role="list">
-              {tasks.tasks.map((task) => (
-                <button
-                  key={task.id}
-                  type="button"
-                  aria-pressed={activeTask?.id === task.id}
-                  className={activeTask?.id === task.id ? "active" : ""}
-                  onClick={() => setSelectedTask(task.id)}
-                >
-                  <span>{task.label}</span>
-                  <strong>{(task.share * 100).toFixed(1)}%</strong>
-                </button>
-              ))}
+              {tasks.tasks.map((task, index) => {
+                const TaskIcon = taskIconFor(task.id, task.category);
+                return (
+                  <button
+                    key={task.id}
+                    type="button"
+                    aria-pressed={activeTask?.id === task.id}
+                    className={activeTask?.id === task.id ? "active" : ""}
+                    style={
+                      {
+                        "--mm-task-category-color": taskCategoryColor(
+                          task.category,
+                          index,
+                        ),
+                      } as CSSProperties
+                    }
+                    onClick={() => setSelectedTask(task.id)}
+                  >
+                    <span className="mm-task-item-icon" aria-hidden="true">
+                      <TaskIcon size={14} strokeWidth={1.9} />
+                    </span>
+                    <span className="mm-task-item-label">{task.label}</span>
+                    <strong>{(task.share * 100).toFixed(1)}%</strong>
+                  </button>
+                );
+              })}
             </div>
             <section className="mm-rank-surface">
               <header>

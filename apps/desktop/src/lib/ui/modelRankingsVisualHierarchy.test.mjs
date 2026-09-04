@@ -29,6 +29,8 @@ test("task rankings expose composition and redundant change direction", () => {
   assert.match(panelSource, /className="mm-rank-change-arrow"/);
   assert.match(panelSource, /item\.change >= 0 \? "↑" : "↓"/);
   assert.match(panelSource, /aria-pressed=\{activeTask\?\.id === task\.id\}/);
+  assert.match(panelSource, /function taskIconFor\(/);
+  assert.match(panelSource, /className="mm-task-item-icon"/);
 });
 
 test("ranking hierarchy keeps surfaces neutral and comparison marks legible", () => {
@@ -38,7 +40,27 @@ test("ranking hierarchy keeps surfaces neutral and comparison marks legible", ()
   assert.match(rankingsCss, /\.mm-task-list button\.active::before/);
   assert.match(
     rankingsCss,
+    /grid-template-columns:\s*24px minmax\(0, 1fr\) auto/,
+  );
+  assert.match(rankingsCss, /\.mm-task-item-icon\s*\{/);
+  assert.match(
+    rankingsCss,
     /grid-template-columns:\s*20px 22px minmax\(0, 1fr\) auto auto/,
+  );
+});
+
+test("ranking navigation is one aligned rounded toolbar", () => {
+  assert.match(
+    rankingsCss,
+    /\.mm-rankings-sticky-nav\s*\{[\s\S]*?border-radius:\s*14px/,
+  );
+  assert.match(
+    rankingsCss,
+    /\.mm-rankings-commandbar\s*\{[\s\S]*?align-items:\s*center/,
+  );
+  assert.match(
+    rankingsCss,
+    /\.mm-rankings-commandbar \.model-market-refresh\s*\{[\s\S]*?height:\s*34px/,
   );
 });
 
