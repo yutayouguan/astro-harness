@@ -151,6 +151,8 @@ message ChatRequest {
   string tool_mode = 41;
   // 编辑重提：提交新输入前保留的绝对 user/assistant 气泡数。
   optional uint32 rollback_keep_chat_bubbles = 42;
+  // 模型目录运行时能力（types::ModelProfile JSON）。
+  string model_profile_json = 43;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

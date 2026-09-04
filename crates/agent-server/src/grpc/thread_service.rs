@@ -529,6 +529,11 @@ fn validate_chat_request(chat: &proto::ChatRequest) -> Result<ValidatedChatReque
             ));
         }
     }
+    if !chat.model_profile_json.trim().is_empty() {
+        serde_json::from_str::<types::ModelProfile>(&chat.model_profile_json).map_err(|error| {
+            Status::invalid_argument(format!("invalid model_profile_json: {error}"))
+        })?;
+    }
     let resume_items = if chat.resume_json.trim().is_empty() {
         Vec::new()
     } else {
@@ -710,6 +715,12 @@ mod tests {
                     model: "deepseek-v4-flash".into(),
                     reasoning_effort: "max".into(),
                     tool_mode: "code_mode_only".into(),
+                    model_profile_json: serde_json::to_string(&types::ModelProfile {
+                        supports_search_tool: false,
+                        effective_context_window_percent: 95,
+                        ..types::ModelProfile::default()
+                    })
+                    .unwrap(),
                     chat_fallbacks: vec![
                         proto::ChatFallbackTarget {
                             provider: "openai".into(),
@@ -735,6 +746,15 @@ mod tests {
         assert_eq!(
             managed.runtime.session().model_spec().unwrap().tool_mode,
             Some(types::ToolMode::CodeModeOnly)
+        );
+        assert!(
+            !managed
+                .runtime
+                .session()
+                .model_spec()
+                .unwrap()
+                .profile
+                .supports_search_tool
         );
         let (_rx, _cancel, generation) = service
             .connections

@@ -80,6 +80,8 @@ pub struct ThreadSettingsSnapshot {
     /// Provider runtime/backend identifier.
     pub provider: String,
     pub model: String,
+    #[serde(default)]
+    pub model_profile: types::ModelProfile,
     pub interaction_mode: types::InteractionMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_root: Option<String>,

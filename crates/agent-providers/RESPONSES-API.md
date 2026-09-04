@@ -5,10 +5,10 @@
 
 Agent 对话只支持 Responses API。本文记录 Provider 接入要求；Chat Completions 不是 Agent 的第二选项，只属于工具、媒体和独立兼容调用。
 
-所有进入 Agent target/fallback 链的 Responses Provider 都接收原生客户端
-`tool_search`、namespace 与 `defer_loading`；不得按 Provider 或模型降级成全量 eager
-function schema。任一 Responses 请求失败时只能切换到下一个 Responses-capable target，
-不能回退到 Chat Completions。
+Agent target/fallback 链只接受 Responses Provider，任一请求失败时只能切换到下一个
+Responses-capable target，不能回退到 Chat Completions。模型目录中的
+`supports_search_tool` 控制客户端 `tool_search`、namespace 与 `defer_loading`；能力关闭时
+Deferred 工具改为 eager function schema，避免模型失去工具访问能力。
 
 ## 统一接入
 
@@ -33,7 +33,7 @@ Agent 请求使用 `ResponsesRequest`：顶层 `instructions`、`Vec<ResponseIte
 | --- | --- | --- |
 | OpenAI | `POST /v1/responses` | `store: false`、parallel tools、reasoning summary |
 | OpenRouter | `POST /api/v1/responses` | 无状态兼容层；共享解析器同时接受 `content_part.delta`、`reasoning.delta` 与 `response.done` |
-| DeepSeek | `POST /v1/responses` | Core 子集；保留客户端 tool_search/namespace 延迟加载，不开放显式 prompt-cache 控制；解析 `reasoning_text.delta` |
+| DeepSeek | `POST /v1/responses` | 官方三模型目录开启客户端 tool_search/namespace 延迟加载；不开放显式 prompt-cache 控制；解析 `reasoning_text.delta` |
 | Azure OpenAI | `POST /openai/v1/responses` | 静态 API Key 以 `Authorization: Bearer` 发送；deployment name 位于 model 字段；强制 `store: false`；支持 v1 Embeddings |
 | 百炼 | `POST /compatible-mode/v1/responses` | thinking/cache 扩展参数；不支持 background |
 | MiniMax | `POST /v1/responses` | reasoning details 与媒体 API 分离 |

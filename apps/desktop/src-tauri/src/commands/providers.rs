@@ -685,6 +685,7 @@ fn sync_custom_provider_models() {
                 crate::meta::model_meta::ModelEntryCompat::Full(Box::new(
                     crate::meta::model_meta::ModelInfo {
                         id: m.id.clone(),
+                        profile: types::ModelProfile::default(),
                         tool_mode: m.tool_mode,
                         display_name: m.display_name.clone(),
                         description: None,
@@ -1865,22 +1866,6 @@ pub fn cached_model_info(
     } else {
         Some(info)
     }
-}
-
-/// 从 models.json 缓存读取某模型的 context_window（与前端展示同源，不做 128K 臆测）。
-pub fn cached_model_context_window(provider_id: &str, model_id: &str) -> Option<u32> {
-    cached_model_info(provider_id, model_id)
-        .and_then(|info| info.context_window)
-        .and_then(|n| u32::try_from(n).ok())
-        .filter(|n| *n > 0)
-}
-
-/// 从 models.json 缓存读取某模型的 max_output_tokens（与 context_window 同源）。
-pub fn cached_model_max_output_tokens(provider_id: &str, model_id: &str) -> Option<u32> {
-    cached_model_info(provider_id, model_id)
-        .and_then(|info| info.max_output_tokens)
-        .and_then(|n| u32::try_from(n).ok())
-        .filter(|n| *n > 0)
 }
 
 /// Tauri 命令：get_cached_provider_models。

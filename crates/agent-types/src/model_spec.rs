@@ -5,7 +5,7 @@
 
 use crate::auxiliary_target::AuxiliaryTask;
 use crate::model_target::ModelTarget;
-use crate::{ToolMode, ToolModeFeatureFlags};
+use crate::{ModelProfile, ToolMode, ToolModeFeatureFlags};
 use serde::{Deserialize, Serialize};
 
 /// 模型角色：主聊或辅助任务（对齐 Agno `ModelType`）。
@@ -34,6 +34,9 @@ pub struct ModelSpec {
     /// 模型目录提供的工具模式；存在时优先于 feature flag。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_mode: Option<ToolMode>,
+    /// 模型目录提供的运行时能力。
+    #[serde(default)]
+    pub profile: ModelProfile,
 }
 
 impl ModelSpec {
@@ -44,6 +47,7 @@ impl ModelSpec {
             temperature: None,
             max_tokens: None,
             tool_mode: None,
+            profile: ModelProfile::default(),
         }
     }
 
@@ -59,6 +63,11 @@ impl ModelSpec {
 
     pub fn with_tool_mode(mut self, mode: ToolMode) -> Self {
         self.tool_mode = Some(mode);
+        self
+    }
+
+    pub fn with_profile(mut self, profile: ModelProfile) -> Self {
+        self.profile = profile;
         self
     }
 

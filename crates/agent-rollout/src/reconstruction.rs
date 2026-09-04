@@ -311,6 +311,10 @@ mod tests {
                         provider_id: Some("profile".into()),
                         provider: "openai".into(),
                         model: model.into(),
+                        model_profile: types::ModelProfile {
+                            supports_search_tool: model == "new",
+                            ..types::ModelProfile::default()
+                        },
                         interaction_mode: types::InteractionMode::Agent,
                         project_root: None,
                         workspace_roots: Vec::new(),
@@ -326,10 +330,9 @@ mod tests {
         };
         let items = vec![settings("old"), settings("new")];
 
-        assert_eq!(
-            latest_thread_settings(&items).map(|snapshot| snapshot.model),
-            Some("new".into())
-        );
+        let latest = latest_thread_settings(&items).expect("latest settings");
+        assert_eq!(latest.model, "new");
+        assert!(latest.model_profile.supports_search_tool);
     }
 
     #[test]

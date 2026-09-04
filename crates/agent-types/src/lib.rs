@@ -11,6 +11,7 @@ pub mod interaction_mode;
 pub mod media;
 pub mod memory_citation;
 pub mod model_spec;
+pub mod model_profile;
 pub mod model_target;
 pub mod model_tool;
 pub mod network_policy;
@@ -66,6 +67,10 @@ pub use async_user_input::AsyncUserInputQuestion;
 pub use credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 pub use interaction_mode::InteractionMode;
 pub use memory_citation::MemoryCitation;
+pub use model_profile::{
+    ApplyPatchToolType, ModelInputModality, ModelMultiAgentVersion, ModelProfile, ModelVerbosity,
+    WebSearchToolType,
+};
 pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
 pub use thread_memory_mode::ThreadMemoryMode;
 pub use tool_call::{ParsedToolCall, ToolCallAccumulator, ToolCallDelta};

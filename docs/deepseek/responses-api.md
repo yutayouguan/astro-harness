@@ -11,6 +11,8 @@ synced_at: 2026-09-04
 > 官方原文：[DeepSeek API 文档](https://api-docs.deepseek.com/zh-cn/guides/responses_api)
 >
 > 本文件是便于仓库内检索与后续更新的 Markdown 快照。刷新时以上述 `source_url` 为准，并更新 `synced_at`。
+>
+> Astro 的模型目录映射见 [model-catalog.md](model-catalog.md)。
 
 为了满足大家对 Codex 的需求，我们的 API 新增了对 Responses API 格式的支持，其 `base_url` 为 `https://api.deepseek.com`。
 

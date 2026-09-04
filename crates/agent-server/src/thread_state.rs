@@ -466,6 +466,7 @@ mod tests {
                     provider_id: Some("profile-1".into()),
                     provider: "openai".into(),
                     model: "gpt-5.6".into(),
+                    model_profile: types::ModelProfile::default(),
                     interaction_mode: types::InteractionMode::Agent,
                     project_root: None,
                     workspace_roots: Vec::new(),
