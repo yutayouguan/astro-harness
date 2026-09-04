@@ -197,7 +197,21 @@ impl McpEventStreamManager {
     }
 
     pub async fn cancel_server(&self, server_id: &str) {
-        let streams = {
+        let streams = self.take_server_streams(server_id);
+        for stream in streams {
+            stream.worker.abort();
+            let _ = stream.worker.await;
+        }
+    }
+
+    pub fn abort_server(&self, server_id: &str) {
+        for stream in self.take_server_streams(server_id) {
+            stream.worker.abort();
+        }
+    }
+
+    fn take_server_streams(&self, server_id: &str) -> Vec<ManagedEventStream> {
+        {
             let mut current = self.streams.lock().unwrap_or_else(PoisonError::into_inner);
             let keys = current
                 .iter()
@@ -207,10 +221,6 @@ impl McpEventStreamManager {
             keys.into_iter()
                 .filter_map(|key| current.remove(&key))
                 .collect::<Vec<_>>()
-        };
-        for stream in streams {
-            stream.worker.abort();
-            let _ = stream.worker.await;
         }
     }
 
