@@ -323,6 +323,7 @@ fn parse_reasoning_meta(
         default_enabled: parsed.default_enabled,
         mandatory: parsed.mandatory,
         supports_max_tokens: parsed.supports_max_tokens,
+        persistent_instructions: None,
     };
     if meta.is_empty() {
         // 空对象 `{}` 仍视为「支持推理」占位

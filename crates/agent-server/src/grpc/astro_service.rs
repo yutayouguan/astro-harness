@@ -1272,7 +1272,7 @@ impl AstroServiceImpl {
                 ));
             }
         }
-        let additional_params = if req.additional_params_json.trim().is_empty() {
+        let mut additional_params = if req.additional_params_json.trim().is_empty() {
             None
         } else {
             let params: serde_json::Value = serde_json::from_str(&req.additional_params_json)
@@ -1296,6 +1296,29 @@ impl AstroServiceImpl {
             return Err(Status::invalid_argument(format!(
                 "provider `{provider}` does not support the Responses API"
             )));
+        }
+        let persistent_instructions = req.persistent_instructions.trim();
+        if req.reasoning_effort.trim() == "persistent" {
+            if provider != "openai" {
+                return Err(Status::invalid_argument(format!(
+                    "provider `{provider}` does not support persistent reasoning"
+                )));
+            }
+            if persistent_instructions.is_empty() {
+                return Err(Status::invalid_argument(
+                    "persistent reasoning requires persistent_instructions",
+                ));
+            }
+        }
+        if provider == "openai" && !persistent_instructions.is_empty() {
+            additional_params
+                .get_or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .expect("validated additional params object")
+                .insert(
+                    "astro_persistent_instructions".into(),
+                    persistent_instructions.into(),
+                );
         }
         let model = if req.model.trim().is_empty() {
             providers::dispatch::default_model(provider).to_string()
@@ -2810,6 +2833,23 @@ impl AstroService for AstroServiceImpl {
             .get(&req.session_id)
             .await
             .ok_or_else(|| Status::not_found("session runtime is not loaded"))?;
+        if req.reasoning_effort.as_deref() == Some("persistent") {
+            let session = managed.runtime.session();
+            let is_openai = session
+                .model_targets()
+                .first()
+                .is_some_and(|target| target.backend_id == "openai");
+            let has_instructions = session
+                .additional_params()
+                .get("astro_persistent_instructions")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty());
+            if !is_openai || !has_instructions {
+                return Err(Status::invalid_argument(
+                    "persistent reasoning is unavailable for the active model",
+                ));
+            }
+        }
         let optional = |value: Option<String>| {
             value.map(|value| (!value.trim().is_empty()).then(|| value.trim().to_string()))
         };

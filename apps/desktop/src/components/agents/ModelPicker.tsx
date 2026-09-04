@@ -412,6 +412,8 @@ export default function ModelPicker({
         return t("modelEdit.effortXHigh");
       case "max":
         return t("modelEdit.effortMax");
+      case "persistent":
+        return t("modelEdit.effortPersistent");
     }
   };
 

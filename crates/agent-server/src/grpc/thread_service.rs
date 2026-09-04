@@ -758,6 +758,148 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn persistent_reasoning_requires_openai_catalog_instructions() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("persistent-thread")
+            .await
+            .expect("thread");
+
+        let missing = service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-thread".into(),
+                    provider: "openai".into(),
+                    model: "gpt-test".into(),
+                    reasoning_effort: "persistent".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("missing instructions must fail");
+        assert_eq!(missing.code(), tonic::Code::InvalidArgument);
+
+        let unsupported = service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-thread".into(),
+                    provider: "deepseek".into(),
+                    model: "deepseek-test".into(),
+                    reasoning_effort: "persistent".into(),
+                    persistent_instructions: "continue autonomously".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("non-OpenAI provider must reject persistent reasoning");
+        assert_eq!(unsupported.code(), tonic::Code::InvalidArgument);
+
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-thread".into(),
+                    provider: "openai".into(),
+                    model: "gpt-test".into(),
+                    reasoning_effort: "persistent".into(),
+                    persistent_instructions: "continue autonomously".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("persistent configuration");
+        assert_eq!(
+            managed.runtime.session().additional_params()["astro_persistent_instructions"],
+            "continue autonomously"
+        );
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn active_turn_persistent_reasoning_requires_stored_instructions() {
+        use proto::astro_service_server::AstroService;
+
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("persistent-switch-thread")
+            .await
+            .expect("thread");
+
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-switch-thread".into(),
+                    provider: "openai".into(),
+                    model: "gpt-test".into(),
+                    reasoning_effort: "high".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("base configuration");
+        let missing = AstroService::update_turn_settings(
+            &service,
+            Request::new(proto::UpdateTurnSettingsRequest {
+                session_id: "persistent-switch-thread".into(),
+                turn_id: "turn-1".into(),
+                reasoning_effort: Some("persistent".into()),
+                ..Default::default()
+            }),
+        )
+        .await
+        .expect_err("missing active-turn instructions must fail");
+        assert_eq!(missing.code(), tonic::Code::InvalidArgument);
+
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-switch-thread".into(),
+                    provider: "openai".into(),
+                    model: "gpt-test".into(),
+                    reasoning_effort: "high".into(),
+                    persistent_instructions: "continue autonomously".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("catalog-backed configuration");
+        let response = AstroService::update_turn_settings(
+            &service,
+            Request::new(proto::UpdateTurnSettingsRequest {
+                session_id: "persistent-switch-thread".into(),
+                turn_id: "turn-1".into(),
+                reasoning_effort: Some("persistent".into()),
+                ..Default::default()
+            }),
+        )
+        .await
+        .expect("stored instructions pass persistent validation")
+        .into_inner();
+        assert_eq!(response.status, "rejected");
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
     async fn configure_thread_rejects_non_responses_primary() {
         let dir = TempDir::new().expect("tempdir");
         memory::ensure_workspace(dir.path()).expect("workspace");

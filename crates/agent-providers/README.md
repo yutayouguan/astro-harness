@@ -18,6 +18,7 @@
 
 - 检查 `ProviderProfile.supports_responses`，阻止不支持 Responses 的 Provider 进入 Agent target/fallback chain；
 - 将 `ResponseItem`、原生工具定义和 instructions 发送到 `/responses`；
+- OpenAI 模型目录提供非空 `persistent_instructions` 时开放 `persistent` 推理档位；本地保持该名称，wire effort 映射为 `disabled`，指令作为 developer instructions 合并，内部元数据不会透传；
 - Namespace 工具在 Responses 路径保留原生容器；非 Agent Function-only adapter 会省略不支持的 namespace，不再展平为伪 Function 名；
 - 解析 text、reasoning、tool-call、usage 和终态流式事件；
 - 为非 Agent 调用保留聊天、embedding、图像、音频、视频等能力；
@@ -61,6 +62,7 @@ agent_responses_stream(
 5. Provider usage 统一归一化，但保留 reported 状态；reasoning 是 output 子集，cached input 是 input 子集。
 6. `ResponsesModel`、`DynResponsesModel` 和 registry 的 `responses_model` 与 Chat compatibility model 分开声明。
 7. 测试注入也直接接收 `ResponsesOverrideInput`，不得为测试把 Items 降级成 Chat Completions 消息。
+8. `persistent` 仅属于 OpenAI Responses adapter；其他 Provider 必须明确拒绝，不能原样透传未知 effort。
 
 ## 文档
 

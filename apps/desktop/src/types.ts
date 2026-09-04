@@ -7,7 +7,14 @@ export type ChatEmptyMode = "chat" | "agent" | null;
 
 /** DeepSeek / OpenRouter 等模型的推理力度 */
 export type ReasoningEffort =
-  "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max"
+  | "persistent";
 
 /** OpenRouter `reasoning` 对象（档位 / 默认开关） */
 export type ModelReasoningMeta = {
@@ -16,6 +23,7 @@ export type ModelReasoningMeta = {
   default_enabled?: boolean | null;
   mandatory?: boolean | null;
   supports_max_tokens?: boolean | null;
+  persistent_instructions?: string | null;
 };
 
 /** 聊天附件媒体类型 */
