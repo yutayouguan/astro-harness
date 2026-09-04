@@ -121,6 +121,7 @@
 }
 
 .sidebar-session-title-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -135,7 +136,17 @@
   white-space: nowrap;
 }
 
-.sidebar-session-item:hover .sidebar-session-title[data-scrollable="true"] {
+.sidebar-session-title-measure {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: max-content;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sidebar-session-item:is(:hover, :focus-within)
+  .sidebar-session-title[data-scrollable="true"] {
   display: inline-block;
   max-width: none;
   overflow: visible;
@@ -160,7 +171,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar-session-item:hover .sidebar-session-title[data-scrollable="true"] {
+  .sidebar-session-item:is(:hover, :focus-within)
+    .sidebar-session-title[data-scrollable="true"] {
     animation: none;
   }
 }
@@ -199,10 +211,10 @@
   margin-right: 2px;
 }
 
-/* hover 时隐藏时间，显示操作按钮 */
+/* hover/focus 时次要信息真正让出布局空间，避免只把文字变透明却继续挤压标题 */
 .sidebar-session-item:is(:hover, :focus-within) .sidebar-session-time,
 .sidebar-session-item:is(:hover, :focus-within) .session-status-icon {
-  opacity: 0;
+  display: none;
 }
 
 .sidebar-session-actions {

@@ -330,7 +330,11 @@ test("session activity preserves title space and progressively reveals tools", (
   const title = rule(sessionStyles, ".sidebar-session-title");
   const scrollableTitle = rule(
     sessionStyles,
-    '.sidebar-session-item:hover .sidebar-session-title[data-scrollable="true"]',
+    '.sidebar-session-item:is(:hover, :focus-within)\n  .sidebar-session-title[data-scrollable="true"]',
+  );
+  const titleMeasure = rule(
+    sessionStyles,
+    ".sidebar-session-title-measure",
   );
 
   assert.match(sessionList, /const showUnread = unread && status === "idle";/);
@@ -381,9 +385,39 @@ test("session activity preserves title space and progressively reveals tools", (
   assert.match(title, /text-overflow:\s*ellipsis;/);
   assert.ok(scrollableTitle, "only clipped session titles should scroll");
   assert.match(scrollableTitle, /animation:\s*sidebar-title-scroll/);
-  assert.match(sessionList, /if \(overflow > 1\)/);
-  assert.match(sessionList, /el\.dataset\.scrollable = "true";/);
-  assert.match(sessionList, /delete el\.dataset\.scrollable;/);
+  assert.ok(titleMeasure, "missing intrinsic title measurement styles");
+  assert.match(titleMeasure, /position:\s*absolute;/);
+  assert.match(titleMeasure, /visibility:\s*hidden;/);
+  assert.match(sessionList, /const overflowing = distance > 1;/);
+  assert.match(
+    sessionList,
+    /text\.getBoundingClientRect\(\)\.width - wrap\.clientWidth/,
+    "overflow detection should compare intrinsic text width with its viewport",
+  );
+  assert.match(
+    sessionList,
+    /className="sidebar-session-title-measure"[\s\S]*?aria-hidden/,
+    "intrinsic title measurement must stay hidden from assistive technology",
+  );
+  assert.match(
+    sessionList,
+    /data-scrollable=\{titleOverflow\.overflowing \? "true" : undefined\}/,
+  );
+  assert.match(
+    sessionList,
+    /data-tip=\{titleOverflow\.overflowing \? title : undefined\}/,
+    "clipped titles should expose their full text through the shared tooltip",
+  );
+  assert.match(
+    sessionList,
+    /data-tip-delay=\{titleOverflow\.overflowing \? "400"/,
+  );
+  assert.match(sessionList, /new ResizeObserver\(measureTitle\)/);
+  assert.match(
+    sessionStyles,
+    /\.sidebar-session-item:is\(:hover, :focus-within\) \.sidebar-session-time,[\s\S]*?\.session-status-icon\s*\{[\s\S]*?display:\s*none;/,
+    "secondary metadata must release layout width while title actions are visible",
+  );
 });
 
 test("session action menu stays inside the app viewport", () => {

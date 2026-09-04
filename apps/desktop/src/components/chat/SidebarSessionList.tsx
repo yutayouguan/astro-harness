@@ -1,6 +1,14 @@
 // 侧栏会话列表：按项目分组或全局搜索结果，含全部会话操作。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -339,21 +347,45 @@ function SessionItem({
   onPinToggle: () => void;
 }) {
   const titleRef = useRef<HTMLSpanElement>(null);
+  const titleMeasureRef = useRef<HTMLSpanElement>(null);
+  const titleWrapRef = useRef<HTMLSpanElement>(null);
+  const [titleOverflow, setTitleOverflow] = useState({
+    overflowing: false,
+    distance: 0,
+  });
   void unreadTick;
 
-  const handleMouseEnter = () => {
+  const title = s.summary || t("chat.rightPanel.untitledSession");
+
+  const measureTitle = useCallback(() => {
     const el = titleRef.current;
-    const wrap = el?.parentElement;
-    if (!el || !wrap) return;
-    const overflow = el.scrollWidth - wrap.clientWidth;
-    if (overflow > 1) {
-      el.dataset.scrollable = "true";
-      el.style.setProperty("--scroll-distance", `-${overflow + 4}px`);
-    } else {
-      delete el.dataset.scrollable;
-      el.style.removeProperty("--scroll-distance");
+    const text = titleMeasureRef.current;
+    const wrap = titleWrapRef.current;
+    if (!el || !text || !wrap) return;
+    const distance = Math.max(
+      0,
+      Math.ceil(text.getBoundingClientRect().width - wrap.clientWidth),
+    );
+    const overflowing = distance > 1;
+    setTitleOverflow((current) =>
+      current.overflowing === overflowing && current.distance === distance
+        ? current
+        : { overflowing, distance },
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    measureTitle();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measureTitle);
+      return () => window.removeEventListener("resize", measureTitle);
     }
-  };
+
+    const observer = new ResizeObserver(measureTitle);
+    if (titleWrapRef.current) observer.observe(titleWrapRef.current);
+    return () => observer.disconnect();
+  }, [measureTitle, title]);
 
   const showUnread = unread && status === "idle";
 
@@ -367,17 +399,38 @@ function SessionItem({
         e.stopPropagation();
         onContextMenu(e.clientX, e.clientY);
       }}
-      onMouseEnter={handleMouseEnter}
+      onMouseEnter={measureTitle}
     >
       <button
         type="button"
         className="sidebar-session-main"
         aria-current={isActive ? "page" : undefined}
+        aria-label={title}
+        data-tip={titleOverflow.overflowing ? title : undefined}
+        data-tip-delay={titleOverflow.overflowing ? "400" : undefined}
         onClick={onOpen}
       >
-        <span className="sidebar-session-title-wrap">
-          <span className="sidebar-session-title" ref={titleRef}>
-            {s.summary || t("chat.rightPanel.untitledSession")}
+        <span className="sidebar-session-title-wrap" ref={titleWrapRef}>
+          <span
+            className="sidebar-session-title"
+            ref={titleRef}
+            data-scrollable={titleOverflow.overflowing ? "true" : undefined}
+            style={
+              titleOverflow.overflowing
+                ? ({
+                    "--scroll-distance": `-${titleOverflow.distance + 4}px`,
+                  } as CSSProperties)
+                : undefined
+            }
+          >
+            {title}
+          </span>
+          <span
+            className="sidebar-session-title-measure"
+            ref={titleMeasureRef}
+            aria-hidden
+          >
+            {title}
           </span>
         </span>
         {s.pinnedAt && (
