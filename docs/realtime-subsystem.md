@@ -155,6 +155,11 @@ Provider delta。关闭时可选择保留或丢弃未完成的 transcript tail�
 新 session started。`agent_rollout::realtime_history()` 按 append order 恢复多个 session，
 不合并、不重排边界。
 
+handoff promotion 会先封口当前 user/assistant transcript，再追加 BEM item，
+因此重启后仍保留完整事件顺序。LLM 用量另以 `TokenUsageRecord` 持久化
+latest/cumulative 和 compaction checkpoint；resume 恢复最新记录，fork 不复制父
+Thread 的累计值。
+
 ## 流控、失败与安全
 
 - command/event channel 都是有界队列；音频队列满时丢弃当前帧，不阻塞录音线程。
