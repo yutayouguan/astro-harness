@@ -281,4 +281,46 @@ mod tests {
         assert_eq!(boundary[0].realtime_session_id, "session-1");
         assert_eq!(boundary[2].realtime_session_id, "session-2");
     }
+
+    #[test]
+    fn handoff_promotion_seals_transcripts_before_the_promoted_item() {
+        let mut history = RealtimeHistory::default();
+        history.start("session-1");
+        history.observe(&RealtimeEvent::InputTranscriptDelta(
+            RealtimeTranscriptDelta {
+                delta: "please continue".into(),
+            },
+        ));
+        history.observe(&RealtimeEvent::OutputTranscriptDelta(
+            RealtimeTranscriptDelta {
+                delta: "working".into(),
+            },
+        ));
+
+        let items = history.promote(
+            "turn-1",
+            "item-1",
+            agent_protocol::BemItemPresentation::WholeItem,
+        );
+
+        assert!(matches!(
+            &items[0].content,
+            RealtimeItemContent::TranscriptSegment {
+                role: RealtimeTranscriptRole::User,
+                text,
+            } if text == "please continue"
+        ));
+        assert!(matches!(
+            &items[1].content,
+            RealtimeItemContent::TranscriptSegment {
+                role: RealtimeTranscriptRole::Assistant,
+                text,
+            } if text == "working"
+        ));
+        assert!(matches!(
+            &items[2].content,
+            RealtimeItemContent::BemItemPromoted { turn_id, item_id, .. }
+                if turn_id == "turn-1" && item_id == "item-1"
+        ));
+    }
 }

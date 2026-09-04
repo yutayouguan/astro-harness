@@ -11,6 +11,7 @@ MCP（Model Context Protocol）客户端实现：配置加载、进程级连接�
 - **原生命名空间** -- 模型看到 `mcp__{server_id}` namespace 与原生子工具；Hub 内部仍用 `mcp__{server_id}__{tool_name}` 执行键
 - **Resources / Prompts** -- 显式按需适配 MCP resources 和 prompts 协议扩展
 - **OAuth 认证** -- `auth` 模块支持 keyring 凭据存取和 HTTP Bearer 认证
+- **Event Streams** -- `McpEventStreamManager` 按 Thread/Subscription 持有长流，管理激活、attempt 身份、权限变更及 Server 删除取消
 
 ## 模块结构
 
@@ -22,6 +23,7 @@ MCP（Model Context Protocol）客户端实现：配置加载、进程级连接�
 | `names.rs` | 限定名工具：`qualify_tool_name()` / `parse_qualified_name()` / `is_mcp_tool_name()` / `sanitize_server_id()`，常量 `MCP_PREFIX` / `MCP_TOOLSET` |
 | `protocol.rs` | Resources / Prompts 适配：`call_resource_broker()` / `call_prompt_broker()` / `MCP_RESOURCES_TOOL` / `MCP_PROMPTS_TOOL` |
 | `auth.rs` | OAuth 认证：keyring 凭据存取、`McpHttpAuth` HTTP Bearer 头注入 |
+| `event_stream.rs` | 进程级事件流所有权、激活握手、有界通知队列与取消 |
 
 ## 核心类型与 API
 
@@ -32,6 +34,7 @@ MCP（Model Context Protocol）客户端实现：配置加载、进程级连接�
 - `ToolEntrySpec` -- 暴露给 ToolRegistry 的工具条目：原生 namespace + 内部执行键 + JSON Schema + 描述
 - `ServerStatus` -- Server 连接状态：Starting / Connected / Failed / Stopped
 - `McpLifecycleState` -- 生命周期状态机
+- `McpEventStreamManager` -- 按 `thread_id + subscription_id` 管理长流，每次启动分配单调 attempt ID
 - `tool_namespace(server_id)` -- 生成模型可见 namespace `mcp__{sid}`
 - `qualify_tool_name(server_id, tool_name)` -- 生成 Hub 内部执行键 `mcp__{sid}__{tool}`
 - `parse_qualified_name(name)` -- 解析限定名为 `(server_id, tool_name)`

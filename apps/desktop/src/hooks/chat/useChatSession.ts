@@ -178,9 +178,10 @@ export function useChatSession({
   const lastStreamActivityAtRef = useRef(0);
   const sessionWorktreeRef = useRef<{
     sessionId: string;
+    id: string;
     path: string;
-    repoRoot: string;
-    branch: string;
+    branch?: string | null;
+    headSha: string;
   } | null>(null);
   const steeringQueueIdsRef = useRef(new Set<string>());
   const checkpointFiredForTurnRef = useRef(false);
@@ -408,9 +409,7 @@ export function useChatSession({
       const wt = sessionWorktreeRef.current;
       if (wt) {
         void invoke("cleanup_task_worktree", {
-          path: wt.path,
-          repoRoot: wt.repoRoot,
-          branch: wt.branch,
+          worktreeId: wt.id,
         }).catch(() => {});
         sessionWorktreeRef.current = null;
       }
@@ -1165,9 +1164,7 @@ export function useChatSession({
     const wt = sessionWorktreeRef.current;
     if (wt) {
       void invoke("cleanup_task_worktree", {
-        path: wt.path,
-        repoRoot: wt.repoRoot,
-        branch: wt.branch,
+        worktreeId: wt.id,
       }).catch(() => {});
       sessionWorktreeRef.current = null;
     }
@@ -1852,9 +1849,7 @@ export function useChatSession({
     const wt = sessionWorktreeRef.current;
     if (wt) {
       void invoke("cleanup_task_worktree", {
-        path: wt.path,
-        repoRoot: wt.repoRoot,
-        branch: wt.branch,
+        worktreeId: wt.id,
       }).catch(() => {});
       sessionWorktreeRef.current = null;
     }

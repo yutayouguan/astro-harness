@@ -21,7 +21,7 @@ Astro Agent 记忆子系统：管理精炼记忆（MEMORY.md）、用户档案�
 | `agent/store.rs` | `MemoryStore` — Markdown 记忆存储：解析条目、增删改、live/snapshot 双视图 |
 | `agent/workspace.rs` | `ensure_workspace` / `ensure_default_workspace` — 工作区目录引导与 Agent 空间初始化 |
 | `session/manager.rs` | `MemoryManager` — 单 Agent 记忆聚合入口：MEMORY/USER 存储、配置加载、prompt 内容生成 |
-| `config.rs` | 多维度配置加载：`MemoryConfig` / `CompressionConfig` / `LearningConfig` / `EvolutionConfig` / `AuxiliaryConfig` / `ApprovalsConfig` / `LoadedPermissionSettings` |
+| `config.rs` | 多维度配置加载：`MemoryConfig` / `CompressionConfig` / `LearningConfig` / `EvolutionConfig` / `AuxiliaryConfig` / `CommandApprovalConfig` / `LoadedPermissionSettings` |
 | `pending.rs` | 待审批记忆队列：`enqueue` / `approve` / `reject` / `list_pending` — JSON 文件持久化 |
 | `dreaming/mod.rs` | Dreaming 入梦管道：`prepare_all_dream_jobs` / `DreamRunReport` / `DreamingState` |
 | `review.rs` | 记忆回顾：`build_review_digest` / `parse_review_llm_output` / `apply_review_suggestions` |
@@ -74,7 +74,7 @@ Astro Agent 记忆子系统：管理精炼记忆（MEMORY.md）、用户档案�
 | `LearningConfig` | 学习循环：nudge 开关、自动 skill 建议 |
 | `EvolutionConfig` | 自进化参数：评判、信号分析、DSPy 集成、搜索 |
 | `AuxiliaryConfig` | 辅助任务路由：Dreaming/Compaction/SmartApproval/TitleGen 各自目标 |
-| `ApprovalsConfig` | 审批策略：auto/manual/smart 模式、write_approval 开关 |
+| `CommandApprovalConfig` | 终端命令的精确/类型白名单；审批策略与审查者由独立字段管理 |
 | `LoadedPermissionSettings` | 权限配置：预设 profile、沙箱模式、文件系统/网络策略 |
 
 ## 关键不变量

@@ -253,6 +253,10 @@ export type ResponseItemHistoryDto = {
   parentSessionId?: string | null;
   /** UI 隐藏、但模型仍继承的 turn 数 */
   excludedTurnCount?: number;
+  providerId?: string | null;
+  backendId?: string | null;
+  model?: string | null;
+  reasoningEffort?: string | null;
 };
 
 /** 聊天后备链条目（写入 providers.json） */
@@ -867,6 +871,10 @@ export type RecentSessionDto = {
   source: string;
   projectId?: string | null;
   summary: string;
+  providerId?: string | null;
+  backendId?: string | null;
+  model?: string | null;
+  reasoningEffort?: string | null;
   createdAt: string | null;
   endReason?: string | null;
   archivedAt?: string | null;

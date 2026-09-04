@@ -543,11 +543,15 @@ pub async fn run_listener_commands(
                         .cloned()
                         .collect::<Vec<_>>();
                     pending_background_turn_ids.sort();
+                    let (provider_id, backend_id, model, reasoning_effort) =
+                        state.history.thread_settings();
                     ThreadSnapshot {
                         thread_id: thread_id.clone(),
                         status: state.status.clone(),
-                        model: None,
-                        reasoning_effort: None,
+                        provider_id,
+                        backend_id,
+                        model,
+                        reasoning_effort,
                         turns: if include_turns {
                             state.history.completed_turns().to_vec()
                         } else {

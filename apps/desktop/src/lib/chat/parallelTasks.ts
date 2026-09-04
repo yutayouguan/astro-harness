@@ -9,9 +9,10 @@ export type ParallelTaskStatus =
   "running" | "waiting" | "done" | "error" | "cancelled";
 
 export type ParallelWorktreeInfo = {
+  id: string;
   path: string;
-  repoRoot: string;
-  branch: string;
+  branch?: string | null;
+  headSha: string;
 };
 
 export type ParallelChatTask = {

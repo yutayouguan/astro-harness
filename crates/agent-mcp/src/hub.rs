@@ -434,6 +434,9 @@ pub struct McpHub {
     /// 当前 session/profile 对 MCP 连接施加的不可变权限快照。
     execution_context: Option<McpExecutionContext>,
     elicitation: Arc<McpElicitationBroker>,
+    event_streams: Arc<crate::McpEventStreamManager>,
+    event_stream_updates: Option<tokio::sync::mpsc::Receiver<crate::McpEventStreamUpdate>>,
+    event_stream_access_generation: tokio::sync::watch::Sender<u64>,
 }
 
 impl Default for McpHub {
@@ -446,6 +449,8 @@ impl Default for McpHub {
 impl McpHub {
     /// 创建未绑定 Agent、无连接的空 Hub。
     pub fn new() -> Self {
+        let (event_streams, event_stream_updates) = crate::McpEventStreamManager::new();
+        let (event_stream_access_generation, _) = tokio::sync::watch::channel(0_u64);
         Self {
             agent_id: None,
             servers: HashMap::new(),
@@ -455,7 +460,24 @@ impl McpHub {
             retries: HashMap::new(),
             execution_context: None,
             elicitation: Arc::new(McpElicitationBroker::new()),
+            event_streams: Arc::new(event_streams),
+            event_stream_updates: Some(event_stream_updates),
+            event_stream_access_generation,
         }
+    }
+
+    pub fn event_stream_manager(&self) -> Arc<crate::McpEventStreamManager> {
+        Arc::clone(&self.event_streams)
+    }
+
+    pub fn event_stream_access_generation(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.event_stream_access_generation.subscribe()
+    }
+
+    pub fn take_event_stream_updates(
+        &mut self,
+    ) -> Option<tokio::sync::mpsc::Receiver<crate::McpEventStreamUpdate>> {
+        self.event_stream_updates.take()
     }
 
     pub fn elicitation_broker(&self) -> Arc<McpElicitationBroker> {
@@ -480,7 +502,16 @@ impl McpHub {
     ///
     /// 传 `None` 表示策略解析失败或尚未配置；所有连接都会 fail closed。
     pub fn set_execution_context(&mut self, context: Option<McpExecutionContext>) {
+        let changed = self
+            .execution_context
+            .as_ref()
+            .map(McpExecutionContext::fingerprint)
+            != context.as_ref().map(McpExecutionContext::fingerprint);
         self.execution_context = context;
+        if changed {
+            let next = self.event_stream_access_generation.borrow().wrapping_add(1);
+            self.event_stream_access_generation.send_replace(next);
+        }
     }
 
     /// 从磁盘重载：保留未变连接，重连变更项，断开已删除/禁用项
@@ -531,6 +562,7 @@ impl McpHub {
             .cloned()
             .collect();
         for id in drop_ids {
+            self.event_streams.abort_server(&id);
             self.servers.remove(&id);
         }
 
@@ -597,6 +629,7 @@ impl McpHub {
                 }
             }
             self.servers.remove(&sid);
+            self.event_streams.abort_server(&sid);
             self.states.insert(sid, McpLifecycleState::Connecting);
             connect_errors.remove(&sanitize_server_id(&cfg.id));
             pending.push(cfg);
@@ -774,6 +807,7 @@ impl McpHub {
         self.retries.remove(&sid);
         self.last_connect_errors.remove(&sid);
         self.servers.remove(&sid);
+        self.event_streams.abort_server(&sid);
         self.states.insert(sid, McpLifecycleState::Disconnected);
         Ok(())
     }

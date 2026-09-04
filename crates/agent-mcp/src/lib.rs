@@ -8,6 +8,7 @@
 pub mod auth;
 pub mod config;
 mod elicitation;
+mod event_stream;
 pub mod hub;
 pub mod names;
 mod protocol;
@@ -22,6 +23,9 @@ pub use config::{
 };
 pub use elicitation::{
     McpElicitationAction, McpElicitationBroker, McpElicitationRequest, McpElicitationResponse,
+};
+pub use event_stream::{
+    McpEventNotification, McpEventStreamManager, McpEventStreamOpener, McpEventStreamUpdate,
 };
 pub use hub::{
     call_tool_with_peer, filter_enabled_tool_names, toolset_name, McpBrokerCapabilities,

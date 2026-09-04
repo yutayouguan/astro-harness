@@ -34,6 +34,7 @@ service AstroService {
   rpc InterruptResume(InterruptResumeRequest) returns (Empty);
   rpc ResolveElicitation(ResolveElicitationRequest) returns (Empty);
   rpc UpdateTurnSettings(UpdateTurnSettingsRequest) returns (UpdateTurnSettingsResponse);
+  rpc ReconcileExtensions(ReconcileExtensionsRequest) returns (ReconcileExtensionsResponse);
   rpc ApproveGuardianDeniedAction(ApproveGuardianDeniedActionRequest) returns (Empty);
   rpc RunUserShellCommand(RunUserShellCommandRequest) returns (RunUserShellCommandResponse);
   rpc OpenTerminal(TerminalOpenRequest) returns (TerminalSessionResponse);
@@ -292,6 +293,8 @@ message ThreadSnapshot {
   reserved 7;
   optional string model = 8;
   optional string reasoning_effort = 9;
+  optional string provider_id = 10;
+  optional string backend_id = 11;
 }
 
 message ThreadTurn {
@@ -430,6 +433,25 @@ message UpdateTurnSettingsRequest {
 message UpdateTurnSettingsResponse {
   string status = 1; // applied | target_unavailable | rejected
   string message = 2;
+}
+
+message ReconcileExtensionsRequest {
+  string session_id = 1;
+}
+
+message ExtensionReconcileChange {
+  string extension_id = 1;
+  string kind = 2; // added | updated | removed
+}
+
+message ReconcileExtensionsResponse {
+  string previous_version = 1;
+  string next_version = 2;
+  repeated ExtensionReconcileChange changed_extensions = 3;
+  bool refresh_mcp = 4;
+  bool refresh_skills = 5;
+  bool refresh_hooks = 6;
+  bool refresh_toolsets = 7;
 }
 
 message ApproveGuardianDeniedActionRequest {

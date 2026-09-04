@@ -1,5 +1,6 @@
 //! 会话管理 Tauri 命令：历史记录、分叉、归档、置顶、删除、标题生成。
 
+use futures::StreamExt;
 use serde::Serialize;
 use tauri::AppHandle;
 use uuid::Uuid;
@@ -17,6 +18,10 @@ pub struct RecentSessionDto {
     pub source: String,
     pub project_id: Option<String>,
     pub summary: String,
+    pub provider_id: Option<String>,
+    pub backend_id: Option<String>,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub created_at: Option<String>,
     pub end_reason: Option<String>,
     pub archived_at: Option<String>,
@@ -47,6 +52,10 @@ pub struct ResponseItemHistoryDto {
     pub parent_session_id: Option<String>,
     /// 模型仍可见、但 UI 不重复展示的继承回合数。
     pub excluded_turn_count: i64,
+    pub provider_id: Option<String>,
+    pub backend_id: Option<String>,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
 }
 
 fn exclude_inherited_turns(
@@ -102,7 +111,10 @@ fn validate_session_title(title: &str) -> Result<String, String> {
     Ok(title.to_string())
 }
 
-fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
+fn recent_session_dto(
+    s: session::RecentSession,
+    settings: Option<&agent_protocol::ThreadSettingsSnapshot>,
+) -> RecentSessionDto {
     let summary = s
         .title
         .filter(|t| !t.trim().is_empty())
@@ -123,11 +135,33 @@ fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
         source: s.source,
         project_id: s.project_id,
         summary,
+        provider_id: settings.and_then(|value| value.provider_id.clone()),
+        backend_id: settings.map(|value| value.provider.clone()),
+        model: settings.map(|value| value.model.clone()),
+        reasoning_effort: settings
+            .map(|value| value.reasoning_effort.clone())
+            .filter(|value| !value.trim().is_empty()),
         created_at,
         end_reason: s.end_reason,
         archived_at,
         pinned_at,
     }
+}
+
+async fn persisted_thread_settings(
+    session_id: &str,
+) -> Option<agent_protocol::ThreadSettingsSnapshot> {
+    let root = home::default_memory_dir().join("sessions").join("rollouts");
+    let path = agent_rollout::find_rollout(&root, session_id).ok()??;
+    let items = agent_rollout::read_rollout(&path).await.ok()?;
+    agent_rollout::latest_thread_settings(&items)
+}
+
+async fn persisted_thread_settings_at(
+    path: Option<std::path::PathBuf>,
+) -> Option<agent_protocol::ThreadSettingsSnapshot> {
+    let items = agent_rollout::read_rollout(&path?).await.ok()?;
+    agent_rollout::latest_thread_settings(&items)
 }
 
 // ---------------------------------------------------------------------------
@@ -157,12 +191,17 @@ pub async fn get_chat_history(
                     ephemeral: false,
                     parent_session_id: None,
                     excluded_turn_count: 0,
+                    provider_id: None,
+                    backend_id: None,
+                    model: None,
+                    reasoning_effort: None,
                 });
             }
         },
     };
 
     let meta = store.get_session(&sid).await.map_err(|e| e.to_string())?;
+    let thread_settings = persisted_thread_settings(&sid).await;
     let end_reason = meta.as_ref().and_then(|s| s.end_reason.clone());
     let ended_at = meta.as_ref().and_then(|s| s.ended_at);
     let ephemeral = meta
@@ -211,6 +250,18 @@ pub async fn get_chat_history(
         ephemeral,
         parent_session_id,
         excluded_turn_count,
+        provider_id: thread_settings
+            .as_ref()
+            .and_then(|value| value.provider_id.clone()),
+        backend_id: thread_settings.as_ref().map(|value| value.provider.clone()),
+        model: thread_settings
+            .as_ref()
+            .map(|value| value.model.clone())
+            .or_else(|| meta.as_ref().and_then(|value| value.model.clone())),
+        reasoning_effort: thread_settings
+            .as_ref()
+            .map(|value| value.reasoning_effort.clone())
+            .filter(|value| !value.trim().is_empty()),
     })
 }
 
@@ -354,7 +405,23 @@ pub async fn list_sessions(
             .await
             .map_err(|e| e.to_string())?
     };
-    Ok(sessions.into_iter().map(recent_session_dto).collect())
+    let rollout_root = home::default_memory_dir().join("sessions").join("rollouts");
+    let session_ids = sessions
+        .iter()
+        .map(|session| session.id.clone())
+        .collect::<Vec<_>>();
+    let mut rollout_paths =
+        agent_rollout::find_rollouts(&rollout_root, &session_ids).map_err(|e| e.to_string())?;
+    Ok(futures::stream::iter(sessions.into_iter().map(|session| {
+        let path = rollout_paths.remove(&session.id);
+        async move {
+            let settings = persisted_thread_settings_at(path).await;
+            recent_session_dto(session, settings.as_ref())
+        }
+    }))
+    .buffered(8)
+    .collect()
+    .await)
 }
 
 /// 兼容旧调用：仅列出未归档会话。

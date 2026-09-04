@@ -1035,6 +1035,7 @@ impl Session {
 
         let primary = state.model_ctx.primary_model_target();
         Ok(agent_protocol::ThreadSettingsSnapshot {
+            provider_id: (!primary.provider_id.trim().is_empty()).then_some(primary.provider_id),
             provider: primary.backend_id,
             model: primary.model,
             interaction_mode: state.interaction_mode,
@@ -2000,8 +2001,8 @@ impl Session {
     pub(crate) async fn extension_snapshot_for_current_turn(
         &self,
     ) -> anyhow::Result<Arc<crate::extensions::ExtensionSnapshot>> {
-        let (turn_context, project_root, mcp_overrides, skill_overrides) = {
-            let state = self.lock_state();
+        let (turn_context, pending) = {
+            let mut state = self.lock_state();
             if let Some(snapshot) = state
                 .current_turn_context
                 .as_ref()
@@ -2009,13 +2010,33 @@ impl Session {
             {
                 return Ok(snapshot);
             }
-            let turn_context = state.current_turn_context.clone();
+            (
+                state.current_turn_context.clone(),
+                state.pending_extension_snapshot.take(),
+            )
+        };
+        let snapshot = match pending {
+            Some(snapshot) => snapshot,
+            None => self.discover_extension_snapshot_from_disk(turn_context.as_ref())?,
+        };
+        let published = match turn_context {
+            Some(turn) => turn.publish_extension_snapshot(snapshot),
+            None => snapshot,
+        };
+        self.lock_state().extension_snapshot_baseline = Some(Arc::clone(&published));
+        Ok(published)
+    }
+
+    fn discover_extension_snapshot_from_disk(
+        &self,
+        turn_context: Option<&Arc<TurnContext>>,
+    ) -> anyhow::Result<Arc<crate::extensions::ExtensionSnapshot>> {
+        let (project_root, mcp_overrides, skill_overrides) = {
+            let state = self.lock_state();
             let project_root = turn_context
-                .as_ref()
                 .and_then(|turn| turn.project_root().map(ToOwned::to_owned))
                 .or_else(|| state.project_root.clone());
             (
-                turn_context,
                 project_root,
                 state.mcp_config_override.clone(),
                 state.skill_config_overrides.clone(),
@@ -2046,10 +2067,34 @@ impl Session {
                 "extension manifest skipped"
             );
         }
-        Ok(match turn_context {
-            Some(turn) => turn.publish_extension_snapshot(snapshot),
-            None => snapshot,
-        })
+        Ok(snapshot)
+    }
+
+    /// Discovers and validates the next extension snapshot without replacing the active turn's
+    /// frozen view. The validated snapshot becomes eligible at the next turn boundary.
+    pub async fn reconcile_extensions(
+        &self,
+    ) -> anyhow::Result<crate::extensions::ExtensionReconcileReport> {
+        let turn = self.lock_state().current_turn_context.clone();
+        let next = self.discover_extension_snapshot_from_disk(turn.as_ref())?;
+        let previous = {
+            let state = self.lock_state();
+            state
+                .current_turn_context
+                .as_ref()
+                .and_then(|turn| turn.extension_snapshot())
+                .or_else(|| state.extension_snapshot_baseline.clone())
+                .unwrap_or_else(|| Arc::clone(&next))
+        };
+        let report = crate::extensions::reconcile_extension_snapshots(&previous, &next)?;
+        let mut state = self.lock_state();
+        if previous.version() != next.version() {
+            state.pending_extension_snapshot = Some(next);
+        }
+        if state.extension_snapshot_baseline.is_none() {
+            state.extension_snapshot_baseline = Some(previous);
+        }
+        Ok(report)
     }
 
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
@@ -2361,6 +2406,87 @@ impl Session {
         }
     }
 
+    pub(crate) async fn record_token_usage(&self, turn_id: &str, usage: providers::Usage) {
+        let latest = agent_protocol::TokenUsageTotals {
+            input_tokens: u64::from(usage.prompt_tokens()),
+            uncached_input_tokens: u64::from(usage.input_tokens),
+            output_tokens: u64::from(usage.output_tokens),
+            total_tokens: u64::from(usage.total_tokens()),
+            cache_read_tokens: u64::from(usage.cache_read_tokens),
+            cache_write_tokens: u64::from(usage.cache_write_tokens),
+            reasoning_tokens: u64::from(usage.reasoning_tokens),
+            request_count: u64::from(usage.request_count.max(1)),
+        };
+        let record = {
+            let mut state = self.lock_state();
+            let mut cumulative = state
+                .token_usage
+                .as_ref()
+                .map(|record| record.cumulative.clone())
+                .unwrap_or_default();
+            cumulative.add_assign(&latest);
+            let record = agent_protocol::TokenUsageRecord {
+                record_id: uuid::Uuid::now_v7().to_string(),
+                session_id: self.session_id.clone(),
+                turn_id: turn_id.to_string(),
+                root_turn_id: turn_id.to_string(),
+                response_id: None,
+                latest,
+                cumulative,
+                compaction_response_id: None,
+            };
+            state.token_usage = Some(record.clone());
+            record
+        };
+        if let Some(bindings) = self.runtime_io.get() {
+            if let Err(error) = bindings
+                .rollout
+                .record(vec![RolloutItem::TokenUsage(record)])
+                .await
+            {
+                tracing::warn!(%error, "failed to persist token usage record");
+            }
+        }
+    }
+
+    pub fn restore_token_usage_from_rollout(&self, items: &[RolloutItem]) {
+        self.lock_state().token_usage = agent_rollout::latest_token_usage(items);
+    }
+
+    pub fn token_usage_record(&self) -> Option<agent_protocol::TokenUsageRecord> {
+        self.lock_state().token_usage.clone()
+    }
+
+    async fn record_token_usage_checkpoint(&self, compaction_response_id: String) {
+        let record = {
+            let mut state = self.lock_state();
+            let Some(previous) = state.token_usage.as_ref() else {
+                return;
+            };
+            let record = agent_protocol::TokenUsageRecord {
+                record_id: uuid::Uuid::now_v7().to_string(),
+                session_id: previous.session_id.clone(),
+                turn_id: previous.turn_id.clone(),
+                root_turn_id: previous.root_turn_id.clone(),
+                response_id: None,
+                latest: agent_protocol::TokenUsageTotals::default(),
+                cumulative: previous.cumulative.clone(),
+                compaction_response_id: Some(compaction_response_id),
+            };
+            state.token_usage = Some(record.clone());
+            record
+        };
+        if let Some(bindings) = self.runtime_io.get() {
+            if let Err(error) = bindings
+                .rollout
+                .record(vec![RolloutItem::TokenUsage(record)])
+                .await
+            {
+                tracing::warn!(%error, "failed to persist token usage checkpoint");
+            }
+        }
+    }
+
     fn record_response_items_unlocked(&self, items: Vec<agent_protocol::ResponseItem>) {
         self.lock_state().record_items(items);
     }
@@ -2460,9 +2586,12 @@ impl Session {
                 )]
             };
         }
+        let compaction_response_id = uuid::Uuid::now_v7().to_string();
         if let Some(bindings) = self.runtime_io.get() {
-            let compacted_item =
-                RolloutItem::Compacted(serde_json::json!({ "reason": "mid-run-summary" }));
+            let compacted_item = RolloutItem::Compacted(serde_json::json!({
+                "id": compaction_response_id.clone(),
+                "reason": "mid-run-summary"
+            }));
             let world_state_item =
                 crate::prompt::context_state::rollout_update(None, &rebased_snapshot, 0);
             let mut items = vec![compacted_item];
@@ -2473,6 +2602,8 @@ impl Session {
                 tracing::warn!(%err, "failed to persist rebased prompt context");
             }
         }
+        self.record_token_usage_checkpoint(compaction_response_id)
+            .await;
     }
 
     /// 从先前持久化的 rollout 条目恢复 prompt 上下文状态。
@@ -2697,6 +2828,100 @@ mod tests {
         session.increment_turn().await;
         let second = session.create_turn_context("turn-2".into()).await;
         assert_eq!(second.turn(), 2);
+    }
+
+    #[tokio::test]
+    async fn token_usage_accumulates_and_restores_from_rollout_records() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
+        session
+            .record_token_usage(
+                "turn-1",
+                providers::Usage {
+                    input_tokens: 10,
+                    output_tokens: 5,
+                    request_count: 1,
+                    ..Default::default()
+                },
+            )
+            .await;
+        session
+            .record_token_usage(
+                "turn-2",
+                providers::Usage {
+                    input_tokens: 20,
+                    output_tokens: 7,
+                    request_count: 1,
+                    ..Default::default()
+                },
+            )
+            .await;
+        let record = session.token_usage_record().unwrap();
+        assert_eq!(record.latest.input_tokens, 20);
+        assert_eq!(record.cumulative.input_tokens, 30);
+        assert_eq!(record.cumulative.output_tokens, 12);
+        assert_eq!(record.cumulative.request_count, 2);
+
+        let restored = Session::new(test_config(&dir)).await.unwrap();
+        restored.restore_token_usage_from_rollout(&[RolloutItem::TokenUsage(record.clone())]);
+        assert_eq!(restored.token_usage_record(), Some(record));
+    }
+
+    #[tokio::test]
+    async fn compaction_writes_a_token_usage_checkpoint() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
+        session.lock_state().prompt_context_snapshot = Some(serde_json::json!({}));
+        session
+            .record_token_usage(
+                "turn-1",
+                providers::Usage {
+                    input_tokens: 10,
+                    output_tokens: 5,
+                    request_count: 1,
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        session
+            .rebase_prompt_context_after_compaction("summary")
+            .await;
+
+        let record = session.token_usage_record().unwrap();
+        assert_eq!(record.cumulative.input_tokens, 10);
+        assert!(record.compaction_response_id.is_some());
+        assert_eq!(record.latest, agent_protocol::TokenUsageTotals::default());
+    }
+
+    #[tokio::test]
+    async fn reconciled_extensions_activate_only_at_the_next_turn_boundary() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
+        let first_turn = session.create_turn_context("turn-1".into()).await;
+        session.bind_turn_context(first_turn).await;
+        let first = session.extension_snapshot_for_current_turn().await.unwrap();
+        assert!(first.extensions().is_empty());
+
+        let extension = dir.path().join("extensions/demo");
+        std::fs::create_dir_all(&extension).unwrap();
+        std::fs::write(
+            extension.join(crate::extensions::EXTENSION_MANIFEST_FILE),
+            "schema_version = 1\nid = 'demo'\n[[tools]]\ntoolset = 'image_gen'\n",
+        )
+        .unwrap();
+        let report = session.reconcile_extensions().await.unwrap();
+        assert_eq!(report.changed_extensions.len(), 1);
+        assert!(session
+            .current_extension_snapshot()
+            .await
+            .is_some_and(|snapshot| snapshot.extensions().is_empty()));
+
+        session.clear_current_turn_id().await;
+        let second_turn = session.create_turn_context("turn-2".into()).await;
+        session.bind_turn_context(second_turn).await;
+        let second = session.extension_snapshot_for_current_turn().await.unwrap();
+        assert_eq!(second.extensions()[0].manifest.id, "demo");
     }
 
     #[tokio::test]

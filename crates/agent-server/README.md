@@ -54,7 +54,7 @@ pub struct ThreadStateManager;              // thread_id -> ThreadState 全局�
 pub struct ThreadHistoryBuilder;            // Turn/Item 增量跟踪器
 pub struct ItemSnapshot;                    // 单个 Item 快照
 pub struct TurnSnapshot;                    // 单个 Turn 快照
-pub struct ThreadSnapshot;                  // Thread 完整快照（含 model/reasoning、活跃 Turn 和后台 Turn）
+pub struct ThreadSnapshot;                  // Thread 完整快照（含 provider/backend/model/reasoning、活跃 Turn 和后台 Turn）
 pub struct ThreadActivity;                  // 状态 + 是否有订阅者
 pub enum ListenerCommand;                   // 事件监听器命令枚举
 
@@ -64,15 +64,15 @@ pub struct ConnectionGeneration;            // 精确的连接 generation 标识
 pub struct ConnectionGenerationKey;         // generation 键（connection_id + uuid）
 ```
 
-`ResumeThread` 在 listener 产生权威 Turn/Item 快照后，再从已加载 `Session` 补全当前
-primary model 和 `reasoning_effort`。模型热更新和后续重连返回当前值；冷恢复只投影
-Session 已重建的设置。未配置模型的空 Thread 保持 `null`，不伪造默认值。
+listener 从 durable `ThreadSettingsApplied` 事件恢复 `provider_id`、`backend_id`、
+`model` 和 `reasoning_effort`。`ResumeThread` 仅用已加载 Session 补齐缺失值，
+因此冷恢复与热更新使用同一 rollout 事实源。
 
 ## 与其他 crate 的关系
 
 - **`agent`（agent-core）** — 调用 `AgentBuilder` / `Session` / `AstroThread` 构建和运行 Agent 循环
 - **`subagents`** — Agent Thread V2 控制面：`AgentControl` 活动观察和 watcher 管理
-- **`proto`** — Protobuf gRPC 服务契约（`AstroService` 35 RPC）
+- **`proto`** — Protobuf gRPC 服务契约（`AstroService` 36 RPC，含 Extension reconcile）
 - **`providers`** — 读取环境 API Key（`read_env_api_key`）和默认模型
 - **`session`** — `SessionStore` 打开会话存储
 - **`memory`** — `ensure_workspace` 初始化工作区、`MemoryManager` 记忆 review

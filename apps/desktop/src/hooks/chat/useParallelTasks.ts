@@ -143,9 +143,7 @@ export function useParallelTasks(deps: Deps) {
       for (const task of prev) {
         if (task.worktree) {
           void invoke("cleanup_task_worktree", {
-            path: task.worktree.path,
-            repoRoot: task.worktree.repoRoot,
-            branch: task.worktree.branch,
+            worktreeId: task.worktree.id,
           }).catch(() => {});
         }
       }
@@ -203,9 +201,7 @@ export function useParallelTasks(deps: Deps) {
       dispatchSessionsChanged();
       if (task.worktree) {
         void invoke("cleanup_task_worktree", {
-          path: task.worktree.path,
-          repoRoot: task.worktree.repoRoot,
-          branch: task.worktree.branch,
+          worktreeId: task.worktree.id,
         }).catch(() => {});
       }
       depsRef.current.setMessages((prev) =>
@@ -411,15 +407,17 @@ export function useParallelTasks(deps: Deps) {
       let slotted = true;
       try {
         const prepared = await invoke<{
+          id: string;
           path: string;
-          repoRoot: string;
-          branch: string;
-        } | null>("prepare_task_worktree", { taskId });
+          branch?: string | null;
+          headSha: string;
+        } | null>("prepare_task_worktree");
         if (prepared?.path) {
           worktree = {
+            id: prepared.id,
             path: prepared.path,
-            repoRoot: prepared.repoRoot,
             branch: prepared.branch,
+            headSha: prepared.headSha,
           };
         }
       } catch (e) {
@@ -863,9 +861,7 @@ export function useParallelTasks(deps: Deps) {
         finish("error", errMsg);
         if (worktree) {
           void invoke("cleanup_task_worktree", {
-            path: worktree.path,
-            repoRoot: worktree.repoRoot,
-            branch: worktree.branch,
+            worktreeId: worktree.id,
           }).catch(() => {});
         }
         setMessages((prev) =>
@@ -894,9 +890,7 @@ export function useParallelTasks(deps: Deps) {
         if (isParallelTaskActive(task.status)) continue;
         if (task.worktree) {
           void invoke("cleanup_task_worktree", {
-            path: task.worktree.path,
-            repoRoot: task.worktree.repoRoot,
-            branch: task.worktree.branch,
+            worktreeId: task.worktree.id,
           }).catch(() => {});
         }
       }

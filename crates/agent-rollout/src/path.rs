@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -20,12 +21,20 @@ pub fn new_rollout_path(root: &Path, thread_id: &str, now: DateTime<Utc>) -> Pat
 }
 
 pub fn find_rollout(root: &Path, thread_id: &str) -> io::Result<Option<PathBuf>> {
+    Ok(find_rollouts(root, &[thread_id.to_string()])?.remove(thread_id))
+}
+
+/// Finds the latest rollout for each requested thread while scanning the dated tree once.
+pub fn find_rollouts(root: &Path, thread_ids: &[String]) -> io::Result<HashMap<String, PathBuf>> {
     if !root.is_dir() {
-        return Ok(None);
+        return Ok(HashMap::new());
     }
 
-    let encoded_thread_id = encode_thread_id(thread_id);
-    let mut matches = Vec::new();
+    let requested = thread_ids
+        .iter()
+        .map(|thread_id| (encode_thread_id(thread_id), thread_id.clone()))
+        .collect::<HashMap<_, _>>();
+    let mut matches = HashMap::<String, PathBuf>::new();
     for year in fs::read_dir(root)? {
         let year = year?;
         if !year.file_type()?.is_dir() {
@@ -47,17 +56,21 @@ pub fn find_rollout(root: &Path, thread_id: &str) -> io::Result<Option<PathBuf>>
                         continue;
                     }
                     let name = file.file_name();
-                    if name.to_str().and_then(encoded_thread_id_from_file_name)
-                        == Some(encoded_thread_id.as_str())
+                    if let Some(thread_id) = name
+                        .to_str()
+                        .and_then(encoded_thread_id_from_file_name)
+                        .and_then(|encoded| requested.get(encoded))
                     {
-                        matches.push(file.path());
+                        let path = file.path();
+                        if matches.get(thread_id).is_none_or(|current| path > *current) {
+                            matches.insert(thread_id.clone(), path);
+                        }
                     }
                 }
             }
         }
     }
-    matches.sort();
-    Ok(matches.pop())
+    Ok(matches)
 }
 
 fn encode_thread_id(thread_id: &str) -> String {
@@ -119,7 +132,7 @@ mod tests {
     use chrono::TimeZone;
     use tempfile::TempDir;
 
-    use super::{find_rollout, new_rollout_path};
+    use super::{find_rollout, find_rollouts, new_rollout_path};
 
     #[test]
     fn find_rollout_returns_the_latest_lexical_timestamp() {
@@ -140,6 +153,40 @@ mod tests {
         std::fs::write(&second, b"{}").unwrap();
 
         assert_eq!(find_rollout(temp.path(), "thread-1").unwrap(), Some(second));
+    }
+
+    #[test]
+    fn find_rollouts_scans_multiple_threads_and_keeps_latest_paths() {
+        let temp = TempDir::new().unwrap();
+        let first = new_rollout_path(
+            temp.path(),
+            "thread-1",
+            chrono::Utc.with_ymd_and_hms(2026, 8, 17, 9, 0, 0).unwrap(),
+        );
+        let latest = new_rollout_path(
+            temp.path(),
+            "thread-1",
+            chrono::Utc.with_ymd_and_hms(2026, 8, 18, 9, 0, 0).unwrap(),
+        );
+        let other = new_rollout_path(
+            temp.path(),
+            "thread-2",
+            chrono::Utc.with_ymd_and_hms(2026, 8, 18, 10, 0, 0).unwrap(),
+        );
+        for path in [&first, &latest, &other] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"{}").unwrap();
+        }
+
+        let found = find_rollouts(
+            temp.path(),
+            &["thread-1".into(), "thread-2".into(), "missing".into()],
+        )
+        .unwrap();
+
+        assert_eq!(found.get("thread-1"), Some(&latest));
+        assert_eq!(found.get("thread-2"), Some(&other));
+        assert!(!found.contains_key("missing"));
     }
 
     #[test]

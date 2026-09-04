@@ -31,6 +31,8 @@ pub(crate) struct SessionState {
     pub(crate) interaction_mode: types::InteractionMode,
     pub(crate) current_turn_context: Option<Arc<TurnContext>>,
     pub(crate) current_step_context: Option<Arc<StepContext>>,
+    pub(crate) extension_snapshot_baseline: Option<Arc<crate::extensions::ExtensionSnapshot>>,
+    pub(crate) pending_extension_snapshot: Option<Arc<crate::extensions::ExtensionSnapshot>>,
     pub(crate) mcp_config_override: Vec<mcp::McpServerConfig>,
     pub(crate) mcp_instructions: Vec<mcp::McpServerInstructions>,
     pub(crate) mcp_enabled: bool,
@@ -40,6 +42,7 @@ pub(crate) struct SessionState {
     pub(crate) skill_config_overrides: Vec<(PathBuf, bool)>,
     pub(crate) temperature: f32,
     pub(crate) additional_params: Value,
+    pub(crate) token_usage: Option<agent_protocol::TokenUsageRecord>,
 }
 
 impl SessionState {
@@ -63,6 +66,8 @@ impl SessionState {
             interaction_mode: types::InteractionMode::Agent,
             current_turn_context: None,
             current_step_context: None,
+            extension_snapshot_baseline: None,
+            pending_extension_snapshot: None,
             mcp_config_override: Vec::new(),
             mcp_instructions: Vec::new(),
             mcp_enabled: true,
@@ -72,6 +77,7 @@ impl SessionState {
             skill_config_overrides: Vec::new(),
             temperature: 0.7,
             additional_params: Value::Null,
+            token_usage: None,
         }
     }
 

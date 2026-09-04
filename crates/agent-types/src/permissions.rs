@@ -20,7 +20,6 @@ pub enum SandboxMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ApprovalPolicy {
-    Untrusted,
     #[default]
     OnRequest,
     Never,

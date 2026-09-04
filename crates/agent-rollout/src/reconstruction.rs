@@ -60,6 +60,25 @@ pub fn realtime_history(items: &[RolloutItem]) -> Vec<agent_protocol::RealtimeIt
         .collect()
 }
 
+/// Returns the latest durable thread settings snapshot in submission order.
+pub fn latest_thread_settings(
+    items: &[RolloutItem],
+) -> Option<agent_protocol::ThreadSettingsSnapshot> {
+    items.iter().rev().find_map(|item| match item {
+        RolloutItem::EventMsg(agent_protocol::EventMsg::ThreadSettingsApplied(event)) => {
+            Some(event.thread_settings.clone())
+        }
+        _ => None,
+    })
+}
+
+pub fn latest_token_usage(items: &[RolloutItem]) -> Option<agent_protocol::TokenUsageRecord> {
+    items.iter().rev().find_map(|item| match item {
+        RolloutItem::TokenUsage(record) => Some(record.clone()),
+        _ => None,
+    })
+}
+
 /// Rebuild the effective model history after applying append-only compaction and rollback markers.
 pub fn effective_response_history(items: &[RolloutItem]) -> Vec<ResponseItem> {
     let mut history = Vec::new();
@@ -223,8 +242,8 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        drop_last_n_user_turns, effective_response_history, read_rollout_with_diagnostics,
-        realtime_history,
+        drop_last_n_user_turns, effective_response_history, latest_thread_settings,
+        latest_token_usage, read_rollout_with_diagnostics, realtime_history,
     };
     use crate::RolloutItem;
 
@@ -281,6 +300,63 @@ mod tests {
         assert_eq!(restored[0].realtime_session_id, "one");
         assert_eq!(restored[1].realtime_session_id, "one");
         assert_eq!(restored[2].realtime_session_id, "two");
+    }
+
+    #[test]
+    fn latest_thread_settings_uses_the_last_durable_snapshot() {
+        let settings = |model: &str| {
+            RolloutItem::EventMsg(agent_protocol::EventMsg::ThreadSettingsApplied(
+                agent_protocol::ThreadSettingsAppliedEvent {
+                    thread_settings: agent_protocol::ThreadSettingsSnapshot {
+                        provider_id: Some("profile".into()),
+                        provider: "openai".into(),
+                        model: model.into(),
+                        interaction_mode: types::InteractionMode::Agent,
+                        project_root: None,
+                        workspace_roots: Vec::new(),
+                        context_window: 128_000,
+                        temperature: 0.7,
+                        thinking_enabled: true,
+                        reasoning_effort: "high".into(),
+                        service_tier: None,
+                        max_tokens: 4096,
+                    },
+                },
+            ))
+        };
+        let items = vec![settings("old"), settings("new")];
+
+        assert_eq!(
+            latest_thread_settings(&items).map(|snapshot| snapshot.model),
+            Some("new".into())
+        );
+    }
+
+    #[test]
+    fn latest_token_usage_prefers_the_latest_checkpoint() {
+        let record = |input_tokens, checkpoint: Option<&str>| {
+            RolloutItem::TokenUsage(agent_protocol::TokenUsageRecord {
+                record_id: format!("usage-{input_tokens}"),
+                session_id: "thread-1".into(),
+                turn_id: "turn-1".into(),
+                root_turn_id: "turn-1".into(),
+                response_id: None,
+                latest: Default::default(),
+                cumulative: agent_protocol::TokenUsageTotals {
+                    input_tokens,
+                    ..Default::default()
+                },
+                compaction_response_id: checkpoint.map(str::to_string),
+            })
+        };
+        let items = vec![record(10, None), record(30, Some("compact-1"))];
+
+        let restored = latest_token_usage(&items).unwrap();
+        assert_eq!(restored.cumulative.input_tokens, 30);
+        assert_eq!(
+            restored.compaction_response_id.as_deref(),
+            Some("compact-1")
+        );
     }
 
     #[tokio::test]

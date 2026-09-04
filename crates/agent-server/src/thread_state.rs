@@ -28,6 +28,8 @@ pub struct TurnSnapshot {
 pub struct ThreadSnapshot {
     pub thread_id: String,
     pub status: String,
+    pub provider_id: Option<String>,
+    pub backend_id: Option<String>,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
     pub turns: Vec<TurnSnapshot>,
@@ -39,11 +41,23 @@ pub struct ThreadSnapshot {
 pub struct ThreadHistoryBuilder {
     active: Option<TurnSnapshot>,
     completed: Vec<TurnSnapshot>,
+    provider_id: Option<String>,
+    backend_id: Option<String>,
+    model: Option<String>,
+    reasoning_effort: Option<String>,
 }
 
 impl ThreadHistoryBuilder {
     pub fn track(&mut self, event: &Event) {
         match &event.msg {
+            EventMsg::ThreadSettingsApplied(applied) => {
+                self.provider_id = applied.thread_settings.provider_id.clone();
+                self.backend_id = Some(applied.thread_settings.provider.clone());
+                self.model = Some(applied.thread_settings.model.clone());
+                self.reasoning_effort =
+                    (!applied.thread_settings.reasoning_effort.trim().is_empty())
+                        .then(|| applied.thread_settings.reasoning_effort.clone());
+            }
             EventMsg::TurnStarted(started) => {
                 if self
                     .active
@@ -201,6 +215,22 @@ impl ThreadHistoryBuilder {
 
     pub fn completed_turns(&self) -> &[TurnSnapshot] {
         &self.completed
+    }
+
+    pub fn thread_settings(
+        &self,
+    ) -> (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) {
+        (
+            self.provider_id.clone(),
+            self.backend_id.clone(),
+            self.model.clone(),
+            self.reasoning_effort.clone(),
+        )
     }
 
     pub fn contains_item_payload(&self, item_id: &str, payload_json: &str) -> bool {
@@ -424,6 +454,40 @@ mod tests {
         });
         assert!(builder.active_turn_snapshot().is_none());
         assert!(builder.completed_turns().is_empty());
+    }
+
+    #[test]
+    fn builder_restores_latest_thread_settings_without_a_live_session() {
+        let mut builder = ThreadHistoryBuilder::default();
+        builder.track(&Event {
+            id: "settings-1".into(),
+            msg: EventMsg::ThreadSettingsApplied(agent_protocol::ThreadSettingsAppliedEvent {
+                thread_settings: agent_protocol::ThreadSettingsSnapshot {
+                    provider_id: Some("profile-1".into()),
+                    provider: "openai".into(),
+                    model: "gpt-5.6".into(),
+                    interaction_mode: types::InteractionMode::Agent,
+                    project_root: None,
+                    workspace_roots: Vec::new(),
+                    context_window: 128_000,
+                    temperature: 0.7,
+                    thinking_enabled: true,
+                    reasoning_effort: "high".into(),
+                    service_tier: None,
+                    max_tokens: 4096,
+                },
+            }),
+        });
+
+        assert_eq!(
+            builder.thread_settings(),
+            (
+                Some("profile-1".into()),
+                Some("openai".into()),
+                Some("gpt-5.6".into()),
+                Some("high".into()),
+            )
+        );
     }
 
     #[test]

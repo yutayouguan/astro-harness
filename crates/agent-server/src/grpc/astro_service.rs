@@ -1136,6 +1136,7 @@ impl AstroServiceImpl {
         }
         let session = self.get_session(thread_id).await?;
         session.restore_prompt_context_from_rollout(&existing_items);
+        session.restore_token_usage_from_rollout(&existing_items);
         let rollout = agent_rollout::RolloutRecorder::open(rollout_path)
             .await
             .map_err(|error| Status::internal(error.to_string()))?;
@@ -2840,6 +2841,45 @@ impl AstroService for AstroServiceImpl {
         Ok(Response::new(UpdateTurnSettingsResponse {
             status: status.into(),
             message,
+        }))
+    }
+
+    async fn reconcile_extensions(
+        &self,
+        request: Request<proto::ReconcileExtensionsRequest>,
+    ) -> Result<Response<proto::ReconcileExtensionsResponse>, Status> {
+        let req = request.into_inner();
+        if req.session_id.trim().is_empty() {
+            return Err(Status::invalid_argument("session_id is required"));
+        }
+        let managed = self.get_or_create_thread(req.session_id.trim()).await?;
+        let report = managed
+            .runtime
+            .session()
+            .reconcile_extensions()
+            .await
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        let changed_extensions = report
+            .changed_extensions
+            .into_iter()
+            .map(|change| proto::ExtensionReconcileChange {
+                extension_id: change.extension_id,
+                kind: match change.kind {
+                    agent::extensions::ExtensionChangeKind::Added => "added",
+                    agent::extensions::ExtensionChangeKind::Updated => "updated",
+                    agent::extensions::ExtensionChangeKind::Removed => "removed",
+                }
+                .into(),
+            })
+            .collect();
+        Ok(Response::new(proto::ReconcileExtensionsResponse {
+            previous_version: report.previous_version,
+            next_version: report.next_version,
+            changed_extensions,
+            refresh_mcp: report.refresh_mcp,
+            refresh_skills: report.refresh_skills,
+            refresh_hooks: report.refresh_hooks,
+            refresh_toolsets: report.refresh_toolsets,
         }))
     }
 
@@ -5841,5 +5881,24 @@ mod tests {
             tokio::task::yield_now().await;
         }
         assert!(!service.threads.contains("completed-thread").await);
+    }
+
+    #[tokio::test]
+    async fn reconcile_extensions_rejects_an_empty_session_id_without_side_effects() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+
+        let error = AstroService::reconcile_extensions(
+            &service,
+            Request::new(proto::ReconcileExtensionsRequest {
+                session_id: "  ".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert!(!service.threads.contains("").await);
     }
 }
