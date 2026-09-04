@@ -8,6 +8,8 @@
 >
 > Step-scoped tool plan 重构：`e3ac2c51`
 >
+> 全链路 fail-closed 审计：`cc1ddc63`
+>
 > 参考实现基准：Codex `e24190caa9ee355044a7d70177d48a556d766d35`（2026-08-26）
 >
 > 范围：Responses API 原生工具协议、Astro 工具协议、延迟工具发现、Responses 事件回放、Direct / CodeModeOnly 模式合同与 QuickJS Code Mode runtime
@@ -75,6 +77,15 @@ CoreToolRuntime / ToolExecutor
 核心原则是：Registry 中的可执行 Runtime、本 Step 的模型可见 schema、Provider 请求和响应调用必须来自同一份冻结快照。`ToolRouter` 同时持有 `registry` 和 `model_visible_specs`，`StepContext` 再持有该 Router，因此 MCP 热重载或 Skill 激活不会改变已发出 sampling request 的执行边界。
 
 `Prompt.tools` 是 Agent Core 对本次请求的权威投影；Provider 层只负责将它解析为 `ResponsesRequest.tools`。返回的原生 item 必须由 `ToolRouter::build_tool_call()` 重建结构化工具身份，再交回同一 Router 内的 Registry 执行。
+
+### 3.1 链路的 fail-closed 规则
+
+- `build_tool_router` 拒绝没有 `CoreToolRuntime` 的模型可见 schema，防止“可见但不可执行”。
+- 两个 registered name 不得投影到同一 `(namespace, name)`；冲突在 Step 构建时报错，不依赖 HashMap 迭代顺序选择 handler。
+- Provider 将 `Prompt.tools` 解析为 `ToolDefinition` 时不得使用静默 `filter_map`；任一无效 schema 都终止请求。
+- `ToolRouter::build_tool_call()` 仅接受 `execution: "client"` 的 `tool_search_call`；Provider 执行的搜索不得被本地重复执行。
+- Function arguments 无法解析为 JSON 时设置 `args_parse_error`，在进入审批或 handler 前返回参数错误。
+- 用新 `ToolEntry` 覆盖旧元数据时必须同时使旧 Runtime 失效，直到新 Runtime 显式绑定。
 
 ## 4. Responses API 原生工具协议
 
@@ -760,6 +771,7 @@ code_mode = true
 7. CodeModeOnly 的 `ALL_TOOLS` 对象形状固定为 `{name, description}`；description 是包含 TypeScript 调用声明的自描述合同。
 8. Namespace 工具的规范身份是 `(namespace, name)`；点号只用于人类可读投影，Code Mode 标识符只用于 cell 内部，二者都不得作为模型顶层直调别名。
 9. Namespace 不扩大权限；调用仍必须同时命中当前 StepContext 的模型可见路由与执行策略。
+10. Provider 工具定义解析、Runtime 绑定、规范身份冲突和 client/server 执行权必须 fail closed。
 
 ## 11. 实现映射
 

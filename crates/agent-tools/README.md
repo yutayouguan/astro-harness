@@ -100,10 +100,12 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 ## 关键不变量
 
 1. **inventory 自注册**：新工具无需修改 `register_all`，只需 `submit_builtin_tool!` 宏声明即可
-2. **handler 完备性**：每个注册的 metadata 工具必须有对应 dispatch handler（由测试强制）
+2. **Runtime 完备性**：每个注册的 metadata 工具必须有对应 `CoreToolRuntime`（由测试强制）
 3. **schema 清洗**：所有工具 schema 在发往 LLM 前必须经过 `sanitize_tool_schema` 处理
 4. **路径安全**：文件操作工具必须通过 `resolve_safe` 验证路径不穿越工作区
-5. **交互模式门禁**：Plan 模式下写类工具不可见；`filter_schemas` 负责过滤
+5. **Runtime 快照**：模型可见 schema 必须存在同身份 `CoreToolRuntime`；替换 metadata 会立即使旧 Runtime 失效
+6. **规范身份唯一**：两个 registered name 不得投影到同一 `(namespace, name)`
+7. **交互模式门禁**：Plan 模式下写类工具不可见；`filter_schemas` 负责过滤
 
 ## 测试
 
