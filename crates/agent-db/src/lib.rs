@@ -1,12 +1,12 @@
-//! 统一 SQLite 基础层 — 所有 Astro DB 共用的连接配置、池工厂和迁移。
+//! 统一 SQLite 基础层 — 所有 Astro DB 共用的文件级 PRAGMA 初始化、连接配置、池工厂和迁移。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 
-use sqlx::sqlite::{
-    SqliteAutoVacuum, SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous,
-};
-use sqlx::ConnectOptions;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteSynchronous};
+use sqlx::{ConnectOptions, Connection, SqliteConnection};
 
 pub use sqlx;
 pub use sqlx::SqlitePool;
@@ -86,20 +86,22 @@ impl AstroDb {
             std::fs::create_dir_all(parent)?;
         }
 
+        // journal_mode/auto_vacuum 是数据库文件级设置，不能放在池选项里。
+        // SQLx 会在每条新连接上重放连接选项；多个池并发打开同一文件时，
+        // 重复执行 journal_mode=WAL 会竞争排他锁并按 busy_timeout 串行等待。
+        let init_lock = database_init_lock(path);
+        let init_guard = init_lock.lock().await;
+        initialize_database_file(path).await?;
+        drop(init_guard);
+
         let opts = SqliteConnectOptions::new()
             .filename(path)
             .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal)
-            .auto_vacuum(SqliteAutoVacuum::Incremental)
             .busy_timeout(Duration::from_secs(5))
             .log_statements(tracing::log::LevelFilter::Debug)
             .log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_secs(1));
 
-        // `PRAGMA journal_mode=WAL` needs an exclusive lock and SQLite's busy
-        // timeout does not apply while changing journal mode. Agent children
-        // may open independent pools for the same state database concurrently,
-        // so retry that short startup race instead of failing the whole turn.
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
         let pool = loop {
             match SqlitePoolOptions::new()
@@ -132,6 +134,74 @@ impl AstroDb {
         sqlx::query(ddl).execute(&pool).await?;
         Ok(pool)
     }
+}
+
+fn database_init_lock(path: &Path) -> Arc<tokio::sync::Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<PathBuf, Weak<tokio::sync::Mutex<()>>>>> = OnceLock::new();
+    let key = path
+        .parent()
+        .and_then(|parent| parent.canonicalize().ok())
+        .and_then(|parent| path.file_name().map(|name| parent.join(name)))
+        .unwrap_or_else(|| path.to_path_buf());
+    let mut locks = LOCKS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    locks.retain(|_, lock| lock.strong_count() > 0);
+    if let Some(lock) = locks.get(&key).and_then(Weak::upgrade) {
+        return lock;
+    }
+    let lock = Arc::new(tokio::sync::Mutex::new(()));
+    locks.insert(key, Arc::downgrade(&lock));
+    lock
+}
+
+async fn initialize_database_file(path: &Path) -> DbResult<()> {
+    let opts = SqliteConnectOptions::new()
+        .filename(path)
+        .create_if_missing(true)
+        .busy_timeout(Duration::from_secs(5))
+        .log_statements(tracing::log::LevelFilter::Debug)
+        .log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_secs(1));
+    let mut connection = SqliteConnection::connect_with(&opts).await?;
+
+    let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+        .fetch_one(&mut connection)
+        .await?;
+    let user_table_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+    )
+    .fetch_one(&mut connection)
+    .await?;
+    if auto_vacuum != 2 && user_table_count == 0 {
+        sqlx::query("PRAGMA auto_vacuum = INCREMENTAL")
+            .execute(&mut connection)
+            .await?;
+    }
+
+    let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&mut connection)
+        .await?;
+    if !journal_mode.eq_ignore_ascii_case("wal") {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            match sqlx::query_scalar::<_, String>("PRAGMA journal_mode = WAL")
+                .fetch_one(&mut connection)
+                .await
+            {
+                Ok(_) => break,
+                Err(error)
+                    if is_sqlite_busy_or_locked(&error)
+                        && tokio::time::Instant::now() < deadline =>
+                {
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+    connection.close().await?;
+    Ok(())
 }
 
 fn is_sqlite_busy_or_locked(error: &sqlx::Error) -> bool {
@@ -223,5 +293,64 @@ mod tests {
         assert!(exact.is_file());
         assert!(!dir.join(spec.filename).exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn concurrent_pools_initialize_file_pragmas_once_without_lock_storm() {
+        let dir = std::env::temp_dir().join(format!(
+            "astro-db-concurrent-open-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp database directory");
+        let db = AstroDb::new(&dir);
+        let spec = DbSpec::new("concurrent", "shared.db");
+
+        let (first, second, third, fourth) = tokio::time::timeout(Duration::from_secs(8), async {
+            tokio::join!(
+                db.open_pool(&spec),
+                db.open_pool(&spec),
+                db.open_pool(&spec),
+                db.open_pool(&spec),
+            )
+        })
+        .await
+        .expect("concurrent pool initialization must remain bounded");
+        let pools = [
+            first.expect("first pool"),
+            second.expect("second pool"),
+            third.expect("third pool"),
+            fourth.expect("fourth pool"),
+        ];
+
+        for pool in &pools {
+            let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+                .fetch_one(pool)
+                .await
+                .expect("journal mode");
+            let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+                .fetch_one(pool)
+                .await
+                .expect("auto vacuum");
+            let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+                .fetch_one(pool)
+                .await
+                .expect("foreign keys");
+            let synchronous: i64 = sqlx::query_scalar("PRAGMA synchronous")
+                .fetch_one(pool)
+                .await
+                .expect("synchronous");
+            assert_eq!(journal_mode.to_ascii_lowercase(), "wal");
+            assert_eq!(auto_vacuum, 2);
+            assert_eq!(foreign_keys, 1);
+            assert_eq!(synchronous, 1);
+        }
+        for pool in pools {
+            pool.close().await;
+        }
+        std::fs::remove_dir_all(&dir).expect("remove temp database directory");
     }
 }

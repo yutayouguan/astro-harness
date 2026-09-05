@@ -64,7 +64,7 @@ reqwest      = { version = "0.12", features = ["json", "stream", "rustls-tls", "
 | 路径 | package name | 职责 |
 |---|---|---|
 | `crates/agent-types` | `types` | 跨 crate 共享类型：`ModelTarget`、`model_tool::ToolCall`、结构化 `ToolName`、`ToolEntry`（含 `ToolExposure`、`namespace`）、`MediaAsset`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。Agent history 类型归 `agent-protocol`。 |
-| `crates/agent-db` | `agent-db` | 统一 SQLite 基础层：`AstroDb`、`DbSpec`、WAL/同步/繁忙超时配置、连接池与迁移错误。 |
+| `crates/agent-db` | `agent-db` | 统一 SQLite 基础层：`AstroDb`、`DbSpec`、文件级 WAL/auto-vacuum 幂等初始化、连接级 synchronous/foreign-keys/busy-timeout、连接池与迁移错误。 |
 | `crates/agent-config` | `agent-config` | 分层配置原语：`ConfigLayer`、多来源 `ConfigLayerSource`、`ConfigKeyPath`、逐键来源与稳定版本。无产品特有字段，不做文件系统发现。 |
 | `crates/agent-protocol` | `agent-protocol` | Core 领域事件协议：`Event`、`EventMsg`、`TurnItem`、`Submission`。运行时唯一事件格式。 |
 | `crates/agent-realtime` | `realtime` | Realtime transport negotiation、WebSocket/WebRTC/ExistingCall、V2/V3 wire decoding、typed event、transcript reducer 与 handoff/BEM。 |

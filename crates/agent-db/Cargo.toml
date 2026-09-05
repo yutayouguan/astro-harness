@@ -13,3 +13,6 @@ sqlx = { version = "0.9", default-features = false, features = [
 tokio = { version = "1", features = ["sync", "time"] }
 tracing = "0.1"
 thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
