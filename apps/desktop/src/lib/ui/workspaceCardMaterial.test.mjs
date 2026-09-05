@@ -10,6 +10,10 @@ const a11y = await readFile(
   new URL("../../styles/tokens/a11y.css", import.meta.url),
   "utf8",
 );
+const glassIntensity = await readFile(
+  new URL("../../styles/tokens/glass-intensity.css", import.meta.url),
+  "utf8",
+);
 const cron = await readFile(
   new URL("../../styles/features/cron/templates.css", import.meta.url),
   "utf8",
@@ -81,6 +85,21 @@ test("workspace content cards become solid for accessibility preferences", () =>
     a11y,
     /@media \(prefers-contrast: more\)[\s\S]*?--content-card-border:\s*var\(--color-border\);[\s\S]*?--content-card-backdrop:\s*none;/,
   );
+});
+
+test("large content cards use the restrained liquid recipe over busy wallpapers", () => {
+  for (const level of ["liquid", "liquid-soft"]) {
+    const escaped = level.replace("-", "\\-");
+    const block = glassIntensity.match(
+      new RegExp(
+        `\\[data-glass="${escaped}"\\]\\s*\\{(?<body>[\\s\\S]*?)\\n\\}`,
+      ),
+    )?.groups?.body;
+    assert.ok(block, `missing ${level} glass overrides`);
+    assert.match(block, /--content-card-border:\s*var\(--liquid-glass-soft-edge\);/);
+    assert.match(block, /--content-card-background:[\s\S]*?--liquid-glass-soft-sheen/);
+    assert.match(block, /--content-card-backdrop:\s*var\(--liquid-glass-soft-backdrop\);/);
+  }
 });
 
 test("content cards keep tone in accents rather than their base fill", () => {

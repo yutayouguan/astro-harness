@@ -16,19 +16,13 @@ const canvas = await readFile(
 );
 
 test("workflow editor opens as a full-window workspace", () => {
-  assert.match(
-    editor,
-    /const \[fullscreen, setFullscreen\] = useState\(true\);/,
-  );
+  assert.doesNotMatch(editor, /fullscreen|exitFullscreen|setFullscreen/);
   assert.match(
     shell,
-    /\.page-body--bare:has\(\.loop-editor--fullscreen\)\s*\{[\s\S]*?padding:\s*0;/,
+    /\.page-body--bare:has\(\.loop-editor\)\s*\{[\s\S]*?padding:\s*0;/,
   );
-  assert.match(shell, /\.loop-editor--fullscreen\s*\{[\s\S]*?inset:\s*0;/);
-  assert.doesNotMatch(
-    shell,
-    /\.loop-editor--fullscreen \.loop-editor-toolbar\s*\{/,
-  );
+  assert.match(shell, /\.loop-editor\s*\{[\s\S]*?inset:\s*0;/);
+  assert.doesNotMatch(shell, /loop-editor--fullscreen/);
 });
 
 test("workflow content keeps the wallpaper visible through frosted glass", () => {
@@ -44,4 +38,12 @@ test("workflow content keeps the wallpaper visible through frosted glass", () =>
     canvas,
     /\.loop-canvas-container \.react-flow__background\s*\{[\s\S]*?background:\s*transparent;/,
   );
+});
+
+test("workflow image export captures the complete viewport as PNG", () => {
+  assert.match(editor, /import \{ toPng \} from "html-to-image";/);
+  assert.match(editor, /reactFlowInstance\.getNodesBounds\(exportNodes\)/);
+  assert.match(editor, /await toPng\(viewport,/);
+  assert.match(editor, /invoke<string>\("export_loop_png",/);
+  assert.doesNotMatch(editor, /svg\.react-flow__edges|XMLSerializer/);
 });

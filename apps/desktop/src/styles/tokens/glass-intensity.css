@@ -30,6 +30,13 @@
   --header-chip-shadow: var(--liquid-glass-shadow);
   --lens-shadow: var(--liquid-glass-shadow);
   --badge-shadow: var(--liquid-glass-shadow);
+  /* 大面积内容卡需要更稳定的中性衬底，避免同一排卡片被壁纸染成不同材质。 */
+  --content-card-border: var(--liquid-glass-soft-edge);
+  --content-card-background:
+    var(--liquid-glass-soft-sheen), var(--liquid-glass-soft-tint);
+  --content-card-shadow:
+    var(--liquid-glass-soft-shadow), var(--liquid-glass-soft-rim);
+  --content-card-backdrop: var(--liquid-glass-soft-backdrop);
 }
 
 /* Liquid Glass（克制）—— 同样的折光边缘，衬底更实，长文本更好读。 */
@@ -54,6 +61,12 @@
   --header-chip-shadow: var(--liquid-glass-soft-shadow);
   --lens-shadow: var(--liquid-glass-soft-shadow);
   --badge-shadow: var(--liquid-glass-soft-shadow);
+  --content-card-border: var(--liquid-glass-soft-edge);
+  --content-card-background:
+    var(--liquid-glass-soft-sheen), var(--liquid-glass-soft-tint);
+  --content-card-shadow:
+    var(--liquid-glass-soft-shadow), var(--liquid-glass-soft-rim);
+  --content-card-backdrop: var(--liquid-glass-soft-backdrop);
 }
 
 html[data-glass="normal"] {

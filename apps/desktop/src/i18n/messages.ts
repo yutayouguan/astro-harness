@@ -233,8 +233,6 @@ export const zh = {
   "loop.exportImage": "导出为图片",
   "loop.exported": "导出成功",
   "loop.notConfigured": "未配置",
-  "loop.fullscreen": "全屏编辑",
-  "loop.exitFullscreen": "退出全屏",
   "loop.history": "运行日志",
   "loop.detailSelect": "选择一个工作流查看详情",
   "loop.searchNodes": "搜索节点…",
@@ -2237,8 +2235,7 @@ export const zh = {
   "prefs.wallpaper.recent": "最近使用",
   "prefs.wallpaper.cycle": "更换壁纸",
   "prefs.wallpaper.aiTitle": "AI 生成壁纸",
-  "prefs.wallpaper.aiSub":
-    "使用模型服务中选定的图片模型，按横向比例生成画面",
+  "prefs.wallpaper.aiSub": "使用模型服务中选定的图片模型，按横向比例生成画面",
   "prefs.wallpaper.prompt": "描述你想要的画面",
   "prefs.wallpaper.promptPlaceholder":
     "例如：宁静的未来山谷，柔和晨雾与紫蓝色天光，画面干净克制",
@@ -2250,8 +2247,7 @@ export const zh = {
   "prefs.wallpaper.failureKeepsCurrent": "失败时保留当前壁纸",
   "prefs.wallpaper.generateAndApply": "生成并应用",
   "prefs.wallpaper.generating": "正在生成壁纸",
-  "prefs.wallpaper.generatingHint":
-    "当前壁纸会一直保留，生成成功后再自动替换",
+  "prefs.wallpaper.generatingHint": "当前壁纸会一直保留，生成成功后再自动替换",
   "prefs.wallpaper.applied": "壁纸已应用",
 
   "prefs.colorStyle.title": "色彩风格",
@@ -3243,8 +3239,6 @@ export const en: Record<MessageKey, string> = {
   "loop.exportImage": "Export as image",
   "loop.exported": "Exported",
   "loop.notConfigured": "not configured",
-  "loop.fullscreen": "Fullscreen",
-  "loop.exitFullscreen": "Exit fullscreen",
   "loop.history": "Run history",
   "loop.detailSelect": "Select a workflow to view details",
   "loop.searchNodes": "Search nodes…",
@@ -5322,13 +5316,15 @@ export const en: Record<MessageKey, string> = {
   "prefs.theme.dark": "Dark",
   "prefs.theme.darkDesc": "Deep purple glass for night use",
   "prefs.theme.auto": "Auto",
-  "prefs.theme.autoDesc": "Match wallpaper brightness, otherwise follow the system",
+  "prefs.theme.autoDesc":
+    "Match wallpaper brightness, otherwise follow the system",
 
   "prefs.wallpaper.title": "Global background",
   "prefs.wallpaper.sub":
     "Wallpaper changes only the backdrop; accent, appearance, and glass remain independent",
   "prefs.wallpaper.colorMode": "Ambient colors",
-  "prefs.wallpaper.colorModeDesc": "Keep colorful, unified, or dynamic palettes",
+  "prefs.wallpaper.colorModeDesc":
+    "Keep colorful, unified, or dynamic palettes",
   "prefs.wallpaper.imageMode": "Image wallpaper",
   "prefs.wallpaper.imageModeDesc": "Upload an image or generate one with AI",
   "prefs.wallpaper.upload": "Upload image",

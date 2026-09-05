@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { toPng } from "html-to-image";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -24,6 +25,7 @@ import {
   type NodeTypes,
   type OnConnect,
   ConnectionLineType,
+  getViewportForBounds,
   Handle,
   Position,
 } from "@xyflow/react";
@@ -38,8 +40,6 @@ import {
 import {
   ChevronDown as ChevronDownData,
   ChevronRight as ChevronRightData,
-  Maximize2 as Maximize2Data,
-  Minimize2 as Minimize2Data,
 } from "lucide";
 import { LOOP_ICON_MAP } from "./loopIcons";
 import type { LoopDto, NodeType, NodeMeta, LoopIconData } from "./loopTypes";
@@ -493,8 +493,6 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  // 工作流编辑是一级工作台，默认占满窗口；用户仍可从“更多”退出全屏。
-  const [fullscreen, setFullscreen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [paletteSearch, setPaletteSearch] = useState("");
   const [contextMenu, setContextMenu] = useState<{
@@ -712,37 +710,64 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
 
   const handleExportImage = useCallback(async () => {
     try {
-      const container = document.querySelector<HTMLElement>(
+      const viewport = editorRef.current?.querySelector<HTMLElement>(
         ".loop-canvas-container .react-flow__viewport",
       );
-      if (!container) {
+      if (!viewport) {
         showToast("画布未就绪", { tone: "error" });
         return;
       }
-      const svgEdges = container
-        .closest(".react-flow")
-        ?.querySelector<SVGElement>("svg.react-flow__edges");
-      if (!svgEdges) {
-        showToast("未找到连线元素", { tone: "error" });
+      const exportNodes = reactFlowInstance.getNodes();
+      if (exportNodes.length === 0) {
+        showToast("画布中没有可导出的节点", { tone: "error" });
         return;
       }
-      const bbox = container.getBoundingClientRect();
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("width", String(bbox.width));
-      svg.setAttribute("height", String(bbox.height));
-      svg.setAttribute("viewBox", `0 0 ${bbox.width} ${bbox.height}`);
-      svg.appendChild(svgEdges.cloneNode(true));
-      const svgStr = new XMLSerializer().serializeToString(svg);
-      const fileName = `workflow-${name || "export"}-${Date.now()}.svg`;
-      const savedPath = await invoke<string>("export_loop_svg", {
+
+      const bounds = reactFlowInstance.getNodesBounds(exportNodes);
+      const imageWidth = Math.min(
+        3200,
+        Math.max(640, Math.ceil(bounds.width + 128)),
+      );
+      const imageHeight = Math.min(
+        2400,
+        Math.max(360, Math.ceil(bounds.height + 128)),
+      );
+      const { x, y, zoom } = getViewportForBounds(
+        bounds,
+        imageWidth,
+        imageHeight,
+        0.1,
+        1.5,
+        0.12,
+      );
+      const rootStyle = getComputedStyle(document.documentElement);
+      const backgroundColor =
+        rootStyle.getPropertyValue("--bg0").trim() || "#ffffff";
+      const dataUrl = await toPng(viewport, {
+        backgroundColor,
+        width: imageWidth,
+        height: imageHeight,
+        canvasWidth: imageWidth * 2,
+        canvasHeight: imageHeight * 2,
+        pixelRatio: 1,
+        cacheBust: true,
+        style: {
+          width: `${imageWidth}px`,
+          height: `${imageHeight}px`,
+          transform: `translate(${x}px, ${y}px) scale(${zoom})`,
+        },
+      });
+      const safeName = (name.trim() || "export").replace(/[\\/:*?"<>|]/g, "-");
+      const fileName = `workflow-${safeName}-${Date.now()}.png`;
+      const savedPath = await invoke<string>("export_loop_png", {
         path: fileName,
-        content: svgStr,
+        dataUrl,
       });
       showToast(`${t("loop.exported")}: ${savedPath}`, { tone: "success" });
     } catch (e) {
       showToast(String(e), { tone: "error" });
     }
-  }, [name, showToast, t]);
+  }, [name, reactFlowInstance, showToast, t]);
 
   // node action callbacks (injected into node data for toolbar buttons)
   const deleteNode = useCallback(
@@ -1222,10 +1247,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   );
 
   return (
-    <div
-      ref={editorRef}
-      className={`loop-editor${fullscreen ? " loop-editor--fullscreen" : ""}`}
-    >
+    <div ref={editorRef} className="loop-editor">
       {/* ── Toolbar ── */}
       <div className="loop-editor-toolbar">
         <div className="loop-editor-toolbar-lead">
@@ -1397,26 +1419,6 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 >
                   <LOOP_ICON_MAP.Keyboard size={15} />
                   <span>{t("loop.shortcuts")}</span>
-                </button>
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    setFullscreen((value) => !value);
-                    setShowMoreMenu(false);
-                  }}
-                >
-                  <MorphToggleIcon
-                    active={fullscreen}
-                    activeIcon={Minimize2Data}
-                    inactiveIcon={Maximize2Data}
-                    size={15}
-                    aria-hidden
-                  />
-                  <span>
-                    {fullscreen
-                      ? t("loop.exitFullscreen")
-                      : t("loop.fullscreen")}
-                  </span>
                 </button>
               </div>
             )}

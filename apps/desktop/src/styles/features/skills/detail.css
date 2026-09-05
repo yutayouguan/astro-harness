@@ -307,7 +307,7 @@ html[data-theme="dark"] .skills-detail-body {
 .tool-card.skill-card {
   overflow: hidden;
   min-height: 244px;
-  border-radius: 16px;
+  border-radius: var(--content-card-radius, 18px);
   padding: 14px;
   border: 1px solid var(--content-card-border, var(--glass-edge));
   background: var(--content-card-background, var(--glass-fill));
