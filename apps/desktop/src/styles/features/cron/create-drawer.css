@@ -90,11 +90,7 @@ html[data-theme="dark"] .cron-create-drawer-head {
   border-radius: 10px;
   color: var(--tone);
   background:
-    linear-gradient(
-      160deg,
-      rgba(255, 255, 255, 0.35),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.39),
@@ -207,11 +203,7 @@ html[data-theme="dark"] .cron-create-drawer-title-icon {
   color: var(--tone);
   border-color: color-mix(in srgb, var(--tone) 34%, var(--chip-border));
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.38),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 62%, transparent);
 }
 
@@ -372,11 +364,7 @@ html[data-theme="dark"] .cron-create-drawer-foot {
   border: 1px solid
     color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.33),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.1)),
     rgba(255, 255, 255, 0.17);
   color: var(--ink);
   font-size: 13px;
@@ -418,11 +406,7 @@ html[data-theme="dark"] .cron-create-drawer-foot {
 html[data-theme="dark"] .cron-dialog-input,
 html[data-theme="dark"] .cron-dialog-textarea {
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     rgba(255, 255, 255, 0.04);
   border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.12));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "test": "node scripts/run-tests.mjs",
     "sync:mcp-catalog": "node scripts/sync-mcp-community-catalog.mjs",
     "build": "tsc -b && vite build",
@@ -59,6 +61,7 @@
     "vgpu": "0.3.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.12",
     "@playwright/test": "^1.62.1",
     "@storybook/react-vite": "^10.5.10",
     "@tauri-apps/cli": "^2",

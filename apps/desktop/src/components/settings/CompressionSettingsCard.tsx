@@ -242,9 +242,11 @@ export default function CompressionSettingsCard({
   const commit = useCallback(
     async (next: CompressionSettingsDto) => {
       setLocalError(null);
-      if (!(
-        next.softRatio < next.mediumRatio && next.mediumRatio < next.hardRatio
-      )) {
+      if (
+        !(
+          next.softRatio < next.mediumRatio && next.mediumRatio < next.hardRatio
+        )
+      ) {
         setLocalError(t("prefs.context.invalidOrder"));
         if (settings) setDraft(settings);
         return;

@@ -171,5 +171,4 @@
   .sidebar {
     border-right-color: color-mix(in srgb, var(--ink) 28%, transparent);
   }
-
 }

@@ -667,11 +667,15 @@ export default function InsightsPanel({
               />
               <KpiCard
                 emphasis={hasUnpriced ? "warning" : "muted"}
-                icon={<AlertTriangle size={16} strokeWidth={2.25} aria-hidden />}
+                icon={
+                  <AlertTriangle size={16} strokeWidth={2.25} aria-hidden />
+                }
                 label={t("insights.kpi.unpriced")}
                 value={String(data.unpriced_llm_events ?? 0)}
                 detail={hasUnpriced ? t("insights.unpriced.hint") : undefined}
-                actionLabel={hasUnpriced ? t("insights.unpriced.action") : undefined}
+                actionLabel={
+                  hasUnpriced ? t("insights.unpriced.action") : undefined
+                }
                 onAction={hasUnpriced ? () => setView("models") : undefined}
               />
             </div>
@@ -947,9 +951,7 @@ export default function InsightsPanel({
                         key={s.bucket}
                         className={`insights-bar-col is-${bucketState}`}
                         title={bucketState === "future" ? undefined : tip}
-                        aria-label={
-                          bucketState === "future" ? undefined : tip
-                        }
+                        aria-label={bucketState === "future" ? undefined : tip}
                         aria-hidden={
                           bucketState === "future" ? true : undefined
                         }
@@ -966,12 +968,11 @@ export default function InsightsPanel({
                             }}
                           />
                         </div>
-                        <span className="insights-bar-label">{bucketLabel}</span>
+                        <span className="insights-bar-label">
+                          {bucketLabel}
+                        </span>
                         {bucketState !== "future" && (
-                          <span
-                            className="insights-bar-tooltip"
-                            role="tooltip"
-                          >
+                          <span className="insights-bar-tooltip" role="tooltip">
                             {tip}
                           </span>
                         )}

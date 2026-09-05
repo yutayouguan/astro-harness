@@ -71,7 +71,10 @@ export function thinkingLevelsFromMeta(
     raw.length > 0
       ? EFFORT_ORDER.filter((e) => raw.includes(e))
       : [...DEFAULT_EFFORTS];
-  if (meta?.persistent_instructions?.trim() && !efforts.includes("persistent")) {
+  if (
+    meta?.persistent_instructions?.trim() &&
+    !efforts.includes("persistent")
+  ) {
     efforts.push("persistent");
   }
   return mandatory ? efforts : (["off", ...efforts] as ThinkingLevel[]);

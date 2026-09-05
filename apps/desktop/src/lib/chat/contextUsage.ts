@@ -26,7 +26,9 @@ export type ContextUsageSegment = {
 };
 
 export type ContextUsageSource =
-  "provider_reported" | "provider_recomputed" | "local_estimate";
+  | "provider_reported"
+  | "provider_recomputed"
+  | "local_estimate";
 
 export type ContextTokenUsage = {
   inputTokens: number;

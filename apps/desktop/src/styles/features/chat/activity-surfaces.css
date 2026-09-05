@@ -498,13 +498,26 @@ html[data-theme="dark"] .composer-shell .chat-scroll-latest {
   gap: 2px;
 }
 
-.turn-change-card-title strong { font-size: 14px; font-weight: 650; }
+.turn-change-card-title strong {
+  font-size: 14px;
+  font-weight: 650;
+}
 .turn-change-card-title b,
-.turn-change-file-list b { color: var(--success); font-weight: 600; }
+.turn-change-file-list b {
+  color: var(--success);
+  font-weight: 600;
+}
 .turn-change-card-title em,
-.turn-change-file-list em { color: var(--danger); font-style: normal; font-weight: 600; }
+.turn-change-file-list em {
+  color: var(--danger);
+  font-style: normal;
+  font-weight: 600;
+}
 .turn-change-card-note,
-.turn-change-undo-hint { color: var(--text-tertiary); font-size: 11px; }
+.turn-change-undo-hint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
 
 .turn-change-review-btn {
   min-height: 32px;
@@ -534,16 +547,58 @@ html[data-theme="dark"] .composer-shell .chat-scroll-latest {
   text-align: left;
 }
 
-.turn-change-file-list > button:hover { background: var(--glass-hover); }
-.turn-change-file-list > button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.turn-change-file-list > button > span:last-child { display: inline-flex; flex: 0 0 auto; gap: 6px; }
-.turn-change-artifact { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 14px; color: var(--text-secondary); font-size: 12px; }
-.turn-change-artifact > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.turn-change-expand { justify-content: flex-start !important; }
-.turn-change-expand svg { transition: transform 160ms ease; }
-.turn-change-expand svg.is-expanded { transform: rotate(180deg); }
-.turn-change-undo-hint { display: inline-flex; align-items: center; gap: 5px; margin: 0 10px 8px; padding: 4px; border: 0; background: transparent; }
-.turn-change-action-error { margin: 0; padding: 0 14px 10px; color: var(--danger); font-size: 11px; }
+.turn-change-file-list > button:hover {
+  background: var(--glass-hover);
+}
+.turn-change-file-list > button > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.turn-change-file-list > button > span:last-child {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+.turn-change-artifact {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.turn-change-artifact > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.turn-change-expand {
+  justify-content: flex-start !important;
+}
+.turn-change-expand svg {
+  transition: transform 160ms ease;
+}
+.turn-change-expand svg.is-expanded {
+  transform: rotate(180deg);
+}
+.turn-change-undo-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 10px 8px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+}
+.turn-change-action-error {
+  margin: 0;
+  padding: 0 14px 10px;
+  color: var(--danger);
+  font-size: 11px;
+}
 
 @media (prefers-reduced-transparency: reduce) {
   .bubble.assistant .msg-reasoning,

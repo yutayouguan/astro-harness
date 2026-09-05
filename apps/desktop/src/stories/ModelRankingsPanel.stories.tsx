@@ -179,7 +179,12 @@ export const EmbeddedInModelMarket: Story = {
           <Grid2x2 size={15} />
           模型目录
         </button>
-        <button type="button" role="tab" aria-selected="true" className="active">
+        <button
+          type="button"
+          role="tab"
+          aria-selected="true"
+          className="active"
+        >
           <BarChart3 size={15} />
           模型情报
         </button>

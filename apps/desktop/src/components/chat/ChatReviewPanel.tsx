@@ -57,9 +57,18 @@ function frozenDiff(file: FileChangeItem): ProjectGitDiff | null {
       tooLarge: true,
     };
   }
-  const beforeLines = before.replace(/\n$/, "").split("\n").filter((_, i) => before.length > 0 || i > 0);
-  const afterLines = after.replace(/\n$/, "").split("\n").filter((_, i) => after.length > 0 || i > 0);
-  const oldPath = file.beforeContent == null ? "/dev/null" : `a/${file.sourcePath ?? file.path}`;
+  const beforeLines = before
+    .replace(/\n$/, "")
+    .split("\n")
+    .filter((_, i) => before.length > 0 || i > 0);
+  const afterLines = after
+    .replace(/\n$/, "")
+    .split("\n")
+    .filter((_, i) => after.length > 0 || i > 0);
+  const oldPath =
+    file.beforeContent == null
+      ? "/dev/null"
+      : `a/${file.sourcePath ?? file.path}`;
   const newPath = file.afterContent == null ? "/dev/null" : `b/${file.path}`;
   const patch = [
     `diff --git a/${file.sourcePath ?? file.path} b/${file.path}`,
@@ -109,7 +118,9 @@ export default function ChatReviewPanel({
     setReview(null);
     setError(null);
     const frozen = selectedFile ? frozenDiff(selectedFile) : null;
-    const request = frozen ? Promise.resolve(frozen) : loadDiff(projectId, selectedPath);
+    const request = frozen
+      ? Promise.resolve(frozen)
+      : loadDiff(projectId, selectedPath);
     request
       .then((next) => {
         if (!active) return;
@@ -202,7 +213,9 @@ export default function ChatReviewPanel({
                 <span>{error}</span>
               </div>
             ) : review?.tooLarge ? (
-              <div className="chat-review-state">本轮冻结差异过大，请在编辑器中查看</div>
+              <div className="chat-review-state">
+                本轮冻结差异过大，请在编辑器中查看
+              </div>
             ) : review?.isBinary ? (
               <div className="chat-review-state">
                 二进制文件无法显示文本差异

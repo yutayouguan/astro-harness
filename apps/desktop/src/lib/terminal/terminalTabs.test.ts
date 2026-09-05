@@ -19,18 +19,22 @@ test("new user terminals honor the configured execution mode", () => {
 
 test("stored layouts are bounded and repaired to one project-scoped AI terminal", () => {
   const originalWindow = globalThis.window;
-  const storedTabs = Array.from({ length: MAX_TERMINAL_TABS + 3 }, (_, index) => ({
-    clientId: index === 1 ? "tab-0" : `tab-${index}`,
-    title: `Stored ${index}`,
-    cwd: "/untrusted/path",
-    executionMode: index === 2 ? "project" : "system",
-    agentDefault: index === 0 || index === 2,
-  }));
+  const storedTabs = Array.from(
+    { length: MAX_TERMINAL_TABS + 3 },
+    (_, index) => ({
+      clientId: index === 1 ? "tab-0" : `tab-${index}`,
+      title: `Stored ${index}`,
+      cwd: "/untrusted/path",
+      executionMode: index === 2 ? "project" : "system",
+      agentDefault: index === 0 || index === 2,
+    }),
+  );
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
       localStorage: {
-        getItem: () => JSON.stringify({ activeClientId: "missing", tabs: storedTabs }),
+        getItem: () =>
+          JSON.stringify({ activeClientId: "missing", tabs: storedTabs }),
       },
     },
   });
@@ -38,7 +42,10 @@ test("stored layouts are bounded and repaired to one project-scoped AI terminal"
   try {
     const layout = readTerminalTabLayout("project", "/workspace", "User", "AI");
     assert.equal(layout.tabs.length, MAX_TERMINAL_TABS);
-    assert.equal(new Set(layout.tabs.map((tab) => tab.clientId)).size, layout.tabs.length);
+    assert.equal(
+      new Set(layout.tabs.map((tab) => tab.clientId)).size,
+      layout.tabs.length,
+    );
     assert.equal(layout.tabs.filter((tab) => tab.agentDefault).length, 1);
     assert.equal(
       layout.tabs.find((tab) => tab.agentDefault)?.executionMode,
@@ -47,7 +54,8 @@ test("stored layouts are bounded and repaired to one project-scoped AI terminal"
     assert.ok(layout.tabs.every((tab) => tab.cwd === "/workspace"));
     assert.equal(layout.activeClientId, layout.tabs[0].clientId);
   } finally {
-    if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
+    if (originalWindow === undefined)
+      delete (globalThis as { window?: Window }).window;
     else globalThis.window = originalWindow;
   }
 });

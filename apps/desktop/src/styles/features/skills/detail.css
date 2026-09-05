@@ -27,11 +27,7 @@
   border: 1px solid var(--chip-border);
   border-radius: 14px;
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.4),
-      rgba(255, 255, 255, 0.12)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--glass-fill) 55%, transparent);
   cursor: pointer;
   text-align: left;
@@ -54,11 +50,7 @@
   letter-spacing: -0.04em;
   color: var(--tone, var(--ink));
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.9),
-      rgba(255, 255, 255, 0.45)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
     color-mix(in srgb, var(--tone-soft, var(--chip-bg)) 75%, transparent);
   border: 1px solid
     color-mix(in srgb, var(--tone, var(--glass-edge)) 22%, transparent);
@@ -73,11 +65,7 @@
 
 html[data-theme="dark"] .skills-detail-item-icon {
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.55));
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
   color: color-mix(in srgb, #fff 28%, var(--tone));
@@ -95,11 +83,7 @@ html[data-theme="dark"] .skills-detail-item-icon {
 .skills-detail-item:hover {
   border-color: color-mix(in srgb, var(--tone) 28%, transparent);
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.5),
-      rgba(255, 255, 255, 0.18)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.18)),
     color-mix(in srgb, var(--tone-soft) 35%, transparent);
 }
 .skills-detail-item.is-selected {
@@ -311,16 +295,9 @@ html[data-theme="dark"] .skills-detail-body {
   padding: 14px;
   border: 1px solid var(--content-card-border, var(--glass-edge));
   background: var(--content-card-background, var(--glass-fill));
-  box-shadow: var(
-    --content-card-shadow,
-    var(--shadow-card),
-    var(--glass-rim)
-  );
+  box-shadow: var(--content-card-shadow, var(--shadow-card), var(--glass-rim));
   backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
-  -webkit-backdrop-filter: var(
-    --content-card-backdrop,
-    var(--backdrop-glass)
-  );
+  -webkit-backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
   transition:
     border-color 0.18s ease,
     background 0.18s ease;
@@ -1145,11 +1122,7 @@ html[data-theme="dark"] .skillhub-badge.is-store {
 html[data-theme="dark"] .skillhub-copy-prompt-btn {
   color: #5eead4;
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.12),
-      rgba(16, 185, 129, 0.14)
-    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(16, 185, 129, 0.14)),
     rgba(255, 255, 255, 0.04);
   border-color: rgba(45, 212, 191, 0.36);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -1650,11 +1623,7 @@ html[data-theme="dark"] .skills-header-search-input:focus {
   font-weight: 600;
   color: var(--ink-mute);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.55),
-      rgba(255, 255, 255, 0.2)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.2)),
     color-mix(
       in srgb,
       var(--glass-fill, rgba(255, 255, 255, 0.4)) 60%,
@@ -1712,11 +1681,7 @@ html[data-theme="dark"] .skills-header-search-input:focus {
 html[data-theme="dark"] .skills-load-more {
   color: color-mix(in srgb, #fff 22%, var(--tone));
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.55));
   border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.1));
   box-shadow:
@@ -1979,11 +1944,7 @@ html[data-theme="dark"] .skills-end-hint {
 .skills-update-filter.active {
   color: var(--tone);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.9),
-      rgba(255, 255, 255, 0.45)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
     var(--tone-soft);
   box-shadow: 0 2px 10px color-mix(in srgb, var(--tone) 12%, transparent);
 }
@@ -2112,11 +2073,7 @@ html[data-theme="dark"] .skills-update-filter.active {
 .skills-action-btn:hover {
   color: var(--tone);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.92),
-      rgba(255, 255, 255, 0.5)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.5)),
     color-mix(in srgb, var(--tone) 10%, transparent);
   box-shadow: 0 4px 12px
     color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.05));
@@ -2142,11 +2099,7 @@ html[data-theme="dark"] .skills-update-filter.active {
 .skills-action-btn.primary {
   color: var(--tone);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.9),
-      rgba(255, 255, 255, 0.45)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
     var(--tone-soft);
   box-shadow: 0 2px 10px
     color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.04));

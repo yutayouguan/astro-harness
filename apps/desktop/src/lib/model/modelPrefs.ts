@@ -248,7 +248,10 @@ export function effortChoicesFromMeta(
     );
   if (raw.length > 0) {
     const efforts = EFFORT_ORDER_FOR_PICKER.filter((e) => raw.includes(e));
-    if (meta?.persistent_instructions?.trim() && !efforts.includes("persistent")) {
+    if (
+      meta?.persistent_instructions?.trim() &&
+      !efforts.includes("persistent")
+    ) {
       efforts.push("persistent");
     }
     return efforts;

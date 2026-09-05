@@ -164,7 +164,7 @@ html[data-theme="dark"] .sidebar-new-chat:hover {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: color-mix(in srgb, var(--ink-mute) 80%, transparent);
   font:
-    600 10px/1.2 system-ui,
+    600 10px / 1.2 system-ui,
     sans-serif;
   letter-spacing: 0;
   text-align: center;

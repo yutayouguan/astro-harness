@@ -27,7 +27,9 @@ export function formatTurnDuration(sec: number, locale: Locale): string {
   if (!Number.isFinite(sec) || sec < 0) return locale === "zh" ? "0秒" : "0s";
   if (sec < 60) {
     const rounded = sec < 10 ? Math.round(sec * 10) / 10 : Math.round(sec);
-    const value = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    const value = Number.isInteger(rounded)
+      ? String(rounded)
+      : rounded.toFixed(1);
     return locale === "zh" ? `${value}秒` : `${value}s`;
   }
 

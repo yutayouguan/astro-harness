@@ -1,5 +1,9 @@
 export type UnifiedDiffLineKind =
-  "context" | "addition" | "deletion" | "hunk" | "meta";
+  | "context"
+  | "addition"
+  | "deletion"
+  | "hunk"
+  | "meta";
 
 export type UnifiedDiffLine = {
   kind: UnifiedDiffLineKind;

@@ -105,8 +105,9 @@ export function WelcomeLogoEffect() {
     let disposeRenderer: (() => void) | undefined;
 
     const initialize = async () => {
-      const { clock, effect, frame, frameLoop, init, surface } =
-        await import("vgpu");
+      const { clock, effect, frame, frameLoop, init, surface } = await import(
+        "vgpu"
+      );
       if (cancelled) return;
 
       const gpu = await init();

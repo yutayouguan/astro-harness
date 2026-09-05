@@ -65,8 +65,7 @@ function normalizeAsset(raw: unknown): WallpaperAsset | null {
     source: value.source,
     width: clamp(value.width, 0, 16_384, 0),
     height: clamp(value.height, 0, 16_384, 0),
-    createdAt:
-      typeof value.createdAt === "string" ? value.createdAt : "",
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : "",
     luminance:
       typeof value.luminance === "number" && Number.isFinite(value.luminance)
         ? Math.min(1, Math.max(0, value.luminance))
@@ -76,7 +75,8 @@ function normalizeAsset(raw: unknown): WallpaperAsset | null {
         ? value.recommendedTheme
         : undefined,
     accentColor:
-      typeof value.accentColor === "string" && /^#[0-9a-f]{6}$/i.test(value.accentColor)
+      typeof value.accentColor === "string" &&
+      /^#[0-9a-f]{6}$/i.test(value.accentColor)
         ? value.accentColor
         : undefined,
     secondaryColor:
@@ -84,8 +84,7 @@ function normalizeAsset(raw: unknown): WallpaperAsset | null {
       /^#[0-9a-f]{6}$/i.test(value.secondaryColor)
         ? value.secondaryColor
         : undefined,
-    provider:
-      typeof value.provider === "string" ? value.provider : undefined,
+    provider: typeof value.provider === "string" ? value.provider : undefined,
     model: typeof value.model === "string" ? value.model : undefined,
   };
 }
@@ -101,7 +100,8 @@ export function normalizeWallpaperPrefs(raw: unknown): WallpaperPrefs {
         .filter((asset): asset is WallpaperAsset => asset !== null)
         .filter(
           (asset, index, assets) =>
-            assets.findIndex((candidate) => candidate.id === asset.id) === index,
+            assets.findIndex((candidate) => candidate.id === asset.id) ===
+            index,
         )
         .slice(0, MAX_RECENT_WALLPAPERS)
     : [];
@@ -130,10 +130,10 @@ export function addRecentWallpaper(
     ...prefs,
     mode: "wallpaper",
     current: asset,
-    recent: [asset, ...prefs.recent.filter((item) => item.id !== asset.id)].slice(
-      0,
-      MAX_RECENT_WALLPAPERS,
-    ),
+    recent: [
+      asset,
+      ...prefs.recent.filter((item) => item.id !== asset.id),
+    ].slice(0, MAX_RECENT_WALLPAPERS),
   };
 }
 
@@ -142,7 +142,8 @@ export function cycleRecentWallpaper(prefs: WallpaperPrefs): WallpaperPrefs {
   const currentIndex = prefs.current
     ? prefs.recent.findIndex((asset) => asset.id === prefs.current?.id)
     : -1;
-  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % prefs.recent.length : 0;
+  const nextIndex =
+    currentIndex >= 0 ? (currentIndex + 1) % prefs.recent.length : 0;
   return {
     ...prefs,
     mode: "wallpaper",

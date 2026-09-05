@@ -14,8 +14,15 @@ type Props = {
   onReview?: (file: FileChangeItem, files: FileChangeItem[]) => void;
 };
 
-export default function TurnChangeSummaryCard({ message, projectId, onReview }: Props) {
-  const summary = useMemo(() => extractTurnFileChangeSummary(message), [message]);
+export default function TurnChangeSummaryCard({
+  message,
+  projectId,
+  onReview,
+}: Props) {
+  const summary = useMemo(
+    () => extractTurnFileChangeSummary(message),
+    [message],
+  );
   const artifacts = useMemo(
     () => [
       ...new Map(
@@ -63,10 +70,11 @@ export default function TurnChangeSummaryCard({ message, projectId, onReview }: 
         status: string;
         appliedPaths: string[];
         conflictedPaths: string[];
-      }>(
-        "apply_turn_file_changes",
-        { projectId, changes: summary.items, revert: !undone },
-      );
+      }>("apply_turn_file_changes", {
+        projectId,
+        changes: summary.items,
+        revert: !undone,
+      });
       if (result.status !== "success") {
         const prefix = result.appliedPaths.length
           ? `已处理 ${result.appliedPaths.length} 个文件；`
@@ -161,9 +169,13 @@ export default function TurnChangeSummaryCard({ message, projectId, onReview }: 
         </button>
       ) : null}
       {artifacts.length > 0 ? (
-        <span className="turn-change-card-note">本地产物随文件变更显示；外部副作用不可撤销</span>
+        <span className="turn-change-card-note">
+          本地产物随文件变更显示；外部副作用不可撤销
+        </span>
       ) : null}
-      {actionError ? <p className="turn-change-action-error">{actionError}</p> : null}
+      {actionError ? (
+        <p className="turn-change-action-error">{actionError}</p>
+      ) : null}
     </section>
   );
 }

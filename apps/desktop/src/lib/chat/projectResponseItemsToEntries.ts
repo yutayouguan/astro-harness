@@ -203,7 +203,8 @@ function projectResponseItems(
     if (!item) continue;
     const metadata = itemMetadata(item);
     const segments = metadata?.astro_timeline_v1 as
-      ChatTimelineSegment[] | undefined;
+      | ChatTimelineSegment[]
+      | undefined;
     const uiSurfaces = metadata?.astro_surfaces_v1 as UiSurface[] | undefined;
     const media = mediaFromMetadata(metadata);
     const fileChanges = fileChangesFromMetadata(metadata);

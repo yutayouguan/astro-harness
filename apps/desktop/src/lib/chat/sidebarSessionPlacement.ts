@@ -1,7 +1,11 @@
 import type { RecentSessionDto } from "../../types";
 
 export type SidebarSessionPlacement =
-  "all" | "pinned" | "project" | "automation" | "recent";
+  | "all"
+  | "pinned"
+  | "project"
+  | "automation"
+  | "recent";
 
 /**
  * Assign every ordinary sidebar session to exactly one visible section.

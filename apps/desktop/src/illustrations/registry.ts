@@ -53,7 +53,14 @@ export type CoverId =
   | "toolkit";
 
 export type CoverTone =
-  "blue" | "purple" | "cyan" | "orange" | "green" | "rose" | "amber" | "indigo";
+  | "blue"
+  | "purple"
+  | "cyan"
+  | "orange"
+  | "green"
+  | "rose"
+  | "amber"
+  | "indigo";
 
 export type CoverMeta = {
   id: CoverId;

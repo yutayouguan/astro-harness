@@ -53,7 +53,7 @@ test("insights selections and cards share one scoped material hierarchy", () => 
   );
   assert.match(
     styles,
-    /:is\(\.insights-view-tab, \.insights-period-tab\)\.ui-segmented-tabs__tab\.is-active/,
+    /:is\(\s*\.insights-view-tab,\s*\.insights-period-tab\s*\)\.ui-segmented-tabs__tab\.is-active/,
   );
   assert.match(
     styles,

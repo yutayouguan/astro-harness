@@ -244,7 +244,7 @@ export function MessageTokenStats({
   const { locale, t } = useI18n();
   const hasUsage = Boolean(
     usage &&
-    (usage.totalTokens || usage.promptTokens || usage.completionTokens),
+      (usage.totalTokens || usage.promptTokens || usage.completionTokens),
   );
   const hasDuration = generationDurationSec != null;
   if (!hasUsage && !hasDuration) return null;
@@ -320,10 +320,7 @@ export function MessageTokenStats({
         {cacheHit != null ? (
           <span>
             {t("chat.tokenCacheHit", {
-              tokens: formatCompactTurnTokens(
-                usage!.cacheReadTokens,
-                locale,
-              ),
+              tokens: formatCompactTurnTokens(usage!.cacheReadTokens, locale),
               pct: String(cacheHit),
             })}
           </span>
@@ -1287,10 +1284,7 @@ export default function ChatView({
 
     const syncComposerOverlayHeight = () => {
       const height = Math.ceil(composer.getBoundingClientRect().height);
-      pane.style.setProperty(
-        "--composer-overlay-height",
-        `${height}px`,
-      );
+      pane.style.setProperty("--composer-overlay-height", `${height}px`);
       onComposerHeightChange?.(height);
     };
 
@@ -1356,7 +1350,7 @@ export default function ChatView({
 
   const assistantHasCustomAvatar = Boolean(
     activeAgent &&
-    (isAgentIconSrc(activeAgent.avatar) || isAgentIconSrc(activeAgent.emoji)),
+      (isAgentIconSrc(activeAgent.avatar) || isAgentIconSrc(activeAgent.emoji)),
   );
 
   useEffect(() => {
@@ -2763,7 +2757,7 @@ export default function ChatView({
             hasAnswer={Boolean(contextMenuMessage.content.trim())}
             hasProcess={Boolean(
               contextMenuMessage.reasoning?.trim() ||
-              contextMenuMessage.activities?.length,
+                contextMenuMessage.activities?.length,
             )}
             canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
             canBranch={!streaming && !turnInFlight && Boolean(onBranchMessage)}
@@ -2989,7 +2983,9 @@ export default function ChatView({
                                 ? projectCanonicalTimelineSegments(m)
                                 : m.segments;
                             const reasoningOutcome:
-                              "done" | "error" | "interrupted" =
+                              | "done"
+                              | "error"
+                              | "interrupted" =
                               m.turnStatus === "error" || m.error
                                 ? "error"
                                 : m.turnStatus === "interrupted"
@@ -3046,8 +3042,8 @@ export default function ChatView({
                                   hasTimelineText = true;
                                   const active = Boolean(
                                     isStreamingBubble &&
-                                    segmentIndex ===
-                                      timelineSegments.length - 1,
+                                      segmentIndex ===
+                                        timelineSegments.length - 1,
                                   );
                                   steps.push({
                                     key: seg.id,
@@ -3125,9 +3121,9 @@ export default function ChatView({
                                 m.segments?.[m.segments.length - 1];
                               const groupedReasoningActive = Boolean(
                                 isStreamingBubble &&
-                                (lastSegment
-                                  ? lastSegment.type === "reasoning"
-                                  : reasoningActive),
+                                  (lastSegment
+                                    ? lastSegment.type === "reasoning"
+                                    : reasoningActive),
                               );
 
                               if (groupedAnswer.reasoning) {

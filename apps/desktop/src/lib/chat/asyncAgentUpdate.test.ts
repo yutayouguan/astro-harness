@@ -70,7 +70,10 @@ test("only the latest unanswered async question group stays interactive", () => 
     asyncQuestions: [{ title: "Latest?" }],
   };
   assert.equal(pendingAsyncQuestionsAt([first, latest], 0), undefined);
-  assert.deepEqual(pendingAsyncQuestionsAt([first, latest], 1), latest.asyncQuestions);
+  assert.deepEqual(
+    pendingAsyncQuestionsAt([first, latest], 1),
+    latest.asyncQuestions,
+  );
   assert.equal(
     pendingAsyncQuestionsAt(
       [latest, { id: "reply", role: "user", content: "answer" }],

@@ -193,22 +193,14 @@ html[data-theme="dark"] .cron-job-list-row {
 .cron-job-detail-item:hover {
   border-color: color-mix(in srgb, var(--tone) 28%, transparent);
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.32),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 35%, transparent);
 }
 
 .cron-job-detail-item.is-selected {
   border-color: color-mix(in srgb, var(--tone) 32%, transparent);
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.3),
-      rgba(255, 255, 255, 0.08)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--tone-soft) 65%, transparent);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 14%, transparent),
@@ -373,11 +365,7 @@ html[data-theme="dark"] .cron-job-detail-task {
   border-radius: 12px;
   border: 1px solid var(--chip-border);
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.22),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--glass-fill) 50%, transparent);
   font-size: 13px;
   color: var(--ink);

@@ -50,7 +50,8 @@ html[data-wallpaper="true"] .terminal-dock {
 }
 
 html[data-wallpaper="true"] .terminal-dock-header {
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 58%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 58%, transparent);
   background: linear-gradient(
     180deg,
     color-mix(in srgb, white 8%, transparent),
@@ -435,7 +436,6 @@ html[data-wallpaper="true"] .terminal-dock-screen .xterm-screen canvas {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-
 }
 
 @media (prefers-contrast: more) {

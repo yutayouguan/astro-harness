@@ -17,7 +17,7 @@ const styles = readFileSync(
 
 test("welcome logo mounts a lazily loaded vgpu material layer", () => {
   assert.match(welcome, /<WelcomeLogoEffect \/>/);
-  assert.match(canvas, /await import\("vgpu"\)/);
+  assert.match(canvas, /await import\(\s*"vgpu"\s*\)/);
   assert.match(canvas, /await ledEffect\.compile\(canvasSurface\)/);
   assert.match(canvas, /dpr: \[1, 2\]/);
   assert.match(canvas, /canvasSurface\.clearColor = \[0, 0, 0, 0\]/);

@@ -126,7 +126,11 @@ import type {
 } from "../../types";
 
 type SkillPreviewCategory =
-  "overview" | "scripts" | "references" | "assets" | "other";
+  | "overview"
+  | "scripts"
+  | "references"
+  | "assets"
+  | "other";
 
 const PREVIEW_TABS: {
   id: SkillPreviewCategory;

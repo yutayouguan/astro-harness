@@ -39,7 +39,13 @@ export default function MsgActivityGroup({
   const interrupted = progress.interrupted > 0;
   const partial = progress.hasPartialOutcome;
   const needsAttention =
-    waiting || running || retrying || failed || declined || interrupted || partial;
+    waiting ||
+    running ||
+    retrying ||
+    failed ||
+    declined ||
+    interrupted ||
+    partial;
   const [open, setOpen] = useState(() => defaultOpen || needsAttention);
 
   useEffect(() => {

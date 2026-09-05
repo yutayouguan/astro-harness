@@ -52,7 +52,10 @@ test("normalization clamps controls and rejects malformed assets", () => {
   assert.equal(prefs.current?.accentColor, "#22c55e");
   assert.equal(prefs.current?.secondaryColor, "#3b82f6");
   assert.equal(prefs.adaptiveColor, true);
-  assert.deepEqual(prefs.recent.map((item) => item.id), ["current"]);
+  assert.deepEqual(
+    prefs.recent.map((item) => item.id),
+    ["current"],
+  );
 });
 
 test("recent wallpapers are deduplicated and bounded", () => {
@@ -63,7 +66,10 @@ test("recent wallpapers are deduplicated and bounded", () => {
   prefs = addRecentWallpaper(prefs, asset("4"));
   assert.equal(prefs.recent.length, MAX_RECENT_WALLPAPERS);
   assert.equal(prefs.recent[0].id, "4");
-  assert.equal(new Set(prefs.recent.map((item) => item.id)).size, prefs.recent.length);
+  assert.equal(
+    new Set(prefs.recent.map((item) => item.id)).size,
+    prefs.recent.length,
+  );
 });
 
 test("stretch uses explicit dimensions while other fits pass through", () => {

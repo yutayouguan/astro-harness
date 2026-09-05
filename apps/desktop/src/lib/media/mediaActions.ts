@@ -12,7 +12,12 @@ import {
 export { parseClipboardLocalPaths };
 
 export type MediaActionKind =
-  "image" | "video" | "audio" | "html" | "code" | "document";
+  | "image"
+  | "video"
+  | "audio"
+  | "html"
+  | "code"
+  | "document";
 
 type FileBase64Dto = {
   mime: string;

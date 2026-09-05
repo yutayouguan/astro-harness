@@ -3,7 +3,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Edit3, FolderOpen, GitBranch, Archive, Pin, X } from "lucide-react";
 
 export type ProjectMenuAction =
-  "pin" | "edit" | "reveal" | "worktree" | "archive" | "remove";
+  | "pin"
+  | "edit"
+  | "reveal"
+  | "worktree"
+  | "archive"
+  | "remove";
 
 type Props = {
   x: number;

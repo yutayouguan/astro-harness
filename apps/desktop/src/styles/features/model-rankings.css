@@ -866,9 +866,7 @@
   text-align: right;
 }
 
-html[data-theme="dark"]
-  .mm-rank-row
-  .model-brand-icon[data-brand="kimi"] {
+html[data-theme="dark"] .mm-rank-row .model-brand-icon[data-brand="kimi"] {
   --mm-model-brand: #e5e7eb;
 }
 

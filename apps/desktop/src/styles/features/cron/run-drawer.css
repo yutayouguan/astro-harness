@@ -18,7 +18,8 @@
 .chat-pane.has-cron-run .message-list {
   padding-top: calc(var(--chat-header-overlay-height, 0px) + 108px);
   scroll-padding-block-start: calc(
-    var(--chat-header-overlay-height, 0px) + 108px
+    var(--chat-header-overlay-height, 0px) +
+    108px
   );
 }
 
@@ -66,11 +67,7 @@
 .chat-cron-run-card:focus-visible {
   border-color: color-mix(in srgb, var(--tone) 34%, var(--glass-edge));
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.3),
-      rgba(255, 255, 255, 0.08)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--tone-soft, transparent) 34%, var(--glass-panel));
   outline: none;
   transform: translateY(-1px);
@@ -421,7 +418,8 @@ html[data-theme="dark"] .cron-job-drawer-action {
   .chat-pane.has-cron-run .message-list {
     padding-top: calc(var(--chat-header-overlay-height, 0px) + 96px);
     scroll-padding-block-start: calc(
-      var(--chat-header-overlay-height, 0px) + 96px
+      var(--chat-header-overlay-height, 0px) +
+      96px
     );
   }
 

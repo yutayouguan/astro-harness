@@ -34,8 +34,7 @@
   --content-card-border: var(--liquid-glass-edge);
   --content-card-background:
     var(--liquid-glass-sheen), var(--liquid-glass-tint);
-  --content-card-shadow:
-    var(--liquid-glass-shadow), var(--liquid-glass-rim);
+  --content-card-shadow: var(--liquid-glass-shadow), var(--liquid-glass-rim);
   --content-card-backdrop: var(--liquid-glass-backdrop);
 }
 

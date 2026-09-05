@@ -144,16 +144,16 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
     browserStyles,
     /\.chat-layout-with-right\.is-browser-expanded[\s\S]*?> \.browser-dock\s*\{[\s\S]*?right:\s*0;[\s\S]*?left:\s*auto;/,
   );
-  assert.match(
-    browserStyles,
-    /\.browser-dock\.is-expanded \.browser-viewport/,
-  );
+  assert.match(browserStyles, /\.browser-dock\.is-expanded \.browser-viewport/);
   assert.match(
     browserStyles,
     /margin-bottom:\s*calc\(var\(--browser-composer-height/,
   );
   assert.match(browserStyles, /--browser-composer-height, 50px\) \+ 18px/);
-  assert.match(browserStyles, /\.browser-native-viewport\s*\{[^}]*inset:\s*0;/s);
+  assert.match(
+    browserStyles,
+    /\.browser-native-viewport\s*\{[^}]*inset:\s*0;/s,
+  );
   assert.doesNotMatch(browserStyles, /\.browser-live-underlay/);
   assert.doesNotMatch(browserStyles, /background:\s*rgb\(255, 255, 255\)/);
   assert.match(browserStyles, /\.browser-empty > svg/);

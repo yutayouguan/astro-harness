@@ -319,14 +319,15 @@ export function useSend(deps: UseSendDeps) {
 
             if (resolved.enableMcpIds.length > 0) {
               try {
-                const servers = await invoke<
-                  {
-                    id: string;
-                    name: string;
-                    enabled: boolean;
-                    [k: string]: unknown;
-                  }[]
-                >("get_mcp_servers");
+                const servers =
+                  await invoke<
+                    {
+                      id: string;
+                      name: string;
+                      enabled: boolean;
+                      [k: string]: unknown;
+                    }[]
+                  >("get_mcp_servers");
                 const want = new Set(resolved.enableMcpIds);
                 const next = (servers ?? []).map((s) =>
                   want.has(s.id) ? { ...s, enabled: true } : s,

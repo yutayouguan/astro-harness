@@ -15,7 +15,10 @@ test("browser tabs render website favicons with a globe fallback", () => {
 
   assert.match(hook, /row\.favicon_url \?\? row\.faviconUrl/);
   assert.match(component, /<BrowserTabIcon tab=\{tab\} \/>/);
-  assert.match(component, /onError=\{\(\) => setFailedUrl\(tab\.faviconUrl\)\}/);
+  assert.match(
+    component,
+    /onError=\{\(\) => setFailedUrl\(tab\.faviconUrl\)\}/,
+  );
   assert.match(component, /browser-tab-favicon-fallback/);
   assert.match(css, /\.browser-tab-favicon/);
 });

@@ -113,10 +113,7 @@ function maxTerminalDockHeight(): number {
   if (typeof window === "undefined") return MAX_TERMINAL_DOCK_HEIGHT;
   return Math.max(
     MIN_TERMINAL_DOCK_HEIGHT,
-    Math.min(
-      MAX_TERMINAL_DOCK_HEIGHT,
-      Math.floor(window.innerHeight * 0.65),
-    ),
+    Math.min(MAX_TERMINAL_DOCK_HEIGHT, Math.floor(window.innerHeight * 0.65)),
   );
 }
 
@@ -132,10 +129,7 @@ function terminalTheme() {
   const read = (name: string, fallback: string) =>
     styles.getPropertyValue(name).trim() || fallback;
   return {
-    background: read(
-      "--terminal-screen-bg",
-      read("--sidebar-bg", "#111318"),
-    ),
+    background: read("--terminal-screen-bg", read("--sidebar-bg", "#111318")),
     foreground: read("--ink", "#e8eaf0"),
     cursor: read("--tone", "#7aa2f7"),
     selectionBackground: read("--tone-soft", "rgba(122, 162, 247, 0.28)"),

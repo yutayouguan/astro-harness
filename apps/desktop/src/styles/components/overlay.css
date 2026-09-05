@@ -56,7 +56,7 @@
   color: var(--color-text, #111827);
   box-shadow:
     0 24px 64px
-      color-mix(in srgb, var(--color-bg-base, #0f172a) 28%, transparent),
+    color-mix(in srgb, var(--color-bg-base, #0f172a) 28%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent);
   backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.24));

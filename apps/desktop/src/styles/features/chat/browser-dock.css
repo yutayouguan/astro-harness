@@ -108,7 +108,9 @@
   .browser-dock.is-expanded
   .browser-viewport {
   margin-bottom: calc(
-    var(--browser-composer-height, 50px) + min(55vh, 480px) + 44px
+    var(--browser-composer-height, 50px) +
+    min(55vh, 480px) +
+    44px
   );
 }
 
@@ -593,10 +595,7 @@
 
 @media (max-width: 840px) {
   .browser-dock {
-    --browser-dock-current-width: min(
-      100%,
-      var(--browser-dock-width, 680px)
-    );
+    --browser-dock-current-width: min(100%, var(--browser-dock-width, 680px));
     position: absolute;
     inset: 0 0 0 auto;
     min-width: 0;

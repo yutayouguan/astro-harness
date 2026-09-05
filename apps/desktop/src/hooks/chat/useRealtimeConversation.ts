@@ -7,7 +7,11 @@ const SEND_FRAME_SAMPLES = 2_400;
 const MAX_QUEUED_AUDIO_FRAMES = 64;
 
 export type RealtimeConversationStatus =
-  "idle" | "connecting" | "active" | "stopping" | "error";
+  | "idle"
+  | "connecting"
+  | "active"
+  | "stopping"
+  | "error";
 
 type RealtimeConversationEvent = {
   sessionId: string;
@@ -332,10 +336,7 @@ export function useRealtimeConversation({
           payload.payload.data && typeof payload.payload.data === "object"
             ? (payload.payload.data as Record<string, unknown>)
             : {};
-        const delta =
-          typeof data.delta === "string"
-            ? data.delta
-            : "";
+        const delta = typeof data.delta === "string" ? data.delta : "";
         if (type === "input_audio_speech_started") {
           void stopPlayback();
         }
@@ -359,9 +360,10 @@ export function useRealtimeConversation({
           setTranscript((current) => current + delta);
         }
         if (type === "error") {
-          const message = typeof payload.payload.data === "string"
-            ? payload.payload.data
-            : "Realtime 会话发生错误";
+          const message =
+            typeof payload.payload.data === "string"
+              ? payload.payload.data
+              : "Realtime 会话发生错误";
           setError(message);
           setStatus("error");
           attemptRef.current += 1;
@@ -526,7 +528,10 @@ export function useRealtimeConversation({
       if (webRtc && answer) {
         const answerSdp = await answer;
         if (attempt !== attemptRef.current) return;
-        await webRtc.peer.setRemoteDescription({ type: "answer", sdp: answerSdp });
+        await webRtc.peer.setRemoteDescription({
+          type: "answer",
+          sdp: answerSdp,
+        });
       } else if (transport === "websocket") {
         const capture = await createCapture(enqueueAudio);
         if (attempt !== attemptRef.current) {

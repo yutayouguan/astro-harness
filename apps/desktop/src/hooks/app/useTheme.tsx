@@ -16,7 +16,11 @@ import {
 
 export type { ResolvedTheme, ThemeMode } from "../../lib/ui/themeResolution";
 export type GlassLevel =
-  "liquid" | "liquid-soft" | "rich" | "normal" | "minimal";
+  | "liquid"
+  | "liquid-soft"
+  | "rich"
+  | "normal"
+  | "minimal";
 
 const GLASS_LEVELS: readonly GlassLevel[] = [
   "liquid",

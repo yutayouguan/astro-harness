@@ -271,11 +271,7 @@ html[data-theme="dark"] .cron-more.is-open .cron-more-btn {
   color: color-mix(in srgb, #fff 14%, var(--tone));
   border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.45));
 }
 

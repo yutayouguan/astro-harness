@@ -611,8 +611,10 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
                 key={category.id}
                 style={
                   {
-                    "--mm-task-category-color":
-                      taskCategoryColor(category.id, index),
+                    "--mm-task-category-color": taskCategoryColor(
+                      category.id,
+                      index,
+                    ),
                     "--mm-task-category-share": Math.max(category.share, 0),
                   } as CSSProperties
                 }
@@ -625,8 +627,10 @@ export default function ModelRankingsPanel({ active }: { active: boolean }) {
                 key={category.id}
                 style={
                   {
-                    "--mm-task-category-color":
-                      taskCategoryColor(category.id, index),
+                    "--mm-task-category-color": taskCategoryColor(
+                      category.id,
+                      index,
+                    ),
                   } as CSSProperties
                 }
               >

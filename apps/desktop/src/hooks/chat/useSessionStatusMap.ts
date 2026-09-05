@@ -4,7 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 import { markSessionUnread } from "../../lib/chat/sessionUnread";
 
 export type SessionRuntimeActiveFlag =
-  "waitingOnApproval" | "waitingOnUserInput";
+  | "waitingOnApproval"
+  | "waitingOnUserInput";
 
 export type SessionRuntimeStatus = {
   status: "idle" | "active" | "systemError";

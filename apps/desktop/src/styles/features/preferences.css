@@ -156,7 +156,7 @@
   background: color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.78));
   box-shadow:
     inset 0 0 0 1px
-      color-mix(in srgb, var(--tone) 30%, rgba(255, 255, 255, 0.42)),
+    color-mix(in srgb, var(--tone) 30%, rgba(255, 255, 255, 0.42)),
     inset 0 1px 0 rgba(255, 255, 255, 0.42),
     0 2px 7px color-mix(in srgb, var(--tone) 11%, transparent);
 }
@@ -184,7 +184,7 @@ html[data-theme="dark"] .morphicon-selection-indicator {
   background: color-mix(in srgb, var(--tone) 22%, rgba(21, 16, 34, 0.92));
   box-shadow:
     inset 0 0 0 1px
-      color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.1)),
+    color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.1)),
     inset 0 1px 0 rgba(255, 255, 255, 0.09),
     0 2px 8px rgba(0, 0, 0, 0.22);
 }
@@ -641,11 +641,7 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   flex-shrink: 0;
   color: var(--tone);
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.35),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   border: 1px solid
     color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.45));
@@ -1332,11 +1328,7 @@ html[data-theme="dark"] .wallpaper-preview-shade {
 .theme-option:hover {
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.35),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 45%, transparent);
 }
 
@@ -1372,22 +1364,14 @@ html[data-theme="dark"] .theme-option {
 html[data-theme="dark"] .theme-option:hover {
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--tone-soft) 40%, rgba(8, 6, 18, 0.45));
 }
 
 html[data-theme="dark"] .theme-option.active {
   border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.48));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent),
@@ -1421,11 +1405,7 @@ html[data-theme="dark"] .theme-option.active {
 
 html[data-theme="dark"] .theme-option-icon {
   background:
-    linear-gradient(
-      160deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.02)
-    ),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
     color-mix(in srgb, var(--tone-soft) 45%, rgba(8, 6, 18, 0.45));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: color-mix(in srgb, #fff 14%, var(--tone));
@@ -1567,11 +1547,7 @@ html[data-theme="dark"] .prefs-toggle-row:hover {
 
 html[data-theme="dark"] .prefs-toggle-icon {
   background:
-    linear-gradient(
-      160deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.02)
-    ),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
     color-mix(in srgb, var(--tone-soft) 45%, rgba(8, 6, 18, 0.45));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: color-mix(in srgb, #fff 14%, var(--tone));
@@ -1712,11 +1688,7 @@ html[data-theme="dark"] .prefs-switch-thumb {
 .prefs-chip.active {
   border-color: color-mix(in srgb, var(--tone) 42%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.2),
-      rgba(255, 255, 255, 0.08)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--tone) 72%, transparent);
   color: #fff;
   box-shadow: 0 4px 12px color-mix(in srgb, var(--tone) 18%, transparent);
@@ -2245,11 +2217,7 @@ html[data-theme="dark"] .prefs-diag-log {
   flex-shrink: 0;
   color: var(--tone);
   background:
-    linear-gradient(
-      160deg,
-      rgba(255, 255, 255, 0.35),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 60%, transparent);
   border: 1px solid
     color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.4));
@@ -2446,11 +2414,7 @@ html[data-theme="dark"] .prefs-context-field--card {
   flex-shrink: 0;
   color: var(--tone);
   background:
-    linear-gradient(
-      160deg,
-      rgba(255, 255, 255, 0.35),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 55%, transparent);
   border: 1px solid
     color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.4));
@@ -2556,11 +2520,7 @@ html[data-theme="dark"] .prefs-context-budget-block {
   place-items: center;
   color: var(--stage-accent);
   background:
-    linear-gradient(
-      160deg,
-      rgba(255, 255, 255, 0.35),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--stage-accent) 16%, transparent);
   border: 1px solid
     color-mix(in srgb, var(--stage-accent) 20%, rgba(255, 255, 255, 0.4));

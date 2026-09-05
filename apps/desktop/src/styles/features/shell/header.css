@@ -67,9 +67,7 @@
 }
 
 .body-row:has(> .sidebar.is-pinned.is-icons) .content-header--chat {
-  padding-inline-start: calc(
-    var(--window-chrome-safe-left) - var(--sidebar-w)
-  );
+  padding-inline-start: calc(var(--window-chrome-safe-left) - var(--sidebar-w));
 }
 
 .body-row:has(> .sidebar.is-pinned.is-labels) .content-header--chat {
@@ -82,8 +80,7 @@
 
 /* Browser drawer owns the right side of the titlebar. Keep the chat title and
    its scrolling underlay out of that live tab region as the drawer resizes. */
-.content-pane--chat:has(.browser-dock.is-open)
-  .content-header--chat::before {
+.content-pane--chat:has(.browser-dock.is-open) .content-header--chat::before {
   right: var(--browser-dock-visible-width);
 }
 
@@ -91,14 +88,8 @@
   .content-header--chat
   .content-heading {
   flex: 0 1 auto;
-  width: max(
-    0px,
-    calc(100% - var(--browser-dock-visible-width) - 20px)
-  );
-  max-width: max(
-    0px,
-    calc(100% - var(--browser-dock-visible-width) - 20px)
-  );
+  width: max(0px, calc(100% - var(--browser-dock-visible-width) - 20px));
+  max-width: max(0px, calc(100% - var(--browser-dock-visible-width) - 20px));
   overflow: hidden;
 }
 
@@ -372,18 +363,10 @@
   );
   box-shadow:
     inset 0 0 0 1px
-      color-mix(
-        in srgb,
-        var(--tone, var(--tone-blue, #2563eb)) 42%,
-        transparent
-      ),
+    color-mix(in srgb, var(--tone, var(--tone-blue, #2563eb)) 42%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.72),
     0 2px 7px
-      color-mix(
-        in srgb,
-        var(--tone, var(--tone-blue, #2563eb)) 18%,
-        transparent
-      );
+    color-mix(in srgb, var(--tone, var(--tone-blue, #2563eb)) 18%, transparent);
 }
 
 .header-icon-btn:active {
@@ -452,11 +435,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   );
   box-shadow:
     inset 0 0 0 1px
-      color-mix(
-        in srgb,
-        var(--tone, var(--tone-blue, #3b82f6)) 48%,
-        transparent
-      ),
+    color-mix(in srgb, var(--tone, var(--tone-blue, #3b82f6)) 48%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     0 2px 8px rgba(0, 0, 0, 0.22);
 }
@@ -1601,12 +1580,7 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
 /* 无页头功能页的工具栏会与窗口拖拽区垂直重叠。
    只提升实际控件，行内空白仍可用于拖动窗口。 */
 .feature-content-inline
-  :is(
-    .cron-toolbar,
-    .loop-toolbar,
-    .loop-editor-toolbar,
-    .plugins-command-bar
-  ) {
+:is(.cron-toolbar, .loop-toolbar, .loop-editor-toolbar, .plugins-command-bar) {
   position: relative;
   z-index: var(--z-window-controls);
   pointer-events: none;

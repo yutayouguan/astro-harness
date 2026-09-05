@@ -254,11 +254,7 @@ html[data-theme="dark"]:is(
 html:is([data-color-style="unified"], [data-color-style="dynamic"])
   .prefs-category-nav {
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.5),
-      rgba(255, 255, 255, 0.16)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)),
     color-mix(in srgb, var(--tone-soft) 40%, var(--glass-panel, transparent));
 }
 

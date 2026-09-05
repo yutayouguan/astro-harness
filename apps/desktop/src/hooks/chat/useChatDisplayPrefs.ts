@@ -119,7 +119,12 @@ function readStored(): ChatDisplayPrefs {
 }
 
 export type ChatActivityKind =
-  "tool" | "skill" | "mcp" | "hook" | "memory" | "status";
+  | "tool"
+  | "skill"
+  | "mcp"
+  | "hook"
+  | "memory"
+  | "status";
 
 export function isActivityVisible(
   kind: ChatActivityKind,

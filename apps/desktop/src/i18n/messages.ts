@@ -994,8 +994,7 @@ export const zh = {
   "agentTools.cron.desc":
     "创建和管理定时任务（cron：add/list/remove/enable/disable）",
   "agentTools.workflow.title": "智能工作流",
-  "agentTools.workflow.desc":
-    "以 workflow 原生命名空间调用已启用的智能工作流",
+  "agentTools.workflow.desc": "以 workflow 原生命名空间调用已启用的智能工作流",
   "subagents.title": "Subagents",
   "subagents.subtitle": "当前会话启动的 Agent Threads",
   "subagents.refresh": "刷新",

@@ -152,11 +152,7 @@ html[data-theme="light"] .bubble.assistant .msg-activity-io {
   border: 1px solid
     color-mix(in srgb, var(--tone, var(--accent)) 12%, rgba(71, 85, 105, 0.18));
   background:
-    linear-gradient(
-      180deg,
-      rgba(71, 85, 105, 0.052),
-      rgba(255, 255, 255, 0.18)
-    ),
+    linear-gradient(180deg, rgba(71, 85, 105, 0.052), rgba(255, 255, 255, 0.18)),
     color-mix(
       in srgb,
       var(--tone-soft, transparent) 18%,

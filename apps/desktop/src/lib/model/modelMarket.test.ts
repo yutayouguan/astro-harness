@@ -77,7 +77,10 @@ test("media capability filters remain distinct", () => {
 
   const inputOnlyAudio = model({ supports_audio_input: true });
   assert.equal(matchesModelMarketFilter(inputOnlyAudio, "speech"), false);
-  assert.equal(matchesModelMarketFilter(inputOnlyAudio, "transcription"), false);
+  assert.equal(
+    matchesModelMarketFilter(inputOnlyAudio, "transcription"),
+    false,
+  );
 });
 
 test("specialized model types hide generation capability filters", () => {

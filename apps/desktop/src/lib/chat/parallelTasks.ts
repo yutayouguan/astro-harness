@@ -6,7 +6,11 @@
 import type { PendingInterrupt } from "../../types";
 
 export type ParallelTaskStatus =
-  "running" | "waiting" | "done" | "error" | "cancelled";
+  | "running"
+  | "waiting"
+  | "done"
+  | "error"
+  | "cancelled";
 
 export type ParallelWorktreeInfo = {
   id: string;

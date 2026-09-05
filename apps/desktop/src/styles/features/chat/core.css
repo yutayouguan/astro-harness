@@ -352,7 +352,7 @@ html[data-theme="dark"] .msg-token-stats {
   box-shadow:
     var(--glass-rim),
     0 6px 16px
-      color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.06));
+    color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.06));
   backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.35));
   -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
@@ -439,7 +439,7 @@ html[data-theme="light"] .msg-actions {
   box-shadow:
     var(--glass-rim),
     0 6px 14px
-      color-mix(in srgb, var(--tone, #2563eb) 8%, rgba(15, 23, 42, 0.05)),
+    color-mix(in srgb, var(--tone, #2563eb) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 

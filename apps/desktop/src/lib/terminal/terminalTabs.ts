@@ -54,15 +54,18 @@ export function defaultTerminalTabs(
 function normalizeTab(value: unknown, projectRoot: string): TerminalTab | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
-  const clientId = typeof input.clientId === "string" ? input.clientId.trim() : "";
+  const clientId =
+    typeof input.clientId === "string" ? input.clientId.trim() : "";
   if (!clientId || clientId.length > 128) return null;
-  const title = typeof input.title === "string" ? input.title.trim().slice(0, 60) : "";
+  const title =
+    typeof input.title === "string" ? input.title.trim().slice(0, 60) : "";
   return {
     clientId,
     title: title || "Terminal",
     cwd: projectRoot,
     executionMode: input.executionMode === "project" ? "project" : "system",
-    agentDefault: input.agentDefault === true && input.executionMode === "project",
+    agentDefault:
+      input.agentDefault === true && input.executionMode === "project",
   };
 }
 
@@ -96,11 +99,15 @@ export function readTerminalTabLayout(
     let claimedAgentDefault = false;
     for (const tab of tabs) {
       tab.agentDefault =
-        !claimedAgentDefault && tab.agentDefault && tab.executionMode === "project";
+        !claimedAgentDefault &&
+        tab.agentDefault &&
+        tab.executionMode === "project";
       claimedAgentDefault ||= tab.agentDefault;
     }
     if (!claimedAgentDefault) {
-      const existingProjectTab = tabs.find((tab) => tab.executionMode === "project");
+      const existingProjectTab = tabs.find(
+        (tab) => tab.executionMode === "project",
+      );
       if (existingProjectTab) {
         existingProjectTab.agentDefault = true;
       } else {
@@ -116,7 +123,9 @@ export function readTerminalTabLayout(
       }
     }
 
-    const activeClientId = tabs.some((tab) => tab.clientId === parsed.activeClientId)
+    const activeClientId = tabs.some(
+      (tab) => tab.clientId === parsed.activeClientId,
+    )
       ? String(parsed.activeClientId)
       : tabs[0].clientId;
     return { tabs, activeClientId };
@@ -125,10 +134,16 @@ export function readTerminalTabLayout(
   }
 }
 
-export function saveTerminalTabLayout(projectId: string, layout: TerminalTabLayout): void {
+export function saveTerminalTabLayout(
+  projectId: string,
+  layout: TerminalTabLayout,
+): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(`${STORAGE_PREFIX}${projectId}`, JSON.stringify(layout));
+    window.localStorage.setItem(
+      `${STORAGE_PREFIX}${projectId}`,
+      JSON.stringify(layout),
+    );
   } catch {
     // Running PTYs remain available even if the WebView cannot persist layout metadata.
   }

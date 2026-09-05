@@ -46,15 +46,28 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   cursorBlink: true,
 };
 
-function finiteNumber(value: unknown, fallback: number, min: number, max: number) {
+function finiteNumber(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+) {
   const number = Number(value);
-  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+  return Number.isFinite(number)
+    ? Math.min(max, Math.max(min, number))
+    : fallback;
 }
 
 export function normalizeTerminalSettings(value: unknown): TerminalSettings {
-  const input = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-  const executionMode = input.executionMode === "project" ? "project" : "system";
-  const cursorStyle = ["block", "underline", "bar"].includes(String(input.cursorStyle))
+  const input =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  const executionMode =
+    input.executionMode === "project" ? "project" : "system";
+  const cursorStyle = ["block", "underline", "bar"].includes(
+    String(input.cursorStyle),
+  )
     ? (input.cursorStyle as TerminalCursorStyle)
     : DEFAULT_TERMINAL_SETTINGS.cursorStyle;
   const fontFamily =
@@ -65,10 +78,25 @@ export function normalizeTerminalSettings(value: unknown): TerminalSettings {
   return {
     executionMode,
     fontFamily,
-    fontSize: finiteNumber(input.fontSize, DEFAULT_TERMINAL_SETTINGS.fontSize, 9, 28),
-    lineHeight: finiteNumber(input.lineHeight, DEFAULT_TERMINAL_SETTINGS.lineHeight, 1, 2),
+    fontSize: finiteNumber(
+      input.fontSize,
+      DEFAULT_TERMINAL_SETTINGS.fontSize,
+      9,
+      28,
+    ),
+    lineHeight: finiteNumber(
+      input.lineHeight,
+      DEFAULT_TERMINAL_SETTINGS.lineHeight,
+      1,
+      2,
+    ),
     scrollback: Math.round(
-      finiteNumber(input.scrollback, DEFAULT_TERMINAL_SETTINGS.scrollback, 500, 50_000),
+      finiteNumber(
+        input.scrollback,
+        DEFAULT_TERMINAL_SETTINGS.scrollback,
+        500,
+        50_000,
+      ),
     ),
     cursorStyle,
     cursorBlink:
@@ -90,16 +118,23 @@ export function readTerminalSettings(): TerminalSettings {
   }
 }
 
-export function saveTerminalSettings(value: TerminalSettings): TerminalSettings {
+export function saveTerminalSettings(
+  value: TerminalSettings,
+): TerminalSettings {
   const next = normalizeTerminalSettings(value);
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.setItem(TERMINAL_SETTINGS_STORAGE_KEY, JSON.stringify(next));
+      window.localStorage.setItem(
+        TERMINAL_SETTINGS_STORAGE_KEY,
+        JSON.stringify(next),
+      );
     } catch {
       // Keep the current UI session usable when WebView storage is unavailable.
     }
     window.dispatchEvent(
-      new CustomEvent<TerminalSettings>(TERMINAL_SETTINGS_EVENT, { detail: next }),
+      new CustomEvent<TerminalSettings>(TERMINAL_SETTINGS_EVENT, {
+        detail: next,
+      }),
     );
   }
   return next;

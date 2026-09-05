@@ -26,7 +26,9 @@ function coerceSchemaValue(value: unknown, schema: unknown): unknown {
 
 export type ElicitationAction = "accept" | "decline" | "cancel";
 
-export function resolveElicitationAction(actionName: string): ElicitationAction {
+export function resolveElicitationAction(
+  actionName: string,
+): ElicitationAction {
   if (actionName === "cancel") return "cancel";
   if (actionName === "deny") return "decline";
   return "accept";
@@ -49,10 +51,7 @@ export function buildElicitationContent(
   return Object.fromEntries(
     Object.entries(raw)
       .filter(([key]) => key !== "value" && key !== "approved")
-      .map(([key, value]) => [
-        key,
-        coerceSchemaValue(value, properties[key]),
-      ]),
+      .map(([key, value]) => [key, coerceSchemaValue(value, properties[key])]),
   );
 }
 

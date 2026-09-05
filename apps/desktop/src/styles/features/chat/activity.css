@@ -905,11 +905,7 @@ html[data-theme="light"] .a2ui-surface {
   padding: 10px 14px;
   border-radius: 12px;
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.45),
-      rgba(255, 255, 255, 0.2)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.2)),
     color-mix(
       in srgb,
       var(--tone-soft, var(--tone-green-soft)) 18%,
@@ -927,11 +923,7 @@ html[data-theme="light"] .a2ui-surface {
 
 .a2ui-clarify-wizard.is-collapsed:hover .a2ui-clarify-collapsed {
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.55),
-      rgba(255, 255, 255, 0.3)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.3)),
     color-mix(
       in srgb,
       var(--tone-soft, var(--tone-green-soft)) 26%,

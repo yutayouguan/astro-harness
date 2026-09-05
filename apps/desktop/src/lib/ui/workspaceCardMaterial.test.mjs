@@ -37,8 +37,9 @@ const welcome = await readFile(
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{(?<body>[\\s\\S]*?)\\}`))
-    ?.groups?.body;
+  return css.match(
+    new RegExp(`(?:^|\\n)${escaped}\\s*\\{(?<body>[\\s\\S]*?)\\}`),
+  )?.groups?.body;
 }
 
 test("workspace template cards share the canonical content material", () => {
@@ -121,8 +122,8 @@ test("content cards keep tone in accents rather than their base fill", () => {
     /--tone|--tone-soft/,
   );
   assert.doesNotMatch(
-    skills.match(/\.tool-card\.skill-card\s*\{(?<body>[\s\S]*?)\n\}/)
-      ?.groups?.body ?? "",
+    skills.match(/\.tool-card\.skill-card\s*\{(?<body>[\s\S]*?)\n\}/)?.groups
+      ?.body ?? "",
     /--skill-tone|--tone-soft/,
   );
   assert.doesNotMatch(

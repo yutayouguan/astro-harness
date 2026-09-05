@@ -42,16 +42,9 @@
   border-radius: var(--content-card-radius, 18px);
   border: 1px solid var(--content-card-border, var(--glass-edge));
   background: var(--content-card-background, var(--glass-fill));
-  box-shadow: var(
-    --content-card-shadow,
-    var(--shadow-card),
-    var(--glass-rim)
-  );
+  box-shadow: var(--content-card-shadow, var(--shadow-card), var(--glass-rim));
   backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
-  -webkit-backdrop-filter: var(
-    --content-card-backdrop,
-    var(--backdrop-glass)
-  );
+  -webkit-backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -176,11 +169,7 @@
 .cron-template-card:hover .cron-template-icon {
   color: var(--tone, #6366f1);
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.38),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft, var(--tone, #6366f1)) 65%, transparent);
   border-color: color-mix(in srgb, var(--tone, #6366f1) 30%, transparent);
 }

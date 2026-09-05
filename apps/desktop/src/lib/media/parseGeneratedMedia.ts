@@ -187,7 +187,8 @@ export function parseGeneratedMedia(
         ) as Array<{
           kind?: string;
           reference?:
-            { WorkspacePath?: string; workspace_path?: string } | string;
+            | { WorkspacePath?: string; workspace_path?: string }
+            | string;
           // serde externally tagged enum serializes as {"workspace_path":"..."}
         }>;
         for (const item of parsed) {
@@ -199,7 +200,9 @@ export function parseGeneratedMedia(
               : null;
           let path = "";
           const ref = item.reference as
-            Record<string, string> | string | undefined;
+            | Record<string, string>
+            | string
+            | undefined;
           if (typeof ref === "string") path = ref;
           else if (ref && typeof ref === "object") {
             path =

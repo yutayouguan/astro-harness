@@ -116,11 +116,11 @@ html[data-theme="dark"] {
     );
   --seg-shell-shadow:
     var(--seg-shell-drop-geo)
-      color-mix(
-        in srgb,
-        var(--tone) var(--seg-shell-drop-tone-amt),
-        var(--seg-shell-drop-base)
-      ),
+    color-mix(
+      in srgb,
+      var(--tone) var(--seg-shell-drop-tone-amt),
+      var(--seg-shell-drop-base)
+    ),
     inset 0 1px 0 var(--seg-shell-rim);
   --seg-item-color-hover: var(--tone);
   --seg-item-bg-hover: color-mix(
@@ -143,8 +143,8 @@ html[data-theme="dark"] {
     );
   --seg-item-shadow-active:
     inset 0 0 0 1px
-      color-mix(in srgb, var(--tone) var(--seg-item-ring-amt), transparent),
+    color-mix(in srgb, var(--tone) var(--seg-item-ring-amt), transparent),
     inset 0 1px 0 var(--seg-item-rim),
     0 2px 8px
-      color-mix(in srgb, var(--tone) var(--seg-item-glow-amt), transparent);
+    color-mix(in srgb, var(--tone) var(--seg-item-glow-amt), transparent);
 }

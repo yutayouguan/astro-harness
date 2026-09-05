@@ -292,11 +292,7 @@ html[data-theme="dark"] .skills-pane {
   color: var(--tone);
   border-color: transparent;
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.95),
-      rgba(255, 255, 255, 0.5)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.5)),
     color-mix(in srgb, var(--tone) 12%, transparent);
   box-shadow: 0 4px 12px
     color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.05));
@@ -306,11 +302,7 @@ html[data-theme="dark"] .skills-pane {
   color: var(--tone);
   border-color: transparent;
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.9),
-      rgba(255, 255, 255, 0.45)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
     var(--tone-soft);
   box-shadow: 0 2px 10px
     color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.04));
@@ -334,11 +326,7 @@ html[data-theme="dark"] .skills-pane {
 .skills-tab-pill.is-on {
   color: var(--tone);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.9),
-      rgba(255, 255, 255, 0.45)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
     var(--tone-soft);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
 }
@@ -379,11 +367,7 @@ html[data-theme="dark"] .skills-tab-pill {
   border-radius: 999px;
   color: var(--tone);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.9),
-      rgba(255, 255, 255, 0.45)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
     var(--tone-soft);
   box-shadow: 0 2px 10px
     color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));
@@ -476,11 +460,7 @@ html[data-theme="dark"] .skills-tab-shell .agent-picker-chip.is-open {
   padding: 6px 10px 6px 12px;
   color: var(--tone);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.9),
-      rgba(255, 255, 255, 0.45)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
     var(--tone-soft);
   box-shadow: 0 2px 10px
     color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));

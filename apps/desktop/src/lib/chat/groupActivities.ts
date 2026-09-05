@@ -12,7 +12,8 @@ export type ConsecutiveActivityGroup<T extends ActivityBearingItem> = {
 };
 
 export type GroupedActivityItem<T extends ActivityBearingItem> =
-  T | ConsecutiveActivityGroup<T>;
+  | T
+  | ConsecutiveActivityGroup<T>;
 
 /** Group only adjacent activity items; narrative/surface items remain hard boundaries. */
 export function groupConsecutiveActivities<T extends ActivityBearingItem>(

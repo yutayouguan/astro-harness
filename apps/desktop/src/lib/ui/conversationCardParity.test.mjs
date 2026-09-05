@@ -30,8 +30,7 @@ test("user and assistant entries share the same outer card surface", async () =>
 
 test("assistant avatars reuse the answer card glass material", async () => {
   const css = await readFile(coreCssUrl, "utf8");
-  const avatar = css.match(/\.avatar\s*\{(?<body>[\s\S]*?)\n\}/)?.groups
-    ?.body;
+  const avatar = css.match(/\.avatar\s*\{(?<body>[\s\S]*?)\n\}/)?.groups?.body;
 
   assert.ok(avatar, "missing assistant avatar styles");
   for (const declaration of [

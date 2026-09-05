@@ -1,5 +1,9 @@
 export type ChatRightDock =
-  "project-files" | "browser" | "side-chat" | "inspector" | "review";
+  | "project-files"
+  | "browser"
+  | "side-chat"
+  | "inspector"
+  | "review";
 
 type ChatRightDockState = {
   projectFilesOpen: boolean;

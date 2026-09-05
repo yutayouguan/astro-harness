@@ -40,7 +40,7 @@
   box-shadow:
     var(--glass-rim),
     0 8px 20px
-      color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.1));
+    color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.1));
   backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.35));
   -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
@@ -453,7 +453,7 @@ html[data-theme="dark"] .media-preview-video {
   box-shadow:
     var(--glass-rim),
     0 8px 20px
-      color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.1));
+    color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.1));
   backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.35));
   -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
@@ -724,7 +724,7 @@ html[data-theme="dark"] .media-preview-modal {
   box-shadow:
     var(--glass-rim),
     0 8px 20px
-      color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.1));
+    color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.1));
   backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
     saturate(var(--glass-saturate, 1.35));
   -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
@@ -1409,7 +1409,7 @@ html[data-theme="dark"] .gen-media-card {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 10px 24px
-      color-mix(in srgb, var(--tone, #a78bfa) 16%, rgba(0, 0, 0, 0.28));
+    color-mix(in srgb, var(--tone, #a78bfa) 16%, rgba(0, 0, 0, 0.28));
 }
 
 html[data-theme="dark"] .gen-media-card-glyph {

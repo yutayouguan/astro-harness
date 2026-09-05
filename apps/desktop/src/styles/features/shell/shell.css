@@ -661,10 +661,9 @@ html[data-theme="light"] .app-shell[data-tone="twilight"] {
 
 /* 统一模式自定义渐变：位置/RGB 由 JS 写入；强度/扩散按色点数与主题自动算（无用户滑块） */
 html[data-theme="dark"]:is(
-    [data-color-style="unified"],
-    [data-color-style="dynamic"]
-  )
-  .app-shell {
+  [data-color-style="unified"],
+  [data-color-style="dynamic"]
+) .app-shell {
   --shell-bg:
     radial-gradient(
       circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
@@ -810,18 +809,18 @@ html[data-theme="light"]:is(
 
 /* 统一色选白：压低渐变强度，保留可读玻璃描边（强调色由 JS 回退 slate） */
 html[data-theme="light"][data-unified-surface="light-neutral"]:is(
-    [data-color-style="unified"],
-    [data-color-style="dynamic"]
-  ) {
+  [data-color-style="unified"],
+  [data-color-style="dynamic"]
+) {
   --glass-edge: color-mix(in srgb, #64748b 16%, rgba(15, 23, 42, 0.1));
   --glass-border: color-mix(in srgb, #64748b 12%, rgba(15, 23, 42, 0.08));
   --header-chip-border: color-mix(in srgb, #64748b 20%, rgba(15, 23, 42, 0.12));
 }
 
 html[data-theme="dark"][data-unified-surface="dark-neutral"]:is(
-    [data-color-style="unified"],
-    [data-color-style="dynamic"]
-  ) {
+  [data-color-style="unified"],
+  [data-color-style="dynamic"]
+) {
   --glass-edge: rgba(255, 255, 255, 0.14);
   --glass-border: rgba(255, 255, 255, 0.11);
   --header-chip-border: rgba(255, 255, 255, 0.16);

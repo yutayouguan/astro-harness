@@ -1324,8 +1324,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   const enabledCount = state?.providers.filter((p) => p.enabled).length ?? 0;
   const total = state?.providers.length ?? 0;
   const isActive = state?.active_provider_id === selected?.id;
-  const isImageActive =
-    state?.active_image_provider_id === selected?.id;
+  const isImageActive = state?.active_image_provider_id === selected?.id;
   const needsKey = selected?.kind !== "ollama";
   const filteredModels = useMemo(() => {
     const q = modelFilter.trim().toLowerCase();

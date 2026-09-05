@@ -68,7 +68,10 @@
 }
 
 .insights-panel
-  :is(.insights-view-tab, .insights-period-tab).ui-segmented-tabs__tab.is-active {
+  :is(
+    .insights-view-tab,
+    .insights-period-tab
+  ).ui-segmented-tabs__tab.is-active {
   color: color-mix(in srgb, var(--tone) 72%, var(--ink));
   background: color-mix(
     in srgb,
@@ -151,7 +154,11 @@
 
 .insights-kpi--primary {
   border-color: color-mix(in srgb, var(--tone) 28%, var(--glass-edge));
-  background: color-mix(in srgb, var(--insights-surface-strong) 94%, var(--tone) 6%);
+  background: color-mix(
+    in srgb,
+    var(--insights-surface-strong) 94%,
+    var(--tone) 6%
+  );
   box-shadow:
     0 2px 8px color-mix(in srgb, var(--tone) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 8%, transparent);
@@ -187,7 +194,11 @@
 }
 
 .insights-kpi--warning {
-  border-color: color-mix(in srgb, var(--insights-warn) 24%, var(--insights-edge));
+  border-color: color-mix(
+    in srgb,
+    var(--insights-warn) 24%,
+    var(--insights-edge)
+  );
 }
 
 .insights-kpi--warning .insights-kpi-icon {
@@ -1455,7 +1466,8 @@ html[data-theme="dark"] .insights-collab-label {
   border-radius: 9px;
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--ink);
-  font: 11.5px/1.5
+  font:
+    11.5px / 1.5
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   white-space: pre-wrap;
   word-break: break-word;

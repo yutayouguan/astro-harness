@@ -39,7 +39,10 @@ test("new projects start with separate user and AI terminals", () => {
 });
 
 test("only the active tab is started eagerly", () => {
-  assert.match(dock, /if \(activeTab && !activeSession && !activeError\) void openTab\(activeTab\)/);
+  assert.match(
+    dock,
+    /if \(activeTab && !activeSession && !activeError\) void openTab\(activeTab\)/,
+  );
   assert.doesNotMatch(dock, /for \(const tab of tabs\)/);
 });
 

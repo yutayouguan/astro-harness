@@ -1888,7 +1888,8 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
               {history.recent.slice(0, 12).map((ev, i) => {
                 const type = String(ev.type ?? "");
                 const meta = ev.search_meta as
-                  Record<string, unknown> | undefined;
+                  | Record<string, unknown>
+                  | undefined;
                 const line =
                   type === "run"
                     ? meta && String(ev.mode ?? "") === "search"

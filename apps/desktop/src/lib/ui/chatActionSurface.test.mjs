@@ -36,11 +36,7 @@ test("hover actions exclude deletion and only the latest user question can be ed
   )?.[0];
 
   assert.ok(messageActions, "missing message action surface");
-  for (const label of [
-    "chat.copy",
-    "chat.editQuestion",
-    "chat.branch",
-  ]) {
+  for (const label of ["chat.copy", "chat.editQuestion", "chat.branch"]) {
     assert.ok(messageActions.includes(`t("${label}")`), label);
   }
   assert.doesNotMatch(messageActions, /onDelete|chat\.delete|Trash2/);
@@ -78,7 +74,10 @@ test("assistant actions do not expose side-effecting regeneration", async () => 
     readFile(chatViewUrl, "utf8"),
     readFile(chatSessionUrl, "utf8"),
     readFile(
-      new URL("../../components/chat/AssistantTurnContextMenu.tsx", import.meta.url),
+      new URL(
+        "../../components/chat/AssistantTurnContextMenu.tsx",
+        import.meta.url,
+      ),
       "utf8",
     ),
   ]);

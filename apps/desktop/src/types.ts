@@ -42,7 +42,11 @@ export type ModelRuntimeProfile = {
 
 /** 聊天附件媒体类型 */
 export type ChatAttachmentKind =
-  "image" | "video" | "audio" | "file" | "folder";
+  | "image"
+  | "video"
+  | "audio"
+  | "file"
+  | "folder";
 
 /** 用户消息附件 */
 export type ChatAttachment = {
@@ -61,7 +65,12 @@ export type ChatAttachment = {
 
 /** 聊天活动条类型 */
 export type ChatActivityKind =
-  "tool" | "skill" | "mcp" | "hook" | "memory" | "status";
+  | "tool"
+  | "skill"
+  | "mcp"
+  | "hook"
+  | "memory"
+  | "status";
 export type ToolExecutionMode = "serial" | "parallel";
 export type ToolFileChange = {
   root?: string;
@@ -84,7 +93,11 @@ export type ChatActivityStatus =
   | "declined"
   | "interrupted";
 export type TurnStatus =
-  "waiting" | "running" | "done" | "error" | "interrupted";
+  | "waiting"
+  | "running"
+  | "done"
+  | "error"
+  | "interrupted";
 
 /** 助手气泡旁的活动记录 */
 export type ChatActivity = {
@@ -885,7 +898,12 @@ export type SkillUpdateRow = {
   skill: InstalledSkill;
   origin: SkillOriginRecord | null;
   status:
-    "no_origin" | "with_origin" | "outdated" | "current" | "unknown" | "error";
+    | "no_origin"
+    | "with_origin"
+    | "outdated"
+    | "current"
+    | "unknown"
+    | "error";
 };
 
 /** 侧栏近期会话 */
@@ -950,7 +968,14 @@ export type ProjectDto = {
 
 /** 产物分类筛选 */
 export type ArtifactCategory =
-  "all" | "doc" | "sheet" | "image" | "av" | "code" | "pdf_ppt" | "other";
+  | "all"
+  | "doc"
+  | "sheet"
+  | "image"
+  | "av"
+  | "code"
+  | "pdf_ppt"
+  | "other";
 
 /** 单条产物记录 */
 export type ArtifactDto = {

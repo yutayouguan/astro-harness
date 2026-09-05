@@ -159,13 +159,7 @@ const ACTIVE_PROJECT_KEY = "astro.activeProjectId";
 
 export default function App() {
   // ── Theme / i18n / prefs ──────────────────────────────────────────────────
-  const {
-    mode,
-    setMode,
-    resolved,
-    setWallpaperTheme,
-    reassert,
-  } = useTheme();
+  const { mode, setMode, resolved, setWallpaperTheme, reassert } = useTheme();
   const {
     colorStyle,
     gradient,
@@ -814,8 +808,8 @@ export default function App() {
   const wallpaperEnabled = Boolean(wallpaperSrc);
   const recommendedWallpaperTheme =
     wallpaperEnabled && wallpaper.prefs.adaptiveColor
-    ? (wallpaper.prefs.current?.recommendedTheme ?? null)
-    : null;
+      ? (wallpaper.prefs.current?.recommendedTheme ?? null)
+      : null;
   useEffect(() => {
     setWallpaperTheme(recommendedWallpaperTheme);
   }, [recommendedWallpaperTheme, setWallpaperTheme]);
@@ -2405,7 +2399,7 @@ export default function App() {
                       realtimeBackendId={activeProvider?.backend_id ?? null}
                       realtimeAvailable={Boolean(
                         activeProvider?.backend_id === "openai" &&
-                        activeProvider.has_api_key,
+                          activeProvider.has_api_key,
                       )}
                       cronProviders={providers.map((provider) => ({
                         id: provider.id,

@@ -13,7 +13,11 @@ import McpIcon from "../icons/McpIcon";
 import { IconMemory, IconSkills, IconTools } from "../icons/NavIcons";
 
 export type MsgTimelineKind =
-  "reasoning" | ChatActivityKind | "surface" | "reply" | "generating";
+  | "reasoning"
+  | ChatActivityKind
+  | "surface"
+  | "reply"
+  | "generating";
 
 type StepProps = {
   kind: MsgTimelineKind;

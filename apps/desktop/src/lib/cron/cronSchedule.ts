@@ -1,8 +1,16 @@
 /** 定时表达式解析与人类可读描述。 */
 export type ScheduleMode =
-  "interval" | "daily" | "weekly" | "weekdays" | "custom";
+  | "interval"
+  | "daily"
+  | "weekly"
+  | "weekdays"
+  | "custom";
 export type CustomFrequency =
-  "hourly" | "daily" | "weekly" | "monthly" | "yearly";
+  | "hourly"
+  | "daily"
+  | "weekly"
+  | "monthly"
+  | "yearly";
 
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun 与 cron 一致
 

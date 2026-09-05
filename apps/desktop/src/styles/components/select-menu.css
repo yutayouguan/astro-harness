@@ -17,11 +17,7 @@
     var(--tone-orange-soft, rgba(245, 158, 11, 0.14))
   );
   --select-glass-fill:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.42),
-      rgba(255, 255, 255, 0.2)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.2)),
     rgba(255, 255, 255, 0.24);
   --select-glass-fill-hover:
     linear-gradient(
@@ -315,11 +311,7 @@
 
 html[data-theme="dark"] .select-menu {
   --select-glass-fill:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     rgba(255, 255, 255, 0.04);
   --select-glass-fill-hover:
     linear-gradient(

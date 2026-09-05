@@ -357,10 +357,7 @@ test("session activity preserves title space and progressively reveals tools", (
     sessionStyles,
     '.sidebar-session-item:is(:hover, :focus-within)\n  .sidebar-session-title[data-scrollable="true"]',
   );
-  const titleMeasure = rule(
-    sessionStyles,
-    ".sidebar-session-title-measure",
-  );
+  const titleMeasure = rule(sessionStyles, ".sidebar-session-title-measure");
 
   assert.match(sessionList, /const showUnread = unread && status === "idle";/);
   assert.match(

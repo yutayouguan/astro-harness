@@ -4,7 +4,11 @@ import { normalizeBrowserFaviconUrl } from "../../lib/browser/browserFavicon";
 import { nextBrowserPreviewRevision } from "../../lib/browser/browserPreviewState";
 
 export type BrowserPreviewStatus =
-  "connecting" | "connected" | "disconnected" | "closed" | "error";
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "closed"
+  | "error";
 
 export type BrowserPreview = {
   sessionId: string;

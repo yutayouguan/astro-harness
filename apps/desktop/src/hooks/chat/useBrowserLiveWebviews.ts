@@ -57,7 +57,12 @@ export function cleanupStaleBrowserLiveWebviews(): Promise<void> {
 }
 
 type LiveWebviewStatus =
-  "unsupported" | "idle" | "creating" | "loading" | "ready" | "error";
+  | "unsupported"
+  | "idle"
+  | "creating"
+  | "loading"
+  | "ready"
+  | "error";
 
 type LivePageEvent = {
   label: string;
@@ -269,7 +274,8 @@ export function useBrowserLiveWebviews({
             // The native WebView is the visible source of truth. Keep its URL
             // pending so a failed headless-browser sync cannot navigate it back.
             if (lastNativeSync === syncKey) lastNativeSync = "";
-            const message = cause instanceof Error ? cause.message : String(cause);
+            const message =
+              cause instanceof Error ? cause.message : String(cause);
             callbacksRef.current.onError(message);
           }
         });

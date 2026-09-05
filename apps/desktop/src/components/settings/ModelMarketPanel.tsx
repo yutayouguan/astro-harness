@@ -305,9 +305,9 @@ function ModelDetailPanel({
     isEmbedding && openRouterProvider?.embedding_model === model.id;
   const embeddingReady = Boolean(
     embeddingConfigured &&
-    openRouterProvider?.enabled &&
-    openRouterProvider.has_api_key &&
-    openRouterProvider.supports_embedding,
+      openRouterProvider?.enabled &&
+      openRouterProvider.has_api_key &&
+      openRouterProvider.supports_embedding,
   );
   const savingThisModel =
     embeddingSave?.modelId === model.id && embeddingSave.status === "saving";

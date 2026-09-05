@@ -61,10 +61,7 @@ test("browser titlebar controls receive pointer input above the drag surface", (
 
 test("native controls and chat titles share one compact titlebar row", () => {
   assert.match(primitives, /--titlebar-control-row-h:\s*34px;/);
-  assert.match(
-    headerStyles,
-    /\.titlebar-sidebar-toggle\s*\{\s*top:\s*6px;/,
-  );
+  assert.match(headerStyles, /\.titlebar-sidebar-toggle\s*\{\s*top:\s*6px;/);
   assert.match(
     headerStyles,
     /\.content-header--chat\s*\{[\s\S]*?min-height:\s*var\(--titlebar-control-row-h\);[\s\S]*?padding:\s*0 16px;[\s\S]*?padding-inline-start:\s*var\(--window-chrome-safe-left\);/,

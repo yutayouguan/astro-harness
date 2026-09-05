@@ -66,13 +66,16 @@ export function useWallpaper(): WallpaperController {
   const [error, setError] = useState<string | null>(null);
   const analysisRequests = useRef(new Set<string>());
 
-  const update = useCallback((recipe: (current: WallpaperPrefs) => WallpaperPrefs) => {
-    setPrefs((current) => {
-      const next = normalizeWallpaperPrefs(recipe(current));
-      persist(next);
-      return next;
-    });
-  }, []);
+  const update = useCallback(
+    (recipe: (current: WallpaperPrefs) => WallpaperPrefs) => {
+      setPrefs((current) => {
+        const next = normalizeWallpaperPrefs(recipe(current));
+        persist(next);
+        return next;
+      });
+    },
+    [],
+  );
 
   const applyAsset = useCallback(
     (asset: WallpaperAsset) => {
@@ -105,7 +108,10 @@ export function useWallpaper(): WallpaperController {
       update((current) => ({ ...current, adaptiveColor })),
     [update],
   );
-  const select = useCallback((asset: WallpaperAsset) => applyAsset(asset), [applyAsset]);
+  const select = useCallback(
+    (asset: WallpaperAsset) => applyAsset(asset),
+    [applyAsset],
+  );
   const cycleRecent = useCallback(() => {
     setError(null);
     update(cycleRecentWallpaper);
@@ -171,7 +177,11 @@ export function useWallpaper(): WallpaperController {
 
   useEffect(() => {
     const asset = prefs.current;
-    if (!asset || asset.recommendedTheme || analysisRequests.current.has(asset.path)) {
+    if (
+      !asset ||
+      asset.recommendedTheme ||
+      analysisRequests.current.has(asset.path)
+    ) {
       return;
     }
     analysisRequests.current.add(asset.path);
@@ -181,7 +191,9 @@ export function useWallpaper(): WallpaperController {
         if (cancelled) return;
         update((current) => {
           const enrich = (candidate: WallpaperAsset) =>
-            candidate.id === asset.id ? { ...candidate, ...analysis } : candidate;
+            candidate.id === asset.id
+              ? { ...candidate, ...analysis }
+              : candidate;
           return {
             ...current,
             current: current.current ? enrich(current.current) : null,

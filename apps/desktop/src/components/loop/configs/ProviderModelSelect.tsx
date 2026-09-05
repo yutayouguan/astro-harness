@@ -28,7 +28,12 @@ interface ProvidersState {
 }
 
 export type MediaType =
-  "chat" | "image" | "video" | "tts" | "music" | "subtitle";
+  | "chat"
+  | "image"
+  | "video"
+  | "tts"
+  | "music"
+  | "subtitle";
 
 function supportsMedia(provider: ProviderDto, mediaType: MediaType): boolean {
   switch (mediaType) {
@@ -117,7 +122,9 @@ export default function ProviderModelSelect({
         setAllProviders(available);
         setActiveId(
           mediaType === "image"
-            ? (state.active_image_provider_id ?? state.active_provider_id ?? null)
+            ? (state.active_image_provider_id ??
+                state.active_provider_id ??
+                null)
             : (state.active_provider_id ?? null),
         );
 

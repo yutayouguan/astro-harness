@@ -45,9 +45,11 @@ export function pendingAsyncQuestionsAt(
 ): AsyncUserInputQuestion[] | undefined {
   const questions = messages[index]?.asyncQuestions;
   if (!questions?.length) return undefined;
-  const supersededOrAnswered = messages.slice(index + 1).some(
-    (message) =>
-      message.role === "user" || Boolean(message.asyncQuestions?.length),
-  );
+  const supersededOrAnswered = messages
+    .slice(index + 1)
+    .some(
+      (message) =>
+        message.role === "user" || Boolean(message.asyncQuestions?.length),
+    );
   return supersededOrAnswered ? undefined : questions;
 }

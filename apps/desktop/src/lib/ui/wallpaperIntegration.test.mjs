@@ -4,7 +4,10 @@ import test from "node:test";
 
 const app = await readFile(new URL("../../App.tsx", import.meta.url), "utf8");
 const panel = await readFile(
-  new URL("../../components/settings/WallpaperSettingsCard.tsx", import.meta.url),
+  new URL(
+    "../../components/settings/WallpaperSettingsCard.tsx",
+    import.meta.url,
+  ),
   "utf8",
 );
 const hook = await readFile(

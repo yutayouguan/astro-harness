@@ -3,8 +3,15 @@
    靠后的 layer 胜出，与选择器特异度无关；同一 layer 内仍按特异度 + 源码顺序。
    顺序一旦声明就固定，后续新增样式只需选 layer，不再依赖「谁最后导入」。
    ═══════════════════════════════════════════════════════════════ */
-@layer vendor, tokens.primitive, tokens.semantic, tokens.component, base, shell, components,
-  features, overrides;
+@layer vendor,
+  tokens.primitive,
+  tokens.semantic,
+  tokens.component,
+  base,
+  shell,
+  components,
+  features,
+  overrides;
 
 /* 第三方：放最底层，功能层无需 !important 就能覆盖 React Flow 默认外观 */
 @import "@xyflow/react/dist/style.css" layer(vendor);

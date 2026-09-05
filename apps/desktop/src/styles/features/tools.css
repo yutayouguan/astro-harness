@@ -228,11 +228,7 @@ html[data-theme="dark"] .agent-tool-call-stat {
   line-height: 1;
   color: var(--tone);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.33),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--tone) 10%, transparent),
@@ -280,11 +276,7 @@ html[data-theme="dark"] .mcp-add-btn {
 html[data-theme="dark"] .mcp-add-btn:hover {
   border-color: color-mix(in srgb, var(--tone) 44%, rgba(255, 255, 255, 0.14));
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--tone-soft) 52%, rgba(8, 6, 18, 0.5));
   color: color-mix(in srgb, #fff 36%, var(--tone));
 }
@@ -307,16 +299,9 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   isolation: isolate;
   border: 1px solid var(--content-card-border, var(--glass-edge));
   background: var(--content-card-background, var(--glass-fill));
-  box-shadow: var(
-    --content-card-shadow,
-    var(--shadow-card),
-    var(--glass-rim)
-  );
+  box-shadow: var(--content-card-shadow, var(--shadow-card), var(--glass-rim));
   backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
-  -webkit-backdrop-filter: var(
-    --content-card-backdrop,
-    var(--backdrop-glass)
-  );
+  -webkit-backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
   transition:
     transform 0.18s ease,
     border-color 0.18s ease,
@@ -941,11 +926,7 @@ html[data-theme="dark"] .mcp-add-drawer-head {
 html[data-theme="dark"] .mcp-add-drawer-title-icon {
   border-color: color-mix(in srgb, var(--tone) 30%, rgba(255, 255, 255, 0.1));
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.02)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
     color-mix(in srgb, var(--tone) 18%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
@@ -1012,11 +993,7 @@ html[data-theme="dark"] .mcp-add-drawer-title-icon {
   border: 1px solid
     color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.4),
-      rgba(255, 255, 255, 0.16)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.16)),
     rgba(255, 255, 255, 0.38);
   color: inherit;
   font-size: 12px;
@@ -1032,11 +1009,7 @@ html[data-theme="dark"] .mcp-add-drawer-title-icon {
 
 html[data-theme="dark"] .mcp-add-drawer-textarea {
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     rgba(255, 255, 255, 0.04);
   border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.12));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -1156,11 +1129,7 @@ html[data-theme="dark"] .mcp-add-drawer-foot {
   border: 1px solid
     color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.4),
-      rgba(255, 255, 255, 0.16)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.16)),
     rgba(255, 255, 255, 0.38);
   color: inherit;
   font-size: 13px;
@@ -1186,11 +1155,7 @@ html[data-theme="dark"] .mcp-add-drawer-foot {
 html[data-theme="dark"] .mcp-field input,
 html[data-theme="dark"] .mcp-field-textarea {
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     rgba(255, 255, 255, 0.04);
   border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.12));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -1390,11 +1355,7 @@ html[data-theme="dark"] .tools-view-toggle {
 
 html[data-theme="dark"] .tools-view-btn.is-active {
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--tone-soft) 60%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
   color: color-mix(in srgb, #fff 18%, var(--tone));
@@ -1612,22 +1573,14 @@ html[data-theme="dark"] .tools-view-btn.is-active {
 .tools-detail-item:hover {
   border-color: color-mix(in srgb, var(--tone) 28%, transparent);
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.32),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 35%, transparent);
 }
 
 .tools-detail-item.is-selected {
   border-color: color-mix(in srgb, var(--tone) 32%, transparent);
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.3),
-      rgba(255, 255, 255, 0.09)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.09)),
     color-mix(in srgb, var(--tone-soft) 65%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 14%, transparent);
 }
@@ -1791,11 +1744,7 @@ html[data-theme="dark"] .tools-view-btn.is-active {
   line-height: 1.55;
   color: var(--ink-soft);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.55),
-      rgba(255, 255, 255, 0.3)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.3)),
     var(--glass-inner, rgba(255, 255, 255, 0.78));
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
@@ -1992,11 +1941,7 @@ html[data-theme="dark"] .tool-lucide-inline {
   padding: 12px 14px;
   border-radius: 14px;
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.55),
-      rgba(255, 255, 255, 0.3)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.3)),
     var(--glass-inner, rgba(255, 255, 255, 0.78));
   border: 1px solid rgba(255, 255, 255, 0.78);
   box-shadow:
@@ -2228,11 +2173,7 @@ html[data-theme="dark"] .tool-lucide-inline {
       rgba(255, 255, 255, 0.55)
     );
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.4),
-      rgba(255, 255, 255, 0.16)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.16)),
     rgba(255, 255, 255, 0.6);
   color: var(--ink);
   font-size: 13px;
@@ -2253,11 +2194,7 @@ html[data-theme="dark"] .tool-lucide-inline {
 
 html[data-theme="dark"] .approvals-add-row input {
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     rgba(255, 255, 255, 0.04);
   border-color: color-mix(
     in srgb,
@@ -2389,11 +2326,7 @@ html[data-theme="dark"] .approvals-hardline .tools-detail-body {
 
 html[data-theme="dark"] .tool-card.agent-tool-card {
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--glass-panel, #1a2238) 80%, transparent);
   border-color: rgba(255, 255, 255, 0.14);
 }

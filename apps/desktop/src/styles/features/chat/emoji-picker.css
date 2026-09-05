@@ -337,11 +337,7 @@ html[data-theme="dark"] .lucide-picker-search {
 
 .lucide-picker-item:hover {
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.42),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, transparent);
   border-color: color-mix(
     in srgb,
@@ -355,11 +351,7 @@ html[data-theme="dark"] .lucide-picker-search {
 
 .lucide-picker-item.is-active {
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.4),
-      rgba(255, 255, 255, 0.08)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--tone, var(--tone-blue)) 16%, transparent);
   border-color: color-mix(
     in srgb,

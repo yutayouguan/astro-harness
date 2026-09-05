@@ -9,11 +9,7 @@
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--chip-border));
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.32),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 28%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.49),
@@ -53,11 +49,7 @@ html[data-theme="dark"] .cron-sched {
   padding: 4px;
   border-radius: 10px;
   background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.35),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--glass-fill) 60%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--chip-border));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
@@ -180,11 +172,7 @@ html[data-theme="dark"] .cron-sched-mode.active {
   border: 1px solid
     color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.33),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.1)),
     rgba(255, 255, 255, 0.17);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.47),
@@ -203,11 +191,7 @@ html[data-theme="dark"] .cron-sched-mode.active {
 html[data-theme="dark"] .cron-sched-field-shell,
 html[data-theme="dark"] .cron-sched-stepper {
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     rgba(255, 255, 255, 0.04);
   border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.12));
   box-shadow:
@@ -467,11 +451,7 @@ html[data-theme="dark"] .cron-sched-input {
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
   background:
-    linear-gradient(
-      160deg,
-      rgba(255, 255, 255, 0.35),
-      rgba(255, 255, 255, 0.1)
-    ),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--glass-fill) 70%, transparent);
   color: var(--ink-mute);
   font-size: 12px;
