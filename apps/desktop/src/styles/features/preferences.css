@@ -442,6 +442,77 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   grid-column: 1 / -1;
 }
 
+.prefs-appearance-preview {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(180px, 0.75fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 16px 18px;
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--settings-panel-border, var(--glass-edge)) 72%,
+      transparent
+    );
+  background: color-mix(in srgb, var(--tone-soft) 9%, transparent);
+}
+
+.prefs-appearance-preview-shell {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  min-height: 112px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-edge));
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--tone-soft) 18%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.prefs-appearance-preview-sidebar {
+  border-right: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  background: color-mix(in srgb, var(--tone-soft) 28%, transparent);
+}
+
+.prefs-appearance-preview-canvas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 8px;
+  padding: 14px;
+}
+
+.prefs-appearance-preview-canvas i,
+.prefs-appearance-preview-canvas b {
+  display: block;
+  min-height: 28px;
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 9px;
+  background: var(--settings-panel-background, var(--glass-fill));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.prefs-appearance-preview-canvas i {
+  grid-column: 1 / -1;
+  min-height: 10px;
+}
+
+.prefs-appearance-preview-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.prefs-appearance-preview-summary span {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-edge));
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--tone-soft) 14%, transparent);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
 .prefs-category-stack--appearance > .morphicon-settings-card,
 .prefs-category-stack--appearance > .prefs-card--app-icon {
   grid-column: auto;
@@ -2460,6 +2531,10 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   .prefs-category-stack--appearance:not([hidden]),
   .prefs-card--conversation-display .prefs-toggle-list,
   .prefs-about-features {
+    grid-template-columns: 1fr;
+  }
+
+  .prefs-appearance-preview {
     grid-template-columns: 1fr;
   }
 

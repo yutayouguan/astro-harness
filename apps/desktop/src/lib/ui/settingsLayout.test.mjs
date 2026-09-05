@@ -52,6 +52,7 @@ test("each preference-backed tab owns one shared glass surface", () => {
 
 test("appearance and conversation use responsive grouped layouts", () => {
   assert.match(preferences, /prefs-category-stack--appearance/);
+  assert.match(preferences, /prefs-appearance-preview/);
   assert.match(preferences, /prefs-card--conversation-display/);
   assert.match(
     preferencesCss,

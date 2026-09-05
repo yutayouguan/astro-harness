@@ -367,6 +367,34 @@ export default function PreferencesPanel({
     },
   ];
 
+  const glassOptions: { id: GlassLevel; label: string; desc: string }[] = [
+    {
+      id: "liquid",
+      label: t("prefs.glass.liquid"),
+      desc: t("prefs.glass.liquidDesc"),
+    },
+    {
+      id: "liquid-soft",
+      label: t("prefs.glass.liquidSoft"),
+      desc: t("prefs.glass.liquidSoftDesc"),
+    },
+    {
+      id: "rich",
+      label: t("prefs.glass.rich"),
+      desc: t("prefs.glass.richDesc"),
+    },
+    {
+      id: "normal",
+      label: t("prefs.glass.normal"),
+      desc: t("prefs.glass.normalDesc"),
+    },
+    {
+      id: "minimal",
+      label: t("prefs.glass.minimal"),
+      desc: t("prefs.glass.minimalDesc"),
+    },
+  ];
+
   const langOptions: {
     id: Locale;
     label: string;
@@ -429,6 +457,15 @@ export default function PreferencesPanel({
   const ModeIcon = themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
   const ColorStyleIcon =
     colorStyleOptions.find((o) => o.id === colorStyle)?.Icon ?? Palette;
+  const activeThemeLabel = themeOptions.find(
+    (option) => option.id === mode,
+  )?.label;
+  const activeGlassLabel = glassOptions.find(
+    (option) => option.id === glassLevel,
+  )?.label;
+  const activeColorStyleLabel = colorStyleOptions.find(
+    (option) => option.id === colorStyle,
+  )?.label;
   const selectedAppIcon = appIcon?.options.find(
     (option) => option.id === appIcon.current,
   );
@@ -544,6 +581,25 @@ export default function PreferencesPanel({
           className="prefs-category-stack prefs-category-stack--appearance"
           hidden={activeCategory !== "appearance"}
         >
+          <div className="prefs-appearance-preview">
+            <div className="prefs-appearance-preview-shell" aria-hidden>
+              <span className="prefs-appearance-preview-sidebar" />
+              <span className="prefs-appearance-preview-canvas">
+                <i />
+                <b />
+                <b />
+              </span>
+            </div>
+            <div
+              className="prefs-appearance-preview-summary"
+              aria-label={t("prefs.category.appearance")}
+            >
+              <span>{activeThemeLabel}</span>
+              <span>{activeGlassLabel}</span>
+              <span>{activeColorStyleLabel}</span>
+            </div>
+          </div>
+
           <section className="prefs-card prefs-card--theme">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
@@ -600,33 +656,7 @@ export default function PreferencesPanel({
               role="radiogroup"
               aria-label={t("prefs.glass.title")}
             >
-              {[
-                {
-                  id: "liquid" as GlassLevel,
-                  label: t("prefs.glass.liquid"),
-                  desc: t("prefs.glass.liquidDesc"),
-                },
-                {
-                  id: "liquid-soft" as GlassLevel,
-                  label: t("prefs.glass.liquidSoft"),
-                  desc: t("prefs.glass.liquidSoftDesc"),
-                },
-                {
-                  id: "rich" as GlassLevel,
-                  label: t("prefs.glass.rich"),
-                  desc: t("prefs.glass.richDesc"),
-                },
-                {
-                  id: "normal" as GlassLevel,
-                  label: t("prefs.glass.normal"),
-                  desc: t("prefs.glass.normalDesc"),
-                },
-                {
-                  id: "minimal" as GlassLevel,
-                  label: t("prefs.glass.minimal"),
-                  desc: t("prefs.glass.minimalDesc"),
-                },
-              ].map(({ id, label, desc }) => (
+              {glassOptions.map(({ id, label, desc }) => (
                 <button
                   key={id}
                   type="button"
