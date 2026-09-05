@@ -1,7 +1,6 @@
 html {
   --terminal-dock-bg: color-mix(in srgb, var(--sidebar-bg) 96%, black 4%);
   --terminal-screen-bg: var(--sidebar-bg);
-  --terminal-screen-edge: transparent;
 }
 
 .terminal-dock {
@@ -33,13 +32,11 @@ html {
 html[data-wallpaper="true"][data-theme="light"] {
   --terminal-dock-bg: rgba(232, 242, 247, 0.42);
   --terminal-screen-bg: rgba(0, 0, 0, 0);
-  --terminal-screen-edge: rgba(255, 255, 255, 0.7);
 }
 
 html[data-wallpaper="true"][data-theme="dark"] {
   --terminal-dock-bg: rgba(7, 10, 18, 0.48);
   --terminal-screen-bg: rgba(0, 0, 0, 0);
-  --terminal-screen-edge: rgba(255, 255, 255, 0.1);
 }
 
 html[data-wallpaper="true"] .terminal-dock {
@@ -68,6 +65,10 @@ html[data-wallpaper="true"] .terminal-dock-screen .xterm-rows,
 html[data-wallpaper="true"] .terminal-dock-screen .xterm-screen canvas {
   background: var(--terminal-screen-bg) !important;
   background-color: var(--terminal-screen-bg) !important;
+}
+
+.chat-layout-with-right:has(.terminal-dock.is-open) {
+  border-radius: 28px 28px 0 0;
 }
 
 .terminal-dock.is-open {
@@ -372,12 +373,10 @@ html[data-wallpaper="true"] .terminal-dock-screen .xterm-screen canvas {
 
 .terminal-dock-screen .xterm {
   overflow: hidden;
-  border: 1px solid var(--terminal-screen-edge);
+  border: 0;
   border-radius: 0;
   background: var(--terminal-screen-bg);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
-    0 8px 24px rgba(var(--shadow-ink), 0.06);
+  box-shadow: none;
 }
 
 .terminal-dock-screen .xterm,
@@ -442,11 +441,9 @@ html[data-wallpaper="true"] .terminal-dock-screen .xterm-screen canvas {
 @media (prefers-contrast: more) {
   html[data-wallpaper="true"][data-theme="light"] {
     --terminal-screen-bg: rgb(255, 255, 255);
-    --terminal-screen-edge: rgba(15, 23, 42, 0.28);
   }
 
   html[data-wallpaper="true"][data-theme="dark"] {
     --terminal-screen-bg: rgb(4, 6, 12);
-    --terminal-screen-edge: rgba(255, 255, 255, 0.26);
   }
 }

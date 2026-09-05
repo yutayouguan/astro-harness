@@ -98,15 +98,19 @@ test("terminal dock configures the xterm 6 custom scrollbar instead of the legac
   assert.doesNotMatch(css, /xterm-viewport::/);
 });
 
-test("terminal content clips all four xterm corners to the inner radius", () => {
+test("terminal content is borderless and keeps all four xterm corners square", () => {
   const css = source("styles/features/chat/terminal-dock.css");
   const outerDock = css.match(/\.terminal-dock\s*\{([\s\S]*?)\}/)?.[1] ?? "";
 
   assert.match(
     css,
-    /\.terminal-dock-screen \.xterm\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border-radius:\s*0;/,
+    /\.terminal-dock-screen \.xterm\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border:\s*0;[\s\S]*?border-radius:\s*0;[\s\S]*?box-shadow:\s*none;/,
   );
   assert.doesNotMatch(outerDock, /border-radius/);
+  assert.match(
+    css,
+    /\.chat-layout-with-right:has\(\.terminal-dock\.is-open\)\s*\{[\s\S]*?border-radius:\s*28px 28px 0 0;/,
+  );
 });
 
 test("terminal uses a denser readable material when wallpaper is active", () => {
