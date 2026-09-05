@@ -122,11 +122,10 @@ test("terminal uses a denser readable material when wallpaper is active", () => 
   assert.match(dock, /activeSession\.id.*wallpaperActive/s);
   assert.match(dock, /"data-wallpaper"/);
   assert.match(css, /html\[data-wallpaper="true"\]\[data-theme="light"\]/);
-  assert.match(
-    css,
-    /--terminal-screen-bg:\s*rgba\(244, 248, 251, 0\.64\)/,
-  );
+  assert.match(css, /--terminal-screen-bg:\s*transparent/);
   assert.match(css, /padding:\s*4px 10px 0 14px/);
+  assert.match(css, /border-bottom-right-radius:\s*0/);
+  assert.match(css, /border-bottom-left-radius:\s*0/);
   assert.match(css, /html\[data-wallpaper="true"\] \.terminal-dock\s*\{/);
   assert.match(css, /backdrop-filter:\s*blur\(/);
   assert.match(css, /prefers-reduced-transparency/);

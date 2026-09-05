@@ -36,13 +36,13 @@ html {
 
 html[data-wallpaper="true"][data-theme="light"] {
   --terminal-dock-bg: rgba(232, 242, 247, 0.42);
-  --terminal-screen-bg: rgba(244, 248, 251, 0.64);
+  --terminal-screen-bg: transparent;
   --terminal-screen-edge: rgba(255, 255, 255, 0.7);
 }
 
 html[data-wallpaper="true"][data-theme="dark"] {
   --terminal-dock-bg: rgba(7, 10, 18, 0.48);
-  --terminal-screen-bg: rgba(8, 11, 20, 0.68);
+  --terminal-screen-bg: transparent;
   --terminal-screen-edge: rgba(255, 255, 255, 0.1);
 }
 
@@ -382,6 +382,14 @@ html[data-wallpaper="true"] .terminal-dock-header {
 .terminal-dock-screen .xterm-screen,
 .terminal-dock-screen .xterm-viewport {
   height: 100%;
+}
+
+.terminal-dock-screen,
+.terminal-dock-screen .xterm,
+.terminal-dock-screen .xterm-screen,
+.terminal-dock-screen .xterm-viewport {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .terminal-dock-screen .xterm-viewport {
