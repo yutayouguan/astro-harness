@@ -269,9 +269,8 @@
   display: flex;
   flex: 1;
   min-height: 0;
-  background: var(--glass-fill-soft);
-  backdrop-filter: var(--backdrop-glass);
-  -webkit-backdrop-filter: var(--backdrop-glass);
+  /* 大面积画布不叠加重度模糊，只保留轻薄染色，避免整屏发灰。 */
+  background: color-mix(in srgb, var(--glass-panel) 18%, transparent);
   overflow: hidden;
 }
 
@@ -330,7 +329,11 @@
 .loop-node-palette {
   width: 208px;
   border-right: 1px solid var(--border);
-  background: var(--glass-panel);
+  background: color-mix(in srgb, var(--glass-panel) 82%, transparent);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
   overflow-y: auto;
   flex-shrink: 0;
   padding: 0 0 10px;

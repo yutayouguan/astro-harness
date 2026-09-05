@@ -28,8 +28,12 @@ test("workflow editor opens as a full-window workspace", () => {
 test("workflow content keeps the wallpaper visible through frosted glass", () => {
   assert.match(
     shell,
-    /\.loop-editor-body\s*\{[\s\S]*?background:\s*var\(--glass-fill-soft\);[\s\S]*?backdrop-filter:\s*var\(--backdrop-glass\);/,
+    /\.loop-editor-body\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--glass-panel\) 18%, transparent\);/,
   );
+  const bodyRule = shell.match(/\.loop-editor-body\s*\{(?<body>[\s\S]*?)\n\}/)
+    ?.groups?.body;
+  assert.ok(bodyRule);
+  assert.doesNotMatch(bodyRule, /backdrop-filter/);
   assert.match(
     shell,
     /\.loop-editor-toolbar\s*\{[\s\S]*?background:\s*var\(--glass-fill-soft\);[\s\S]*?backdrop-filter:\s*var\(--backdrop-glass\);/,
@@ -43,6 +47,12 @@ test("workflow content keeps the wallpaper visible through frosted glass", () =>
 test("workflow image export captures the complete viewport as PNG", () => {
   assert.match(editor, /import \{ toPng \} from "html-to-image";/);
   assert.match(editor, /reactFlowInstance\.getNodesBounds\(exportNodes\)/);
+  assert.match(editor, /prepareEdgeLayerForExport\(/);
+  assert.match(
+    editor,
+    /querySelectorAll<SVGPathElement>\("\.react-flow__edge-path"\)/,
+  );
+  assert.match(editor, /restoreEdgeLayer\(\);/);
   assert.match(editor, /await toPng\(viewport,/);
   assert.match(editor, /invoke<string>\("export_loop_png",/);
   assert.doesNotMatch(editor, /svg\.react-flow__edges|XMLSerializer/);

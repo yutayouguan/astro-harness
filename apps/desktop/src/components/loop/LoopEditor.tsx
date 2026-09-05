@@ -296,6 +296,52 @@ function edgePresentation(sourceHandle?: string | null): Partial<RFEdge> {
   };
 }
 
+/**
+ * React Flow 为每条连线生成一个无显式尺寸的溢出 SVG。WKWebView 可以显示它，
+ * 但 DOM 转图片时会按 0 尺寸裁掉。导出前临时固定连线层尺寸并内联实际 stroke，
+ * 完成后再恢复原始 DOM，避免影响画布交互。
+ */
+function prepareEdgeLayerForExport(
+  viewport: HTMLElement,
+  width: number,
+  height: number,
+): () => void {
+  const edgeLayer = viewport.querySelector<HTMLElement>(".react-flow__edges");
+  if (!edgeLayer) return () => undefined;
+
+  const elements = [
+    edgeLayer,
+    ...edgeLayer.querySelectorAll<SVGSVGElement>("svg"),
+    ...edgeLayer.querySelectorAll<SVGPathElement>(".react-flow__edge-path"),
+  ];
+  const originalStyles = elements.map((element) => element.style.cssText);
+
+  edgeLayer.style.inset = "0";
+  edgeLayer.style.width = `${width}px`;
+  edgeLayer.style.height = `${height}px`;
+  edgeLayer.style.overflow = "visible";
+  edgeLayer.querySelectorAll<SVGSVGElement>("svg").forEach((svg) => {
+    svg.style.inset = "0";
+    svg.style.width = `${width}px`;
+    svg.style.height = `${height}px`;
+    svg.style.overflow = "visible";
+  });
+  edgeLayer
+    .querySelectorAll<SVGPathElement>(".react-flow__edge-path")
+    .forEach((path) => {
+      const style = getComputedStyle(path);
+      path.style.stroke = style.stroke === "none" ? "#94a3b8" : style.stroke;
+      path.style.strokeWidth = style.strokeWidth || "1.5px";
+      path.style.fill = "none";
+    });
+
+  return () => {
+    elements.forEach((element, index) => {
+      element.style.cssText = originalStyles[index];
+    });
+  };
+}
+
 const nodeTypes: NodeTypes = {
   loopNode: LoopNode as unknown as NodeTypes[string],
   branchNode: BranchNode as unknown as NodeTypes[string],
@@ -726,11 +772,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       const bounds = reactFlowInstance.getNodesBounds(exportNodes);
       const imageWidth = Math.min(
         3200,
-        Math.max(640, Math.ceil(bounds.width + 128)),
+        Math.max(560, Math.ceil(bounds.width + 96)),
       );
       const imageHeight = Math.min(
         2400,
-        Math.max(360, Math.ceil(bounds.height + 128)),
+        Math.max(240, Math.ceil(bounds.height + 96)),
       );
       const { x, y, zoom } = getViewportForBounds(
         bounds,
@@ -738,25 +784,35 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         imageHeight,
         0.1,
         1.5,
-        0.12,
+        0.08,
       );
       const rootStyle = getComputedStyle(document.documentElement);
       const backgroundColor =
         rootStyle.getPropertyValue("--bg0").trim() || "#ffffff";
-      const dataUrl = await toPng(viewport, {
-        backgroundColor,
-        width: imageWidth,
-        height: imageHeight,
-        canvasWidth: imageWidth * 2,
-        canvasHeight: imageHeight * 2,
-        pixelRatio: 1,
-        cacheBust: true,
-        style: {
-          width: `${imageWidth}px`,
-          height: `${imageHeight}px`,
-          transform: `translate(${x}px, ${y}px) scale(${zoom})`,
-        },
-      });
+      const restoreEdgeLayer = prepareEdgeLayerForExport(
+        viewport,
+        imageWidth,
+        imageHeight,
+      );
+      let dataUrl: string;
+      try {
+        dataUrl = await toPng(viewport, {
+          backgroundColor,
+          width: imageWidth,
+          height: imageHeight,
+          canvasWidth: imageWidth * 2,
+          canvasHeight: imageHeight * 2,
+          pixelRatio: 1,
+          cacheBust: true,
+          style: {
+            width: `${imageWidth}px`,
+            height: `${imageHeight}px`,
+            transform: `translate(${x}px, ${y}px) scale(${zoom})`,
+          },
+        });
+      } finally {
+        restoreEdgeLayer();
+      }
       const safeName = (name.trim() || "export").replace(/[\\/:*?"<>|]/g, "-");
       const fileName = `workflow-${safeName}-${Date.now()}.png`;
       const savedPath = await invoke<string>("export_loop_png", {
