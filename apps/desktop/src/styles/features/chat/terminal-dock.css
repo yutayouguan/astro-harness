@@ -61,6 +61,15 @@ html[data-wallpaper="true"] .terminal-dock-header {
   );
 }
 
+html[data-wallpaper="true"] .terminal-dock-screen .xterm,
+html[data-wallpaper="true"] .terminal-dock-screen .xterm-screen,
+html[data-wallpaper="true"] .terminal-dock-screen .xterm-viewport,
+html[data-wallpaper="true"] .terminal-dock-screen .xterm-rows,
+html[data-wallpaper="true"] .terminal-dock-screen .xterm-screen canvas {
+  background: var(--terminal-screen-bg) !important;
+  background-color: var(--terminal-screen-bg) !important;
+}
+
 .terminal-dock.is-open {
   flex-basis: var(--terminal-dock-height);
   border-top-width: 0.5px;

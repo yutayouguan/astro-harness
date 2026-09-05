@@ -126,6 +126,11 @@ test("terminal uses a denser readable material when wallpaper is active", () => 
   assert.match(css, /padding:\s*4px 10px 0 14px/);
   assert.match(css, /border-bottom-right-radius:\s*0/);
   assert.match(css, /border-bottom-left-radius:\s*0/);
+  assert.match(css, /\.terminal-dock-screen \.xterm-screen canvas/);
+  assert.match(
+    css,
+    /background-color:\s*var\(--terminal-screen-bg\) !important/,
+  );
   assert.match(css, /html\[data-wallpaper="true"\] \.terminal-dock\s*\{/);
   assert.match(css, /backdrop-filter:\s*blur\(/);
   assert.match(css, /prefers-reduced-transparency/);
