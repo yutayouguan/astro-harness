@@ -14,6 +14,14 @@ const canvas = await readFile(
   new URL("../../styles/features/loop/canvas.css", import.meta.url),
   "utf8",
 );
+const loopCommands = await readFile(
+  new URL("../../../src-tauri/src/commands/loops.rs", import.meta.url),
+  "utf8",
+);
+const tauri = await readFile(
+  new URL("../../../src-tauri/src/lib.rs", import.meta.url),
+  "utf8",
+);
 
 test("workflow editor opens as a full-window workspace", () => {
   assert.doesNotMatch(editor, /fullscreen|exitFullscreen|setFullscreen/);
@@ -44,16 +52,15 @@ test("workflow content keeps the wallpaper visible through frosted glass", () =>
   );
 });
 
-test("workflow image export captures the complete viewport as PNG", () => {
-  assert.match(editor, /import \{ toPng \} from "html-to-image";/);
-  assert.match(editor, /reactFlowInstance\.getNodesBounds\(exportNodes\)/);
-  assert.match(editor, /prepareEdgeLayerForExport\(/);
-  assert.match(
-    editor,
-    /querySelectorAll<SVGPathElement>\("\.react-flow__edge-path"\)/,
-  );
-  assert.match(editor, /restoreEdgeLayer\(\);/);
-  assert.match(editor, /await toPng\(viewport,/);
-  assert.match(editor, /invoke<string>\("export_loop_png",/);
-  assert.doesNotMatch(editor, /svg\.react-flow__edges|XMLSerializer/);
+test("workflow export writes SVG and offers a system-app open action", () => {
+  assert.match(editor, /import \{ buildWorkflowSvg \}/);
+  assert.match(editor, /const svg = buildWorkflowSvg\(/);
+  assert.match(editor, /invoke<string>\("export_loop_svg",/);
+  assert.match(editor, /invoke\("open_loop_export",/);
+  assert.match(editor, /actionLabel: t\("workspace\.menu\.open"\)/);
+  assert.doesNotMatch(editor, /toPng|export_loop_png|data:image\/png/);
+  assert.match(loopCommands, /pub async fn open_loop_export/);
+  assert.doesNotMatch(loopCommands, /export_loop_png|decode_png_data_url/);
+  assert.match(tauri, /commands::loops::open_loop_export/);
+  assert.doesNotMatch(tauri, /commands::loops::export_loop_png/);
 });

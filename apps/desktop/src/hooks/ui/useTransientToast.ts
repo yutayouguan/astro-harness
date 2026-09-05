@@ -1,4 +1,4 @@
-/** 统一短暂 Toast：进度条倒计时 + 可点关闭；支持 tone / 图标。 */
+/** 统一短暂 Toast：进度条倒计时 + 可点关闭；支持 tone、图标和可选操作。 */
 import {
   createElement,
   useCallback,
@@ -16,6 +16,8 @@ import {
 export type ShowToastOptions = {
   sticky?: boolean;
   durationMs?: number;
+  actionLabel?: string;
+  onAction?: () => void | Promise<void>;
   /** 语义色 + 图标；未指定时由 `error` 推断 */
   tone?: ToastTone;
   /** 错误类：更长展示时间；等价于 tone: "error"（若未显式传 tone） */
@@ -39,10 +41,16 @@ export function useTransientToast(): {
   const [sticky, setSticky] = useState(false);
   const [tone, setTone] = useState<ToastTone>("info");
   const [durationMs, setDurationMs] = useState(TOAST_DURATION_MS);
+  const [actionLabel, setActionLabel] = useState<string | undefined>();
+  const [onAction, setOnAction] = useState<
+    (() => void | Promise<void>) | undefined
+  >();
 
   const dismissToast = useCallback(() => {
     setVisible(false);
     setSticky(false);
+    setActionLabel(undefined);
+    setOnAction(undefined);
   }, []);
 
   const showToast = useCallback((msg: string, opts?: ShowToastOptions) => {
@@ -54,6 +62,8 @@ export function useTransientToast(): {
     setMessage(text);
     setSticky(isSticky);
     setTone(nextTone);
+    setActionLabel(opts?.actionLabel);
+    setOnAction(() => opts?.onAction);
     setDurationMs(
       opts?.durationMs ??
         (isSticky || isErrorLike || opts?.error
@@ -72,10 +82,22 @@ export function useTransientToast(): {
         visible,
         sticky,
         tone,
+        actionLabel,
+        onAction,
         durationMs: sticky ? undefined : durationMs,
         onDismiss: dismissToast,
       }),
-    [epoch, message, visible, sticky, tone, durationMs, dismissToast],
+    [
+      epoch,
+      message,
+      visible,
+      sticky,
+      tone,
+      actionLabel,
+      onAction,
+      durationMs,
+      dismissToast,
+    ],
   );
 
   return { showToast, dismissToast, toastHost };

@@ -1,4 +1,4 @@
-/** 轻量 Toast：倒计时环绕进度条后自动消失，可手动点 ×；按 tone 显示图标与配色。 */
+/** 轻量 Toast：倒计时环绕进度条后自动消失，支持关闭和可选操作。 */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
@@ -16,6 +16,8 @@ type Props = {
   durationMs?: number;
   sticky?: boolean;
   tone?: ToastTone;
+  actionLabel?: string;
+  onAction?: () => void | Promise<void>;
   onDismiss: () => void;
 };
 
@@ -133,6 +135,8 @@ export function Toast({
   durationMs = TOAST_DURATION_MS,
   sticky = false,
   tone = "info",
+  actionLabel,
+  onAction,
   onDismiss,
 }: Props) {
   const { t } = useI18n();
@@ -185,6 +189,18 @@ export function Toast({
               <ToneIcon tone={tone} />
             </span>
             <p className="astro-toast-msg">{message}</p>
+            {actionLabel && onAction && (
+              <button
+                type="button"
+                className="astro-toast-action"
+                onClick={() => {
+                  onDismiss();
+                  void onAction();
+                }}
+              >
+                {actionLabel}
+              </button>
+            )}
             <button
               type="button"
               className="astro-toast-close"

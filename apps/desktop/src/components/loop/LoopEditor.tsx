@@ -8,7 +8,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { toPng } from "html-to-image";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -25,7 +24,6 @@ import {
   type NodeTypes,
   type OnConnect,
   ConnectionLineType,
-  getViewportForBounds,
   Handle,
   Position,
 } from "@xyflow/react";
@@ -72,6 +70,7 @@ import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useConfirm } from "../../hooks/ui/DialogContext";
+import { buildWorkflowSvg } from "./loopExportSvg";
 
 interface Props {
   workflowId: string | null;
@@ -293,52 +292,6 @@ function edgePresentation(sourceHandle?: string | null): Partial<RFEdge> {
           labelBgBorderRadius: 6,
         }
       : {}),
-  };
-}
-
-/**
- * React Flow 为每条连线生成一个无显式尺寸的溢出 SVG。WKWebView 可以显示它，
- * 但 DOM 转图片时会按 0 尺寸裁掉。导出前临时固定连线层尺寸并内联实际 stroke，
- * 完成后再恢复原始 DOM，避免影响画布交互。
- */
-function prepareEdgeLayerForExport(
-  viewport: HTMLElement,
-  width: number,
-  height: number,
-): () => void {
-  const edgeLayer = viewport.querySelector<HTMLElement>(".react-flow__edges");
-  if (!edgeLayer) return () => undefined;
-
-  const elements = [
-    edgeLayer,
-    ...edgeLayer.querySelectorAll<SVGSVGElement>("svg"),
-    ...edgeLayer.querySelectorAll<SVGPathElement>(".react-flow__edge-path"),
-  ];
-  const originalStyles = elements.map((element) => element.style.cssText);
-
-  edgeLayer.style.inset = "0";
-  edgeLayer.style.width = `${width}px`;
-  edgeLayer.style.height = `${height}px`;
-  edgeLayer.style.overflow = "visible";
-  edgeLayer.querySelectorAll<SVGSVGElement>("svg").forEach((svg) => {
-    svg.style.inset = "0";
-    svg.style.width = `${width}px`;
-    svg.style.height = `${height}px`;
-    svg.style.overflow = "visible";
-  });
-  edgeLayer
-    .querySelectorAll<SVGPathElement>(".react-flow__edge-path")
-    .forEach((path) => {
-      const style = getComputedStyle(path);
-      path.style.stroke = style.stroke === "none" ? "#94a3b8" : style.stroke;
-      path.style.strokeWidth = style.strokeWidth || "1.5px";
-      path.style.fill = "none";
-    });
-
-  return () => {
-    elements.forEach((element, index) => {
-      element.style.cssText = originalStyles[index];
-    });
   };
 }
 
@@ -756,74 +709,69 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
 
   const handleExportImage = useCallback(async () => {
     try {
-      const viewport = editorRef.current?.querySelector<HTMLElement>(
-        ".loop-canvas-container .react-flow__viewport",
-      );
-      if (!viewport) {
-        showToast("画布未就绪", { tone: "error" });
-        return;
-      }
-      const exportNodes = reactFlowInstance.getNodes();
+      const exportNodes = reactFlowInstance
+        .getNodes()
+        .filter((node) => !node.hidden);
       if (exportNodes.length === 0) {
         showToast("画布中没有可导出的节点", { tone: "error" });
         return;
       }
-
-      const bounds = reactFlowInstance.getNodesBounds(exportNodes);
-      const imageWidth = Math.min(
-        3200,
-        Math.max(560, Math.ceil(bounds.width + 96)),
-      );
-      const imageHeight = Math.min(
-        2400,
-        Math.max(240, Math.ceil(bounds.height + 96)),
-      );
-      const { x, y, zoom } = getViewportForBounds(
-        bounds,
-        imageWidth,
-        imageHeight,
-        0.1,
-        1.5,
-        0.08,
-      );
-      const rootStyle = getComputedStyle(document.documentElement);
-      const backgroundColor =
-        rootStyle.getPropertyValue("--bg0").trim() || "#ffffff";
-      const restoreEdgeLayer = prepareEdgeLayerForExport(
-        viewport,
-        imageWidth,
-        imageHeight,
-      );
-      let dataUrl: string;
-      try {
-        dataUrl = await toPng(viewport, {
-          backgroundColor,
-          width: imageWidth,
-          height: imageHeight,
-          canvasWidth: imageWidth * 2,
-          canvasHeight: imageHeight * 2,
-          pixelRatio: 1,
-          cacheBust: true,
-          style: {
-            width: `${imageWidth}px`,
-            height: `${imageHeight}px`,
-            transform: `translate(${x}px, ${y}px) scale(${zoom})`,
-          },
-        });
-      } finally {
-        restoreEdgeLayer();
-      }
-      const safeName = (name.trim() || "export").replace(/[\\/:*?"<>|]/g, "-");
-      const fileName = `workflow-${safeName}-${Date.now()}.png`;
-      const savedPath = await invoke<string>("export_loop_png", {
-        path: fileName,
-        dataUrl,
+      const exportedIds = new Set(exportNodes.map((node) => node.id));
+      const exportEdges = reactFlowInstance
+        .getEdges()
+        .filter(
+          (edge) =>
+            exportedIds.has(edge.source) && exportedIds.has(edge.target),
+        );
+      const svg = buildWorkflowSvg({
+        title: name,
+        summary: `${exportNodes.length} ${t("loop.statusNodes")} · ${exportEdges.length} ${t("loop.statusEdges")}`,
+        dark: document.documentElement.dataset.theme === "dark",
+        nodes: exportNodes.map((node) => {
+          const data = node.data as unknown as Record<string, unknown>;
+          const meta = data.meta as NodeMeta | undefined;
+          return {
+            id: node.id,
+            x: node.position.x,
+            y: node.position.y,
+            width: node.measured?.width ?? node.width ?? 188,
+            height: node.measured?.height ?? node.height ?? 58,
+            label: String(data.label ?? node.id),
+            subtitle: meta?.labelEn ?? String(data.nodeType ?? "Workflow node"),
+            color: meta?.color ?? "#8b5cf6",
+            disabled: Boolean(data.disabled),
+          };
+        }),
+        edges: exportEdges.map((edge) => ({
+          source: edge.source,
+          target: edge.target,
+          type: edge.type ?? edgeType,
+          label: edge.sourceHandle ?? undefined,
+        })),
       });
-      showToast(`${t("loop.exported")}: ${savedPath}`, { tone: "success" });
+      const safeName = (name.trim() || "export").replace(/[\\/:*?"<>|]/g, "-");
+      const fileName = `workflow-${safeName}-${Date.now()}.svg`;
+      const savedPath = await invoke<string>("export_loop_svg", {
+        path: fileName,
+        content: svg,
+      });
+      showToast(`${t("loop.exported")}: ${fileName}`, {
+        tone: "success",
+        durationMs: 10_000,
+        actionLabel: t("workspace.menu.open"),
+        onAction: () => {
+          void invoke("open_loop_export", { path: savedPath }).catch((error) =>
+            showToast(
+              `${t("workspace.openExternallyFailed")}: ${String(error)}`,
+              { tone: "error" },
+            ),
+          );
+        },
+      });
     } catch (e) {
       showToast(String(e), { tone: "error" });
     }
-  }, [name, reactFlowInstance, showToast, t]);
+  }, [edgeType, name, reactFlowInstance, showToast, t]);
 
   // node action callbacks (injected into node data for toolbar buttons)
   const deleteNode = useCallback(

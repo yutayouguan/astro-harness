@@ -1,4 +1,3 @@
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 use workflow::engine::WorkflowRunResult;
 use workflow::model::{NewWorkflow, NodeType, Position, Workflow, WorkflowEdge, WorkflowNode};
@@ -308,38 +307,51 @@ pub async fn export_loop_svg(path: String, content: String) -> Result<String, St
     Ok(final_path.to_string_lossy().to_string())
 }
 
-fn decode_png_data_url(data_url: &str) -> Result<Vec<u8>, String> {
-    const PREFIX: &str = "data:image/png;base64,";
-    let encoded = data_url
-        .strip_prefix(PREFIX)
-        .ok_or_else(|| "导出数据不是 PNG 图片".to_string())?;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
-        .map_err(|e| format!("PNG 数据解码失败: {e}"))?;
-    if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Err("导出数据缺少 PNG 文件头".into());
-    }
-    Ok(bytes)
-}
-
 #[tauri::command]
-pub async fn export_loop_png(path: String, data_url: String) -> Result<String, String> {
-    let p = std::path::Path::new(&path);
-    let final_path = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        let desktop = home::user_home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("Desktop");
-        std::fs::create_dir_all(&desktop).ok();
-        desktop.join(&path)
-    };
-    if let Some(parent) = final_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+pub async fn open_loop_export(path: String) -> Result<(), String> {
+    let desktop = home::user_home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("Desktop");
+    let canonical_desktop = desktop.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_path = std::path::PathBuf::from(path)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    if !canonical_path.starts_with(&canonical_desktop)
+        || canonical_path.extension().and_then(|ext| ext.to_str()) != Some("svg")
+    {
+        return Err("只能打开桌面目录中的 SVG 导出文件".into());
     }
-    let png = decode_png_data_url(&data_url)?;
-    std::fs::write(&final_path, png).map_err(|e| e.to_string())?;
-    Ok(final_path.to_string_lossy().to_string())
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&canonical_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", ""])
+            .arg(&canonical_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&canonical_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+    {
+        let _ = canonical_path;
+        Err("当前平台不支持用系统应用打开文件".into())
+    }
 }
 
 #[tauri::command]
@@ -591,21 +603,4 @@ pub async fn loop_ai_polish(
     workflow::nodes::ai::one_shot_llm(provider_cfg.kind.backend_id(), &config, &system, &user_msg)
         .await
         .map_err(|e| format!("AI 润色失败: {e}"))
-}
-
-#[cfg(test)]
-mod export_tests {
-    use super::decode_png_data_url;
-
-    #[test]
-    fn decodes_png_data_url_and_rejects_wrong_payloads() {
-        let png = decode_png_data_url(
-            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-        )
-        .expect("valid PNG data URL");
-        assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
-
-        assert!(decode_png_data_url("data:image/jpeg;base64,AAAA").is_err());
-        assert!(decode_png_data_url("data:image/png;base64,bm90IGEgcG5n").is_err());
-    }
 }
