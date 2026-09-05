@@ -6,7 +6,10 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   border-radius: 12px;
+  background: transparent;
   overflow: hidden;
 }
 
@@ -15,23 +18,28 @@
   inset: 0;
   z-index: 9999;
   border-radius: 0;
-  background: var(--bg0, #fff);
+}
+
+/* 编辑器默认作为全窗工作台，移除功能页外层预留的四周留白。 */
+.page-body--bare:has(.loop-editor--fullscreen) {
+  --page-body-inline-padding: 0px;
+  padding: 0;
 }
 
 .loop-editor-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 14px;
+  padding: 0 16px;
   height: 52px;
-  border-bottom: 1px solid var(--border);
-  background: var(--glass-panel);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 82%, transparent);
+  background: var(--glass-fill-soft);
+  box-shadow: var(--glass-rim);
+  backdrop-filter: var(--backdrop-glass);
+  -webkit-backdrop-filter: var(--backdrop-glass);
   flex-shrink: 0;
   overflow: visible;
-}
-.loop-editor--fullscreen .loop-editor-toolbar {
-  padding-top: 28px;
-  height: 64px;
 }
 
 /* 工具栏按钮统一高度 + hover */
@@ -264,6 +272,10 @@
   position: relative;
   display: flex;
   flex: 1;
+  min-height: 0;
+  background: var(--glass-fill-soft);
+  backdrop-filter: var(--backdrop-glass);
+  -webkit-backdrop-filter: var(--backdrop-glass);
   overflow: hidden;
 }
 

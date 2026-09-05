@@ -10,8 +10,9 @@
 
 /* React Flow 样式覆盖 */
 .loop-canvas-container .react-flow__background {
-  background: color-mix(in srgb, var(--bg0) 92%, var(--surface, transparent));
-  opacity: 0.72;
+  /* 画布只保留点阵，透出 editor body 的毛玻璃材质。 */
+  background: transparent;
+  opacity: 0.58;
 }
 .loop-canvas-container .react-flow__controls {
   border-radius: 10px;

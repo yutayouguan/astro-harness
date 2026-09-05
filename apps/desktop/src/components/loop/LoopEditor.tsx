@@ -493,7 +493,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
+  // 工作流编辑是一级工作台，默认占满窗口；用户仍可从“更多”退出全屏。
+  const [fullscreen, setFullscreen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [paletteSearch, setPaletteSearch] = useState("");
   const [contextMenu, setContextMenu] = useState<{
