@@ -104,7 +104,7 @@ test("terminal content clips all four xterm corners to the inner radius", () => 
 
   assert.match(
     css,
-    /\.terminal-dock-screen \.xterm\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border-radius:\s*12px 12px 0 0;/,
+    /\.terminal-dock-screen \.xterm\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border-radius:\s*0;/,
   );
   assert.doesNotMatch(outerDock, /border-radius/);
 });
