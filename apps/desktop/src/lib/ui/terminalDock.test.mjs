@@ -122,7 +122,7 @@ test("terminal uses a denser readable material when wallpaper is active", () => 
   assert.match(dock, /activeSession\.id.*wallpaperActive/s);
   assert.match(dock, /"data-wallpaper"/);
   assert.match(css, /html\[data-wallpaper="true"\]\[data-theme="light"\]/);
-  assert.match(css, /--terminal-screen-bg:\s*transparent/);
+  assert.match(css, /--terminal-screen-bg:\s*rgba\(0, 0, 0, 0\)/);
   assert.match(css, /padding:\s*4px 10px 0 14px/);
   assert.match(css, /border-bottom-right-radius:\s*0/);
   assert.match(css, /border-bottom-left-radius:\s*0/);
@@ -130,4 +130,19 @@ test("terminal uses a denser readable material when wallpaper is active", () => 
   assert.match(css, /backdrop-filter:\s*blur\(/);
   assert.match(css, /prefers-reduced-transparency/);
   assert.match(css, /prefers-contrast:\s*more/);
+});
+
+test("terminal opens and closes as one bottom drawer without competing size animations", () => {
+  const css = source("styles/features/chat/terminal-dock.css");
+  const closed = css.match(/\.terminal-dock\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+  const opened =
+    css.match(/\.terminal-dock\.is-open\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+
+  assert.match(closed, /flex:\s*0 0 0/);
+  assert.match(closed, /transform:\s*translateY\(44px\)/);
+  assert.match(closed, /flex-basis 300ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/);
+  assert.doesNotMatch(closed, /scale\(/);
+  assert.doesNotMatch(closed, /height 300ms|min-height 300ms|max-height 300ms/);
+  assert.match(opened, /flex-basis:\s*var\(--terminal-dock-height\)/);
+  assert.match(opened, /transform:\s*translateY\(0\)/);
 });
