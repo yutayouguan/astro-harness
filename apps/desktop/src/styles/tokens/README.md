@@ -27,6 +27,16 @@ idempotent and will convert anything that regressed.
 container enables one strength locally. `Design/Liquid Glass` in Storybook uses that to
 render the strengths side by side.
 
+## Content card material
+
+`component/glass.css` maps the active glass recipe onto the canonical
+`--content-card-*` contract: radius, border, background, shadow, and backdrop. Primary
+cards in Settings, Cron templates, workflow templates, Skills/MCP, and ChatWelcome use
+this contract so feature colors remain accents rather than competing base materials.
+Small controls and nested rows intentionally keep lighter component-specific surfaces;
+do not apply the content-card recipe recursively. Accessibility overrides replace the
+background with the semantic panel surface and disable backdrop blur.
+
 `foundation/themes.css` and `foundation/tones.css` are deprecated barrels for legacy external entry points. The application does not import them, preventing duplicate token injection.
 
 ## Compatibility policy
