@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import {
   DEFAULT_WALLPAPER_PREFS,
   addRecentWallpaper,
+  cycleRecentWallpaper,
   normalizeWallpaperPrefs,
   type WallpaperAsset,
   type WallpaperFit,
@@ -40,6 +41,7 @@ export type WallpaperController = {
   setShade: (shade: number) => void;
   setBlur: (blur: number) => void;
   select: (asset: WallpaperAsset) => void;
+  cycleRecent: () => void;
   importImage: (sourcePath: string) => Promise<WallpaperAsset>;
   generate: (prompt: string) => Promise<WallpaperAsset>;
   clearError: () => void;
@@ -90,6 +92,10 @@ export function useWallpaper(): WallpaperController {
     [update],
   );
   const select = useCallback((asset: WallpaperAsset) => applyAsset(asset), [applyAsset]);
+  const cycleRecent = useCallback(() => {
+    setError(null);
+    update(cycleRecentWallpaper);
+  }, [update]);
 
   const importImage = useCallback(
     async (sourcePath: string) => {
@@ -158,6 +164,7 @@ export function useWallpaper(): WallpaperController {
     setShade,
     setBlur,
     select,
+    cycleRecent,
     importImage,
     generate,
     clearError,

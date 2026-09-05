@@ -4,6 +4,7 @@ import {
   DEFAULT_WALLPAPER_PREFS,
   MAX_RECENT_WALLPAPERS,
   addRecentWallpaper,
+  cycleRecentWallpaper,
   normalizeWallpaperPrefs,
   wallpaperBackgroundSize,
   type WallpaperAsset,
@@ -58,4 +59,24 @@ test("stretch uses explicit dimensions while other fits pass through", () => {
   assert.equal(wallpaperBackgroundSize("stretch"), "100% 100%");
   assert.equal(wallpaperBackgroundSize("cover"), "cover");
   assert.equal(wallpaperBackgroundSize("contain"), "contain");
+});
+
+test("recent wallpaper cycle advances and wraps without changing a single item", () => {
+  const first = asset("first");
+  const second = asset("second");
+  const prefs = {
+    ...DEFAULT_WALLPAPER_PREFS,
+    mode: "wallpaper" as const,
+    current: first,
+    recent: [first, second],
+  };
+  assert.equal(cycleRecentWallpaper(prefs).current?.id, "second");
+  assert.equal(
+    cycleRecentWallpaper({ ...prefs, current: second }).current?.id,
+    "first",
+  );
+  assert.equal(
+    cycleRecentWallpaper({ ...prefs, recent: [first] }).current?.id,
+    "first",
+  );
 });

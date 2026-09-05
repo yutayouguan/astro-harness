@@ -101,9 +101,6 @@ html[data-theme="dark"] .shell-wallpaper-layer > span {
   background: rgba(5, 7, 14, var(--wallpaper-shade, 0.34));
 }
 
-.app-shell.has-wallpaper > .native-drag-region,
-.app-shell.has-wallpaper > .titlebar-sidebar-toggle,
-.app-shell.has-wallpaper > .sidebar-hotzone,
 .app-shell.has-wallpaper > .body-row {
   z-index: 1;
 }

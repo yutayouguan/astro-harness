@@ -64,6 +64,7 @@ const meta = {
       setShade: () => {},
       setBlur: () => {},
       select: () => {},
+      cycleRecent: () => {},
       importImage: async () => {
         throw new Error("not available in Storybook");
       },

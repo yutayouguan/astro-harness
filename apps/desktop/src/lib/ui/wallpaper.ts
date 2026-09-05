@@ -110,6 +110,19 @@ export function addRecentWallpaper(
   };
 }
 
+export function cycleRecentWallpaper(prefs: WallpaperPrefs): WallpaperPrefs {
+  if (prefs.recent.length < 2) return prefs;
+  const currentIndex = prefs.current
+    ? prefs.recent.findIndex((asset) => asset.id === prefs.current?.id)
+    : -1;
+  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % prefs.recent.length : 0;
+  return {
+    ...prefs,
+    mode: "wallpaper",
+    current: prefs.recent[nextIndex],
+  };
+}
+
 export function wallpaperBackgroundSize(fit: WallpaperFit): string {
   return fit === "stretch" ? "100% 100%" : fit;
 }

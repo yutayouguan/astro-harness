@@ -2227,7 +2227,7 @@ export default function App() {
                   }
                 >
                   <div
-                    className={`chat-main${colorStyle === "dynamic" ? " has-dynamic-palette" : ""}`}
+                    className={`chat-main${colorStyle === "dynamic" || wallpaperEnabled ? " has-dynamic-palette" : ""}`}
                   >
                     {chat.sessionEphemeral && (
                       <div className="chat-side-banner" role="status">
@@ -2394,10 +2394,24 @@ export default function App() {
                         />
                       </Suspense>
                     ) : null}
-                    {colorStyle === "dynamic" && !wallpaperEnabled ? (
+                    {colorStyle === "dynamic" || wallpaperEnabled ? (
                       <DynamicPaletteButton
-                        label={t("prefs.colorStyle.reshuffle")}
-                        onReshuffle={reshuffleDynamic}
+                        label={
+                          wallpaperEnabled
+                            ? t("prefs.wallpaper.cycle")
+                            : t("prefs.colorStyle.reshuffle")
+                        }
+                        onReshuffle={
+                          wallpaperEnabled
+                            ? () => {
+                                if (wallpaper.prefs.recent.length > 1) {
+                                  wallpaper.cycleRecent();
+                                } else {
+                                  openSettingsTab("preferences:appearance");
+                                }
+                              }
+                            : reshuffleDynamic
+                        }
                       />
                     ) : null}
                   </div>

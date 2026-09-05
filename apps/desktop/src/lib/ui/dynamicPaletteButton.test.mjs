@@ -13,13 +13,14 @@ const styles = await readFile(
 );
 
 test("dynamic palette button is limited to the main chat surface", () => {
-  assert.match(app, /className=\{`chat-main\$\{colorStyle === "dynamic"/);
   assert.match(
     app,
-    /\{colorStyle === "dynamic" && !wallpaperEnabled \? \(/,
+    /className=\{`chat-main\$\{colorStyle === "dynamic" \|\| wallpaperEnabled/,
   );
-  assert.match(app, /onReshuffle=\{reshuffleDynamic\}/);
-  assert.match(app, /label=\{t\("prefs\.colorStyle\.reshuffle"\)\}/);
+  assert.match(app, /\{colorStyle === "dynamic" \|\| wallpaperEnabled \? \(/);
+  assert.match(app, /wallpaper\.cycleRecent\(\)/);
+  assert.match(app, /openSettingsTab\("preferences:appearance"\)/);
+  assert.match(app, /t\("prefs\.wallpaper\.cycle"\)/);
 });
 
 test("dynamic seed changes crossfade from the current shell palette", () => {
