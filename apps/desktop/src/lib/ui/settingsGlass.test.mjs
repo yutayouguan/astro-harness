@@ -138,6 +138,10 @@ test("settings sidebar uses clear category and capability names", () => {
   );
   assert.match(
     messagesSource,
+    /"settings\.sidebar\.tab\.context": "自动压缩"/,
+  );
+  assert.match(
+    messagesSource,
     /"settings\.sidebar\.tab\.tools": "工具与技能"/,
   );
   assert.match(
@@ -148,6 +152,10 @@ test("settings sidebar uses clear category and capability names", () => {
   assert.match(
     messagesSource,
     /"settings\.sidebar\.group\.intelligence": "Agents"/,
+  );
+  assert.match(
+    messagesSource,
+    /"settings\.sidebar\.tab\.context": "Automatic Compression"/,
   );
 });
 

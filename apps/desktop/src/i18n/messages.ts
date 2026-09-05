@@ -286,7 +286,7 @@ export const zh = {
   "settings.sidebar.tab.appearance": "外观",
   "settings.sidebar.tab.conversation": "对话",
   "settings.sidebar.tab.terminal": "终端",
-  "settings.sidebar.tab.context": "上下文与压缩",
+  "settings.sidebar.tab.context": "自动压缩",
   "settings.sidebar.tab.providers": "模型服务",
   "settings.sidebar.tab.tools": "工具与技能",
   "settings.sidebar.tab.memory": "记忆",
@@ -454,7 +454,7 @@ export const zh = {
   "aux.compaction": "上下文压缩",
   "aux.compactionDesc": "长对话压缩和摘要续聊时使用。",
   "aux.compactionThresholdHint":
-    "触发阈值与字符预算请在「偏好设置 → 上下文与压缩」调整。",
+    "触发阈值与字符预算请在「偏好设置 → 自动压缩」调整。",
   "aux.smartApproval": "智能审批",
   "aux.smartApprovalDesc": "判断高风险操作是否需要继续询问。",
   "aux.dreaming": "入梦",
@@ -2182,7 +2182,7 @@ export const zh = {
   "prefs.category.aria": "偏好设置分类",
   "prefs.category.appearance": "外观",
   "prefs.category.conversation": "对话",
-  "prefs.category.context": "上下文与压缩",
+  "prefs.category.context": "自动压缩",
   "prefs.category.general": "通用",
   "prefs.category.diagnostics": "诊断",
   "prefs.category.about": "关于",
@@ -2348,7 +2348,7 @@ export const zh = {
   "prefs.chat.showTimestamps": "时间戳",
   "prefs.chat.showTimestampsDesc": "在消息与过程卡片上显示时间",
 
-  "prefs.context.title": "上下文与压缩",
+  "prefs.context.title": "自动压缩",
   "prefs.context.sub":
     "配置 Run 内 Soft/Medium/Hard、mid-run 与建议 /compact 等卫生参数",
   "prefs.context.viewHint":
@@ -3301,7 +3301,7 @@ export const en: Record<MessageKey, string> = {
   "settings.sidebar.tab.appearance": "Appearance",
   "settings.sidebar.tab.conversation": "Chat",
   "settings.sidebar.tab.terminal": "Terminal",
-  "settings.sidebar.tab.context": "Context & Compression",
+  "settings.sidebar.tab.context": "Automatic Compression",
   "settings.sidebar.tab.providers": "Model Services",
   "settings.sidebar.tab.tools": "Tools & Skills",
   "settings.sidebar.tab.memory": "Memory",
@@ -3477,7 +3477,7 @@ export const en: Record<MessageKey, string> = {
   "aux.compactionDesc":
     "Used when summarizing a long conversation and continuing in a new session.",
   "aux.compactionThresholdHint":
-    "Adjust trigger ratios and char budgets in Preferences → Context & compression.",
+    "Adjust trigger ratios and char budgets in Preferences → Automatic Compression.",
   "aux.smartApproval": "Smart approval",
   "aux.smartApprovalDesc":
     "Decide whether risky operations should ask for confirmation.",
@@ -5289,7 +5289,7 @@ export const en: Record<MessageKey, string> = {
   "prefs.category.aria": "Preference categories",
   "prefs.category.appearance": "Appearance",
   "prefs.category.conversation": "Chat",
-  "prefs.category.context": "Context & compression",
+  "prefs.category.context": "Automatic Compression",
   "prefs.category.general": "General",
   "prefs.category.diagnostics": "Diagnostics",
   "prefs.category.about": "About",
@@ -5465,7 +5465,7 @@ export const en: Record<MessageKey, string> = {
   "prefs.chat.showTimestamps": "Timestamps",
   "prefs.chat.showTimestampsDesc": "Show time on messages and process cards",
 
-  "prefs.context.title": "Context & compression",
+  "prefs.context.title": "Automatic Compression",
   "prefs.context.sub":
     "Configure Soft/Medium/Hard, mid-run, and /compact recommend thresholds",
   "prefs.context.viewHint":

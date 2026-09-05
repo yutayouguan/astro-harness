@@ -274,7 +274,7 @@ function SidebarSessionStates({ labels = true }: { labels?: boolean }) {
 function SettingsMenu() {
   const items = [
     { label: "对话", Icon: MessageSquare },
-    { label: "上下文与压缩", Icon: Layers2 },
+    { label: "自动压缩", Icon: Layers2 },
     { label: "模型服务", Icon: Cpu, active: true },
     { label: "工具与技能", Icon: Wrench },
   ];
