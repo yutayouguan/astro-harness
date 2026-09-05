@@ -183,7 +183,7 @@ html[data-theme="dark"] .terminal-settings-field select {
   background: color-mix(in srgb, var(--glass-fill) 52%, rgba(8, 6, 18, 0.4));
 }
 
-@media (max-width: 820px) {
+@container (max-width: 760px) {
   .terminal-settings-layout:not([hidden]) {
     grid-template-columns: 1fr;
   }

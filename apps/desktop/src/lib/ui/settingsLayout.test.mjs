@@ -35,6 +35,7 @@ test("preference-backed settings use one scroll owner and one content width", ()
     preferencesCss,
     /\.prefs-page\.is-embedded \.prefs-category-content\s*\{[\s\S]*?max-width:\s*920px;/,
   );
+  assert.match(preferencesCss, /container-type:\s*inline-size;/);
   assert.doesNotMatch(terminalCss, /max-width:\s*920px/);
   assert.doesNotMatch(browserCss, /max-width:\s*760px/);
 });

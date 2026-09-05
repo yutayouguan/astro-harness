@@ -221,6 +221,7 @@ html[data-theme="dark"] .morphicon-selection-indicator {
   max-width: 920px;
   margin: 0 auto;
   padding: 18px 0 20px;
+  container-type: inline-size;
 }
 
 .prefs-category-nav {
@@ -2511,6 +2512,29 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   gap: 6px;
 }
 
+@container (max-width: 760px) {
+  .prefs-category-stack--appearance:not([hidden]),
+  .prefs-card--conversation-display .prefs-toggle-list,
+  .prefs-about-features,
+  .prefs-about-meta,
+  .prefs-about-resources {
+    grid-template-columns: 1fr;
+  }
+
+  .prefs-appearance-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .prefs-category-stack--appearance > .morphicon-settings-card,
+  .prefs-category-stack--appearance > .prefs-card--app-icon {
+    grid-column: 1;
+  }
+
+  .prefs-category-stack--appearance > .prefs-card--app-icon {
+    border-left: 0;
+  }
+}
+
 @media (max-width: 860px) {
   .prefs-page,
   .preferences-page {
@@ -2600,27 +2624,6 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   .prefs-context-grid,
   .prefs-context-grid--3 {
     grid-template-columns: 1fr;
-  }
-
-  .prefs-category-stack--appearance:not([hidden]),
-  .prefs-card--conversation-display .prefs-toggle-list,
-  .prefs-about-features,
-  .prefs-about-meta,
-  .prefs-about-resources {
-    grid-template-columns: 1fr;
-  }
-
-  .prefs-appearance-preview {
-    grid-template-columns: 1fr;
-  }
-
-  .prefs-category-stack--appearance > .morphicon-settings-card,
-  .prefs-category-stack--appearance > .prefs-card--app-icon {
-    grid-column: 1;
-  }
-
-  .prefs-category-stack--appearance > .prefs-card--app-icon {
-    border-left: 0;
   }
 }
 

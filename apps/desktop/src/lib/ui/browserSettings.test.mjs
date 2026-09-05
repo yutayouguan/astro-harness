@@ -46,7 +46,7 @@ test("new tabs defer to the configured home page", () => {
 
 test("browser settings preserve light dark and narrow layouts", () => {
   assert.match(css, /html\[data-theme="dark"\]/);
-  assert.match(css, /@media \(max-width: 680px\)/);
+  assert.match(css, /@container \(max-width: 620px\)/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(css, /transition:\s*all/);
 });

@@ -44,6 +44,7 @@ test("terminal execution mode is explicit across the desktop boundary", () => {
 
 test("terminal settings preserve dark, narrow, and reduced-motion layouts", () => {
   assert.match(css, /html\[data-theme="dark"\]/);
+  assert.match(css, /@container \(max-width: 760px\)/);
   assert.match(css, /@media \(max-width: 680px\)/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(css, /transition:\s*all/);
