@@ -63,6 +63,7 @@ const meta = {
       setFit: () => {},
       setShade: () => {},
       setBlur: () => {},
+      setAdaptiveColor: () => {},
       select: () => {},
       cycleRecent: () => {},
       importImage: async () => {

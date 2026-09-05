@@ -304,8 +304,34 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
         </div>
 
         {prefs.mode === "wallpaper" ? (
-          <div className="wallpaper-editor">
-            <div className="wallpaper-preview-column">
+          <>
+            <div className="wallpaper-adaptive-color">
+              <span
+                className="wallpaper-adaptive-swatch"
+                style={{
+                  background: prefs.current?.accentColor
+                    ? `linear-gradient(135deg, ${prefs.current.accentColor}, ${prefs.current.secondaryColor ?? prefs.current.accentColor})`
+                    : undefined,
+                }}
+                aria-hidden
+              />
+              <span className="wallpaper-adaptive-copy">
+                <strong>{t("prefs.wallpaper.adaptiveColor")}</strong>
+                <small>{t("prefs.wallpaper.adaptiveColorDesc")}</small>
+              </span>
+              <button
+                type="button"
+                role="switch"
+                className="prefs-switch"
+                data-tone={tone}
+                aria-checked={prefs.adaptiveColor}
+                onClick={() => controller.setAdaptiveColor(!prefs.adaptiveColor)}
+              >
+                <span className="prefs-switch-thumb" />
+              </button>
+            </div>
+            <div className="wallpaper-editor">
+              <div className="wallpaper-preview-column">
               {prefs.current && currentSrc ? (
                 <WallpaperPreview
                   path={prefs.current.path}
@@ -325,9 +351,9 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                   <span>{t("prefs.wallpaper.emptySub")}</span>
                 </button>
               )}
-            </div>
+              </div>
 
-            <div className="wallpaper-controls">
+              <div className="wallpaper-controls">
               <div className="wallpaper-action-row">
                 <button
                   type="button"
@@ -431,8 +457,9 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                   </div>
                 </div>
               ) : null}
+              </div>
             </div>
-          </div>
+          </>
         ) : null}
 
         {error && !dialogOpen ? (

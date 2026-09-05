@@ -35,6 +35,8 @@ test("normalization clamps controls and rejects malformed assets", () => {
       ...asset("current"),
       luminance: 3,
       recommendedTheme: "dark",
+      accentColor: "#22c55e",
+      secondaryColor: "#3b82f6",
     },
     recent: [asset("current"), { id: "broken" }],
     fit: "stretch",
@@ -47,6 +49,9 @@ test("normalization clamps controls and rejects malformed assets", () => {
   assert.equal(prefs.blur, 0);
   assert.equal(prefs.current?.luminance, 1);
   assert.equal(prefs.current?.recommendedTheme, "dark");
+  assert.equal(prefs.current?.accentColor, "#22c55e");
+  assert.equal(prefs.current?.secondaryColor, "#3b82f6");
+  assert.equal(prefs.adaptiveColor, true);
   assert.deepEqual(prefs.recent.map((item) => item.id), ["current"]);
 });
 

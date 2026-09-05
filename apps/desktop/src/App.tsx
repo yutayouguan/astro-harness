@@ -138,6 +138,10 @@ import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import { dynamicGradientForTab } from "./lib/ui/dynamicGradient";
 import { resolveMediaSrc } from "./lib/media/resolveMediaSrc";
 import {
+  applyWallpaperPaletteVars,
+  clearWallpaperPaletteVars,
+} from "./lib/ui/wallpaper";
+import {
   applyShellGradientVars,
   clearShellGradientVars,
   flushGlassBackdrop,
@@ -808,7 +812,8 @@ export default function App() {
       ? resolveMediaSrc(wallpaper.prefs.current.path)
       : null;
   const wallpaperEnabled = Boolean(wallpaperSrc);
-  const recommendedWallpaperTheme = wallpaperEnabled
+  const recommendedWallpaperTheme =
+    wallpaperEnabled && wallpaper.prefs.adaptiveColor
     ? (wallpaper.prefs.current?.recommendedTheme ?? null)
     : null;
   useEffect(() => {
@@ -871,6 +876,20 @@ export default function App() {
     } else {
       root.removeAttribute("data-wallpaper");
     }
+    const wallpaperAccent = wallpaper.prefs.adaptiveColor
+      ? wallpaper.prefs.current?.accentColor
+      : null;
+    const wallpaperSecondary = wallpaper.prefs.adaptiveColor
+      ? wallpaper.prefs.current?.secondaryColor
+      : null;
+    if (wallpaperEnabled && wallpaperAccent && wallpaperSecondary) {
+      root.setAttribute("data-wallpaper-palette", "true");
+      applyWallpaperPaletteVars(root, wallpaperAccent, wallpaperSecondary);
+      flushGlassBackdrop(root);
+    } else {
+      root.removeAttribute("data-wallpaper-palette");
+      clearWallpaperPaletteVars(root);
+    }
     if (activeShellGradient) {
       applyShellGradientVars(root, activeShellGradient, resolved);
       flushGlassBackdrop(root);
@@ -886,6 +905,9 @@ export default function App() {
     resolved,
     reassert,
     wallpaperEnabled,
+    wallpaper.prefs.adaptiveColor,
+    wallpaper.prefs.current?.accentColor,
+    wallpaper.prefs.current?.secondaryColor,
   ]);
   useEffect(() => {
     void syncWindowUnderlay(resolved, shellTone, activeShellGradient);

@@ -2234,6 +2234,9 @@ export const zh = {
   "prefs.wallpaper.off": "关闭",
   "prefs.wallpaper.recent": "最近使用",
   "prefs.wallpaper.cycle": "更换壁纸",
+  "prefs.wallpaper.adaptiveColor": "主题色跟随壁纸",
+  "prefs.wallpaper.adaptiveColorDesc":
+    "自动提取强调色；自动主题同时跟随壁纸明暗",
   "prefs.wallpaper.aiTitle": "AI 生成壁纸",
   "prefs.wallpaper.aiSub": "使用模型服务中选定的图片模型，按横向比例生成画面",
   "prefs.wallpaper.prompt": "描述你想要的画面",
@@ -5341,6 +5344,9 @@ export const en: Record<MessageKey, string> = {
   "prefs.wallpaper.off": "Off",
   "prefs.wallpaper.recent": "Recently used",
   "prefs.wallpaper.cycle": "Change wallpaper",
+  "prefs.wallpaper.adaptiveColor": "Match wallpaper colors",
+  "prefs.wallpaper.adaptiveColorDesc":
+    "Extract accent colors; Auto appearance also follows brightness",
   "prefs.wallpaper.aiTitle": "Generate AI wallpaper",
   "prefs.wallpaper.aiSub":
     "Uses the image model selected in Model Providers and generates a landscape image",

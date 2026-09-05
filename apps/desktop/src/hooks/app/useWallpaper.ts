@@ -40,6 +40,7 @@ export type WallpaperController = {
   setFit: (fit: WallpaperFit) => void;
   setShade: (shade: number) => void;
   setBlur: (blur: number) => void;
+  setAdaptiveColor: (enabled: boolean) => void;
   select: (asset: WallpaperAsset) => void;
   cycleRecent: () => void;
   importImage: (sourcePath: string) => Promise<WallpaperAsset>;
@@ -51,6 +52,8 @@ export type WallpaperController = {
 type WallpaperAnalysis = {
   luminance: number;
   recommendedTheme: "light" | "dark";
+  accentColor: string;
+  secondaryColor: string;
 };
 
 export function useWallpaper(): WallpaperController {
@@ -95,6 +98,11 @@ export function useWallpaper(): WallpaperController {
   );
   const setBlur = useCallback(
     (blur: number) => update((current) => ({ ...current, blur })),
+    [update],
+  );
+  const setAdaptiveColor = useCallback(
+    (adaptiveColor: boolean) =>
+      update((current) => ({ ...current, adaptiveColor })),
     [update],
   );
   const select = useCallback((asset: WallpaperAsset) => applyAsset(asset), [applyAsset]);
@@ -203,6 +211,7 @@ export function useWallpaper(): WallpaperController {
     setFit,
     setShade,
     setBlur,
+    setAdaptiveColor,
     select,
     cycleRecent,
     importImage,

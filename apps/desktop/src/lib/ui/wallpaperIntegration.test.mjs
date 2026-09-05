@@ -19,6 +19,10 @@ const shellStyles = await readFile(
   new URL("../../styles/features/shell/shell.css", import.meta.url),
   "utf8",
 );
+const unifiedStyles = await readFile(
+  new URL("../../styles/tokens/unified-color.css", import.meta.url),
+  "utf8",
+);
 
 test("wallpaper commands are registered and the settings card calls both paths", () => {
   assert.match(commands, /commands::wallpaper::import_wallpaper/);
@@ -56,4 +60,15 @@ test("wallpaper mode remains independent from color style", () => {
   assert.match(app, /colorStyle === "dynamic" \|\| wallpaperEnabled/);
   assert.match(hook, /cycleRecentWallpaper/);
   assert.match(app, /setWallpaperTheme\(recommendedWallpaperTheme\)/);
+  assert.match(app, /applyWallpaperPaletteVars/);
+  assert.match(app, /wallpaper\.prefs\.adaptiveColor/);
+  assert.match(app, /data-wallpaper-palette/);
+  assert.ok(
+    unifiedStyles.lastIndexOf('html[data-wallpaper-palette="true"]') >
+      unifiedStyles.lastIndexOf('[data-color-style="dynamic"]'),
+  );
+  assert.match(
+    unifiedStyles,
+    /--unified-tone:\s*var\(--wallpaper-tone, var\(--tone-blue\)\)/,
+  );
 });

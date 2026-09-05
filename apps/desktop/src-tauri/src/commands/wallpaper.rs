@@ -1,5 +1,6 @@
 //! 全局壁纸资产：安全导入用户图片，或复用已配置的图片 Provider 生成后原子落盘。
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,8 @@ pub struct WallpaperAssetDto {
     pub created_at: String,
     pub luminance: f32,
     pub recommended_theme: String,
+    pub accent_color: String,
+    pub secondary_color: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -34,6 +37,8 @@ pub struct WallpaperAssetDto {
 pub struct WallpaperAnalysisDto {
     pub luminance: f32,
     pub recommended_theme: String,
+    pub accent_color: String,
+    pub secondary_color: String,
 }
 
 #[derive(Debug)]
@@ -57,6 +62,133 @@ fn supported_format(format: ImageFormat) -> Option<(&'static str, &'static str)>
     }
 }
 
+#[derive(Default)]
+struct ColorBucket {
+    count: u32,
+    red: u64,
+    green: u64,
+    blue: u64,
+}
+
+fn rgb_to_hsl([red, green, blue]: [u8; 3]) -> (f32, f32, f32) {
+    let red = f32::from(red) / 255.0;
+    let green = f32::from(green) / 255.0;
+    let blue = f32::from(blue) / 255.0;
+    let max = red.max(green).max(blue);
+    let min = red.min(green).min(blue);
+    let delta = max - min;
+    let lightness = (max + min) / 2.0;
+    if delta <= f32::EPSILON {
+        return (0.0, 0.0, lightness);
+    }
+    let saturation = delta / (1.0 - (2.0 * lightness - 1.0).abs());
+    let hue = if max == red {
+        60.0 * (((green - blue) / delta) % 6.0)
+    } else if max == green {
+        60.0 * ((blue - red) / delta + 2.0)
+    } else {
+        60.0 * ((red - green) / delta + 4.0)
+    };
+    (
+        if hue < 0.0 { hue + 360.0 } else { hue },
+        saturation,
+        lightness,
+    )
+}
+
+fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> [u8; 3] {
+    let chroma = (1.0 - (2.0 * lightness - 1.0).abs()) * saturation;
+    let section = (hue.rem_euclid(360.0)) / 60.0;
+    let x = chroma * (1.0 - (section % 2.0 - 1.0).abs());
+    let (red, green, blue) = match section.floor() as u8 {
+        0 => (chroma, x, 0.0),
+        1 => (x, chroma, 0.0),
+        2 => (0.0, chroma, x),
+        3 => (0.0, x, chroma),
+        4 => (x, 0.0, chroma),
+        _ => (chroma, 0.0, x),
+    };
+    let offset = lightness - chroma / 2.0;
+    [red, green, blue].map(|channel| ((channel + offset) * 255.0).round() as u8)
+}
+
+fn normalized_accent(rgb: [u8; 3], dark_theme: bool) -> String {
+    let (sample_hue, sample_saturation, _) = rgb_to_hsl(rgb);
+    let low_saturation = sample_saturation < 0.18;
+    let saturation = if low_saturation {
+        0.68
+    } else {
+        sample_saturation.clamp(0.5, 0.86)
+    };
+    let hue = if low_saturation { 215.0 } else { sample_hue };
+    let lightness = if dark_theme { 0.62 } else { 0.48 };
+    let [red, green, blue] = hsl_to_rgb(hue, saturation, lightness);
+    format!("#{red:02x}{green:02x}{blue:02x}")
+}
+
+fn hue_distance(left: f32, right: f32) -> f32 {
+    let distance = (left - right).abs();
+    distance.min(360.0 - distance)
+}
+
+fn extract_palette(image: &DynamicImage, dark_theme: bool) -> (String, String) {
+    let thumbnail = image.thumbnail(64, 64).to_rgba8();
+    let mut buckets: HashMap<u16, ColorBucket> = HashMap::new();
+    for pixel in thumbnail.pixels() {
+        let alpha = f32::from(pixel[3]) / 255.0;
+        if alpha < 0.1 {
+            continue;
+        }
+        let blend = |channel: u8| (f32::from(channel) * alpha + 128.0 * (1.0 - alpha)) as u8;
+        let rgb = [blend(pixel[0]), blend(pixel[1]), blend(pixel[2])];
+        let (_, saturation, lightness) = rgb_to_hsl(rgb);
+        if !(0.05..=0.95).contains(&lightness) || saturation < 0.08 {
+            continue;
+        }
+        let key =
+            (u16::from(rgb[0] / 32) << 6) | (u16::from(rgb[1] / 32) << 3) | u16::from(rgb[2] / 32);
+        let bucket = buckets.entry(key).or_default();
+        bucket.count += 1;
+        bucket.red += u64::from(rgb[0]);
+        bucket.green += u64::from(rgb[1]);
+        bucket.blue += u64::from(rgb[2]);
+    }
+
+    let mut candidates = buckets
+        .into_values()
+        .filter(|bucket| bucket.count > 0)
+        .map(|bucket| {
+            let rgb = [
+                (bucket.red / u64::from(bucket.count)) as u8,
+                (bucket.green / u64::from(bucket.count)) as u8,
+                (bucket.blue / u64::from(bucket.count)) as u8,
+            ];
+            let (hue, saturation, lightness) = rgb_to_hsl(rgb);
+            let middle_weight = 1.0 - (lightness - 0.5).abs() * 0.7;
+            let score = bucket.count as f32 * (0.35 + saturation * 1.65) * middle_weight;
+            (score, hue, rgb)
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| right.0.total_cmp(&left.0));
+
+    let primary = candidates
+        .first()
+        .map(|candidate| candidate.2)
+        .unwrap_or([37, 99, 235]);
+    let primary_hue = rgb_to_hsl(primary).0;
+    let secondary = candidates
+        .iter()
+        .skip(1)
+        .find(|candidate| hue_distance(primary_hue, candidate.1) >= 28.0)
+        .map(|candidate| candidate.2)
+        .unwrap_or_else(|| hsl_to_rgb((primary_hue + 42.0) % 360.0, 0.68, 0.56));
+
+    (
+        normalized_accent(primary, dark_theme),
+        normalized_accent(secondary, dark_theme),
+    )
+}
+
 fn analyze_image(image: &DynamicImage) -> WallpaperAnalysisDto {
     let thumbnail = image.thumbnail(64, 64).to_rgba8();
     let mut samples = thumbnail
@@ -74,9 +206,13 @@ fn analyze_image(image: &DynamicImage) -> WallpaperAnalysisDto {
     let mean = samples.iter().sum::<f32>() / samples.len().max(1) as f32;
     let median = samples.get(samples.len() / 2).copied().unwrap_or(0.5);
     let luminance = (mean * 0.65 + median * 0.35).clamp(0.0, 1.0);
+    let dark_theme = luminance < 0.46;
+    let (accent_color, secondary_color) = extract_palette(image, dark_theme);
     WallpaperAnalysisDto {
         luminance,
-        recommended_theme: if luminance < 0.46 { "dark" } else { "light" }.to_string(),
+        recommended_theme: if dark_theme { "dark" } else { "light" }.to_string(),
+        accent_color,
+        secondary_color,
     }
 }
 
@@ -143,6 +279,8 @@ fn store_wallpaper_at(
         created_at: chrono::Utc::now().to_rfc3339(),
         luminance: validated.analysis.luminance,
         recommended_theme: validated.analysis.recommended_theme,
+        accent_color: validated.analysis.accent_color,
+        secondary_color: validated.analysis.secondary_color,
         provider,
         model,
     })
@@ -272,6 +410,9 @@ mod tests {
         assert_eq!(dark_analysis.recommended_theme, "dark");
         assert_eq!(light_analysis.recommended_theme, "light");
         assert!(dark_analysis.luminance < light_analysis.luminance);
+        assert!(dark_analysis.accent_color.starts_with('#'));
+        assert_eq!(dark_analysis.accent_color.len(), 7);
+        assert!(light_analysis.secondary_color.starts_with('#'));
     }
 
     #[test]

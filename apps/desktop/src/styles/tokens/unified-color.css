@@ -275,3 +275,16 @@ html[data-theme="dark"]:is(
     ),
     color-mix(in srgb, var(--tone-soft) 34%, rgba(8, 6, 18, 0.6));
 }
+
+/* 壁纸自适应主题色最后覆盖页面/组件 data-tone，避免原有 Tab 色谱反压。 */
+html[data-wallpaper-palette="true"],
+html[data-wallpaper-palette="true"] [data-tone] {
+  --tone: var(--wallpaper-tone, var(--tone-blue));
+  --tone-soft: var(--wallpaper-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--wallpaper-tone-glow, var(--tone-blue-glow));
+  --shell-tone-soft: var(--wallpaper-tone-soft, var(--tone-blue-soft));
+  --unified-tone: var(--wallpaper-tone, var(--tone-blue));
+  --unified-tone-soft: var(--wallpaper-tone-soft, var(--tone-blue-soft));
+  --unified-tone-glow: var(--wallpaper-tone-glow, var(--tone-blue-glow));
+  --accent-2: var(--wallpaper-accent-2, var(--tone));
+}
