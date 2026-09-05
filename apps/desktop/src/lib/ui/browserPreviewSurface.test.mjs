@@ -110,7 +110,7 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.doesNotMatch(liveWebviews, /occludedRef/);
 });
 
-test("browser restore animates toward the right edge before rejoining layout", () => {
+test("browser restore keeps the revealed welcome region aligned before rejoining layout", () => {
   const css = source("../../styles/features/chat/browser-dock.css");
   const expandedRule = css.match(
     /\.chat-layout-with-right\.is-browser-expanded > \.browser-dock \{([^}]*)\}/s,
@@ -125,6 +125,18 @@ test("browser restore animates toward the right edge before rejoining layout", (
   assert.ok(restoringRule);
   assert.match(restoringRule, /width:\s*var\(--browser-dock-current-width\)/);
   assert.match(restoringRule, /max-width:\s*calc\(100% - 320px\)/);
+  assert.match(
+    css,
+    /\.chat-layout-with-right\.is-browser-expanded:has\([\s\S]*?> \.browser-dock\.is-restoring[\s\S]*?\)[\s\S]*?> \.chat-main[\s\S]*?\.chat-welcome\s*\{[\s\S]*?align-self:\s*flex-start;[\s\S]*?min-width:\s*0;[\s\S]*?width:\s*max\(0px, calc\(100% - var\(--browser-dock-visible-width, 100%\)\)\);/,
+  );
+  assert.match(
+    css,
+    /\.chat-layout-with-right\.has-browser > \.chat-main \.chat-welcome\s*\{\s*transition:\s*padding-bottom 180ms ease;/,
+  );
+  assert.match(
+    css,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.chat-layout-with-right\.has-browser > \.chat-main \.chat-welcome\s*\{\s*transition:\s*none;/,
+  );
 });
 
 test("browser dock uses a Rust-created native child WebView", () => {

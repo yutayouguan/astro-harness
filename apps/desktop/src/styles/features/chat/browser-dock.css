@@ -70,6 +70,29 @@
   border-left-color: color-mix(in srgb, var(--glass-edge) 62%, transparent);
 }
 
+/* BrowserDock 仍绝对定位时，chat-main 不会随收回动画缩小。
+   让欢迎区按 ResizeObserver 上报的实时 dock 宽度占据已露出区域，
+   避免动画结束、dock 重回 flex 流时才突然跳到左侧中心。 */
+.chat-layout-with-right.is-browser-expanded:has(> .browser-dock.is-restoring)
+  > .chat-main
+  .chat-welcome {
+  align-self: flex-start;
+  min-width: 0;
+  width: max(0px, calc(100% - var(--browser-dock-visible-width, 100%)));
+}
+
+/* capsule 恢复为默认 Composer 时底部安全区会变高，用同一次短过渡
+   吸收纵向重排，避免宽度已对齐后又上下跳一帧。 */
+.chat-layout-with-right.has-browser > .chat-main .chat-welcome {
+  transition: padding-bottom 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-layout-with-right.has-browser > .chat-main .chat-welcome {
+    transition: none;
+  }
+}
+
 .chat-layout-with-right.is-browser-expanded
   > .chat-main
   .composer-shell.is-capsule {
