@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use image::{ImageFormat, ImageReader};
+use image::{DynamicImage, ImageFormat, ImageReader};
 use serde::Serialize;
 
 const MAX_WALLPAPER_BYTES: u64 = 25 * 1024 * 1024;
@@ -21,10 +21,27 @@ pub struct WallpaperAssetDto {
     pub width: u32,
     pub height: u32,
     pub created_at: String,
+    pub luminance: f32,
+    pub recommended_theme: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WallpaperAnalysisDto {
+    pub luminance: f32,
+    pub recommended_theme: String,
+}
+
+#[derive(Debug)]
+struct ValidatedImage {
+    format: ImageFormat,
+    width: u32,
+    height: u32,
+    analysis: WallpaperAnalysisDto,
 }
 
 fn wallpapers_dir_at(base: &Path) -> PathBuf {
@@ -40,7 +57,30 @@ fn supported_format(format: ImageFormat) -> Option<(&'static str, &'static str)>
     }
 }
 
-fn validate_image(bytes: &[u8]) -> Result<(ImageFormat, u32, u32), String> {
+fn analyze_image(image: &DynamicImage) -> WallpaperAnalysisDto {
+    let thumbnail = image.thumbnail(64, 64).to_rgba8();
+    let mut samples = thumbnail
+        .pixels()
+        .map(|pixel| {
+            let alpha = f32::from(pixel[3]) / 255.0;
+            let blend = |channel: u8| f32::from(channel) * alpha + 128.0 * (1.0 - alpha);
+            let red = blend(pixel[0]);
+            let green = blend(pixel[1]);
+            let blue = blend(pixel[2]);
+            (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255.0
+        })
+        .collect::<Vec<_>>();
+    samples.sort_by(f32::total_cmp);
+    let mean = samples.iter().sum::<f32>() / samples.len().max(1) as f32;
+    let median = samples.get(samples.len() / 2).copied().unwrap_or(0.5);
+    let luminance = (mean * 0.65 + median * 0.35).clamp(0.0, 1.0);
+    WallpaperAnalysisDto {
+        luminance,
+        recommended_theme: if luminance < 0.46 { "dark" } else { "light" }.to_string(),
+    }
+}
+
+fn validate_image(bytes: &[u8]) -> Result<ValidatedImage, String> {
     if bytes.is_empty() {
         return Err("图片文件为空".to_string());
     }
@@ -63,7 +103,12 @@ fn validate_image(bytes: &[u8]) -> Result<(ImageFormat, u32, u32), String> {
     let decoded = reader
         .decode()
         .map_err(|_| "图片已损坏或尺寸过大".to_string())?;
-    Ok((format, decoded.width(), decoded.height()))
+    Ok(ValidatedImage {
+        format,
+        width: decoded.width(),
+        height: decoded.height(),
+        analysis: analyze_image(&decoded),
+    })
 }
 
 fn store_wallpaper_at(
@@ -74,8 +119,8 @@ fn store_wallpaper_at(
     provider: Option<String>,
     model: Option<String>,
 ) -> Result<WallpaperAssetDto, String> {
-    let (format, width, height) = validate_image(bytes)?;
-    let (ext, _) = supported_format(format).expect("validated wallpaper format");
+    let validated = validate_image(bytes)?;
+    let (ext, _) = supported_format(validated.format).expect("validated wallpaper format");
     let id = uuid::Uuid::new_v4().simple().to_string();
     let dir = wallpapers_dir_at(base);
     fs::create_dir_all(&dir).map_err(|e| format!("无法创建壁纸目录：{e}"))?;
@@ -93,12 +138,37 @@ fn store_wallpaper_at(
         path: path.to_string_lossy().into_owned(),
         name: display_name,
         source: source.to_string(),
-        width,
-        height,
+        width: validated.width,
+        height: validated.height,
         created_at: chrono::Utc::now().to_rfc3339(),
+        luminance: validated.analysis.luminance,
+        recommended_theme: validated.analysis.recommended_theme,
         provider,
         model,
     })
+}
+
+fn analyze_wallpaper_at(base: &Path, path: &Path) -> Result<WallpaperAnalysisDto, String> {
+    let root = wallpapers_dir_at(base)
+        .canonicalize()
+        .map_err(|_| "壁纸目录不存在".to_string())?;
+    let target = path
+        .canonicalize()
+        .map_err(|_| "壁纸文件不存在".to_string())?;
+    if !target.starts_with(&root) || !target.is_file() {
+        return Err("只能分析 Astro 壁纸目录中的图片".to_string());
+    }
+    let metadata = fs::metadata(&target).map_err(|e| format!("无法读取壁纸信息：{e}"))?;
+    if metadata.len() > MAX_WALLPAPER_BYTES {
+        return Err("图片不能超过 25 MB".to_string());
+    }
+    let bytes = fs::read(&target).map_err(|e| format!("无法读取壁纸：{e}"))?;
+    Ok(validate_image(&bytes)?.analysis)
+}
+
+#[tauri::command]
+pub async fn analyze_wallpaper(path: String) -> Result<WallpaperAnalysisDto, String> {
+    analyze_wallpaper_at(&home::default_memory_dir(), Path::new(path.trim()))
 }
 
 fn validate_prompt(prompt: &str) -> Result<&str, String> {
@@ -179,6 +249,8 @@ mod tests {
         .unwrap();
         assert_eq!((asset.width, asset.height), (4, 3));
         assert_eq!(asset.source, "upload");
+        assert_eq!(asset.recommended_theme, "dark");
+        assert!(asset.luminance < 0.1);
         let path = PathBuf::from(asset.path);
         assert!(path.starts_with(wallpapers_dir_at(temp.path())));
         assert!(path.is_file());
@@ -188,6 +260,38 @@ mod tests {
     fn rejects_non_image_bytes() {
         let error = validate_image(b"not an image").unwrap_err();
         assert!(error.contains("图片"));
+    }
+
+    #[test]
+    fn luminance_recommends_matching_theme() {
+        let dark = DynamicImage::ImageRgba8(RgbaImage::from_pixel(16, 16, Rgba([8, 12, 20, 255])));
+        let light =
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(16, 16, Rgba([245, 248, 252, 255])));
+        let dark_analysis = analyze_image(&dark);
+        let light_analysis = analyze_image(&light);
+        assert_eq!(dark_analysis.recommended_theme, "dark");
+        assert_eq!(light_analysis.recommended_theme, "light");
+        assert!(dark_analysis.luminance < light_analysis.luminance);
+    }
+
+    #[test]
+    fn analysis_only_reads_owned_wallpapers() {
+        let temp = tempfile::tempdir().unwrap();
+        let asset = store_wallpaper_at(
+            temp.path(),
+            &tiny_png(),
+            "owned.png".to_string(),
+            "upload",
+            None,
+            None,
+        )
+        .unwrap();
+        let owned = analyze_wallpaper_at(temp.path(), Path::new(&asset.path)).unwrap();
+        assert_eq!(owned.recommended_theme, "dark");
+
+        let outside = temp.path().join("outside.png");
+        fs::write(&outside, tiny_png()).unwrap();
+        assert!(analyze_wallpaper_at(temp.path(), &outside).is_err());
     }
 
     #[test]

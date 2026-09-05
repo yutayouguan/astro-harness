@@ -155,7 +155,13 @@ const ACTIVE_PROJECT_KEY = "astro.activeProjectId";
 
 export default function App() {
   // ── Theme / i18n / prefs ──────────────────────────────────────────────────
-  const { mode, setMode, resolved, reassert } = useTheme();
+  const {
+    mode,
+    setMode,
+    resolved,
+    setWallpaperTheme,
+    reassert,
+  } = useTheme();
   const {
     colorStyle,
     gradient,
@@ -802,6 +808,18 @@ export default function App() {
       ? resolveMediaSrc(wallpaper.prefs.current.path)
       : null;
   const wallpaperEnabled = Boolean(wallpaperSrc);
+  const recommendedWallpaperTheme = wallpaperEnabled
+    ? (wallpaper.prefs.current?.recommendedTheme ?? null)
+    : null;
+  useEffect(() => {
+    setWallpaperTheme(recommendedWallpaperTheme);
+  }, [recommendedWallpaperTheme, setWallpaperTheme]);
+  useEffect(
+    () => () => {
+      setWallpaperTheme(null);
+    },
+    [setWallpaperTheme],
+  );
   useEffect(() => {
     if (
       wallpaper.prefs.mode === "wallpaper" &&

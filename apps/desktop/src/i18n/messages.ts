@@ -2213,7 +2213,7 @@ export const zh = {
   "prefs.theme.dark": "暗色",
   "prefs.theme.darkDesc": "深紫玻璃拟态，适合夜间使用",
   "prefs.theme.auto": "自动",
-  "prefs.theme.autoDesc": "跟随系统外观设置",
+  "prefs.theme.autoDesc": "壁纸模式跟随画面明暗，否则跟随系统",
 
   "prefs.wallpaper.title": "全局背景",
   "prefs.wallpaper.sub":
@@ -5322,7 +5322,7 @@ export const en: Record<MessageKey, string> = {
   "prefs.theme.dark": "Dark",
   "prefs.theme.darkDesc": "Deep purple glass for night use",
   "prefs.theme.auto": "Auto",
-  "prefs.theme.autoDesc": "Follow system appearance",
+  "prefs.theme.autoDesc": "Match wallpaper brightness, otherwise follow the system",
 
   "prefs.wallpaper.title": "Global background",
   "prefs.wallpaper.sub":

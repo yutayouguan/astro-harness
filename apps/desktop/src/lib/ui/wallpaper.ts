@@ -9,6 +9,8 @@ export type WallpaperAsset = {
   width: number;
   height: number;
   createdAt: string;
+  luminance?: number;
+  recommendedTheme?: "light" | "dark";
   provider?: string;
   model?: string;
 };
@@ -61,6 +63,14 @@ function normalizeAsset(raw: unknown): WallpaperAsset | null {
     height: clamp(value.height, 0, 16_384, 0),
     createdAt:
       typeof value.createdAt === "string" ? value.createdAt : "",
+    luminance:
+      typeof value.luminance === "number" && Number.isFinite(value.luminance)
+        ? Math.min(1, Math.max(0, value.luminance))
+        : undefined,
+    recommendedTheme:
+      value.recommendedTheme === "dark" || value.recommendedTheme === "light"
+        ? value.recommendedTheme
+        : undefined,
     provider:
       typeof value.provider === "string" ? value.provider : undefined,
     model: typeof value.model === "string" ? value.model : undefined,

@@ -31,7 +31,11 @@ test("invalid stored wallpaper prefs use defaults and empty wallpaper mode stays
 test("normalization clamps controls and rejects malformed assets", () => {
   const prefs = normalizeWallpaperPrefs({
     mode: "wallpaper",
-    current: asset("current"),
+    current: {
+      ...asset("current"),
+      luminance: 3,
+      recommendedTheme: "dark",
+    },
     recent: [asset("current"), { id: "broken" }],
     fit: "stretch",
     shade: 900,
@@ -41,6 +45,8 @@ test("normalization clamps controls and rejects malformed assets", () => {
   assert.equal(prefs.fit, "stretch");
   assert.equal(prefs.shade, 55);
   assert.equal(prefs.blur, 0);
+  assert.equal(prefs.current?.luminance, 1);
+  assert.equal(prefs.current?.recommendedTheme, "dark");
   assert.deepEqual(prefs.recent.map((item) => item.id), ["current"]);
 });
 

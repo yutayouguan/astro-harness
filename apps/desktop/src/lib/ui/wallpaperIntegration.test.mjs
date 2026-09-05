@@ -23,8 +23,10 @@ const shellStyles = await readFile(
 test("wallpaper commands are registered and the settings card calls both paths", () => {
   assert.match(commands, /commands::wallpaper::import_wallpaper/);
   assert.match(commands, /commands::wallpaper::generate_wallpaper/);
+  assert.match(commands, /commands::wallpaper::analyze_wallpaper/);
   assert.match(hook, /invoke<WallpaperAsset>\("import_wallpaper"/);
   assert.match(hook, /invoke<WallpaperAsset>\("generate_wallpaper"/);
+  assert.match(hook, /invoke<WallpaperAnalysis>\("analyze_wallpaper"/);
   assert.match(panel, /controller\.importImage\(path\)/);
   assert.match(panel, /controller\.generate\(generatedPrompt\)/);
 });
@@ -53,4 +55,5 @@ test("wallpaper mode remains independent from color style", () => {
   assert.match(app, /wallpaper=\{wallpaper\}/);
   assert.match(app, /colorStyle === "dynamic" \|\| wallpaperEnabled/);
   assert.match(hook, /cycleRecentWallpaper/);
+  assert.match(app, /setWallpaperTheme\(recommendedWallpaperTheme\)/);
 });

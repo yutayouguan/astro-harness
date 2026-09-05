@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_WALLPAPER_PREFS,
   addRecentWallpaper,
@@ -48,6 +48,11 @@ export type WallpaperController = {
   markCurrentUnavailable: () => void;
 };
 
+type WallpaperAnalysis = {
+  luminance: number;
+  recommendedTheme: "light" | "dark";
+};
+
 export function useWallpaper(): WallpaperController {
   const [prefs, setPrefs] = useState<WallpaperPrefs>(() =>
     typeof window === "undefined"
@@ -56,6 +61,7 @@ export function useWallpaper(): WallpaperController {
   );
   const [busy, setBusy] = useState<WallpaperController["busy"]>(null);
   const [error, setError] = useState<string | null>(null);
+  const analysisRequests = useRef(new Set<string>());
 
   const update = useCallback((recipe: (current: WallpaperPrefs) => WallpaperPrefs) => {
     setPrefs((current) => {
@@ -154,6 +160,40 @@ export function useWallpaper(): WallpaperController {
     });
     setError("壁纸文件不可用，已恢复为氛围配色");
   }, [update]);
+
+  useEffect(() => {
+    const asset = prefs.current;
+    if (!asset || asset.recommendedTheme || analysisRequests.current.has(asset.path)) {
+      return;
+    }
+    analysisRequests.current.add(asset.path);
+    let cancelled = false;
+    void invoke<WallpaperAnalysis>("analyze_wallpaper", { path: asset.path })
+      .then((analysis) => {
+        if (cancelled) return;
+        update((current) => {
+          const enrich = (candidate: WallpaperAsset) =>
+            candidate.id === asset.id ? { ...candidate, ...analysis } : candidate;
+          return {
+            ...current,
+            current: current.current ? enrich(current.current) : null,
+            recent: current.recent.map(enrich),
+          };
+        });
+      })
+      .catch(() => {
+        // 旧壁纸分析失败时沿用系统主题，不影响壁纸显示。
+      });
+    return () => {
+      cancelled = true;
+      analysisRequests.current.delete(asset.path);
+    };
+  }, [
+    prefs.current?.id,
+    prefs.current?.path,
+    prefs.current?.recommendedTheme,
+    update,
+  ]);
 
   return {
     prefs,

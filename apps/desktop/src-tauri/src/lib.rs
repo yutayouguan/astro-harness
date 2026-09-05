@@ -255,6 +255,7 @@ pub fn run() {
             commands::chat::generate_image,
             commands::wallpaper::import_wallpaper,
             commands::wallpaper::generate_wallpaper,
+            commands::wallpaper::analyze_wallpaper,
             commands::chat::query_memory,
             // — agent —
             commands::agent::prepare_task_worktree,
