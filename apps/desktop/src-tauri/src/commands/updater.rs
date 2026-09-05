@@ -6,6 +6,8 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 use url::Url;
 
 const UPDATE_ENDPOINT_ENV: &str = "ASTRO_UPDATE_ENDPOINT";
+const DEFAULT_UPDATE_ENDPOINT: &str =
+    "https://github.com/yutayouguan/astro-agent-releases/releases/latest/download/latest.json";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,7 +45,11 @@ fn parse_update_endpoint(raw: Option<String>) -> Result<Option<Url>, String> {
 fn configured_update_endpoint() -> Result<Option<Url>, String> {
     let runtime = std::env::var(UPDATE_ENDPOINT_ENV).ok();
     let compiled = option_env!("ASTRO_UPDATE_ENDPOINT").map(str::to_owned);
-    parse_update_endpoint(runtime.or(compiled))
+    parse_update_endpoint(
+        runtime
+            .or(compiled)
+            .or_else(|| Some(DEFAULT_UPDATE_ENDPOINT.to_owned())),
+    )
 }
 
 async fn find_update(app: &AppHandle) -> Result<Option<Update>, String> {
@@ -138,7 +144,7 @@ pub(crate) async fn install_app_update(app: AppHandle) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_update_endpoint;
+    use super::{configured_update_endpoint, parse_update_endpoint, DEFAULT_UPDATE_ENDPOINT};
 
     #[test]
     fn updater_endpoint_must_be_https() {
@@ -153,6 +159,10 @@ mod tests {
             parse_update_endpoint(Some("https://updates.example/latest.json".to_owned()))
                 .unwrap()
                 .is_some()
+        );
+        assert_eq!(
+            configured_update_endpoint().unwrap().unwrap().as_str(),
+            DEFAULT_UPDATE_ENDPOINT
         );
     }
 }

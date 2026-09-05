@@ -27,12 +27,10 @@ const [
 test("desktop updater pins a public key and only accepts HTTPS manifests", () => {
   assert.match(cargo, /tauri-plugin-updater\s*=\s*"2\.11\.0"/);
   assert.match(tauriLib, /tauri_plugin_updater::Builder::new\(\)/);
-  assert.match(
-    tauriLib,
-    /include_str!\("\.\.\/updater\.pub"\)\.trim\(\)/,
-  );
+  assert.match(tauriLib, /include_str!\("\.\.\/updater\.pub"\)\.trim\(\)/);
   assert.match(command, /endpoint\.scheme\(\) != "https"/);
   assert.match(command, /option_env!\("ASTRO_UPDATE_ENDPOINT"\)/);
+  assert.match(command, /yutayouguan\/astro-agent-releases/);
   assert.match(publicKey, /^dW50cnVzdGVkIGNvbW1lbnQ6/);
 });
 
@@ -49,8 +47,8 @@ test("update commands check, verify, install, report progress, and restart", () 
 
 test("release workflow publishes signed updater assets without source", () => {
   assert.equal(JSON.parse(tauriConfig).bundle.createUpdaterArtifacts, true);
-  assert.match(workflow, /ASTRO_RELEASE_OWNER/);
-  assert.match(workflow, /ASTRO_RELEASE_REPO/);
+  assert.match(workflow, /owner:\s*yutayouguan/);
+  assert.match(workflow, /repo:\s*astro-agent-releases/);
   assert.match(workflow, /secrets\.ASTRO_RELEASE_TOKEN/);
   assert.match(workflow, /secrets\.TAURI_SIGNING_PRIVATE_KEY/);
   assert.match(workflow, /TAURI_SIGNING_PRIVATE_KEY_PASSWORD/);

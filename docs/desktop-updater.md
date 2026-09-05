@@ -18,12 +18,9 @@ GitHub Releases 仓库，客户端只访问该公开仓库。
 
 ## GitHub 配置
 
-1. 新建一个公开仓库，例如 `astro-agent-releases`。仓库只需初始化 `main` 分支，不能推送 Astro 源码。
-2. 在私有源码仓库的 Actions variables 中配置：
-   - `ASTRO_RELEASE_OWNER`：公开仓库所属账号或组织。
-   - `ASTRO_RELEASE_REPO`：公开仓库名称。
-3. 创建只对公开发布仓库拥有 `Contents: Read and write` 权限的 fine-grained PAT，并保存为源码仓库 Secret `ASTRO_RELEASE_TOKEN`。
-4. 将本机签名材料写入源码仓库 Secrets：
+1. 公开资产仓库固定为 [`yutayouguan/astro-agent-releases`](https://github.com/yutayouguan/astro-agent-releases)。该仓库只初始化 `main` 分支，不能推送 Astro 源码。
+2. 创建只对公开发布仓库拥有 `Contents: Read and write` 权限的 fine-grained PAT，并保存为源码仓库 Secret `ASTRO_RELEASE_TOKEN`。
+3. 将本机签名材料写入源码仓库 Secrets：
 
    ```bash
    gh auth login
@@ -46,7 +43,7 @@ GitHub Releases 仓库，客户端只访问该公开仓库。
 构建时客户端会写入以下更新地址：
 
 ```text
-https://github.com/<ASTRO_RELEASE_OWNER>/<ASTRO_RELEASE_REPO>/releases/latest/download/latest.json
+https://github.com/yutayouguan/astro-agent-releases/releases/latest/download/latest.json
 ```
 
 本地开发构建未设置 `ASTRO_UPDATE_ENDPOINT` 时，关于页会明确显示更新功能尚未配置。

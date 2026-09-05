@@ -72,13 +72,11 @@ jobs:
 
       - name: Validate public release configuration
         env:
-          ASTRO_RELEASE_OWNER: ${{ vars.ASTRO_RELEASE_OWNER }}
-          ASTRO_RELEASE_REPO: ${{ vars.ASTRO_RELEASE_REPO }}
           ASTRO_RELEASE_TOKEN: ${{ secrets.ASTRO_RELEASE_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: >-
-          node -e "for (const key of ['ASTRO_RELEASE_OWNER','ASTRO_RELEASE_REPO','ASTRO_RELEASE_TOKEN','TAURI_SIGNING_PRIVATE_KEY','TAURI_SIGNING_PRIVATE_KEY_PASSWORD']) if (!process.env[key]) { console.error('Missing release configuration: ' + key); process.exitCode = 1 }"
+          node -e "for (const key of ['ASTRO_RELEASE_TOKEN','TAURI_SIGNING_PRIVATE_KEY','TAURI_SIGNING_PRIVATE_KEY_PASSWORD']) if (!process.env[key]) { console.error('Missing release configuration: ' + key); process.exitCode = 1 }"
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -94,13 +92,13 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.ASTRO_RELEASE_TOKEN }}
-          ASTRO_UPDATE_ENDPOINT: https://github.com/${{ vars.ASTRO_RELEASE_OWNER }}/${{ vars.ASTRO_RELEASE_REPO }}/releases/latest/download/latest.json
+          ASTRO_UPDATE_ENDPOINT: https://github.com/yutayouguan/astro-agent-releases/releases/latest/download/latest.json
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
-          owner: ${{ vars.ASTRO_RELEASE_OWNER }}
-          repo: ${{ vars.ASTRO_RELEASE_REPO }}
+          owner: yutayouguan
+          repo: astro-agent-releases
           tagName: v__VERSION__
           releaseName: Astro Agent v__VERSION__
           releaseBody: |
