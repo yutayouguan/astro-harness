@@ -28,9 +28,10 @@ test("keeps enough room for the main content on narrow windows", () => {
 });
 
 test("switches the sidebar to icon-only density at the compact breakpoint", () => {
-  assert.equal(SIDEBAR_COMPACT_MAX_WIDTH, 760);
-  assert.equal(shouldUseCompactSidebar(761), false);
-  assert.equal(shouldUseCompactSidebar(760), true);
+  assert.equal(SIDEBAR_COMPACT_MAX_WIDTH, 960);
+  assert.equal(shouldUseCompactSidebar(961), false);
+  assert.equal(shouldUseCompactSidebar(960), true);
+  assert.equal(shouldUseCompactSidebar(879), true);
   assert.equal(shouldUseCompactSidebar(480), true);
   assert.equal(shouldUseCompactSidebar(0), false);
   assert.equal(shouldUseCompactSidebar(Number.POSITIVE_INFINITY), false);
