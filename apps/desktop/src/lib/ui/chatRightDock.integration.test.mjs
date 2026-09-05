@@ -126,6 +126,16 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
   assert.match(browserDock, /onTitleMouseDown/);
   assert.match(browserDock, /onTitleDoubleClick/);
   assert.match(chatView, /composerPresentation === "capsule"/);
+  assert.match(chatView, /<motion\.form/);
+  assert.match(chatView, /<motion\.div/);
+  assert.match(chatView, /layout=\{!reduceComposerMotion\}/);
+  assert.match(chatView, /layoutDependency=\{composerLayoutState\}/);
+  assert.match(chatView, /COMPOSER_LAYOUT_TRANSITION/);
+  assert.match(chatView, /COMPOSER_REDUCED_MOTION_TRANSITION/);
+  assert.match(chatView, /type:\s*"spring"/);
+  assert.match(chatView, /bounce:\s*0/);
+  assert.match(chatView, /duration:\s*0\.4/);
+  assert.match(chatView, /useReducedMotion\(\)/);
   assert.match(chatView, /Boolean\(workspaceContent\)/);
   assert.doesNotMatch(chatView, /capsuleComposerExpanded/);
   assert.doesNotMatch(chatView, /input\.includes\("\\n"\)/);
@@ -159,6 +169,14 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
     /calc\(100% - var\(--browser-dock-visible-width\) - 20px\)/,
   );
   assert.match(composerStyles, /\.composer-shell\.is-capsule/);
+  assert.match(
+    composerStyles,
+    /\.composer-shell\.is-capsule\s*\{[\s\S]*?right:\s*16px;[\s\S]*?left:\s*16px;[\s\S]*?width:\s*auto;[\s\S]*?max-width:\s*640px;/,
+  );
+  assert.doesNotMatch(
+    composerStyles,
+    /\.composer-shell\.is-capsule\s*\{[^}]*transform:\s*translateX/s,
+  );
   assert.match(composerStyles, /--composer-capsule-frost/);
   assert.match(composerStyles, /var\(--glass-panel\) 78%/);
   assert.match(composerStyles, /saturate\(1\.18\)/);

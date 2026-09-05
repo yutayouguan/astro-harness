@@ -1614,12 +1614,11 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
     var(--glass-panel) 78%,
     var(--tone-soft, transparent) 22%
   );
-  right: auto;
+  right: 16px;
   bottom: 18px;
-  left: 50%;
-  width: min(640px, calc(100% - 32px));
+  left: 16px;
+  width: auto;
   max-width: 640px;
-  transform: translateX(-50%);
 }
 
 html[data-theme="dark"] .composer-shell.is-capsule {
@@ -1706,8 +1705,9 @@ html[data-theme="dark"]
 
 @media (max-width: 560px) {
   .composer-shell.is-capsule {
+    right: 10px;
     bottom: 10px;
-    width: calc(100% - 20px);
+    left: 10px;
   }
 }
 

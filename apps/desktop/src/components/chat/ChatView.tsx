@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { motion, useReducedMotion } from "framer-motion";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
   Bot,
@@ -511,6 +512,12 @@ const MAX_ATTACHMENTS = 8;
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
 const HEADER_UNDERLAY_ENTER_SCROLL_TOP = 12;
 const HEADER_UNDERLAY_EXIT_SCROLL_TOP = 2;
+const COMPOSER_LAYOUT_TRANSITION = {
+  type: "spring",
+  bounce: 0,
+  duration: 0.4,
+} as const;
+const COMPOSER_REDUCED_MOTION_TRANSITION = { duration: 0 } as const;
 
 type PermissionPreset = "ask_for_approval" | "approve_for_me" | "full_access";
 type PermissionSettings = {
@@ -926,6 +933,7 @@ export default function ChatView({
   onSlashAction,
 }: Props) {
   const { t } = useI18n();
+  const reduceComposerMotion = useReducedMotion();
   const { showToast, toastHost } = useTransientToast();
   const realtime = useRealtimeConversation({
     sessionId,
@@ -2273,6 +2281,14 @@ export default function ChatView({
     agentCreateMissing.length > 0 ||
     welcomeTemplateMissing.length > 0 ||
     fileDragOver;
+  const composerLayoutState = useCapsuleComposer
+    ? capsuleComposerHasRichContent
+      ? "capsule-expanded"
+      : "capsule"
+    : "default";
+  const composerLayoutTransition = reduceComposerMotion
+    ? COMPOSER_REDUCED_MOTION_TRANSITION
+    : COMPOSER_LAYOUT_TRANSITION;
 
   useEffect(() => {
     onComposerOverlayOpenChange?.(
@@ -3415,13 +3431,16 @@ export default function ChatView({
           </div>
         )}
 
-        <form
+        <motion.form
           ref={composerShellRef}
           className={`composer-shell${useCapsuleComposer ? " is-capsule" : ""}${
             useCapsuleComposer && capsuleComposerHasRichContent
               ? " is-capsule-expanded"
               : ""
           }`}
+          layout={!reduceComposerMotion}
+          layoutDependency={composerLayoutState}
+          transition={{ layout: composerLayoutTransition }}
           onSubmit={(e) => {
             e.preventDefault();
             if (composerContexts.length === 0 && tryHandleSlashSubmit()) return;
@@ -3782,8 +3801,11 @@ export default function ChatView({
             />
           ) : null}
 
-          <div
+          <motion.div
             className={`composer composer--stacked ${composerClarify ? "has-clarify" : ""} ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
+            layout={!reduceComposerMotion}
+            layoutDependency={composerLayoutState}
+            transition={{ layout: composerLayoutTransition }}
           >
             <input
               ref={fileInputRef}
@@ -4393,8 +4415,8 @@ export default function ChatView({
                 ) : null}
               </div>
             </div>
-          </div>
-        </form>
+          </motion.div>
+        </motion.form>
         <ComposerContextPreview
           target={previewTarget}
           onClose={() => setPreviewTarget(null)}
