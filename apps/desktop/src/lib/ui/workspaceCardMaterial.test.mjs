@@ -87,8 +87,11 @@ test("workspace content cards become solid for accessibility preferences", () =>
   );
 });
 
-test("large content cards use the restrained liquid recipe over busy wallpapers", () => {
-  for (const level of ["liquid", "liquid-soft"]) {
+test("workspace content cards follow the selected liquid glass strength", () => {
+  for (const [level, recipe] of [
+    ["liquid", "liquid-glass"],
+    ["liquid-soft", "liquid-glass-soft"],
+  ]) {
     const escaped = level.replace("-", "\\-");
     const block = glassIntensity.match(
       new RegExp(
@@ -96,9 +99,18 @@ test("large content cards use the restrained liquid recipe over busy wallpapers"
       ),
     )?.groups?.body;
     assert.ok(block, `missing ${level} glass overrides`);
-    assert.match(block, /--content-card-border:\s*var\(--liquid-glass-soft-edge\);/);
-    assert.match(block, /--content-card-background:[\s\S]*?--liquid-glass-soft-sheen/);
-    assert.match(block, /--content-card-backdrop:\s*var\(--liquid-glass-soft-backdrop\);/);
+    assert.match(
+      block,
+      new RegExp(`--content-card-border:\\s*var\\(--${recipe}-edge\\);`),
+    );
+    assert.match(
+      block,
+      new RegExp(`--content-card-background:[\\s\\S]*?--${recipe}-sheen`),
+    );
+    assert.match(
+      block,
+      new RegExp(`--content-card-backdrop:\\s*var\\(--${recipe}-backdrop\\);`),
+    );
   }
 });
 

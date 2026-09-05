@@ -36,9 +36,9 @@ this contract so feature colors remain accents rather than competing base materi
 Small controls and nested rows intentionally keep lighter component-specific surfaces;
 do not apply the content-card recipe recursively. Accessibility overrides replace the
 background with the semantic panel surface and disable backdrop blur.
-Both Liquid Glass levels map large content cards to the restrained liquid recipe: large
-surfaces need a steadier neutral tint than lightweight chrome, especially over wallpapers
-whose brightness changes sharply across the window.
+Content cards follow the selected Liquid Glass strength: `liquid` uses the full clear,
+refractive recipe while `liquid-soft` retains the steadier neutral tint for readability.
+Accessibility preferences still replace either recipe with a solid semantic surface.
 
 `foundation/themes.css` and `foundation/tones.css` are deprecated barrels for legacy external entry points. The application does not import them, preventing duplicate token injection.
 
