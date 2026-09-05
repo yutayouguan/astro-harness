@@ -2389,6 +2389,7 @@ export default function App() {
                           projectId={activeProject.id}
                           projectName={activeProject.name}
                           projectRoot={activeProjectRoot}
+                          wallpaperActive={wallpaperEnabled}
                           onClose={() => setTerminalDockOpen(false)}
                         />
                       </Suspense>

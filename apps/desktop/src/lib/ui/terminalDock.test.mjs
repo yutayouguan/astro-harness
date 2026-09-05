@@ -104,7 +104,7 @@ test("terminal content clips all four xterm corners to the inner radius", () => 
 
   assert.match(
     css,
-    /\.terminal-dock-screen \.xterm\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border-radius:\s*12px;/,
+    /\.terminal-dock-screen \.xterm\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border-radius:\s*12px 12px 0 0;/,
   );
   assert.doesNotMatch(outerDock, /border-radius/);
 });
@@ -117,9 +117,16 @@ test("terminal uses a denser readable material when wallpaper is active", () => 
   assert.match(app, /root\.setAttribute\("data-wallpaper", "true"\)/);
   assert.match(app, /root\.removeAttribute\("data-wallpaper"\)/);
   assert.match(dock, /"--terminal-screen-bg"/);
+  assert.match(dock, /allowTransparency:\s*wallpaperActive/);
+  assert.match(app, /wallpaperActive=\{wallpaperEnabled\}/);
+  assert.match(dock, /activeSession\.id.*wallpaperActive/s);
   assert.match(dock, /"data-wallpaper"/);
   assert.match(css, /html\[data-wallpaper="true"\]\[data-theme="light"\]/);
-  assert.match(css, /--terminal-screen-bg:\s*rgb\(246, 248, 252\)/);
+  assert.match(
+    css,
+    /--terminal-screen-bg:\s*rgba\(244, 248, 251, 0\.64\)/,
+  );
+  assert.match(css, /padding:\s*4px 10px 0 14px/);
   assert.match(css, /html\[data-wallpaper="true"\] \.terminal-dock\s*\{/);
   assert.match(css, /backdrop-filter:\s*blur\(/);
   assert.match(css, /prefers-reduced-transparency/);
