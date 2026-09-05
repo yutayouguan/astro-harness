@@ -3,6 +3,7 @@ pub mod executor;
 pub mod variables;
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::Local;
@@ -37,6 +38,13 @@ pub struct WorkflowRunResult {
 }
 
 const WORKFLOW_TIMEOUT_SECS: u64 = 30 * 60; // 30 分钟
+
+#[derive(Clone, Default)]
+struct WorkflowExecutionOptions {
+    human_approval_granted: bool,
+    owner_session_id: String,
+    workflow_snapshots: Option<Arc<HashMap<String, Workflow>>>,
+}
 
 /// 执行一条工作流
 pub async fn execute_workflow(
@@ -162,7 +170,7 @@ pub async fn execute_workflow_with_provider_configs_and_run_id(
         run_db,
         provider_configs,
         run_id,
-        false,
+        WorkflowExecutionOptions::default(),
     )
     .await
 }
@@ -175,6 +183,8 @@ pub async fn execute_workflow_as_agent_tool(
     run_db: &WorkflowRunDb,
     provider_configs: HashMap<String, RuntimeProviderConfig>,
     run_id: String,
+    owner_session_id: &str,
+    workflow_snapshots: Arc<HashMap<String, Workflow>>,
 ) -> Result<WorkflowRunResult> {
     execute_workflow_with_options(
         workflow,
@@ -183,7 +193,11 @@ pub async fn execute_workflow_as_agent_tool(
         run_db,
         provider_configs,
         run_id,
-        true,
+        WorkflowExecutionOptions {
+            human_approval_granted: true,
+            owner_session_id: owner_session_id.to_string(),
+            workflow_snapshots: Some(workflow_snapshots),
+        },
     )
     .await
 }
@@ -195,18 +209,19 @@ async fn execute_workflow_with_options(
     run_db: &WorkflowRunDb,
     provider_configs: HashMap<String, RuntimeProviderConfig>,
     run_id: String,
-    human_approval_granted: bool,
+    options: WorkflowExecutionOptions,
 ) -> Result<WorkflowRunResult> {
     anyhow::ensure!(!run_id.trim().is_empty(), "workflow run id 不能为空");
     let started_at = Local::now().to_rfc3339();
 
     run_db
-        .insert_run(
+        .insert_run_owned(
             &run_id,
             &workflow.id,
             &workflow.name,
             trigger_type,
             &started_at,
+            &options.owner_session_id,
         )
         .await?;
 
@@ -224,7 +239,7 @@ async fn execute_workflow_with_options(
             &run_id,
             run_db,
             provider_configs,
-            human_approval_granted,
+            options,
         ),
     )
     .await
@@ -282,7 +297,7 @@ async fn execute_inner(
     run_id: &str,
     run_db: &WorkflowRunDb,
     provider_configs: HashMap<String, RuntimeProviderConfig>,
-    human_approval_granted: bool,
+    options: WorkflowExecutionOptions,
 ) -> Result<WorkflowRunResult> {
     execute_inner_with_depth(
         workflow,
@@ -291,7 +306,7 @@ async fn execute_inner(
         run_db,
         0,
         provider_configs,
-        human_approval_granted,
+        options,
     )
     .await
 }
@@ -303,7 +318,7 @@ async fn execute_inner_with_depth(
     run_db: &WorkflowRunDb,
     depth: u32,
     provider_configs: HashMap<String, RuntimeProviderConfig>,
-    human_approval_granted: bool,
+    options: WorkflowExecutionOptions,
 ) -> Result<WorkflowRunResult> {
     let plan = resolve_dag(&workflow.nodes, &workflow.edges)?;
 
@@ -311,7 +326,8 @@ async fn execute_inner_with_depth(
 
     let mut ctx = VariableContext::new(workflow.variables.clone())
         .with_provider_configs(provider_configs)
-        .with_human_approval_granted(human_approval_granted);
+        .with_human_approval_granted(options.human_approval_granted)
+        .with_workflow_snapshots(options.workflow_snapshots);
 
     // 将 trigger_input 注入全局变量
     if let serde_json::Value::Object(map) = trigger_input {
@@ -746,12 +762,15 @@ fn execute_sub_workflow<'a>(
             }
             .into());
         }
-        let store = WorkflowStore::open_default()?;
-        let sub_wf = store
-            .get(workflow_id)?
-            .ok_or_else(|| WorkflowError::SubWorkflowNotFound {
-                workflow_id: workflow_id.to_string(),
-            })?;
+        let sub_wf = if let Some(snapshot) = ctx.workflow_snapshot(workflow_id) {
+            snapshot.clone()
+        } else {
+            WorkflowStore::open_default()?
+                .get(workflow_id)?
+                .ok_or_else(|| WorkflowError::SubWorkflowNotFound {
+                    workflow_id: workflow_id.to_string(),
+                })?
+        };
 
         let input = ctx.snapshot_outputs();
         let sub_run_id = uuid::Uuid::new_v4().to_string();
@@ -775,7 +794,11 @@ fn execute_sub_workflow<'a>(
             run_db,
             depth + 1,
             ctx.provider_configs(),
-            ctx.human_approval_granted(),
+            WorkflowExecutionOptions {
+                human_approval_granted: ctx.human_approval_granted(),
+                owner_session_id: String::new(),
+                workflow_snapshots: ctx.workflow_snapshots(),
+            },
         )
         .await;
 
@@ -1172,6 +1195,8 @@ mod tests {
             &db,
             HashMap::new(),
             "known-run-id".into(),
+            "session-1",
+            Arc::new(HashMap::new()),
         )
         .await
         .unwrap();
@@ -1185,6 +1210,14 @@ mod tests {
         assert_eq!(
             db.get_run("known-run-id").await.unwrap().unwrap().status,
             "success"
+        );
+        assert_eq!(
+            db.get_run("known-run-id")
+                .await
+                .unwrap()
+                .unwrap()
+                .owner_session_id,
+            "session-1"
         );
     }
 
@@ -1211,5 +1244,49 @@ mod tests {
             db.get_run("pending-run-id").await.unwrap().unwrap().status,
             "pending_approval"
         );
+    }
+
+    #[tokio::test]
+    async fn agent_sub_workflow_uses_the_frozen_snapshot() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db = WorkflowRunDb::new(dir.path().join("workflow.db"))
+            .await
+            .expect("workflow db");
+        let child = Workflow {
+            id: "frozen-child".into(),
+            name: "Frozen child".into(),
+            description: String::new(),
+            enabled: true,
+            agent_tool: WorkflowAgentTool::default(),
+            nodes: vec![WorkflowNode {
+                id: "child-trigger".into(),
+                node_type: NodeType::ManualTrigger,
+                label: "trigger".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                config: serde_json::json!({}),
+                disabled: false,
+            }],
+            edges: Vec::new(),
+            variables: HashMap::new(),
+            created_at: "now".into(),
+            updated_at: "now".into(),
+            icon: None,
+        };
+        let mut parent = workflow_with_middle(NodeType::CustomLoop);
+        parent.nodes[1].config = serde_json::json!({"workflow_id": child.id.clone()});
+        let snapshots = Arc::new(HashMap::from([(child.id.clone(), child)]));
+
+        let result = execute_workflow_as_agent_tool(
+            &parent,
+            serde_json::json!({}),
+            &db,
+            HashMap::new(),
+            "frozen-run".into(),
+            "session-1",
+            snapshots,
+        )
+        .await
+        .expect("frozen child executes without reading the default store");
+        assert_eq!(result.status, "success");
     }
 }

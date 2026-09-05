@@ -7,7 +7,7 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    is_reserved_agent_tool_name, is_valid_agent_tool_name, NewWorkflow, Workflow,
+    is_reserved_agent_tool_name, is_valid_agent_tool_name, NewWorkflow, NodeType, Workflow,
     WorkflowAgentToolPatch, WorkflowToolExposure,
 };
 
@@ -134,6 +134,16 @@ impl WorkflowStore {
                     && serde_json::to_vec(&wf.agent_tool.examples)?.len() <= 32 * 1024,
                 "Agent 工具调用示例过多或过大"
             );
+            if wf.enabled
+                && wf
+                    .nodes
+                    .iter()
+                    .any(|node| !node.disabled && node.node_type == NodeType::Code)
+            {
+                anyhow::bail!(
+                    "含 Code 节点的工作流尚未接入 Agent 沙箱；请先将 Agent 工具暴露设为 disabled"
+                );
+            }
         }
         Ok(())
     }
@@ -341,7 +351,7 @@ mod tests {
         let workflows = store.list().unwrap();
         assert_eq!(
             workflows[0].agent_tool.exposure,
-            WorkflowToolExposure::Deferred
+            WorkflowToolExposure::Disabled
         );
     }
 
@@ -373,5 +383,30 @@ mod tests {
             updated.agent_tool.confirmation,
             crate::model::WorkflowToolConfirmation::Always
         );
+    }
+
+    #[test]
+    fn enabled_agent_tool_rejects_unsandboxed_code_nodes() {
+        let mut workflow = Workflow::new(NewWorkflow {
+            name: "code".into(),
+            description: String::new(),
+        });
+        workflow.enabled = true;
+        workflow.nodes.push(crate::model::WorkflowNode {
+            id: "code".into(),
+            node_type: NodeType::Code,
+            label: "Code".into(),
+            position: crate::model::Position { x: 0.0, y: 0.0 },
+            config: serde_json::json!({"language": "bash", "source": "echo unsafe"}),
+            disabled: false,
+        });
+
+        let error = WorkflowStore::validate_workflow(&workflow)
+            .expect_err("Agent-callable Code workflow must fail closed");
+        assert!(error.to_string().contains("尚未接入 Agent 沙箱"));
+
+        workflow.agent_tool.exposure = WorkflowToolExposure::Disabled;
+        WorkflowStore::validate_workflow(&workflow)
+            .expect("non-Agent workflow may keep using the existing Code executor");
     }
 }

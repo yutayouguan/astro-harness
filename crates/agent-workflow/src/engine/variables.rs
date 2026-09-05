@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use anyhow::Result;
 
@@ -35,6 +36,7 @@ pub struct VariableContext {
     node_outputs: HashMap<String, serde_json::Value>,
     provider_configs: HashMap<String, RuntimeProviderConfig>,
     human_approval_granted: bool,
+    workflow_snapshots: Option<Arc<HashMap<String, crate::model::Workflow>>>,
 }
 
 impl VariableContext {
@@ -44,6 +46,7 @@ impl VariableContext {
             node_outputs: HashMap::new(),
             provider_configs: HashMap::new(),
             human_approval_granted: false,
+            workflow_snapshots: None,
         }
     }
 
@@ -66,6 +69,22 @@ impl VariableContext {
 
     pub fn human_approval_granted(&self) -> bool {
         self.human_approval_granted
+    }
+
+    pub fn with_workflow_snapshots(
+        mut self,
+        snapshots: Option<Arc<HashMap<String, crate::model::Workflow>>>,
+    ) -> Self {
+        self.workflow_snapshots = snapshots;
+        self
+    }
+
+    pub fn workflow_snapshot(&self, workflow_id: &str) -> Option<&crate::model::Workflow> {
+        self.workflow_snapshots.as_ref()?.get(workflow_id)
+    }
+
+    pub fn workflow_snapshots(&self) -> Option<Arc<HashMap<String, crate::model::Workflow>>> {
+        self.workflow_snapshots.clone()
     }
 
     pub(crate) fn provider_configs(&self) -> HashMap<String, RuntimeProviderConfig> {

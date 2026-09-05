@@ -19,11 +19,12 @@ fn build_provider_config(
         .get("provider_id")
         .and_then(|v| v.as_str())
         .unwrap_or("openai");
-    let model = node
+    let model_override = node
         .config
         .get("model")
         .and_then(|v| v.as_str())
-        .unwrap_or("gpt-4o-mini");
+        .map(str::trim)
+        .filter(|model| !model.is_empty());
     let temperature = node
         .config
         .get("temperature")
@@ -37,7 +38,7 @@ fn build_provider_config(
 
     if let Some(runtime) = ctx.provider_config(provider_id) {
         let mut config = runtime.config.clone();
-        if !model.trim().is_empty() {
+        if let Some(model) = model_override {
             config.model = model.to_string();
         }
         config.temperature = temperature;
@@ -60,7 +61,7 @@ fn build_provider_config(
         ProviderConfig {
             api_key,
             base_url,
-            model: model.to_string(),
+            model: model_override.unwrap_or("gpt-4o-mini").to_string(),
             temperature,
             max_tokens,
             thinking_enabled: false,
@@ -478,5 +479,60 @@ impl NodeExecutor for VisionUnderstandingExec {
             "input_path": input_path,
             "provider": provider_id,
         })))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    use crate::engine::RuntimeProviderConfig;
+    use crate::model::{NodeType, Position};
+
+    fn node(config: serde_json::Value) -> WorkflowNode {
+        WorkflowNode {
+            id: "ai".into(),
+            node_type: NodeType::AiAgentTask,
+            label: "AI".into(),
+            position: Position { x: 0.0, y: 0.0 },
+            config,
+            disabled: false,
+        }
+    }
+
+    #[test]
+    fn runtime_model_is_kept_unless_node_explicitly_overrides_it() {
+        let runtime = RuntimeProviderConfig {
+            backend_id: "openai".into(),
+            config: ProviderConfig {
+                api_key: "secret".into(),
+                model: "configured-model".into(),
+                ..ProviderConfig::default()
+            },
+            image_model: String::new(),
+            video_model: String::new(),
+            tts_model: String::new(),
+            music_model: String::new(),
+        };
+        let ctx = VariableContext::default()
+            .with_provider_configs(HashMap::from([("provider-record".into(), runtime)]));
+
+        let (_, inherited) = build_provider_config(
+            &node(serde_json::json!({"provider_id": "provider-record"})),
+            &ctx,
+        )
+        .expect("inherited provider config");
+        assert_eq!(inherited.model, "configured-model");
+
+        let (_, overridden) = build_provider_config(
+            &node(serde_json::json!({
+                "provider_id": "provider-record",
+                "model": "node-model"
+            })),
+            &ctx,
+        )
+        .expect("overridden provider config");
+        assert_eq!(overridden.model, "node-model");
     }
 }

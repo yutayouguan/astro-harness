@@ -104,6 +104,12 @@ Agent 调用参数会先按 `input_schema` 校验，再原样注入 `trigger_inp
 `workflow.get_run` 查询或用 `workflow.cancel_run` 取消。AI、媒体、Action 和人工审批节点
 会在运行整个 Workflow 前进入 Agent 审批链。
 
+`get_run` / `cancel_run` 只允许访问当前 Agent Session 启动的 run；其他 Session 的 id
+按不存在处理。Agent Step 还会冻结被引用的子工作流，执行期间的编辑/删除不会
+改变已签发调用。`Code` 节点当前仍使用旧的本地子进程执行器，因此不允许通过
+Agent 工具调用，直到它接入 Agent sandbox。Workflow HTTP/Webhook 对初始 URL 和每一次
+重定向都执行 DNS/私网 SSRF 检查。
+
 ### 目录约定
 
 ```

@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
     status TEXT NOT NULL DEFAULT 'running',
     error TEXT,
     node_count INTEGER DEFAULT 0,
-    output TEXT
+    output TEXT,
+    owner_session_id TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_wf_runs_wid ON workflow_runs(workflow_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wf_runs_started ON workflow_runs(started_at DESC);
@@ -51,6 +52,8 @@ pub struct WorkflowRunRow {
     pub error: Option<String>,
     pub node_count: i64,
     pub output: Option<String>,
+    #[serde(default, skip_serializing)]
+    pub owner_session_id: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -84,6 +87,7 @@ fn row_to_run(r: &sqlx::sqlite::SqliteRow) -> WorkflowRunRow {
         error: r.get("error"),
         node_count: r.get("node_count"),
         output: r.get("output"),
+        owner_session_id: r.get("owner_session_id"),
     }
 }
 
@@ -108,6 +112,25 @@ impl WorkflowRunDb {
         let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
         let pool = db.open_pool_at_path(&DB_SPEC, &path).await?;
         sqlx::query(DDL).execute(&pool).await?;
+        let columns = sqlx::query("PRAGMA table_info(workflow_runs)")
+            .fetch_all(&pool)
+            .await?;
+        if !columns
+            .iter()
+            .any(|row| row.get::<String, _>("name") == "owner_session_id")
+        {
+            if let Err(error) = sqlx::query(
+                "ALTER TABLE workflow_runs ADD COLUMN owner_session_id TEXT NOT NULL DEFAULT ''",
+            )
+            .execute(&pool)
+            .await
+            {
+                let message = error.to_string();
+                if !message.contains("duplicate column name") {
+                    return Err(error.into());
+                }
+            }
+        }
         Ok(Self { pool })
     }
 
@@ -126,14 +149,28 @@ impl WorkflowRunDb {
         trigger_type: &str,
         started_at: &str,
     ) -> Result<()> {
+        self.insert_run_owned(id, workflow_id, workflow_name, trigger_type, started_at, "")
+            .await
+    }
+
+    pub async fn insert_run_owned(
+        &self,
+        id: &str,
+        workflow_id: &str,
+        workflow_name: &str,
+        trigger_type: &str,
+        started_at: &str,
+        owner_session_id: &str,
+    ) -> Result<()> {
         sqlx::query(
-            "INSERT INTO workflow_runs (id, workflow_id, workflow_name, trigger_type, started_at, status) VALUES (?1,?2,?3,?4,?5,'running')",
+            "INSERT INTO workflow_runs (id, workflow_id, workflow_name, trigger_type, started_at, status, owner_session_id) VALUES (?1,?2,?3,?4,?5,'running',?6)",
         )
         .bind(id)
         .bind(workflow_id)
         .bind(workflow_name)
         .bind(trigger_type)
         .bind(started_at)
+        .bind(owner_session_id)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -290,6 +327,7 @@ impl WorkflowRunDb {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_db::sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
     #[tokio::test]
     async fn run_lifecycle() {
@@ -309,6 +347,26 @@ mod tests {
         .unwrap();
         let run = db.get_run("r1").await.unwrap().unwrap();
         assert_eq!(run.status, "running");
+        assert!(run.owner_session_id.is_empty());
+
+        db.insert_run_owned(
+            "r-owned",
+            "wf1",
+            "测试流程",
+            "agent_tool",
+            "2026-01-01T00:00:00+08:00",
+            "session-1",
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            db.get_run("r-owned")
+                .await
+                .unwrap()
+                .unwrap()
+                .owner_session_id,
+            "session-1"
+        );
 
         db.finish_run(
             "r1",
@@ -325,10 +383,11 @@ mod tests {
         assert_eq!(run.node_count, 3);
 
         let list = db.list_runs(Some("wf1"), 100).await.unwrap();
-        assert_eq!(list.len(), 1);
+        assert_eq!(list.len(), 2);
 
         db.delete_run("r1").await.unwrap();
         assert!(db.get_run("r1").await.unwrap().is_none());
+        db.delete_run("r-owned").await.unwrap();
     }
 
     #[tokio::test]
@@ -339,5 +398,58 @@ mod tests {
 
         assert!(path.is_file());
         assert!(!dir.path().join(DB_SPEC.filename).exists());
+    }
+
+    #[tokio::test]
+    async fn existing_database_adds_owner_session_column() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("legacy-workflow.db");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true),
+            )
+            .await
+            .expect("legacy pool");
+        sqlx::query(
+            "CREATE TABLE workflow_runs (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                workflow_name TEXT NOT NULL DEFAULT '',
+                trigger_type TEXT NOT NULL DEFAULT 'manual',
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                status TEXT NOT NULL DEFAULT 'running',
+                error TEXT,
+                node_count INTEGER DEFAULT 0,
+                output TEXT
+            )",
+        )
+        .execute(&pool)
+        .await
+        .expect("legacy schema");
+        pool.close().await;
+
+        let db = WorkflowRunDb::new(path).await.expect("migrated db");
+        db.insert_run_owned(
+            "owned",
+            "workflow",
+            "Workflow",
+            "agent_tool",
+            "now",
+            "session-1",
+        )
+        .await
+        .expect("insert owned run");
+        assert_eq!(
+            db.get_run("owned")
+                .await
+                .expect("read run")
+                .expect("owned run")
+                .owner_session_id,
+            "session-1"
+        );
     }
 }

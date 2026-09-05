@@ -25,8 +25,14 @@ pub const WORKFLOW_TOOLSET: &str = "workflow";
 pub const WORKFLOW_NAMESPACE: &str = "workflow";
 const WORKFLOW_TOOL_WAIT_SECS: u64 = 30;
 
-fn active_runs() -> &'static Mutex<HashMap<String, CancellationToken>> {
-    static RUNS: OnceLock<Mutex<HashMap<String, CancellationToken>>> = OnceLock::new();
+#[derive(Clone)]
+struct ActiveRun {
+    owner_session_id: String,
+    cancellation: CancellationToken,
+}
+
+fn active_runs() -> &'static Mutex<HashMap<String, ActiveRun>> {
+    static RUNS: OnceLock<Mutex<HashMap<String, ActiveRun>>> = OnceLock::new();
     RUNS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -110,7 +116,7 @@ fn workflow_may_write_files(workflow: &Workflow) -> bool {
         })
 }
 
-fn workflow_entry(workflow: &Workflow) -> types::ToolEntry {
+fn workflow_entry(workflow: &Workflow, contains_unmanaged_code: bool) -> types::ToolEntry {
     let requires_approval = workflow_requires_approval(workflow);
     let always_confirm = workflow.agent_tool.confirmation == WorkflowToolConfirmation::Always
         || workflow.nodes.iter().any(|node| {
@@ -130,12 +136,21 @@ fn workflow_entry(workflow: &Workflow) -> types::ToolEntry {
         model_name: Some(workflow.agent_tool_name()),
         toolset: WORKFLOW_TOOLSET.to_string(),
         namespace: WORKFLOW_NAMESPACE.to_string(),
-        description: workflow.agent_tool_description(),
+        description: if contains_unmanaged_code {
+            format!(
+                "{} 当前不可由 Agent 调用：流程包含未接入沙箱的 Code 节点。",
+                workflow.agent_tool_description()
+            )
+        } else {
+            workflow.agent_tool_description()
+        },
         schema: workflow.agent_tool.input_schema.clone(),
         check_fn: None,
         icon: "workflow",
         needs_confirmation: always_confirm,
-        approval_requirement: if requires_approval {
+        approval_requirement: if contains_unmanaged_code {
+            ExecApprovalRequirement::Forbidden
+        } else if requires_approval {
             ExecApprovalRequirement::NeedsApproval
         } else {
             ExecApprovalRequirement::Skip
@@ -163,7 +178,9 @@ fn provider_configs_from_context(ctx: &ToolContext<'_>) -> HashMap<String, Runti
             tts_model: String::new(),
             music_model: String::new(),
         };
-        configs.insert(target.backend_id.clone(), runtime.clone());
+        configs
+            .entry(target.backend_id.clone())
+            .or_insert_with(|| runtime.clone());
         configs.insert(target.provider_id.clone(), runtime);
     }
     if configs.is_empty() && !ctx.credentials.provider.trim().is_empty() {
@@ -234,6 +251,8 @@ fn provider_configs_from_context(ctx: &ToolContext<'_>) -> HashMap<String, Runti
 struct WorkflowRuntime {
     entry: types::ToolEntry,
     workflow: Workflow,
+    workflow_snapshots: Arc<HashMap<String, Workflow>>,
+    contains_unmanaged_code: bool,
 }
 
 impl ToolExecutor for WorkflowRuntime {
@@ -274,6 +293,13 @@ impl ToolExecutor for WorkflowRuntime {
     ) -> ToolExecutorFuture<'a> {
         let trigger_input = args.clone();
         let workflow = self.workflow.clone();
+        if self.contains_unmanaged_code {
+            return Box::pin(async {
+                anyhow::bail!(
+                    "workflow contains a Code node that is not integrated with the Agent sandbox"
+                )
+            });
+        }
         if let Err(error) = validate_agent_tool_input(&workflow, &trigger_input) {
             return Box::pin(async move { Err(error) });
         }
@@ -289,13 +315,21 @@ impl ToolExecutor for WorkflowRuntime {
         }
         let provider_configs = provider_configs_from_context(ctx);
         let workflow_db_path = ctx.memory_dir.join("workflows").join("workflow.db");
+        let owner_session_id = ctx.session_id.clone();
+        let workflow_snapshots = Arc::clone(&self.workflow_snapshots);
         Box::pin(async move {
             let run_id = uuid::Uuid::new_v4().to_string();
             let cancellation = CancellationToken::new();
             active_runs()
                 .lock()
                 .map_err(|_| anyhow::anyhow!("workflow run registry mutex is poisoned"))?
-                .insert(run_id.clone(), cancellation.clone());
+                .insert(
+                    run_id.clone(),
+                    ActiveRun {
+                        owner_session_id: owner_session_id.clone(),
+                        cancellation: cancellation.clone(),
+                    },
+                );
             // 如果 Agent turn 在等待期间被取消，丢弃工具 future 会联动取消 workflow。
             // 超过前台等待窗口后会解除该联动，让已返回 run_id 的任务继续。
             let mut cancel_on_drop = CancelOnDrop::new(cancellation.clone());
@@ -322,6 +356,8 @@ impl ToolExecutor for WorkflowRuntime {
                                     &run_db,
                                     provider_configs,
                                     execution_run_id.clone(),
+                                    &owner_session_id,
+                                    workflow_snapshots,
                                 );
                                 tokio::select! {
                                     result = execution => result,
@@ -433,20 +469,23 @@ impl ToolExecutor for RunControlRuntime {
             .trim()
             .to_string();
         let workflow_db_path = ctx.memory_dir.join("workflows").join("workflow.db");
+        let owner_session_id = ctx.session_id.clone();
         Box::pin(async move {
             anyhow::ensure!(!run_id.is_empty(), "run_id 不能为空");
             let value = match action {
                 RunControlAction::Get => {
                     let db = WorkflowRunDb::new(workflow_db_path).await?;
                     match db.get_run(&run_id).await? {
-                        Some(row) => serde_json::json!({
-                            "run_id": row.id,
-                            "status": row.status,
-                            "output": row.output.and_then(|output| serde_json::from_str::<serde_json::Value>(&output).ok()),
-                            "error": row.error,
-                            "steps_executed": row.node_count
-                        }),
-                        None => serde_json::json!({
+                        Some(row) if row.owner_session_id == owner_session_id => {
+                            serde_json::json!({
+                                "run_id": row.id,
+                                "status": row.status,
+                                "output": row.output.map(|output| serde_json::from_str::<serde_json::Value>(&output).unwrap_or(serde_json::Value::String(output))),
+                                "error": row.error,
+                                "steps_executed": row.node_count
+                            })
+                        }
+                        Some(_) | None => serde_json::json!({
                             "run_id": run_id,
                             "status": "not_found",
                             "output": null,
@@ -460,8 +499,9 @@ impl ToolExecutor for RunControlRuntime {
                         .lock()
                         .map_err(|_| anyhow::anyhow!("workflow run registry mutex is poisoned"))?
                         .get(&run_id)
-                        .map(|token| {
-                            token.cancel();
+                        .filter(|run| run.owner_session_id == owner_session_id)
+                        .map(|run| {
+                            run.cancellation.cancel();
                             true
                         })
                         .unwrap_or(false);
@@ -517,6 +557,13 @@ pub fn register_workflow_tools(
         return Ok(0);
     }
     let workflows = WorkflowStore::open(memory_dir.join("workflows"))?.list()?;
+    let workflow_snapshots = Arc::new(
+        workflows
+            .iter()
+            .cloned()
+            .map(|workflow| (workflow.id.clone(), workflow))
+            .collect::<HashMap<_, _>>(),
+    );
     let callable = workflows
         .into_iter()
         .filter(|workflow| {
@@ -542,10 +589,47 @@ pub fn register_workflow_tools(
     register_run_control(registry, "cancel_run", RunControlAction::Cancel);
     let count = callable.len();
     for workflow in callable {
-        let entry = workflow_entry(&workflow);
-        registry.register_runtime(entry.clone(), Arc::new(WorkflowRuntime { entry, workflow }));
+        let contains_unmanaged_code =
+            workflow_contains_unmanaged_code(&workflow, &workflow_snapshots, &mut HashSet::new());
+        let entry = workflow_entry(&workflow, contains_unmanaged_code);
+        registry.register_runtime(
+            entry.clone(),
+            Arc::new(WorkflowRuntime {
+                entry,
+                workflow,
+                workflow_snapshots: Arc::clone(&workflow_snapshots),
+                contains_unmanaged_code,
+            }),
+        );
     }
     Ok(count)
+}
+
+fn workflow_contains_unmanaged_code(
+    workflow: &Workflow,
+    snapshots: &HashMap<String, Workflow>,
+    visited: &mut HashSet<String>,
+) -> bool {
+    if !visited.insert(workflow.id.clone()) {
+        return false;
+    }
+    workflow
+        .nodes
+        .iter()
+        .filter(|node| !node.disabled)
+        .any(|node| {
+            if node.node_type == NodeType::Code {
+                return true;
+            }
+            if !matches!(node.node_type, NodeType::RunLoop | NodeType::CustomLoop) {
+                return false;
+            }
+            node.config
+                .get("workflow_id")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|workflow_id| snapshots.get(workflow_id))
+                .is_some_and(|nested| workflow_contains_unmanaged_code(nested, snapshots, visited))
+        })
 }
 
 #[cfg(test)]
@@ -563,7 +647,7 @@ mod tests {
         workflow.enabled = true;
         workflow.agent_tool = WorkflowAgentTool::deferred();
         workflow.agent_tool.name = "generate_weekly_report".into();
-        let entry = workflow_entry(&workflow);
+        let entry = workflow_entry(&workflow, false);
         assert_eq!(
             entry.tool_name(),
             ToolName::namespaced(WORKFLOW_NAMESPACE, "generate_weekly_report")
@@ -588,13 +672,13 @@ mod tests {
         });
         assert!(workflow_requires_approval(&workflow));
         assert_eq!(
-            workflow_entry(&workflow).approval_requirement,
+            workflow_entry(&workflow, false).approval_requirement,
             ExecApprovalRequirement::NeedsApproval
         );
-        assert!(!workflow_entry(&workflow).needs_confirmation);
+        assert!(!workflow_entry(&workflow, false).needs_confirmation);
 
         workflow.agent_tool.confirmation = WorkflowToolConfirmation::Always;
-        assert!(workflow_entry(&workflow).needs_confirmation);
+        assert!(workflow_entry(&workflow, false).needs_confirmation);
 
         let human = workflow::model::WorkflowNode {
             id: "human".into(),
@@ -606,7 +690,46 @@ mod tests {
         };
         workflow.agent_tool.confirmation = WorkflowToolConfirmation::Auto;
         workflow.nodes = vec![human];
-        assert!(workflow_entry(&workflow).needs_confirmation);
+        assert!(workflow_entry(&workflow, false).needs_confirmation);
+    }
+
+    #[test]
+    fn nested_code_node_is_forbidden_for_agent_execution() {
+        let mut child = Workflow::new(NewWorkflow {
+            name: "Code child".into(),
+            description: String::new(),
+        });
+        child.nodes.push(workflow::model::WorkflowNode {
+            id: "code".into(),
+            node_type: NodeType::Code,
+            label: "Code".into(),
+            position: workflow::model::Position { x: 0.0, y: 0.0 },
+            config: serde_json::json!({"language": "bash", "source": "echo unsafe"}),
+            disabled: false,
+        });
+        let mut parent = Workflow::new(NewWorkflow {
+            name: "Parent".into(),
+            description: String::new(),
+        });
+        parent.nodes.push(workflow::model::WorkflowNode {
+            id: "nested".into(),
+            node_type: NodeType::CustomLoop,
+            label: "Nested".into(),
+            position: workflow::model::Position { x: 0.0, y: 0.0 },
+            config: serde_json::json!({"workflow_id": child.id.clone()}),
+            disabled: false,
+        });
+        let snapshots = HashMap::from([(child.id.clone(), child)]);
+
+        assert!(workflow_contains_unmanaged_code(
+            &parent,
+            &snapshots,
+            &mut HashSet::new()
+        ));
+        assert_eq!(
+            workflow_entry(&parent, true).approval_requirement,
+            ExecApprovalRequirement::Forbidden
+        );
     }
 
     #[test]
@@ -738,6 +861,22 @@ mod tests {
             .expect("session store");
         let targets = crate::ImageGenTargets::default();
         let credentials = crate::ModelCredentials::default();
+        let model_targets = [
+            types::ModelTarget {
+                provider_id: "primary-record".into(),
+                backend_id: "openai".into(),
+                model: "primary-model".into(),
+                api_key: "primary-key".into(),
+                base_url: "https://primary.example".into(),
+            },
+            types::ModelTarget {
+                provider_id: "fallback-record".into(),
+                backend_id: "openai".into(),
+                model: "fallback-model".into(),
+                api_key: "fallback-key".into(),
+                base_url: "https://fallback.example".into(),
+            },
+        ];
         let mut context = ToolContext {
             memory: &memory,
             sessions: &sessions,
@@ -750,7 +889,7 @@ mod tests {
             turn_id: None,
             credentials: &credentials,
             service_tier: None,
-            model_targets: &[],
+            model_targets: &model_targets,
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -763,6 +902,12 @@ mod tests {
             context_tokens_used: None,
             tool_registry: None,
         };
+        let provider_configs = provider_configs_from_context(&context);
+        assert_eq!(provider_configs["openai"].config.api_key, "primary-key");
+        assert_eq!(
+            provider_configs["fallback-record"].config.api_key,
+            "fallback-key"
+        );
         let output = registry
             .dispatch(
                 &mut context,
@@ -774,7 +919,112 @@ mod tests {
         let result: serde_json::Value =
             serde_json::from_str(output.text()).expect("structured result");
         assert_eq!(result["status"], "success");
-        assert!(result["run_id"].as_str().is_some_and(|id| !id.is_empty()));
+        let run_id = result["run_id"].as_str().expect("run id").to_string();
+
+        let get_run_name = registry
+            .all_tools()
+            .into_iter()
+            .find(|entry| entry.tool_name() == ToolName::namespaced("workflow", "get_run"))
+            .expect("get_run")
+            .name
+            .clone();
+        let own_run = registry
+            .dispatch(
+                &mut context,
+                &get_run_name,
+                &serde_json::json!({"run_id": run_id.clone()}),
+            )
+            .await
+            .expect("get owned run");
+        let own_run: serde_json::Value =
+            serde_json::from_str(own_run.text()).expect("owned run result");
+        assert_eq!(own_run["status"], "success");
+
+        let mut other_context = ToolContext {
+            memory: &memory,
+            sessions: &sessions,
+            memory_dir: root.path().to_path_buf(),
+            workspace_dir: root.path().join("workspace"),
+            project_root: None,
+            workspace_roots: Vec::new(),
+            image_gen_targets: &targets,
+            session_id: "other-session".into(),
+            turn_id: None,
+            credentials: &credentials,
+            service_tier: None,
+            model_targets: &model_targets,
+            execution: None,
+            permission_profile: None,
+            skill_config_overrides: &[],
+            hook_bus: None,
+            hook_runtime: None,
+            workspace_write_grant: false,
+            sandbox_policy: None,
+            managed_network: None,
+            context_window: None,
+            context_tokens_used: None,
+            tool_registry: None,
+        };
+        let foreign_run = registry
+            .dispatch(
+                &mut other_context,
+                &get_run_name,
+                &serde_json::json!({"run_id": run_id}),
+            )
+            .await
+            .expect("hide foreign run");
+        let foreign_run: serde_json::Value =
+            serde_json::from_str(foreign_run.text()).expect("foreign run result");
+        assert_eq!(foreign_run["status"], "not_found");
+
+        let cancellation = CancellationToken::new();
+        active_runs().lock().expect("active runs").insert(
+            "active-owned".into(),
+            ActiveRun {
+                owner_session_id: "workflow-tool-test".into(),
+                cancellation: cancellation.clone(),
+            },
+        );
+        let cancel_name = registry
+            .all_tools()
+            .into_iter()
+            .find(|entry| entry.tool_name() == ToolName::namespaced("workflow", "cancel_run"))
+            .expect("cancel_run")
+            .name
+            .clone();
+        let foreign_cancel = registry
+            .dispatch(
+                &mut other_context,
+                &cancel_name,
+                &serde_json::json!({"run_id": "active-owned"}),
+            )
+            .await
+            .expect("foreign cancel result");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(foreign_cancel.text())
+                .expect("foreign cancel json")["cancelled"],
+            false
+        );
+        assert!(!cancellation.is_cancelled());
+
+        let own_cancel = registry
+            .dispatch(
+                &mut context,
+                &cancel_name,
+                &serde_json::json!({"run_id": "active-owned"}),
+            )
+            .await
+            .expect("owner cancel result");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(own_cancel.text())
+                .expect("owner cancel json")["cancelled"],
+            true
+        );
+        assert!(cancellation.is_cancelled());
+        active_runs()
+            .lock()
+            .expect("active runs")
+            .remove("active-owned");
 
         let error = registry
             .dispatch(&mut context, &registered_name, &serde_json::json!({}))
