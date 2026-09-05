@@ -665,13 +665,8 @@ mod tests {
     #[test]
     fn seatbelt_allows_shell_output_to_dev_null() {
         let workspace = tempfile::tempdir().unwrap();
-        let policy = SandboxPolicy::new(
-            SandboxMode::ReadOnly,
-            workspace.path(),
-            Vec::new(),
-            false,
-        )
-        .unwrap();
+        let policy =
+            SandboxPolicy::new(SandboxMode::ReadOnly, workspace.path(), Vec::new(), false).unwrap();
         let status = SandboxRunner
             .std_command(&policy, "/bin/sh")
             .unwrap()

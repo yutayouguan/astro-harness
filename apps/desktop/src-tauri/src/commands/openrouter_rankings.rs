@@ -188,10 +188,8 @@ fn official_url(spec: &RequestSpec) -> Option<reqwest::Url> {
             "{OPENROUTER_ORIGIN}/api/v1/datasets/rankings-daily"
         ))
         .ok()?,
-        "apps" => reqwest::Url::parse(&format!(
-            "{OPENROUTER_ORIGIN}/api/v1/datasets/app-rankings"
-        ))
-        .ok()?,
+        "apps" => reqwest::Url::parse(&format!("{OPENROUTER_ORIGIN}/api/v1/datasets/app-rankings"))
+            .ok()?,
         "benchmarks" => {
             reqwest::Url::parse(&format!("{OPENROUTER_ORIGIN}/api/v1/benchmarks")).ok()?
         }
@@ -453,7 +451,6 @@ mod tests {
             .unwrap()
             .path()
             .ends_with("/rankings/task-spend"));
-
     }
 
     #[test]

@@ -1251,13 +1251,15 @@ pub async fn write_file(
     if as_artifact.unwrap_or(false) {
         let mem = home::default_memory_dir();
         if let Ok(db) = artifacts::open_default(&mem).await {
-            let _ = db.register(
-                &path,
-                artifacts::ArtifactSource::AgentWrite,
-                session_id.as_deref(),
-                None,
-                None,
-            ).await;
+            let _ = db
+                .register(
+                    &path,
+                    artifacts::ArtifactSource::AgentWrite,
+                    session_id.as_deref(),
+                    None,
+                    None,
+                )
+                .await;
         }
     }
     Ok(())
