@@ -25,9 +25,12 @@ const [
 );
 
 test("desktop updater pins a public key and only accepts HTTPS manifests", () => {
+  const updaterConfig = JSON.parse(tauriConfig).plugins?.updater;
+
   assert.match(cargo, /tauri-plugin-updater\s*=\s*"2\.11\.0"/);
   assert.match(tauriLib, /tauri_plugin_updater::Builder::new\(\)/);
   assert.match(tauriLib, /include_str!\("\.\.\/updater\.pub"\)\.trim\(\)/);
+  assert.deepEqual(updaterConfig, { pubkey: "" });
   assert.match(command, /endpoint\.scheme\(\) != "https"/);
   assert.match(command, /option_env!\("ASTRO_UPDATE_ENDPOINT"\)/);
   assert.match(command, /yutayouguan\/astro-agent-releases/);
