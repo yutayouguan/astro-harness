@@ -105,6 +105,12 @@ test("diagnostics and about have task-specific layouts", () => {
   assert.match(preferences, /prefs-card--diagnostics/);
   assert.match(preferences, /prefs-category-stack--about/);
   assert.match(preferences, /prefs-about-version/);
+  assert.match(preferences, /getIdentifier/);
+  assert.match(preferences, /getTauriVersion/);
+  assert.match(preferences, /prefs-about-meta/);
+  assert.match(preferences, /prefs-about-resources/);
+  assert.match(preferences, /updatesUnavailable/);
+  assert.match(preferences, /licenseValue/);
   assert.match(preferences, /ABOUT_FEATURES\.map/);
   assert.match(
     preferencesCss,

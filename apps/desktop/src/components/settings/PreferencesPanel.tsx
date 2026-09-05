@@ -24,7 +24,11 @@ import {
   Wrench,
 } from "lucide-react";
 import { Activity as ActivityData, Sparkles as SparklesData } from "lucide";
-import { getVersion } from "@tauri-apps/api/app";
+import {
+  getIdentifier,
+  getTauriVersion,
+  getVersion,
+} from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { motion, useReducedMotion } from "framer-motion";
 import appIconAsset from "../../assets/astro-app-icon.png";
@@ -97,6 +101,39 @@ const ABOUT_FEATURES: MessageKey[] = [
   "about.feature.tools",
   "about.feature.evolution",
 ];
+
+const ABOUT_COPY = {
+  zh: {
+    channel: "构建渠道",
+    development: "开发构建",
+    release: "正式构建",
+    identifier: "应用标识",
+    runtime: "运行时",
+    updates: "检查更新",
+    updatesUnavailable: "此构建未配置自动更新服务",
+    releaseNotes: "发布说明",
+    releaseNotesUnavailable: "当前安装包未附带更新记录",
+    license: "许可证",
+    licenseValue: "私有项目，未声明开源许可",
+    support: "支持",
+    supportValue: "在“诊断”页复制日志后提交给维护者",
+  },
+  en: {
+    channel: "Build channel",
+    development: "Development build",
+    release: "Release build",
+    identifier: "App identifier",
+    runtime: "Runtime",
+    updates: "Check for updates",
+    updatesUnavailable: "Automatic updates are not configured for this build",
+    releaseNotes: "Release notes",
+    releaseNotesUnavailable: "No release notes are bundled with this build",
+    license: "License",
+    licenseValue: "Private project; no open-source license declared",
+    support: "Support",
+    supportValue: "Copy logs from Diagnostics and send them to the maintainer",
+  },
+} as const;
 
 function AutostartSwitch({ tone }: { tone: string }) {
   const [enabled, setEnabled] = useState(false);
@@ -260,7 +297,11 @@ export default function PreferencesPanel({
   const reduceMotion = useReducedMotion();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
-  const [appVersion, setAppVersion] = useState("0.1.0");
+  const [appMeta, setAppMeta] = useState({
+    version: "0.1.0",
+    identifier: "com.astroagent.desktop",
+    runtime: "Tauri 2",
+  });
   const [morphPreviewActive, setMorphPreviewActive] = useState(false);
   // 预览靠翻转图标来触发一次形变；任何预设改动都在同一批渲染里带上新参数重播。
   const playMorphPreview = useCallback(() => {
@@ -275,9 +316,15 @@ export default function PreferencesPanel({
   useEffect(() => {
     if (activeCategory !== "about") return;
     let cancelled = false;
-    void getVersion()
-      .then((version) => {
-        if (!cancelled && version) setAppVersion(version);
+    void Promise.all([getVersion(), getIdentifier(), getTauriVersion()])
+      .then(([version, identifier, tauriVersion]) => {
+        if (!cancelled) {
+          setAppMeta({
+            version: version || "0.1.0",
+            identifier: identifier || "com.astroagent.desktop",
+            runtime: `Tauri ${tauriVersion || "2"}`,
+          });
+        }
       })
       .catch(() => {});
     return () => {
@@ -469,6 +516,7 @@ export default function PreferencesPanel({
   const selectedAppIcon = appIcon?.options.find(
     (option) => option.id === appIcon.current,
   );
+  const aboutCopy = ABOUT_COPY[locale];
   const categoryOptions = [
     {
       id: "general" as const,
@@ -1367,15 +1415,51 @@ export default function PreferencesPanel({
               <h2 className="prefs-about-title">Astro</h2>
               <p className="prefs-about-tagline">{t("about.tagline")}</p>
               <span className="prefs-about-version">
-                {t("about.version", { v: appVersion })}
+                {t("about.version", { v: appMeta.version })}
               </span>
             </div>
             <p className="prefs-about-body">{t("about.body")}</p>
+            <dl className="prefs-about-meta">
+              <div>
+                <dt>{aboutCopy.channel}</dt>
+                <dd>
+                  {import.meta.env.DEV
+                    ? aboutCopy.development
+                    : aboutCopy.release}
+                </dd>
+              </div>
+              <div>
+                <dt>{aboutCopy.identifier}</dt>
+                <dd>{appMeta.identifier}</dd>
+              </div>
+              <div>
+                <dt>{aboutCopy.runtime}</dt>
+                <dd>{appMeta.runtime}</dd>
+              </div>
+            </dl>
             <ul className="prefs-about-features">
               {ABOUT_FEATURES.map((key) => (
                 <li key={key}>{t(key)}</li>
               ))}
             </ul>
+            <div className="prefs-about-resources">
+              <div>
+                <strong>{aboutCopy.updates}</strong>
+                <span>{aboutCopy.updatesUnavailable}</span>
+              </div>
+              <div>
+                <strong>{aboutCopy.releaseNotes}</strong>
+                <span>{aboutCopy.releaseNotesUnavailable}</span>
+              </div>
+              <div>
+                <strong>{aboutCopy.license}</strong>
+                <span>{aboutCopy.licenseValue}</span>
+              </div>
+              <div>
+                <strong>{aboutCopy.support}</strong>
+                <span>{aboutCopy.supportValue}</span>
+              </div>
+            </div>
           </section>
         </div>
       </div>
