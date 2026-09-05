@@ -108,3 +108,20 @@ test("terminal content clips all four xterm corners to the inner radius", () => 
   );
   assert.doesNotMatch(outerDock, /border-radius/);
 });
+
+test("terminal uses a denser readable material when wallpaper is active", () => {
+  const app = source("App.tsx");
+  const dock = source("components/chat/TerminalTabsDock.tsx");
+  const css = source("styles/features/chat/terminal-dock.css");
+
+  assert.match(app, /root\.setAttribute\("data-wallpaper", "true"\)/);
+  assert.match(app, /root\.removeAttribute\("data-wallpaper"\)/);
+  assert.match(dock, /"--terminal-screen-bg"/);
+  assert.match(dock, /"data-wallpaper"/);
+  assert.match(css, /html\[data-wallpaper="true"\]\[data-theme="light"\]/);
+  assert.match(css, /--terminal-screen-bg:\s*rgb\(246, 248, 252\)/);
+  assert.match(css, /html\[data-wallpaper="true"\] \.terminal-dock\s*\{/);
+  assert.match(css, /backdrop-filter:\s*blur\(/);
+  assert.match(css, /prefers-reduced-transparency/);
+  assert.match(css, /prefers-contrast:\s*more/);
+});

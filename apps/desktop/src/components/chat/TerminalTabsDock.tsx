@@ -130,7 +130,10 @@ function terminalTheme() {
   const read = (name: string, fallback: string) =>
     styles.getPropertyValue(name).trim() || fallback;
   return {
-    background: read("--sidebar-bg", "#111318"),
+    background: read(
+      "--terminal-screen-bg",
+      read("--sidebar-bg", "#111318"),
+    ),
     foreground: read("--ink", "#e8eaf0"),
     cursor: read("--tone", "#7aa2f7"),
     selectionBackground: read("--tone-soft", "rgba(122, 162, 247, 0.28)"),
@@ -239,7 +242,7 @@ function TerminalPane({
     });
     themeObserver.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class", "data-theme", "style"],
+      attributeFilter: ["class", "data-theme", "data-wallpaper", "style"],
     });
 
     const readOutput = async () => {

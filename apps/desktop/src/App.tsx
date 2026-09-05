@@ -842,6 +842,11 @@ export default function App() {
     prevDynamicSeedRef.current = dynamicSeed;
     root.setAttribute("data-tone", shellTone);
     root.setAttribute("data-color-style", colorStyle);
+    if (wallpaperEnabled) {
+      root.setAttribute("data-wallpaper", "true");
+    } else {
+      root.removeAttribute("data-wallpaper");
+    }
     if (activeShellGradient) {
       applyShellGradientVars(root, activeShellGradient, resolved);
       flushGlassBackdrop(root);

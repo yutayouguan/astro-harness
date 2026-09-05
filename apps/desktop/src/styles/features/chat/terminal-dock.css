@@ -1,3 +1,9 @@
+html {
+  --terminal-dock-bg: color-mix(in srgb, var(--sidebar-bg) 96%, black 4%);
+  --terminal-screen-bg: var(--sidebar-bg);
+  --terminal-screen-edge: transparent;
+}
+
 .terminal-dock {
   --terminal-dock-height: 260px;
   position: relative;
@@ -10,7 +16,7 @@
   min-width: 0;
   overflow: hidden;
   border-top: 0 solid transparent;
-  background: color-mix(in srgb, var(--sidebar-bg) 96%, black 4%);
+  background: var(--terminal-dock-bg);
   box-shadow: 0 -10px 28px rgba(var(--shadow-ink), 0.07);
   opacity: 0;
   visibility: hidden;
@@ -26,6 +32,37 @@
     opacity 180ms ease,
     transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
     visibility 0s linear 300ms;
+}
+
+html[data-wallpaper="true"][data-theme="light"] {
+  --terminal-dock-bg: rgba(238, 244, 249, 0.52);
+  --terminal-screen-bg: rgb(246, 248, 252);
+  --terminal-screen-edge: rgba(255, 255, 255, 0.7);
+}
+
+html[data-wallpaper="true"][data-theme="dark"] {
+  --terminal-dock-bg: rgba(7, 10, 18, 0.58);
+  --terminal-screen-bg: rgb(9, 12, 20);
+  --terminal-screen-edge: rgba(255, 255, 255, 0.1);
+}
+
+html[data-wallpaper="true"] .terminal-dock {
+  box-shadow:
+    0 -14px 34px rgba(var(--shadow-ink), 0.13),
+    inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
+  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.16));
+  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.16));
+}
+
+html[data-wallpaper="true"] .terminal-dock-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 58%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, white 8%, transparent),
+    transparent
+  );
 }
 
 .terminal-dock.is-open {
@@ -333,7 +370,12 @@
 
 .terminal-dock-screen .xterm {
   overflow: hidden;
+  border: 1px solid var(--terminal-screen-edge);
   border-radius: 12px;
+  background: var(--terminal-screen-bg);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
+    0 8px 24px rgba(var(--shadow-ink), 0.06);
 }
 
 .terminal-dock-screen .xterm,
@@ -382,5 +424,20 @@
 @media (prefers-reduced-transparency: reduce) {
   .terminal-dock {
     background: var(--surface-panel-background);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+}
+
+@media (prefers-contrast: more) {
+  html[data-wallpaper="true"][data-theme="light"] {
+    --terminal-screen-bg: rgb(255, 255, 255);
+    --terminal-screen-edge: rgba(15, 23, 42, 0.28);
+  }
+
+  html[data-wallpaper="true"][data-theme="dark"] {
+    --terminal-screen-bg: rgb(4, 6, 12);
+    --terminal-screen-edge: rgba(255, 255, 255, 0.26);
   }
 }
