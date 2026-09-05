@@ -22,6 +22,10 @@ const sidebarPolishStyles = await readFile(
   ),
   "utf8",
 );
+const sidebarHook = await readFile(
+  new URL("../../hooks/app/useSidebar.ts", import.meta.url),
+  "utf8",
+);
 const shellStyles = await readFile(
   new URL("../../styles/features/shell/shell.css", import.meta.url),
   "utf8",
@@ -166,8 +170,13 @@ test("icon-only sidebar uses meaningful section controls instead of detached che
   assert.match(app, /<History size=\{18\} strokeWidth=\{1\.8\} \/>/);
   assert.match(
     app,
-    /const sidebarContentExpanded =\s*sidebar\.showSidebarLabels \|\| sidebarRailPreview;/,
+    /const sidebarContentExpanded =\s*!sidebar\.sidebarCompact &&\s*\(sidebar\.showSidebarLabels \|\| sidebarRailPreview\);/,
     "the rail preview should preserve the saved label preference",
+  );
+  assert.match(
+    app,
+    /if \(sidebar\.sidebarCompact\) setSidebarRailPreview\(false\);/,
+    "compact windows should not retain the labelled rail preview",
   );
   assert.match(
     app,
@@ -196,6 +205,21 @@ test("icon-only sidebar uses meaningful section controls instead of detached che
     sidebarPolishStyles,
     /\.body-row:has\(> \.sidebar\.is-pinned\.is-rail-preview\)\s*\{[\s\S]*?padding-left:\s*var\(--sidebar-w\);/,
     "the temporary preview should overlay content instead of shifting it",
+  );
+  assert.match(
+    sidebarHook,
+    /setSidebarCompact\(shouldUseCompactSidebar\(width\)\);/,
+    "the sidebar should follow the measured shell width",
+  );
+  assert.match(
+    sidebarHook,
+    /sidebarVisible && !sidebarCompact && \(sidebarLabels \|\| !sidebarPinned\)/,
+    "compact mode should override labels without changing the saved preference",
+  );
+  assert.match(
+    projectStyles,
+    /\.sidebar:not\(\.is-labels\)[\s\S]*?\.sidebar-settings-nav[\s\S]*?\.sidebar-item-label\s*\{\s*display:\s*none;/,
+    "settings navigation should hide its labels through the shared icon-only mode",
   );
 });
 

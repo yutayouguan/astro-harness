@@ -4,6 +4,15 @@ export const SIDEBAR_DEFAULT_WIDTH = 280;
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 420;
 export const SIDEBAR_MIN_CONTENT_WIDTH = 440;
+export const SIDEBAR_COMPACT_MAX_WIDTH = 760;
+
+export function shouldUseCompactSidebar(containerWidth: number): boolean {
+  return (
+    Number.isFinite(containerWidth) &&
+    containerWidth > 0 &&
+    containerWidth <= SIDEBAR_COMPACT_MAX_WIDTH
+  );
+}
 
 export function maxSidebarWidth(containerWidth: number): number {
   if (!Number.isFinite(containerWidth)) return SIDEBAR_MAX_WIDTH;

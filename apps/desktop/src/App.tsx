@@ -301,7 +301,11 @@ export default function App() {
   // ── Extracted hooks ───────────────────────────────────────────────────────
   const sidebar = useSidebar();
   const sidebarContentExpanded =
-    sidebar.showSidebarLabels || sidebarRailPreview;
+    !sidebar.sidebarCompact &&
+    (sidebar.showSidebarLabels || sidebarRailPreview);
+  useEffect(() => {
+    if (sidebar.sidebarCompact) setSidebarRailPreview(false);
+  }, [sidebar.sidebarCompact]);
   const toggleVisibleSidebarSection = useCallback(
     (section: string) => {
       if (!sidebarContentExpanded) {
@@ -311,12 +315,12 @@ export default function App() {
           next.delete(section);
           return next;
         });
-        setSidebarRailPreview(true);
+        if (!sidebar.sidebarCompact) setSidebarRailPreview(true);
         return;
       }
       toggleSection(section);
     },
-    [sidebarContentExpanded, toggleSection],
+    [sidebar.sidebarCompact, sidebarContentExpanded, toggleSection],
   );
   const toggleVisibleProject = useCallback(
     (projectId: string) => {
@@ -327,9 +331,11 @@ export default function App() {
         else next.add(projectId);
         return next;
       });
-      if (!sidebarContentExpanded) setSidebarRailPreview(true);
+      if (!sidebarContentExpanded && !sidebar.sidebarCompact) {
+        setSidebarRailPreview(true);
+      }
     },
-    [sidebarContentExpanded],
+    [sidebar.sidebarCompact, sidebarContentExpanded],
   );
   const winChrome = useWindowChrome();
   const {
@@ -1283,7 +1289,7 @@ export default function App() {
       >
         <aside
           ref={sidebar.sidebarRef}
-          className={`sidebar ${nav === "settings" ? "is-settings" : ""} ${sidebar.sidebarOpen || sidebar.sidebarPinned ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned ? "is-pinned" : ""} ${sidebarContentExpanded ? "is-labels" : "is-icons"} ${sidebarRailPreview ? "is-rail-preview" : ""} ${sidebar.sidebarResizing ? "is-resizing" : ""}`}
+          className={`sidebar ${nav === "settings" ? "is-settings" : ""} ${sidebar.sidebarOpen || sidebar.sidebarPinned ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned ? "is-pinned" : ""} ${sidebarContentExpanded ? "is-labels" : "is-icons"} ${sidebar.sidebarCompact ? "is-compact" : ""} ${sidebarRailPreview ? "is-rail-preview" : ""} ${sidebar.sidebarResizing ? "is-resizing" : ""}`}
           onMouseEnter={sidebar.openSidebar}
           onMouseLeave={() => {
             sidebar.scheduleHideSidebar();

@@ -12,6 +12,7 @@ import {
   clampSidebarWidth,
   maxSidebarWidth,
   parseStoredSidebarWidth,
+  shouldUseCompactSidebar,
 } from "../../lib/ui/sidebarWidth";
 
 const RESIZE_KEYBOARD_STEP = 16;
@@ -50,6 +51,7 @@ export function useSidebar() {
     }
   });
   const [sidebarMaxWidth, setSidebarMaxWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const [sidebarCompact, setSidebarCompact] = useState(false);
   const [sidebarResizing, setSidebarResizing] = useState(false);
 
   const hideTimerRef = useRef<number | null>(null);
@@ -94,6 +96,7 @@ export function useSidebar() {
     const syncBounds = () => {
       const width = container.getBoundingClientRect().width;
       if (width <= 0) return;
+      setSidebarCompact(shouldUseCompactSidebar(width));
       setSidebarMaxWidth(maxSidebarWidth(width));
       const next = clampSidebarWidth(sidebarWidthRef.current, width);
       sidebarWidthRef.current = next;
@@ -318,7 +321,8 @@ export function useSidebar() {
   }, []);
 
   const sidebarVisible = sidebarOpen || sidebarPinned;
-  const showSidebarLabels = sidebarVisible && (sidebarLabels || !sidebarPinned);
+  const showSidebarLabels =
+    sidebarVisible && !sidebarCompact && (sidebarLabels || !sidebarPinned);
 
   return {
     sidebarPinned,
@@ -327,6 +331,7 @@ export function useSidebar() {
     sidebarCtx,
     sidebarRef,
     sidebarWidth,
+    sidebarCompact,
     sidebarMinWidth: Math.min(SIDEBAR_MIN_WIDTH, sidebarMaxWidth),
     sidebarMaxWidth,
     sidebarResizing,
