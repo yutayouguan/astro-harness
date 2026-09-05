@@ -13,9 +13,11 @@ import {
   Brain,
   Clock,
   Dices,
+  Download,
   Palette,
   Play,
   Plug,
+  RefreshCw,
   ScrollText,
   Sparkles,
   Webhook,
@@ -30,6 +32,7 @@ import {
   getVersion,
 } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { motion, useReducedMotion } from "framer-motion";
 import appIconAsset from "../../assets/astro-app-icon.png";
 import { useAppIcon } from "../../hooks/settings/useAppIcon";
@@ -87,6 +90,30 @@ type LogScope = "current" | "all";
 /** 内容过滤：全部 / 只看问题（warn 及以上） */
 type LogLevelFilter = "all" | "issues";
 
+type AppUpdateInfo = {
+  configured: boolean;
+  available: boolean;
+  currentVersion: string;
+  version: string | null;
+  date: string | null;
+  notes: string | null;
+};
+
+type AppUpdatePhase =
+  | "idle"
+  | "checking"
+  | "unconfigured"
+  | "current"
+  | "available"
+  | "installing"
+  | "error";
+
+type AppUpdateProgress = {
+  phase: "downloading" | "installing";
+  downloaded: number;
+  total: number | null;
+};
+
 /** 弹簧预设的本地化文案 */
 const MORPHICON_SPRING_LABEL: Record<MorphiconSpring, MessageKey> = {
   smooth: "prefs.morphicons.spring.smooth",
@@ -110,6 +137,14 @@ const ABOUT_COPY = {
     identifier: "应用标识",
     runtime: "运行时",
     updates: "检查更新",
+    updatesPrompt: "从公开发布仓库检查已签名安装包",
+    checking: "正在检查…",
+    current: "当前已是最新版本",
+    available: "发现新版本 {{version}}",
+    install: "下载并安装",
+    installing: "正在下载并安装…",
+    progress: "已下载 {{progress}}%",
+    retry: "重试",
     updatesUnavailable: "此构建未配置自动更新服务",
     releaseNotes: "发布说明",
     releaseNotesUnavailable: "当前安装包未附带更新记录",
@@ -125,6 +160,14 @@ const ABOUT_COPY = {
     identifier: "App identifier",
     runtime: "Runtime",
     updates: "Check for updates",
+    updatesPrompt: "Check the public release repository for a signed build",
+    checking: "Checking…",
+    current: "You are up to date",
+    available: "Version {{version}} is available",
+    install: "Download and install",
+    installing: "Downloading and installing…",
+    progress: "Downloaded {{progress}}%",
+    retry: "Retry",
     updatesUnavailable: "Automatic updates are not configured for this build",
     releaseNotes: "Release notes",
     releaseNotesUnavailable: "No release notes are bundled with this build",
@@ -302,6 +345,10 @@ export default function PreferencesPanel({
     identifier: "com.astroagent.desktop",
     runtime: "Tauri 2",
   });
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [updatePhase, setUpdatePhase] = useState<AppUpdatePhase>("idle");
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+  const [updateError, setUpdateError] = useState("");
   const [morphPreviewActive, setMorphPreviewActive] = useState(false);
   // 预览靠翻转图标来触发一次形变；任何预设改动都在同一批渲染里带上新参数重播。
   const playMorphPreview = useCallback(() => {
@@ -331,6 +378,64 @@ export default function PreferencesPanel({
       cancelled = true;
     };
   }, [activeCategory]);
+
+  useEffect(() => {
+    if (activeCategory !== "about") return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<AppUpdateProgress>("app-update-progress", (event) => {
+      if (disposed) return;
+      const { downloaded, total } = event.payload;
+      setUpdatePhase("installing");
+      setUpdateProgress(
+        total && total > 0
+          ? Math.min(100, Math.round((downloaded / total) * 100))
+          : null,
+      );
+    })
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else unlisten = cleanup;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [activeCategory]);
+
+  const checkForUpdate = useCallback(async () => {
+    setUpdatePhase("checking");
+    setUpdateError("");
+    setUpdateProgress(null);
+    try {
+      const info = await invoke<AppUpdateInfo>("check_app_update");
+      setUpdateInfo(info);
+      setUpdatePhase(
+        !info.configured
+          ? "unconfigured"
+          : info.available
+            ? "available"
+            : "current",
+      );
+    } catch (error) {
+      setUpdatePhase("error");
+      setUpdateError(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
+
+  const installUpdate = useCallback(async () => {
+    if (!updateInfo?.available) return;
+    setUpdatePhase("installing");
+    setUpdateProgress(null);
+    setUpdateError("");
+    try {
+      await invoke("install_app_update");
+    } catch (error) {
+      setUpdatePhase("error");
+      setUpdateError(error instanceof Error ? error.message : String(error));
+    }
+  }, [updateInfo]);
 
   const appIconLabel = (id: AppIconId): string => {
     switch (id) {
@@ -517,6 +622,28 @@ export default function PreferencesPanel({
     (option) => option.id === appIcon.current,
   );
   const aboutCopy = ABOUT_COPY[locale];
+  const updateStatus =
+    updatePhase === "checking"
+      ? aboutCopy.checking
+      : updatePhase === "current"
+        ? aboutCopy.current
+        : updatePhase === "available"
+          ? aboutCopy.available.replace(
+              "{{version}}",
+              updateInfo?.version ?? "",
+            )
+          : updatePhase === "installing"
+            ? updateProgress == null
+              ? aboutCopy.installing
+              : aboutCopy.progress.replace(
+                  "{{progress}}",
+                  String(updateProgress),
+                )
+            : updatePhase === "unconfigured"
+              ? aboutCopy.updatesUnavailable
+              : updatePhase === "error"
+                ? updateError
+                : aboutCopy.updatesPrompt;
   const categoryOptions = [
     {
       id: "general" as const,
@@ -1443,13 +1570,41 @@ export default function PreferencesPanel({
               ))}
             </ul>
             <div className="prefs-about-resources">
-              <div>
+              <div className="prefs-about-resource">
                 <strong>{aboutCopy.updates}</strong>
-                <span>{aboutCopy.updatesUnavailable}</span>
+                <span role={updatePhase === "error" ? "alert" : "status"}>
+                  {updateStatus}
+                </span>
+                <button
+                  type="button"
+                  disabled={
+                    updatePhase === "checking" ||
+                    updatePhase === "installing" ||
+                    updatePhase === "unconfigured"
+                  }
+                  onClick={() =>
+                    void (updatePhase === "available"
+                      ? installUpdate()
+                      : checkForUpdate())
+                  }
+                >
+                  {updatePhase === "available" ? (
+                    <Download size={13} aria-hidden />
+                  ) : (
+                    <RefreshCw size={13} aria-hidden />
+                  )}
+                  {updatePhase === "available"
+                    ? aboutCopy.install
+                    : updatePhase === "error"
+                      ? aboutCopy.retry
+                      : aboutCopy.updates}
+                </button>
               </div>
               <div>
                 <strong>{aboutCopy.releaseNotes}</strong>
-                <span>{aboutCopy.releaseNotesUnavailable}</span>
+                <span>
+                  {updateInfo?.notes || aboutCopy.releaseNotesUnavailable}
+                </span>
               </div>
               <div>
                 <strong>{aboutCopy.license}</strong>

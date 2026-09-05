@@ -10,6 +10,7 @@ const [
   preferences,
   terminal,
   compression,
+  updater,
 ] = await Promise.all(
   [
     "../../styles/features/shell/layout/projects.css",
@@ -19,6 +20,7 @@ const [
     "../../components/settings/PreferencesPanel.tsx",
     "../../components/settings/TerminalSettingsPanel.tsx",
     "../../components/settings/CompressionSettingsCard.tsx",
+    "../../../src-tauri/src/commands/updater.rs",
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
 );
 
@@ -112,6 +114,10 @@ test("diagnostics and about have task-specific layouts", () => {
   assert.match(preferences, /prefs-about-resources/);
   assert.match(preferences, /updatesUnavailable/);
   assert.match(preferences, /licenseValue/);
+  assert.match(preferences, /invoke<AppUpdateInfo>\("check_app_update"\)/);
+  assert.match(preferences, /invoke\("install_app_update"\)/);
+  assert.match(updater, /\.download_and_install\(/);
+  assert.match(updater, /app\.restart\(\)/);
   assert.match(preferences, /ABOUT_FEATURES\.map/);
   assert.match(
     preferencesCss,

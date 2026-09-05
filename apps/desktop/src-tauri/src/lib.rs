@@ -203,6 +203,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard::init())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .pubkey(include_str!("../updater.pub").trim())
+                .build(),
+        )
         .plugin(commands::browser::live_browser_plugin())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
@@ -292,6 +297,8 @@ pub fn run() {
             commands::browser::browser_get_settings,
             commands::browser::browser_set_settings,
             commands::browser::browser_revoke_approval,
+            commands::updater::check_app_update,
+            commands::updater::install_app_update,
             // — projects —
             commands::common::get_default_workspace_path,
             commands::session::list_projects,

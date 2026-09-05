@@ -1,19 +1,17 @@
 # 在 macOS / Windows / Linux 上构建 Astro Agent 桌面安装包。
-# 触发：手动运行、push 到 release 分支、打 v* 标签。
-# 产物会写入草稿 GitHub Release（tagName 中的 __VERSION__ 由 tauri-action 替换）。
+# 触发：手动运行或推送 v* 标签。
+# 产物写入独立的公开 Release 仓库；私有源码不会被推送过去。
 
 name: release-tauri
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - release
     tags:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-tauri-${{ github.ref }}
@@ -72,6 +70,16 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate public release configuration
+        env:
+          ASTRO_RELEASE_OWNER: ${{ vars.ASTRO_RELEASE_OWNER }}
+          ASTRO_RELEASE_REPO: ${{ vars.ASTRO_RELEASE_REPO }}
+          ASTRO_RELEASE_TOKEN: ${{ secrets.ASTRO_RELEASE_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: >-
+          node -e "for (const key of ['ASTRO_RELEASE_OWNER','ASTRO_RELEASE_REPO','ASTRO_RELEASE_TOKEN','TAURI_SIGNING_PRIVATE_KEY','TAURI_SIGNING_PRIVATE_KEY_PASSWORD']) if (!process.env[key]) { console.error('Missing release configuration: ' + key); process.exitCode = 1 }"
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -85,9 +93,14 @@ jobs:
       - name: Build and upload Tauri bundles
         uses: tauri-apps/tauri-action@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ASTRO_RELEASE_TOKEN }}
+          ASTRO_UPDATE_ENDPOINT: https://github.com/${{ vars.ASTRO_RELEASE_OWNER }}/${{ vars.ASTRO_RELEASE_REPO }}/releases/latest/download/latest.json
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
+          owner: ${{ vars.ASTRO_RELEASE_OWNER }}
+          repo: ${{ vars.ASTRO_RELEASE_REPO }}
           tagName: v__VERSION__
           releaseName: Astro Agent v__VERSION__
           releaseBody: |
@@ -99,6 +112,9 @@ jobs:
             - **Linux x64**：`.AppImage` / `.deb`
 
             详见本 Release 的 Assets。
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
+          releaseCommitish: main
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
