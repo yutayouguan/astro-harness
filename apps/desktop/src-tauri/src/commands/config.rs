@@ -47,7 +47,11 @@ pub async fn set_tools_enabled(
 /// 内置工具目录（schemars 派生参数），供前端 Tools 面板展示
 #[tauri::command]
 pub async fn get_tool_catalog() -> Result<Vec<tools::ToolCatalogItem>, String> {
-    Ok(tools::builtin_catalog())
+    let mut registry = tools::ToolRegistry::new();
+    tools::register_all(&mut registry);
+    tools::register_workflow_tools(&mut registry, &home::default_memory_dir())
+        .map_err(|error| error.to_string())?;
+    Ok(tools::catalog_for_ui(&registry))
 }
 
 /// MCP 发现工具的前端 DTO。

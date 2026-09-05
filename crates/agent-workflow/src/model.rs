@@ -13,7 +13,7 @@ pub struct Workflow {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
-    pub ai_callable: bool,
+    pub agent_tool: WorkflowAgentTool,
     pub nodes: Vec<WorkflowNode>,
     pub edges: Vec<WorkflowEdge>,
     #[serde(default)]
@@ -22,6 +22,168 @@ pub struct Workflow {
     pub updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+}
+
+/// Workflow 暴露给 Agent 时的工具契约。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowAgentTool {
+    #[serde(default)]
+    pub exposure: WorkflowToolExposure,
+    /// Responses API namespace 下的子工具名；留空时由 workflow id 生成稳定名。
+    #[serde(default)]
+    pub name: String,
+    /// 对模型暴露的 JSON Schema object，参数会原样作为 `trigger_input`。
+    #[serde(default = "default_agent_tool_input_schema")]
+    pub input_schema: serde_json::Value,
+    #[serde(default)]
+    pub output_description: String,
+    #[serde(default)]
+    pub examples: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub confirmation: WorkflowToolConfirmation,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct WorkflowAgentToolPatch {
+    pub exposure: Option<WorkflowToolExposure>,
+    pub name: Option<String>,
+    pub input_schema: Option<serde_json::Value>,
+    pub output_description: Option<String>,
+    pub examples: Option<Vec<serde_json::Value>>,
+    pub confirmation: Option<WorkflowToolConfirmation>,
+}
+
+impl WorkflowAgentTool {
+    pub fn deferred() -> Self {
+        Self {
+            exposure: WorkflowToolExposure::Deferred,
+            ..Self::default()
+        }
+    }
+
+    pub fn apply_patch(&mut self, patch: WorkflowAgentToolPatch) {
+        if let Some(exposure) = patch.exposure {
+            self.exposure = exposure;
+        }
+        if let Some(name) = patch.name {
+            self.name = name;
+        }
+        if let Some(input_schema) = patch.input_schema {
+            self.input_schema = input_schema;
+        }
+        if let Some(output_description) = patch.output_description {
+            self.output_description = output_description;
+        }
+        if let Some(examples) = patch.examples {
+            self.examples = examples;
+        }
+        if let Some(confirmation) = patch.confirmation {
+            self.confirmation = confirmation;
+        }
+    }
+}
+
+impl Workflow {
+    /// 返回 Responses API `workflow` namespace 下的稳定子工具名。
+    pub fn agent_tool_name(&self) -> String {
+        let configured = self.agent_tool.name.trim();
+        if !configured.is_empty() {
+            return configured.to_string();
+        }
+        format!("run_{}", self.id.replace('-', ""))
+    }
+
+    pub fn agent_tool_description(&self) -> String {
+        let mut description = if self.description.trim().is_empty() {
+            format!("运行智能工作流「{}」。", self.name)
+        } else {
+            format!(
+                "运行智能工作流「{}」：{}",
+                self.name,
+                self.description.trim()
+            )
+        };
+        if !self.agent_tool.output_description.trim().is_empty() {
+            description.push_str(" 输出：");
+            description.push_str(self.agent_tool.output_description.trim());
+        }
+        if !self.agent_tool.examples.is_empty() {
+            description.push_str(" 调用示例：");
+            description.push_str(
+                &serde_json::to_string(&self.agent_tool.examples).unwrap_or_else(|_| "[]".into()),
+            );
+        }
+        description
+    }
+}
+
+pub fn is_valid_agent_tool_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
+pub fn is_reserved_agent_tool_name(name: &str) -> bool {
+    matches!(name, "get_run" | "cancel_run")
+}
+
+pub fn validate_agent_tool_input(
+    workflow: &Workflow,
+    input: &serde_json::Value,
+) -> anyhow::Result<()> {
+    let validator = jsonschema::validator_for(&workflow.agent_tool.input_schema)
+        .map_err(|error| anyhow::anyhow!("Agent 工具 input_schema 无效: {error}"))?;
+    let errors = validator
+        .iter_errors(input)
+        .take(8)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>();
+    anyhow::ensure!(
+        errors.is_empty(),
+        "workflow 输入不符合 JSON Schema: {}",
+        errors.join("; ")
+    );
+    Ok(())
+}
+
+impl Default for WorkflowAgentTool {
+    fn default() -> Self {
+        Self {
+            exposure: WorkflowToolExposure::Disabled,
+            name: String::new(),
+            input_schema: default_agent_tool_input_schema(),
+            output_description: String::new(),
+            examples: Vec::new(),
+            confirmation: WorkflowToolConfirmation::Auto,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowToolExposure {
+    #[default]
+    Disabled,
+    Deferred,
+    Direct,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowToolConfirmation {
+    #[default]
+    Auto,
+    Always,
+}
+
+fn default_agent_tool_input_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +219,7 @@ pub struct Position {
     pub y: f64,
 }
 
-/// 41 种节点类型
+/// 43 种节点类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeType {
@@ -238,7 +400,7 @@ impl Workflow {
             name: input.name,
             description: input.description,
             enabled: false,
-            ai_callable: false,
+            agent_tool: WorkflowAgentTool::deferred(),
             nodes: vec![WorkflowNode {
                 id: trigger_id,
                 node_type: NodeType::ManualTrigger,
@@ -279,5 +441,41 @@ mod tests {
         let back: Workflow = serde_json::from_str(&json).unwrap();
         assert_eq!(back.id, wf.id);
         assert_eq!(back.nodes.len(), 1);
+        assert_eq!(back.agent_tool.exposure, WorkflowToolExposure::Deferred);
+    }
+
+    #[test]
+    fn missing_agent_tool_defaults_to_disabled() {
+        let raw = r#"{
+            "id":"legacy",
+            "name":"legacy",
+            "description":"",
+            "enabled":true,
+            "nodes":[],
+            "edges":[],
+            "variables":{},
+            "created_at":"now",
+            "updated_at":"now"
+        }"#;
+        let workflow: Workflow = serde_json::from_str(raw).unwrap();
+        assert_eq!(workflow.agent_tool.exposure, WorkflowToolExposure::Disabled);
+    }
+
+    #[test]
+    fn validates_agent_tool_input_against_declared_schema() {
+        let mut workflow = Workflow::new(NewWorkflow {
+            name: "schema".into(),
+            description: String::new(),
+        });
+        workflow.agent_tool.input_schema = serde_json::json!({
+            "type": "object",
+            "properties": {"topic": {"type": "string"}},
+            "required": ["topic"],
+            "additionalProperties": false
+        });
+
+        validate_agent_tool_input(&workflow, &serde_json::json!({"topic": "Astro"})).unwrap();
+        assert!(validate_agent_tool_input(&workflow, &serde_json::json!({})).is_err());
+        assert!(validate_agent_tool_input(&workflow, &serde_json::json!({"topic": 42})).is_err());
     }
 }

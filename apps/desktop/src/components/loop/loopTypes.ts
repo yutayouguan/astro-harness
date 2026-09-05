@@ -115,7 +115,14 @@ export interface LoopDto {
   name: string;
   description: string;
   enabled: boolean;
-  ai_callable: boolean;
+  agent_tool: {
+    exposure: "disabled" | "deferred" | "direct";
+    name: string;
+    input_schema: Record<string, unknown>;
+    output_description: string;
+    examples: unknown[];
+    confirmation: "auto" | "always";
+  };
   nodes: LoopNodeDto[];
   edges: LoopEdgeDto[];
   variables: Record<string, unknown>;

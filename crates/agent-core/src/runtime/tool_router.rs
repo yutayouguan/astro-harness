@@ -231,6 +231,7 @@ pub(crate) fn build_tool_router(
         registry
             .searchable_deferred_tools()
             .into_iter()
+            .filter(|entry| entry.allow_eager_fallback)
             .map(types::ToolEntry::tool_name)
             .collect::<HashSet<_>>()
     });
@@ -571,6 +572,59 @@ mod tests {
             spec.get("name").and_then(serde_json::Value::as_str) == Some("web_search")
         }));
         assert!(without_search.model_can_call(None, "web_search"));
+    }
+
+    #[test]
+    fn deferred_tool_can_forbid_eager_fallback_without_tool_search() {
+        let mut registry = ToolRegistry::new();
+        tools::register_all(&mut registry);
+        registry.register_dynamic(
+            types::ToolEntry {
+                name: "workflow__report".into(),
+                model_name: Some("report".into()),
+                namespace: "workflow".into(),
+                toolset: "workflow".into(),
+                description: "run report workflow".into(),
+                allow_eager_fallback: false,
+                ..types::ToolEntry::lifecycle_defaults().deferred()
+            },
+            Arc::new(|_name, _args| Box::pin(async { Ok("done".into()) })),
+        );
+
+        let router = build_tool_router(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            false,
+            &HashSet::new(),
+        )
+        .unwrap();
+
+        assert!(!router.model_can_call(Some("workflow"), "report"));
+        assert!(!router.model_visible_specs().iter().any(|spec| {
+            spec.get("name").and_then(serde_json::Value::as_str) == Some("workflow")
+        }));
+
+        let code_mode_router = build_tool_router(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::CodeMode,
+            false,
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert!(!code_mode_router.has_tool(None, "workflow_report"));
+
+        let discovered = HashSet::from([types::ToolName::namespaced("workflow", "report")]);
+        let discovered_router = build_tool_router(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            true,
+            &discovered,
+        )
+        .unwrap();
+        assert!(discovered_router.model_can_call(Some("workflow"), "report"));
     }
 
     #[test]

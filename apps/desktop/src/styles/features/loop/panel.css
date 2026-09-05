@@ -502,6 +502,34 @@
   transform: translateX(12px);
 }
 
+.loop-tool-exposure {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.loop-tool-exposure.is-compact {
+  font-size: 11px;
+}
+
+.loop-tool-exposure select,
+.loop-agent-tool-config input,
+.loop-agent-tool-config select,
+.loop-agent-tool-config textarea {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--ink);
+  background: var(--glass-panel);
+  font: inherit;
+}
+
+.loop-tool-exposure select {
+  min-width: 88px;
+  padding: 3px 22px 3px 7px;
+}
+
 /* ── List view (compact rows) ─────────────────────────────────── */
 
 .loop-list-view {
@@ -757,4 +785,40 @@
 .loop-detail-panel-toggles {
   display: flex;
   gap: 16px;
+}
+
+.loop-agent-tool-config {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--glass-panel) 82%, transparent);
+}
+
+.loop-agent-tool-config label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--ink-secondary);
+}
+
+.loop-agent-tool-config label.is-wide {
+  grid-column: 1 / -1;
+}
+
+.loop-agent-tool-config input,
+.loop-agent-tool-config select,
+.loop-agent-tool-config textarea {
+  width: 100%;
+  padding: 7px 9px;
+}
+
+.loop-agent-tool-config textarea {
+  min-height: 92px;
+  resize: vertical;
+  font-family: var(--font-mono, ui-monospace, monospace);
 }

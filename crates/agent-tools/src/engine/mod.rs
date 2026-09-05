@@ -10,3 +10,4 @@ pub mod network;
 pub mod path_safe;
 pub mod registry;
 pub mod schema;
+pub mod workflow;

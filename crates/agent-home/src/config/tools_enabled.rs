@@ -38,6 +38,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "present",
     "subagents",
     "cron",
+    "workflow",
     "persona",
     "todo",
 ];
@@ -214,6 +215,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "spawn_agent" | "list_agents" | "followup_task" | "send_message" | "wait_agent"
         | "interrupt_agent" => "subagents",
         "persona_create" => "persona",
+        name if name.starts_with("workflow__") || name.starts_with("workflow.") => "workflow",
         "todo" => "todo",
         other => other,
     }
@@ -301,5 +303,12 @@ mod tests {
         let raw = fs::read_to_string(dir.path().join("tools-enabled.json")).unwrap();
         let map: HashMap<String, bool> = serde_json::from_str(&raw).unwrap();
         assert_eq!(map.get("memory"), Some(&true));
+    }
+
+    #[test]
+    fn workflow_names_share_the_workflow_toolset() {
+        assert_eq!(tool_name_to_toolset("workflow__saved-id"), "workflow");
+        assert_eq!(tool_name_to_toolset("workflow.weekly_report"), "workflow");
+        assert!(KNOWN_TOOLSET_IDS.contains(&"workflow"));
     }
 }

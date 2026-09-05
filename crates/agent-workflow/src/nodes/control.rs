@@ -158,7 +158,7 @@ impl NodeExecutor for HumanApprovalExec {
             .get("auto_approve")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        if auto_approve {
+        if auto_approve || ctx.human_approval_granted() {
             tracing::info!(prompt = %resolved_prompt, "人工审批节点：自动放行");
             return Ok(NodeResult::Approved);
         }

@@ -846,6 +846,84 @@ async fn preflight_read_only_write(
     .await
 }
 
+async fn preflight_workflow_tool(
+    session: &Arc<AgentLoop>,
+    step_context: &StepContext,
+    call: &types::ParsedToolCall,
+    turn_context: &TurnContext,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Option<PermissionPreflight> {
+    if call.namespace.as_deref() != Some(tools::engine::workflow::WORKFLOW_NAMESPACE) {
+        return Some(PermissionPreflight::NotRequired);
+    }
+    match step_context
+        .tool_router
+        .approval_requirement(call.namespace.as_deref(), &call.name)
+    {
+        types::ExecApprovalRequirement::Skip => return Some(PermissionPreflight::NotRequired),
+        types::ExecApprovalRequirement::Forbidden => {
+            return Some(PermissionPreflight::Denied(format!(
+                "Workflow `{}` is forbidden by policy",
+                call.display_name()
+            )));
+        }
+        types::ExecApprovalRequirement::NeedsApproval => {}
+    }
+
+    let settings = memory::load_permission_settings(session.memory_dir());
+    let profile_id = session
+        .permission_profile()
+        .unwrap_or_else(|| settings.selection.profile_id.clone());
+    let mut selection = settings.selection.clone();
+    if step_context
+        .tool_router
+        .needs_confirmation(call.namespace.as_deref(), &call.name)
+    {
+        selection.approvals_reviewer = types::ApprovalsReviewer::User;
+    }
+    let request = types::PermissionRequest {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        session_id: session.session_id().to_string(),
+        turn_id: session.current_turn_id().await,
+        tool_call_id: call.id.clone(),
+        tool_name: call.display_name(),
+        summary: format!("Allow workflow {} for this call", call.display_name()),
+        capabilities: vec![types::PermissionCapability::ExternalSideEffect {
+            category: "workflow".to_string(),
+            target: call.display_name(),
+        }],
+        reason: types::PermissionReason::RulePrompt,
+        requested_scope: types::GrantScope::Once,
+        command_preview: None,
+        affected_paths: Vec::new(),
+        network_hosts: Vec::new(),
+    };
+    let body = format!(
+        "Agent 请求执行智能工作流 `{}`。该流程包含 AI、媒体、外部请求、文件或其他副作用节点。\n\n是否仅批准本次调用？",
+        call.display_name()
+    );
+    let audit = PermissionAuditReceipt::new(
+        session.memory_dir().to_path_buf(),
+        &settings,
+        profile_id,
+        request,
+        session.config.thread_memory_mode,
+    );
+    review_once_permission(
+        session,
+        &selection,
+        audit,
+        turn_context,
+        hitl_gate,
+        "surface=workflow reason=workflow_side_effects",
+        ConfirmPresentation::Text {
+            title: "批准智能工作流",
+            body: &body,
+        },
+    )
+    .await
+}
+
 async fn preflight_mcp_tool_approval(
     session: &Arc<AgentLoop>,
     step_context: &StepContext,
@@ -1063,16 +1141,7 @@ fn code_mode_nested_tools(
         {
             continue;
         }
-        let child_name = entry
-            .name
-            .strip_prefix(&format!("{}_", entry.namespace))
-            .or_else(|| entry.name.strip_prefix(&format!("{}.", entry.namespace)))
-            .unwrap_or(&entry.name);
-        let wire_name = if entry.namespace.is_empty() {
-            entry.name.clone()
-        } else {
-            format!("{}.{}", entry.namespace, child_name)
-        };
+        let wire_name = entry.tool_name().wire_name();
         if !step_context.routes_tool(&wire_name) {
             continue;
         }
@@ -1681,6 +1750,24 @@ async fn execute_tools_serial_inner(
         let mut workspace_write_grant = false;
         let mut permission_audits = Vec::new();
         if !call.args_parse_error {
+            match preflight_workflow_tool(session, &step_context, call, turn_context, hitl_gate)
+                .await?
+            {
+                PermissionPreflight::NotRequired => {}
+                PermissionPreflight::Granted(audit) => {
+                    workspace_write_grant = true;
+                    permission_audits.push(*audit);
+                }
+                PermissionPreflight::Denied(message) => {
+                    out.push(
+                        format!(
+                        "{message}. Do not retry the same workflow without explicit authorization."
+                    )
+                        .into(),
+                    );
+                    continue;
+                }
+            }
             match preflight_browser_action(session, &step_context, call, turn_context, hitl_gate)
                 .await?
             {

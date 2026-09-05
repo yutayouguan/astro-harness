@@ -133,6 +133,71 @@ pub async fn execute_workflow_with_provider_configs(
     provider_configs: HashMap<String, RuntimeProviderConfig>,
 ) -> Result<WorkflowRunResult> {
     let run_id = uuid::Uuid::new_v4().to_string();
+    execute_workflow_with_provider_configs_and_run_id(
+        workflow,
+        trigger_input,
+        trigger_type,
+        run_db,
+        provider_configs,
+        run_id,
+    )
+    .await
+}
+
+/// 使用调用方预先分配的 run id 执行工作流。
+///
+/// Agent 工具适配器依靠该入口在转入后台运行前就向模型返回可查询的 id。
+pub async fn execute_workflow_with_provider_configs_and_run_id(
+    workflow: &Workflow,
+    trigger_input: serde_json::Value,
+    trigger_type: &str,
+    run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+    run_id: String,
+) -> Result<WorkflowRunResult> {
+    execute_workflow_with_options(
+        workflow,
+        trigger_input,
+        trigger_type,
+        run_db,
+        provider_configs,
+        run_id,
+        false,
+    )
+    .await
+}
+
+/// Agent 工具调用入口：调用已经过 Harness 审批链，因此内部
+/// HumanApproval 节点可消费这一次性授权，无需二次 park。
+pub async fn execute_workflow_as_agent_tool(
+    workflow: &Workflow,
+    trigger_input: serde_json::Value,
+    run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+    run_id: String,
+) -> Result<WorkflowRunResult> {
+    execute_workflow_with_options(
+        workflow,
+        trigger_input,
+        "agent_tool",
+        run_db,
+        provider_configs,
+        run_id,
+        true,
+    )
+    .await
+}
+
+async fn execute_workflow_with_options(
+    workflow: &Workflow,
+    trigger_input: serde_json::Value,
+    trigger_type: &str,
+    run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+    run_id: String,
+    human_approval_granted: bool,
+) -> Result<WorkflowRunResult> {
+    anyhow::ensure!(!run_id.trim().is_empty(), "workflow run id 不能为空");
     let started_at = Local::now().to_rfc3339();
 
     run_db
@@ -153,7 +218,14 @@ pub async fn execute_workflow_with_provider_configs(
 
     let result = match tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        execute_inner(workflow, trigger_input, &run_id, run_db, provider_configs),
+        execute_inner(
+            workflow,
+            trigger_input,
+            &run_id,
+            run_db,
+            provider_configs,
+            human_approval_granted,
+        ),
     )
     .await
     {
@@ -171,7 +243,7 @@ pub async fn execute_workflow_with_provider_configs(
             run_db
                 .finish_run(
                     &run_id,
-                    "success",
+                    &res.status,
                     &finished_at,
                     None,
                     output_str.as_deref(),
@@ -210,8 +282,18 @@ async fn execute_inner(
     run_id: &str,
     run_db: &WorkflowRunDb,
     provider_configs: HashMap<String, RuntimeProviderConfig>,
+    human_approval_granted: bool,
 ) -> Result<WorkflowRunResult> {
-    execute_inner_with_depth(workflow, trigger_input, run_id, run_db, 0, provider_configs).await
+    execute_inner_with_depth(
+        workflow,
+        trigger_input,
+        run_id,
+        run_db,
+        0,
+        provider_configs,
+        human_approval_granted,
+    )
+    .await
 }
 
 async fn execute_inner_with_depth(
@@ -221,13 +303,15 @@ async fn execute_inner_with_depth(
     run_db: &WorkflowRunDb,
     depth: u32,
     provider_configs: HashMap<String, RuntimeProviderConfig>,
+    human_approval_granted: bool,
 ) -> Result<WorkflowRunResult> {
     let plan = resolve_dag(&workflow.nodes, &workflow.edges)?;
 
     let executors = nodes::executor_registry();
 
-    let mut ctx =
-        VariableContext::new(workflow.variables.clone()).with_provider_configs(provider_configs);
+    let mut ctx = VariableContext::new(workflow.variables.clone())
+        .with_provider_configs(provider_configs)
+        .with_human_approval_granted(human_approval_granted);
 
     // 将 trigger_input 注入全局变量
     if let serde_json::Value::Object(map) = trigger_input {
@@ -691,6 +775,7 @@ fn execute_sub_workflow<'a>(
             run_db,
             depth + 1,
             ctx.provider_configs(),
+            ctx.human_approval_granted(),
         )
         .await;
 
@@ -1009,4 +1094,122 @@ fn truncate_utf8_safe(s: &str, max_bytes: usize) -> String {
         end -= 1;
     }
     s[..end].to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Position, WorkflowAgentTool};
+
+    fn workflow_with_middle(node_type: NodeType) -> Workflow {
+        Workflow {
+            id: "workflow-test".into(),
+            name: "Workflow Test".into(),
+            description: String::new(),
+            enabled: true,
+            agent_tool: WorkflowAgentTool::deferred(),
+            nodes: vec![
+                WorkflowNode {
+                    id: "trigger".into(),
+                    node_type: NodeType::ManualTrigger,
+                    label: "trigger".into(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    config: serde_json::json!({}),
+                    disabled: false,
+                },
+                WorkflowNode {
+                    id: "middle".into(),
+                    node_type,
+                    label: "middle".into(),
+                    position: Position { x: 1.0, y: 0.0 },
+                    config: serde_json::json!({"prompt_template": "approve"}),
+                    disabled: false,
+                },
+                WorkflowNode {
+                    id: "output".into(),
+                    node_type: NodeType::Output,
+                    label: "output".into(),
+                    position: Position { x: 2.0, y: 0.0 },
+                    config: serde_json::json!({
+                        "output_fields": [{"name": "trigger_input.question"}]
+                    }),
+                    disabled: false,
+                },
+            ],
+            edges: vec![
+                WorkflowEdge {
+                    id: "a".into(),
+                    source: "trigger".into(),
+                    source_handle: None,
+                    target: "middle".into(),
+                    target_handle: None,
+                },
+                WorkflowEdge {
+                    id: "b".into(),
+                    source: "middle".into(),
+                    source_handle: None,
+                    target: "output".into(),
+                    target_handle: None,
+                },
+            ],
+            variables: HashMap::new(),
+            created_at: "now".into(),
+            updated_at: "now".into(),
+            icon: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn explicit_run_id_and_agent_approval_flow_through_execution() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = WorkflowRunDb::new(dir.path().join("workflow.db"))
+            .await
+            .unwrap();
+        let workflow = workflow_with_middle(NodeType::HumanApproval);
+        let result = execute_workflow_as_agent_tool(
+            &workflow,
+            serde_json::json!({"question": "hello"}),
+            &db,
+            HashMap::new(),
+            "known-run-id".into(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.run_id, "known-run-id");
+        assert_eq!(result.status, "success");
+        assert_eq!(
+            result.output.unwrap()["trigger_input.question"],
+            serde_json::json!("hello")
+        );
+        assert_eq!(
+            db.get_run("known-run-id").await.unwrap().unwrap().status,
+            "success"
+        );
+    }
+
+    #[tokio::test]
+    async fn pending_approval_is_persisted_as_pending() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = WorkflowRunDb::new(dir.path().join("workflow.db"))
+            .await
+            .unwrap();
+        let workflow = workflow_with_middle(NodeType::HumanApproval);
+        let result = execute_workflow_with_provider_configs_and_run_id(
+            &workflow,
+            serde_json::json!({"question": "hello"}),
+            "manual",
+            &db,
+            HashMap::new(),
+            "pending-run-id".into(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.status, "pending_approval");
+        assert_eq!(
+            db.get_run("pending-run-id").await.unwrap().unwrap().status,
+            "pending_approval"
+        );
+    }
 }

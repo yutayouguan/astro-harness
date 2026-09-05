@@ -273,6 +273,8 @@ impl McpToolApproval {
 #[derive(Clone)]
 pub struct ToolEntry {
     pub name: String,
+    /// 可选的模型可见子工具名；内部注册键仍使用 `name`。
+    pub model_name: Option<String>,
     pub toolset: String,
     pub description: String,
     pub schema: serde_json::Value,
@@ -289,6 +291,8 @@ pub struct ToolEntry {
     /// Tool visibility level: Direct (default), Deferred (discoverable via tool_search),
     /// or Hidden (internal only). Replaces the former `deferred: bool` flag.
     pub exposure: ToolExposure,
+    /// Provider 不支持 tool_search 时，是否允许将 Deferred 工具降级为 eager。
+    pub allow_eager_fallback: bool,
     /// Tool namespace for grouping (e.g., "shell", "media", "system", "mcp").
     /// Default empty string means the default namespace.
     pub namespace: String,
@@ -299,6 +303,12 @@ pub struct ToolEntry {
 impl ToolEntry {
     /// 返回 Responses API 中的原生工具身份。
     pub fn tool_name(&self) -> ToolName {
+        if let Some(model_name) = self.model_name.as_deref().filter(|name| !name.is_empty()) {
+            return ToolName::new(
+                (!self.namespace.is_empty()).then_some(self.namespace.as_str()),
+                model_name,
+            );
+        }
         if self.namespace.is_empty() {
             return ToolName::plain(self.name.clone());
         }
@@ -313,6 +323,7 @@ impl ToolEntry {
     pub fn lifecycle_defaults() -> Self {
         Self {
             name: String::new(),
+            model_name: None,
             toolset: String::new(),
             description: String::new(),
             schema: serde_json::json!({ "type": "object", "properties": {} }),
@@ -326,6 +337,7 @@ impl ToolEntry {
             output_token_limit: None,
             approval_requirement: ExecApprovalRequirement::Skip,
             exposure: ToolExposure::Direct,
+            allow_eager_fallback: true,
             namespace: String::new(),
             freeform_format: None,
         }
@@ -399,6 +411,21 @@ mod tests {
     fn tool_entry_defaults_include_skip_approval() {
         let entry = ToolEntry::lifecycle_defaults();
         assert_eq!(entry.approval_requirement, ExecApprovalRequirement::Skip);
+        assert!(entry.allow_eager_fallback);
+    }
+
+    #[test]
+    fn tool_entry_can_separate_model_and_registered_names() {
+        let entry = ToolEntry {
+            name: "workflow__stable-id".into(),
+            model_name: Some("weekly_report".into()),
+            namespace: "workflow".into(),
+            ..ToolEntry::lifecycle_defaults()
+        };
+        assert_eq!(
+            entry.tool_name(),
+            ToolName::namespaced("workflow", "weekly_report")
+        );
     }
 
     fn approval(mode: McpToolApprovalMode, annotations: McpToolAnnotations) -> McpToolApproval {

@@ -544,6 +544,13 @@ export default function ToolsPanel({
   const detailApiName =
     activeFn?.name ?? selectedTool?.tools?.[0] ?? selectedTool?.id ?? "";
   const detailNamespace = activeFn?.namespace ?? selectedTool?.namespace;
+  const detailExposure = activeFn?.exposure ?? selectedTool?.exposure;
+  const detailExposureLabel =
+    detailExposure === "deferred"
+      ? t("loop.agentToolDeferred")
+      : detailExposure === "direct"
+        ? t("loop.agentToolDirect")
+        : detailExposure;
   const detailRegisteredName =
     activeFn?.registeredName ?? selectedTool?.registeredName;
 
@@ -705,6 +712,17 @@ export default function ToolsPanel({
                                       {t("tools.detail.namespace")}
                                     </span>
                                     <code>{detailNamespace}</code>
+                                  </span>
+                                ) : null}
+                                {detailExposure ? (
+                                  <span
+                                    className="tools-detail-id-chip"
+                                    title={t("tools.detail.exposure")}
+                                  >
+                                    <span className="tools-detail-id-label">
+                                      {t("tools.detail.exposure")}
+                                    </span>
+                                    <code>{detailExposureLabel}</code>
                                   </span>
                                 ) : null}
                                 {detailRegisteredName &&

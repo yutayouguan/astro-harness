@@ -252,7 +252,7 @@ export default function LoopPanel({
           variables: {},
           icon: null,
           enabled: false,
-          ai_callable: false,
+          agent_tool: created.agent_tool,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -294,14 +294,48 @@ export default function LoopPanel({
     }
   };
 
-  const handleToggleAiCallable = async (id: string, callable: boolean) => {
+  const handleAgentToolExposure = async (
+    workflow: LoopDto,
+    exposure: LoopDto["agent_tool"]["exposure"],
+  ) => {
+    await handleAgentToolPatch(workflow, { exposure });
+  };
+
+  const handleAgentToolPatch = async (
+    workflow: LoopDto,
+    patch: Partial<LoopDto["agent_tool"]>,
+  ) => {
     try {
-      await invoke("set_loop_ai_callable", { id, callable });
+      await invoke("set_loop_agent_tool", {
+        id: workflow.id,
+        patch,
+      });
       void refresh();
     } catch (e) {
       showToast(String(e), { tone: "error" });
     }
   };
+
+  const renderAgentToolExposure = (workflow: LoopDto, compact = false) => (
+    <label className={`loop-tool-exposure${compact ? " is-compact" : ""}`}>
+      <Bot size={12} />
+      <span>{compact ? "AI" : t("loop.agentTool")}</span>
+      <select
+        value={workflow.agent_tool.exposure}
+        onChange={(event) =>
+          void handleAgentToolExposure(
+            workflow,
+            event.target.value as LoopDto["agent_tool"]["exposure"],
+          )
+        }
+        aria-label={t("loop.agentToolExposure")}
+      >
+        <option value="disabled">{t("loop.agentToolDisabled")}</option>
+        <option value="deferred">{t("loop.agentToolDeferred")}</option>
+        <option value="direct">{t("loop.agentToolDirect")}</option>
+      </select>
+    </label>
+  );
 
   const handleExport = async (id: string) => {
     try {
@@ -333,7 +367,7 @@ export default function LoopPanel({
           variables: lp.variables,
           icon: lp.icon ?? null,
           enabled: lp.enabled,
-          ai_callable: lp.ai_callable,
+          agent_tool: lp.agent_tool,
           created_at: lp.created_at,
           updated_at: new Date().toISOString(),
         },
@@ -504,17 +538,7 @@ export default function LoopPanel({
               <Power size={12} />
               <span>{t("loop.enabled")}</span>
             </label>
-            <label className="loop-toggle">
-              <input
-                type="checkbox"
-                checked={lp.ai_callable}
-                onChange={(e) =>
-                  void handleToggleAiCallable(lp.id, e.target.checked)
-                }
-              />
-              <Bot size={12} />
-              <span>{t("loop.aiCallable")}</span>
-            </label>
+            {renderAgentToolExposure(lp)}
           </div>
         </article>
       ))}
@@ -550,16 +574,7 @@ export default function LoopPanel({
               />
               <span>{t("loop.enabled")}</span>
             </label>
-            <label className="loop-toggle loop-toggle--compact">
-              <input
-                type="checkbox"
-                checked={lp.ai_callable}
-                onChange={(e) =>
-                  void handleToggleAiCallable(lp.id, e.target.checked)
-                }
-              />
-              <span>AI</span>
-            </label>
+            {renderAgentToolExposure(lp, true)}
           </div>
           <span
             className={`loop-list-row-badge${lp.enabled ? " is-active" : ""}`}
@@ -655,21 +670,106 @@ export default function LoopPanel({
                   <Power size={12} />
                   <span>{t("loop.enabled")}</span>
                 </label>
-                <label className="loop-toggle">
-                  <input
-                    type="checkbox"
-                    checked={selectedDetail.ai_callable}
-                    onChange={(e) =>
-                      void handleToggleAiCallable(
-                        selectedDetail.id,
-                        e.target.checked,
-                      )
-                    }
-                  />
-                  <Bot size={12} />
-                  <span>{t("loop.aiCallable")}</span>
-                </label>
+                {renderAgentToolExposure(selectedDetail)}
               </div>
+              {selectedDetail.agent_tool.exposure !== "disabled" ? (
+                <div className="loop-agent-tool-config">
+                  <label>
+                    <span>{t("loop.agentToolName")}</span>
+                    <input
+                      key={`${selectedDetail.id}:name`}
+                      defaultValue={selectedDetail.agent_tool.name}
+                      placeholder={`run_${selectedDetail.id.replace(/-/g, "")}`}
+                      onBlur={(event) =>
+                        void handleAgentToolPatch(selectedDetail, {
+                          name: event.target.value.trim(),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>{t("loop.agentToolConfirmation")}</span>
+                    <select
+                      value={selectedDetail.agent_tool.confirmation}
+                      onChange={(event) =>
+                        void handleAgentToolPatch(selectedDetail, {
+                          confirmation: event.target.value as "auto" | "always",
+                        })
+                      }
+                    >
+                      <option value="auto">
+                        {t("loop.agentToolConfirmationAuto")}
+                      </option>
+                      <option value="always">
+                        {t("loop.agentToolConfirmationAlways")}
+                      </option>
+                    </select>
+                  </label>
+                  <label className="is-wide">
+                    <span>{t("loop.agentToolInputSchema")}</span>
+                    <textarea
+                      key={`${selectedDetail.id}:schema`}
+                      defaultValue={JSON.stringify(
+                        selectedDetail.agent_tool.input_schema,
+                        null,
+                        2,
+                      )}
+                      onBlur={(event) => {
+                        try {
+                          const parsed = JSON.parse(
+                            event.target.value,
+                          ) as Record<string, unknown>;
+                          void handleAgentToolPatch(selectedDetail, {
+                            input_schema: parsed,
+                          });
+                        } catch {
+                          showToast(t("loop.agentToolInvalidJson"), {
+                            tone: "error",
+                          });
+                        }
+                      }}
+                    />
+                  </label>
+                  <label className="is-wide">
+                    <span>{t("loop.agentToolOutputDescription")}</span>
+                    <input
+                      key={`${selectedDetail.id}:output`}
+                      defaultValue={
+                        selectedDetail.agent_tool.output_description
+                      }
+                      onBlur={(event) =>
+                        void handleAgentToolPatch(selectedDetail, {
+                          output_description: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="is-wide">
+                    <span>{t("loop.agentToolExamples")}</span>
+                    <textarea
+                      key={`${selectedDetail.id}:examples`}
+                      defaultValue={JSON.stringify(
+                        selectedDetail.agent_tool.examples,
+                        null,
+                        2,
+                      )}
+                      onBlur={(event) => {
+                        try {
+                          const parsed = JSON.parse(event.target.value);
+                          if (!Array.isArray(parsed)) throw new Error();
+                          void handleAgentToolPatch(selectedDetail, {
+                            examples: parsed,
+                          });
+                        } catch {
+                          showToast(t("loop.agentToolInvalidExamples"), {
+                            tone: "error",
+                          });
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
             </div>
             {selectedDetail.nodes.length > 0 && (
               <LoopPreview workflow={selectedDetail} />

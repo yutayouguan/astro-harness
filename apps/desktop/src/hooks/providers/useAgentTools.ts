@@ -57,6 +57,7 @@ export type AgentToolId =
   | "present"
   | "subagents"
   | "cron"
+  | "workflow"
   | "persona"
   | "todo";
 
@@ -95,6 +96,7 @@ export type AgentToolFnDef = {
   description?: string;
   emoji?: string;
   params?: ToolParam[];
+  exposure?: string;
 };
 
 export type AgentToolDef = {
@@ -114,6 +116,7 @@ export type AgentToolDef = {
   functions?: AgentToolFnDef[];
   namespace?: string;
   registeredName?: string;
+  exposure?: string;
 };
 
 /** UI 元数据（图标 / i18n / 色调）；params 为后端 schema 未就绪时的回退 */
@@ -459,6 +462,14 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "task", type: "string", optional: true },
       { name: "id", type: "string", optional: true },
     ],
+  },
+  {
+    id: "workflow",
+    titleKey: "agentTools.workflow.title",
+    descKey: "agentTools.workflow.desc",
+    Icon: IconScheduled,
+    tone: "fuchsia",
+    params: [],
   },
   {
     id: "persona",

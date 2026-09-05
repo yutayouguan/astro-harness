@@ -2112,6 +2112,16 @@ impl Session {
             .reload_enabled_from_disk(Some(&self.agent_id));
     }
 
+    /// 将当前启用的智能工作流重建为 `workflow` namespace 工具。
+    fn reload_workflow_tools(&self) -> anyhow::Result<usize> {
+        let mut registry = self
+            .services
+            .tool_registry
+            .write()
+            .expect("tool registry lock poisoned");
+        tools::register_workflow_tools(&mut registry, &self.config.memory_dir)
+    }
+
     /// 从磁盘重载 MCP 配置，并将启用工具挂接到 [`ToolRegistry`]。
     ///
     /// optional Server 失败仅降级；required Server 失败向调用方传播。
@@ -2213,6 +2223,7 @@ impl Session {
     pub async fn reload_tools_and_mcp(&self) -> anyhow::Result<()> {
         let snapshot = self.extension_snapshot_for_current_turn().await?;
         self.reload_tool_gates().await;
+        self.reload_workflow_tools()?;
         self.services
             .tool_registry
             .write()

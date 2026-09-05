@@ -501,7 +501,10 @@ impl ToolRegistry {
             let is_nested = mode != types::ToolMode::Direct
                 && !is_control
                 && entry.name != "tool_search"
-                && !entry.exposure.is_hidden();
+                && !entry.exposure.is_hidden()
+                && (!entry.exposure.is_deferred()
+                    || entry.allow_eager_fallback
+                    || discovered_deferred.contains(&entry.tool_name()));
             if (!is_direct && !is_discovered && !is_nested) || !self.is_entry_available(entry) {
                 continue;
             }

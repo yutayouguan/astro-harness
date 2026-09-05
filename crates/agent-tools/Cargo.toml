@@ -18,7 +18,9 @@ skills = { path = "../agent-skills" }
 artifacts = { path = "../agent-artifacts" }
 a2ui = { path = "../agent-a2ui" }
 hooks = { path = "../agent-hooks" }
+workflow = { path = "../agent-workflow" }
 tokio = { workspace = true, features = ["process", "time", "rt", "macros"] }
+tokio-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 schemars = { workspace = true }

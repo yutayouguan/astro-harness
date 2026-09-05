@@ -40,6 +40,8 @@ pub struct ToolFunctionInfo {
     pub icon: String,
     /// 该函数的全部参数列表。
     pub params: Vec<ToolParamInfo>,
+    /// `direct` / `deferred` / `hidden`，用于界面展示加载策略。
+    pub exposure: String,
 }
 
 /// 按 toolset 聚合的工具目录项，供前端设置面板与工具列表展示。
@@ -65,6 +67,17 @@ pub struct ToolCatalogItem {
     pub tools: Vec<String>,
     /// 每个函数的完整说明与参数。
     pub functions: Vec<ToolFunctionInfo>,
+    pub exposure: String,
+}
+
+fn exposure_name(exposure: types::ToolExposure) -> &'static str {
+    match exposure {
+        types::ToolExposure::Direct => "direct",
+        types::ToolExposure::Deferred => "deferred",
+        types::ToolExposure::Hidden => "hidden",
+        types::ToolExposure::DeferredModelOnly => "deferred_model_only",
+        types::ToolExposure::DirectModelOnly => "direct_model_only",
+    }
 }
 
 /// 从 JSON Schema object 提取参数列表。
@@ -178,6 +191,7 @@ fn entries_to_item(id: String, mut entries: Vec<&crate::registry::ToolEntry>) ->
                 description: entry.description.clone(),
                 icon: entry.icon.to_string(),
                 params: params_from_schema(&entry.schema),
+                exposure: exposure_name(entry.exposure).to_string(),
             }
         })
         .collect();
@@ -194,6 +208,7 @@ fn entries_to_item(id: String, mut entries: Vec<&crate::registry::ToolEntry>) ->
         params: params_from_schema(&primary.schema),
         tools,
         functions,
+        exposure: exposure_name(primary.exposure).to_string(),
     }
 }
 
@@ -290,7 +305,8 @@ mod tests {
     #[test]
     fn builtin_catalog_covers_known_toolsets() {
         let cat = builtin_catalog();
-        assert!(cat.len() >= home::KNOWN_TOOLSET_IDS.len());
+        // workflow 是运行时目录，不由 builtin_catalog 静态注册。
+        assert!(cat.len() + 1 >= home::KNOWN_TOOLSET_IDS.len());
         let web = cat
             .iter()
             .find(|c| c.id == "web_search")
@@ -357,6 +373,7 @@ mod tests {
             .expect("browser.open catalog function");
         assert_eq!(open["namespace"], "browser");
         assert_eq!(open["registeredName"], "browser_open");
+        assert_eq!(open["exposure"], "direct");
     }
 
     #[test]

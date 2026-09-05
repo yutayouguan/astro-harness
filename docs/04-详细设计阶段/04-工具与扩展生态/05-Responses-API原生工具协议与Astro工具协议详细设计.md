@@ -263,6 +263,7 @@ MCP 同样使用原生身份：模型看到 `namespace: "mcp__calendar"` + `name
 | `browser` | Direct，受本机浏览器可用性和 Plan 模式过滤 | `open`、`snapshot`、`click`、`type`、`scroll`、`wait`、`screenshot`、`tabs`、`tab_open`、`tab_switch`、`tab_close`、`back`、`forward`、`reload`、`downloads`、`close` |
 | `media` | Deferred，由 `tool_search` 发现；Skill 可放宽对应 toolset 开关 | `image_gen`、`video_gen`、`speech_gen`、`music_gen` |
 | `cron` | Direct | `add`、`list`、`remove`、`enable`、`disable` |
+| `workflow` | 按工作流配置，默认 Deferred | 已启用 Workflow 的 Agent 工具名，另有 `get_run` / `cancel_run` |
 | `mcp__{server}` | 有 `tool_search` 时 Deferred，否则 Direct | Server 返回的原生工具名 |
 
 `image_analyze`、`audio_analyze`、`video_analyze` 和 `robotics` 不归入 `media`；理解/感知工具与生成工具的副作用、路由和授权语义不同。
@@ -376,6 +377,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 - 媒体生成：`media.image_gen`、`media.video_gen`、`media.speech_gen`、`media.music_gen`；
 - 媒体理解：`image_analyze`、`audio_analyze`、`video_analyze`、`robotics`；
 - MCP：当 `tool_search` 可用时，当前 MCP Hub 发现的 `(mcp__{server}, {tool})` 原生子工具也默认进入 Deferred。
+- Workflow：`agent_tool.exposure=deferred` 的已启用工作流以 `workflow.<name>` 进入搜索；不支持 `tool_search` 的模型不会将它们 eager 降级。
 
 `exec` / `wait` 以 `DirectModelOnly` 注册，但只有 CodeMode 或 CodeModeOnly 投影会把它们发给模型。Direct 模式仍直接获得普通 Direct 工具和原生 `tool_search`；Deferred 工具由 `tool_search` 激活后进入下一次 sampling。
 

@@ -12,7 +12,20 @@ const workflows: LoopDto[] = [
     name: "每日内容摘要",
     description: "收集工作区更新，生成结构化摘要并保存。",
     enabled: true,
-    ai_callable: true,
+    agent_tool: {
+      exposure: "deferred",
+      name: "daily_summary",
+      input_schema: {
+        type: "object",
+        properties: {
+          topic: { type: "string", description: "要摘要的主题" },
+        },
+        additionalProperties: false,
+      },
+      output_description: "结构化的每日摘要",
+      examples: [{ topic: "Astro 开发进展" }],
+      confirmation: "auto",
+    },
     nodes: [
       {
         id: "manual",

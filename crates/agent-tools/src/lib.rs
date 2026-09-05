@@ -51,6 +51,7 @@ pub use engine::execution::{
 pub use engine::executor::{
     CoreToolRuntime, DynamicToolAdapter, LegacyToolAdapter, ToolExecutor, ToolExecutorFuture,
 };
+pub use engine::workflow::{register_workflow_tools, WORKFLOW_TOOLSET};
 pub use path_safe::resolve_safe;
 pub use registry::DynToolHandler;
 pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};

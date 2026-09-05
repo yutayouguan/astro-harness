@@ -67,6 +67,7 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 
 - `ToolRegistry` — 工具注册表：`register_runtime()` / `register_dynamic()` / `available_tools()` / `schemas_for_api()` / `dispatch()`；Deferred namespace 由 `tool_search` 返回完整子工具 schema
 - `ToolCatalogItem` — 前端目录 DTO：`id` 是 toolset，`name` 是模型调用名，`namespace` 与 `registeredName` 显式区分协议身份和内部 handler
+- `register_workflow_tools()` — 每 Step 从 WorkflowStore 快照生成 `workflow` namespace、执行 runtime 和加载策略；默认 Deferred 且禁止在无 `tool_search` 模型上 eager 降级
 - `ToolContext` — 工具执行上下文：凭证、会话 ID、沙箱策略、项目根、MCP Hub
 - `register_all(registry)` — 一次性注册全部内置工具（通过 `inventory` 自动收集）
 - `ToolRegistry::dispatch(ctx, name, args)` — Agent 规范分发入口

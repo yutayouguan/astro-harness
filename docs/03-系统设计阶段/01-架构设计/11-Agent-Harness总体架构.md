@@ -168,6 +168,7 @@ Harness 通过 `ToolRegistry` 区分工具是否可执行、是否直接对模�
 - `tool_search`：以原生 wire type 搜索并激活 Deferred 内置工具和 MCP 工具；
 - Namespace：定义、call、StepContext 路由和 output 都保留分离的 `(namespace, name)`，不接受展平名伪装模型直调；
 - MCP：每 Agent 连接池、延迟工具发现和调用时审批；模型侧使用 `namespace=mcp__{server}` + 原生子工具名，内部 qualified key 只在 `McpHub` 分发边界使用；
+- Workflow：每个 sampling Step 从 WorkflowStore 重建 `workflow` namespace，并在 `ToolRouter` 中冻结工作流定义与执行器；Deferred 工作流只能由可信 `tool_search_output` 激活；
 - Browser：任务绑定的隔离浏览器会话；
 - 媒体/工作流/Cron：作为扩展执行面，复用 Harness 的 Provider、持久化和观测能力。
 

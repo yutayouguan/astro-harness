@@ -7427,10 +7427,12 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-tungstenite",
+ "tokio-util",
  "types",
  "urlencoding",
  "usage",
  "uuid",
+ "workflow",
 ]
 
 [[package]]
@@ -8919,6 +8921,7 @@ dependencies = [
  "chrono",
  "futures",
  "home",
+ "jsonschema",
  "providers",
  "reqwest 0.12.28",
  "serde",
@@ -9042,12 +9045,12 @@ dependencies = [
  "rustix",
 ]
 
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a5a4b21e1a62b67a2970e6831bc091d7b87e119e7f9791aef9702e3bef04448"
-
 [[package]]
 name = "y4m"
 version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a5a4b21e1a62b67a2970e6831bc091d7b87e119e7f9791aef9702e3bef04448"
+
 [[package]]
 name = "yoke"
 version = "0.8.3"
@@ -9224,12 +9227,12 @@ dependencies = [
  "memchr",
 ]
 
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
-
 [[package]]
 name = "zmij"
 version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
 [[package]]
 name = "zune-core"
 version = "0.5.3"

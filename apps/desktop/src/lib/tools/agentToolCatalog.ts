@@ -12,6 +12,7 @@ export type CatalogFnDto = {
   description: string;
   icon: string;
   params: CatalogParamDto[];
+  exposure?: string;
 };
 
 export type CatalogItemDto = {
@@ -24,6 +25,7 @@ export type CatalogItemDto = {
   params: CatalogParamDto[];
   tools: string[];
   functions?: CatalogFnDto[];
+  exposure?: string;
 };
 
 type ToolParamShape = {
@@ -40,6 +42,7 @@ type ToolFunctionShape = {
   description?: string;
   emoji?: string;
   params?: ToolParamShape[];
+  exposure?: string;
 };
 
 export type CatalogMergeTarget = {
@@ -51,6 +54,7 @@ export type CatalogMergeTarget = {
   functions?: ToolFunctionShape[];
   namespace?: string;
   registeredName?: string;
+  exposure?: string;
 };
 
 function mapCatalogParam(param: CatalogParamDto): ToolParamShape {
@@ -81,6 +85,7 @@ export function mergeToolCatalog<T extends CatalogMergeTarget>(
             description: fn.description || undefined,
             emoji: fn.icon || undefined,
             params: fn.params.map(mapCatalogParam),
+            exposure: fn.exposure,
           }))
         : (item.tools ?? []).map((name) => ({
             name,
@@ -100,6 +105,7 @@ export function mergeToolCatalog<T extends CatalogMergeTarget>(
       functions: functions.length > 0 ? functions : tool.functions,
       namespace: item.namespace ?? undefined,
       registeredName: item.registeredName,
+      exposure: item.exposure,
     };
   });
 }

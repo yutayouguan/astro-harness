@@ -387,7 +387,7 @@ pub fn run() {
             commands::loops::save_loop,
             commands::loops::delete_loop,
             commands::loops::set_loop_enabled,
-            commands::loops::set_loop_ai_callable,
+            commands::loops::set_loop_agent_tool,
             commands::loops::run_loop,
             commands::loops::list_loop_runs,
             commands::loops::get_loop_run,

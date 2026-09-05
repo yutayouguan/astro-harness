@@ -34,6 +34,7 @@ pub struct VariableContext {
     global: HashMap<String, serde_json::Value>,
     node_outputs: HashMap<String, serde_json::Value>,
     provider_configs: HashMap<String, RuntimeProviderConfig>,
+    human_approval_granted: bool,
 }
 
 impl VariableContext {
@@ -42,6 +43,7 @@ impl VariableContext {
             global: globals,
             node_outputs: HashMap::new(),
             provider_configs: HashMap::new(),
+            human_approval_granted: false,
         }
     }
 
@@ -55,6 +57,15 @@ impl VariableContext {
 
     pub fn provider_config(&self, provider_id: &str) -> Option<&RuntimeProviderConfig> {
         self.provider_configs.get(provider_id)
+    }
+
+    pub fn with_human_approval_granted(mut self, granted: bool) -> Self {
+        self.human_approval_granted = granted;
+        self
+    }
+
+    pub fn human_approval_granted(&self) -> bool {
+        self.human_approval_granted
     }
 
     pub(crate) fn provider_configs(&self) -> HashMap<String, RuntimeProviderConfig> {

@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use workflow::engine::WorkflowRunResult;
-use workflow::model::{NewWorkflow, NodeType, Position, Workflow, WorkflowEdge, WorkflowNode};
+use workflow::model::{
+    NewWorkflow, NodeType, Position, Workflow, WorkflowAgentTool, WorkflowAgentToolPatch,
+    WorkflowEdge, WorkflowNode,
+};
 use workflow::run_db::{WorkflowRunDb, WorkflowRunRow, WorkflowStepLogRow};
 use workflow::store::WorkflowStore;
 
@@ -48,7 +51,8 @@ pub struct LoopDto {
     pub name: String,
     pub description: String,
     pub enabled: bool,
-    pub ai_callable: bool,
+    #[serde(default)]
+    pub agent_tool: WorkflowAgentTool,
     pub nodes: Vec<LoopNodeDto>,
     pub edges: Vec<LoopEdgeDto>,
     pub variables: std::collections::HashMap<String, serde_json::Value>,
@@ -84,7 +88,7 @@ fn to_dto(wf: Workflow) -> LoopDto {
         name: wf.name,
         description: wf.description,
         enabled: wf.enabled,
-        ai_callable: wf.ai_callable,
+        agent_tool: wf.agent_tool,
         nodes: wf
             .nodes
             .into_iter()
@@ -121,7 +125,7 @@ fn from_dto(dto: LoopDto) -> Workflow {
         name: dto.name,
         description: dto.description,
         enabled: dto.enabled,
-        ai_callable: dto.ai_callable,
+        agent_tool: dto.agent_tool,
         nodes: dto
             .nodes
             .into_iter()
@@ -199,10 +203,13 @@ pub async fn set_loop_enabled(id: String, enabled: bool) -> Result<bool, String>
 }
 
 #[tauri::command]
-pub async fn set_loop_ai_callable(id: String, callable: bool) -> Result<bool, String> {
+pub async fn set_loop_agent_tool(
+    id: String,
+    patch: WorkflowAgentToolPatch,
+) -> Result<bool, String> {
     let store = WorkflowStore::open_default().map_err(|e| e.to_string())?;
     store
-        .set_ai_callable(&id, callable)
+        .update_agent_tool(&id, patch)
         .map_err(|e| e.to_string())
 }
 
