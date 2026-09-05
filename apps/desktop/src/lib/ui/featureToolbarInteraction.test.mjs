@@ -10,7 +10,7 @@ const shellStyles = await readFile(
 test("feature toolbars remain interactive above the native drag region", () => {
   assert.match(
     shellStyles,
-    /\.feature-content-inline\s+:is\(\s*\.cron-toolbar,\s*\.loop-toolbar,\s*\.loop-editor-toolbar,\s*\.plugins-command-bar\s*\)\s*\{[\s\S]*?position:\s*relative;[\s\S]*?z-index:\s*45;[\s\S]*?pointer-events:\s*none;/,
+    /\.feature-content-inline\s+:is\(\s*\.cron-toolbar,\s*\.loop-toolbar,\s*\.loop-editor-toolbar,\s*\.plugins-command-bar\s*\)\s*\{[\s\S]*?position:\s*relative;[\s\S]*?z-index:\s*var\(--z-window-controls\);[\s\S]*?pointer-events:\s*none;/,
   );
   assert.match(
     shellStyles,

@@ -33,15 +33,18 @@ test("app renders wallpaper behind shell chrome and fails closed on missing file
   assert.match(app, /className="shell-wallpaper-layer"/);
   assert.match(app, /onError=\{wallpaper\.markCurrentUnavailable\}/);
   assert.match(shellStyles, /\.shell-wallpaper-layer\s*\{/);
-  assert.match(shellStyles, /\.app-shell\.has-wallpaper > \.body-row/);
   assert.doesNotMatch(
     shellStyles,
-    /\.app-shell\.has-wallpaper > \.native-drag-region,/,
+    /\.app-shell\.has-wallpaper > :is\(\.native-drag-region, \.titlebar-sidebar-toggle, \.body-row\)/,
   );
-  assert.match(shellStyles, /\.native-drag-region\s*\{[\s\S]*?z-index:\s*40/);
+  assert.doesNotMatch(shellStyles, /\.app-shell\.has-wallpaper > \.body-row/);
   assert.match(
     shellStyles,
-    /\.titlebar-sidebar-toggle\s*\{[\s\S]*?z-index:\s*45/,
+    /\.native-drag-region\s*\{[\s\S]*?z-index:\s*var\(--z-window-drag\)/,
+  );
+  assert.match(
+    shellStyles,
+    /\.titlebar-sidebar-toggle\s*\{[\s\S]*?z-index:\s*var\(--z-window-controls\)/,
   );
 });
 

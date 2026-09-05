@@ -4,7 +4,7 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 40;
+  z-index: var(--z-window-drag);
   height: var(--titlebar-h);
   padding-left: var(--titlebar-traffic-w);
   background: transparent;
@@ -24,7 +24,7 @@
   /* 略高于默认红绿灯中线，视觉更贴窗顶 */
   top: 4px;
   left: var(--titlebar-traffic-w);
-  z-index: 45;
+  z-index: var(--z-window-controls);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -78,7 +78,7 @@
 .shell-wallpaper-layer {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: var(--z-wallpaper);
   overflow: hidden;
   pointer-events: none;
 }
@@ -101,10 +101,6 @@ html[data-theme="dark"] .shell-wallpaper-layer > span {
   background: rgba(5, 7, 14, var(--wallpaper-shade, 0.34));
 }
 
-.app-shell.has-wallpaper > .body-row {
-  z-index: 1;
-}
-
 /* 灵动色彩：主聊天页右下角的即时换色入口。 */
 .chat-main.has-dynamic-palette {
   position: relative;
@@ -114,7 +110,7 @@ html[data-theme="dark"] .shell-wallpaper-layer > span {
   position: absolute;
   right: 16px;
   bottom: 0;
-  z-index: 34;
+  z-index: var(--z-shell-floating-control);
   box-sizing: border-box;
   width: 38px;
   height: 38px;
@@ -858,7 +854,7 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is(
   top: 0;
   bottom: 0;
   width: 14px;
-  z-index: 35;
+  z-index: var(--z-sidebar-hotzone);
 }
 
 .sidebar {
@@ -885,7 +881,7 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is(
   left: 0;
   top: 0;
   bottom: 0;
-  z-index: 30;
+  z-index: var(--z-sidebar);
   overflow: hidden;
   transform: translateX(calc(-1 * 100% + var(--sidebar-collapsed)));
   transform-origin: left center;
@@ -1097,7 +1093,7 @@ html[data-tone="twilight"] {
 
 .sidebar-resizer {
   position: absolute;
-  z-index: 65;
+  z-index: var(--z-sidebar-resizer);
   top: 38px;
   bottom: 12px;
   left: var(--sidebar-w-wide);
@@ -1169,7 +1165,7 @@ html[data-tone="twilight"] {
 
 /* 浮层模式（非固定）时必须盖住 content-header / header-actions(45) / model-picker(50) */
 .sidebar.is-open:not(.is-pinned) {
-  z-index: 60;
+  z-index: var(--z-sidebar-overlay);
 }
 
 /* 固定栏本身保持绝对定位，由 .body-row 的 padding 平滑承担布局占位。 */

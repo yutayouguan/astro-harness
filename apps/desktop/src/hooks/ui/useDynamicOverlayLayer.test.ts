@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  APP_OVERLAY_LAYER_BASE,
   claimOverlayLayer,
   nextOverlayLayer,
 } from "./useDynamicOverlayLayer.ts";
@@ -10,6 +11,7 @@ test("each claimed app overlay layer is above the previous one", () => {
   const second = claimOverlayLayer();
   const third = claimOverlayLayer();
 
+  assert.ok(first > APP_OVERLAY_LAYER_BASE);
   assert.ok(second > first);
   assert.ok(third > second);
 });

@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
-let topLayer = 0;
+export const APP_OVERLAY_LAYER_BASE = 1200;
+let topLayer = APP_OVERLAY_LAYER_BASE;
 const MAX_CSS_LAYER = 2_147_483_647;
 
 export function nextOverlayLayer(

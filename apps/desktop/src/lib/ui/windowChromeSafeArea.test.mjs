@@ -14,6 +14,10 @@ const headerStyles = await readFile(
   new URL("../../styles/features/shell/header.css", import.meta.url),
   "utf8",
 );
+const shellStyles = await readFile(
+  new URL("../../styles/features/shell/shell.css", import.meta.url),
+  "utf8",
+);
 
 test("the app shell exposes explicit sidebar occupancy", () => {
   assert.match(
@@ -38,4 +42,16 @@ test("collapsed window chrome uses one shared safe-left token", () => {
     headerStyles,
     /\.app-shell\[data-sidebar-state="collapsed"\][\s\S]*?\.feature-content-inline[\s\S]*?:is\(\s*\.cron-toolbar,\s*\.loop-toolbar,\s*\.loop-editor-toolbar,\s*\.plugins-command-bar\s*\)\s*\{[\s\S]*?padding-inline-start:\s*max\([\s\S]*?var\(--window-chrome-safe-left\)[\s\S]*?var\(--page-body-inline-padding\)/,
   );
+});
+
+test("window chrome uses semantic elevation tokens instead of ad-hoc layers", () => {
+  assert.match(primitives, /--z-wallpaper:\s*0;/);
+  assert.match(primitives, /--z-window-drag:\s*40;/);
+  assert.match(primitives, /--z-titlebar:\s*42;/);
+  assert.match(primitives, /--z-window-controls:\s*45;/);
+  assert.match(primitives, /--z-overlay-base:\s*1200;/);
+  assert.match(shellStyles, /z-index:\s*var\(--z-window-drag\)/);
+  assert.match(shellStyles, /z-index:\s*var\(--z-window-controls\)/);
+  assert.match(headerStyles, /z-index:\s*var\(--z-titlebar\)/);
+  assert.match(headerStyles, /z-index:\s*var\(--z-window-controls\)/);
 });

@@ -1,7 +1,7 @@
 .header-actions {
   /* 浮在 native-drag-region 之上，避免标题栏拖拽层挡住点击热区 */
   position: relative;
-  z-index: 45;
+  z-index: var(--z-window-controls);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -35,7 +35,7 @@
   --chat-header-divider: color-mix(in srgb, var(--ink) 8%, transparent);
   --chat-header-filter: var(--sidebar-chrome-filter);
   position: absolute;
-  z-index: 42;
+  z-index: var(--z-titlebar);
   top: 0;
   right: 0;
   left: 0;
@@ -270,7 +270,7 @@
 
 .conversation-menu {
   position: relative;
-  z-index: 51;
+  z-index: var(--z-titlebar-menu);
   flex: 0 0 auto;
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -1608,7 +1608,7 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
     .plugins-command-bar
   ) {
   position: relative;
-  z-index: 45;
+  z-index: var(--z-window-controls);
   pointer-events: none;
 }
 

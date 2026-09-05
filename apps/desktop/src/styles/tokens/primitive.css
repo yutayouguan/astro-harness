@@ -15,6 +15,17 @@
   );
 
   /* Elevation */
+  --z-wallpaper: 0;
+  --z-sidebar: 30;
+  --z-shell-floating-control: 34;
+  --z-sidebar-hotzone: 35;
+  --z-window-drag: 40;
+  --z-titlebar: 42;
+  --z-window-controls: 45;
+  --z-titlebar-menu: 51;
+  --z-sidebar-overlay: 60;
+  --z-sidebar-resizer: 65;
+  --z-overlay-base: 1200;
   --z-drawer: 1300;
   --z-menu: 1400;
   --z-tip: 10001;
