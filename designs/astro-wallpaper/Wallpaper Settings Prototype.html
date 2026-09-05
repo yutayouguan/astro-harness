@@ -149,9 +149,11 @@
 
       .settings-nav {
         padding: 23px 16px 18px;
+        overflow-y: auto;
         border-right: 1px solid rgba(255, 255, 255, 0.4);
         background: rgba(245, 246, 252, 0.46);
         backdrop-filter: blur(30px) saturate(1.35);
+        scrollbar-width: thin;
       }
 
       .settings-heading { margin: 0 0 18px 8px; font-size: 22px; letter-spacing: -0.03em; }
@@ -570,11 +572,20 @@
                   <div className="nav-label">通用</div>
                   <NavRow icon="◇">偏好设置</NavRow>
                   <NavRow icon="◐" active>外观</NavRow>
-                  <NavRow icon="⌘">快捷键</NavRow>
+                  <NavRow icon="◍">对话</NavRow>
+                  <NavRow icon="›_">终端</NavRow>
                   <div className="nav-label">智能体</div>
+                  <NavRow icon="▤">上下文与压缩</NavRow>
                   <NavRow icon="◎">模型服务</NavRow>
                   <NavRow icon="✧">工具与技能</NavRow>
                   <NavRow icon="◌">记忆</NavRow>
+                  <div className="nav-label">扩展</div>
+                  <NavRow icon="⊙">浏览器</NavRow>
+                  <NavRow icon="⬡">模型市场</NavRow>
+                  <NavRow icon="◫">数据洞察</NavRow>
+                  <div className="nav-label">系统</div>
+                  <NavRow icon="△">诊断</NavRow>
+                  <NavRow icon="ⓘ">关于 Astro</NavRow>
                 </aside>
 
                 <section className="content">

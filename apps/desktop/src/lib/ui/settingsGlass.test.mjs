@@ -22,6 +22,10 @@ const appSource = await readFile(
   new URL("../../App.tsx", import.meta.url),
   "utf8",
 );
+const messagesSource = await readFile(
+  new URL("../../i18n/messages.ts", import.meta.url),
+  "utf8",
+);
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -116,6 +120,35 @@ test("settings sidebar labels and search follow the active locale", () => {
     /placeholder=\{t\("settings\.sidebar\.searchPlaceholder"\)\}/,
   );
   assert.match(appSource, /\[settingsQuery, t\]/);
+});
+
+test("settings sidebar uses clear category and capability names", () => {
+  assert.match(messagesSource, /"settings\.sidebar\.group\.basics": "通用"/);
+  assert.match(
+    messagesSource,
+    /"settings\.sidebar\.group\.intelligence": "智能体"/,
+  );
+  assert.match(
+    messagesSource,
+    /"settings\.sidebar\.tab\.general": "偏好设置"/,
+  );
+  assert.match(
+    messagesSource,
+    /"settings\.sidebar\.tab\.providers": "模型服务"/,
+  );
+  assert.match(
+    messagesSource,
+    /"settings\.sidebar\.tab\.tools": "工具与技能"/,
+  );
+  assert.match(
+    messagesSource,
+    /"settings\.sidebar\.tab\.about": "关于 Astro"/,
+  );
+  assert.match(messagesSource, /"settings\.sidebar\.group\.basics": "General"/);
+  assert.match(
+    messagesSource,
+    /"settings\.sidebar\.group\.intelligence": "Agents"/,
+  );
 });
 
 test("preference category navigation keeps the shared glass material", () => {
