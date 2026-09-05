@@ -159,6 +159,14 @@ test("settings content panels consume one shared glass material contract", () =>
   }
 });
 
+test("preference-backed settings tabs render their glass material on the first frame", () => {
+  const stack = rule(preferenceStyles, ".prefs-category-stack");
+
+  assert.ok(stack, "missing preference category stack rule");
+  assert.doesNotMatch(stack, /animation\s*:/);
+  assert.doesNotMatch(preferenceStyles, /@keyframes\s+prefs-category-enter/);
+});
+
 test("settings navigation uses one Astro icon family and one optical canvas", () => {
   assert.match(settingsTabsSource, /from "\.\.\/\.\.\/components\/icons"/);
   assert.doesNotMatch(settingsTabsSource, /from "lucide-react"/);

@@ -382,22 +382,11 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   flex-direction: column;
   gap: 16px;
   min-width: 0;
-  animation: prefs-category-enter 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  /* 玻璃层需在 Tab 首帧直接合成；父级透明度动画会让 backdrop 延迟显现。 */
 }
 
 .prefs-category-stack[hidden] {
   display: none;
-}
-
-@keyframes prefs-category-enter {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .prefs-card,
@@ -2213,10 +2202,6 @@ html[data-theme="dark"] .prefs-context-budget-ico {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .prefs-category-stack {
-    animation: none;
-  }
-
   .prefs-category-nav-item {
     transition: none;
   }
