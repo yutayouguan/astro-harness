@@ -1,8 +1,8 @@
 //! 全局 tracing 日志初始化：控制台输出 + 按日滚动的双文件日志。
 //!
 //! 日志目录位于 `~/.astro/logs/`：
-//! - `agent.log`：INFO 及以上（受 EnvFilter 约束）
-//! - `errors.log`：WARN 及以上
+//! - `agent.log.YYYY-MM-DD`：INFO 及以上（受 EnvFilter 约束）
+//! - `errors.log.YYYY-MM-DD`：WARN 及以上
 //!
 //! 过滤器默认 `info,memory=info,agent=info`，可通过 `RUST_LOG` 环境变量覆盖。
 
@@ -18,13 +18,14 @@ use crate::workspace::default_memory_dir;
 /// 非阻塞文件写入器的生命周期守卫；必须保持存活，否则日志可能丢失。
 static LOG_GUARDS: OnceLock<(WorkerGuard, WorkerGuard)> = OnceLock::new();
 
-/// 初始化控制台 + `~/.astro/logs/agent.log` 与 `errors.log` 按日滚动文件日志。
+/// 初始化控制台 + `~/.astro/logs/agent.log.YYYY-MM-DD` 与
+/// `errors.log.YYYY-MM-DD` 按日滚动文件日志。
 ///
 /// 可安全重复调用：第二次及以后 `try_init` 失败时不报错。
 ///
 /// # 参数
 ///
-/// - `_component`：保留以兼容调用方；文件名已统一为 `agent.log`。
+/// - `_component`：保留以兼容调用方；文件名前缀已统一为 `agent.log`。
 pub fn init_logging(_component: &str) -> anyhow::Result<()> {
     let log_dir = default_memory_dir().join("logs");
     std::fs::create_dir_all(&log_dir)?;
@@ -59,8 +60,8 @@ pub fn init_logging(_component: &str) -> anyhow::Result<()> {
     if result.is_ok() {
         tracing::info!(
             component = _component,
-            agent_path = %log_dir.join("agent.log").display(),
-            errors_path = %log_dir.join("errors.log").display(),
+            agent_file_pattern = %log_dir.join("agent.log.YYYY-MM-DD").display(),
+            errors_file_pattern = %log_dir.join("errors.log.YYYY-MM-DD").display(),
             "file logging enabled (agent + errors)"
         );
     }
