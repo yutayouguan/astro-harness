@@ -24,8 +24,10 @@ import {
   Wrench,
 } from "lucide-react";
 import { Activity as ActivityData, Sparkles as SparklesData } from "lucide";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { motion, useReducedMotion } from "framer-motion";
+import appIconAsset from "../../assets/astro-app-icon.png";
 import { useAppIcon } from "../../hooks/settings/useAppIcon";
 import { useMorphicons } from "../../hooks/app/useMorphicons";
 import type { WallpaperController } from "../../hooks/app/useWallpaper";
@@ -87,6 +89,14 @@ const MORPHICON_SPRING_LABEL: Record<MorphiconSpring, MessageKey> = {
   snappy: "prefs.morphicons.spring.snappy",
   bouncy: "prefs.morphicons.spring.bouncy",
 };
+
+const ABOUT_FEATURES: MessageKey[] = [
+  "about.feature.chat",
+  "about.feature.memory",
+  "about.feature.workspace",
+  "about.feature.tools",
+  "about.feature.evolution",
+];
 
 function AutostartSwitch({ tone }: { tone: string }) {
   const [enabled, setEnabled] = useState(false);
@@ -250,6 +260,7 @@ export default function PreferencesPanel({
   const reduceMotion = useReducedMotion();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState("0.1.0");
   const [morphPreviewActive, setMorphPreviewActive] = useState(false);
   // 预览靠翻转图标来触发一次形变；任何预设改动都在同一批渲染里带上新参数重播。
   const playMorphPreview = useCallback(() => {
@@ -260,6 +271,19 @@ export default function PreferencesPanel({
   const activeCategory = section ?? internalCategory;
   const setActiveCategory = section ? () => {} : setInternalCategory;
   const showInternalNav = !section;
+
+  useEffect(() => {
+    if (activeCategory !== "about") return;
+    let cancelled = false;
+    void getVersion()
+      .then((version) => {
+        if (!cancelled && version) setAppVersion(version);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCategory]);
 
   const appIconLabel = (id: AppIconId): string => {
     switch (id) {
@@ -405,6 +429,9 @@ export default function PreferencesPanel({
   const ModeIcon = themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
   const ColorStyleIcon =
     colorStyleOptions.find((o) => o.id === colorStyle)?.Icon ?? Palette;
+  const selectedAppIcon = appIcon?.options.find(
+    (option) => option.id === appIcon.current,
+  );
   const categoryOptions = [
     {
       id: "general" as const,
@@ -514,10 +541,10 @@ export default function PreferencesPanel({
 
       <div className="prefs-category-content">
         <div
-          className="prefs-category-stack"
+          className="prefs-category-stack prefs-category-stack--appearance"
           hidden={activeCategory !== "appearance"}
         >
-          <section className="prefs-card">
+          <section className="prefs-card prefs-card--theme">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <ModeIcon width={22} height={22} />
@@ -558,7 +585,7 @@ export default function PreferencesPanel({
 
           <WallpaperSettingsCard controller={wallpaper} tone={tone} />
 
-          <section className="prefs-card">
+          <section className="prefs-card prefs-card--glass">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <Layers size={22} />
@@ -619,7 +646,7 @@ export default function PreferencesPanel({
             </div>
           </section>
 
-          <section className="prefs-card">
+          <section className="prefs-card prefs-card--color-style">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <ColorStyleIcon width={22} height={22} />
@@ -733,20 +760,6 @@ export default function PreferencesPanel({
             ) : null}
           </section>
 
-          <ShellGradientEditor
-            open={gradientEditorOpen}
-            initial={gradient}
-            onPreview={onPreviewGradient}
-            onConfirm={(g) => {
-              onCommitCustomGradient(g);
-              setGradientEditorOpen(false);
-            }}
-            onCancel={() => {
-              onCancelCustomGradient();
-              setGradientEditorOpen(false);
-            }}
-          />
-
           <section className="prefs-card morphicon-settings-card">
             <div className="prefs-card-head">
               <button
@@ -850,7 +863,7 @@ export default function PreferencesPanel({
             </div>
           </section>
 
-          <section className="prefs-card">
+          <section className="prefs-card prefs-card--app-icon">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <IconAtom width={22} height={22} />
@@ -890,10 +903,10 @@ export default function PreferencesPanel({
         </div>
 
         <div
-          className="prefs-category-stack"
+          className="prefs-category-stack prefs-category-stack--conversation"
           hidden={activeCategory !== "conversation"}
         >
-          <section className="prefs-card">
+          <section className="prefs-card prefs-card--conversation-display">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <List width={22} height={22} />
@@ -1002,30 +1015,21 @@ export default function PreferencesPanel({
                 </label>
               ))}
             </div>
-
-            <div
-              className="prefs-toggle-list"
-              role="group"
-              aria-label="侧栏显示"
-            >
-              <h3 className="prefs-toggle-heading">侧栏</h3>
-              <SidebarVisibleSetting tone={tone} />
-            </div>
           </section>
         </div>
 
         <div
-          className="prefs-category-stack"
+          className="prefs-category-stack prefs-category-stack--context"
           hidden={activeCategory !== "context"}
         >
           <CompressionSettingsCard tone={tone} />
         </div>
 
         <div
-          className="prefs-category-stack"
+          className="prefs-category-stack prefs-category-stack--diagnostics"
           hidden={activeCategory !== "diagnostics"}
         >
-          <section className="prefs-card">
+          <section className="prefs-card prefs-card--diagnostics">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <ScrollText width={22} height={22} />
@@ -1310,30 +1314,54 @@ export default function PreferencesPanel({
                   </span>
                   <AutostartSwitch tone={tone} />
                 </label>
+                <SidebarVisibleSetting tone={tone} />
               </div>
             </div>
           </section>
         </div>
 
         <div
-          className="prefs-category-stack"
+          className="prefs-category-stack prefs-category-stack--about"
           hidden={activeCategory !== "about"}
         >
-          <section className="prefs-card">
-            <div className="prefs-card-head">
-              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-                <IconAtom width={22} height={22} />
+          <section className="prefs-card prefs-card--about">
+            <div className="prefs-about-hero">
+              <div className="prefs-about-icon" aria-hidden>
+                <img
+                  src={selectedAppIcon?.dataUrl ?? appIconAsset}
+                  alt=""
+                  width={82}
+                  height={82}
+                />
               </div>
-              <div>
-                <h2 className="prefs-card-title">
-                  {t("prefs.app.aboutTitle")}
-                </h2>
-                <p className="prefs-card-sub">{t("prefs.app.about")}</p>
-              </div>
+              <h2 className="prefs-about-title">Astro</h2>
+              <p className="prefs-about-tagline">{t("about.tagline")}</p>
+              <span className="prefs-about-version">
+                {t("about.version", { v: appVersion })}
+              </span>
             </div>
+            <p className="prefs-about-body">{t("about.body")}</p>
+            <ul className="prefs-about-features">
+              {ABOUT_FEATURES.map((key) => (
+                <li key={key}>{t(key)}</li>
+              ))}
+            </ul>
           </section>
         </div>
       </div>
+      <ShellGradientEditor
+        open={gradientEditorOpen}
+        initial={gradient}
+        onPreview={onPreviewGradient}
+        onConfirm={(g) => {
+          onCommitCustomGradient(g);
+          setGradientEditorOpen(false);
+        }}
+        onCancel={() => {
+          onCancelCustomGradient();
+          setGradientEditorOpen(false);
+        }}
+      />
     </div>
   );
 }

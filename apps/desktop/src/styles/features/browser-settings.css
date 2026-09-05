@@ -1,9 +1,11 @@
-.browser-settings-page .prefs-category-content {
-  max-width: 760px;
-}
-
 .browser-settings-status-card .prefs-card-head {
   align-items: center;
+  margin-bottom: 10px;
+}
+
+.prefs-page.is-embedded .prefs-category-stack > .browser-settings-status-card {
+  padding-block: 14px;
+  background: color-mix(in srgb, var(--tone-soft) 10%, transparent);
 }
 
 .browser-runtime-status {

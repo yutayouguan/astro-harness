@@ -1,5 +1,23 @@
-.terminal-settings-page .prefs-category-content {
-  max-width: 920px;
+.terminal-settings-layout:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.72fr);
+}
+
+.terminal-settings-section {
+  grid-column: 1;
+}
+
+.terminal-settings-preview-pane {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  min-width: 0;
+  padding: 18px;
+  border-left: 1px solid
+    color-mix(
+      in srgb,
+      var(--settings-panel-border, var(--glass-edge)) 72%,
+      transparent
+    );
 }
 
 .terminal-mode-options {
@@ -100,7 +118,9 @@
   flex-direction: column;
   justify-content: center;
   gap: 5px;
-  margin-top: 14px;
+  position: sticky;
+  top: 0;
+  margin-top: 0;
   padding: 14px 16px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -140,7 +160,15 @@
 
 .terminal-settings-actions {
   display: flex;
+  grid-column: 1 / -1;
   justify-content: flex-end;
+  padding: 12px 18px;
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--settings-panel-border, var(--glass-edge)) 72%,
+      transparent
+    );
 }
 
 .terminal-settings-actions .prefs-diag-btn {
@@ -153,6 +181,24 @@ html[data-theme="dark"] .terminal-mode-option,
 html[data-theme="dark"] .terminal-settings-field input,
 html[data-theme="dark"] .terminal-settings-field select {
   background: color-mix(in srgb, var(--glass-fill) 52%, rgba(8, 6, 18, 0.4));
+}
+
+@media (max-width: 820px) {
+  .terminal-settings-layout:not([hidden]) {
+    grid-template-columns: 1fr;
+  }
+
+  .terminal-settings-preview-pane {
+    grid-column: 1;
+    grid-row: auto;
+    border-top: 1px solid
+      color-mix(
+        in srgb,
+        var(--settings-panel-border, var(--glass-edge)) 72%,
+        transparent
+      );
+    border-left: 0;
+  }
 }
 
 @media (max-width: 680px) {

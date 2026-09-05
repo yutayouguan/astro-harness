@@ -21,6 +21,6 @@ test("settings tabs share a responsive horizontal safe area", () => {
 test("embedded preferences rely on the shared safe area without doubling it", () => {
   assert.match(
     preferenceStyles,
-    /\.prefs-page\.is-embedded\s+\.prefs-category-content\s*\{[\s\S]*?padding:\s*18px\s+0;/,
+    /\.prefs-page\.is-embedded\s+\.prefs-category-content\s*\{[\s\S]*?padding:\s*18px\s+0\s+20px;/,
   );
 });

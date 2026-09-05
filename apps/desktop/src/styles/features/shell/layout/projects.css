@@ -1125,7 +1125,8 @@ html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
 .settings-content-inline:has(> .model-market),
 .settings-content-inline:has(> .providers-page),
 .settings-content-inline:has(> .insights-panel),
-.settings-content-inline:has(> .memory-panel) {
+.settings-content-inline:has(> .memory-panel),
+.settings-content-inline:has(> .prefs-page) {
   display: flex;
   flex-direction: column;
   min-height: 0;

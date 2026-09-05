@@ -209,16 +209,18 @@ html[data-theme="dark"] .morphicon-selection-indicator {
 }
 
 .prefs-page.is-embedded {
-  display: block;
-  overflow-y: auto;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
   padding: 0;
   gap: 0;
 }
 
 .prefs-page.is-embedded .prefs-category-content {
-  max-width: 720px;
+  width: 100%;
+  max-width: 920px;
   margin: 0 auto;
-  padding: 18px 0;
+  padding: 18px 0 20px;
 }
 
 .prefs-category-nav {
@@ -389,6 +391,71 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   display: none;
 }
 
+/* 设置页与模型服务、工具页一致：每个 Tab 只合成一块主材质。 */
+.prefs-page.is-embedded .prefs-category-stack {
+  gap: 0;
+  isolation: isolate;
+  border: 1px solid var(--settings-panel-border, var(--glass-edge));
+  border-radius: var(--settings-panel-radius, 20px);
+  background: var(--settings-panel-background, var(--glass-fill));
+  box-shadow: var(
+    --settings-panel-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  backdrop-filter: var(--settings-panel-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(
+    --settings-panel-backdrop,
+    var(--backdrop-glass)
+  );
+}
+
+.prefs-page.is-embedded .prefs-category-stack > .prefs-card,
+.prefs-page.is-embedded .prefs-category-stack > .prefs-section {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.prefs-page.is-embedded .prefs-category-stack > .prefs-card ~ .prefs-card,
+.prefs-page.is-embedded
+  .prefs-category-stack
+  > .prefs-section
+  ~ .prefs-section {
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--settings-panel-border, var(--glass-edge)) 72%,
+      transparent
+    );
+}
+
+.prefs-category-stack--appearance:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.prefs-category-stack--appearance > .prefs-card {
+  grid-column: 1 / -1;
+}
+
+.prefs-category-stack--appearance > .morphicon-settings-card,
+.prefs-category-stack--appearance > .prefs-card--app-icon {
+  grid-column: auto;
+}
+
+.prefs-category-stack--appearance > .prefs-card--app-icon {
+  border-left: 1px solid
+    color-mix(
+      in srgb,
+      var(--settings-panel-border, var(--glass-edge)) 72%,
+      transparent
+    );
+}
+
 .prefs-card,
 .prefs-section {
   padding: 18px 18px 16px;
@@ -470,6 +537,27 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
 .prefs-card--general .prefs-toggle-row {
   min-height: 46px;
   padding: 6px;
+}
+
+.prefs-card--conversation-display .prefs-toggle-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 8px;
+}
+
+.prefs-card--conversation-display .prefs-toggle-heading {
+  grid-column: 1 / -1;
+}
+
+.prefs-card--diagnostics {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.prefs-category-stack--diagnostics:not([hidden]) {
+  min-height: 100%;
 }
 
 .prefs-icon-badge {
@@ -1445,6 +1533,8 @@ html[data-theme="dark"] .prefs-switch-thumb {
 
 .prefs-diag-form {
   display: flex;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
   gap: 10px;
   margin-top: 4px;
@@ -1712,8 +1802,16 @@ html[data-theme="dark"] .prefs-diag-select .select-menu-trigger:focus-visible {
   color: var(--ink-mute);
 }
 
+.prefs-card--diagnostics .prefs-diag-empty {
+  display: grid;
+  min-height: 220px;
+  flex: 1;
+  place-items: center;
+}
+
 .prefs-diag-log {
-  max-height: 240px;
+  min-height: 220px;
+  flex: 1;
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
@@ -1735,6 +1833,94 @@ html[data-theme="dark"] .prefs-diag-log {
   border-color: color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.08));
 }
 
+.prefs-category-stack--about:not([hidden]) {
+  width: min(100%, 620px);
+  min-height: auto;
+  margin-inline: auto;
+}
+
+.prefs-card--about {
+  text-align: center;
+}
+
+.prefs-about-hero {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+}
+
+.prefs-about-icon {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-items: center;
+  margin-bottom: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, var(--glass-edge));
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--tone-soft) 30%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.prefs-about-icon img {
+  width: 82px;
+  height: 82px;
+  object-fit: contain;
+}
+
+.prefs-about-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.prefs-about-tagline,
+.prefs-about-body {
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.prefs-about-tagline {
+  margin: 6px 0 8px;
+  font-size: 13px;
+}
+
+.prefs-about-version {
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 999px;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.prefs-about-body {
+  max-width: 500px;
+  margin: 18px auto 0;
+  font-size: 12.5px;
+}
+
+.prefs-about-features {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 500px;
+  margin: 16px auto 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.prefs-about-features li {
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
+  border-radius: 11px;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--tone-soft) 12%, transparent);
+  font-size: 12px;
+}
+
 .prefs-context-error {
   margin: 10px 0 0;
 }
@@ -1748,6 +1934,77 @@ html[data-theme="dark"] .prefs-diag-log {
   align-items: center;
   gap: 8px;
   margin-top: 18px;
+}
+
+.prefs-context-advanced {
+  margin-top: 16px;
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-edge));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tone-soft) 10%, transparent);
+}
+
+.prefs-context-advanced > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+  padding: 0 14px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  list-style: none;
+}
+
+.prefs-context-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.prefs-context-advanced > summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 56%, transparent);
+  outline-offset: -2px;
+  border-radius: 13px;
+}
+
+.prefs-context-advanced > summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.prefs-context-advanced-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.prefs-context-advanced-meta small {
+  color: var(--ink-mute);
+  font-size: 11.5px;
+}
+
+.prefs-context-advanced-meta svg {
+  color: var(--ink-mute);
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.prefs-context-advanced[open] .prefs-context-advanced-meta svg {
+  transform: rotate(180deg);
+}
+
+.prefs-context-advanced[open] > summary {
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--settings-panel-border, var(--glass-edge)) 64%,
+      transparent
+    );
+}
+
+.prefs-context-advanced-body {
+  padding: 0 14px 14px;
 }
 
 .prefs-context-section-ico {
@@ -2199,6 +2456,21 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   .prefs-context-grid--3 {
     grid-template-columns: 1fr;
   }
+
+  .prefs-category-stack--appearance:not([hidden]),
+  .prefs-card--conversation-display .prefs-toggle-list,
+  .prefs-about-features {
+    grid-template-columns: 1fr;
+  }
+
+  .prefs-category-stack--appearance > .morphicon-settings-card,
+  .prefs-category-stack--appearance > .prefs-card--app-icon {
+    grid-column: 1;
+  }
+
+  .prefs-category-stack--appearance > .prefs-card--app-icon {
+    border-left: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2208,6 +2480,10 @@ html[data-theme="dark"] .prefs-context-budget-ico {
 
   .prefs-category-nav-item:active {
     transform: none;
+  }
+
+  .prefs-context-advanced-meta svg {
+    transition: none;
   }
 
   .morphicon-segmented button {
