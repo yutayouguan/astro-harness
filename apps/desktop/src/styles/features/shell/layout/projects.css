@@ -1108,6 +1108,12 @@ html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
 
 .settings-content-inline {
   --settings-content-inline-padding: clamp(20px, 2vw, 28px);
+  /* 设置内容面板只使用这一档主材质；功能页不得各自重配白色占比。 */
+  --settings-panel-radius: 20px;
+  --settings-panel-border: var(--glass-edge);
+  --settings-panel-background: var(--glass-fill);
+  --settings-panel-shadow: var(--shadow-card), var(--glass-rim);
+  --settings-panel-backdrop: var(--backdrop-glass);
   flex: 1;
   min-width: 0;
   overflow-y: auto;

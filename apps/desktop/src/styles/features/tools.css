@@ -42,26 +42,21 @@
   display: flex;
   flex-direction: column;
   isolation: isolate;
-  border-radius: 22px;
+  border-radius: var(--settings-panel-radius, 20px);
   overflow: hidden;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.39),
-      rgba(255, 255, 255, 0.12)
-    ),
-    color-mix(
-      in srgb,
-      var(--glass-panel, rgba(255, 255, 255, 0.5)) 78%,
-      transparent
-    );
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.2));
+  border: 1px solid var(--settings-panel-border, var(--glass-edge));
+  background: var(--settings-panel-background, var(--glass-fill));
+  box-shadow: var(
+    --settings-panel-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  backdrop-filter: var(--settings-panel-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(
+    --settings-panel-backdrop,
+    var(--backdrop-glass)
+  );
 }
 
 .agent-tools-body::before {
@@ -93,20 +88,6 @@
 .agent-tools-body > .panel-agent-toolbar {
   margin-bottom: 12px;
   z-index: 40;
-}
-
-html[data-theme="dark"] .agent-tools-body {
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.05) 0%,
-      rgba(255, 255, 255, 0.01) 100%
-    ),
-    rgba(8, 6, 18, 0.58);
-  border-color: rgba(255, 255, 255, 0.08);
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .agent-tools-body > .anim-switch {

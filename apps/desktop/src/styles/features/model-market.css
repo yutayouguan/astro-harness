@@ -15,20 +15,18 @@
       calc(12px * var(--glass-blur-scale, 1))
     )
     saturate(var(--glass-saturate, 1.1));
-  --model-market-card-border: color-mix(
-    in srgb,
-    var(--glass-edge) 72%,
-    transparent
+  --model-market-card-border: var(
+    --settings-panel-border,
+    var(--glass-edge)
   );
-  --model-market-card-background: color-mix(
-    in srgb,
-    var(--glass-panel, rgba(255, 255, 255, 0.45)) 92%,
-    transparent
+  --model-market-card-background: var(
+    --settings-panel-background,
+    var(--glass-fill)
   );
-  --model-market-card-filter: blur(
-      calc(12px * var(--glass-blur-scale, 1))
-    )
-    saturate(var(--glass-saturate, 1.1));
+  --model-market-card-filter: var(
+    --settings-panel-backdrop,
+    var(--backdrop-glass)
+  );
   flex: 1;
   min-height: 0;
   display: flex;
@@ -546,6 +544,11 @@ html[data-theme="dark"] .model-market-view-btn.active {
   background: var(--model-market-card-background);
   backdrop-filter: var(--model-market-card-filter);
   -webkit-backdrop-filter: var(--model-market-card-filter);
+  box-shadow: var(
+    --settings-panel-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
   transition:
     border-color 0.16s ease,
     box-shadow 0.16s ease;

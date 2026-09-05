@@ -18,6 +18,26 @@ const settingsTabsSource = await readFile(
   new URL("settingsTabs.ts", import.meta.url),
   "utf8",
 );
+const providerStyles = await readFile(
+  new URL("../../styles/features/providers.css", import.meta.url),
+  "utf8",
+);
+const toolStyles = await readFile(
+  new URL("../../styles/features/tools.css", import.meta.url),
+  "utf8",
+);
+const marketStyles = await readFile(
+  new URL("../../styles/features/model-market.css", import.meta.url),
+  "utf8",
+);
+const insightStyles = await readFile(
+  new URL("../../styles/features/insights.css", import.meta.url),
+  "utf8",
+);
+const memoryStyles = await readFile(
+  new URL("../../styles/features/memory.css", import.meta.url),
+  "utf8",
+);
 const appSource = await readFile(
   new URL("../../App.tsx", import.meta.url),
   "utf8",
@@ -91,6 +111,46 @@ test("settings sidebar uses grouped compact navigation and a quiet search field"
   assert.ok(item, "missing settings navigation item rule");
   assert.match(item, /min-height:\s*36px;/);
   assert.match(item, /border-radius:\s*10px;/);
+});
+
+test("settings content panels consume one shared glass material contract", () => {
+  const content = rule(projectStyles, ".settings-content-inline");
+  assert.ok(content, "missing settings content material scope");
+  assert.match(content, /--settings-panel-border:\s*var\(--glass-edge\);/);
+  assert.match(content, /--settings-panel-background:\s*var\(--glass-fill\);/);
+  assert.match(
+    content,
+    /--settings-panel-shadow:\s*var\(--shadow-card\),\s*var\(--glass-rim\);/,
+  );
+  assert.match(
+    content,
+    /--settings-panel-backdrop:\s*var\(--backdrop-glass\);/,
+  );
+
+  for (const [name, source] of [
+    ["preferences", preferenceStyles],
+    ["providers", providerStyles],
+    ["tools", toolStyles],
+    ["model market", marketStyles],
+    ["insights", insightStyles],
+    ["memory", memoryStyles],
+  ]) {
+    assert.match(
+      source,
+      /var\(\s*--settings-panel-background/,
+      `${name} must use the shared settings background`,
+    );
+    assert.match(
+      source,
+      /var\(\s*--settings-panel-border/,
+      `${name} must use the shared settings border`,
+    );
+    assert.match(
+      source,
+      /var\(\s*--settings-panel-backdrop/,
+      `${name} must use the shared settings backdrop`,
+    );
+  }
 });
 
 test("settings navigation uses one Astro icon family and one optical canvas", () => {
@@ -185,4 +245,8 @@ test("reduced transparency replaces settings glass with a solid surface", () => 
   assert.match(media, /\.settings-sidebar-item\.is-active/);
   assert.match(media, /\.prefs-category-nav-item\.is-active/);
   assert.match(media, /background:\s*var\(--glass-panel\);/);
+  assert.match(
+    media,
+    /\.settings-content-inline\s*\{[\s\S]*?--settings-panel-background:\s*var\(--surface-panel-background\);[\s\S]*?--settings-panel-backdrop:\s*none;/,
+  );
 });

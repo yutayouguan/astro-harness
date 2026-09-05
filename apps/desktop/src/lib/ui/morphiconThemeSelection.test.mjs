@@ -35,7 +35,15 @@ test("morphicon controls use a compact track and a distinct selection pill", () 
 
   assert.ok(card, "missing Morphicon card treatment");
   assert.match(card, /display:\s*grid/);
-  assert.match(card, /var\(--tone-soft\) 20%/);
+  assert.doesNotMatch(
+    card,
+    /(?:background|border-color|box-shadow):/,
+    "Morphicon card must inherit the shared settings panel material",
+  );
+  assert.match(
+    preferencesCss,
+    /\.prefs-card,\s*\.prefs-section\s*\{[\s\S]*?background:\s*var\(--settings-panel-background/,
+  );
   assert.ok(subtitle, "missing Morphicon subtitle contrast treatment");
   assert.match(subtitle, /color:\s*var\(--ink-soft\)/);
   assert.ok(row, "missing Morphicon compact row layout");

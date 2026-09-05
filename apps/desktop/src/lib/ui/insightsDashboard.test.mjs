@@ -45,7 +45,7 @@ test("insights layout has responsive KPI grids and accessible fallbacks", () => 
 test("insights selections and cards share one scoped material hierarchy", () => {
   assert.match(
     styles,
-    /--insights-surface:\s*var\(\s*--surface-panel-background/,
+    /--insights-surface:\s*var\(\s*--settings-panel-background,\s*var\(--glass-fill\)\)/,
   );
   assert.match(
     styles,

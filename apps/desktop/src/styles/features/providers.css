@@ -29,22 +29,20 @@
   display: flex;
   flex-direction: column;
   padding: 18px 20px;
-  border-radius: 20px;
+  border: 1px solid var(--settings-panel-border, var(--glass-edge));
+  border-radius: var(--settings-panel-radius, 20px);
+  background: var(--settings-panel-background, var(--glass-fill));
+  box-shadow: var(
+    --settings-panel-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  backdrop-filter: var(--settings-panel-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(
+    --settings-panel-backdrop,
+    var(--backdrop-glass)
+  );
   overflow: hidden;
-}
-
-.providers-pane-detail {
-  background: var(--sidebar-bg);
-  border: 1px solid var(--glass-edge);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(
-      calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))
-    )
-    saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(
-      calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))
-    )
-    saturate(var(--glass-saturate, 1.25));
 }
 
 /* 与侧栏同色：半透明底 + 当前 tab 主题色晕 */

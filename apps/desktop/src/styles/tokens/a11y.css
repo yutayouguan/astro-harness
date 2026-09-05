@@ -65,6 +65,11 @@
     background: var(--glass-panel);
   }
 
+  .settings-content-inline {
+    --settings-panel-background: var(--surface-panel-background);
+    --settings-panel-backdrop: none;
+  }
+
   .shell-wallpaper-layer > span {
     background: rgba(244, 246, 252, 0.68);
   }
@@ -161,5 +166,11 @@
 
   .sidebar {
     border-right-color: color-mix(in srgb, var(--ink) 28%, transparent);
+  }
+
+  .settings-content-inline {
+    --settings-panel-background: var(--surface-panel-background);
+    --settings-panel-border: var(--color-border);
+    --settings-panel-backdrop: none;
   }
 }
