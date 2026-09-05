@@ -4,6 +4,9 @@
   html[data-theme] {
     --glass-blur-scale: 0;
     --glass-saturate: 1;
+    --content-card-background: var(--surface-panel-background);
+    --content-card-border: var(--color-border);
+    --content-card-backdrop: none;
   }
 
   html[data-theme="dark"] {
@@ -65,11 +68,6 @@
     background: var(--glass-panel);
   }
 
-  .settings-content-inline {
-    --settings-panel-background: var(--surface-panel-background);
-    --settings-panel-backdrop: none;
-  }
-
   .shell-wallpaper-layer > span {
     background: rgba(244, 246, 252, 0.68);
   }
@@ -116,6 +114,12 @@
 }
 
 @media (prefers-contrast: more) {
+  html[data-theme] {
+    --content-card-background: var(--surface-panel-background);
+    --content-card-border: var(--color-border);
+    --content-card-backdrop: none;
+  }
+
   .shell-wallpaper-layer > span {
     background: rgba(244, 246, 252, 0.7);
   }
@@ -168,9 +172,4 @@
     border-right-color: color-mix(in srgb, var(--ink) 28%, transparent);
   }
 
-  .settings-content-inline {
-    --settings-panel-background: var(--surface-panel-background);
-    --settings-panel-border: var(--color-border);
-    --settings-panel-backdrop: none;
-  }
 }

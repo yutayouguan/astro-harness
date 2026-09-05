@@ -4506,23 +4506,18 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   width: 240px;
   min-width: 240px;
   flex-shrink: 0;
-  border: 0.75px solid color-mix(in srgb, var(--glass-edge) 84%, transparent);
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.45),
-      rgba(255, 255, 255, 0.18)
-    ),
-    color-mix(
-      in srgb,
-      var(--glass-panel, rgba(255, 255, 255, 0.32)) 80%,
-      transparent
-    );
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.2));
+  border: 1px solid var(--content-card-border, var(--glass-edge));
+  background: var(--content-card-background, var(--glass-fill));
+  box-shadow: var(
+    --content-card-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(
+    --content-card-backdrop,
+    var(--backdrop-glass)
+  );
   color: var(--ink);
   cursor: pointer;
   text-align: left;
@@ -4789,20 +4784,6 @@ html[data-theme="dark"] .chat-welcome-card-lens {
     opacity 0.18s ease,
     transform 0.18s ease,
     color 0.18s ease;
-}
-
-html[data-theme="dark"] .chat-welcome-card {
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
-    color-mix(
-      in srgb,
-      var(--glass-panel, rgba(255, 255, 255, 0.08)) 80%,
-      transparent
-    );
 }
 
 html[data-theme="dark"] .chat-welcome-card-glyph {

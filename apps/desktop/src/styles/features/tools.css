@@ -302,26 +302,21 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  border-radius: 20px;
+  border-radius: var(--content-card-radius, 18px);
   overflow: hidden;
   isolation: isolate;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.45),
-      rgba(255, 255, 255, 0.15)
-    ),
-    color-mix(
-      in srgb,
-      var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%,
-      transparent
-    );
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.2));
+  border: 1px solid var(--content-card-border, var(--glass-edge));
+  background: var(--content-card-background, var(--glass-fill));
+  box-shadow: var(
+    --content-card-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(
+    --content-card-backdrop,
+    var(--backdrop-glass)
+  );
   transition:
     transform 0.18s ease,
     border-color 0.18s ease,
@@ -752,17 +747,6 @@ html[data-theme="dark"] .mcp-server-remove:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-html[data-theme="dark"] .mcp-server-card {
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.1),
-      rgba(255, 255, 255, 0.03)
-    ),
-    color-mix(in srgb, var(--glass-panel, #1a2238) 82%, #0b1224);
-  border-color: rgba(255, 255, 255, 0.14);
 }
 
 /* ── MCP add dialog ── */

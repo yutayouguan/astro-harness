@@ -289,8 +289,18 @@
   gap: 6px;
   padding: 14px 10px;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--tone, #6366f1) 20%, var(--border));
-  background: var(--glass-panel, var(--bg0, #fff));
+  border: 1px solid var(--content-card-border, var(--glass-edge));
+  background: var(--content-card-background, var(--glass-fill));
+  box-shadow: var(
+    --content-card-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(
+    --content-card-backdrop,
+    var(--backdrop-glass)
+  );
   cursor: pointer;
   transition:
     border-color 0.15s,
@@ -300,13 +310,9 @@
 }
 .loop-template-card:hover {
   border-color: var(--tone, #6366f1);
-  background: color-mix(
-    in srgb,
-    var(--tone, #6366f1) 6%,
-    var(--glass-panel, var(--bg0, #fff))
-  );
   box-shadow: 0 2px 8px
-    color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
+      color-mix(in srgb, var(--tone, #6366f1) 10%, transparent),
+    var(--glass-rim);
 }
 .loop-template-card-icon {
   display: flex;

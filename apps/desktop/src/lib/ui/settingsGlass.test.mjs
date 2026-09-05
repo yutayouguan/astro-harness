@@ -116,15 +116,21 @@ test("settings sidebar uses grouped compact navigation and a quiet search field"
 test("settings content panels consume one shared glass material contract", () => {
   const content = rule(projectStyles, ".settings-content-inline");
   assert.ok(content, "missing settings content material scope");
-  assert.match(content, /--settings-panel-border:\s*var\(--glass-edge\);/);
-  assert.match(content, /--settings-panel-background:\s*var\(--glass-fill\);/);
   assert.match(
     content,
-    /--settings-panel-shadow:\s*var\(--shadow-card\),\s*var\(--glass-rim\);/,
+    /--settings-panel-border:\s*var\(--content-card-border\);/,
   );
   assert.match(
     content,
-    /--settings-panel-backdrop:\s*var\(--backdrop-glass\);/,
+    /--settings-panel-background:\s*var\(--content-card-background\);/,
+  );
+  assert.match(
+    content,
+    /--settings-panel-shadow:\s*var\(--content-card-shadow\);/,
+  );
+  assert.match(
+    content,
+    /--settings-panel-backdrop:\s*var\(--content-card-backdrop\);/,
   );
 
   for (const [name, source] of [
@@ -247,6 +253,6 @@ test("reduced transparency replaces settings glass with a solid surface", () => 
   assert.match(media, /background:\s*var\(--glass-panel\);/);
   assert.match(
     media,
-    /\.settings-content-inline\s*\{[\s\S]*?--settings-panel-background:\s*var\(--surface-panel-background\);[\s\S]*?--settings-panel-backdrop:\s*none;/,
+    /html\[data-theme\]\s*\{[\s\S]*?--content-card-background:\s*var\(--surface-panel-background\);[\s\S]*?--content-card-backdrop:\s*none;/,
   );
 });
