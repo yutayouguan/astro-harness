@@ -5,7 +5,7 @@ export type WallpaperAsset = {
   id: string;
   path: string;
   name: string;
-  source: "upload" | "ai";
+  source: "system" | "upload" | "ai";
   width: number;
   height: number;
   createdAt: string;
@@ -25,18 +25,20 @@ export type WallpaperPrefs = {
   shade: number;
   blur: number;
   adaptiveColor: boolean;
+  followSystemWallpaper: boolean;
 };
 
 export const MAX_RECENT_WALLPAPERS = 6;
 
 export const DEFAULT_WALLPAPER_PREFS: WallpaperPrefs = {
-  mode: "color",
+  mode: "wallpaper",
   current: null,
   recent: [],
   fit: "cover",
   shade: 34,
   blur: 0,
   adaptiveColor: true,
+  followSystemWallpaper: true,
 };
 
 function clamp(value: unknown, min: number, max: number, fallback: number) {
@@ -54,7 +56,9 @@ function normalizeAsset(raw: unknown): WallpaperAsset | null {
     typeof value.path !== "string" ||
     !value.path.trim() ||
     typeof value.name !== "string" ||
-    (value.source !== "upload" && value.source !== "ai")
+    (value.source !== "system" &&
+      value.source !== "upload" &&
+      value.source !== "ai")
   ) {
     return null;
   }
@@ -106,8 +110,12 @@ export function normalizeWallpaperPrefs(raw: unknown): WallpaperPrefs {
         .slice(0, MAX_RECENT_WALLPAPERS)
     : [];
   const current = normalizeAsset(value.current);
+  const legacySystemDefault =
+    typeof value.followSystemWallpaper !== "boolean" &&
+    !current &&
+    recent.length === 0;
   const mode: WallpaperMode =
-    value.mode === "wallpaper" ? "wallpaper" : "color";
+    value.mode === "wallpaper" || legacySystemDefault ? "wallpaper" : "color";
   return {
     mode,
     current,
@@ -119,6 +127,10 @@ export function normalizeWallpaperPrefs(raw: unknown): WallpaperPrefs {
       typeof value.adaptiveColor === "boolean"
         ? value.adaptiveColor
         : DEFAULT_WALLPAPER_PREFS.adaptiveColor,
+    followSystemWallpaper:
+      typeof value.followSystemWallpaper === "boolean"
+        ? value.followSystemWallpaper
+        : current?.source === "system" || legacySystemDefault,
   };
 }
 
@@ -130,10 +142,24 @@ export function addRecentWallpaper(
     ...prefs,
     mode: "wallpaper",
     current: asset,
+    followSystemWallpaper: false,
     recent: [
       asset,
       ...prefs.recent.filter((item) => item.id !== asset.id),
     ].slice(0, MAX_RECENT_WALLPAPERS),
+  };
+}
+
+export function applySystemWallpaper(
+  prefs: WallpaperPrefs,
+  asset: WallpaperAsset,
+): WallpaperPrefs {
+  return {
+    ...prefs,
+    mode: "wallpaper",
+    current: asset,
+    followSystemWallpaper: true,
+    recent: prefs.recent.filter((item) => item.source !== "system"),
   };
 }
 
@@ -148,6 +174,7 @@ export function cycleRecentWallpaper(prefs: WallpaperPrefs): WallpaperPrefs {
     ...prefs,
     mode: "wallpaper",
     current: prefs.recent[nextIndex],
+    followSystemWallpaper: false,
   };
 }
 

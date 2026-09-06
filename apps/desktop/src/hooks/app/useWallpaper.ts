@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_WALLPAPER_PREFS,
   addRecentWallpaper,
+  applySystemWallpaper,
   cycleRecentWallpaper,
   normalizeWallpaperPrefs,
   type WallpaperAsset,
@@ -12,6 +13,7 @@ import {
 } from "../../lib/ui/wallpaper";
 
 const STORAGE_KEY = "astro-wallpaper-prefs.v1";
+const SYSTEM_WALLPAPER_POLL_MS = 15_000;
 
 function readStored(): WallpaperPrefs {
   try {
@@ -41,6 +43,7 @@ export type WallpaperController = {
   setShade: (shade: number) => void;
   setBlur: (blur: number) => void;
   setAdaptiveColor: (enabled: boolean) => void;
+  setFollowSystemWallpaper: (enabled: boolean) => void;
   select: (asset: WallpaperAsset) => void;
   cycleRecent: () => void;
   importImage: (sourcePath: string) => Promise<WallpaperAsset>;
@@ -65,11 +68,14 @@ export function useWallpaper(): WallpaperController {
   const [busy, setBusy] = useState<WallpaperController["busy"]>(null);
   const [error, setError] = useState<string | null>(null);
   const analysisRequests = useRef(new Set<string>());
+  const systemSyncInFlight = useRef(false);
 
   const update = useCallback(
     (recipe: (current: WallpaperPrefs) => WallpaperPrefs) => {
       setPrefs((current) => {
-        const next = normalizeWallpaperPrefs(recipe(current));
+        const candidate = recipe(current);
+        if (candidate === current) return current;
+        const next = normalizeWallpaperPrefs(candidate);
         persist(next);
         return next;
       });
@@ -106,6 +112,15 @@ export function useWallpaper(): WallpaperController {
   const setAdaptiveColor = useCallback(
     (adaptiveColor: boolean) =>
       update((current) => ({ ...current, adaptiveColor })),
+    [update],
+  );
+  const setFollowSystemWallpaper = useCallback(
+    (followSystemWallpaper: boolean) =>
+      update((current) => ({
+        ...current,
+        mode: followSystemWallpaper ? "wallpaper" : current.mode,
+        followSystemWallpaper,
+      })),
     [update],
   );
   const select = useCallback(
@@ -163,17 +178,61 @@ export function useWallpaper(): WallpaperController {
   const markCurrentUnavailable = useCallback(() => {
     update((current) => {
       const unavailableId = current.current?.id;
+      const isSystemWallpaper = current.current?.source === "system";
       return {
         ...current,
-        mode: "color",
+        mode: isSystemWallpaper ? "wallpaper" : "color",
         current: null,
         recent: unavailableId
           ? current.recent.filter((asset) => asset.id !== unavailableId)
           : current.recent,
       };
     });
-    setError("壁纸文件不可用，已恢复为氛围配色");
+    setError("壁纸文件不可用");
   }, [update]);
+
+  const syncSystemWallpaper = useCallback(async () => {
+    if (systemSyncInFlight.current) return;
+    systemSyncInFlight.current = true;
+    try {
+      const asset = await invoke<WallpaperAsset>("get_system_wallpaper");
+      setError(null);
+      update((current) =>
+        current.followSystemWallpaper && current.current?.id !== asset.id
+          ? applySystemWallpaper(current, asset)
+          : current,
+      );
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+    } finally {
+      systemSyncInFlight.current = false;
+    }
+  }, [update]);
+
+  useEffect(() => {
+    if (
+      prefs.mode !== "wallpaper" ||
+      !prefs.followSystemWallpaper ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        void syncSystemWallpaper();
+      }
+    };
+    void syncSystemWallpaper();
+    const timer = window.setInterval(refresh, SYSTEM_WALLPAPER_POLL_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [prefs.followSystemWallpaper, prefs.mode, syncSystemWallpaper]);
 
   useEffect(() => {
     const asset = prefs.current;
@@ -224,6 +283,7 @@ export function useWallpaper(): WallpaperController {
     setShade,
     setBlur,
     setAdaptiveColor,
+    setFollowSystemWallpaper,
     select,
     cycleRecent,
     importImage,

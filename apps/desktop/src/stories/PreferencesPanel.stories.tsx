@@ -64,6 +64,7 @@ const meta = {
       setShade: () => {},
       setBlur: () => {},
       setAdaptiveColor: () => {},
+      setFollowSystemWallpaper: () => {},
       select: () => {},
       cycleRecent: () => {},
       importImage: async () => {

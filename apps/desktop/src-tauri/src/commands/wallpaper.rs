@@ -1,16 +1,30 @@
-//! 全局壁纸资产：安全导入用户图片，或复用已配置的图片 Provider 生成后原子落盘。
+//! 全局壁纸资产：读取系统桌面、导入用户图片，或复用图片 Provider 生成后原子落盘。
 
 use std::collections::HashMap;
 use std::fs;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+use std::time::UNIX_EPOCH;
 
 use image::{DynamicImage, ImageFormat, ImageReader};
 use serde::Serialize;
 
 const MAX_WALLPAPER_BYTES: u64 = 25 * 1024 * 1024;
+const MAX_SYSTEM_WALLPAPER_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_WALLPAPER_DIMENSION: u32 = 16_384;
 const MAX_DECODE_ALLOC: u64 = 128 * 1024 * 1024;
+
+#[derive(Clone)]
+struct SystemWallpaperCache {
+    signature: u64,
+    asset: WallpaperAssetDto,
+}
+
+static SYSTEM_WALLPAPER_CACHE: OnceLock<Mutex<Option<SystemWallpaperCache>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +72,7 @@ fn supported_format(format: ImageFormat) -> Option<(&'static str, &'static str)>
         ImageFormat::Png => Some(("png", "image/png")),
         ImageFormat::Jpeg => Some(("jpg", "image/jpeg")),
         ImageFormat::WebP => Some(("webp", "image/webp")),
+        ImageFormat::Bmp => Some(("bmp", "image/bmp")),
         _ => None,
     }
 }
@@ -216,12 +231,12 @@ fn analyze_image(image: &DynamicImage) -> WallpaperAnalysisDto {
     }
 }
 
-fn validate_image(bytes: &[u8]) -> Result<ValidatedImage, String> {
+fn validate_image_with_limit(bytes: &[u8], max_bytes: u64) -> Result<ValidatedImage, String> {
     if bytes.is_empty() {
         return Err("图片文件为空".to_string());
     }
-    if bytes.len() as u64 > MAX_WALLPAPER_BYTES {
-        return Err("图片不能超过 25 MB".to_string());
+    if bytes.len() as u64 > max_bytes {
+        return Err(format!("图片不能超过 {} MB", max_bytes / 1024 / 1024));
     }
 
     let mut reader = ImageReader::new(Cursor::new(bytes))
@@ -230,7 +245,7 @@ fn validate_image(bytes: &[u8]) -> Result<ValidatedImage, String> {
     let format = reader
         .format()
         .filter(|format| supported_format(*format).is_some())
-        .ok_or_else(|| "仅支持 PNG、JPEG 和 WebP 图片".to_string())?;
+        .ok_or_else(|| "仅支持 PNG、JPEG、WebP 和 BMP 图片".to_string())?;
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_WALLPAPER_DIMENSION);
     limits.max_image_height = Some(MAX_WALLPAPER_DIMENSION);
@@ -245,6 +260,10 @@ fn validate_image(bytes: &[u8]) -> Result<ValidatedImage, String> {
         height: decoded.height(),
         analysis: analyze_image(&decoded),
     })
+}
+
+fn validate_image(bytes: &[u8]) -> Result<ValidatedImage, String> {
+    validate_image_with_limit(bytes, MAX_WALLPAPER_BYTES)
 }
 
 fn store_wallpaper_at(
@@ -302,6 +321,276 @@ fn analyze_wallpaper_at(base: &Path, path: &Path) -> Result<WallpaperAnalysisDto
     }
     let bytes = fs::read(&target).map_err(|e| format!("无法读取壁纸：{e}"))?;
     Ok(validate_image(&bytes)?.analysis)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn decode_wallpaper_path(value: &str) -> Option<PathBuf> {
+    let value = value.trim().trim_matches(['\'', '"']);
+    if value.is_empty() {
+        return None;
+    }
+    if value.starts_with("file://") {
+        return url::Url::parse(value).ok()?.to_file_path().ok();
+    }
+    Some(PathBuf::from(value))
+}
+
+#[cfg(target_os = "macos")]
+fn system_wallpaper_path() -> Result<PathBuf, String> {
+    let output = Command::new("/usr/bin/osascript")
+        .args([
+            "-e",
+            "tell application \"System Events\" to get picture of current desktop",
+        ])
+        .output()
+        .map_err(|error| format!("无法读取 macOS 系统壁纸：{error}"))?;
+    if !output.status.success() {
+        return Err("macOS 未返回当前系统壁纸".to_string());
+    }
+    let value = String::from_utf8_lossy(&output.stdout);
+    decode_wallpaper_path(value.trim()).ok_or_else(|| "macOS 系统壁纸路径为空".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn system_wallpaper_path() -> Result<PathBuf, String> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETDESKWALLPAPER,
+    };
+
+    let mut buffer = vec![0_u16; 32_768];
+    let succeeded = unsafe {
+        SystemParametersInfoW(
+            SPI_GETDESKWALLPAPER,
+            buffer.len() as u32,
+            buffer.as_mut_ptr().cast(),
+            0,
+        )
+    };
+    if succeeded == 0 {
+        return Err("Windows 未返回当前系统壁纸".to_string());
+    }
+    let length = buffer
+        .iter()
+        .position(|character| *character == 0)
+        .unwrap_or(buffer.len());
+    if length == 0 {
+        return Err("Windows 系统壁纸路径为空".to_string());
+    }
+    Ok(PathBuf::from(OsString::from_wide(&buffer[..length])))
+}
+
+#[cfg(target_os = "linux")]
+fn command_output(program: &str, args: &[&str]) -> Option<String> {
+    let output = Command::new(program).args(args).output().ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn gsettings_wallpaper_path() -> Option<PathBuf> {
+    let prefers_dark = command_output(
+        "gsettings",
+        &["get", "org.gnome.desktop.interface", "color-scheme"],
+    )
+    .is_some_and(|value| value.contains("prefer-dark"));
+    let keys = if prefers_dark {
+        ["picture-uri-dark", "picture-uri"]
+    } else {
+        ["picture-uri", "picture-uri-dark"]
+    };
+    for schema in [
+        "org.gnome.desktop.background",
+        "org.cinnamon.desktop.background",
+    ] {
+        for key in keys {
+            let Some(value) = command_output("gsettings", &["get", schema, key]) else {
+                continue;
+            };
+            if let Some(path) = decode_wallpaper_path(&value).filter(|path| path.is_file()) {
+                return Some(path);
+            }
+        }
+    }
+    command_output(
+        "gsettings",
+        &["get", "org.mate.background", "picture-filename"],
+    )
+    .and_then(|value| decode_wallpaper_path(&value))
+    .filter(|path| path.is_file())
+}
+
+#[cfg(target_os = "linux")]
+fn xfce_wallpaper_path() -> Option<PathBuf> {
+    let properties = command_output("xfconf-query", &["-c", "xfce4-desktop", "-l"])?;
+    properties
+        .lines()
+        .filter(|property| property.ends_with("/last-image"))
+        .find_map(|property| {
+            command_output("xfconf-query", &["-c", "xfce4-desktop", "-p", property])
+                .and_then(|value| decode_wallpaper_path(&value))
+                .filter(|path| path.is_file())
+        })
+}
+
+#[cfg(target_os = "linux")]
+fn kde_wallpaper_path() -> Option<PathBuf> {
+    let config_home = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
+    let contents =
+        fs::read_to_string(config_home.join("plasma-org.kde.plasma.desktop-appletsrc")).ok()?;
+    contents.lines().rev().find_map(|line| {
+        line.trim()
+            .strip_prefix("Image=")
+            .and_then(decode_wallpaper_path)
+            .filter(|path| path.is_file())
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn system_wallpaper_path() -> Result<PathBuf, String> {
+    gsettings_wallpaper_path()
+        .or_else(xfce_wallpaper_path)
+        .or_else(kde_wallpaper_path)
+        .ok_or_else(|| "当前 Linux 桌面环境未返回系统壁纸".to_string())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+fn system_wallpaper_path() -> Result<PathBuf, String> {
+    Err("当前平台暂不支持读取系统壁纸".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn read_system_wallpaper(base: &Path, source: &Path) -> Result<(Vec<u8>, ValidatedImage), String> {
+    let bytes = fs::read(source).map_err(|error| format!("无法读取系统壁纸：{error}"))?;
+    if let Ok(validated) = validate_image_with_limit(&bytes, MAX_SYSTEM_WALLPAPER_BYTES) {
+        return Ok((bytes, validated));
+    }
+
+    let directory = wallpapers_dir_at(base);
+    fs::create_dir_all(&directory).map_err(|error| format!("无法创建壁纸目录：{error}"))?;
+    let converted = directory.join(format!(
+        ".system-wallpaper-{}.jpg",
+        uuid::Uuid::new_v4().simple()
+    ));
+    let output = Command::new("/usr/bin/sips")
+        .args(["-s", "format", "jpeg"])
+        .arg(source)
+        .arg("--out")
+        .arg(&converted)
+        .output()
+        .map_err(|error| format!("无法转换系统壁纸：{error}"))?;
+    if !output.status.success() {
+        let _ = fs::remove_file(&converted);
+        return Err("系统壁纸格式无法读取".to_string());
+    }
+    let converted_bytes =
+        fs::read(&converted).map_err(|error| format!("无法读取系统壁纸：{error}"));
+    let _ = fs::remove_file(&converted);
+    let converted_bytes = converted_bytes?;
+    let validated = validate_image_with_limit(&converted_bytes, MAX_SYSTEM_WALLPAPER_BYTES)?;
+    Ok((converted_bytes, validated))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn read_system_wallpaper(_base: &Path, source: &Path) -> Result<(Vec<u8>, ValidatedImage), String> {
+    let bytes = fs::read(source).map_err(|error| format!("无法读取系统壁纸：{error}"))?;
+    let validated = validate_image_with_limit(&bytes, MAX_SYSTEM_WALLPAPER_BYTES)?;
+    Ok((bytes, validated))
+}
+
+fn system_wallpaper_at(base: &Path, source: &Path) -> Result<WallpaperAssetDto, String> {
+    let source = source
+        .canonicalize()
+        .map_err(|_| "系统壁纸文件不存在".to_string())?;
+    let metadata =
+        fs::metadata(&source).map_err(|error| format!("无法读取系统壁纸信息：{error}"))?;
+    if !metadata.is_file() {
+        return Err("系统壁纸不是普通文件".to_string());
+    }
+    if metadata.len() > MAX_SYSTEM_WALLPAPER_BYTES {
+        return Err("系统壁纸文件过大".to_string());
+    }
+
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let mut hasher = DefaultHasher::new();
+    base.hash(&mut hasher);
+    source.hash(&mut hasher);
+    metadata.len().hash(&mut hasher);
+    modified.hash(&mut hasher);
+    let signature = hasher.finish();
+
+    let cache = SYSTEM_WALLPAPER_CACHE.get_or_init(|| Mutex::new(None));
+    if let Some(cached) = cache
+        .lock()
+        .map_err(|_| "系统壁纸缓存不可用".to_string())?
+        .as_ref()
+        .filter(|cached| cached.signature == signature)
+        .cloned()
+    {
+        return Ok(cached.asset);
+    }
+
+    let (bytes, validated) = read_system_wallpaper(base, &source)?;
+    let (extension, _) = supported_format(validated.format).expect("validated wallpaper format");
+    let directory = wallpapers_dir_at(base);
+    fs::create_dir_all(&directory).map_err(|error| format!("无法创建壁纸目录：{error}"))?;
+    let destination = directory.join(format!("system-{signature:016x}.{extension}"));
+    if !destination.is_file() {
+        let temporary = directory.join(format!(".system-{}.tmp", uuid::Uuid::new_v4().simple()));
+        fs::write(&temporary, bytes).map_err(|error| format!("无法缓存系统壁纸：{error}"))?;
+        if let Err(error) = fs::rename(&temporary, &destination) {
+            let _ = fs::remove_file(&temporary);
+            if !destination.is_file() {
+                return Err(format!("无法保存系统壁纸：{error}"));
+            }
+        }
+    }
+
+    let name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("系统壁纸");
+    let asset = WallpaperAssetDto {
+        id: format!("system-{signature:016x}"),
+        path: destination.to_string_lossy().into_owned(),
+        name: format!("系统壁纸 · {name}"),
+        source: "system".to_string(),
+        width: validated.width,
+        height: validated.height,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        luminance: validated.analysis.luminance,
+        recommended_theme: validated.analysis.recommended_theme,
+        accent_color: validated.analysis.accent_color,
+        secondary_color: validated.analysis.secondary_color,
+        provider: None,
+        model: None,
+    };
+    *cache.lock().map_err(|_| "系统壁纸缓存不可用".to_string())? = Some(SystemWallpaperCache {
+        signature,
+        asset: asset.clone(),
+    });
+    Ok(asset)
+}
+
+#[tauri::command]
+pub async fn get_system_wallpaper() -> Result<WallpaperAssetDto, String> {
+    tokio::task::spawn_blocking(|| {
+        let path = system_wallpaper_path()?;
+        system_wallpaper_at(&home::default_memory_dir(), &path)
+    })
+    .await
+    .map_err(|error| format!("读取系统壁纸任务失败：{error}"))?
 }
 
 #[tauri::command]
@@ -392,6 +681,20 @@ mod tests {
         let path = PathBuf::from(asset.path);
         assert!(path.starts_with(wallpapers_dir_at(temp.path())));
         assert!(path.is_file());
+    }
+
+    #[test]
+    fn caches_system_wallpaper_inside_app_home() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("desktop.png");
+        fs::write(&source, tiny_png()).unwrap();
+
+        let asset = system_wallpaper_at(temp.path(), &source).unwrap();
+
+        assert_eq!(asset.source, "system");
+        assert!(asset.id.starts_with("system-"));
+        assert!(Path::new(&asset.path).starts_with(wallpapers_dir_at(temp.path())));
+        assert!(Path::new(&asset.path).is_file());
     }
 
     #[test]

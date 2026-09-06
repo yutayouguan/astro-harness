@@ -2246,7 +2246,9 @@ export const zh = {
   "prefs.wallpaper.colorMode": "氛围配色",
   "prefs.wallpaper.colorModeDesc": "沿用多彩、统一与灵动配色",
   "prefs.wallpaper.imageMode": "图片壁纸",
-  "prefs.wallpaper.imageModeDesc": "上传喜欢的图片，或让 AI 生成一张",
+  "prefs.wallpaper.imageModeDesc": "使用系统壁纸，也可上传或让 AI 生成",
+  "prefs.wallpaper.followSystem": "跟随系统壁纸",
+  "prefs.wallpaper.followSystemDesc": "系统切换桌面壁纸后自动同步到 Astro",
   "prefs.wallpaper.upload": "上传图片",
   "prefs.wallpaper.imageFiles": "图片",
   "prefs.wallpaper.aiGenerate": "AI 生成",
@@ -5428,7 +5430,11 @@ export const en: Record<MessageKey, string> = {
   "prefs.wallpaper.colorModeDesc":
     "Keep colorful, unified, or dynamic palettes",
   "prefs.wallpaper.imageMode": "Image wallpaper",
-  "prefs.wallpaper.imageModeDesc": "Upload an image or generate one with AI",
+  "prefs.wallpaper.imageModeDesc":
+    "Use the system wallpaper, upload an image, or generate one with AI",
+  "prefs.wallpaper.followSystem": "Follow system wallpaper",
+  "prefs.wallpaper.followSystemDesc":
+    "Automatically sync when the desktop wallpaper changes",
   "prefs.wallpaper.upload": "Upload image",
   "prefs.wallpaper.imageFiles": "Images",
   "prefs.wallpaper.aiGenerate": "Generate with AI",

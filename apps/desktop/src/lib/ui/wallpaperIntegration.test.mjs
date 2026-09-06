@@ -27,15 +27,18 @@ const unifiedStyles = await readFile(
   "utf8",
 );
 
-test("wallpaper commands are registered and the settings card calls both paths", () => {
+test("wallpaper commands are registered and the settings card calls each source", () => {
   assert.match(commands, /commands::wallpaper::import_wallpaper/);
   assert.match(commands, /commands::wallpaper::generate_wallpaper/);
   assert.match(commands, /commands::wallpaper::analyze_wallpaper/);
+  assert.match(commands, /commands::wallpaper::get_system_wallpaper/);
   assert.match(hook, /invoke<WallpaperAsset>\("import_wallpaper"/);
   assert.match(hook, /invoke<WallpaperAsset>\("generate_wallpaper"/);
   assert.match(hook, /invoke<WallpaperAnalysis>\("analyze_wallpaper"/);
+  assert.match(hook, /invoke<WallpaperAsset>\("get_system_wallpaper"/);
   assert.match(panel, /controller\.importImage\(path\)/);
   assert.match(panel, /controller\.generate\(generatedPrompt\)/);
+  assert.match(panel, /controller\.setFollowSystemWallpaper/);
 });
 
 test("app renders wallpaper behind shell chrome and fails closed on missing files", () => {

@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   Images,
   Loader2,
+  MonitorUp,
   Palette,
   Sparkles,
   Upload,
@@ -310,6 +311,29 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
 
         {prefs.mode === "wallpaper" ? (
           <>
+            <div className="wallpaper-adaptive-color wallpaper-system-follow">
+              <span className="wallpaper-system-icon" aria-hidden>
+                <MonitorUp size={17} />
+              </span>
+              <span className="wallpaper-adaptive-copy">
+                <strong>{t("prefs.wallpaper.followSystem")}</strong>
+                <small>{t("prefs.wallpaper.followSystemDesc")}</small>
+              </span>
+              <button
+                type="button"
+                role="switch"
+                className="prefs-switch"
+                data-tone={tone}
+                aria-checked={prefs.followSystemWallpaper}
+                onClick={() =>
+                  controller.setFollowSystemWallpaper(
+                    !prefs.followSystemWallpaper,
+                  )
+                }
+              >
+                <span className="prefs-switch-thumb" />
+              </button>
+            </div>
             <div className="wallpaper-adaptive-color">
               <span
                 className="wallpaper-adaptive-swatch"

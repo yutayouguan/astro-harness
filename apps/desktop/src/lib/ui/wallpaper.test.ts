@@ -4,6 +4,7 @@ import {
   DEFAULT_WALLPAPER_PREFS,
   MAX_RECENT_WALLPAPERS,
   addRecentWallpaper,
+  applySystemWallpaper,
   cycleRecentWallpaper,
   normalizeWallpaperPrefs,
   wallpaperBackgroundSize,
@@ -25,6 +26,25 @@ test("invalid stored wallpaper prefs use defaults and empty wallpaper mode stays
   assert.equal(
     normalizeWallpaperPrefs({ mode: "wallpaper", current: null }).mode,
     "wallpaper",
+  );
+});
+
+test("new installs follow the system wallpaper while legacy custom prefs do not", () => {
+  assert.equal(DEFAULT_WALLPAPER_PREFS.mode, "wallpaper");
+  assert.equal(DEFAULT_WALLPAPER_PREFS.followSystemWallpaper, true);
+  const legacyDefault = normalizeWallpaperPrefs({
+    mode: "color",
+    current: null,
+    recent: [],
+  });
+  assert.equal(legacyDefault.mode, "wallpaper");
+  assert.equal(legacyDefault.followSystemWallpaper, true);
+  assert.equal(
+    normalizeWallpaperPrefs({
+      mode: "wallpaper",
+      current: asset("legacy"),
+    }).followSystemWallpaper,
+    false,
   );
 });
 
@@ -52,6 +72,7 @@ test("normalization clamps controls and rejects malformed assets", () => {
   assert.equal(prefs.current?.accentColor, "#22c55e");
   assert.equal(prefs.current?.secondaryColor, "#3b82f6");
   assert.equal(prefs.adaptiveColor, true);
+  assert.equal(prefs.followSystemWallpaper, false);
   assert.deepEqual(
     prefs.recent.map((item) => item.id),
     ["current"],
@@ -70,6 +91,22 @@ test("recent wallpapers are deduplicated and bounded", () => {
     new Set(prefs.recent.map((item) => item.id)).size,
     prefs.recent.length,
   );
+  assert.equal(prefs.followSystemWallpaper, false);
+});
+
+test("system wallpaper becomes current without entering custom history", () => {
+  const custom = asset("custom");
+  const system: WallpaperAsset = {
+    ...asset("system"),
+    source: "system",
+  };
+  const prefs = applySystemWallpaper(
+    { ...DEFAULT_WALLPAPER_PREFS, recent: [custom] },
+    system,
+  );
+  assert.equal(prefs.current?.source, "system");
+  assert.equal(prefs.followSystemWallpaper, true);
+  assert.deepEqual(prefs.recent, [custom]);
 });
 
 test("stretch uses explicit dimensions while other fits pass through", () => {
@@ -88,6 +125,7 @@ test("recent wallpaper cycle advances and wraps without changing a single item",
     recent: [first, second],
   };
   assert.equal(cycleRecentWallpaper(prefs).current?.id, "second");
+  assert.equal(cycleRecentWallpaper(prefs).followSystemWallpaper, false);
   assert.equal(
     cycleRecentWallpaper({ ...prefs, current: second }).current?.id,
     "first",
