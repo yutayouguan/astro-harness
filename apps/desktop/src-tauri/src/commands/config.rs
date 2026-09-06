@@ -647,6 +647,7 @@ pub struct DiagnosticsStatusDto {
     pub provider_enabled: usize,
     pub provider_total: usize,
     pub active_provider_id: Option<String>,
+    pub active_provider_name: Option<String>,
     pub provider_error: Option<String>,
     pub mcp_connected: usize,
     pub mcp_total: usize,
@@ -662,23 +663,41 @@ pub struct DiagnosticsStatusDto {
 #[tauri::command]
 pub async fn get_diagnostics_status() -> Result<DiagnosticsStatusDto, String> {
     let endpoint = endpoint_url(&default_grpc_address());
-    let (provider_enabled, provider_total, active_provider_id, provider_error) =
-        match super::providers::get_providers_state() {
-            Ok(state) => {
-                let total = state
+    let (
+        provider_enabled,
+        provider_total,
+        active_provider_id,
+        active_provider_name,
+        provider_error,
+    ) = match super::providers::get_providers_state() {
+        Ok(state) => {
+            let total = state
+                .providers
+                .iter()
+                .filter(|provider| provider.supports_responses_api)
+                .count();
+            let enabled = state
+                .providers
+                .iter()
+                .filter(|provider| provider.enabled && provider.supports_responses_api)
+                .count();
+            let active_provider_name = state.active_provider_id.as_ref().and_then(|active_id| {
+                state
                     .providers
                     .iter()
-                    .filter(|provider| provider.supports_responses_api)
-                    .count();
-                let enabled = state
-                    .providers
-                    .iter()
-                    .filter(|provider| provider.enabled && provider.supports_responses_api)
-                    .count();
-                (enabled, total, state.active_provider_id, None)
-            }
-            Err(error) => (0, 0, None, Some(error)),
-        };
+                    .find(|provider| &provider.id == active_id)
+                    .map(|provider| provider.display_name.clone())
+            });
+            (
+                enabled,
+                total,
+                state.active_provider_id,
+                active_provider_name,
+                None,
+            )
+        }
+        Err(error) => (0, 0, None, None, Some(error)),
+    };
 
     let mcp_result = get_mcp_server_statuses(None).await;
     let backend_healthy = mcp_result.is_ok();
@@ -714,6 +733,7 @@ pub async fn get_diagnostics_status() -> Result<DiagnosticsStatusDto, String> {
         provider_enabled,
         provider_total,
         active_provider_id,
+        active_provider_name,
         provider_error,
         mcp_connected,
         mcp_total,
@@ -803,6 +823,8 @@ pub async fn export_diagnostics_bundle(app: AppHandle) -> Result<Option<String>,
         session_id: None,
         turn_id: None,
         min_level: None,
+        since_ms: None,
+        until_ms: None,
         lines: 500,
         source: home::LogSource::Both,
     })
@@ -850,6 +872,8 @@ pub struct QueryAgentLogsArgs {
     pub session_id: Option<String>,
     pub turn_id: Option<String>,
     pub min_level: Option<String>,
+    pub since_ms: Option<i64>,
+    pub until_ms: Option<i64>,
     pub lines: Option<usize>,
     /// "agent" | "errors" | "both"
     pub source: Option<String>,
@@ -868,10 +892,15 @@ pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<home::Agen
         session_id: args.session_id,
         turn_id: args.turn_id,
         min_level: args.min_level,
+        since_ms: args.since_ms,
+        until_ms: args.until_ms,
         lines: args.lines.unwrap_or(50),
         source,
     };
-    home::query_agent_logs(q).map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || home::query_agent_logs(q))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

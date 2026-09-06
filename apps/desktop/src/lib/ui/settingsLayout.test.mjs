@@ -239,6 +239,12 @@ test("diagnostics and about have task-specific layouts", () => {
   assert.match(preferences, /DiagnosticStatusCard/);
   assert.match(preferences, /prefs-diag-filter-grid/);
   assert.match(preferences, /prefs-diag-search/);
+  assert.match(preferences, /prefs-diag-live/);
+  assert.match(preferences, /setInterval\(\(\) =>/);
+  assert.match(preferences, /DiagnosticLogTimeRange/);
+  assert.match(preferences, /sinceMs/);
+  assert.match(preferences, /untilMs/);
+  assert.match(preferences, /datetime-local/);
   assert.match(preferences, /visibleLogRows/);
   assert.match(preferences, /diagnosticLogLevel/);
   assert.match(preferences, /prefs-diag-log-list/);
@@ -282,6 +288,8 @@ test("diagnostics and about have task-specific layouts", () => {
   );
   assert.match(preferencesCss, /\.prefs-diag-export-card\s*\{/);
   assert.match(preferencesCss, /\.prefs-diag-log-row\.is-error/);
+  assert.match(preferencesCss, /\.prefs-diag-live\[data-active="true"\]/);
+  assert.match(preferencesCss, /\.prefs-diag-log-meta time/);
   assert.match(
     preferencesCss,
     /\.prefs-category-stack--about:not\(\[hidden\]\)[\s\S]*?grid-template-columns:\s*repeat\(2,[\s\S]*?width:\s*min\(100%, 980px\);/,

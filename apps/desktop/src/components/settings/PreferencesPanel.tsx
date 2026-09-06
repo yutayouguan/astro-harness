@@ -68,6 +68,13 @@ import {
   GLASS_INTENSITY_MAX,
   GLASS_INTENSITY_MIN,
 } from "../../lib/ui/glassIntensity";
+import {
+  diagnosticLogTimeBounds,
+  formatDiagnosticTimestamp,
+  presentDiagnosticMessage,
+  toLocalDateTimeInput,
+  type DiagnosticLogTimeRange,
+} from "../../lib/diagnostics/logView";
 import { AppMorphIcon } from "../icons/MorphIcon";
 import { IconGlobe, IconChat, IconAtom } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
@@ -76,7 +83,13 @@ import ShellGradientEditor from "./ShellGradientEditor";
 import WallpaperSettingsCard from "./WallpaperSettingsCard";
 
 /** 查询返回的单行日志 */
-type AgentLogLine = { raw: string; source: string };
+type AgentLogLine = {
+  raw: string;
+  source: string;
+  timestamp: string | null;
+  level: string | null;
+  message: string;
+};
 
 type DiagnosticsStatusDto = {
   backendHealthy: boolean;
@@ -85,6 +98,7 @@ type DiagnosticsStatusDto = {
   providerEnabled: number;
   providerTotal: number;
   activeProviderId: string | null;
+  activeProviderName: string | null;
   providerError: string | null;
   mcpConnected: number;
   mcpTotal: number;
@@ -139,7 +153,7 @@ function DiagnosticStatusCard({
     <div className="prefs-diag-status-card" data-status={state}>
       <span>{label}</span>
       <strong>{value}</strong>
-      <small>{detail}</small>
+      <small title={detail}>{detail}</small>
     </div>
   );
 }
@@ -613,6 +627,14 @@ export default function PreferencesPanel({
   const [level, setLevel] = useState<LogLevelFilter>("all");
   const [lines, setLines] = useState<number>(50);
   const [source, setSource] = useState<LogSourceFilter>("both");
+  const [timeRange, setTimeRange] = useState<DiagnosticLogTimeRange>("1h");
+  const [customSince, setCustomSince] = useState(() =>
+    toLocalDateTimeInput(Date.now() - 60 * 60 * 1_000),
+  );
+  const [customUntil, setCustomUntil] = useState(() =>
+    toLocalDateTimeInput(Date.now()),
+  );
+  const [liveLogs, setLiveLogs] = useState(true);
   const [manualSession, setManualSession] = useState("");
   const [turnId, setTurnId] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -628,6 +650,11 @@ export default function PreferencesPanel({
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [queried, setQueried] = useState(false);
+  const [logsUpdatedAt, setLogsUpdatedAt] = useState<string | null>(null);
+  const logRequestGenerationRef = useRef(0);
+  const logRequestInFlightRef = useRef(false);
+  const logRowsSignatureRef = useRef("");
+  const logListRef = useRef<HTMLUListElement | null>(null);
   const normalizedLogSearch = logSearch.trim().toLowerCase();
   const visibleLogRows = normalizedLogSearch
     ? rows.filter((row) =>
@@ -660,9 +687,13 @@ export default function PreferencesPanel({
           value: `${diagnosticsStatus.providerEnabled}/${diagnosticsStatus.providerTotal}`,
           detail: diagnosticsStatus.providerError
             ? t("prefs.diag.status.unavailable")
-            : diagnosticsStatus.activeProviderId
+            : diagnosticsStatus.activeProviderName ||
+                diagnosticsStatus.activeProviderId
               ? t("prefs.diag.status.providerDetail", {
-                  provider: diagnosticsStatus.activeProviderId,
+                  provider:
+                    diagnosticsStatus.activeProviderName ??
+                    diagnosticsStatus.activeProviderId ??
+                    "",
                 })
               : t("prefs.diag.status.noneActive"),
           state: diagnosticsStatus.providerError
@@ -880,13 +911,30 @@ export default function PreferencesPanel({
     },
   ];
 
-  const refreshRef = useRef<() => Promise<void>>(async () => {});
+  const refreshRef = useRef<(silent?: boolean) => Promise<void>>(
+    async () => {},
+  );
 
-  async function refreshLogs() {
+  async function refreshLogs(silent = false) {
+    if (silent && logRequestInFlightRef.current) return;
+    const generation = ++logRequestGenerationRef.current;
     const manual = manualSession.trim();
     const effectiveSession =
       manual || (scope === "current" ? (activeSessionId ?? null) : null);
-    setBusy(true);
+    const { sinceMs, untilMs } = diagnosticLogTimeBounds(
+      timeRange,
+      customSince,
+      customUntil,
+    );
+    if (sinceMs != null && untilMs != null && sinceMs > untilMs) {
+      logRequestInFlightRef.current = false;
+      if (!silent) setBusy(false);
+      setErrorMsg(t("prefs.diag.time.invalid"));
+      return;
+    }
+    logRequestInFlightRef.current = true;
+    const shouldFollow = liveLogs && (logListRef.current?.scrollTop ?? 0) < 24;
+    if (!silent) setBusy(true);
     setErrorMsg("");
     try {
       const result = await invoke<AgentLogLine[]>("query_agent_logs", {
@@ -896,16 +944,38 @@ export default function PreferencesPanel({
           source,
           lines,
           minLevel: level === "issues" ? "WARN" : null,
+          sinceMs,
+          untilMs,
         },
       });
-      setRows(result);
+      if (generation !== logRequestGenerationRef.current) return;
+      const signature = result
+        .map(
+          (row) => `${row.timestamp ?? ""}\u0000${row.source}\u0000${row.raw}`,
+        )
+        .join("\u0001");
+      if (signature !== logRowsSignatureRef.current) {
+        logRowsSignatureRef.current = signature;
+        setRows(result);
+        if (shouldFollow) {
+          window.requestAnimationFrame(() =>
+            logListRef.current?.scrollTo(0, 0),
+          );
+        }
+      }
       setQueried(true);
+      setLogsUpdatedAt(new Date().toISOString());
     } catch (error) {
+      if (generation !== logRequestGenerationRef.current) return;
+      logRowsSignatureRef.current = "";
       setRows([]);
       setQueried(true);
       setErrorMsg(error instanceof Error ? error.message : String(error));
     } finally {
-      setBusy(false);
+      if (generation === logRequestGenerationRef.current) {
+        logRequestInFlightRef.current = false;
+        if (!silent) setBusy(false);
+      }
     }
   }
   refreshRef.current = refreshLogs;
@@ -933,7 +1003,34 @@ export default function PreferencesPanel({
       void refreshRef.current();
     }, 250);
     return () => clearTimeout(timer);
-  }, [activeCategory, scope, level, lines, source, manualSession, turnId]);
+  }, [
+    activeCategory,
+    scope,
+    level,
+    lines,
+    source,
+    timeRange,
+    customSince,
+    customUntil,
+    manualSession,
+    turnId,
+  ]);
+
+  useEffect(() => {
+    if (activeCategory !== "diagnostics" || !liveLogs) return;
+    const timer = window.setInterval(() => {
+      void refreshRef.current(true);
+    }, 1_500);
+    return () => window.clearInterval(timer);
+  }, [activeCategory, liveLogs]);
+
+  useEffect(
+    () => () => {
+      logRequestGenerationRef.current += 1;
+      logRequestInFlightRef.current = false;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (activeCategory === "diagnostics") void refreshDiagnosticsStatus();
@@ -1542,24 +1639,44 @@ export default function PreferencesPanel({
         >
           <div className="prefs-diag-page-head">
             <p>{t("prefs.diag.pageSub")}</p>
-            <button
-              type="button"
-              className="prefs-diag-btn"
-              disabled={busy || diagnosticsStatusBusy}
-              onClick={() =>
-                void Promise.all([refreshLogs(), refreshDiagnosticsStatus()])
-              }
-            >
-              <RefreshCw
-                size={13}
-                strokeWidth={2.25}
-                className={busy || diagnosticsStatusBusy ? "spin" : undefined}
-                aria-hidden
-              />
-              {busy || diagnosticsStatusBusy
-                ? t("prefs.diag.loading")
-                : t("prefs.diag.refresh")}
-            </button>
+            <div className="prefs-diag-page-actions">
+              <button
+                type="button"
+                className="prefs-diag-live"
+                data-active={liveLogs || undefined}
+                aria-pressed={liveLogs}
+                onClick={() => {
+                  const next = !liveLogs;
+                  setLiveLogs(next);
+                  if (next && timeRange === "custom") setTimeRange("1h");
+                }}
+              >
+                <span aria-hidden />
+                {t(
+                  liveLogs
+                    ? "prefs.diag.live.active"
+                    : "prefs.diag.live.paused",
+                )}
+              </button>
+              <button
+                type="button"
+                className="prefs-diag-btn"
+                disabled={busy || diagnosticsStatusBusy}
+                onClick={() =>
+                  void Promise.all([refreshLogs(), refreshDiagnosticsStatus()])
+                }
+              >
+                <RefreshCw
+                  size={13}
+                  strokeWidth={2.25}
+                  className={busy || diagnosticsStatusBusy ? "spin" : undefined}
+                  aria-hidden
+                />
+                {busy || diagnosticsStatusBusy
+                  ? t("prefs.diag.loading")
+                  : t("prefs.diag.refresh")}
+              </button>
+            </div>
           </div>
 
           <div className="prefs-diag-status-grid">
@@ -1626,6 +1743,36 @@ export default function PreferencesPanel({
                       {t("prefs.diag.scope.all")}
                     </button>
                   </div>
+                </div>
+
+                <div className="prefs-diag-group">
+                  <span className="prefs-diag-group-label">
+                    {t("prefs.diag.time")}
+                  </span>
+                  <SelectMenu
+                    className="prefs-diag-select"
+                    value={timeRange}
+                    aria-label={t("prefs.diag.time")}
+                    onChange={(value) => {
+                      const next = value as DiagnosticLogTimeRange;
+                      setTimeRange(next);
+                      if (next === "custom") {
+                        setLiveLogs(false);
+                        setShowAdvanced(true);
+                      }
+                    }}
+                    options={[
+                      { value: "15m", label: t("prefs.diag.time.15m") },
+                      { value: "1h", label: t("prefs.diag.time.1h") },
+                      { value: "24h", label: t("prefs.diag.time.24h") },
+                      { value: "7d", label: t("prefs.diag.time.7d") },
+                      { value: "all", label: t("prefs.diag.time.all") },
+                      {
+                        value: "custom",
+                        label: t("prefs.diag.time.custom"),
+                      },
+                    ]}
+                  />
                 </div>
 
                 <div className="prefs-diag-group">
@@ -1733,6 +1880,36 @@ export default function PreferencesPanel({
 
               {showAdvanced && (
                 <div className="prefs-diag-advanced">
+                  {timeRange === "custom" ? (
+                    <>
+                      <label className="prefs-diag-row">
+                        <span className="prefs-diag-label">
+                          {t("prefs.diag.time.start")}
+                        </span>
+                        <input
+                          className="prefs-diag-input"
+                          type="datetime-local"
+                          value={customSince}
+                          onChange={(event) =>
+                            setCustomSince(event.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="prefs-diag-row">
+                        <span className="prefs-diag-label">
+                          {t("prefs.diag.time.end")}
+                        </span>
+                        <input
+                          className="prefs-diag-input"
+                          type="datetime-local"
+                          value={customUntil}
+                          onChange={(event) =>
+                            setCustomUntil(event.target.value)
+                          }
+                        />
+                      </label>
+                    </>
+                  ) : null}
                   <label className="prefs-diag-row">
                     <span className="prefs-diag-label">
                       {t("prefs.diag.session")}
@@ -1785,7 +1962,7 @@ export default function PreferencesPanel({
                   <div
                     className="prefs-diag-results-head"
                     role="status"
-                    aria-live="polite"
+                    aria-live={liveLogs ? "off" : "polite"}
                   >
                     <span>
                       {t("prefs.diag.results", {
@@ -1793,22 +1970,55 @@ export default function PreferencesPanel({
                         total: String(rows.length),
                       })}
                     </span>
-                    <span>{t("prefs.diag.newestFirst")}</span>
+                    <span className="prefs-diag-results-meta">
+                      {logsUpdatedAt
+                        ? t("prefs.diag.updated", {
+                            time: formatDiagnosticTimestamp(
+                              logsUpdatedAt,
+                              locale,
+                            ),
+                          })
+                        : t("prefs.diag.newestFirst")}
+                      {liveLogs ? (
+                        <i aria-label={t("prefs.diag.live.active")} />
+                      ) : null}
+                    </span>
                   </div>
-                  <ul className="prefs-diag-log prefs-diag-log-list">
+                  <ul
+                    ref={logListRef}
+                    className="prefs-diag-log prefs-diag-log-list"
+                  >
                     {visibleLogRows.map((row, index) => {
-                      const severity = diagnosticLogLevel(row.raw);
+                      const severity = diagnosticLogLevel(row.level ?? row.raw);
                       return (
                         <li
-                          key={row.source + "-" + index}
+                          key={
+                            (row.timestamp ?? "unknown") +
+                            "-" +
+                            row.source +
+                            "-" +
+                            index
+                          }
                           className={"prefs-diag-log-row is-" + severity}
                         >
-                          <span
-                            className={"prefs-diag-source is-" + row.source}
-                          >
-                            {row.source}
-                          </span>
-                          <code>{row.raw}</code>
+                          <div className="prefs-diag-log-meta">
+                            <time dateTime={row.timestamp ?? undefined}>
+                              {formatDiagnosticTimestamp(row.timestamp, locale)}
+                            </time>
+                            <span className="prefs-diag-log-badges">
+                              <span
+                                className={"prefs-diag-source is-" + row.source}
+                              >
+                                {row.source}
+                              </span>
+                              <span className="prefs-diag-level">
+                                {row.level ?? severity}
+                              </span>
+                            </span>
+                          </div>
+                          <code>
+                            {presentDiagnosticMessage(row.message || row.raw)}
+                          </code>
                         </li>
                       );
                     })}

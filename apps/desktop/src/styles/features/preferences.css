@@ -154,7 +154,7 @@
   background: color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.78));
   box-shadow:
     inset 0 0 0 1px
-    color-mix(in srgb, var(--tone) 30%, rgba(255, 255, 255, 0.42)),
+      color-mix(in srgb, var(--tone) 30%, rgba(255, 255, 255, 0.42)),
     inset 0 1px 0 rgba(255, 255, 255, 0.42),
     0 2px 7px color-mix(in srgb, var(--tone) 11%, transparent);
 }
@@ -182,7 +182,7 @@ html[data-theme="dark"] .morphicon-selection-indicator {
   background: color-mix(in srgb, var(--tone) 22%, rgba(21, 16, 34, 0.92));
   box-shadow:
     inset 0 0 0 1px
-    color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.1)),
+      color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.1)),
     inset 0 1px 0 rgba(255, 255, 255, 0.09),
     0 2px 8px rgba(0, 0, 0, 0.22);
 }
@@ -638,7 +638,7 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   background: color-mix(in srgb, var(--tone) 12%, rgba(255, 255, 255, 0.74));
   box-shadow:
     inset 0 0 0 1px
-    color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.32)),
+      color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.32)),
     0 2px 5px color-mix(in srgb, var(--tone) 9%, transparent);
   font-weight: 700;
 }
@@ -847,7 +847,11 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   flex-shrink: 0;
   color: var(--tone);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   border: 1px solid
     color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.45));
@@ -1214,6 +1218,61 @@ html[data-theme="dark"] .wallpaper-preview-shade {
 .wallpaper-control-group input[type="range"] {
   width: 100%;
   accent-color: var(--tone);
+}
+
+.wallpaper-color-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.wallpaper-color-fields label {
+  min-width: 0;
+  min-height: 43px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--glass-fill) 62%, transparent);
+  cursor: pointer;
+}
+
+.wallpaper-color-fields input[type="color"] {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, var(--glass-edge));
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.wallpaper-color-fields span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wallpaper-color-fields strong {
+  color: var(--ink-soft);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.wallpaper-color-fields code {
+  color: var(--ink-mute);
+  font-size: 9.5px;
+  text-transform: uppercase;
+}
+
+.wallpaper-palette-hint {
+  color: var(--ink-mute);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .wallpaper-fit-options {
@@ -1861,7 +1920,11 @@ html[data-theme="dark"] .prefs-conversation-preview-group {
 .theme-option:hover {
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 45%, transparent);
 }
 
@@ -1897,14 +1960,22 @@ html[data-theme="dark"] .theme-option {
 html[data-theme="dark"] .theme-option:hover {
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.03)
+    ),
     color-mix(in srgb, var(--tone-soft) 40%, rgba(8, 6, 18, 0.45));
 }
 
 html[data-theme="dark"] .theme-option.active {
   border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.03)
+    ),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.48));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent),
@@ -1938,7 +2009,11 @@ html[data-theme="dark"] .theme-option.active {
 
 html[data-theme="dark"] .theme-option-icon {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 45%, rgba(8, 6, 18, 0.45));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: color-mix(in srgb, #fff 14%, var(--tone));
@@ -2095,7 +2170,11 @@ html[data-theme="dark"] .prefs-toggle-row:hover {
 
 html[data-theme="dark"] .prefs-toggle-icon {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft) 45%, rgba(8, 6, 18, 0.45));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: color-mix(in srgb, #fff 14%, var(--tone));
@@ -2188,6 +2267,52 @@ html[data-theme="dark"] .prefs-switch-thumb {
   flex: 0 0 auto;
 }
 
+.prefs-diag-page-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.prefs-diag-live {
+  min-height: 34px;
+  padding: 6px 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, var(--glass-edge));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--glass-fill, #fff) 72%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.prefs-diag-live > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.prefs-diag-live[data-active="true"] {
+  border-color: color-mix(in srgb, #23a36d 32%, var(--glass-edge));
+  background: color-mix(in srgb, #23a36d 11%, transparent);
+  color: #21865c;
+}
+
+.prefs-diag-live[data-active="true"] > span {
+  box-shadow: 0 0 0 4px color-mix(in srgb, #23a36d 15%, transparent);
+  animation: prefs-diag-live-pulse 1.8s ease-out infinite;
+}
+
+@keyframes prefs-diag-live-pulse {
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, #23a36d 2%, transparent);
+  }
+}
+
 .prefs-diag-status-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2215,12 +2340,18 @@ html[data-theme="dark"] .prefs-switch-thumb {
 .prefs-diag-status-card > span,
 .prefs-diag-status-card > small {
   display: block;
-  overflow: hidden;
   color: var(--ink-mute);
   font-size: 10.5px;
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.prefs-diag-status-card > small {
+  min-height: 2.7em;
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .prefs-diag-status-card > strong {
@@ -2281,7 +2412,9 @@ html[data-theme="dark"] .prefs-switch-thumb {
 
 .prefs-diag-filter-grid {
   display: grid;
-  grid-template-columns: 1.05fr 1.15fr 0.9fr 1fr;
+  grid-template-columns:
+    minmax(150px, 1.05fr) minmax(150px, 1.05fr) minmax(150px, 1.1fr)
+    minmax(140px, 0.9fr) minmax(190px, 1.15fr);
   gap: 9px;
 }
 
@@ -2339,7 +2472,11 @@ html[data-theme="dark"] .prefs-switch-thumb {
 .prefs-chip.active {
   border-color: color-mix(in srgb, var(--tone) 42%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.2),
+      rgba(255, 255, 255, 0.08)
+    ),
     color-mix(in srgb, var(--tone) 72%, transparent);
   color: #fff;
   box-shadow: 0 4px 12px color-mix(in srgb, var(--tone) 18%, transparent);
@@ -2569,6 +2706,20 @@ html[data-theme="dark"] .prefs-switch-thumb {
   font-size: 10px;
 }
 
+.prefs-diag-results-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.prefs-diag-results-meta > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #23a36d;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #23a36d 13%, transparent);
+}
+
 .prefs-diag-log {
   min-height: 220px;
   flex: 1;
@@ -2598,11 +2749,34 @@ html[data-theme="dark"] .prefs-switch-thumb {
   min-width: 0;
   padding: 7px 8px;
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 122px minmax(0, 1fr);
   align-items: start;
   gap: 8px;
   border-radius: 8px;
   border-left: 2px solid color-mix(in srgb, var(--diag-level) 55%, transparent);
+}
+
+.prefs-diag-log-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.prefs-diag-log-meta time {
+  color: var(--ink-mute);
+  font:
+    600 9.5px / 1.3 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: nowrap;
+}
+
+.prefs-diag-log-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .prefs-diag-log-row:hover {
@@ -2628,7 +2802,7 @@ html[data-theme="dark"] .prefs-switch-thumb {
 }
 
 .prefs-diag-source {
-  width: 58px;
+  max-width: 68px;
   padding: 3px 5px;
   overflow: hidden;
   border-radius: 6px;
@@ -2642,6 +2816,19 @@ html[data-theme="dark"] .prefs-switch-thumb {
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.prefs-diag-level {
+  padding: 3px 5px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--diag-level) 9%, transparent);
+  color: var(--diag-level);
+  font:
+    700 9px / 1.25 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  text-transform: uppercase;
 }
 
 .prefs-diag-log-row code {
@@ -2681,9 +2868,12 @@ html[data-theme="dark"] .prefs-diag-log-row:hover {
 }
 
 @media (max-width: 1120px) {
-  .prefs-diag-status-grid,
-  .prefs-diag-filter-grid {
+  .prefs-diag-status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prefs-diag-filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .prefs-diag-toolbar {
@@ -2706,6 +2896,28 @@ html[data-theme="dark"] .prefs-diag-log-row:hover {
   .prefs-diag-export-card {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .prefs-diag-page-head,
+  .prefs-diag-page-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .prefs-diag-log-row {
+    grid-template-columns: 1fr;
+  }
+
+  .prefs-diag-log-meta {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prefs-diag-live[data-active="true"] > span {
+    animation: none;
   }
 }
 .prefs-category-stack--about:not([hidden]) {
@@ -3015,7 +3227,11 @@ html[data-theme="dark"] .prefs-diag-log-row:hover {
   flex-shrink: 0;
   color: var(--tone);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 60%, transparent);
   border: 1px solid
     color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.4));
@@ -3172,7 +3388,11 @@ html[data-theme="dark"] .prefs-context-stage {
   flex-shrink: 0;
   color: var(--tone);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--tone-soft) 55%, transparent);
   border: 1px solid
     color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.4));
@@ -3412,7 +3632,11 @@ html[data-theme="dark"] .prefs-context-budget-block {
   place-items: center;
   color: var(--stage-accent);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.1)
+    ),
     color-mix(in srgb, var(--stage-accent) 16%, transparent);
   border: 1px solid
     color-mix(in srgb, var(--stage-accent) 20%, rgba(255, 255, 255, 0.4));

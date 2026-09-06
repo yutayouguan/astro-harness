@@ -1,7 +1,8 @@
 //! 扫描 logs 目录下 agent/errors 日志尾部并按 session/turn 过滤。
 
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{cmp::Reverse, collections::HashMap, path::PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -19,6 +20,12 @@ pub struct AgentLogQuery {
     pub session_id: Option<String>,
     pub turn_id: Option<String>,
     pub min_level: Option<String>,
+    /// Inclusive UTC epoch-millisecond lower bound.
+    #[serde(default)]
+    pub since_ms: Option<i64>,
+    /// Inclusive UTC epoch-millisecond upper bound.
+    #[serde(default)]
+    pub until_ms: Option<i64>,
     pub lines: usize,
     pub source: LogSource,
 }
@@ -27,6 +34,9 @@ pub struct AgentLogQuery {
 pub struct AgentLogLine {
     pub raw: String,
     pub source: String,
+    pub timestamp: Option<String>,
+    pub level: Option<String>,
+    pub message: String,
 }
 
 const MAX_LINES: usize = 500;
@@ -36,34 +46,135 @@ const MAX_LINES: usize = 500;
 /// `agent.log` / `errors.log`。
 ///
 /// - 同一来源先读最新日期文件，每个文件内按**从新到旧**（文件末尾优先）遍历。
-/// - `LogSource::Both` 先读 `agent.log` 再读 `errors.log`，在共享 `lines` 上限内顺序拼接；
-///   **不会**按时间戳跨文件合并排序。
+/// - 所有来源按时间戳统一倒序合并。
+/// - `LogSource::Both` 会去除 agent/errors 同时写入的同一条事件。
 pub fn query_agent_logs(q: AgentLogQuery) -> anyhow::Result<Vec<AgentLogLine>> {
+    anyhow::ensure!(
+        !matches!((q.since_ms, q.until_ms), (Some(since), Some(until)) if since > until),
+        "log time range start must not be later than end"
+    );
     let limit = q.lines.clamp(1, MAX_LINES);
-    let mut out = Vec::new();
+    let mut collected = Vec::new();
     let files: &[(&str, &str)] = match q.source {
         LogSource::Agent => &[("agent", "agent.log")],
         LogSource::Errors => &[("errors", "errors.log")],
         LogSource::Both => &[("agent", "agent.log"), ("errors", "errors.log")],
     };
     for (src, name) in files {
-        for path in source_log_files(&q.logs_dir, name)? {
+        let mut source_matches = 0usize;
+        'source_files: for path in source_log_files(&q.logs_dir, name)? {
             let raw = std::fs::read_to_string(&path)?;
             for line in raw.lines().rev() {
-                if !line_matches(line, &q) {
+                let parsed = parse_log_line(line);
+                if !line_matches(line, parsed.timestamp_ms, &q) {
                     continue;
                 }
-                out.push(AgentLogLine {
-                    raw: line.to_string(),
-                    source: (*src).into(),
+                collected.push(CollectedLogLine {
+                    timestamp_ms: parsed.timestamp_ms,
+                    fingerprint: parsed.fingerprint,
+                    line: AgentLogLine {
+                        raw: line.to_string(),
+                        source: (*src).into(),
+                        timestamp: parsed.timestamp,
+                        level: parsed.level,
+                        message: parsed.message,
+                    },
                 });
-                if out.len() >= limit {
-                    return Ok(out);
+                source_matches += 1;
+                if source_matches >= limit {
+                    break 'source_files;
                 }
             }
         }
     }
-    Ok(out)
+
+    collected.sort_by_key(|row| Reverse(row.timestamp_ms.unwrap_or(i64::MIN)));
+    if q.source == LogSource::Both {
+        collected = deduplicate_cross_source(collected);
+    }
+    Ok(collected
+        .into_iter()
+        .take(limit)
+        .map(|row| row.line)
+        .collect())
+}
+
+#[derive(Debug)]
+struct CollectedLogLine {
+    line: AgentLogLine,
+    timestamp_ms: Option<i64>,
+    fingerprint: String,
+}
+
+#[derive(Debug)]
+struct ParsedLogLine {
+    timestamp: Option<String>,
+    timestamp_ms: Option<i64>,
+    level: Option<String>,
+    message: String,
+    fingerprint: String,
+}
+
+fn parse_log_line(raw: &str) -> ParsedLogLine {
+    let trimmed = raw.trim_start();
+    let (timestamp_raw, after_timestamp) = split_first_token(trimmed);
+    let (level_raw, message_raw) = split_first_token(after_timestamp.trim_start());
+    let message_raw = message_raw.trim_start();
+    let timestamp_ms = DateTime::parse_from_rfc3339(timestamp_raw)
+        .ok()
+        .map(|value| value.timestamp_millis());
+    let timestamp = timestamp_ms.map(|_| timestamp_raw.to_string());
+    let level = matches!(
+        level_raw.to_ascii_uppercase().as_str(),
+        "TRACE" | "DEBUG" | "INFO" | "WARN" | "WARNING" | "ERROR" | "CRITICAL"
+    )
+    .then(|| level_raw.to_ascii_uppercase());
+    let message = if timestamp.is_some() && level.is_some() {
+        message_raw.to_string()
+    } else {
+        raw.to_string()
+    };
+    let fingerprint = format!("{}\n{}", level.as_deref().unwrap_or_default(), message);
+    ParsedLogLine {
+        timestamp,
+        timestamp_ms,
+        level,
+        message,
+        fingerprint,
+    }
+}
+
+fn split_first_token(input: &str) -> (&str, &str) {
+    input
+        .find(char::is_whitespace)
+        .map_or((input, ""), |index| (&input[..index], &input[index..]))
+}
+
+fn deduplicate_cross_source(rows: Vec<CollectedLogLine>) -> Vec<CollectedLogLine> {
+    const DUPLICATE_WINDOW_MS: i64 = 100;
+    let mut recent: HashMap<String, (i64, String)> = HashMap::new();
+    let mut deduplicated = Vec::with_capacity(rows.len());
+    for row in rows {
+        let duplicate = row.timestamp_ms.is_some_and(|timestamp_ms| {
+            recent
+                .get(&row.fingerprint)
+                .is_some_and(|(seen_at, source)| {
+                    source != &row.line.source
+                        && (seen_at - timestamp_ms).abs() <= DUPLICATE_WINDOW_MS
+                })
+        });
+        if duplicate {
+            continue;
+        }
+        if let Some(timestamp_ms) = row.timestamp_ms {
+            recent.insert(
+                row.fingerprint.clone(),
+                (timestamp_ms, row.line.source.clone()),
+            );
+        }
+        deduplicated.push(row);
+    }
+    deduplicated
 }
 
 fn source_log_files(logs_dir: &std::path::Path, base_name: &str) -> anyhow::Result<Vec<PathBuf>> {
@@ -114,7 +225,17 @@ fn is_iso_date(value: &str) -> bool {
             .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
 }
 
-fn line_matches(line: &str, q: &AgentLogQuery) -> bool {
+fn line_matches(line: &str, timestamp_ms: Option<i64>, q: &AgentLogQuery) -> bool {
+    if q.since_ms.is_some() || q.until_ms.is_some() {
+        let Some(timestamp_ms) = timestamp_ms else {
+            return false;
+        };
+        if q.since_ms.is_some_and(|since| timestamp_ms < since)
+            || q.until_ms.is_some_and(|until| timestamp_ms > until)
+        {
+            return false;
+        }
+    }
     if let Some(ref sid) = q.session_id {
         if !sid.is_empty() && !line.contains(sid.as_str()) {
             return false;
@@ -164,6 +285,8 @@ pub fn default_agent_log_query() -> AgentLogQuery {
         session_id: None,
         turn_id: None,
         min_level: None,
+        since_ms: None,
+        until_ms: None,
         lines: 50,
         source: LogSource::Both,
     }
@@ -198,6 +321,8 @@ mod tests {
             session_id: Some("s1".into()),
             turn_id: Some("t1".into()),
             min_level: None,
+            since_ms: None,
+            until_ms: None,
             lines: 50,
             source: LogSource::Agent,
         })
@@ -220,6 +345,8 @@ mod tests {
             session_id: Some("s1".into()),
             turn_id: None,
             min_level: None,
+            since_ms: None,
+            until_ms: None,
             lines: 50,
             source: LogSource::Errors,
         })
@@ -243,6 +370,8 @@ mod tests {
             session_id: Some("s1".into()),
             turn_id: Some("t1".into()),
             min_level: Some("WARN".into()),
+            since_ms: None,
+            until_ms: None,
             lines: 50,
             source: LogSource::Agent,
         })
@@ -260,6 +389,8 @@ mod tests {
             session_id: None,
             turn_id: None,
             min_level: None,
+            since_ms: None,
+            until_ms: None,
             lines: 50,
             source: LogSource::Agent,
         })
@@ -282,6 +413,8 @@ mod tests {
             session_id: Some("s1".into()),
             turn_id: Some("t1".into()),
             min_level: None,
+            since_ms: None,
+            until_ms: None,
             lines: 0,
             source: LogSource::Agent,
         })
@@ -305,6 +438,8 @@ mod tests {
             session_id: Some("s1".into()),
             turn_id: Some("t1".into()),
             min_level: None,
+            since_ms: None,
+            until_ms: None,
             lines: 9999,
             source: LogSource::Agent,
         })
@@ -330,6 +465,8 @@ mod tests {
             session_id: Some("s1".into()),
             turn_id: Some("t1".into()),
             min_level: None,
+            since_ms: None,
+            until_ms: None,
             lines: 1,
             source: LogSource::Both,
         })
@@ -360,6 +497,8 @@ mod tests {
             session_id: None,
             turn_id: None,
             min_level: None,
+            since_ms: None,
+            until_ms: None,
             lines: 50,
             source: LogSource::Agent,
         })
@@ -385,6 +524,8 @@ mod tests {
             session_id: None,
             turn_id: None,
             min_level: None,
+            since_ms: None,
+            until_ms: None,
             lines: 50,
             source: LogSource::Agent,
         })
@@ -393,5 +534,101 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert!(lines[0].raw.contains("active"));
         assert!(lines[1].raw.contains("dated"));
+    }
+
+    #[test]
+    fn filters_by_inclusive_time_range_and_returns_structured_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        write_lines(
+            &dir.path().join("agent.log"),
+            &[
+                "2026-09-05T10:00:00.000Z  INFO server: before",
+                "2026-09-05T10:30:00.000Z  WARN sqlx::query: inside",
+                "2026-09-05T11:00:00.000Z  ERROR server: after",
+            ],
+        );
+        let since = DateTime::parse_from_rfc3339("2026-09-05T10:15:00Z")
+            .unwrap()
+            .timestamp_millis();
+        let until = DateTime::parse_from_rfc3339("2026-09-05T10:45:00Z")
+            .unwrap()
+            .timestamp_millis();
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: None,
+            turn_id: None,
+            min_level: None,
+            since_ms: Some(since),
+            until_ms: Some(until),
+            lines: 50,
+            source: LogSource::Agent,
+        })
+        .unwrap();
+
+        assert_eq!(lines.len(), 1);
+        assert_eq!(
+            lines[0].timestamp.as_deref(),
+            Some("2026-09-05T10:30:00.000Z")
+        );
+        assert_eq!(lines[0].level.as_deref(), Some("WARN"));
+        assert_eq!(lines[0].message, "sqlx::query: inside");
+    }
+
+    #[test]
+    fn both_sources_merge_by_time_and_deduplicate_mirrored_events() {
+        let dir = tempfile::tempdir().unwrap();
+        write_lines(
+            &dir.path().join("agent.log"),
+            &[
+                "2026-09-05T10:00:00.100Z  WARN sqlx::query: mirrored",
+                "2026-09-05T10:01:00.000Z  INFO server: newest",
+            ],
+        );
+        write_lines(
+            &dir.path().join("errors.log"),
+            &[
+                "2026-09-05T10:00:00.110Z  WARN sqlx::query: mirrored",
+                "2026-09-05T09:59:00.000Z  ERROR updater: unique",
+            ],
+        );
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: None,
+            turn_id: None,
+            min_level: None,
+            since_ms: None,
+            until_ms: None,
+            lines: 50,
+            source: LogSource::Both,
+        })
+        .unwrap();
+
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].message.contains("newest"));
+        assert_eq!(
+            lines
+                .iter()
+                .filter(|line| line.message.contains("mirrored"))
+                .count(),
+            1
+        );
+        assert!(lines[2].message.contains("unique"));
+    }
+
+    #[test]
+    fn rejects_reversed_time_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let error = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: None,
+            turn_id: None,
+            min_level: None,
+            since_ms: Some(2),
+            until_ms: Some(1),
+            lines: 50,
+            source: LogSource::Both,
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains("start must not be later"));
     }
 }
