@@ -10,6 +10,7 @@ const [
   terminalCss,
   browserCss,
   preferences,
+  chatDisplayPrefs,
   terminal,
   compression,
   updater,
@@ -22,11 +23,22 @@ const [
     "../../styles/features/terminal-settings.css",
     "../../styles/features/browser-settings.css",
     "../../components/settings/PreferencesPanel.tsx",
+    "../../hooks/chat/useChatDisplayPrefs.ts",
     "../../components/settings/TerminalSettingsPanel.tsx",
     "../../components/settings/CompressionSettingsCard.tsx",
     "../../../src-tauri/src/commands/updater.rs",
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
 );
+
+test("normal chat display preset shows MCP and hides Hook events", () => {
+  const normalPreset = chatDisplayPrefs.slice(
+    chatDisplayPrefs.indexOf("normal: {"),
+    chatDisplayPrefs.indexOf("detailed: {"),
+  );
+
+  assert.match(normalPreset, /showMcp:\s*true/);
+  assert.match(normalPreset, /showHooks:\s*false/);
+});
 
 test("preference-backed settings use one scroll owner and one content width", () => {
   assert.match(

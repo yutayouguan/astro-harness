@@ -48,8 +48,8 @@ const PRESETS: Record<
   normal: {
     showTools: true,
     showSkills: true,
-    showMcp: false,
-    showHooks: true,
+    showMcp: true,
+    showHooks: false,
     showMemory: true,
     showStatus: true,
     showTimestamps: false,

@@ -2447,7 +2447,7 @@ export const zh = {
   "prefs.chat.compact": "简洁",
   "prefs.chat.compactDesc": "只显示对话正文，隐藏过程卡片",
   "prefs.chat.normal": "标准",
-  "prefs.chat.normalDesc": "显示常用过程：工具、Skills、记忆与状态",
+  "prefs.chat.normalDesc": "显示常用过程：工具、Skills、MCP、记忆与状态",
   "prefs.chat.detailed": "详细",
   "prefs.chat.detailedDesc": "显示全部过程信息，含参数与结果细节",
   "prefs.chat.details": "过程信息开关",
@@ -5735,7 +5735,8 @@ export const en: Record<MessageKey, string> = {
   "prefs.chat.compact": "Compact",
   "prefs.chat.compactDesc": "Messages only — hide process cards",
   "prefs.chat.normal": "Normal",
-  "prefs.chat.normalDesc": "Show common process: tools, Skills, memory, status",
+  "prefs.chat.normalDesc":
+    "Show common process: tools, Skills, MCP, memory, and status",
   "prefs.chat.detailed": "Detailed",
   "prefs.chat.detailedDesc": "Show all process info including args and results",
   "prefs.chat.details": "Process toggles",
