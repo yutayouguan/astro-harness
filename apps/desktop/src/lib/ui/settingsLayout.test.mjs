@@ -78,19 +78,27 @@ test("appearance and conversation use responsive grouped layouts", () => {
   assert.match(general, /<SidebarVisibleSetting/);
 });
 
-test("terminal settings keep controls left and a responsive live preview right", () => {
+test("terminal settings use a full-width mode card and balanced detail columns", () => {
   assert.match(
     terminal,
     /className="prefs-category-stack terminal-settings-layout"/,
   );
-  assert.match(terminal, /<aside className="terminal-settings-preview-pane">/);
+  assert.match(terminal, /terminal-settings-section--mode/);
+  assert.match(terminal, /terminal-settings-section--font/);
+  assert.match(terminal, /terminal-settings-section--behavior/);
+  assert.match(terminal, /terminal-font-preview--embedded/);
+  assert.match(terminal, /terminal-settings-range/);
+  assert.match(terminal, /terminal-cursor-options/);
+  assert.match(terminal, /terminal-reset-button/);
+  assert.match(terminal, /scrollbackPresets\.includes\(settings\.scrollback\)/);
+  assert.doesNotMatch(terminal, /terminal-settings-preview-pane/);
   assert.match(
     terminalCss,
-    /\.terminal-settings-layout:not\(\[hidden\]\)[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(250px, 0\.72fr\);/,
+    /\.terminal-settings-layout:not\(\[hidden\]\)[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/,
   );
   assert.match(
     terminalCss,
-    /\.terminal-settings-preview-pane[\s\S]*?grid-column:\s*2;/,
+    /\.terminal-settings-section--mode[\s\S]*?grid-column:\s*1 \/ -1;/,
   );
 });
 

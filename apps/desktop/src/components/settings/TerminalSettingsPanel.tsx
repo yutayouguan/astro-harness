@@ -25,6 +25,7 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
   const selectedPreset =
     TERMINAL_FONT_PRESETS.find((preset) => preset.value === settings.fontFamily)
       ?.value ?? "";
+  const scrollbackPresets = [500, 2_000, 5_000, 10_000, 50_000];
 
   return (
     <div
@@ -97,9 +98,11 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
               </div>
             </div>
 
-            <div className="terminal-settings-grid">
-              <label className="terminal-settings-field terminal-settings-field--wide">
-                <span>{t("terminal.settings.font.preset")}</span>
+            <div className="terminal-settings-list">
+              <label className="terminal-settings-field">
+                <span className="terminal-settings-field-copy">
+                  <strong>{t("terminal.settings.font.preset")}</strong>
+                </span>
                 <select
                   value={selectedPreset}
                   onChange={(event) => {
@@ -115,8 +118,11 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
                   ))}
                 </select>
               </label>
-              <label className="terminal-settings-field terminal-settings-field--wide">
-                <span>{t("terminal.settings.font.family")}</span>
+              <label className="terminal-settings-field">
+                <span className="terminal-settings-field-copy">
+                  <strong>{t("terminal.settings.font.family")}</strong>
+                  <small>{t("terminal.settings.font.familyDesc")}</small>
+                </span>
                 <input
                   type="text"
                   value={settings.fontFamily}
@@ -127,32 +133,67 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
                 />
               </label>
               <label className="terminal-settings-field">
-                <span>{t("terminal.settings.font.size")}</span>
-                <input
-                  type="number"
-                  min={9}
-                  max={28}
-                  step={0.5}
-                  value={settings.fontSize}
-                  onChange={(event) =>
-                    update({ fontSize: Number(event.target.value) })
-                  }
-                />
+                <span className="terminal-settings-field-copy">
+                  <strong>{t("terminal.settings.font.size")}</strong>
+                </span>
+                <span className="terminal-settings-range">
+                  <input
+                    type="range"
+                    min={9}
+                    max={28}
+                    step={0.5}
+                    value={settings.fontSize}
+                    onChange={(event) =>
+                      update({ fontSize: Number(event.target.value) })
+                    }
+                  />
+                  <output>{settings.fontSize}px</output>
+                </span>
               </label>
               <label className="terminal-settings-field">
-                <span>{t("terminal.settings.font.lineHeight")}</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={2}
-                  step={0.05}
-                  value={settings.lineHeight}
-                  onChange={(event) =>
-                    update({ lineHeight: Number(event.target.value) })
-                  }
-                />
+                <span className="terminal-settings-field-copy">
+                  <strong>{t("terminal.settings.font.lineHeight")}</strong>
+                </span>
+                <span className="terminal-settings-range">
+                  <input
+                    type="range"
+                    min={1}
+                    max={2}
+                    step={0.05}
+                    value={settings.lineHeight}
+                    onChange={(event) =>
+                      update({ lineHeight: Number(event.target.value) })
+                    }
+                  />
+                  <output>{settings.lineHeight.toFixed(2)}</output>
+                </span>
               </label>
             </div>
+
+            <div
+              className="terminal-font-preview terminal-font-preview--embedded"
+              style={{
+                fontFamily: settings.fontFamily,
+                fontSize: `${settings.fontSize}px`,
+                lineHeight: settings.lineHeight,
+              }}
+              aria-label={t("terminal.settings.font.hint")}
+            >
+              <span>$ cargo check</span>
+              <span className="terminal-preview-success">
+                ✓ Finished dev profile
+              </span>
+              <span className="terminal-preview-prompt">
+                $
+                <i
+                  className={`terminal-preview-cursor is-${settings.cursorStyle} ${settings.cursorBlink ? "is-blinking" : ""}`}
+                  aria-hidden
+                />
+              </span>
+            </div>
+            <p className="terminal-settings-note">
+              {t("terminal.settings.font.hint")}
+            </p>
           </section>
 
           <section className="prefs-card terminal-settings-section terminal-settings-section--behavior">
@@ -160,7 +201,7 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <TerminalSquare size={20} />
               </div>
-              <div>
+              <div className="terminal-settings-head-copy">
                 <h2 className="prefs-card-title">
                   {t("terminal.settings.behavior.title")}
                 </h2>
@@ -168,48 +209,48 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
                   {t("terminal.settings.behavior.sub")}
                 </p>
               </div>
+              <button
+                type="button"
+                className="terminal-reset-button"
+                onClick={() =>
+                  setSettings(saveTerminalSettings(DEFAULT_TERMINAL_SETTINGS))
+                }
+              >
+                <RotateCcw size={13} aria-hidden />
+                {t("terminal.settings.reset")}
+              </button>
             </div>
-            <div className="terminal-settings-grid">
-              <label className="terminal-settings-field">
-                <span>{t("terminal.settings.cursor.style")}</span>
-                <select
-                  value={settings.cursorStyle}
-                  onChange={(event) =>
-                    update({
-                      cursorStyle: event.target
-                        .value as TerminalSettings["cursorStyle"],
-                    })
-                  }
+            <div className="terminal-settings-list">
+              <div className="terminal-settings-field">
+                <span className="terminal-settings-field-copy">
+                  <strong>{t("terminal.settings.cursor.style")}</strong>
+                </span>
+                <div
+                  className="terminal-cursor-options"
+                  role="radiogroup"
+                  aria-label={t("terminal.settings.cursor.style")}
                 >
-                  <option value="bar">
-                    {t("terminal.settings.cursor.bar")}
-                  </option>
-                  <option value="block">
-                    {t("terminal.settings.cursor.block")}
-                  </option>
-                  <option value="underline">
-                    {t("terminal.settings.cursor.underline")}
-                  </option>
-                </select>
-              </label>
-              <label className="terminal-settings-field">
-                <span>{t("terminal.settings.scrollback")}</span>
-                <input
-                  type="number"
-                  min={500}
-                  max={50_000}
-                  step={500}
-                  value={settings.scrollback}
-                  onChange={(event) =>
-                    update({ scrollback: Number(event.target.value) })
-                  }
-                />
-              </label>
-              <div className="terminal-settings-toggle terminal-settings-field--wide">
-                <div>
+                  {(["bar", "block", "underline"] as const).map((style) => (
+                    <button
+                      key={style}
+                      type="button"
+                      role="radio"
+                      aria-checked={settings.cursorStyle === style}
+                      className={
+                        settings.cursorStyle === style ? "is-active" : ""
+                      }
+                      onClick={() => update({ cursorStyle: style })}
+                    >
+                      {t(`terminal.settings.cursor.${style}` as never)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="terminal-settings-field">
+                <span className="terminal-settings-field-copy">
                   <strong>{t("terminal.settings.cursor.blink")}</strong>
                   <small>{t("terminal.settings.cursor.blinkDesc")}</small>
-                </div>
+                </span>
                 <button
                   type="button"
                   className="prefs-switch"
@@ -221,39 +262,31 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
                   <span className="prefs-switch-thumb" />
                 </button>
               </div>
+              <label className="terminal-settings-field">
+                <span className="terminal-settings-field-copy">
+                  <strong>{t("terminal.settings.scrollback")}</strong>
+                  <small>{t("terminal.settings.scrollbackDesc")}</small>
+                </span>
+                <select
+                  value={settings.scrollback}
+                  onChange={(event) =>
+                    update({ scrollback: Number(event.target.value) })
+                  }
+                >
+                  {!scrollbackPresets.includes(settings.scrollback) ? (
+                    <option value={settings.scrollback}>
+                      {settings.scrollback.toLocaleString()}
+                    </option>
+                  ) : null}
+                  {scrollbackPresets.map((value) => (
+                    <option key={value} value={value}>
+                      {value.toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </section>
-
-          <aside className="terminal-settings-preview-pane">
-            <div
-              className="terminal-font-preview"
-              style={{
-                fontFamily: settings.fontFamily,
-                fontSize: `${settings.fontSize}px`,
-                lineHeight: settings.lineHeight,
-              }}
-              aria-label={t("terminal.settings.font.hint")}
-            >
-              <span>╭─  &nbsp; ~/astro/workspace</span>
-              <span>╰─❯ git status</span>
-            </div>
-            <p className="terminal-settings-note">
-              {t("terminal.settings.font.hint")}
-            </p>
-          </aside>
-
-          <div className="terminal-settings-actions">
-            <button
-              type="button"
-              className="prefs-diag-btn"
-              onClick={() =>
-                setSettings(saveTerminalSettings(DEFAULT_TERMINAL_SETTINGS))
-              }
-            >
-              <RotateCcw size={14} aria-hidden />
-              {t("terminal.settings.reset")}
-            </button>
-          </div>
         </div>
       </div>
     </div>

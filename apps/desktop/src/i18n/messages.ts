@@ -725,31 +725,33 @@ export const zh = {
   "browser.settings.revoke": "撤销",
   "browser.settings.save": "保存",
   "browser.settings.saving": "保存中…",
-  "terminal.settings.mode.title": "终端执行模式",
+  "terminal.settings.mode.title": "执行模式",
   "terminal.settings.mode.sub":
-    "设置新建普通终端 Tab 的默认模式；AI 终端始终使用项目沙箱。",
-  "terminal.settings.mode.system": "系统终端（推荐）",
+    "决定手动终端在系统环境还是当前项目上下文中启动。",
+  "terminal.settings.mode.system": "系统环境",
   "terminal.settings.mode.systemDesc":
-    "直接启动登录 Shell，兼容 Homebrew、Oh My Zsh、Powerlevel10k、历史记录和系统临时目录。",
-  "terminal.settings.mode.project": "项目沙箱",
+    "从用户主目录启动，使用完整的系统 Shell 环境。",
+  "terminal.settings.mode.project": "项目环境",
   "terminal.settings.mode.projectDesc":
-    "使用隔离 Shell 配置，仅允许写入项目目录；不加载会写入 Home 的 Oh My Zsh 和 Powerlevel10k。",
+    "从当前工作区启动，贴合项目命令与路径。",
   "terminal.settings.mode.systemNote":
-    "系统模式拥有与你的外部终端相同的文件权限。低权限 AI 不会自动连接到该会话；这里的模式用于之后新建的普通终端。",
+    "手动终端不继承项目目录，Agent 执行仍保持自己的工作区。",
   "terminal.settings.mode.projectNote":
-    "项目沙箱使用轻量隔离提示符，不写入主目录历史、缓存或 P10k/gitstatus 临时文件；需要个人 Shell 配置时请使用系统终端 Tab。",
-  "terminal.settings.font.title": "字体与字形",
+    "手动终端从当前项目根目录启动；Agent 终端始终保持项目沙箱。",
+  "terminal.settings.font.title": "显示",
   "terminal.settings.font.sub":
     "优先使用 Nerd Font，正确显示 Powerlevel10k 图标和提示符。",
   "terminal.settings.font.preset": "字体预设",
   "terminal.settings.font.custom": "自定义字体栈",
   "terminal.settings.font.family": "字体族",
+  "terminal.settings.font.familyDesc":
+    "可直接输入已安装字体的 CSS font-family。",
   "terminal.settings.font.size": "字号",
   "terminal.settings.font.lineHeight": "行高",
   "terminal.settings.font.hint":
     "若预览仍显示方框，请先在 macOS 安装 MesloLGS NF 或其他 Nerd Font，再从预设中选择。",
-  "terminal.settings.behavior.title": "显示与交互",
-  "terminal.settings.behavior.sub": "这些修改会立即应用到已打开的终端。",
+  "terminal.settings.behavior.title": "光标与历史",
+  "terminal.settings.behavior.sub": "调整光标外观和终端回滚容量。",
   "terminal.settings.cursor.style": "光标样式",
   "terminal.settings.cursor.bar": "竖线",
   "terminal.settings.cursor.block": "方块",
@@ -757,6 +759,7 @@ export const zh = {
   "terminal.settings.cursor.blink": "光标闪烁",
   "terminal.settings.cursor.blinkDesc": "保持输入位置在长输出中清晰可见。",
   "terminal.settings.scrollback": "回滚行数",
+  "terminal.settings.scrollbackDesc": "可设置 500 至 50,000 行。",
   "terminal.settings.reset": "恢复默认设置",
   "approvals.hardline.label": "永久拦截（hardline）",
   "approvals.hardline.desc":
@@ -3815,32 +3818,34 @@ export const en: Record<MessageKey, string> = {
   "browser.settings.revoke": "Revoke",
   "browser.settings.save": "Save",
   "browser.settings.saving": "Saving…",
-  "terminal.settings.mode.title": "Terminal execution mode",
+  "terminal.settings.mode.title": "Execution mode",
   "terminal.settings.mode.sub":
-    "Choose the default mode for new regular tabs. The AI terminal always uses the project sandbox.",
-  "terminal.settings.mode.system": "System terminal (recommended)",
+    "Choose whether manual terminals start in the system environment or the current project context.",
+  "terminal.settings.mode.system": "System environment",
   "terminal.settings.mode.systemDesc":
-    "Starts your login shell directly, including Homebrew, Oh My Zsh, Powerlevel10k, history, and system temp files.",
-  "terminal.settings.mode.project": "Project sandbox",
+    "Starts from your home directory with the complete system shell environment.",
+  "terminal.settings.mode.project": "Project environment",
   "terminal.settings.mode.projectDesc":
-    "Uses an isolated shell profile with writes limited to the project. Oh My Zsh and Powerlevel10k are not loaded because they write outside it.",
+    "Starts from the current workspace and stays aligned with project commands and paths.",
   "terminal.settings.mode.systemNote":
-    "System mode has the same filesystem access as your external terminal. Lower-permission AI cannot attach automatically; this mode applies to subsequently created regular terminals.",
+    "Manual terminals do not inherit the project directory. Agent execution keeps its own workspace.",
   "terminal.settings.mode.projectNote":
-    "The project sandbox uses a lightweight isolated prompt and does not write home history, caches, or P10k/gitstatus temp files. Use a system terminal tab for your personal shell profile.",
-  "terminal.settings.font.title": "Font and glyphs",
+    "Manual terminals start from the project root. Agent terminals always remain in the project sandbox.",
+  "terminal.settings.font.title": "Display",
   "terminal.settings.font.sub":
     "Prefer a Nerd Font so Powerlevel10k icons and prompts render correctly.",
   "terminal.settings.font.preset": "Font preset",
   "terminal.settings.font.custom": "Custom font stack",
   "terminal.settings.font.family": "Font family",
+  "terminal.settings.font.familyDesc":
+    "Enter the CSS font-family of any installed font directly.",
   "terminal.settings.font.size": "Font size",
   "terminal.settings.font.lineHeight": "Line height",
   "terminal.settings.font.hint":
     "If the preview still shows boxes, install MesloLGS NF or another Nerd Font on macOS, then select it above.",
-  "terminal.settings.behavior.title": "Display and interaction",
+  "terminal.settings.behavior.title": "Cursor and history",
   "terminal.settings.behavior.sub":
-    "These changes apply to an open terminal immediately.",
+    "Adjust cursor appearance and terminal scrollback.",
   "terminal.settings.cursor.style": "Cursor style",
   "terminal.settings.cursor.bar": "Bar",
   "terminal.settings.cursor.block": "Block",
@@ -3849,6 +3854,7 @@ export const en: Record<MessageKey, string> = {
   "terminal.settings.cursor.blinkDesc":
     "Keep the input position visible in long output.",
   "terminal.settings.scrollback": "Scrollback lines",
+  "terminal.settings.scrollbackDesc": "Supports 500 to 50,000 lines.",
   "terminal.settings.reset": "Restore defaults",
   "approvals.hardline.label": "Hardline blocklist",
   "approvals.hardline.desc":

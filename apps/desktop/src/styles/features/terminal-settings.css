@@ -1,23 +1,28 @@
 .terminal-settings-layout:not([hidden]) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.72fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
 }
 
 .terminal-settings-section {
-  grid-column: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.terminal-settings-preview-pane {
-  grid-column: 2;
-  grid-row: 1 / span 3;
+.terminal-settings-section--mode {
+  grid-column: 1 / -1;
+}
+
+.terminal-settings-section--font,
+.terminal-settings-section--behavior {
+  min-height: 480px;
+}
+
+.terminal-settings-head-copy {
   min-width: 0;
-  padding: 18px;
-  border-left: 1px solid
-    color-mix(
-      in srgb,
-      var(--settings-panel-border, var(--glass-edge)) 72%,
-      transparent
-    );
+  flex: 1;
 }
 
 .terminal-mode-options {
@@ -27,17 +32,17 @@
 }
 
 .terminal-mode-option {
-  display: flex;
   min-height: 92px;
-  flex-direction: column;
-  gap: 6px;
   padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-edge));
   border-radius: 14px;
   background: color-mix(in srgb, var(--glass-fill) 72%, transparent);
   color: var(--ink);
-  text-align: left;
   cursor: pointer;
+  text-align: left;
   transition:
     border-color 0.16s ease,
     background 0.16s ease,
@@ -49,10 +54,16 @@
   border-color: color-mix(in srgb, var(--tone) 34%, var(--glass-edge));
 }
 
+.terminal-mode-option:active {
+  transform: scale(0.992);
+}
+
 .terminal-mode-option.is-active {
   border-color: color-mix(in srgb, var(--tone) 62%, var(--glass-edge));
   background: color-mix(in srgb, var(--tone-soft) 68%, var(--glass-fill));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
+    0 7px 20px color-mix(in srgb, var(--tone) 8%, transparent);
 }
 
 .terminal-mode-option span {
@@ -62,41 +73,63 @@
 
 .terminal-mode-option small,
 .terminal-settings-note {
-  font-size: 12px;
-  line-height: 1.5;
   color: var(--ink-mute);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .terminal-settings-note {
-  margin: 10px 2px 0;
+  margin: 11px 2px 0;
 }
 
-.terminal-settings-grid {
+.terminal-settings-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
 }
 
 .terminal-settings-field {
-  display: flex;
   min-width: 0;
-  flex-direction: column;
-  gap: 7px;
+  min-height: 58px;
+  padding: 10px 0;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(180px, 0.88fr);
+  align-items: center;
+  gap: 16px;
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--settings-panel-border, var(--glass-edge)) 60%,
+      transparent
+    );
+}
+
+.terminal-settings-field:first-child {
+  border-top: 0;
+}
+
+.terminal-settings-field-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.terminal-settings-field-copy strong {
   color: var(--ink);
   font-size: 12.5px;
-  font-weight: 650;
+  font-weight: 660;
 }
 
-.terminal-settings-field--wide {
-  grid-column: 1 / -1;
+.terminal-settings-field-copy small {
+  color: var(--ink-mute);
+  font-size: 10.5px;
+  font-weight: 450;
+  line-height: 1.45;
 }
 
-.terminal-settings-field input,
-.terminal-settings-field select {
+.terminal-settings-field > input[type="text"],
+.terminal-settings-field > select {
   width: 100%;
   min-width: 0;
   height: 38px;
-  box-sizing: border-box;
   padding: 0 11px;
   border: 1px solid color-mix(in srgb, var(--tone) 16%, var(--glass-edge));
   border-radius: 10px;
@@ -106,81 +139,153 @@
   font: inherit;
 }
 
-.terminal-settings-field input:focus,
-.terminal-settings-field select:focus-visible {
+.terminal-settings-field > input[type="text"]:focus,
+.terminal-settings-field > select:focus-visible {
   border-color: color-mix(in srgb, var(--tone) 58%, var(--glass-edge));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
+.terminal-settings-range {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 46px;
+  align-items: center;
+  gap: 10px;
+}
+
+.terminal-settings-range input[type="range"] {
+  width: 100%;
+  accent-color: var(--tone);
+}
+
+.terminal-settings-range output {
+  color: var(--ink-mute);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .terminal-font-preview {
+  min-height: 96px;
+  padding: 14px 16px;
   display: flex;
-  min-height: 70px;
   flex-direction: column;
   justify-content: center;
-  gap: 5px;
-  position: sticky;
-  top: 0;
-  margin-top: 0;
-  padding: 14px 16px;
+  gap: 4px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid color-mix(in srgb, var(--tone) 8%, var(--glass-edge));
   border-radius: 12px;
-  background: #15272d;
-  color: #e7f1f3;
+  background: color-mix(in srgb, var(--tone-soft) 18%, rgba(43, 47, 61, 0.08));
+  color: var(--ink-soft);
   white-space: nowrap;
 }
 
-.terminal-font-preview span:first-child {
-  color: #16c5ef;
+.terminal-font-preview--embedded {
+  margin-top: auto;
 }
 
-.terminal-settings-toggle {
+.terminal-preview-success {
+  color: #21a66b;
+}
+
+.terminal-preview-prompt {
+  min-height: 18px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 4px 2px;
+  gap: 5px;
 }
 
-.terminal-settings-toggle > div {
-  display: flex;
-  flex-direction: column;
+.terminal-preview-cursor {
+  display: inline-block;
+  background: var(--tone);
+}
+
+.terminal-preview-cursor.is-bar {
+  width: 2px;
+  height: 1.05em;
+}
+
+.terminal-preview-cursor.is-block {
+  width: 0.7em;
+  height: 1em;
+}
+
+.terminal-preview-cursor.is-underline {
+  width: 0.75em;
+  height: 2px;
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
+.terminal-preview-cursor.is-blinking {
+  animation: terminal-preview-blink 1.05s steps(1, end) infinite;
+}
+
+.terminal-cursor-options {
+  padding: 3px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 3px;
+  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--tone-soft) 15%, transparent);
 }
 
-.terminal-settings-toggle strong {
-  color: var(--ink);
-  font-size: 13px;
-}
-
-.terminal-settings-toggle small {
+.terminal-cursor-options button {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--ink-mute);
-  font-size: 11.5px;
+  cursor: pointer;
+  font-size: 11px;
 }
 
-.terminal-settings-actions {
-  display: flex;
-  grid-column: 1 / -1;
-  justify-content: flex-end;
-  padding: 12px 18px;
-  border-top: 1px solid
-    color-mix(
-      in srgb,
-      var(--settings-panel-border, var(--glass-edge)) 72%,
-      transparent
-    );
+.terminal-cursor-options button.is-active {
+  background: color-mix(in srgb, var(--glass-fill, #fff) 92%, transparent);
+  color: var(--tone);
+  font-weight: 700;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 8%, transparent);
 }
 
-.terminal-settings-actions .prefs-diag-btn {
+.terminal-settings-field > .prefs-switch {
+  justify-self: end;
+}
+
+.terminal-reset-button {
+  min-height: 30px;
+  margin-left: auto;
+  padding: 0 7px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.terminal-reset-button:hover {
+  background: color-mix(in srgb, var(--tone-soft) 22%, transparent);
+  color: var(--tone);
 }
 
 html[data-theme="dark"] .terminal-mode-option,
-html[data-theme="dark"] .terminal-settings-field input,
-html[data-theme="dark"] .terminal-settings-field select {
+html[data-theme="dark"] .terminal-settings-field > input[type="text"],
+html[data-theme="dark"] .terminal-settings-field > select,
+html[data-theme="dark"] .terminal-cursor-options,
+html[data-theme="dark"] .terminal-font-preview {
   background: color-mix(in srgb, var(--glass-fill) 52%, rgba(8, 6, 18, 0.4));
+}
+
+@keyframes terminal-preview-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 @container (max-width: 760px) {
@@ -188,32 +293,31 @@ html[data-theme="dark"] .terminal-settings-field select {
     grid-template-columns: 1fr;
   }
 
-  .terminal-settings-preview-pane {
+  .terminal-settings-section--mode,
+  .terminal-settings-section--font,
+  .terminal-settings-section--behavior {
     grid-column: 1;
-    grid-row: auto;
-    border-top: 1px solid
-      color-mix(
-        in srgb,
-        var(--settings-panel-border, var(--glass-edge)) 72%,
-        transparent
-      );
-    border-left: 0;
+    min-height: auto;
   }
 }
 
 @media (max-width: 680px) {
   .terminal-mode-options,
-  .terminal-settings-grid {
+  .terminal-settings-field {
     grid-template-columns: 1fr;
   }
 
-  .terminal-settings-field--wide {
-    grid-column: auto;
+  .terminal-settings-field {
+    gap: 7px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .terminal-mode-option {
     transition: none;
+  }
+
+  .terminal-preview-cursor.is-blinking {
+    animation: none;
   }
 }
