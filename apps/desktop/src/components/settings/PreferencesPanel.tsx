@@ -865,15 +865,6 @@ export default function PreferencesPanel({
   const ModeIcon = themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
   const ColorStyleIcon =
     colorStyleOptions.find((o) => o.id === colorStyle)?.Icon ?? Palette;
-  const activeThemeLabel = themeOptions.find(
-    (option) => option.id === mode,
-  )?.label;
-  const activeGlassLabel = glassOptions.find(
-    (option) => option.id === glassLevel,
-  )?.label;
-  const activeColorStyleLabel = colorStyleOptions.find(
-    (option) => option.id === colorStyle,
-  )?.label;
   const selectedAppIcon = appIcon?.options.find(
     (option) => option.id === appIcon.current,
   );
@@ -1055,214 +1046,207 @@ export default function PreferencesPanel({
           className="prefs-category-stack prefs-category-stack--appearance"
           hidden={activeCategory !== "appearance"}
         >
-          <div className="prefs-appearance-preview">
-            <div className="prefs-appearance-preview-shell" aria-hidden>
-              <span className="prefs-appearance-preview-sidebar" />
-              <span className="prefs-appearance-preview-canvas">
-                <i />
-                <b />
-                <b />
-              </span>
-            </div>
-            <div
-              className="prefs-appearance-preview-summary"
-              aria-label={t("prefs.category.appearance")}
-            >
-              <span>{activeThemeLabel}</span>
-              <span>{activeGlassLabel}</span>
-              <span>{activeColorStyleLabel}</span>
-            </div>
-          </div>
-
-          <section className="prefs-card prefs-card--theme">
+          <section className="prefs-card prefs-card--appearance-material">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <ModeIcon width={22} height={22} />
               </div>
               <div>
-                <h2 className="prefs-card-title">{t("prefs.theme.title")}</h2>
-                <p className="prefs-card-sub">{t("prefs.theme.sub")}</p>
+                <h2 className="prefs-card-title">
+                  {t("prefs.appearance.material.title")}
+                </h2>
+                <p className="prefs-card-sub">
+                  {t("prefs.appearance.material.sub")}
+                </p>
               </div>
             </div>
 
-            <div
-              className="theme-options"
-              role="radiogroup"
-              aria-label={t("prefs.theme.title")}
-            >
-              {themeOptions.map(({ id, label, desc, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="radio"
-                  aria-checked={mode === id}
-                  className={`theme-option ${mode === id ? "active" : ""}`}
-                  data-tone={tone}
-                  onClick={() => onChange(id)}
+            <div className="appearance-control-list">
+              <div className="appearance-control-row">
+                <div className="appearance-control-copy">
+                  <strong>{t("prefs.theme.title")}</strong>
+                  <span>{t("prefs.theme.sub")}</span>
+                </div>
+                <div
+                  className="appearance-segmented"
+                  role="radiogroup"
+                  aria-label={t("prefs.theme.title")}
                 >
-                  <span className="theme-option-icon" aria-hidden>
-                    <Icon />
-                  </span>
-                  <span className="theme-option-text">
-                    <span className="theme-option-label">{label}</span>
-                    <span className="theme-option-desc">{desc}</span>
-                  </span>
-                  <span className="theme-option-check" aria-hidden />
-                </button>
-              ))}
+                  {themeOptions.map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={mode === id}
+                      className={mode === id ? "is-active" : ""}
+                      onClick={() => onChange(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="appearance-control-row">
+                <div className="appearance-control-copy">
+                  <strong>{t("prefs.glass.title")}</strong>
+                  <span>{t("prefs.glass.sub")}</span>
+                </div>
+                <div
+                  className="appearance-segmented appearance-segmented--wide"
+                  role="radiogroup"
+                  aria-label={t("prefs.glass.title")}
+                >
+                  {glassOptions.map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={glassLevel === id}
+                      className={glassLevel === id ? "is-active" : ""}
+                      onClick={() => setGlassLevel(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
 
-          <WallpaperSettingsCard controller={wallpaper} tone={tone} />
-
-          <section className="prefs-card prefs-card--glass">
-            <div className="prefs-card-head">
-              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-                <Layers size={22} />
-              </div>
-              <div>
-                <h2 className="prefs-card-title">{t("prefs.glass.title")}</h2>
-                <p className="prefs-card-sub">{t("prefs.glass.sub")}</p>
-              </div>
-            </div>
-            <div
-              className="theme-options"
-              role="radiogroup"
-              aria-label={t("prefs.glass.title")}
-            >
-              {glassOptions.map(({ id, label, desc }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="radio"
-                  aria-checked={glassLevel === id}
-                  className={`theme-option ${glassLevel === id ? "active" : ""}`}
-                  data-tone={tone}
-                  onClick={() => setGlassLevel(id)}
-                >
-                  <span className="theme-option-text">
-                    <span className="theme-option-label">{label}</span>
-                    <span className="theme-option-desc">{desc}</span>
-                  </span>
-                  <span className="theme-option-check" aria-hidden />
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="prefs-card prefs-card--color-style">
+          <section className="prefs-card prefs-card--appearance-color">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <ColorStyleIcon width={22} height={22} />
               </div>
               <div>
                 <h2 className="prefs-card-title">
-                  {t("prefs.colorStyle.title")}
+                  {t("prefs.appearance.accent.title")}
                 </h2>
-                <p className="prefs-card-sub">{t("prefs.colorStyle.sub")}</p>
+                <p className="prefs-card-sub">
+                  {t("prefs.appearance.accent.sub")}
+                </p>
               </div>
             </div>
 
-            <div
-              className="theme-options"
-              role="radiogroup"
-              aria-label={t("prefs.colorStyle.title")}
-            >
-              {colorStyleOptions.map(({ id, label, desc, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="radio"
-                  aria-checked={colorStyle === id}
-                  className={`theme-option ${colorStyle === id ? "active" : ""}`}
-                  data-tone={tone}
-                  onClick={() => onColorStyleChange(id)}
+            <div className="appearance-control-list">
+              <div className="appearance-control-row">
+                <div className="appearance-control-copy">
+                  <strong>{t("prefs.colorStyle.title")}</strong>
+                  <span>
+                    {
+                      colorStyleOptions.find(
+                        (option) => option.id === colorStyle,
+                      )?.desc
+                    }
+                  </span>
+                </div>
+                <div
+                  className="appearance-segmented"
+                  role="radiogroup"
+                  aria-label={t("prefs.colorStyle.title")}
                 >
-                  <span className="theme-option-icon" aria-hidden>
-                    <Icon />
-                  </span>
-                  <span className="theme-option-text">
-                    <span className="theme-option-label">{label}</span>
-                    <span className="theme-option-desc">{desc}</span>
-                  </span>
-                  <span className="theme-option-check" aria-hidden />
-                </button>
-              ))}
-            </div>
-
-            {colorStyle === "unified" ? (
-              <div
-                className="shell-color-presets"
-                role="radiogroup"
-                aria-label={t("prefs.colorStyle.presets")}
-              >
-                {SHELL_GRADIENT_PRESETS.map((preset) => {
-                  const g = gradientFromPreset(preset.id);
-                  const selected = gradient.id === preset.id;
-                  return (
+                  {colorStyleOptions.map(({ id, label }) => (
                     <button
-                      key={preset.id}
+                      key={id}
                       type="button"
                       role="radio"
-                      aria-checked={selected}
-                      className={`shell-color-swatch ${selected ? "is-active" : ""}`}
+                      aria-checked={colorStyle === id}
+                      className={colorStyle === id ? "is-active" : ""}
+                      onClick={() => onColorStyleChange(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {colorStyle === "unified" ? (
+                <div className="appearance-control-row appearance-control-row--swatches">
+                  <div className="appearance-control-copy">
+                    <strong>{t("prefs.colorStyle.presets")}</strong>
+                    <span>{t("prefs.colorStyle.unifiedDesc")}</span>
+                  </div>
+                  <div
+                    className="shell-color-presets"
+                    role="radiogroup"
+                    aria-label={t("prefs.colorStyle.presets")}
+                  >
+                    {SHELL_GRADIENT_PRESETS.map((preset) => {
+                      const g = gradientFromPreset(preset.id);
+                      const selected = gradient.id === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          className={`shell-color-swatch ${selected ? "is-active" : ""}`}
+                          style={
+                            {
+                              "--swatch-bg": gradientSwatchBackground(g),
+                              "--swatch-ring": g.primary.color,
+                            } as CSSProperties
+                          }
+                          title={t(preset.labelKey)}
+                          aria-label={t(preset.labelKey)}
+                          onClick={() => onGradientChange(g)}
+                        >
+                          <span
+                            className="shell-color-swatch-core"
+                            aria-hidden
+                          />
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={gradient.id === "custom"}
+                      className={`shell-color-swatch shell-color-swatch--custom ${
+                        gradient.id === "custom" ? "is-active" : ""
+                      }`}
                       style={
                         {
-                          "--swatch-bg": gradientSwatchBackground(g),
-                          "--swatch-ring": g.primary.color,
+                          "--swatch-ring": gradient.primary.color,
                         } as CSSProperties
                       }
-                      title={t(preset.labelKey)}
-                      aria-label={t(preset.labelKey)}
-                      onClick={() => onGradientChange(g)}
+                      title={t("prefs.colorStyle.custom")}
+                      aria-label={t("prefs.colorStyle.custom")}
+                      onClick={() => {
+                        onBeginCustomGradient();
+                        setGradientEditorOpen(true);
+                      }}
                     >
-                      <span className="shell-color-swatch-core" aria-hidden />
+                      <span className="shell-color-swatch-core" aria-hidden>
+                        <span className="shell-color-swatch-plus">+</span>
+                      </span>
                     </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={gradient.id === "custom"}
-                  className={`shell-color-swatch shell-color-swatch--custom ${
-                    gradient.id === "custom" ? "is-active" : ""
-                  }`}
-                  style={
-                    {
-                      "--swatch-ring": gradient.primary.color,
-                    } as CSSProperties
-                  }
-                  title={t("prefs.colorStyle.custom")}
-                  aria-label={t("prefs.colorStyle.custom")}
-                  onClick={() => {
-                    onBeginCustomGradient();
-                    setGradientEditorOpen(true);
-                  }}
-                >
-                  <span className="shell-color-swatch-core" aria-hidden>
-                    <span className="shell-color-swatch-plus">+</span>
-                  </span>
-                </button>
-              </div>
-            ) : null}
+                  </div>
+                </div>
+              ) : null}
 
-            {colorStyle === "dynamic" ? (
-              <div className="shell-dynamic-actions">
-                <p className="shell-dynamic-hint">
-                  {t("prefs.colorStyle.dynamicHint")}
-                </p>
-                <button
-                  type="button"
-                  className="shell-dynamic-reshuffle"
-                  data-tone={tone}
-                  onClick={onReshuffleDynamic}
-                >
-                  <Dices width={16} height={16} aria-hidden />
-                  {t("prefs.colorStyle.reshuffle")}
-                </button>
-              </div>
-            ) : null}
+              {colorStyle === "dynamic" ? (
+                <div className="appearance-control-row">
+                  <div className="appearance-control-copy">
+                    <strong>{t("prefs.colorStyle.dynamic")}</strong>
+                    <span>{t("prefs.colorStyle.dynamicHint")}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="shell-dynamic-reshuffle"
+                    data-tone={tone}
+                    onClick={onReshuffleDynamic}
+                  >
+                    <Dices width={16} height={16} aria-hidden />
+                    {t("prefs.colorStyle.reshuffle")}
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </section>
+
+          <WallpaperSettingsCard controller={wallpaper} tone={tone} />
 
           <section className="prefs-card morphicon-settings-card">
             <div className="prefs-card-head">
@@ -1280,9 +1264,11 @@ export default function PreferencesPanel({
               </button>
               <div>
                 <h2 className="prefs-card-title">
-                  {t("prefs.morphicons.title")}
+                  {t("prefs.appearance.motion.title")}
                 </h2>
-                <p className="prefs-card-sub">{t("prefs.morphicons.sub")}</p>
+                <p className="prefs-card-sub">
+                  {t("prefs.appearance.motion.sub")}
+                </p>
               </div>
             </div>
 

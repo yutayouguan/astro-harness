@@ -2211,6 +2211,12 @@ export const zh = {
   "prefs.category.general": "通用",
   "prefs.category.diagnostics": "诊断",
   "prefs.category.about": "关于",
+  "prefs.appearance.material.title": "主题与材质",
+  "prefs.appearance.material.sub": "控制明暗模式与玻璃强度。",
+  "prefs.appearance.accent.title": "强调色",
+  "prefs.appearance.accent.sub": "与壁纸分离，确保按钮和状态始终清晰。",
+  "prefs.appearance.motion.title": "动效与图标",
+  "prefs.appearance.motion.sub": "调整界面反馈的节奏与图标重量。",
   "prefs.glass.title": "视觉风格",
   "prefs.glass.sub": "控制玻璃拟态效果和阴影强度",
   "prefs.glass.liquid": "液态玻璃",
@@ -5391,6 +5397,15 @@ export const en: Record<MessageKey, string> = {
   "prefs.category.general": "General",
   "prefs.category.diagnostics": "Diagnostics",
   "prefs.category.about": "About",
+  "prefs.appearance.material.title": "Theme and material",
+  "prefs.appearance.material.sub":
+    "Control appearance mode and glass intensity.",
+  "prefs.appearance.accent.title": "Accent color",
+  "prefs.appearance.accent.sub":
+    "Keep controls and status colors clear over every wallpaper.",
+  "prefs.appearance.motion.title": "Motion and icons",
+  "prefs.appearance.motion.sub":
+    "Tune the rhythm of interface feedback and the visual weight of icons.",
   "prefs.glass.title": "Visual Style",
   "prefs.glass.sub": "Control glassmorphism and shadow intensity",
   "prefs.glass.liquid": "Liquid Glass",

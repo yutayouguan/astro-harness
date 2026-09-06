@@ -42,7 +42,7 @@ test("preference-backed settings use one scroll owner and one content width", ()
   assert.doesNotMatch(browserCss, /max-width:\s*760px/);
 });
 
-test("each preference-backed tab owns one shared glass surface", () => {
+test("preference-backed tabs share a surface except appearance cards", () => {
   assert.match(
     preferencesCss,
     /\.prefs-page\.is-embedded \.prefs-category-stack\s*\{[\s\S]*?background:\s*var\(--settings-panel-background[\s\S]*?backdrop-filter:\s*var\(--settings-panel-backdrop/,
@@ -51,11 +51,22 @@ test("each preference-backed tab owns one shared glass surface", () => {
     preferencesCss,
     /\.prefs-page\.is-embedded \.prefs-category-stack > \.prefs-card,[\s\S]*?background:\s*transparent;[\s\S]*?backdrop-filter:\s*none;/,
   );
+  assert.match(
+    preferencesCss,
+    /\.prefs-page\.is-embedded \.prefs-category-stack--appearance\s*\{[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;/,
+  );
+  assert.match(
+    preferencesCss,
+    /\.prefs-page\.is-embedded \.prefs-category-stack--appearance > \.prefs-card\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?background:\s*var\(--settings-panel-background[\s\S]*?backdrop-filter:\s*var\(--settings-panel-backdrop/,
+  );
 });
 
 test("appearance and conversation use responsive grouped layouts", () => {
   assert.match(preferences, /prefs-category-stack--appearance/);
-  assert.match(preferences, /prefs-appearance-preview/);
+  assert.match(preferences, /prefs-card--appearance-material/);
+  assert.match(preferences, /prefs-card--appearance-color/);
+  assert.match(preferences, /appearance-control-row/);
+  assert.doesNotMatch(preferences, /prefs-appearance-preview/);
   assert.match(preferences, /prefs-card--conversation-display/);
   assert.match(preferences, /ConversationLayoutPreview/);
   assert.match(preferences, /prefs-conversation-preview/);
