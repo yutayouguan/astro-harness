@@ -1,5 +1,12 @@
 /** 偏好设置：上下文卫生（压缩阈值与保护参数）。 */
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   ArrowDownToLine,
   ArrowUpToLine,
@@ -9,7 +16,6 @@ import {
   FoldVertical,
   Gauge,
   Hash,
-  Layers3,
   Lightbulb,
   MessagesSquare,
   RefreshCw,
@@ -46,6 +52,12 @@ type NumField = {
   Icon?: LucideIcon;
 };
 
+type RangeField = NumField & {
+  min: number;
+  max: number;
+  step?: number;
+};
+
 function pctDraft(ratio: number): string {
   return String(Math.round(ratio * 1000) / 10);
 }
@@ -67,28 +79,24 @@ const STAGE_META: {
   ratioKey: "softRatio" | "mediumRatio" | "hardRatio";
   labelKey: MessageKey;
   hintKey: MessageKey;
-  Icon: LucideIcon;
 }[] = [
   {
     id: "soft",
     ratioKey: "softRatio",
     labelKey: "prefs.context.soft",
     hintKey: "prefs.context.softDesc",
-    Icon: Feather,
   },
   {
     id: "medium",
     ratioKey: "mediumRatio",
     labelKey: "prefs.context.medium",
     hintKey: "prefs.context.mediumDesc",
-    Icon: Scale,
   },
   {
     id: "hard",
     ratioKey: "hardRatio",
     labelKey: "prefs.context.hard",
     hintKey: "prefs.context.hardDesc",
-    Icon: Flame,
   },
 ];
 
@@ -154,12 +162,14 @@ const BUDGET_META: {
   },
 ];
 
-const OTHER_FIELDS: NumField[] = [
+const OTHER_FIELDS: RangeField[] = [
   {
     key: "toolResultsLimit",
     labelKey: "prefs.context.toolResultsLimit",
     hintKey: "prefs.context.toolResultsLimitDesc",
     Icon: Wrench,
+    min: 0,
+    max: 200,
   },
   {
     key: "midRunSummaryRatio",
@@ -167,6 +177,8 @@ const OTHER_FIELDS: NumField[] = [
     hintKey: "prefs.context.midRunDesc",
     percent: true,
     Icon: FoldVertical,
+    min: 5,
+    max: 99,
   },
   {
     key: "recommendCompactRatio",
@@ -174,18 +186,24 @@ const OTHER_FIELDS: NumField[] = [
     hintKey: "prefs.context.recommendDesc",
     percent: true,
     Icon: Lightbulb,
+    min: 5,
+    max: 99,
   },
   {
     key: "protectLastN",
     labelKey: "prefs.context.protectLast",
     hintKey: "prefs.context.protectLastDesc",
     Icon: ShieldCheck,
+    min: 1,
+    max: 200,
   },
   {
     key: "protectFirstMessages",
     labelKey: "prefs.context.protectFirst",
     hintKey: "prefs.context.protectFirstDesc",
     Icon: ShieldPlus,
+    min: 1,
+    max: 50,
   },
   {
     key: "thrashingMinGainRatio",
@@ -193,20 +211,107 @@ const OTHER_FIELDS: NumField[] = [
     hintKey: "prefs.context.thrashingGainDesc",
     percent: true,
     Icon: TrendingDown,
+    min: 1,
+    max: 50,
   },
   {
     key: "thrashingMaxConsecutive",
     labelKey: "prefs.context.thrashingMax",
     hintKey: "prefs.context.thrashingMaxDesc",
     Icon: TriangleAlert,
+    min: 1,
+    max: 20,
   },
   {
     key: "keepTailBubbles",
     labelKey: "prefs.context.keepTail",
     hintKey: "prefs.context.keepTailDesc",
     Icon: MessagesSquare,
+    min: 1,
+    max: 50,
   },
 ];
+
+function CompressionRange({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  suffix,
+  onChange,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  suffix?: string;
+  onChange(value: number): void;
+  onCommit(value: number): void;
+}) {
+  const lastCommittedValue = useRef(value);
+  const changing = useRef(false);
+  const safeValue = Math.min(max, Math.max(min, value));
+  const progress = max === min ? 0 : ((safeValue - min) / (max - min)) * 100;
+  const displayValue = `${safeValue}${suffix ?? ""}`;
+  const style = {
+    "--range-progress": `${progress}%`,
+  } as CSSProperties;
+  const changeValue = (nextValue: number) => {
+    changing.current = true;
+    onChange(nextValue);
+  };
+  const commitValue = (nextValue: number) => {
+    changing.current = false;
+    if (lastCommittedValue.current === nextValue) return;
+    lastCommittedValue.current = nextValue;
+    onCommit(nextValue);
+  };
+
+  useEffect(() => {
+    if (!changing.current) lastCommittedValue.current = safeValue;
+  }, [safeValue]);
+
+  return (
+    <span className="prefs-context-range" style={style}>
+      <input
+        className="prefs-context-range-input"
+        type="range"
+        aria-label={label}
+        aria-valuetext={displayValue}
+        min={min}
+        max={max}
+        step={step}
+        value={safeValue}
+        onChange={(event) => changeValue(Number(event.target.value))}
+        onPointerUp={(event) => commitValue(Number(event.currentTarget.value))}
+        onPointerCancel={(event) =>
+          commitValue(Number(event.currentTarget.value))
+        }
+        onKeyUp={(event) => {
+          if (
+            [
+              "ArrowLeft",
+              "ArrowRight",
+              "ArrowUp",
+              "ArrowDown",
+              "Home",
+              "End",
+            ].includes(event.key)
+          ) {
+            commitValue(Number(event.currentTarget.value));
+          }
+        }}
+        onBlur={(event) => commitValue(Number(event.currentTarget.value))}
+      />
+      <output className="prefs-context-range-value" aria-hidden="true">
+        {displayValue}
+      </output>
+    </span>
+  );
+}
 
 function SectionHead({
   Icon,
@@ -300,17 +405,13 @@ export default function CompressionSettingsCard({
 
   return (
     <section className="prefs-card prefs-context-card">
-      <div className="prefs-card-head">
-        <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-          <Layers3 width={22} height={22} strokeWidth={2} />
-        </div>
-        <div>
-          <h2 className="prefs-card-title">{t("prefs.context.title")}</h2>
-          <p className="prefs-card-sub">{t("prefs.context.sub")}</p>
-        </div>
-      </div>
-
-      <p className="prefs-card-note">{t("prefs.context.viewHint")}</p>
+      <header className="prefs-context-page-head">
+        <span className="prefs-context-eyebrow" aria-hidden="true">
+          Context
+        </span>
+        <h2>{t("prefs.context.title")}</h2>
+        <p>{t("prefs.context.sub")}</p>
+      </header>
 
       {displayError && (
         <p className="aux-error prefs-context-error" role="alert">
@@ -352,39 +453,45 @@ export default function CompressionSettingsCard({
 
           <SectionHead Icon={Gauge}>{t("prefs.context.stages")}</SectionHead>
           <div className="prefs-context-stages">
-            {STAGE_META.map(({ id, ratioKey, labelKey, hintKey, Icon }) => (
-              <label
-                key={ratioKey}
-                className="prefs-context-stage"
-                data-stage={id}
-              >
-                <span className="prefs-context-stage-top">
-                  <span className="prefs-context-stage-ico" aria-hidden>
-                    <Icon size={15} strokeWidth={2.2} />
+            {STAGE_META.map(({ id, ratioKey, labelKey, hintKey }, index) => {
+              const value = Number(pctDraft(draft[ratioKey]));
+              const previous =
+                index === 0
+                  ? 5
+                  : Math.ceil(draft[STAGE_META[index - 1].ratioKey] * 100) + 1;
+              const next =
+                index === STAGE_META.length - 1
+                  ? 95
+                  : Math.floor(draft[STAGE_META[index + 1].ratioKey] * 100) - 1;
+              return (
+                <label
+                  key={ratioKey}
+                  className="prefs-context-stage"
+                  data-stage={id}
+                >
+                  <span className="prefs-context-stage-accent" aria-hidden />
+                  <span className="prefs-context-stage-top">
+                    <span className="prefs-context-stage-text">
+                      <span className="prefs-context-label">{t(labelKey)}</span>
+                      <span className="prefs-context-hint">{t(hintKey)}</span>
+                    </span>
                   </span>
-                  <span className="prefs-context-stage-text">
-                    <span className="prefs-context-label">{t(labelKey)}</span>
-                    <span className="prefs-context-hint">{t(hintKey)}</span>
-                  </span>
-                </span>
-                <span className="prefs-context-input-wrap">
-                  <input
-                    className="aux-number-input"
-                    type="number"
-                    min={5}
-                    max={95}
-                    step={1}
-                    value={pctDraft(draft[ratioKey])}
-                    onChange={(e) => {
-                      const p = parsePct(e.target.value);
-                      if (p != null) setField(ratioKey, p);
-                    }}
-                    onBlur={(e) => commitRatio(ratioKey, e.target.value)}
+                  <CompressionRange
+                    label={t(labelKey)}
+                    value={value}
+                    min={previous}
+                    max={next}
+                    suffix="%"
+                    onChange={(nextValue) =>
+                      setField(ratioKey, nextValue / 100)
+                    }
+                    onCommit={(nextValue) =>
+                      commitRatio(ratioKey, String(nextValue))
+                    }
                   />
-                  <span className="prefs-context-suffix">%</span>
-                </span>
-              </label>
-            ))}
+                </label>
+              );
+            })}
           </div>
 
           <details className="prefs-context-advanced">
@@ -457,66 +564,77 @@ export default function CompressionSettingsCard({
               <SectionHead Icon={Shield}>
                 {t("prefs.context.triggers")}
               </SectionHead>
-              <div className="prefs-context-grid">
+              <div className="prefs-context-controls">
                 {OTHER_FIELDS.map(
-                  ({ key, labelKey, hintKey, percent, Icon }) => (
-                    <label
-                      key={key}
-                      className="prefs-context-field prefs-context-field--card"
-                    >
-                      <span className="prefs-context-label-row">
-                        {Icon && (
-                          <span
-                            className="prefs-context-field-badge"
-                            aria-hidden
-                          >
-                            <Icon size={12} strokeWidth={2.25} />
+                  ({
+                    key,
+                    labelKey,
+                    hintKey,
+                    percent,
+                    Icon,
+                    min,
+                    max,
+                    step,
+                  }) => {
+                    const value = percent
+                      ? Number(pctDraft(draft[key] as number))
+                      : (draft[key] as number);
+                    const rangeMin =
+                      key === "recommendCompactRatio"
+                        ? Math.max(min, Math.ceil(draft.hardRatio * 100))
+                        : min;
+                    return (
+                      <label
+                        key={key}
+                        className="prefs-context-field prefs-context-field--range"
+                      >
+                        <span className="prefs-context-field-copy">
+                          <span className="prefs-context-label-row">
+                            {Icon && (
+                              <span
+                                className="prefs-context-field-badge"
+                                aria-hidden
+                              >
+                                <Icon size={12} strokeWidth={2.25} />
+                              </span>
+                            )}
+                            <span className="prefs-context-label">
+                              {t(labelKey)}
+                            </span>
                           </span>
-                        )}
-                        <span className="prefs-context-label">
-                          {t(labelKey)}
+                          {hintKey && (
+                            <span className="prefs-context-hint">
+                              {t(hintKey)}
+                            </span>
+                          )}
                         </span>
-                      </span>
-                      {hintKey && (
-                        <span className="prefs-context-hint">{t(hintKey)}</span>
-                      )}
-                      <div className="prefs-context-input-wrap">
-                        <input
-                          className="aux-number-input"
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={
-                            percent
-                              ? pctDraft(draft[key] as number)
-                              : (draft[key] as number)
+                        <CompressionRange
+                          label={t(labelKey)}
+                          value={value}
+                          min={rangeMin}
+                          max={max}
+                          step={step}
+                          suffix={percent ? "%" : undefined}
+                          onChange={(nextValue) =>
+                            setField(
+                              key,
+                              (percent ? nextValue / 100 : nextValue) as never,
+                            )
                           }
-                          onChange={(e) => {
-                            if (percent) {
-                              const p = parsePct(e.target.value);
-                              if (p != null) setField(key, p as never);
-                            } else {
-                              const n = parseIntDraft(e.target.value);
-                              if (n != null) setField(key, n as never);
-                            }
-                          }}
-                          onBlur={(e) => {
+                          onCommit={(nextValue) => {
                             if (percent) {
                               commitRatio(
                                 key as "midRunSummaryRatio",
-                                e.target.value,
+                                String(nextValue),
                               );
                             } else {
-                              commitInt(key, e.target.value);
+                              commitInt(key, String(nextValue));
                             }
                           }}
                         />
-                        {percent && (
-                          <span className="prefs-context-suffix">%</span>
-                        )}
-                      </div>
-                    </label>
-                  ),
+                      </label>
+                    );
+                  },
                 )}
               </div>
             </div>

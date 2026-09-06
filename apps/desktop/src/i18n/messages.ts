@@ -2372,14 +2372,13 @@ export const zh = {
   "prefs.chat.showTimestampsDesc": "在消息与过程卡片上显示时间",
 
   "prefs.context.title": "自动压缩",
-  "prefs.context.sub":
-    "配置 Run 内 Soft/Medium/Hard、mid-run 与建议 /compact 等卫生参数",
+  "prefs.context.sub": "在质量和上下文成本之间设定自动压缩策略。",
   "prefs.context.viewHint":
     "占用分层查看在聊天右栏「上下文」；此处只调整触发阈值与预算。",
   "prefs.context.loading": "正在加载压缩设置…",
-  "prefs.context.enabled": "启用自动上下文维护",
+  "prefs.context.enabled": "上下文压缩",
   "prefs.context.enabledDesc":
-    "关闭后仍可手动 /compact；不再自动 prune / 摘要 / mid-run",
+    "压缩会保留原始历史，只改变下一次模型看到的视图。",
   "prefs.context.stages": "阶段触发比例（相对上下文窗口）",
   "prefs.context.soft": "Soft",
   "prefs.context.softDesc": "轻压；开始 prune 较长 tool 结果",
@@ -5547,13 +5546,13 @@ export const en: Record<MessageKey, string> = {
 
   "prefs.context.title": "Automatic Compression",
   "prefs.context.sub":
-    "Configure Soft/Medium/Hard, mid-run, and /compact recommend thresholds",
+    "Balance response quality and context cost with an automatic compression strategy.",
   "prefs.context.viewHint":
     "Layered usage lives in the chat Context panel; this card only tunes triggers and budgets.",
   "prefs.context.loading": "Loading compression settings…",
-  "prefs.context.enabled": "Enable automatic context maintenance",
+  "prefs.context.enabled": "Context compression",
   "prefs.context.enabledDesc":
-    "When off, manual /compact still works; auto prune / summarize / mid-run stop",
+    "Compression preserves the original history and only changes the next model view.",
   "prefs.context.stages": "Stage trigger ratios (of context window)",
   "prefs.context.soft": "Soft",
   "prefs.context.softDesc": "Light pressure; start pruning longer tool results",
