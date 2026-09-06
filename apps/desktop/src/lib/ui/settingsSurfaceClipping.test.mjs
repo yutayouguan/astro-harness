@@ -14,6 +14,10 @@ test("independent settings cards clip WebView backdrop layers to their radius", 
   );
   assert.match(
     surfaces,
+    /\.prefs-category-stack--general > \.prefs-card--general\s*\{[\s\S]*?isolation:\s*auto;[\s\S]*?overflow:\s*visible;[\s\S]*?background:\s*transparent;/,
+  );
+  assert.match(
+    surfaces,
     /\.prefs-category-stack--general \.prefs-general-group\s*\{[\s\S]*?isolation:\s*isolate;[\s\S]*?overflow:\s*hidden;[\s\S]*?background-clip:\s*padding-box;/,
   );
 });

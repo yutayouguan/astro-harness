@@ -47,9 +47,12 @@
 .prefs-page.is-embedded .prefs-category-stack--general > .prefs-card--general {
   display: grid;
   gap: 14px;
+  isolation: auto;
+  overflow: visible;
   padding: 0;
   border: 0;
   border-radius: 0;
+  background-clip: border-box;
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
