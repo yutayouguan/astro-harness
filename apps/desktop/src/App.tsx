@@ -44,6 +44,7 @@ import ExpandableSearch from "./components/ui/ExpandableSearch";
 import PreferencesPanel from "./components/settings/PreferencesPanel";
 import BrowserSettingsPanel from "./components/settings/BrowserSettingsPanel";
 import TerminalSettingsPanel from "./components/settings/TerminalSettingsPanel";
+import EnvironmentDependenciesPanel from "./components/settings/EnvironmentDependenciesPanel";
 import ProvidersPanel from "./components/settings/ProvidersPanel";
 import SidebarContextMenu from "./components/settings/SidebarContextMenu";
 import PluginsPage from "./components/plugins/PluginsPage";
@@ -1970,6 +1971,12 @@ export default function App() {
                   )}
                   {settingsTab === "terminal" && (
                     <TerminalSettingsPanel tone={shellTone} />
+                  )}
+                  {settingsTab === "environment-dependencies" && (
+                    <EnvironmentDependenciesPanel
+                      active={nav === "settings"}
+                      tone={shellTone}
+                    />
                   )}
                   {settingsTab === "evolution" && (
                     <EvolutionModelsPanel

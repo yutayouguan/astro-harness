@@ -10,6 +10,7 @@ pub(crate) mod compression_settings;
 pub(crate) mod config;
 pub(crate) mod cron;
 pub(crate) mod dreaming;
+pub(crate) mod environment_dependencies;
 pub(crate) mod evolution;
 pub(crate) mod evolution_run;
 pub(crate) mod files;

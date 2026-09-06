@@ -6,6 +6,7 @@ import {
   IconBrowser,
   IconChat,
   IconContext,
+  IconDependencies,
   IconDiagnostics,
   IconInsights,
   IconMemory,
@@ -110,6 +111,11 @@ export const SETTINGS_TAB_GROUPS: SettingsTabGroup[] = [
     id: "system",
     labelKey: "settings.sidebar.group.system",
     items: [
+      {
+        id: "environment-dependencies",
+        labelKey: "settings.sidebar.tab.environmentDependencies",
+        Icon: IconDependencies,
+      },
       {
         id: "preferences:diagnostics",
         labelKey: "settings.sidebar.tab.diagnostics",

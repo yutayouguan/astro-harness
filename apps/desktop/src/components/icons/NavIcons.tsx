@@ -332,6 +332,17 @@ export function IconDiagnostics(props: IconProps) {
   );
 }
 
+/** 环境依赖 — 命令行提示符与就绪状态。 */
+export function IconDependencies(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="4" />
+      <path className="nav-icon-stroke" d="m7 9 2.5 2.5L7 14" />
+      <path className="nav-icon-cutout" d="M12.5 14H17" />
+    </NavIconBase>
+  );
+}
+
 /** 偏好设置 — 默认空心+中心圆线稿；选中填实后中心变透镜孔 */
 export function IconSettings(props: IconProps) {
   return (

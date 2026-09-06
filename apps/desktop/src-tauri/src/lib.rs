@@ -422,6 +422,8 @@ pub fn run() {
             commands::config::get_diagnostics_status,
             commands::config::export_diagnostics_bundle,
             commands::config::query_agent_logs,
+            commands::environment_dependencies::list_environment_dependencies,
+            commands::environment_dependencies::install_environment_dependency,
             // — first-class subagent threads —
             commands::subagents::list_subagent_threads,
             commands::subagents::read_subagent_thread,

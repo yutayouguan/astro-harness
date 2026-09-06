@@ -304,9 +304,49 @@ export const zh = {
   "settings.sidebar.tab.browser": "浏览器",
   "settings.sidebar.tab.models": "模型市场",
   "settings.sidebar.tab.insights": "数据洞察",
+  "settings.sidebar.tab.environmentDependencies": "环境依赖",
   "settings.sidebar.tab.diagnostics": "诊断",
   "settings.sidebar.tab.about": "关于 Astro",
   "settings.sidebar.tab.evolution": "自进化",
+
+  "environmentDependencies.title": "环境依赖",
+  "environmentDependencies.subtitle":
+    "检测 Astro 与本地智能体常用的命令行工具，并在缺失时提供受控安装。",
+  "environmentDependencies.ready": "已就绪",
+  "environmentDependencies.rescan": "重新检测",
+  "environmentDependencies.scanning": "正在扫描本机环境…",
+  "environmentDependencies.note":
+    "检测同时覆盖应用 PATH、常见用户目录和登录 Shell。安装只会执行下方展示的官方白名单命令。",
+  "environmentDependencies.installed": "已安装",
+  "environmentDependencies.missing": "未安装",
+  "environmentDependencies.version": "版本",
+  "environmentDependencies.detectedPath": "检测路径",
+  "environmentDependencies.installPath": "建议安装位置",
+  "environmentDependencies.copyCommand": "复制安装命令",
+  "environmentDependencies.official": "官网",
+  "environmentDependencies.install": "安装",
+  "environmentDependencies.installing": "安装中…",
+  "environmentDependencies.install.success": "{name} 已安装并通过检测。",
+  "environmentDependencies.install.restart":
+    "{name} 安装命令已完成；如果仍未识别，请重启 Astro 后复检。",
+  "environmentDependencies.install.failed": "{name} 安装失败：{error}",
+  "environmentDependencies.unavailable.npm":
+    "未检测到 npm；请先安装 Node.js，或按官网步骤手动安装。",
+  "environmentDependencies.unavailable.installer":
+    "未检测到支持的包管理器，请按官网步骤手动安装。",
+  "environmentDependencies.item.uv":
+    "极速 Python 包与项目管理器，也为 MCP 和技能提供 uvx 隔离运行环境。",
+  "environmentDependencies.item.rtk":
+    "面向智能体的命令输出压缩代理，可减少测试、构建与搜索输出噪音。",
+  "environmentDependencies.item.fd":
+    "简洁快速的文件查找工具，适合项目导航与批量文件发现。",
+  "environmentDependencies.item.ripgrep":
+    "高速递归文本搜索工具，Astro 与开发工作流使用命令名 rg。",
+  "environmentDependencies.item.bun":
+    "高性能 JavaScript 运行时、包管理器与脚本执行器。",
+  "environmentDependencies.item.larkCli":
+    "飞书开放平台命令行工具，用于文档、日历、消息、审批等集成。",
+  "environmentDependencies.item.fallback": "本地命令行环境依赖。",
 
   "modelMarket.refresh": "刷新",
   "modelMarket.refreshing": "正在刷新…",
@@ -3426,9 +3466,52 @@ export const en: Record<MessageKey, string> = {
   "settings.sidebar.tab.browser": "Browser",
   "settings.sidebar.tab.models": "Model Market",
   "settings.sidebar.tab.insights": "Data Insights",
+  "settings.sidebar.tab.environmentDependencies": "Environment",
   "settings.sidebar.tab.diagnostics": "Diagnostics",
   "settings.sidebar.tab.about": "About Astro",
   "settings.sidebar.tab.evolution": "Evolution",
+
+  "environmentDependencies.title": "Environment dependencies",
+  "environmentDependencies.subtitle":
+    "Check the command-line tools commonly used by Astro and local agents, with controlled installation when missing.",
+  "environmentDependencies.ready": "ready",
+  "environmentDependencies.rescan": "Scan again",
+  "environmentDependencies.scanning": "Scanning the local environment…",
+  "environmentDependencies.note":
+    "Detection covers the app PATH, common user directories, and the login shell. Install only runs the official allowlisted command shown below.",
+  "environmentDependencies.installed": "Installed",
+  "environmentDependencies.missing": "Missing",
+  "environmentDependencies.version": "Version",
+  "environmentDependencies.detectedPath": "Detected path",
+  "environmentDependencies.installPath": "Suggested install path",
+  "environmentDependencies.copyCommand": "Copy install command",
+  "environmentDependencies.official": "Official site",
+  "environmentDependencies.install": "Install",
+  "environmentDependencies.installing": "Installing…",
+  "environmentDependencies.install.success":
+    "{name} was installed and detected successfully.",
+  "environmentDependencies.install.restart":
+    "The {name} installer completed. Restart Astro and scan again if it is still not detected.",
+  "environmentDependencies.install.failed":
+    "Could not install {name}: {error}",
+  "environmentDependencies.unavailable.npm":
+    "npm was not found. Install Node.js first or follow the official manual steps.",
+  "environmentDependencies.unavailable.installer":
+    "No supported package manager was found. Follow the official manual steps.",
+  "environmentDependencies.item.uv":
+    "A fast Python package and project manager that also provides isolated uvx runtimes for MCP servers and skills.",
+  "environmentDependencies.item.rtk":
+    "An agent-oriented command output proxy that reduces noise from tests, builds, and searches.",
+  "environmentDependencies.item.fd":
+    "A simple, fast file finder for project navigation and bulk discovery.",
+  "environmentDependencies.item.ripgrep":
+    "A fast recursive text search tool used as rg across Astro and development workflows.",
+  "environmentDependencies.item.bun":
+    "A high-performance JavaScript runtime, package manager, and script runner.",
+  "environmentDependencies.item.larkCli":
+    "The Lark developer CLI for Docs, Calendar, IM, Approval, and other integrations.",
+  "environmentDependencies.item.fallback":
+    "A local command-line environment dependency.",
 
   "modelMarket.refresh": "Refresh",
   "modelMarket.refreshing": "Refreshing…",

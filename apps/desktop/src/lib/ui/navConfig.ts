@@ -15,6 +15,7 @@ export type SettingsTabId =
   | "preferences:appearance"
   | "preferences:conversation"
   | "preferences:context"
+  | "environment-dependencies"
   | "preferences:diagnostics"
   | "preferences:about"
   | "providers"
