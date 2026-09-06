@@ -18,6 +18,7 @@ import {
   Play,
   Plug,
   RefreshCw,
+  Search,
   ScrollText,
   Sparkles,
   Webhook,
@@ -89,6 +90,17 @@ type LogScope = "current" | "all";
 
 /** 内容过滤：全部 / 只看问题（warn 及以上） */
 type LogLevelFilter = "all" | "issues";
+
+type DiagnosticLogLevel = "error" | "warn" | "info" | "debug" | "unknown";
+
+function diagnosticLogLevel(raw: string): DiagnosticLogLevel {
+  const upper = raw.toUpperCase();
+  if (upper.includes("CRITICAL") || upper.includes("ERROR")) return "error";
+  if (upper.includes("WARNING") || upper.includes("WARN")) return "warn";
+  if (upper.includes("INFO")) return "info";
+  if (upper.includes("DEBUG") || upper.includes("TRACE")) return "debug";
+  return "unknown";
+}
 
 type AppUpdateInfo = {
   configured: boolean;
@@ -227,7 +239,7 @@ function AutostartSwitch({ tone }: { tone: string }) {
 }
 
 /** 行数预设 */
-const LINE_PRESETS = [50, 100, 200] as const;
+const LINE_PRESETS = [50, 100, 200, 500] as const;
 
 export type PreferenceCategory =
   | "general"
@@ -462,10 +474,27 @@ export default function PreferencesPanel({
   const [manualSession, setManualSession] = useState("");
   const [turnId, setTurnId] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [logSearch, setLogSearch] = useState("");
+  const [logsCopied, setLogsCopied] = useState(false);
   const [rows, setRows] = useState<AgentLogLine[]>([]);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [queried, setQueried] = useState(false);
+  const normalizedLogSearch = logSearch.trim().toLowerCase();
+  const visibleLogRows = normalizedLogSearch
+    ? rows.filter((row) =>
+        `${row.source} ${row.raw}`.toLowerCase().includes(normalizedLogSearch),
+      )
+    : rows;
+  const diagnosticSummary = {
+    total: rows.length,
+    agent: rows.filter((row) => row.source === "agent").length,
+    errors: rows.filter((row) => row.source === "errors").length,
+    issues: rows.filter((row) => {
+      const severity = diagnosticLogLevel(row.raw);
+      return severity === "warn" || severity === "error";
+    }).length,
+  };
 
   const themeOptions: {
     id: ThemeMode;
@@ -714,10 +743,17 @@ export default function PreferencesPanel({
     return () => clearTimeout(timer);
   }, [scope, level, lines, source, manualSession, turnId]);
 
+  useEffect(() => {
+    if (!logsCopied) return;
+    const timer = window.setTimeout(() => setLogsCopied(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [logsCopied]);
+
   async function copyLogs() {
-    const text = rows.map((r) => `[${r.source}] ${r.raw}`).join("\n");
+    const text = visibleLogRows.map((r) => `[${r.source}] ${r.raw}`).join("\n");
     try {
       await navigator.clipboard.writeText(text);
+      setLogsCopied(true);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     }
@@ -1245,8 +1281,34 @@ export default function PreferencesPanel({
               </div>
             </div>
 
+            <div
+              className="prefs-diag-summary"
+              aria-label={t("prefs.diag.summary")}
+            >
+              <div className="prefs-diag-summary-item" data-kind="total">
+                <span>{t("prefs.diag.summary.total")}</span>
+                <strong>{diagnosticSummary.total}</strong>
+                <small>{t("prefs.diag.newestFirst")}</small>
+              </div>
+              <div className="prefs-diag-summary-item" data-kind="agent">
+                <span>{t("prefs.diag.summary.agent")}</span>
+                <strong>{diagnosticSummary.agent}</strong>
+                <small>agent.log</small>
+              </div>
+              <div className="prefs-diag-summary-item" data-kind="errors">
+                <span>{t("prefs.diag.summary.errors")}</span>
+                <strong>{diagnosticSummary.errors}</strong>
+                <small>errors.log</small>
+              </div>
+              <div className="prefs-diag-summary-item" data-kind="issues">
+                <span>{t("prefs.diag.summary.issues")}</span>
+                <strong>{diagnosticSummary.issues}</strong>
+                <small>WARN + ERROR</small>
+              </div>
+            </div>
+
             <div className="prefs-diag-form">
-              <div className="prefs-diag-quick">
+              <div className="prefs-diag-filter-grid">
                 <div className="prefs-diag-group">
                   <span className="prefs-diag-group-label">
                     {t("prefs.diag.scope")}
@@ -1283,6 +1345,26 @@ export default function PreferencesPanel({
                       {t("prefs.diag.scope.all")}
                     </button>
                   </div>
+                </div>
+
+                <div className="prefs-diag-group">
+                  <span className="prefs-diag-group-label">
+                    {t("prefs.diag.source")}
+                  </span>
+                  <SelectMenu
+                    className="prefs-diag-select"
+                    value={source}
+                    aria-label={t("prefs.diag.source")}
+                    onChange={(value) => setSource(value as LogSourceFilter)}
+                    options={[
+                      { value: "both", label: t("prefs.diag.source.both") },
+                      { value: "agent", label: t("prefs.diag.source.agent") },
+                      {
+                        value: "errors",
+                        label: t("prefs.diag.source.errors"),
+                      },
+                    ]}
+                  />
                 </div>
 
                 <div className="prefs-diag-group">
@@ -1326,52 +1408,74 @@ export default function PreferencesPanel({
                     role="radiogroup"
                     aria-label={t("prefs.diag.lines")}
                   >
-                    {LINE_PRESETS.map((n) => (
+                    {LINE_PRESETS.map((count) => (
                       <button
-                        key={n}
+                        key={count}
                         type="button"
                         role="radio"
-                        aria-checked={lines === n}
-                        className={`prefs-chip ${lines === n ? "active" : ""}`}
+                        aria-checked={lines === count}
+                        className={`prefs-chip ${lines === count ? "active" : ""}`}
                         data-tone={tone}
-                        onClick={() => setLines(n)}
+                        onClick={() => setLines(count)}
                       >
-                        {n}
+                        {count}
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
 
-              <div className="prefs-diag-actions">
-                <button
-                  type="button"
-                  className="prefs-diag-btn primary"
-                  data-tone={tone}
-                  disabled={busy}
-                  onClick={() => void refreshLogs()}
-                >
-                  {busy ? t("prefs.diag.loading") : t("prefs.diag.refresh")}
-                </button>
-                <button
-                  type="button"
-                  className="prefs-diag-btn"
-                  data-tone={tone}
-                  disabled={busy || rows.length === 0}
-                  onClick={() => void copyLogs()}
-                >
-                  {t("prefs.diag.copy")}
-                </button>
-                <button
-                  type="button"
-                  className="prefs-diag-link"
-                  onClick={() => setShowAdvanced((v) => !v)}
-                  aria-expanded={showAdvanced}
-                >
-                  {showAdvanced
-                    ? t("prefs.diag.advanced.hide")
-                    : t("prefs.diag.advanced.show")}
-                </button>
+              <div className="prefs-diag-toolbar">
+                <label className="prefs-diag-search">
+                  <Search size={14} strokeWidth={2.2} aria-hidden />
+                  <input
+                    type="search"
+                    aria-label={t("prefs.diag.search")}
+                    value={logSearch}
+                    placeholder={t("prefs.diag.search.ph")}
+                    onChange={(event) => setLogSearch(event.target.value)}
+                  />
+                </label>
+                <div className="prefs-diag-actions">
+                  <button
+                    type="button"
+                    className="prefs-diag-btn primary"
+                    data-tone={tone}
+                    disabled={busy}
+                    onClick={() => void refreshLogs()}
+                  >
+                    <RefreshCw
+                      size={13}
+                      strokeWidth={2.25}
+                      className={busy ? "spin" : undefined}
+                      aria-hidden
+                    />
+                    {busy ? t("prefs.diag.loading") : t("prefs.diag.refresh")}
+                  </button>
+                  <button
+                    type="button"
+                    className="prefs-diag-btn"
+                    data-tone={tone}
+                    disabled={busy || visibleLogRows.length === 0}
+                    onClick={() => void copyLogs()}
+                  >
+                    {t(
+                      logsCopied
+                        ? "prefs.diag.copied"
+                        : "prefs.diag.copyVisible",
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="prefs-diag-link"
+                    onClick={() => setShowAdvanced((value) => !value)}
+                    aria-expanded={showAdvanced}
+                  >
+                    {showAdvanced
+                      ? t("prefs.diag.advanced.hide")
+                      : t("prefs.diag.advanced.show")}
+                  </button>
+                </div>
               </div>
 
               {showAdvanced && (
@@ -1385,7 +1489,7 @@ export default function PreferencesPanel({
                       type="text"
                       value={manualSession}
                       placeholder={t("prefs.diag.session.ph")}
-                      onChange={(e) => setManualSession(e.target.value)}
+                      onChange={(event) => setManualSession(event.target.value)}
                       spellCheck={false}
                       autoComplete="off"
                     />
@@ -1399,41 +1503,64 @@ export default function PreferencesPanel({
                       type="text"
                       value={turnId}
                       placeholder={t("prefs.diag.turn.ph")}
-                      onChange={(e) => setTurnId(e.target.value)}
+                      onChange={(event) => setTurnId(event.target.value)}
                       spellCheck={false}
                       autoComplete="off"
-                    />
-                  </label>
-                  <label className="prefs-diag-row">
-                    <span className="prefs-diag-label">
-                      {t("prefs.diag.source")}
-                    </span>
-                    <SelectMenu
-                      className="prefs-diag-select"
-                      value={source}
-                      aria-label={t("prefs.diag.source")}
-                      onChange={(v) => setSource(v as LogSourceFilter)}
-                      options={[
-                        { value: "both", label: t("prefs.diag.source.both") },
-                        { value: "agent", label: t("prefs.diag.source.agent") },
-                        {
-                          value: "errors",
-                          label: t("prefs.diag.source.errors"),
-                        },
-                      ]}
                     />
                   </label>
                 </div>
               )}
 
-              {errorMsg && <p className="prefs-diag-error">{errorMsg}</p>}
+              {errorMsg && (
+                <p className="prefs-diag-error" role="alert">
+                  {errorMsg}
+                </p>
+              )}
               {queried && !errorMsg && rows.length === 0 && (
                 <p className="prefs-diag-empty">{t("prefs.diag.empty")}</p>
               )}
-              {rows.length > 0 && (
-                <pre className="prefs-diag-log">
-                  {rows.map((r) => `[${r.source}] ${r.raw}`).join("\n")}
-                </pre>
+              {queried &&
+                !errorMsg &&
+                rows.length > 0 &&
+                visibleLogRows.length === 0 && (
+                  <p className="prefs-diag-empty">
+                    {t("prefs.diag.emptySearch")}
+                  </p>
+                )}
+              {visibleLogRows.length > 0 && (
+                <div className="prefs-diag-results">
+                  <div
+                    className="prefs-diag-results-head"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <span>
+                      {t("prefs.diag.results", {
+                        shown: String(visibleLogRows.length),
+                        total: String(rows.length),
+                      })}
+                    </span>
+                    <span>{t("prefs.diag.newestFirst")}</span>
+                  </div>
+                  <ul className="prefs-diag-log prefs-diag-log-list">
+                    {visibleLogRows.map((row, index) => {
+                      const severity = diagnosticLogLevel(row.raw);
+                      return (
+                        <li
+                          key={row.source + "-" + index}
+                          className={"prefs-diag-log-row is-" + severity}
+                        >
+                          <span
+                            className={"prefs-diag-source is-" + row.source}
+                          >
+                            {row.source}
+                          </span>
+                          <code>{row.raw}</code>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               )}
             </div>
           </section>
