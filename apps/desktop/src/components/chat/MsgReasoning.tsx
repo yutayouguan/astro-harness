@@ -21,6 +21,8 @@ type Props = {
   durationSec?: number;
   /** 思考起点（ms）；缺省时在 active 瞬间本地闩锁 */
   startedAtMs?: number;
+  /** 非活动思考块的默认展开状态 */
+  defaultOpen?: boolean;
   /** 右键菜单“展开/折叠全部”的单次消息覆盖 */
   forcedOpen?: boolean;
 };
@@ -31,10 +33,11 @@ export default function MsgReasoning({
   outcome = "done",
   durationSec,
   startedAtMs,
+  defaultOpen = false,
   forcedOpen,
 }: Props) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(active);
+  const [open, setOpen] = useState(active || defaultOpen);
   const [localStart, setLocalStart] = useState<number | null>(null);
   const wasActiveRef = useRef(false);
 
@@ -56,9 +59,9 @@ export default function MsgReasoning({
     } else {
       wasActiveRef.current = false;
       setLocalStart(null);
-      setOpen(false);
+      setOpen(defaultOpen);
     }
-  }, [active, forcedOpen, startedAtMs]);
+  }, [active, defaultOpen, forcedOpen, startedAtMs]);
 
   const liveStart = active ? (startedAtMs ?? localStart) : null;
   const liveSec = useLiveElapsedSec(active, liveStart);

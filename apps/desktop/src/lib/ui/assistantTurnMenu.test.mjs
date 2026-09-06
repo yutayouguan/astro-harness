@@ -81,8 +81,19 @@ test("full-process controls reach reasoning and tool groups", async () => {
   ]);
 
   assert.match(chatView, /forcedOpen=\{forcedProcessOpen\}/);
+  assert.match(
+    chatView,
+    /current\[message\.id\] \?\? displayPrefs\.processDefaultOpen/,
+  );
+  assert.match(
+    chatView,
+    /defaultOpen=\{[\s\S]*?displayPrefs\.processDefaultOpen[\s\S]*?\}/,
+  );
   assert.match(reasoning, /forcedOpen\?: boolean/);
+  assert.match(reasoning, /defaultOpen\?: boolean/);
   assert.match(activities, /forcedOpen\?: boolean/);
+  assert.match(activities, /defaultOpen\?: boolean/);
+  assert.match(activities, /else \{[\s\S]*?setOpen\(defaultOpen\);[\s\S]*?\}/);
 });
 
 test("menu glass stays responsive and respects motion and transparency preferences", async () => {

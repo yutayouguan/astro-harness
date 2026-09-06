@@ -30,14 +30,20 @@ const [
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
 );
 
-test("normal chat display preset shows MCP and hides Hook events", () => {
+test("chat display presets define process visibility and default expansion", () => {
   const normalPreset = chatDisplayPrefs.slice(
     chatDisplayPrefs.indexOf("normal: {"),
     chatDisplayPrefs.indexOf("detailed: {"),
   );
+  const detailedPreset = chatDisplayPrefs.slice(
+    chatDisplayPrefs.indexOf("detailed: {"),
+    chatDisplayPrefs.indexOf("function defaultPrefs"),
+  );
 
   assert.match(normalPreset, /showMcp:\s*true/);
   assert.match(normalPreset, /showHooks:\s*false/);
+  assert.match(normalPreset, /processDefaultOpen:\s*false/);
+  assert.match(detailedPreset, /processDefaultOpen:\s*true/);
 });
 
 test("preference-backed settings use one scroll owner and one content width", () => {

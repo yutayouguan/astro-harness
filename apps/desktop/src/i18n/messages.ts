@@ -2451,6 +2451,9 @@ export const zh = {
   "prefs.chat.detailed": "详细",
   "prefs.chat.detailedDesc": "显示全部过程信息，含参数与结果细节",
   "prefs.chat.details": "过程信息开关",
+  "prefs.chat.processDefaultOpen": "默认展开过程",
+  "prefs.chat.processDefaultOpenDesc":
+    "新回答的思考与过程卡片默认展开",
   "prefs.chat.showTools": "工具调用",
   "prefs.chat.showToolsDesc": "显示 Agent 调用的内置工具",
   "prefs.chat.showSkills": "Skills 调用",
@@ -5740,6 +5743,9 @@ export const en: Record<MessageKey, string> = {
   "prefs.chat.detailed": "Detailed",
   "prefs.chat.detailedDesc": "Show all process info including args and results",
   "prefs.chat.details": "Process toggles",
+  "prefs.chat.processDefaultOpen": "Expand process by default",
+  "prefs.chat.processDefaultOpenDesc":
+    "Open reasoning and process cards by default for new answers",
   "prefs.chat.showTools": "Tool calls",
   "prefs.chat.showToolsDesc": "Show built-in tool invocations",
   "prefs.chat.showSkills": "Skills calls",

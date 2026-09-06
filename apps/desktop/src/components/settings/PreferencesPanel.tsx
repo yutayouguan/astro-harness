@@ -11,6 +11,7 @@ import {
   Activity,
   ArrowUp,
   Brain,
+  ChevronsUpDown,
   Clock,
   Copyright,
   Dices,
@@ -322,6 +323,12 @@ const TOGGLE_KEYS: {
   descKey: MessageKey;
   Icon: LucideIcon;
 }[] = [
+  {
+    key: "processDefaultOpen",
+    labelKey: "prefs.chat.processDefaultOpen",
+    descKey: "prefs.chat.processDefaultOpenDesc",
+    Icon: ChevronsUpDown,
+  },
   {
     key: "showTools",
     labelKey: "prefs.chat.showTools",

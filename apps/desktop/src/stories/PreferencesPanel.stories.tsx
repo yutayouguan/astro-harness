@@ -87,6 +87,7 @@ const meta = {
       showMemory: true,
       showStatus: true,
       showTimestamps: false,
+      processDefaultOpen: false,
     },
     onChatVerbosityChange: () => {},
     onChatAnswerLayoutChange: () => {},

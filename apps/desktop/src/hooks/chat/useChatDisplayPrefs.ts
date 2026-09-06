@@ -23,6 +23,8 @@ export type ChatDisplayPrefs = {
   showStatus: boolean;
   /** 显示时间戳 */
   showTimestamps: boolean;
+  /** 新消息的思考与过程卡片默认展开 */
+  processDefaultOpen: boolean;
 };
 
 export type ChatDisplayToggleKey = Exclude<
@@ -44,6 +46,7 @@ const PRESETS: Record<
     showMemory: false,
     showStatus: false,
     showTimestamps: false,
+    processDefaultOpen: false,
   },
   normal: {
     showTools: true,
@@ -53,6 +56,7 @@ const PRESETS: Record<
     showMemory: true,
     showStatus: true,
     showTimestamps: false,
+    processDefaultOpen: false,
   },
   detailed: {
     showTools: true,
@@ -62,6 +66,7 @@ const PRESETS: Record<
     showMemory: true,
     showStatus: true,
     showTimestamps: true,
+    processDefaultOpen: true,
   },
 };
 
@@ -112,6 +117,10 @@ function readStored(): ChatDisplayPrefs {
         typeof parsed.showTimestamps === "boolean"
           ? parsed.showTimestamps
           : PRESETS[verbosity].showTimestamps,
+      processDefaultOpen:
+        typeof parsed.processDefaultOpen === "boolean"
+          ? parsed.processDefaultOpen
+          : PRESETS[verbosity].processDefaultOpen,
     };
   } catch {
     return base;

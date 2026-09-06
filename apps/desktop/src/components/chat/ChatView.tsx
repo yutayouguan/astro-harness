@@ -2700,7 +2700,9 @@ export default function ChatView({
       if (action === "toggle-process") {
         setMessageProcessExpanded((current) => ({
           ...current,
-          [message.id]: !current[message.id],
+          [message.id]: !(
+            current[message.id] ?? displayPrefs.processDefaultOpen
+          ),
         }));
         return;
       }
@@ -2721,6 +2723,7 @@ export default function ChatView({
     [
       assistantMenu,
       copyAssistantTurnText,
+      displayPrefs.processDefaultOpen,
       messageLayoutOverrides,
       messages,
       onBranchMessage,
@@ -2751,9 +2754,10 @@ export default function ChatView({
             y={assistantMenu.y}
             defaultLayout={displayPrefs.answerLayout}
             layoutOverride={messageLayoutOverrides[contextMenuMessage.id]}
-            processExpanded={Boolean(
-              messageProcessExpanded[contextMenuMessage.id],
-            )}
+            processExpanded={
+              messageProcessExpanded[contextMenuMessage.id] ??
+              displayPrefs.processDefaultOpen
+            }
             hasAnswer={Boolean(contextMenuMessage.content.trim())}
             hasProcess={Boolean(
               contextMenuMessage.reasoning?.trim() ||
@@ -2936,7 +2940,10 @@ export default function ChatView({
                                 node: (
                                   <MsgActivity
                                     activity={act}
-                                    defaultOpen={forcedProcessOpen ?? false}
+                                    defaultOpen={
+                                      forcedProcessOpen ??
+                                      displayPrefs.processDefaultOpen
+                                    }
                                     showTimestamp={displayPrefs.showTimestamps}
                                     mediaBaseDir={mediaBaseDir}
                                   />
@@ -3032,6 +3039,9 @@ export default function ChatView({
                                         startedAtMs={
                                           active ? seg.at : undefined
                                         }
+                                        defaultOpen={
+                                          displayPrefs.processDefaultOpen
+                                        }
                                         forcedOpen={forcedProcessOpen}
                                       />
                                     ),
@@ -3091,6 +3101,9 @@ export default function ChatView({
                                       active={reasoningActive}
                                       outcome={reasoningOutcome}
                                       durationSec={m.reasoningDurationSec}
+                                      defaultOpen={
+                                        displayPrefs.processDefaultOpen
+                                      }
                                       forcedOpen={forcedProcessOpen}
                                     />
                                   ),
@@ -3139,6 +3152,9 @@ export default function ChatView({
                                       durationSec={
                                         groupedAnswer.reasoningDurationSec
                                       }
+                                      defaultOpen={
+                                        displayPrefs.processDefaultOpen
+                                      }
                                       forcedOpen={forcedProcessOpen}
                                     />
                                   ),
@@ -3165,6 +3181,9 @@ export default function ChatView({
                                   node: (
                                     <MsgActivityGroup
                                       activities={visibleActivities}
+                                      defaultOpen={
+                                        displayPrefs.processDefaultOpen
+                                      }
                                       forcedOpen={forcedProcessOpen}
                                       showTimestamp={
                                         displayPrefs.showTimestamps
@@ -3331,6 +3350,9 @@ export default function ChatView({
                                       >
                                         <MsgActivityGroup
                                           activities={activities}
+                                          defaultOpen={
+                                            displayPrefs.processDefaultOpen
+                                          }
                                           forcedOpen={forcedProcessOpen}
                                           showTimestamp={
                                             displayPrefs.showTimestamps

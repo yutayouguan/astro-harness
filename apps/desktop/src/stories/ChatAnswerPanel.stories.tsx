@@ -268,6 +268,7 @@ function GroupedAnswerLayoutPreview() {
                 showMemory: true,
                 showStatus: true,
                 showTimestamps: false,
+                processDefaultOpen: false,
               }}
               emptyMode={null}
               onInputChange={() => {}}
@@ -329,6 +330,7 @@ function InlineUserEditPreview() {
                 showMemory: true,
                 showStatus: true,
                 showTimestamps: false,
+                processDefaultOpen: false,
               }}
               emptyMode={null}
               onInputChange={() => {}}
@@ -384,6 +386,7 @@ function WelcomeLogoInteractionPreview() {
                 showMemory: true,
                 showStatus: true,
                 showTimestamps: false,
+                processDefaultOpen: false,
               }}
               emptyMode="chat"
               onInputChange={setInput}

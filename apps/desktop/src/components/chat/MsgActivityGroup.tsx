@@ -53,8 +53,10 @@ export default function MsgActivityGroup({
       setOpen(forcedOpen);
     } else if (needsAttention) {
       setOpen(true);
+    } else {
+      setOpen(defaultOpen);
     }
-  }, [forcedOpen, needsAttention]);
+  }, [defaultOpen, forcedOpen, needsAttention]);
 
   const actionLabel = useMemo(
     () => activityGroupSummaryLabel(activityGroupSummary(activities), t),
