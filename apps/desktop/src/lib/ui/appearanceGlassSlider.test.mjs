@@ -28,6 +28,20 @@ test("glass intensity uses one accessible five-stop range", () => {
 });
 
 test("glass range exposes discrete ticks, progress, focus, and reduced motion", () => {
+  assert.equal(
+    preferences.match(/appearance-control-row appearance-control-row--split/g)
+      ?.length,
+    2,
+  );
+  assert.match(
+    styles,
+    /\.appearance-control-row--split\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 0\.88fr\) minmax\(0, 1\.12fr\);/,
+  );
+  assert.match(
+    styles,
+    /\.appearance-control-row--split > :last-child\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*380px;[\s\S]*?box-sizing:\s*border-box;/,
+  );
+  assert.doesNotMatch(styles, /\.appearance-glass-slider\s*\{[^}]*cqi/);
   assert.match(
     styles,
     /\.appearance-glass-slider-ticks\s*\{[\s\S]*?grid-template-columns:\s*repeat\(5, 1fr\);/,

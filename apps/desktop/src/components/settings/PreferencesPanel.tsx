@@ -1042,7 +1042,7 @@ export default function PreferencesPanel({
             </div>
 
             <div className="appearance-control-list">
-              <div className="appearance-control-row">
+              <div className="appearance-control-row appearance-control-row--split">
                 <div className="appearance-control-copy">
                   <strong>{t("prefs.appearance.theme.title")}</strong>
                   <span>{t("prefs.appearance.theme.sub")}</span>
@@ -1067,7 +1067,7 @@ export default function PreferencesPanel({
                 </div>
               </div>
 
-              <div className="appearance-control-row">
+              <div className="appearance-control-row appearance-control-row--split">
                 <div className="appearance-control-copy">
                   <strong>{t("prefs.appearance.glass.title")}</strong>
                   <span id="appearance-glass-description">
