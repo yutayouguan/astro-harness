@@ -75,7 +75,7 @@ test("preference-backed tabs render independent glass cards", () => {
   );
   assert.match(
     settingsMaterialCss,
-    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?background:\s*var\(--settings-panel-background/,
+    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?border-radius:\s*var\(--settings-panel-radius,[\s\S]*?background:\s*var\(--settings-panel-background/,
   );
   assert.match(
     preferencesCss,

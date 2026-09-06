@@ -43,7 +43,7 @@ test("settings expose one shared inset and selected material contract", () => {
   assert.match(material, /> :is\(\.prefs-card, \.prefs-section\)/);
   assert.match(
     material,
-    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?background-clip:\s*padding-box;[\s\S]*?box-shadow:\s*var\(--glass-rim\);[\s\S]*?backdrop-filter:\s*none;/,
+    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?border-radius:\s*var\(--settings-panel-radius,[\s\S]*?background-clip:\s*padding-box;[\s\S]*?box-shadow:\s*var\(--settings-panel-shadow,[\s\S]*?backdrop-filter:\s*none;/,
   );
   assert.match(
     material,
