@@ -13,26 +13,19 @@ import {
   type ResolvedTheme,
   type ThemeMode,
 } from "../../lib/ui/themeResolution";
+import {
+  applyGlassIntensity,
+  DEFAULT_GLASS_INTENSITY,
+  normalizeGlassIntensity,
+  persistGlassIntensity,
+  readStoredGlassIntensity,
+  type GlassIntensity,
+} from "../../lib/ui/glassIntensity";
 
 export type { ResolvedTheme, ThemeMode } from "../../lib/ui/themeResolution";
-export type GlassLevel =
-  | "liquid"
-  | "liquid-soft"
-  | "rich"
-  | "normal"
-  | "minimal";
-
-const GLASS_LEVELS: readonly GlassLevel[] = [
-  "liquid",
-  "liquid-soft",
-  "rich",
-  "normal",
-  "minimal",
-];
-const DEFAULT_GLASS_LEVEL: GlassLevel = "liquid";
+export type { GlassIntensity } from "../../lib/ui/glassIntensity";
 
 const STORAGE_KEY = "astro-theme-mode";
-const GLASS_KEY = "astro-glass-level";
 
 function readStoredMode(): ThemeMode {
   try {
@@ -59,26 +52,6 @@ function systemPrefersDark(): boolean {
 export function resolveTheme(mode: ThemeMode): ResolvedTheme {
   if (mode === "auto") return systemPrefersDark() ? "dark" : "light";
   return mode;
-}
-
-function readGlassLevel(): GlassLevel {
-  try {
-    const v = localStorage.getItem(GLASS_KEY);
-    if (GLASS_LEVELS.includes(v as GlassLevel)) return v as GlassLevel;
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_GLASS_LEVEL;
-}
-
-function applyGlass(level: GlassLevel) {
-  const root = document.documentElement;
-  // rich 是 token 基线本身，不需要属性钩子。
-  if (level === "rich") {
-    root.removeAttribute("data-glass");
-  } else {
-    root.setAttribute("data-glass", level);
-  }
 }
 
 function applyResolved(next: ResolvedTheme) {
@@ -123,8 +96,8 @@ type ThemeContextValue = {
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
   resolved: ResolvedTheme;
-  glassLevel: GlassLevel;
-  setGlassLevel: (level: GlassLevel) => void;
+  glassIntensity: GlassIntensity;
+  setGlassIntensity: (intensity: GlassIntensity) => void;
   setWallpaperTheme: (theme: ResolvedTheme | null) => void;
   /** 在切 tab / tone 后重新断言当前主题，防止 data-theme 被冲掉 */
   reassert: () => void;
@@ -139,8 +112,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [resolved, setResolved] = useState<ResolvedTheme>(() =>
     typeof window === "undefined" ? "dark" : resolveTheme(readStoredMode()),
   );
-  const [glassLevel, setGlassState] = useState<GlassLevel>(() =>
-    typeof window === "undefined" ? DEFAULT_GLASS_LEVEL : readGlassLevel(),
+  const [glassIntensity, setGlassIntensityState] = useState<GlassIntensity>(
+    () =>
+      typeof window === "undefined"
+        ? DEFAULT_GLASS_INTENSITY
+        : readStoredGlassIntensity(),
   );
   const [wallpaperTheme, setWallpaperThemeState] =
     useState<ResolvedTheme | null>(null);
@@ -162,8 +138,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     apply(mode, wallpaperTheme);
-    applyGlass(glassLevel);
-  }, [mode, apply, glassLevel, wallpaperTheme]);
+    applyGlassIntensity(document.documentElement, glassIntensity);
+  }, [mode, apply, glassIntensity, wallpaperTheme]);
 
   useEffect(() => {
     if (mode !== "auto") return;
@@ -179,14 +155,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setModeState(next);
   }, []);
 
-  const setGlassLevel = useCallback((level: GlassLevel) => {
-    setGlassState(level);
-    applyGlass(level);
-    try {
-      localStorage.setItem(GLASS_KEY, level);
-    } catch {
-      /* ignore */
-    }
+  const setGlassIntensity = useCallback((intensity: GlassIntensity) => {
+    const normalized = normalizeGlassIntensity(intensity);
+    setGlassIntensityState(normalized);
+    applyGlassIntensity(document.documentElement, normalized);
+    persistGlassIntensity(normalized);
   }, []);
 
   const setWallpaperTheme = useCallback((theme: ResolvedTheme | null) => {
@@ -197,16 +170,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyResolved(
       resolveThemePreference(mode, systemPrefersDark(), wallpaperTheme),
     );
-    applyGlass(glassLevel);
-  }, [mode, glassLevel, wallpaperTheme]);
+    applyGlassIntensity(document.documentElement, glassIntensity);
+  }, [mode, glassIntensity, wallpaperTheme]);
 
   const value = useMemo(
     () => ({
       mode,
       setMode,
       resolved,
-      glassLevel,
-      setGlassLevel,
+      glassIntensity,
+      setGlassIntensity,
       setWallpaperTheme,
       reassert,
     }),
@@ -214,8 +187,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       mode,
       setMode,
       resolved,
-      glassLevel,
-      setGlassLevel,
+      glassIntensity,
+      setGlassIntensity,
       setWallpaperTheme,
       reassert,
     ],

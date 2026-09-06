@@ -1,10 +1,11 @@
+import type { CSSProperties } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-/** 玻璃强度档；与 useTheme 的 GlassLevel 对齐，rich 用空值表示 token 基线。 */
+/** 连续玻璃强度的低、中、高三个校准点。 */
 const VARIANTS = [
-  { id: undefined, label: "rich（旧磨砂）" },
-  { id: "liquid-soft", label: "liquid-soft（克制）" },
-  { id: "liquid", label: "liquid（贴近参考稿）" },
+  { intensity: 0, label: "0（关闭）" },
+  { intensity: 50, label: "50（默认）" },
+  { intensity: 100, label: "100（最强）" },
 ] as const;
 
 /** 背后的彩色图标块：玻璃要有高频细节可透，模糊和折光才看得出差别。 */
@@ -129,8 +130,16 @@ function LiquidGlassComparison() {
           gap: 24,
         }}
       >
-        {VARIANTS.map(({ id, label }) => (
-          <section key={label} data-glass={id}>
+        {VARIANTS.map(({ intensity, label }) => (
+          <section
+            key={label}
+            data-glass-intensity={intensity}
+            style={
+              {
+                "--glass-intensity": intensity / 100,
+              } as CSSProperties
+            }
+          >
             <p
               style={{
                 margin: "0 0 10px",

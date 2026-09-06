@@ -43,11 +43,7 @@ import { useMorphicons } from "../../hooks/app/useMorphicons";
 import type { WallpaperController } from "../../hooks/app/useWallpaper";
 import type { AppIconId } from "../../types";
 import type { ShellColorStyle } from "../../hooks/app/useShellColorStyle";
-import {
-  useTheme,
-  type ThemeMode,
-  type GlassLevel,
-} from "../../hooks/app/useTheme";
+import { useTheme, type ThemeMode } from "../../hooks/app/useTheme";
 import type {
   ChatAnswerLayout,
   ChatDisplayPrefs,
@@ -68,6 +64,10 @@ import {
   type MorphiconSpring,
   type MorphiconStrokeWidth,
 } from "../../lib/ui/morphiconPrefs";
+import {
+  GLASS_INTENSITY_MAX,
+  GLASS_INTENSITY_MIN,
+} from "../../lib/ui/glassIntensity";
 import { AppMorphIcon } from "../icons/MorphIcon";
 import { IconGlobe, IconChat, IconAtom } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
@@ -488,7 +488,7 @@ export default function PreferencesPanel({
   section,
 }: Props) {
   const { locale, setLocale, t } = useI18n();
-  const { glassLevel, setGlassLevel } = useTheme();
+  const { glassIntensity, setGlassIntensity } = useTheme();
   const { spring, strokeWidth, setSpring, setStrokeWidth } = useMorphicons();
   const reduceMotion = useReducedMotion();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
@@ -761,37 +761,6 @@ export default function PreferencesPanel({
       label: t("prefs.colorStyle.colorful"),
     },
   ];
-
-  const glassOptions: { id: GlassLevel; label: string }[] = [
-    {
-      id: "minimal",
-      label: t("prefs.appearance.glass.minimal"),
-    },
-    {
-      id: "normal",
-      label: t("prefs.appearance.glass.normal"),
-    },
-    {
-      id: "rich",
-      label: t("prefs.appearance.glass.rich"),
-    },
-    {
-      id: "liquid-soft",
-      label: t("prefs.appearance.glass.liquidSoft"),
-    },
-    {
-      id: "liquid",
-      label: t("prefs.appearance.glass.liquid"),
-    },
-  ];
-  const glassLevelIndex = Math.max(
-    0,
-    glassOptions.findIndex(({ id }) => id === glassLevel),
-  );
-  const glassLevelProgress =
-    glassOptions.length > 1
-      ? (glassLevelIndex / (glassOptions.length - 1)) * 100
-      : 0;
 
   const langOptions: {
     id: Locale;
@@ -1085,49 +1054,34 @@ export default function PreferencesPanel({
                   className="appearance-glass-slider"
                   style={
                     {
-                      "--glass-range-progress": `${glassLevelProgress}%`,
+                      "--glass-range-progress": `${glassIntensity}%`,
                     } as CSSProperties
                   }
                 >
                   <div className="appearance-glass-slider-track">
-                    <span className="appearance-glass-slider-ticks" aria-hidden>
-                      {glassOptions.map(({ id }, index) => (
-                        <i
-                          key={id}
-                          className={
-                            index <= glassLevelIndex ? "is-filled" : ""
-                          }
-                        />
-                      ))}
-                    </span>
                     <input
                       id="appearance-glass-intensity"
                       className="appearance-glass-range"
                       type="range"
-                      min={0}
-                      max={glassOptions.length - 1}
+                      min={GLASS_INTENSITY_MIN}
+                      max={GLASS_INTENSITY_MAX}
                       step={1}
-                      value={glassLevelIndex}
+                      value={glassIntensity}
                       aria-label={t("prefs.appearance.glass.title")}
                       aria-describedby="appearance-glass-description"
-                      aria-valuetext={glassOptions[glassLevelIndex]?.label}
-                      onChange={(event) => {
-                        const next =
-                          glassOptions[Number(event.currentTarget.value)];
-                        if (next) setGlassLevel(next.id);
-                      }}
+                      aria-valuetext={`${glassIntensity}%`}
+                      onChange={(event) =>
+                        setGlassIntensity(Number(event.currentTarget.value))
+                      }
                     />
                   </div>
-                  <div className="appearance-glass-slider-labels" aria-hidden>
-                    {glassOptions.map(({ id, label }) => (
-                      <span
-                        key={id}
-                        className={glassLevel === id ? "is-active" : ""}
-                      >
-                        {label}
-                      </span>
-                    ))}
-                  </div>
+                  <output
+                    className="appearance-glass-slider-value"
+                    htmlFor="appearance-glass-intensity"
+                    aria-live="off"
+                  >
+                    {glassIntensity}%
+                  </output>
                 </div>
               </div>
             </div>

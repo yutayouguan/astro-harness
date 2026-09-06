@@ -88,31 +88,20 @@ test("workspace content cards become solid for accessibility preferences", () =>
   );
 });
 
-test("workspace content cards follow the selected liquid glass strength", () => {
-  for (const [level, recipe] of [
-    ["liquid", "liquid-glass"],
-    ["liquid-soft", "liquid-glass-soft"],
-  ]) {
-    const escaped = level.replace("-", "\\-");
-    const block = glassIntensity.match(
-      new RegExp(
-        `\\[data-glass="${escaped}"\\]\\s*\\{(?<body>[\\s\\S]*?)\\n\\}`,
-      ),
-    )?.groups?.body;
-    assert.ok(block, `missing ${level} glass overrides`);
-    assert.match(
-      block,
-      new RegExp(`--content-card-border:\\s*var\\(--${recipe}-edge\\);`),
-    );
-    assert.match(
-      block,
-      new RegExp(`--content-card-background:[\\s\\S]*?--${recipe}-sheen`),
-    );
-    assert.match(
-      block,
-      new RegExp(`--content-card-backdrop:\\s*var\\(--${recipe}-backdrop\\);`),
-    );
-  }
+test("workspace content cards follow continuous liquid glass intensity", () => {
+  const block = rule(glassIntensity, "[data-glass-intensity]");
+  assert.ok(block, "missing continuous glass intensity overrides");
+  assert.match(
+    block,
+    /--glass-blur-scale:\s*var\(--liquid-glass-blur-scale\);/,
+  );
+  assert.match(block, /--content-card-border:\s*var\(--liquid-glass-edge\);/);
+  assert.match(block, /--content-card-background:[\s\S]*?--liquid-glass-sheen/);
+  assert.match(
+    block,
+    /--content-card-backdrop:\s*var\(--liquid-glass-backdrop\);/,
+  );
+  assert.doesNotMatch(glassIntensity, /data-glass="/);
 });
 
 test("content cards keep tone in accents rather than their base fill", () => {

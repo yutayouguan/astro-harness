@@ -1,33 +1,46 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {
+  applyGlassIntensity,
+  normalizeGlassIntensity,
+  readStoredGlassIntensity,
+} from "./glassIntensity.ts";
 
-const [preferences, styles] = await Promise.all(
-  [
-    "../../components/settings/PreferencesPanel.tsx",
-    "../../styles/features/preferences.css",
-  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
-);
+const [preferences, styles, theme, intensityRuntime, liquidGlass, main] =
+  await Promise.all(
+    [
+      "../../components/settings/PreferencesPanel.tsx",
+      "../../styles/features/preferences.css",
+      "../../hooks/app/useTheme.tsx",
+      "./glassIntensity.ts",
+      "../../styles/tokens/component/liquid-glass.css",
+      "../../main.tsx",
+    ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
 
-test("glass intensity uses one accessible five-stop range", () => {
+test("glass intensity uses one accessible continuous 0-100 range", () => {
   const control = preferences.slice(
     preferences.indexOf('className="appearance-glass-slider"'),
     preferences.indexOf("prefs-card--appearance-color"),
   );
 
   assert.match(control, /type="range"/);
-  assert.match(control, /min=\{0\}/);
-  assert.match(control, /max=\{glassOptions\.length - 1\}/);
+  assert.match(control, /min=\{GLASS_INTENSITY_MIN\}/);
+  assert.match(control, /max=\{GLASS_INTENSITY_MAX\}/);
   assert.match(control, /step=\{1\}/);
+  assert.match(control, /value=\{glassIntensity\}/);
+  assert.match(control, /aria-valuetext=\{`\$\{glassIntensity\}%`\}/);
   assert.match(
     control,
-    /aria-valuetext=\{glassOptions\[glassLevelIndex\]\?\.label\}/,
+    /setGlassIntensity\(Number\(event\.currentTarget\.value\)\)/,
   );
-  assert.match(control, /setGlassLevel\(next\.id\)/);
+  assert.match(control, /\{glassIntensity\}%/);
+  assert.doesNotMatch(control, /glassOptions|appearance-glass-slider-ticks/);
   assert.doesNotMatch(control, /role="radiogroup"/);
 });
 
-test("glass range exposes discrete ticks, progress, focus, and reduced motion", () => {
+test("glass range stays contained and exposes progress, focus, and reduced motion", () => {
   assert.equal(
     preferences.match(/appearance-control-row appearance-control-row--split/g)
       ?.length,
@@ -44,10 +57,6 @@ test("glass range exposes discrete ticks, progress, focus, and reduced motion", 
   assert.doesNotMatch(styles, /\.appearance-glass-slider\s*\{[^}]*cqi/);
   assert.match(
     styles,
-    /\.appearance-glass-slider-ticks\s*\{[\s\S]*?grid-template-columns:\s*repeat\(5, 1fr\);/,
-  );
-  assert.match(
-    styles,
     /\.appearance-glass-range::\-webkit-slider-runnable-track[\s\S]*?--glass-range-progress/,
   );
   assert.match(
@@ -56,6 +65,64 @@ test("glass range exposes discrete ticks, progress, focus, and reduced motion", 
   );
   assert.match(
     styles,
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.appearance-glass-slider-labels span[\s\S]*?transition:\s*none;/,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.appearance-glass-range::\-webkit-slider-thumb[\s\S]*?transition:\s*none;/,
   );
+});
+
+test("theme state persists a normalized intensity with a default of 50", () => {
+  assert.match(intensityRuntime, /DEFAULT_GLASS_INTENSITY = 50/);
+  assert.match(intensityRuntime, /GLASS_INTENSITY_MIN = 0/);
+  assert.match(intensityRuntime, /GLASS_INTENSITY_MAX = 100/);
+  assert.match(intensityRuntime, /"astro-glass-intensity"/);
+  assert.match(intensityRuntime, /Math\.round\(numeric\)/);
+  assert.match(
+    intensityRuntime,
+    /root\.dataset\.glassIntensity = String\(normalized\)/,
+  );
+  assert.match(
+    intensityRuntime,
+    /root\.style\.setProperty\("--glass-intensity", String\(normalized \/ 100\)\)/,
+  );
+  assert.doesNotMatch(theme, /GlassLevel|astro-glass-level|setGlassLevel/);
+  assert.match(theme, /glassIntensity:\s*GlassIntensity/);
+  assert.match(main, /readStoredGlassIntensity\(window\.localStorage\)/);
+});
+
+test("glass intensity normalization clamps input and rejects the removed presets", () => {
+  assert.equal(readStoredGlassIntensity({ getItem: () => null }), 50);
+  assert.equal(readStoredGlassIntensity({ getItem: () => "liquid" }), 50);
+  assert.equal(normalizeGlassIntensity(-20), 0);
+  assert.equal(normalizeGlassIntensity(42.6), 43);
+  assert.equal(normalizeGlassIntensity(140), 100);
+
+  const properties = new Map();
+  const root = {
+    dataset: {},
+    removeAttribute(name) {
+      assert.equal(name, "data-glass");
+    },
+    style: {
+      setProperty(name, value) {
+        properties.set(name, value);
+      },
+    },
+  };
+  applyGlassIntensity(root, 75);
+  assert.equal(root.dataset.glassIntensity, "75");
+  assert.equal(properties.get("--glass-intensity"), "0.75");
+});
+
+test("continuous recipe drives transparency, blur, saturation, rim, and shadow", () => {
+  for (const token of [
+    "--liquid-glass-tint",
+    "--liquid-glass-sheen",
+    "--liquid-glass-blur-scale",
+    "--liquid-glass-saturate",
+    "--liquid-glass-rim",
+    "--liquid-glass-shadow",
+  ]) {
+    assert.match(liquidGlass, new RegExp(`${token}:`));
+  }
+  assert.match(liquidGlass, /var\(--glass-intensity, 0\.5\)/);
+  assert.doesNotMatch(liquidGlass, /liquid-glass-soft/);
 });

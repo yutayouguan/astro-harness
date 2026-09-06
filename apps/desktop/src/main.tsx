@@ -8,6 +8,11 @@ import { MorphiconProvider } from "./hooks/app/useMorphicons";
 import { ThemeProvider } from "./hooks/app/useTheme";
 import { DialogProvider } from "./hooks/ui/DialogContext";
 import { installContextMenuGuard } from "./lib/ui/contextMenuGuard";
+import {
+  applyGlassIntensity,
+  DEFAULT_GLASS_INTENSITY,
+  readStoredGlassIntensity,
+} from "./lib/ui/glassIntensity";
 import "./styles/index.css";
 import "./styles/features/settings-material-unified.css";
 
@@ -26,8 +31,13 @@ installContextMenuGuard();
             : "light";
     document.documentElement.dataset.theme = resolved;
     document.documentElement.style.colorScheme = resolved;
+    applyGlassIntensity(
+      document.documentElement,
+      readStoredGlassIntensity(window.localStorage),
+    );
   } catch {
     document.documentElement.dataset.theme = "dark";
+    applyGlassIntensity(document.documentElement, DEFAULT_GLASS_INTENSITY);
   }
 })();
 

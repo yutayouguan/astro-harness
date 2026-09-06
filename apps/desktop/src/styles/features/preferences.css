@@ -653,38 +653,16 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
 }
 
 .appearance-glass-slider {
-  padding: 7px 10px 5px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px 5px 10px;
 }
 
 .appearance-glass-slider-track {
   position: relative;
   height: 26px;
-}
-
-.appearance-glass-slider-ticks {
-  position: absolute;
-  z-index: 1;
-  inset: 0 9px;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  align-items: center;
-  pointer-events: none;
-}
-
-.appearance-glass-slider-ticks i {
-  width: 4px;
-  height: 4px;
-  justify-self: center;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ink) 34%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--glass-fill) 58%, transparent);
-  transition:
-    background 140ms ease,
-    transform 140ms ease;
-}
-
-.appearance-glass-slider-ticks i.is-filled {
-  background: color-mix(in srgb, var(--tone) 74%, var(--ink));
 }
 
 .appearance-glass-range {
@@ -784,35 +762,18 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
     0 0 0 4px color-mix(in srgb, var(--tone) 20%, transparent);
 }
 
-.appearance-glass-slider-labels {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  padding: 0 9px;
-  color: var(--ink-mute);
-  font-size: 9.8px;
-  line-height: 1.2;
-  text-align: center;
-}
-
-.appearance-glass-slider-labels span {
+.appearance-glass-slider-value {
   min-width: 0;
-  white-space: nowrap;
-  transition:
-    color 140ms ease,
-    font-weight 140ms ease;
-}
-
-.appearance-glass-slider-labels span:first-child {
-  text-align: left;
-}
-
-.appearance-glass-slider-labels span:last-child {
-  text-align: right;
-}
-
-.appearance-glass-slider-labels span.is-active {
-  color: color-mix(in srgb, var(--tone) 70%, var(--ink));
+  padding: 5px 6px;
+  border: 1px solid var(--settings-inset-border, var(--glass-edge));
+  border-radius: 8px;
+  background: var(--settings-inset-background-strong, transparent);
+  color: color-mix(in srgb, var(--tone) 72%, var(--ink));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   font-weight: 720;
+  line-height: 1;
+  text-align: center;
 }
 
 .appearance-control-row--swatches .shell-color-presets {
@@ -3657,11 +3618,6 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   }
 
   .appearance-segmented button {
-    transition: none;
-  }
-
-  .appearance-glass-slider-ticks i,
-  .appearance-glass-slider-labels span {
     transition: none;
   }
 
