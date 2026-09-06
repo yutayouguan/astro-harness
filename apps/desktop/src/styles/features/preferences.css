@@ -866,16 +866,6 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   margin-bottom: 14px;
 }
 
-.prefs-card--conversation-display .prefs-toggle-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px 8px;
-}
-
-.prefs-card--conversation-display .prefs-toggle-heading {
-  grid-column: 1 / -1;
-}
-
 .prefs-card--diagnostics {
   display: flex;
   min-height: 0;
@@ -1617,7 +1607,7 @@ html[data-theme="dark"] .wallpaper-preview-shade {
 
 .prefs-conversation-preview {
   min-width: 0;
-  min-height: 270px;
+  min-height: 238px;
   padding: 12px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--tone) 13%, var(--glass-edge));
@@ -2022,6 +2012,44 @@ html[data-theme="dark"] .theme-option-icon {
 }
 
 /* 过程信息开关列表 */
+.prefs-conversation-controls-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.prefs-conversation-control-group {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 10%, rgba(255, 255, 255, 0.45));
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.18),
+      rgba(255, 255, 255, 0.08)
+    ),
+    color-mix(in srgb, var(--tone-soft) 18%, transparent);
+}
+
+html[data-theme="dark"] .prefs-conversation-control-group {
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(8, 6, 18, 0.35);
+}
+
+.prefs-conversation-verbosity-options {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
 .prefs-toggle-list {
   margin-top: 16px;
   display: flex;
@@ -2049,6 +2077,17 @@ html[data-theme="dark"] .prefs-toggle-list {
       rgba(255, 255, 255, 0.01)
     ),
     rgba(8, 6, 18, 0.35);
+}
+
+.prefs-card--conversation-controls .prefs-toggle-list {
+  margin-top: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 8px;
+}
+
+.prefs-card--conversation-controls .prefs-toggle-heading {
+  grid-column: 1 / -1;
 }
 
 .prefs-toggle-heading,
@@ -3463,8 +3502,12 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   .prefs-category-stack--appearance:not([hidden]),
   .prefs-category-stack--about:not([hidden]),
   .prefs-conversation-layout-grid,
-  .prefs-card--conversation-display .prefs-toggle-list {
+  .prefs-conversation-controls-grid {
     grid-template-columns: 1fr;
+  }
+
+  .prefs-conversation-verbosity-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .prefs-category-stack--appearance > .prefs-card--appearance-material,
@@ -3495,6 +3538,11 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   }
 
   .wallpaper-source-options {
+    grid-template-columns: 1fr;
+  }
+
+  .prefs-conversation-verbosity-options,
+  .prefs-card--conversation-controls .prefs-toggle-list {
     grid-template-columns: 1fr;
   }
 }

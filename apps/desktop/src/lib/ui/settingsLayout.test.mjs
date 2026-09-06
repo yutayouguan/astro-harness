@@ -75,6 +75,7 @@ test("appearance and conversation use responsive grouped layouts", () => {
   assert.match(preferences, /prefs\.appearance\.motion\.title/);
   assert.doesNotMatch(preferences, /prefs-appearance-preview/);
   assert.match(preferences, /prefs-card--conversation-display/);
+  assert.match(preferences, /prefs-card--conversation-controls/);
   assert.match(preferences, /ConversationLayoutPreview/);
   assert.match(preferences, /prefs-conversation-preview/);
   assert.match(preferences, /data-layout=\{prefs\.answerLayout\}/);
@@ -120,11 +121,15 @@ test("appearance and conversation use responsive grouped layouts", () => {
   assert.match(preferences, /max=\{GLASS_INTENSITY_MAX\}/);
   assert.match(
     preferencesCss,
-    /\.prefs-card--conversation-display \.prefs-toggle-list[\s\S]*?grid-template-columns:\s*repeat\(2,/,
+    /\.prefs-card--conversation-controls \.prefs-toggle-list[\s\S]*?grid-template-columns:\s*repeat\(2,/,
   );
   assert.match(
     preferencesCss,
     /\.prefs-conversation-layout-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(220px, 0\.72fr\) minmax\(320px, 1\.28fr\);/,
+  );
+  assert.match(
+    preferencesCss,
+    /\.prefs-conversation-controls-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(220px, 0\.72fr\) minmax\(0, 1\.28fr\);/,
   );
 
   const conversation = preferences.slice(

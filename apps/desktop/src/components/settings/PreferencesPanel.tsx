@@ -1464,7 +1464,7 @@ export default function PreferencesPanel({
             </div>
           </section>
 
-          <section className="prefs-card">
+          <section className="prefs-card prefs-card--conversation-controls">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <IconChat width={22} height={22} />
@@ -1475,62 +1475,85 @@ export default function PreferencesPanel({
               </div>
             </div>
 
-            <div
-              className="theme-options"
-              role="radiogroup"
-              aria-label={t("prefs.chat.verbosity")}
-            >
-              {verbosityOptions.map(({ id, labelKey, descKey }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="radio"
-                  aria-checked={prefs.verbosity === id}
-                  className={`theme-option ${prefs.verbosity === id ? "active" : ""}`}
-                  data-tone={tone}
-                  onClick={() => onChatVerbosityChange(id)}
+            <div className="prefs-conversation-controls-grid">
+              <div className="prefs-conversation-control-group">
+                <h3
+                  id="prefs-chat-verbosity-heading"
+                  className="prefs-toggle-heading"
                 >
-                  <span className="theme-option-icon lang-badge" aria-hidden>
-                    {id === "compact" ? "简" : id === "normal" ? "常" : "详"}
-                  </span>
-                  <span className="theme-option-text">
-                    <span className="theme-option-label">{t(labelKey)}</span>
-                    <span className="theme-option-desc">{t(descKey)}</span>
-                  </span>
-                  <span className="theme-option-check" aria-hidden />
-                </button>
-              ))}
-            </div>
+                  {t("prefs.chat.verbosity")}
+                </h3>
+                <div
+                  className="theme-options prefs-conversation-verbosity-options"
+                  role="radiogroup"
+                  aria-labelledby="prefs-chat-verbosity-heading"
+                >
+                  {verbosityOptions.map(({ id, labelKey, descKey }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={prefs.verbosity === id}
+                      className={`theme-option ${prefs.verbosity === id ? "active" : ""}`}
+                      data-tone={tone}
+                      onClick={() => onChatVerbosityChange(id)}
+                    >
+                      <span
+                        className="theme-option-icon lang-badge"
+                        aria-hidden
+                      >
+                        {id === "compact"
+                          ? "简"
+                          : id === "normal"
+                            ? "常"
+                            : "详"}
+                      </span>
+                      <span className="theme-option-text">
+                        <span className="theme-option-label">
+                          {t(labelKey)}
+                        </span>
+                        <span className="theme-option-desc">{t(descKey)}</span>
+                      </span>
+                      <span className="theme-option-check" aria-hidden />
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-            <div
-              className="prefs-toggle-list"
-              role="group"
-              aria-label={t("prefs.chat.details")}
-            >
-              <h3 className="prefs-toggle-heading">
-                {t("prefs.chat.details")}
-              </h3>
-              {TOGGLE_KEYS.map(({ key, labelKey, descKey, Icon }) => (
-                <label key={key} className="prefs-toggle-row">
-                  <span className="prefs-toggle-icon" aria-hidden>
-                    <Icon size={15} strokeWidth={2.25} />
-                  </span>
-                  <span className="prefs-toggle-text">
-                    <span className="prefs-toggle-label">{t(labelKey)}</span>
-                    <span className="prefs-toggle-desc">{t(descKey)}</span>
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    className="prefs-switch"
-                    aria-checked={prefs[key]}
-                    data-tone={tone}
-                    onClick={() => onChatToggleChange(key, !prefs[key])}
-                  >
-                    <span className="prefs-switch-thumb" />
-                  </button>
-                </label>
-              ))}
+              <div
+                className="prefs-toggle-list"
+                role="group"
+                aria-labelledby="prefs-chat-details-heading"
+              >
+                <h3
+                  id="prefs-chat-details-heading"
+                  className="prefs-toggle-heading"
+                >
+                  {t("prefs.chat.details")}
+                </h3>
+                {TOGGLE_KEYS.map(({ key, labelKey, descKey, Icon }) => (
+                  <div key={key} className="prefs-toggle-row">
+                    <span className="prefs-toggle-icon" aria-hidden>
+                      <Icon size={15} strokeWidth={2.25} />
+                    </span>
+                    <span className="prefs-toggle-text">
+                      <span className="prefs-toggle-label">{t(labelKey)}</span>
+                      <span className="prefs-toggle-desc">{t(descKey)}</span>
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      className="prefs-switch"
+                      aria-label={t(labelKey)}
+                      aria-checked={prefs[key]}
+                      data-tone={tone}
+                      onClick={() => onChatToggleChange(key, !prefs[key])}
+                    >
+                      <span className="prefs-switch-thumb" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         </div>

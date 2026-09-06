@@ -100,6 +100,12 @@ type Story = StoryObj<typeof meta>;
 
 export const Appearance: Story = {};
 
+export const Conversation: Story = {
+  args: {
+    section: "conversation",
+  },
+};
+
 export const Wallpaper: Story = {
   args: {
     wallpaper: {
