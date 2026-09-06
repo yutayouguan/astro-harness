@@ -16,9 +16,10 @@ const [component, css] = await Promise.all([
   ),
 ]);
 
-test("automatic compression uses a page title and direct-manipulation ranges", () => {
-  assert.match(component, /className="prefs-context-page-head"/);
-  assert.match(component, /className="prefs-context-eyebrow"/);
+test("automatic compression keeps its compact card title and direct-manipulation ranges", () => {
+  assert.doesNotMatch(component, /className="prefs-context-page-head"/);
+  assert.doesNotMatch(component, /className="prefs-context-eyebrow"/);
+  assert.match(component, /className="prefs-card-head"/);
   assert.match(component, /function CompressionRange/);
   assert.match(component, /type="range"/);
   assert.match(component, /onPointerUp=/);

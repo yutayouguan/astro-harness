@@ -16,6 +16,7 @@ import {
   FoldVertical,
   Gauge,
   Hash,
+  Layers3,
   Lightbulb,
   MessagesSquare,
   RefreshCw,
@@ -405,13 +406,17 @@ export default function CompressionSettingsCard({
 
   return (
     <section className="prefs-card prefs-context-card">
-      <header className="prefs-context-page-head">
-        <span className="prefs-context-eyebrow" aria-hidden="true">
-          Context
-        </span>
-        <h2>{t("prefs.context.title")}</h2>
-        <p>{t("prefs.context.sub")}</p>
-      </header>
+      <div className="prefs-card-head">
+        <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+          <Layers3 width={22} height={22} strokeWidth={2} />
+        </div>
+        <div>
+          <h2 className="prefs-card-title">{t("prefs.context.title")}</h2>
+          <p className="prefs-card-sub">{t("prefs.context.sub")}</p>
+        </div>
+      </div>
+
+      <p className="prefs-card-note">{t("prefs.context.viewHint")}</p>
 
       {displayError && (
         <p className="aux-error prefs-context-error" role="alert">

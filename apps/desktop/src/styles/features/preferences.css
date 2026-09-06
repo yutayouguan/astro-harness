@@ -2366,40 +2366,8 @@ html[data-theme="dark"] .prefs-diag-log-row:hover {
   margin: 10px 0 0;
 }
 
-.prefs-context-page-head {
-  padding: 2px 2px 4px;
-}
-
-.prefs-context-eyebrow {
-  display: block;
-  margin-bottom: 7px;
-  color: var(--tone);
-  font-size: 10.5px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-}
-
-.prefs-context-page-head h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: clamp(24px, 3.5vw, 30px);
-  font-weight: 760;
-  font-optical-sizing: auto;
-  line-height: 1.08;
-  letter-spacing: -0.035em;
-}
-
-.prefs-context-page-head p {
-  margin: 9px 0 0;
-  color: var(--ink-mute);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
 .prefs-context-enable {
-  margin-top: 20px;
+  margin-top: 12px;
   min-height: 64px;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--tone) 13%, var(--glass-edge));

@@ -2372,7 +2372,8 @@ export const zh = {
   "prefs.chat.showTimestampsDesc": "在消息与过程卡片上显示时间",
 
   "prefs.context.title": "自动压缩",
-  "prefs.context.sub": "在质量和上下文成本之间设定自动压缩策略。",
+  "prefs.context.sub":
+    "配置 Run 内 Soft/Medium/Hard、mid-run 与建议 /compact 等卫生参数",
   "prefs.context.viewHint":
     "占用分层查看在聊天右栏「上下文」；此处只调整触发阈值与预算。",
   "prefs.context.loading": "正在加载压缩设置…",
@@ -5546,7 +5547,7 @@ export const en: Record<MessageKey, string> = {
 
   "prefs.context.title": "Automatic Compression",
   "prefs.context.sub":
-    "Balance response quality and context cost with an automatic compression strategy.",
+    "Configure Soft/Medium/Hard, mid-run, and /compact recommend thresholds",
   "prefs.context.viewHint":
     "Layered usage lives in the chat Context panel; this card only tunes triggers and budgets.",
   "prefs.context.loading": "Loading compression settings…",
