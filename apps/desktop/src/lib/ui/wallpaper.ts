@@ -25,10 +25,19 @@ export type WallpaperPrefs = {
   shade: number;
   blur: number;
   adaptiveColor: boolean;
+  customThemeColor?: string;
+  customHighlightColor?: string;
   followSystemWallpaper: boolean;
 };
 
+export type WallpaperPalette = {
+  themeColor: string;
+  highlightColor: string;
+};
+
 export const MAX_RECENT_WALLPAPERS = 6;
+export const DEFAULT_WALLPAPER_THEME_COLOR = "#4f6ef7";
+export const DEFAULT_WALLPAPER_HIGHLIGHT_COLOR = "#a855f7";
 
 export const DEFAULT_WALLPAPER_PREFS: WallpaperPrefs = {
   mode: "wallpaper",
@@ -45,6 +54,12 @@ function clamp(value: unknown, min: number, max: number, fallback: number) {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.min(max, Math.max(min, Math.round(value)))
     : fallback;
+}
+
+function normalizeHexColor(value: unknown): string | undefined {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)
+    ? value.toLowerCase()
+    : undefined;
 }
 
 function normalizeAsset(raw: unknown): WallpaperAsset | null {
@@ -78,16 +93,8 @@ function normalizeAsset(raw: unknown): WallpaperAsset | null {
       value.recommendedTheme === "dark" || value.recommendedTheme === "light"
         ? value.recommendedTheme
         : undefined,
-    accentColor:
-      typeof value.accentColor === "string" &&
-      /^#[0-9a-f]{6}$/i.test(value.accentColor)
-        ? value.accentColor
-        : undefined,
-    secondaryColor:
-      typeof value.secondaryColor === "string" &&
-      /^#[0-9a-f]{6}$/i.test(value.secondaryColor)
-        ? value.secondaryColor
-        : undefined,
+    accentColor: normalizeHexColor(value.accentColor),
+    secondaryColor: normalizeHexColor(value.secondaryColor),
     provider: typeof value.provider === "string" ? value.provider : undefined,
     model: typeof value.model === "string" ? value.model : undefined,
   };
@@ -127,11 +134,29 @@ export function normalizeWallpaperPrefs(raw: unknown): WallpaperPrefs {
       typeof value.adaptiveColor === "boolean"
         ? value.adaptiveColor
         : DEFAULT_WALLPAPER_PREFS.adaptiveColor,
+    customThemeColor: normalizeHexColor(value.customThemeColor),
+    customHighlightColor: normalizeHexColor(value.customHighlightColor),
     followSystemWallpaper:
       typeof value.followSystemWallpaper === "boolean"
         ? value.followSystemWallpaper
         : current?.source === "system" || legacySystemDefault,
   };
+}
+
+export function resolveWallpaperPalette(
+  prefs: Pick<
+    WallpaperPrefs,
+    "adaptiveColor" | "customThemeColor" | "customHighlightColor"
+  >,
+  wallpaper: Pick<WallpaperAsset, "accentColor" | "secondaryColor"> | null,
+): WallpaperPalette | null {
+  const themeColor = prefs.adaptiveColor
+    ? normalizeHexColor(wallpaper?.accentColor)
+    : normalizeHexColor(prefs.customThemeColor);
+  const highlightColor = prefs.adaptiveColor
+    ? normalizeHexColor(wallpaper?.secondaryColor)
+    : normalizeHexColor(prefs.customHighlightColor);
+  return themeColor && highlightColor ? { themeColor, highlightColor } : null;
 }
 
 export function addRecentWallpaper(

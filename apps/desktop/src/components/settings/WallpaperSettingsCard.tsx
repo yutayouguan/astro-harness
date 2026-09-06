@@ -16,6 +16,11 @@ import {
 import type { WallpaperController } from "../../hooks/app/useWallpaper";
 import { useI18n } from "../../i18n/LocaleContext";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
+import {
+  DEFAULT_WALLPAPER_HIGHLIGHT_COLOR,
+  DEFAULT_WALLPAPER_THEME_COLOR,
+  resolveWallpaperPalette,
+} from "../../lib/ui/wallpaper";
 
 type Props = {
   controller: WallpaperController;
@@ -78,6 +83,20 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("natural");
   const [applied, setApplied] = useState(false);
+  const automaticPalette = resolveWallpaperPalette(
+    { ...prefs, adaptiveColor: true },
+    prefs.current,
+  );
+  const manualPalette = resolveWallpaperPalette(
+    { ...prefs, adaptiveColor: false },
+    prefs.current,
+  );
+  const palette = prefs.adaptiveColor
+    ? automaticPalette
+    : (manualPalette ?? automaticPalette);
+  const themeColor = palette?.themeColor ?? DEFAULT_WALLPAPER_THEME_COLOR;
+  const highlightColor =
+    palette?.highlightColor ?? DEFAULT_WALLPAPER_HIGHLIGHT_COLOR;
 
   useEffect(() => {
     if (!applied) return;
@@ -343,9 +362,7 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                 <span
                   className="wallpaper-preview-toggle-swatch"
                   style={{
-                    background: prefs.current?.accentColor
-                      ? `linear-gradient(135deg, ${prefs.current.accentColor}, ${prefs.current.secondaryColor ?? prefs.current.accentColor})`
-                      : undefined,
+                    background: `linear-gradient(135deg, ${themeColor}, ${highlightColor})`,
                   }}
                   aria-hidden
                 />
@@ -401,6 +418,56 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                 <Sparkles size={15} />
                 {t("prefs.wallpaper.aiGenerate")}
               </button>
+            </div>
+
+            <div className="wallpaper-control-group wallpaper-palette-control">
+              <span className="wallpaper-control-label">
+                <span>{t("prefs.wallpaper.palette")}</span>
+                <output>
+                  {t(
+                    prefs.adaptiveColor
+                      ? "prefs.wallpaper.paletteAuto"
+                      : "prefs.wallpaper.paletteCustom",
+                  )}
+                </output>
+              </span>
+              <div className="wallpaper-color-fields">
+                <label>
+                  <input
+                    type="color"
+                    value={themeColor}
+                    aria-label={t("prefs.wallpaper.themeColor")}
+                    onChange={(event) =>
+                      controller.setPalette(event.target.value, highlightColor)
+                    }
+                  />
+                  <span>
+                    <strong>{t("prefs.wallpaper.themeColor")}</strong>
+                    <code>{themeColor}</code>
+                  </span>
+                </label>
+                <label>
+                  <input
+                    type="color"
+                    value={highlightColor}
+                    aria-label={t("prefs.wallpaper.highlightColor")}
+                    onChange={(event) =>
+                      controller.setPalette(themeColor, event.target.value)
+                    }
+                  />
+                  <span>
+                    <strong>{t("prefs.wallpaper.highlightColor")}</strong>
+                    <code>{highlightColor}</code>
+                  </span>
+                </label>
+              </div>
+              <small className="wallpaper-palette-hint">
+                {t(
+                  prefs.adaptiveColor
+                    ? "prefs.wallpaper.paletteAutoDesc"
+                    : "prefs.wallpaper.paletteCustomDesc",
+                )}
+              </small>
             </div>
 
             <div className="wallpaper-control-group">

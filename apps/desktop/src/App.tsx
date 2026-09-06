@@ -142,6 +142,7 @@ import { resolveMediaSrc } from "./lib/media/resolveMediaSrc";
 import {
   applyWallpaperPaletteVars,
   clearWallpaperPaletteVars,
+  resolveWallpaperPalette,
 } from "./lib/ui/wallpaper";
 import { resolveWallpaperPresentation } from "./lib/ui/activeUiStyle";
 import {
@@ -818,10 +819,21 @@ export default function App() {
     : null;
   const wallpaperEnabled = Boolean(wallpaperSrc);
   const wallpaperAdaptiveColor = wallpaperPresentation.adaptiveColor;
-  const recommendedWallpaperTheme =
-    wallpaperEnabled && wallpaperAdaptiveColor
-      ? (effectiveWallpaper?.recommendedTheme ?? null)
-      : null;
+  const recommendedWallpaperTheme = wallpaperEnabled
+    ? (effectiveWallpaper?.recommendedTheme ?? null)
+    : null;
+  const wallpaperPalette = wallpaperPresentation.generated
+    ? wallpaperAdaptiveColor &&
+      effectiveWallpaper?.accentColor &&
+      effectiveWallpaper.secondaryColor
+      ? {
+          themeColor: effectiveWallpaper.accentColor,
+          highlightColor: effectiveWallpaper.secondaryColor,
+        }
+      : null
+    : resolveWallpaperPalette(wallpaper.prefs, effectiveWallpaper);
+  const wallpaperThemeColor = wallpaperPalette?.themeColor ?? null;
+  const wallpaperHighlightColor = wallpaperPalette?.highlightColor ?? null;
   useEffect(() => {
     setWallpaperTheme(recommendedWallpaperTheme);
   }, [recommendedWallpaperTheme, setWallpaperTheme]);
@@ -888,15 +900,13 @@ export default function App() {
     } else {
       root.removeAttribute("data-wallpaper");
     }
-    const wallpaperAccent = wallpaperAdaptiveColor
-      ? effectiveWallpaper?.accentColor
-      : null;
-    const wallpaperSecondary = wallpaperAdaptiveColor
-      ? effectiveWallpaper?.secondaryColor
-      : null;
-    if (wallpaperEnabled && wallpaperAccent && wallpaperSecondary) {
+    if (wallpaperEnabled && wallpaperThemeColor && wallpaperHighlightColor) {
       root.setAttribute("data-wallpaper-palette", "true");
-      applyWallpaperPaletteVars(root, wallpaperAccent, wallpaperSecondary);
+      applyWallpaperPaletteVars(
+        root,
+        wallpaperThemeColor,
+        wallpaperHighlightColor,
+      );
       flushGlassBackdrop(root);
     } else {
       root.removeAttribute("data-wallpaper-palette");
@@ -917,9 +927,8 @@ export default function App() {
     resolved,
     reassert,
     wallpaperEnabled,
-    wallpaperAdaptiveColor,
-    effectiveWallpaper?.accentColor,
-    effectiveWallpaper?.secondaryColor,
+    wallpaperThemeColor,
+    wallpaperHighlightColor,
   ]);
   useEffect(() => {
     void syncWindowUnderlay(resolved, shellTone, activeShellGradient);

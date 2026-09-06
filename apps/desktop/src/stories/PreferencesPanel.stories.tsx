@@ -64,6 +64,7 @@ const meta = {
       setShade: () => {},
       setBlur: () => {},
       setAdaptiveColor: () => {},
+      setPalette: () => {},
       setFollowSystemWallpaper: () => {},
       select: () => {},
       cycleRecent: () => {},

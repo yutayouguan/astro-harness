@@ -71,6 +71,8 @@ test("wallpaper commands are registered and the settings card calls each source"
   assert.match(panel, /controller\.importImage\(path\)/);
   assert.match(panel, /controller\.generate\(generatedPrompt\)/);
   assert.match(panel, /controller\.setFollowSystemWallpaper/);
+  assert.match(panel, /controller\.setPalette/);
+  assert.match(panel, /type="color"/);
   assert.match(panel, /className="wallpaper-preview-toggles"/);
   assert.match(panel, /prefs\.recent\.slice\(0, 2\)/);
   assert.match(panel, /className="wallpaper-recent-add"/);
@@ -129,6 +131,7 @@ test("wallpaper mode remains independent from color style", () => {
   assert.match(hook, /cycleRecentWallpaper/);
   assert.match(app, /setWallpaperTheme\(recommendedWallpaperTheme\)/);
   assert.match(app, /applyWallpaperPaletteVars/);
+  assert.match(app, /resolveWallpaperPalette/);
   assert.match(app, /wallpaperPresentation\.adaptiveColor/);
   assert.match(app, /data-wallpaper-palette/);
   assert.ok(

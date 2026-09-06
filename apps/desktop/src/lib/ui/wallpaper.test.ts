@@ -2,11 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_WALLPAPER_PREFS,
+  DEFAULT_WALLPAPER_HIGHLIGHT_COLOR,
+  DEFAULT_WALLPAPER_THEME_COLOR,
   MAX_RECENT_WALLPAPERS,
   addRecentWallpaper,
   applySystemWallpaper,
   cycleRecentWallpaper,
   normalizeWallpaperPrefs,
+  resolveWallpaperPalette,
   wallpaperBackgroundSize,
   type WallpaperAsset,
 } from "./wallpaper.ts";
@@ -62,6 +65,9 @@ test("normalization clamps controls and rejects malformed assets", () => {
     fit: "stretch",
     shade: 900,
     blur: -2,
+    adaptiveColor: false,
+    customThemeColor: "#F97316",
+    customHighlightColor: "not-a-color",
   });
   assert.equal(prefs.mode, "wallpaper");
   assert.equal(prefs.fit, "stretch");
@@ -71,12 +77,49 @@ test("normalization clamps controls and rejects malformed assets", () => {
   assert.equal(prefs.current?.recommendedTheme, "dark");
   assert.equal(prefs.current?.accentColor, "#22c55e");
   assert.equal(prefs.current?.secondaryColor, "#3b82f6");
-  assert.equal(prefs.adaptiveColor, true);
+  assert.equal(prefs.adaptiveColor, false);
+  assert.equal(prefs.customThemeColor, "#f97316");
+  assert.equal(prefs.customHighlightColor, undefined);
   assert.equal(prefs.followSystemWallpaper, false);
   assert.deepEqual(
     prefs.recent.map((item) => item.id),
     ["current"],
   );
+});
+
+test("wallpaper palette defaults to extracted colors and accepts a manual override", () => {
+  const current = {
+    ...asset("palette"),
+    accentColor: "#22C55E",
+    secondaryColor: "#3B82F6",
+  };
+  assert.deepEqual(
+    resolveWallpaperPalette(DEFAULT_WALLPAPER_PREFS, current),
+    { themeColor: "#22c55e", highlightColor: "#3b82f6" },
+  );
+  assert.deepEqual(
+    resolveWallpaperPalette(
+      {
+        adaptiveColor: false,
+        customThemeColor: "#F97316",
+        customHighlightColor: "#EC4899",
+      },
+      current,
+    ),
+    { themeColor: "#f97316", highlightColor: "#ec4899" },
+  );
+  assert.equal(
+    resolveWallpaperPalette(
+      {
+        adaptiveColor: false,
+        customThemeColor: DEFAULT_WALLPAPER_THEME_COLOR,
+        customHighlightColor: undefined,
+      },
+      current,
+    ),
+    null,
+  );
+  assert.match(DEFAULT_WALLPAPER_HIGHLIGHT_COLOR, /^#[0-9a-f]{6}$/);
 });
 
 test("recent wallpapers are deduplicated and bounded", () => {

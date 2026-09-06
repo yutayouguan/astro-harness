@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_WALLPAPER_PREFS,
+  DEFAULT_WALLPAPER_HIGHLIGHT_COLOR,
+  DEFAULT_WALLPAPER_THEME_COLOR,
   addRecentWallpaper,
   applySystemWallpaper,
   cycleRecentWallpaper,
@@ -52,6 +54,7 @@ export type WallpaperController = {
   setShade: (shade: number) => void;
   setBlur: (blur: number) => void;
   setAdaptiveColor: (enabled: boolean) => void;
+  setPalette: (themeColor: string, highlightColor: string) => void;
   setFollowSystemWallpaper: (enabled: boolean) => void;
   select: (asset: WallpaperAsset) => void;
   cycleRecent: () => void;
@@ -131,7 +134,30 @@ export function useWallpaper(): WallpaperController {
   const setAdaptiveColor = useCallback(
     (adaptiveColor: boolean) => {
       deactivateGeneratedStyle();
-      update((current) => ({ ...current, adaptiveColor }));
+      update((current) => ({
+        ...current,
+        adaptiveColor,
+        customThemeColor:
+          current.customThemeColor ??
+          current.current?.accentColor ??
+          DEFAULT_WALLPAPER_THEME_COLOR,
+        customHighlightColor:
+          current.customHighlightColor ??
+          current.current?.secondaryColor ??
+          DEFAULT_WALLPAPER_HIGHLIGHT_COLOR,
+      }));
+    },
+    [update],
+  );
+  const setPalette = useCallback(
+    (customThemeColor: string, customHighlightColor: string) => {
+      deactivateGeneratedStyle();
+      update((current) => ({
+        ...current,
+        adaptiveColor: false,
+        customThemeColor,
+        customHighlightColor,
+      }));
     },
     [update],
   );
@@ -266,7 +292,7 @@ export function useWallpaper(): WallpaperController {
     const asset = prefs.current;
     if (
       !asset ||
-      asset.recommendedTheme ||
+      (asset.recommendedTheme && asset.accentColor && asset.secondaryColor) ||
       analysisRequests.current.has(asset.path)
     ) {
       return;
@@ -299,6 +325,8 @@ export function useWallpaper(): WallpaperController {
     prefs.current?.id,
     prefs.current?.path,
     prefs.current?.recommendedTheme,
+    prefs.current?.accentColor,
+    prefs.current?.secondaryColor,
     update,
   ]);
 
@@ -311,6 +339,7 @@ export function useWallpaper(): WallpaperController {
     setShade,
     setBlur,
     setAdaptiveColor,
+    setPalette,
     setFollowSystemWallpaper,
     select,
     cycleRecent,
