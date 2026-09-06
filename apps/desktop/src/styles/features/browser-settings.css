@@ -1,6 +1,28 @@
+.browser-settings-page .prefs-category-content {
+  max-width: 980px;
+}
+
+.browser-settings-layout:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.browser-settings-card--runtime,
+.browser-settings-card--startup {
+  min-width: 0;
+  min-height: 228px;
+}
+
+.browser-settings-card--permissions,
+.browser-settings-card--sites {
+  grid-column: 1 / -1;
+}
+
 .browser-settings-status-card .prefs-card-head {
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .prefs-page.is-embedded .prefs-category-stack > .browser-settings-status-card {
@@ -25,39 +47,40 @@
 }
 
 .browser-runtime-status > span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentcolor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentcolor 12%, transparent);
+  display: none;
 }
 
 .browser-runtime-status.is-ready {
   color: #218356;
+  border-color: color-mix(in srgb, #218356 16%, transparent);
+  background: color-mix(in srgb, #39a96b 11%, transparent);
 }
 
 .browser-runtime-status.is-missing {
   color: #a15a32;
+  border-color: color-mix(in srgb, #a15a32 16%, transparent);
+  background: color-mix(in srgb, #c8872b 11%, transparent);
 }
 
 .browser-data-path {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(140px, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--tone-soft) 14%, transparent);
-  color: var(--ink-mute);
-  font-size: 11.5px;
+  gap: 16px;
+  min-height: 74px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
 .browser-data-path code {
   min-width: 0;
+  max-width: 220px;
+  padding: 8px 11px;
   overflow: hidden;
   color: var(--ink-soft);
-  font-size: 11.5px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -65,16 +88,30 @@
 .browser-settings-home,
 .browser-viewport-setting {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: minmax(125px, 1fr) minmax(210px, 0.95fr);
   align-items: center;
-  gap: 10px 14px;
+  gap: 14px;
+  min-height: 67px;
+  padding: 10px 0;
 }
 
-.browser-settings-home > label,
-.browser-viewport-setting > span {
-  color: var(--ink-soft);
+.browser-setting-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.browser-setting-copy strong {
+  color: var(--ink);
   font-size: 12.5px;
-  font-weight: 650;
+  font-weight: 700;
+}
+
+.browser-setting-copy small {
+  color: var(--ink-mute);
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 1.45;
 }
 
 .browser-settings-home > div {
@@ -90,7 +127,7 @@
 }
 
 .browser-viewport-setting {
-  margin-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
 .browser-viewport-options {
@@ -164,15 +201,17 @@
   opacity: 0.55;
 }
 
-.browser-viewport-setting > small {
-  grid-column: 2;
-  color: var(--ink-mute);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
 .browser-permission-toggles {
   margin-top: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.browser-permission-toggles .prefs-toggle-row {
+  min-height: 66px;
+  padding-inline: 0;
 }
 
 .browser-permissions-list {
@@ -188,14 +227,26 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 50px;
-  padding: 8px 10px 8px 12px;
+  min-height: 58px;
+  padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
   border-radius: 12px;
   background: color-mix(in srgb, var(--tone-soft) 13%, transparent);
 }
 
-.browser-permissions-list li > span {
+.browser-permission-site-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-edge));
+  border-radius: 10px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--glass-fill, #fff) 72%, transparent);
+}
+
+.browser-permission-site-copy {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -214,6 +265,17 @@
 .browser-permissions-list small {
   color: var(--ink-mute);
   font-size: 11px;
+}
+
+.browser-permission-kind {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #218356;
+  background: color-mix(in srgb, #39a96b 12%, transparent);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .browser-permissions-list button {
@@ -267,6 +329,18 @@ html[data-theme="dark"] .browser-viewport-options button.is-active {
 }
 
 @container (max-width: 620px) {
+  .browser-settings-layout:not([hidden]) {
+    grid-template-columns: 1fr;
+  }
+
+  .browser-settings-card--runtime,
+  .browser-settings-card--startup,
+  .browser-settings-card--permissions,
+  .browser-settings-card--sites {
+    grid-column: 1;
+    min-height: auto;
+  }
+
   .browser-settings-status-card .prefs-card-head {
     align-items: flex-start;
     flex-wrap: wrap;
@@ -281,10 +355,6 @@ html[data-theme="dark"] .browser-viewport-options button.is-active {
     grid-template-columns: 1fr;
   }
 
-  .browser-viewport-setting > small {
-    grid-column: 1;
-  }
-
   .browser-viewport-options {
     grid-template-columns: 1fr;
   }
@@ -296,6 +366,15 @@ html[data-theme="dark"] .browser-viewport-options button.is-active {
 
   .browser-viewport-options button:last-child {
     border-bottom: 0;
+  }
+
+  .browser-permissions-list li {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .browser-permission-site-copy {
+    flex-basis: calc(100% - 48px);
   }
 }
 

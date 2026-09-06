@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [indexCss, surfacesCss, terminal, terminalCss, browser] =
+const [indexCss, surfacesCss, terminal, terminalCss, browser, browserCss] =
   await Promise.all(
     [
       "../../styles/index.css",
@@ -10,13 +10,18 @@ const [indexCss, surfacesCss, terminal, terminalCss, browser] =
       "../../components/settings/TerminalSettingsPanel.tsx",
       "../../styles/features/terminal-settings.css",
       "../../components/settings/BrowserSettingsPanel.tsx",
+      "../../styles/features/browser-settings.css",
     ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );
 
-test("settings card overrides load after legacy shared-surface styles", () => {
+test("settings card overrides load between shared and page-specific styles", () => {
   assert.ok(
     indexCss.indexOf("./features/settings-card-surfaces.css") >
-      indexCss.indexOf("./features/terminal-settings.css"),
+      indexCss.indexOf("./features/preferences.css"),
+  );
+  assert.ok(
+    indexCss.indexOf("./features/settings-card-surfaces.css") <
+      indexCss.indexOf("./features/browser-settings.css"),
   );
   assert.match(
     surfacesCss,
@@ -58,5 +63,18 @@ test("terminal and browser settings keep independent functional sections", () =>
   assert.ok(
     (browser.match(/<section className="prefs-card/g) ?? []).length >= 3,
     "browser settings should keep its runtime, startup, and permission cards",
+  );
+  assert.match(browser, /browser-settings-layout/);
+  assert.match(browser, /browser-settings-card--runtime/);
+  assert.match(browser, /browser-settings-card--startup/);
+  assert.match(browser, /browser-settings-card--permissions/);
+  assert.match(browser, /browser-settings-card--sites/);
+  assert.match(
+    browserCss,
+    /\.browser-settings-layout:not\(\[hidden\]\)[\s\S]*?grid-template-columns:\s*repeat\(2,/,
+  );
+  assert.match(
+    browserCss,
+    /\.browser-settings-card--permissions,[\s\S]*?\.browser-settings-card--sites\s*\{[\s\S]*?grid-column:\s*1 \/ -1;/,
   );
 });

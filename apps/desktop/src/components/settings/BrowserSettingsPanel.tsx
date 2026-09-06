@@ -172,8 +172,8 @@ export default function BrowserSettingsPanel({
       data-tone={tone}
     >
       <div className="prefs-category-content">
-        <div className="prefs-category-stack">
-          <section className="prefs-card browser-settings-status-card">
+        <div className="prefs-category-stack browser-settings-layout">
+          <section className="prefs-card browser-settings-status-card browser-settings-card--runtime">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <Globe2 size={21} />
@@ -198,12 +198,15 @@ export default function BrowserSettingsPanel({
               </span>
             </div>
             <div className="browser-data-path">
-              <span>{t("browser.settings.data.label")}</span>
+              <span className="browser-setting-copy">
+                <strong>{t("browser.settings.data.label")}</strong>
+                <small>{t("browser.settings.data.desc")}</small>
+              </span>
               <code>{settings.dataDirectory}</code>
             </div>
           </section>
 
-          <section className="prefs-card">
+          <section className="prefs-card browser-settings-card--startup">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <Monitor size={20} />
@@ -219,8 +222,12 @@ export default function BrowserSettingsPanel({
             </div>
 
             <form className="browser-settings-home" onSubmit={submitHomePage}>
-              <label htmlFor="browser-home-page">
-                {t("browser.settings.home.label")}
+              <label
+                className="browser-setting-copy"
+                htmlFor="browser-home-page"
+              >
+                <strong>{t("browser.settings.home.label")}</strong>
+                <small>{t("browser.settings.home.desc")}</small>
               </label>
               <div>
                 <input
@@ -249,8 +256,15 @@ export default function BrowserSettingsPanel({
             </form>
 
             <div className="browser-viewport-setting">
-              <span>{t("browser.settings.viewport.label")}</span>
-              <div className="browser-viewport-options" role="radiogroup">
+              <span className="browser-setting-copy">
+                <strong>{t("browser.settings.viewport.label")}</strong>
+                <small>{t("browser.settings.viewport.hint")}</small>
+              </span>
+              <div
+                className="browser-viewport-options"
+                role="radiogroup"
+                aria-label={t("browser.settings.viewport.label")}
+              >
                 {VIEWPORT_PRESETS.map((preset) => {
                   const value = `${preset.width}x${preset.height}`;
                   return (
@@ -276,11 +290,10 @@ export default function BrowserSettingsPanel({
                   );
                 })}
               </div>
-              <small>{t("browser.settings.viewport.hint")}</small>
             </div>
           </section>
 
-          <section className="prefs-card">
+          <section className="prefs-card browser-settings-card--permissions">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <ShieldCheck size={20} />
@@ -358,7 +371,7 @@ export default function BrowserSettingsPanel({
             </div>
           </section>
 
-          <section className="prefs-card">
+          <section className="prefs-card browser-settings-card--sites">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <ShieldCheck size={20} />
@@ -380,13 +393,19 @@ export default function BrowserSettingsPanel({
               <ul className="browser-permissions-list">
                 {settings.approvalRules.map((rule) => (
                   <li key={`${rule.origin}:${rule.actionClass}`}>
-                    <span>
+                    <span className="browser-permission-site-icon" aria-hidden>
+                      <Globe2 size={15} />
+                    </span>
+                    <span className="browser-permission-site-copy">
                       <code>{rule.origin}</code>
                       <small>
-                        {rule.actionClass === "state_changing"
-                          ? t("approvals.browser.stateChanging")
-                          : rule.actionClass}
+                        {t("browser.settings.sitePermissions.approved")}
                       </small>
+                    </span>
+                    <span className="browser-permission-kind">
+                      {rule.actionClass === "state_changing"
+                        ? t("approvals.browser.stateChanging")
+                        : rule.actionClass}
                     </span>
                     <button
                       type="button"

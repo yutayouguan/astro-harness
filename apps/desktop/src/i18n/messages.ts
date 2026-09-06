@@ -699,27 +699,29 @@ export const zh = {
   "browser.settings.runtime.sub":
     "Astro 使用独立 Chromium 会话，与 AI 工具和右侧浏览器共享标签页。",
   "browser.settings.status.checking": "正在检查",
-  "browser.settings.status.ready": "浏览器可用",
+  "browser.settings.status.ready": "可用",
   "browser.settings.status.missing": "未找到 Chromium",
-  "browser.settings.data.label": "本地数据",
-  "browser.settings.startup.title": "新标签页与视口",
+  "browser.settings.data.label": "数据目录",
+  "browser.settings.data.desc": "Cookie、缓存和标签状态只保存在本机。",
+  "browser.settings.startup.title": "启动页与视口",
   "browser.settings.startup.sub": "设置新建标签页的起始页和初始渲染尺寸。",
-  "browser.settings.home.label": "默认主页",
+  "browser.settings.home.label": "主页",
+  "browser.settings.home.desc": "未带 URL 打开新标签时使用。",
   "browser.settings.viewport.label": "默认视口",
   "browser.settings.viewport.hint":
     "右侧浏览器打开后会自动贴合面板；此尺寸用于新标签页的首次渲染和 AI 截图。",
-  "browser.settings.permissions.title": "访问权限",
-  "browser.settings.permissions.sub":
-    "这些开关同时约束你和 AI 操作的共享浏览器会话。",
-  "browser.settings.loopback.label": "本地开发地址",
+  "browser.settings.permissions.title": "运行权限",
+  "browser.settings.permissions.sub": "只开启工作需要的浏览器能力。",
+  "browser.settings.loopback.label": "允许本机回环地址",
   "browser.settings.loopback.desc":
     "允许访问 localhost 和 127.0.0.1，用于预览项目文件和本地前端。其他私有网络仍始终拦截。",
   "browser.settings.downloads.label": "允许下载",
   "browser.settings.downloads.desc":
     "允许网页将文件保存到当前任务的隔离下载目录。",
-  "browser.settings.sitePermissions.title": "站点操作权限",
+  "browser.settings.sitePermissions.title": "已批准站点",
   "browser.settings.sitePermissions.sub":
-    "管理你在 AI 审批卡中选择“始终允许”的站点。",
+    "站点权限在操作发生时申请，只能在此撤销。",
+  "browser.settings.sitePermissions.approved": "已批准的站点操作权限",
   "browser.settings.sensitive":
     "登录、授权、支付、发布、删除等敏感操作不会被永久放行，仍会每次请求批准。",
   "browser.settings.revoke": "撤销",
@@ -3842,28 +3844,33 @@ export const en: Record<MessageKey, string> = {
   "browser.settings.runtime.sub":
     "Astro uses isolated Chromium sessions shared by AI tools and the right-side browser.",
   "browser.settings.status.checking": "Checking",
-  "browser.settings.status.ready": "Browser available",
+  "browser.settings.status.ready": "Available",
   "browser.settings.status.missing": "Chromium not found",
-  "browser.settings.data.label": "Local data",
-  "browser.settings.startup.title": "New tabs and viewport",
+  "browser.settings.data.label": "Data directory",
+  "browser.settings.data.desc":
+    "Cookies, cache, and tab state stay on this device.",
+  "browser.settings.startup.title": "Start page and viewport",
   "browser.settings.startup.sub":
     "Choose the start page and initial rendering size for new tabs.",
-  "browser.settings.home.label": "Home page",
+  "browser.settings.home.label": "Home",
+  "browser.settings.home.desc": "Used when opening a new tab without a URL.",
   "browser.settings.viewport.label": "Default viewport",
   "browser.settings.viewport.hint":
     "The right-side browser fits its panel after opening. This size is used for a new tab's first render and AI screenshots.",
-  "browser.settings.permissions.title": "Access permissions",
+  "browser.settings.permissions.title": "Runtime permissions",
   "browser.settings.permissions.sub":
-    "These controls apply to the shared browser session used by you and AI.",
-  "browser.settings.loopback.label": "Local development addresses",
+    "Enable only the browser capabilities required for your work.",
+  "browser.settings.loopback.label": "Allow local loopback addresses",
   "browser.settings.loopback.desc":
     "Allow localhost and 127.0.0.1 for project previews and local frontends. Other private networks remain blocked.",
   "browser.settings.downloads.label": "Allow downloads",
   "browser.settings.downloads.desc":
     "Allow websites to save files inside the current task's isolated downloads directory.",
-  "browser.settings.sitePermissions.title": "Site action permissions",
+  "browser.settings.sitePermissions.title": "Approved sites",
   "browser.settings.sitePermissions.sub":
-    "Manage sites where you selected Always allow on an AI approval prompt.",
+    "Site permissions are requested during an action and can only be revoked here.",
+  "browser.settings.sitePermissions.approved":
+    "Approved site action permission",
   "browser.settings.sensitive":
     "Login, authorization, payment, publishing, deletion, and other sensitive actions are never permanently allowed and still require approval every time.",
   "browser.settings.revoke": "Revoke",
