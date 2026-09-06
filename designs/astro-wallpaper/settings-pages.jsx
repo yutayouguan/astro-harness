@@ -15,7 +15,7 @@ const { WALLPAPERS, PROVIDERS, TOOLS, MODELS, LOG_ROWS } = window;
 
 function PreferencesPage({ tab, settings, patch, notify }) {
   return (
-    <div className="page" data-screen-label="偏好设置">
+    <div className="page" data-screen-label="基础设置">
       <PageHeader tab={tab} />
       <div className="page-stack">
         <div className="two-column">

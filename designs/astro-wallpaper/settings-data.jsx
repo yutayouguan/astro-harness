@@ -3,7 +3,7 @@ const SETTINGS_GROUPS = [
     id: "general",
     label: "通用",
     items: [
-      { id: "preferences", label: "偏好设置", icon: "◇", eyebrow: "GENERAL", description: "管理语言、启动方式与日常行为。" },
+      { id: "preferences", label: "基础设置", icon: "◇", eyebrow: "GENERAL", description: "管理语言、启动方式与日常行为。" },
       { id: "appearance", label: "外观", icon: "◐", eyebrow: "APPEARANCE", description: "调整主题、背景、材质与图标风格。" },
       { id: "conversation", label: "对话", icon: "◍", eyebrow: "CONVERSATION", description: "决定回答展示密度与运行过程的可见性。" },
       { id: "terminal", label: "终端", icon: "›_", eyebrow: "TERMINAL", description: "设置执行模式、字体与会话行为。" },

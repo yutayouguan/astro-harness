@@ -212,7 +212,7 @@ test("settings sidebar uses clear category and capability names", () => {
     messagesSource,
     /"settings\.sidebar\.group\.intelligence": "智能体"/,
   );
-  assert.match(messagesSource, /"settings\.sidebar\.tab\.general": "偏好设置"/);
+  assert.match(messagesSource, /"settings\.sidebar\.tab\.general": "基础设置"/);
   assert.match(
     messagesSource,
     /"settings\.sidebar\.tab\.providers": "模型服务"/,
