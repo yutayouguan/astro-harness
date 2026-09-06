@@ -20,8 +20,22 @@
           "status": "needs-review"
         }
       ]
+    },
+    "Astro Settings Center": {
+      "versions": [
+        {
+          "path": "Astro Settings Prototype.html",
+          "createdAt": "2026-09-06T01:42:05.530Z",
+          "status": "needs-review",
+          "subtitle": "13 个设置页面的高保真交互原型",
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          }
+        }
+      ]
     }
   },
   "createdAt": "2026-09-04T16:11:47.734Z",
-  "updatedAt": "2026-09-05T02:26:22.066Z"
+  "updatedAt": "2026-09-06T01:44:20.673Z"
 }
