@@ -20,7 +20,7 @@ const {
   HomePage,
 } = window;
 
-const STORAGE_KEY = "astro-settings-prototype.v2";
+const STORAGE_KEY = "astro-settings-prototype.v3";
 
 function loadSettings() {
   try {

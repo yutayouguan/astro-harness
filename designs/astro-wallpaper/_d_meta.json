@@ -34,8 +34,17 @@
           }
         }
       ]
+    },
+    "Astro Settings Prototype": {
+      "versions": [
+        {
+          "path": "Astro Settings Prototype.html",
+          "createdAt": "2026-09-06T07:50:27.224Z",
+          "status": "needs-review"
+        }
+      ]
     }
   },
   "createdAt": "2026-09-04T16:11:47.734Z",
-  "updatedAt": "2026-09-06T03:53:29.538Z"
+  "updatedAt": "2026-09-06T07:50:27.225Z"
 }
