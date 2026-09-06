@@ -59,8 +59,9 @@
 }
 
 .environment-dependencies-list {
-  padding: 0;
-  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .environment-dependencies-loading {
@@ -68,20 +69,20 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  grid-column: 1 / -1;
   min-height: 160px;
   color: var(--ink-mute);
   font-size: 12px;
 }
 
-.environment-dependency-row {
+.environment-dependency-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 12px;
   padding: 17px 18px;
-}
-
-.environment-dependency-row + .environment-dependency-row {
-  border-top: 1px solid var(--settings-divider, var(--glass-edge));
+  overflow: hidden;
 }
 
 .environment-dependency-status {
@@ -95,7 +96,7 @@
   color: color-mix(in srgb, #d97706 80%, var(--ink));
 }
 
-.environment-dependency-row[data-installed="true"]
+.environment-dependency-card[data-installed="true"]
   .environment-dependency-status {
   color: color-mix(in srgb, #16a34a 78%, var(--ink));
 }
@@ -106,6 +107,7 @@
 
 .environment-dependency-title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   min-width: 0;
@@ -238,9 +240,13 @@
 
 .environment-dependency-actions {
   display: flex;
+  grid-column: 1 / -1;
   align-items: flex-start;
+  justify-content: flex-end;
   gap: 7px;
-  padding-top: 1px;
+  margin-top: 2px;
+  padding-top: 11px;
+  border-top: 1px solid var(--settings-divider, var(--glass-edge));
 }
 
 .environment-dependency-actions .prefs-diag-btn {
@@ -290,12 +296,8 @@
     justify-self: start;
   }
 
-  .environment-dependency-row {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .environment-dependency-actions {
-    grid-column: 2;
+  .environment-dependencies-list {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -312,17 +314,11 @@
     grid-column: 1 / -1;
   }
 
-  .environment-dependency-row {
-    grid-template-columns: 1fr;
+  .environment-dependency-card {
     padding: 15px;
   }
 
-  .environment-dependency-status {
-    display: none;
-  }
-
   .environment-dependency-actions {
-    grid-column: 1;
     flex-wrap: wrap;
   }
 

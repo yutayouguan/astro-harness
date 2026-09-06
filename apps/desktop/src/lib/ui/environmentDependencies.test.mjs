@@ -21,6 +21,13 @@ const tabs = await readFile(
   "utf8",
 );
 const nav = await readFile(new URL("navConfig.ts", import.meta.url), "utf8");
+const styles = await readFile(
+  new URL(
+    "../../styles/features/environment-dependencies.css",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 test("environment dependency settings are reachable from the System group", () => {
   assert.match(nav, /\| "environment-dependencies"/);
@@ -40,6 +47,24 @@ test("environment dependency UI exposes detection, allowlisted install, and offi
   assert.match(component, /openUrl\(meta\.officialUrl\)/);
   assert.match(component, /dependency\.installPath/);
   assert.match(component, /dependency\.installCommand/);
+});
+
+test("every environment dependency renders as its own responsive settings card", () => {
+  assert.match(component, /className="environment-dependencies-list"/);
+  assert.doesNotMatch(
+    component,
+    /className="prefs-card environment-dependencies-list"/,
+  );
+  assert.match(component, /className="prefs-card environment-dependency-card"/);
+  assert.match(
+    styles,
+    /\.environment-dependencies-list\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+  );
+  assert.match(
+    styles,
+    /@container settings-content \(max-width: 760px\)[\s\S]*?\.environment-dependencies-list\s*\{[\s\S]*?grid-template-columns:\s*1fr/,
+  );
+  assert.doesNotMatch(styles, /environment-dependency-row/);
 });
 
 test("backend catalog is fixed and installation cannot execute a frontend command", () => {

@@ -233,11 +233,13 @@ export default function EnvironmentDependenciesPanel({
           ) : null}
 
           <section
-            className="prefs-card environment-dependencies-list"
+            className="environment-dependencies-list"
             aria-busy={loading}
+            aria-label={t("environmentDependencies.title")}
+            role="list"
           >
             {loading && dependencies.length === 0 ? (
-              <div className="environment-dependencies-loading">
+              <div className="prefs-card environment-dependencies-loading">
                 <LoaderCircle size={18} className="is-spinning" aria-hidden />
                 {t("environmentDependencies.scanning")}
               </div>
@@ -249,8 +251,9 @@ export default function EnvironmentDependenciesPanel({
               return (
                 <article
                   key={dependency.id}
-                  className="environment-dependency-row"
+                  className="prefs-card environment-dependency-card"
                   data-installed={dependency.installed}
+                  role="listitem"
                 >
                   <div className="environment-dependency-status" aria-hidden>
                     {dependency.installed ? (
