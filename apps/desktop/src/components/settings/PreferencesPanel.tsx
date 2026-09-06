@@ -86,8 +86,8 @@ import WallpaperSettingsCard from "./WallpaperSettingsCard";
 type AgentLogLine = {
   raw: string;
   source: string;
-  timestamp: string | null;
-  level: string | null;
+  timestamp: string;
+  level: string;
   message: string;
 };
 
@@ -950,9 +950,7 @@ export default function PreferencesPanel({
       });
       if (generation !== logRequestGenerationRef.current) return;
       const signature = result
-        .map(
-          (row) => `${row.timestamp ?? ""}\u0000${row.source}\u0000${row.raw}`,
-        )
+        .map((row) => `${row.timestamp}\u0000${row.source}\u0000${row.raw}`)
         .join("\u0001");
       if (signature !== logRowsSignatureRef.current) {
         logRowsSignatureRef.current = signature;
@@ -1989,20 +1987,14 @@ export default function PreferencesPanel({
                     className="prefs-diag-log prefs-diag-log-list"
                   >
                     {visibleLogRows.map((row, index) => {
-                      const severity = diagnosticLogLevel(row.level ?? row.raw);
+                      const severity = diagnosticLogLevel(row.level);
                       return (
                         <li
-                          key={
-                            (row.timestamp ?? "unknown") +
-                            "-" +
-                            row.source +
-                            "-" +
-                            index
-                          }
+                          key={row.timestamp + "-" + row.source + "-" + index}
                           className={"prefs-diag-log-row is-" + severity}
                         >
                           <div className="prefs-diag-log-meta">
-                            <time dateTime={row.timestamp ?? undefined}>
+                            <time dateTime={row.timestamp}>
                               {formatDiagnosticTimestamp(row.timestamp, locale)}
                             </time>
                             <span className="prefs-diag-log-badges">
@@ -2012,13 +2004,11 @@ export default function PreferencesPanel({
                                 {row.source}
                               </span>
                               <span className="prefs-diag-level">
-                                {row.level ?? severity}
+                                {row.level}
                               </span>
                             </span>
                           </div>
-                          <code>
-                            {presentDiagnosticMessage(row.message || row.raw)}
-                          </code>
+                          <code>{presentDiagnosticMessage(row.message)}</code>
                         </li>
                       );
                     })}

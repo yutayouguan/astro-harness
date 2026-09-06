@@ -37,10 +37,9 @@ export function toLocalDateTimeInput(timestampMs: number): string {
 }
 
 export function formatDiagnosticTimestamp(
-  timestamp: string | null,
+  timestamp: string,
   locale: "zh" | "en",
 ): string {
-  if (!timestamp) return "—";
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {

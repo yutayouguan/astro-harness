@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { translate } from "./messages.ts";
+import { messages, translate } from "./messages.ts";
 
-test("translate resolves double-brace diagnostics placeholders without visible braces", () => {
+test("translate resolves diagnostics placeholders without visible braces", () => {
   assert.equal(
     translate("zh", "prefs.diag.status.backendDetail", {
       endpoint: "127.0.0.1:50051",
@@ -15,9 +15,18 @@ test("translate resolves double-brace diagnostics placeholders without visible b
   );
 });
 
-test("translate replaces repeated and legacy single-brace placeholders", () => {
+test("translate replaces every canonical placeholder", () => {
   assert.equal(
     translate("en", "prefs.diag.results", { shown: "5", total: "8" }),
     "Showing 5 / 8 lines",
   );
+});
+
+test("translatable placeholders use the single-brace contract", () => {
+  for (const catalog of Object.values(messages)) {
+    for (const [key, value] of Object.entries(catalog)) {
+      if (key === "loop.variablesHint") continue;
+      assert.doesNotMatch(value, /\{\{[A-Za-z]/, key);
+    }
+  }
 });

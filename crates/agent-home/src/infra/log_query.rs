@@ -34,16 +34,15 @@ pub struct AgentLogQuery {
 pub struct AgentLogLine {
     pub raw: String,
     pub source: String,
-    pub timestamp: Option<String>,
-    pub level: Option<String>,
+    pub timestamp: String,
+    pub level: String,
     pub message: String,
 }
 
 const MAX_LINES: usize = 500;
 
 /// 扫描 `agent.log.YYYY-MM-DD` / `errors.log.YYYY-MM-DD` 滚动日志尾部，
-/// 按 session/turn/level 过滤后返回匹配行。同时兼容未滚动的
-/// `agent.log` / `errors.log`。
+/// 按 session/turn/level/time 过滤后返回匹配行。
 ///
 /// - 同一来源先读最新日期文件，每个文件内按**从新到旧**（文件末尾优先）遍历。
 /// - 所有来源按时间戳统一倒序合并。
@@ -65,8 +64,10 @@ pub fn query_agent_logs(q: AgentLogQuery) -> anyhow::Result<Vec<AgentLogLine>> {
         'source_files: for path in source_log_files(&q.logs_dir, name)? {
             let raw = std::fs::read_to_string(&path)?;
             for line in raw.lines().rev() {
-                let parsed = parse_log_line(line);
-                if !line_matches(line, parsed.timestamp_ms, &q) {
+                let Some(parsed) = parse_log_line(line) else {
+                    continue;
+                };
+                if !line_matches(line, parsed.timestamp_ms, &parsed.level, &q) {
                     continue;
                 }
                 collected.push(CollectedLogLine {
@@ -88,7 +89,7 @@ pub fn query_agent_logs(q: AgentLogQuery) -> anyhow::Result<Vec<AgentLogLine>> {
         }
     }
 
-    collected.sort_by_key(|row| Reverse(row.timestamp_ms.unwrap_or(i64::MIN)));
+    collected.sort_by_key(|row| Reverse(row.timestamp_ms));
     if q.source == LogSource::Both {
         collected = deduplicate_cross_source(collected);
     }
@@ -102,46 +103,41 @@ pub fn query_agent_logs(q: AgentLogQuery) -> anyhow::Result<Vec<AgentLogLine>> {
 #[derive(Debug)]
 struct CollectedLogLine {
     line: AgentLogLine,
-    timestamp_ms: Option<i64>,
+    timestamp_ms: i64,
     fingerprint: String,
 }
 
 #[derive(Debug)]
 struct ParsedLogLine {
-    timestamp: Option<String>,
-    timestamp_ms: Option<i64>,
-    level: Option<String>,
+    timestamp: String,
+    timestamp_ms: i64,
+    level: String,
     message: String,
     fingerprint: String,
 }
 
-fn parse_log_line(raw: &str) -> ParsedLogLine {
+fn parse_log_line(raw: &str) -> Option<ParsedLogLine> {
     let trimmed = raw.trim_start();
     let (timestamp_raw, after_timestamp) = split_first_token(trimmed);
     let (level_raw, message_raw) = split_first_token(after_timestamp.trim_start());
     let message_raw = message_raw.trim_start();
     let timestamp_ms = DateTime::parse_from_rfc3339(timestamp_raw)
-        .ok()
-        .map(|value| value.timestamp_millis());
-    let timestamp = timestamp_ms.map(|_| timestamp_raw.to_string());
+        .ok()?
+        .timestamp_millis();
     let level = matches!(
         level_raw.to_ascii_uppercase().as_str(),
         "TRACE" | "DEBUG" | "INFO" | "WARN" | "WARNING" | "ERROR" | "CRITICAL"
     )
-    .then(|| level_raw.to_ascii_uppercase());
-    let message = if timestamp.is_some() && level.is_some() {
-        message_raw.to_string()
-    } else {
-        raw.to_string()
-    };
-    let fingerprint = format!("{}\n{}", level.as_deref().unwrap_or_default(), message);
-    ParsedLogLine {
-        timestamp,
+    .then(|| level_raw.to_ascii_uppercase())?;
+    let message = message_raw.to_string();
+    let fingerprint = format!("{level}\n{message}");
+    Some(ParsedLogLine {
+        timestamp: timestamp_raw.to_string(),
         timestamp_ms,
         level,
         message,
         fingerprint,
-    }
+    })
 }
 
 fn split_first_token(input: &str) -> (&str, &str) {
@@ -155,30 +151,25 @@ fn deduplicate_cross_source(rows: Vec<CollectedLogLine>) -> Vec<CollectedLogLine
     let mut recent: HashMap<String, (i64, String)> = HashMap::new();
     let mut deduplicated = Vec::with_capacity(rows.len());
     for row in rows {
-        let duplicate = row.timestamp_ms.is_some_and(|timestamp_ms| {
-            recent
-                .get(&row.fingerprint)
-                .is_some_and(|(seen_at, source)| {
-                    source != &row.line.source
-                        && (seen_at - timestamp_ms).abs() <= DUPLICATE_WINDOW_MS
-                })
-        });
+        let duplicate = recent
+            .get(&row.fingerprint)
+            .is_some_and(|(seen_at, source)| {
+                source != &row.line.source
+                    && (seen_at - row.timestamp_ms).abs() <= DUPLICATE_WINDOW_MS
+            });
         if duplicate {
             continue;
         }
-        if let Some(timestamp_ms) = row.timestamp_ms {
-            recent.insert(
-                row.fingerprint.clone(),
-                (timestamp_ms, row.line.source.clone()),
-            );
-        }
+        recent.insert(
+            row.fingerprint.clone(),
+            (row.timestamp_ms, row.line.source.clone()),
+        );
         deduplicated.push(row);
     }
     deduplicated
 }
 
 fn source_log_files(logs_dir: &std::path::Path, base_name: &str) -> anyhow::Result<Vec<PathBuf>> {
-    let exact = logs_dir.join(base_name);
     let mut dated = Vec::new();
 
     let entries = match std::fs::read_dir(logs_dir) {
@@ -205,12 +196,8 @@ fn source_log_files(logs_dir: &std::path::Path, base_name: &str) -> anyhow::Resu
         }
     }
 
-    // ISO 日期可直接按文件名逆序得到从新到旧。若未来切换为不滚动文件，
-    // 则优先读取固定文件名，再补充历史日志。
+    // ISO 日期可直接按文件名逆序得到从新到旧。
     dated.sort_by(|left, right| right.file_name().cmp(&left.file_name()));
-    if exact.is_file() {
-        dated.insert(0, exact);
-    }
     Ok(dated)
 }
 
@@ -225,16 +212,11 @@ fn is_iso_date(value: &str) -> bool {
             .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
 }
 
-fn line_matches(line: &str, timestamp_ms: Option<i64>, q: &AgentLogQuery) -> bool {
-    if q.since_ms.is_some() || q.until_ms.is_some() {
-        let Some(timestamp_ms) = timestamp_ms else {
-            return false;
-        };
-        if q.since_ms.is_some_and(|since| timestamp_ms < since)
-            || q.until_ms.is_some_and(|until| timestamp_ms > until)
-        {
-            return false;
-        }
+fn line_matches(line: &str, timestamp_ms: i64, level: &str, q: &AgentLogQuery) -> bool {
+    if q.since_ms.is_some_and(|since| timestamp_ms < since)
+        || q.until_ms.is_some_and(|until| timestamp_ms > until)
+    {
+        return false;
     }
     if let Some(ref sid) = q.session_id {
         if !sid.is_empty() && !line.contains(sid.as_str()) {
@@ -247,14 +229,14 @@ fn line_matches(line: &str, timestamp_ms: Option<i64>, q: &AgentLogQuery) -> boo
         }
     }
     if let Some(ref lvl) = q.min_level {
-        if !level_ok(line, lvl) {
+        if !level_ok(level, lvl) {
             return false;
         }
     }
     true
 }
 
-fn level_ok(line: &str, min: &str) -> bool {
+fn level_ok(level: &str, min: &str) -> bool {
     let order = |s: &str| match s.to_ascii_uppercase().as_str() {
         "DEBUG" => 0,
         "INFO" => 1,
@@ -267,16 +249,7 @@ fn level_ok(line: &str, min: &str) -> bool {
     if min_o < 0 {
         return true;
     }
-    for cand in ["CRITICAL", "ERROR", "WARNING", "WARN", "INFO", "DEBUG"] {
-        if line.contains(cand) {
-            let o = order(cand);
-            if o < 0 {
-                return true;
-            }
-            return o >= min_o;
-        }
-    }
-    true // 无法解析则保留
+    order(level) >= min_o
 }
 
 pub fn default_agent_log_query() -> AgentLogQuery {
@@ -307,13 +280,13 @@ mod tests {
     #[test]
     fn filters_by_session_and_turn_newest_first() {
         let dir = tempfile::tempdir().unwrap();
-        let agent = dir.path().join("agent.log");
+        let agent = dir.path().join("agent.log.2026-09-07");
         write_lines(
             &agent,
             &[
-                "INFO keep session_id=s1 turn_id=t1 hello",
-                "INFO skip session_id=s2 turn_id=t9 other",
-                "WARN err session_id=s1 turn_id=t1 boom",
+                "2026-09-07T00:00:00.000Z  INFO keep session_id=s1 turn_id=t1 hello",
+                "2026-09-07T00:00:01.000Z  INFO skip session_id=s2 turn_id=t9 other",
+                "2026-09-07T00:00:02.000Z  WARN err session_id=s1 turn_id=t1 boom",
             ],
         );
         let lines = query_agent_logs(AgentLogQuery {
@@ -335,10 +308,13 @@ mod tests {
     #[test]
     fn errors_source_only_reads_errors_file() {
         let dir = tempfile::tempdir().unwrap();
-        write_lines(&dir.path().join("agent.log"), &["INFO session_id=s1 a"]);
         write_lines(
-            &dir.path().join("errors.log"),
-            &["WARN session_id=s1 turn_id=t1 e"],
+            &dir.path().join("agent.log.2026-09-07"),
+            &["2026-09-07T00:00:00.000Z  INFO session_id=s1 a"],
+        );
+        write_lines(
+            &dir.path().join("errors.log.2026-09-07"),
+            &["2026-09-07T00:00:01.000Z  WARN session_id=s1 turn_id=t1 e"],
         );
         let lines = query_agent_logs(AgentLogQuery {
             logs_dir: dir.path().to_path_buf(),
@@ -359,10 +335,10 @@ mod tests {
     fn min_level_warn_filters_info_keeps_warn() {
         let dir = tempfile::tempdir().unwrap();
         write_lines(
-            &dir.path().join("agent.log"),
+            &dir.path().join("agent.log.2026-09-07"),
             &[
-                "INFO session_id=s1 turn_id=t1 info-only",
-                "WARN session_id=s1 turn_id=t1 warn-line",
+                "2026-09-07T00:00:00.000Z  INFO session_id=s1 turn_id=t1 info-only",
+                "2026-09-07T00:00:01.000Z  WARN session_id=s1 turn_id=t1 warn-line",
             ],
         );
         let lines = query_agent_logs(AgentLogQuery {
@@ -383,7 +359,7 @@ mod tests {
     #[test]
     fn empty_agent_log_returns_empty_vec() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::File::create(dir.path().join("agent.log")).unwrap();
+        std::fs::File::create(dir.path().join("agent.log.2026-09-07")).unwrap();
         let lines = query_agent_logs(AgentLogQuery {
             logs_dir: dir.path().to_path_buf(),
             session_id: None,
@@ -402,10 +378,10 @@ mod tests {
     fn lines_zero_clamps_to_one() {
         let dir = tempfile::tempdir().unwrap();
         write_lines(
-            &dir.path().join("agent.log"),
+            &dir.path().join("agent.log.2026-09-07"),
             &[
-                "INFO session_id=s1 turn_id=t1 first",
-                "INFO session_id=s1 turn_id=t1 second",
+                "2026-09-07T00:00:00.000Z  INFO session_id=s1 turn_id=t1 first",
+                "2026-09-07T00:00:01.000Z  INFO session_id=s1 turn_id=t1 second",
             ],
         );
         let lines = query_agent_logs(AgentLogQuery {
@@ -427,10 +403,10 @@ mod tests {
     fn lines_over_max_clamps_to_500() {
         let dir = tempfile::tempdir().unwrap();
         let content: Vec<String> = (0..600)
-            .map(|i| format!("INFO session_id=s1 turn_id=t1 line-{i}"))
+            .map(|i| format!("2026-09-07T00:00:00.000Z  INFO session_id=s1 turn_id=t1 line-{i}"))
             .collect();
         write_lines(
-            &dir.path().join("agent.log"),
+            &dir.path().join("agent.log.2026-09-07"),
             &content.iter().map(String::as_str).collect::<Vec<_>>(),
         );
         let lines = query_agent_logs(AgentLogQuery {
@@ -453,12 +429,12 @@ mod tests {
     fn both_source_agent_fills_limit_before_errors() {
         let dir = tempfile::tempdir().unwrap();
         write_lines(
-            &dir.path().join("agent.log"),
-            &["INFO session_id=s1 turn_id=t1 agent-line"],
+            &dir.path().join("agent.log.2026-09-07"),
+            &["2026-09-07T00:00:01.000Z  INFO session_id=s1 turn_id=t1 agent-line"],
         );
         write_lines(
-            &dir.path().join("errors.log"),
-            &["WARN session_id=s1 turn_id=t1 error-line"],
+            &dir.path().join("errors.log.2026-09-07"),
+            &["2026-09-07T00:00:00.000Z  WARN session_id=s1 turn_id=t1 error-line"],
         );
         let lines = query_agent_logs(AgentLogQuery {
             logs_dir: dir.path().to_path_buf(),
@@ -481,15 +457,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         write_lines(
             &dir.path().join("agent.log.2026-09-04"),
-            &["INFO previous-day"],
+            &["2026-09-04T00:00:00.000Z  INFO previous-day"],
         );
         write_lines(
             &dir.path().join("agent.log.2026-09-05"),
-            &["INFO current-day-first", "WARN current-day-latest"],
+            &[
+                "2026-09-05T00:00:00.000Z  INFO current-day-first",
+                "2026-09-05T00:00:01.000Z  WARN current-day-latest",
+            ],
         );
         write_lines(
             &dir.path().join("agent.log.backup"),
-            &["ERROR must-not-be-read"],
+            &["2026-09-06T00:00:00.000Z  ERROR must-not-be-read"],
         );
 
         let lines = query_agent_logs(AgentLogQuery {
@@ -514,33 +493,10 @@ mod tests {
     }
 
     #[test]
-    fn unrotated_log_precedes_daily_history() {
-        let dir = tempfile::tempdir().unwrap();
-        write_lines(&dir.path().join("agent.log.2026-09-05"), &["INFO dated"]);
-        write_lines(&dir.path().join("agent.log"), &["INFO active"]);
-
-        let lines = query_agent_logs(AgentLogQuery {
-            logs_dir: dir.path().to_path_buf(),
-            session_id: None,
-            turn_id: None,
-            min_level: None,
-            since_ms: None,
-            until_ms: None,
-            lines: 50,
-            source: LogSource::Agent,
-        })
-        .unwrap();
-
-        assert_eq!(lines.len(), 2);
-        assert!(lines[0].raw.contains("active"));
-        assert!(lines[1].raw.contains("dated"));
-    }
-
-    #[test]
     fn filters_by_inclusive_time_range_and_returns_structured_fields() {
         let dir = tempfile::tempdir().unwrap();
         write_lines(
-            &dir.path().join("agent.log"),
+            &dir.path().join("agent.log.2026-09-07"),
             &[
                 "2026-09-05T10:00:00.000Z  INFO server: before",
                 "2026-09-05T10:30:00.000Z  WARN sqlx::query: inside",
@@ -566,11 +522,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(lines.len(), 1);
-        assert_eq!(
-            lines[0].timestamp.as_deref(),
-            Some("2026-09-05T10:30:00.000Z")
-        );
-        assert_eq!(lines[0].level.as_deref(), Some("WARN"));
+        assert_eq!(lines[0].timestamp, "2026-09-05T10:30:00.000Z");
+        assert_eq!(lines[0].level, "WARN");
         assert_eq!(lines[0].message, "sqlx::query: inside");
     }
 
@@ -578,14 +531,14 @@ mod tests {
     fn both_sources_merge_by_time_and_deduplicate_mirrored_events() {
         let dir = tempfile::tempdir().unwrap();
         write_lines(
-            &dir.path().join("agent.log"),
+            &dir.path().join("agent.log.2026-09-07"),
             &[
                 "2026-09-05T10:00:00.100Z  WARN sqlx::query: mirrored",
                 "2026-09-05T10:01:00.000Z  INFO server: newest",
             ],
         );
         write_lines(
-            &dir.path().join("errors.log"),
+            &dir.path().join("errors.log.2026-09-07"),
             &[
                 "2026-09-05T10:00:00.110Z  WARN sqlx::query: mirrored",
                 "2026-09-05T09:59:00.000Z  ERROR updater: unique",
@@ -630,5 +583,33 @@ mod tests {
         })
         .unwrap_err();
         assert!(error.to_string().contains("start must not be later"));
+    }
+
+    #[test]
+    fn ignores_legacy_file_names_and_unstructured_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        write_lines(
+            &dir.path().join("agent.log"),
+            &["2026-09-07T00:00:00.000Z  INFO legacy-file"],
+        );
+        write_lines(
+            &dir.path().join("agent.log.2026-09-07"),
+            &["INFO legacy-line", "2026-09-07T00:00:01.000Z  INFO current"],
+        );
+
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: None,
+            turn_id: None,
+            min_level: None,
+            since_ms: None,
+            until_ms: None,
+            lines: 50,
+            source: LogSource::Agent,
+        })
+        .unwrap();
+
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].message.contains("current"));
     }
 }
