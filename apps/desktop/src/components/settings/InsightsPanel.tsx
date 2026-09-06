@@ -134,6 +134,10 @@ export type TraceInsights = {
     llm: number;
     tools: number;
     skills: number;
+    tokens: number;
+    cost_usd: number;
+    avg_duration_ms: number;
+    error_events: number;
   };
   traces: TraceSummary[];
 };
@@ -449,10 +453,6 @@ export default function InsightsPanel({
 
   const selectedTrace =
     traces?.traces.find((t) => t.session_id === selectedTraceId) ?? null;
-  const traceTokenTotal = useMemo(
-    () => traces?.traces.reduce((sum, trace) => sum + trace.tokens, 0) ?? 0,
-    [traces],
-  );
   const traceAverageEvents = traces?.kpis.traces
     ? Math.round(traces.kpis.events / traces.kpis.traces)
     : 0;
@@ -820,7 +820,8 @@ export default function InsightsPanel({
                 label={t("insights.trace.kpi.traces")}
                 value={String(traces.kpis.traces)}
                 detail={t("insights.summary.traceTokens", {
-                  tokens: formatTokens(traceTokenTotal),
+                  tokens: formatTokens(traces.kpis.tokens),
+                  cost: formatCost(traces.kpis.cost_usd),
                 })}
               />
               <KpiCard
@@ -833,16 +834,17 @@ export default function InsightsPanel({
                 })}
               />
               <KpiCard
-                icon={<Cpu size={18} strokeWidth={2.2} aria-hidden />}
+                icon={<Gauge size={18} strokeWidth={2.2} aria-hidden />}
                 tone="cyan"
-                label={t("insights.trace.kpi.llm")}
-                value={String(traces.kpis.llm)}
-                detail={t("insights.summary.eventShare", {
-                  pct: percentOf(traces.kpis.llm, traces.kpis.events),
+                label={t("insights.summary.avgDuration")}
+                value={formatTraceDuration(traces.kpis.avg_duration_ms)}
+                detail={t("insights.summary.traceComposition", {
+                  llm: String(traces.kpis.llm),
+                  errors: String(traces.kpis.error_events),
                 })}
               />
               <KpiCard
-                icon={<Gauge size={18} strokeWidth={2.2} aria-hidden />}
+                icon={<Wrench size={18} strokeWidth={2.2} aria-hidden />}
                 tone="emerald"
                 label={t("insights.summary.agentActions")}
                 value={String(traceAgentActions)}

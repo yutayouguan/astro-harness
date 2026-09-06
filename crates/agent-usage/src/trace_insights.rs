@@ -3,7 +3,7 @@
 //! 一次对话会话 = 一条 Trace。优先从 `state.db` 的 chat history 展开
 //! user → tool/skill/mcp → llm 调用链（含 input/output），再合并 `usage.db` 的 token/费用。
 
-use chrono::{SecondsFormat, TimeZone, Utc};
+use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use types::truncate_chars;
 
@@ -33,6 +33,10 @@ pub struct TraceKpis {
     pub llm: i64,
     pub tools: i64,
     pub skills: i64,
+    pub tokens: i64,
+    pub cost_usd: f64,
+    pub avg_duration_ms: i64,
+    pub error_events: i64,
 }
 
 /// 单条会话 Trace 摘要（含事件链）
@@ -106,8 +110,12 @@ pub async fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<Trace
         traces: summaries.len() as i64,
         ..Default::default()
     };
+    let mut trace_duration_total_ms = 0_i64;
+    let mut trace_duration_samples = 0_i64;
 
     for s in summaries {
+        kpi.tokens += s.tokens;
+        kpi.cost_usd += s.cost_usd;
         let usage_rows = db
             .list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT)
             .await?;
@@ -132,6 +140,15 @@ pub async fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<Trace
         merge_usage_into_spans(&mut events, &usage_rows);
         propagate_turn_ids(&mut events);
 
+        if let (Some(first), Some(last)) = (events.first(), events.last()) {
+            if events.len() > 1 {
+                if let Some(duration_ms) = trace_duration_ms(&first.ts, &last.ts) {
+                    trace_duration_total_ms += duration_ms;
+                    trace_duration_samples += 1;
+                }
+            }
+        }
+
         for e in &events {
             kpi.events += 1;
             match e.kind.as_str() {
@@ -139,6 +156,9 @@ pub async fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<Trace
                 "tool" | "mcp" | "cron" => kpi.tools += 1,
                 "skill" => kpi.skills += 1,
                 _ => {}
+            }
+            if is_error_status(e.status.as_deref()) {
+                kpi.error_events += 1;
             }
         }
         let kinds = unique_kinds(&events);
@@ -156,8 +176,21 @@ pub async fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<Trace
             events,
         });
     }
+    if trace_duration_samples > 0 {
+        kpi.avg_duration_ms = trace_duration_total_ms / trace_duration_samples;
+    }
 
     Ok(TraceInsights { kpis: kpi, traces })
+}
+
+fn trace_duration_ms(started_at: &str, ended_at: &str) -> Option<i64> {
+    let started = DateTime::parse_from_rfc3339(started_at).ok()?;
+    let ended = DateTime::parse_from_rfc3339(ended_at).ok()?;
+    Some((ended - started).num_milliseconds().max(0))
+}
+
+fn is_error_status(status: Option<&str>) -> bool {
+    matches!(status, Some("error" | "failed"))
 }
 
 async fn resolved_trace_title(
@@ -820,6 +853,11 @@ mod tests {
         assert_eq!(insights.kpis.events, 3);
         assert_eq!(insights.kpis.llm, 2);
         assert_eq!(insights.kpis.tools, 1);
+        assert_eq!(insights.kpis.skills, 0);
+        assert_eq!(insights.kpis.tokens, 17);
+        assert!((insights.kpis.cost_usd - 0.01).abs() < f64::EPSILON);
+        assert_eq!(insights.kpis.avg_duration_ms, 1_000);
+        assert_eq!(insights.kpis.error_events, 0);
         let s1 = insights
             .traces
             .iter()
@@ -828,6 +866,27 @@ mod tests {
         assert_eq!(s1.events.len(), 2);
         assert_eq!(s1.events[0].kind, "llm");
         assert_eq!(s1.events[1].kind, "tool");
+    }
+
+    #[test]
+    fn trace_duration_uses_rfc3339_bounds_and_never_goes_negative() {
+        assert_eq!(
+            trace_duration_ms("2026-07-13T10:00:00Z", "2026-07-13T10:00:03Z"),
+            Some(3_000)
+        );
+        assert_eq!(
+            trace_duration_ms("2026-07-13T10:00:03Z", "2026-07-13T10:00:00Z"),
+            Some(0)
+        );
+        assert_eq!(trace_duration_ms("invalid", "2026-07-13T10:00:00Z"), None);
+    }
+
+    #[test]
+    fn error_kpi_only_counts_explicit_failures() {
+        assert!(is_error_status(Some("error")));
+        assert!(is_error_status(Some("failed")));
+        assert!(!is_error_status(Some("running")));
+        assert!(!is_error_status(None));
     }
 
     #[tokio::test]

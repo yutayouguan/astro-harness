@@ -107,7 +107,17 @@ const sampleData: UsageInsights = {
 };
 
 const sampleTraces: TraceInsights = {
-  kpis: { traces: 2, events: 4, llm: 2, tools: 1, skills: 1 },
+  kpis: {
+    traces: 2,
+    events: 4,
+    llm: 2,
+    tools: 1,
+    skills: 1,
+    tokens: 21_680,
+    cost_usd: 0.52,
+    avg_duration_ms: 415_000,
+    error_events: 0,
+  },
   traces: [
     {
       session_id: "session-research-01",
