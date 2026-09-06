@@ -16,7 +16,7 @@ export const TERMINAL_SETTINGS_EVENT = "astro-terminal-settings-changed";
 
 export const TERMINAL_FONT_PRESETS = [
   {
-    label: "MesloLGS NF (Powerlevel10k)",
+    label: "MesloLGS NF",
     value:
       '"MesloLGS NF", "Hack Nerd Font Mono", "JetBrainsMono Nerd Font", monospace',
   },
@@ -35,6 +35,18 @@ export const TERMINAL_FONT_PRESETS = [
     value: '"SFMono-Regular", "SF Mono", Menlo, Monaco, monospace',
   },
 ] as const;
+
+export function terminalFontPrimaryFamily(fontFamily: string): string {
+  const primary = fontFamily.split(",", 1)[0]?.trim() ?? "";
+  if (
+    primary.length >= 2 &&
+    ((primary.startsWith('"') && primary.endsWith('"')) ||
+      (primary.startsWith("'") && primary.endsWith("'")))
+  ) {
+    return primary.slice(1, -1);
+  }
+  return primary;
+}
 
 export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   executionMode: "system",

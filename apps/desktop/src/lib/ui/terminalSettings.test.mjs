@@ -27,9 +27,12 @@ test("terminal settings has a dedicated route and panel", () => {
 
 test("terminal settings provide Nerd Font defaults and bounded display controls", () => {
   assert.match(settings, /MesloLGS NF/);
+  assert.match(settings, /function terminalFontPrimaryFamily/);
+  assert.doesNotMatch(settings, /MesloLGS NF \(Powerlevel10k\)/);
   assert.match(settings, /fontSize: finiteNumber/);
   assert.match(settings, /scrollback: Math\.round/);
   assert.match(panel, /terminal-font-preview/);
+  assert.match(panel, /value=\{displayedFontFamily\}/);
   assert.match(dock, /subscribeTerminalSettings/);
   assert.match(dock, /terminal\.options\.fontFamily/);
 });

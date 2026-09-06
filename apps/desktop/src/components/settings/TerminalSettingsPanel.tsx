@@ -7,6 +7,7 @@ import {
   TERMINAL_FONT_PRESETS,
   readTerminalSettings,
   saveTerminalSettings,
+  terminalFontPrimaryFamily,
   type TerminalSettings,
 } from "../../lib/terminal/terminalSettings";
 
@@ -25,6 +26,9 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
   const selectedPreset =
     TERMINAL_FONT_PRESETS.find((preset) => preset.value === settings.fontFamily)
       ?.value ?? "";
+  const displayedFontFamily = selectedPreset
+    ? terminalFontPrimaryFamily(settings.fontFamily)
+    : settings.fontFamily;
   const scrollbackPresets = [500, 2_000, 5_000, 10_000, 50_000];
 
   return (
@@ -130,7 +134,7 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
                 </span>
                 <input
                   type="text"
-                  value={settings.fontFamily}
+                  value={displayedFontFamily}
                   spellCheck={false}
                   onChange={(event) =>
                     update({ fontFamily: event.target.value })
