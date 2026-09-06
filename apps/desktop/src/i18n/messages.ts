@@ -931,7 +931,6 @@ export const zh = {
   "agentTools.on": "已启用",
   "agentTools.off": "已关闭",
   "agentTools.toggleAria": "{name}：{state}",
-  "agentTools.params": "工具参数",
   "agentTools.webSearch.title": "网络搜索",
   "agentTools.webSearch.desc":
     "搜索网页（web_search）并抓取页面内容（web_fetch，mode=text|raw）",
@@ -4087,7 +4086,6 @@ export const en: Record<MessageKey, string> = {
   "agentTools.on": "On",
   "agentTools.off": "Off",
   "agentTools.toggleAria": "{name}: {state}",
-  "agentTools.params": "Parameters",
   "agentTools.webSearch.title": "Web Search",
   "agentTools.webSearch.desc":
     "Search the web (web_search) and fetch page content (web_fetch, mode=text|raw)",

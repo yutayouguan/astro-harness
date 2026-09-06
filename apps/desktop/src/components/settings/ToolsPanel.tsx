@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, type SVGProps } from "react";
 import {
   Braces,
+  ChevronRight,
   Columns2,
   FileJson2,
   FileText,
@@ -626,6 +627,7 @@ export default function ToolsPanel({
                   <div className="tools-detail-list" role="list">
                     {items.map((tool) => {
                       const isOn = enabled[tool.id];
+                      const callCount = usage?.tools[tool.id] ?? 0;
                       return (
                         <button
                           key={tool.id}
@@ -644,11 +646,13 @@ export default function ToolsPanel({
                               />
                             </span>
                             {t(tool.titleKey)}
-                            <span className="tools-detail-item-calls">
-                              {t("tools.callCount", {
-                                n: String(usage?.tools[tool.id] ?? 0),
-                              })}
-                            </span>
+                            {callCount > 0 ? (
+                              <span className="tools-detail-item-calls">
+                                {t("tools.callCount", {
+                                  n: String(callCount),
+                                })}
+                              </span>
+                            ) : null}
                           </span>
                           <span
                             className={`tools-detail-item-badge ${isOn ? "is-on" : ""}`}
@@ -905,6 +909,7 @@ export default function ToolsPanel({
                 <div className={`agent-tools-grid is-${viewMode}`}>
                   {items.map((tool) => {
                     const isOn = enabled[tool.id];
+                    const callCount = usage?.tools[tool.id] ?? 0;
                     return (
                       <article
                         key={tool.id}
@@ -927,11 +932,13 @@ export default function ToolsPanel({
                           <h3 className="agent-tool-title">
                             {t(tool.titleKey)}
                           </h3>
-                          <span className="agent-tool-call-stat">
-                            {t("tools.callCount", {
-                              n: String(usage?.tools[tool.id] ?? 0),
-                            })}
-                          </span>
+                          {callCount > 0 ? (
+                            <span className="agent-tool-call-stat">
+                              {t("tools.callCount", {
+                                n: String(callCount),
+                              })}
+                            </span>
+                          ) : null}
                           <button
                             type="button"
                             role="switch"
@@ -949,32 +956,33 @@ export default function ToolsPanel({
                           </button>
                         </header>
 
-                        <div className="tool-card-body agent-tool-detail">
+                        <button
+                          type="button"
+                          className="tool-card-body agent-tool-detail"
+                          aria-label={`${t(tool.titleKey)} · ${t("tools.view.detail")}`}
+                          onClick={() => {
+                            setSelectedDetailId(tool.id);
+                            setViewMode("detail");
+                          }}
+                        >
                           <p className="agent-tool-desc">{t(tool.descKey)}</p>
-                          {tool.params.length > 0 && (
-                            <div className="agent-tool-params">
-                              <span className="agent-tool-params-label">
-                                {t("agentTools.params")}
+                          <span className="agent-tool-card-footer">
+                            {tool.params.length > 0 ? (
+                              <span className="agent-tool-param-summary">
+                                {t("tools.detail.params")} ·{" "}
+                                {tool.params.length}
                               </span>
-                              <ul className="agent-tool-params-list">
-                                {tool.params.map((param) => (
-                                  <li
-                                    key={param.name}
-                                    className="agent-tool-param"
-                                  >
-                                    <code className="agent-tool-param-name">
-                                      {param.name}
-                                    </code>
-                                    <span className="agent-tool-param-type">
-                                      {param.type}
-                                      {param.optional ? "?" : ""}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
+                            ) : null}
+                            <span className="agent-tool-open-hint">
+                              {t("tools.view.detail")}
+                              <ChevronRight
+                                size={13}
+                                strokeWidth={2.25}
+                                aria-hidden
+                              />
+                            </span>
+                          </span>
+                        </button>
                       </article>
                     );
                   })}

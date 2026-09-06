@@ -22,69 +22,44 @@
 .tools-toolbar-end {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   flex-shrink: 0;
   margin-left: auto;
-  height: 36px;
+  min-height: 36px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
 }
 
 .tools-toolbar-end .expandable-search-btn,
 .tools-toolbar-end .expandable-search-field {
-  height: 36px;
-  border-radius: 12px;
+  height: 30px;
+  border-color: transparent;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
-/* 工具内容区：独立滚动 + 与 MCP 空态同款玻璃容器 */
+/* 工具内容区只负责布局与滚动；材质归具体卡片和详情面板所有。 */
 .agent-tools-body {
   position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  isolation: isolate;
-  border-radius: var(--settings-panel-radius, 20px);
   overflow: hidden;
-  padding: 14px;
-  border: 1px solid var(--settings-panel-border, var(--glass-edge));
-  background: var(--settings-panel-background, var(--glass-fill));
-  box-shadow: var(
-    --settings-panel-shadow,
-    var(--shadow-card),
-    var(--glass-rim)
-  );
-  backdrop-filter: var(--settings-panel-backdrop, var(--backdrop-glass));
-  -webkit-backdrop-filter: var(
-    --settings-panel-backdrop,
-    var(--backdrop-glass)
-  );
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
-.agent-tools-body::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(
-      circle at 10% 0%,
-      color-mix(in srgb, var(--tone) 16%, transparent),
-      transparent 42%
-    ),
-    radial-gradient(
-      ellipse at 92% 8%,
-      color-mix(in srgb, var(--tone) 10%, transparent),
-      transparent 38%
-    );
-  opacity: 0.85;
-}
-
-.agent-tools-body > * {
-  position: relative;
-  z-index: 1;
-}
-
-/* 工具栏进玻璃容器：与技能 pane-head 同款顶栏 */
+/* 可选的面板级工具栏只保留间距，不再借助父级玻璃建立层级。 */
 .agent-tools-body > .panel-agent-toolbar {
   margin-bottom: 12px;
   z-index: 40;
@@ -95,7 +70,7 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  border-radius: 14px;
+  border-radius: 0;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1288,27 +1263,19 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
-  height: 36px;
-  padding: 3px;
-  border-radius: 12px;
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.22),
-      rgba(255, 255, 255, 0.12)
-    ),
-    color-mix(in srgb, var(--glass-fill) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.15));
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .tools-view-btn {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border: none;
   border-radius: 9px;
   background: transparent;
@@ -1329,34 +1296,18 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
 
 .tools-view-btn.is-active {
   color: var(--tone);
-  background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.35),
-      rgba(255, 255, 255, 0.12)
-    ),
-    color-mix(in srgb, var(--tone-soft) 80%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  background: var(--tone-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent);
 }
 
 html[data-theme="dark"] .tools-view-toggle {
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.06),
-      rgba(255, 255, 255, 0.02)
-    ),
-    rgba(8, 6, 18, 0.42);
-  border-color: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .tools-view-btn.is-active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--tone-soft) 60%, transparent);
+  background: var(--tone-soft);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
   color: color-mix(in srgb, #fff 18%, var(--tone));
 }
@@ -1433,10 +1384,6 @@ html[data-theme="dark"] .tools-view-btn.is-active {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.agent-tools-grid.is-list .agent-tool-params {
-  display: none;
 }
 
 .agent-tools-grid.is-list .agent-tool-call-stat {
@@ -1671,10 +1618,23 @@ html[data-theme="dark"] .tools-view-btn.is-active {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 4px 8px 12px 4px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  border: 1px solid var(--settings-panel-border, var(--glass-edge));
+  border-radius: var(--settings-panel-radius, 20px);
+  background: var(--settings-panel-background, var(--glass-fill));
+  box-shadow: var(
+    --settings-panel-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  backdrop-filter: var(--settings-panel-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(
+    --settings-panel-backdrop,
+    var(--backdrop-glass)
+  );
 }
 
 .tools-detail-head {
@@ -1718,6 +1678,11 @@ html[data-theme="dark"] .tools-view-btn.is-active {
   gap: 8px;
 }
 
+.tools-detail-panel .tools-detail-section + .tools-detail-section {
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
 .tools-detail-label {
   margin: 0;
   display: inline-flex;
@@ -1748,6 +1713,14 @@ html[data-theme="dark"] .tools-view-btn.is-active {
     var(--glass-inner, rgba(255, 255, 255, 0.78));
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.tools-detail-panel .tools-detail-body {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .tools-detail-meta-grid {
@@ -1824,6 +1797,12 @@ html[data-theme="dark"] .tools-detail-body {
   color: var(--ink-soft);
 }
 
+html[data-theme="dark"] .tools-detail-panel .tools-detail-body {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 html[data-theme="dark"] .tools-detail-meta-item {
   background: color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.45));
   border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.08));
@@ -1854,28 +1833,16 @@ html[data-theme="dark"] .tool-lucide-inline {
 
 .tool-card.agent-tool-card {
   flex-shrink: 0;
-  min-height: 200px;
-  gap: 12px;
+  min-height: 158px;
+  gap: 10px;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: var(--content-card-radius, 18px);
   padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.45),
-      rgba(255, 255, 255, 0.15)
-    ),
-    color-mix(
-      in srgb,
-      var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%,
-      transparent
-    );
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.2));
+  border: 1px solid var(--content-card-border, var(--glass-edge));
+  background: var(--content-card-background, var(--glass-fill));
+  box-shadow: var(--content-card-shadow, var(--shadow-card), var(--glass-rim));
+  backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(--content-card-backdrop, var(--backdrop-glass));
   transition:
     transform 0.18s ease,
     border-color 0.18s ease,
@@ -1883,12 +1850,7 @@ html[data-theme="dark"] .tool-lucide-inline {
 }
 
 .tool-card.agent-tool-card::before {
-  background: radial-gradient(
-    circle at 12% 18%,
-    color-mix(in srgb, var(--tone) 20%, transparent),
-    transparent 52%
-  );
-  opacity: 0.75;
+  content: none;
 }
 
 .tool-card.agent-tool-card:hover {
@@ -1922,7 +1884,7 @@ html[data-theme="dark"] .tool-lucide-inline {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--tone, var(--ink));
+  color: var(--ink);
   line-height: 1.25;
 }
 
@@ -1932,21 +1894,33 @@ html[data-theme="dark"] .tool-lucide-inline {
 }
 
 .tool-card.agent-tool-card .tool-card-body.agent-tool-detail {
+  appearance: none;
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 88px;
+  align-items: stretch;
+  gap: 9px;
+  width: 100%;
+  min-height: 70px;
   margin-top: 0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.3)),
-    var(--glass-inner, rgba(255, 255, 255, 0.78));
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.61),
-    0 1px 3px rgba(15, 23, 42, 0.04);
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.tool-card.agent-tool-card .tool-card-body.agent-tool-detail:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 55%, transparent);
+  outline-offset: 4px;
+  border-radius: 8px;
 }
 
 .agent-tool-desc {
@@ -1955,24 +1929,32 @@ html[data-theme="dark"] .tool-lucide-inline {
   line-height: 1.5;
   color: var(--ink-soft);
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.agent-tool-params {
+.agent-tool-card-footer {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-top: auto;
 }
 
-.agent-tool-params-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--tone, var(--ink)) 72%, var(--ink-mute));
+.agent-tool-param-summary,
+.agent-tool-open-hint {
+  color: var(--ink-mute);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.agent-tool-open-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  color: var(--tone);
 }
 
 .agent-tool-params-list {
@@ -2133,11 +2115,26 @@ html[data-theme="dark"] .tool-lucide-inline {
 /* ── 命令审批 Tab ───────────────────────────────────────── */
 .approvals-section {
   display: flex;
+  width: min(100%, 760px);
+  box-sizing: border-box;
   flex-direction: column;
   gap: 20px;
   padding: 20px 24px 32px;
-  max-width: 760px;
+  margin: 0 auto;
   overflow: auto;
+  border: 1px solid var(--settings-panel-border, var(--glass-edge));
+  border-radius: var(--settings-panel-radius, 20px);
+  background: var(--settings-panel-background, var(--glass-fill));
+  box-shadow: var(
+    --settings-panel-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  backdrop-filter: var(--settings-panel-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(
+    --settings-panel-backdrop,
+    var(--backdrop-glass)
+  );
 }
 
 .approvals-section .tools-detail-section {
@@ -2325,25 +2322,19 @@ html[data-theme="dark"] .approvals-hardline .tools-detail-body {
 }
 
 html[data-theme="dark"] .tool-card.agent-tool-card {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--glass-panel, #1a2238) 80%, transparent);
+  background: var(--content-card-background, var(--glass-fill));
   border-color: rgba(255, 255, 255, 0.14);
 }
 
 html[data-theme="dark"]
   .tool-card.agent-tool-card
   .tool-card-body.agent-tool-detail {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--ink) 9%, transparent);
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .agent-tool-desc {
-  color: var(--ink-soft);
-}
-
-html[data-theme="dark"] .agent-tool-params-label {
   color: var(--ink-soft);
 }
 
