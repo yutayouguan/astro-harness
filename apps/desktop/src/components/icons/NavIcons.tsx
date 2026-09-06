@@ -21,7 +21,7 @@ type PaintedProps = {
 };
 
 /** 工具栏 / 标题栏按钮：currentColor 线稿，不走导航渐变 */
-function ChromeIconBase({ children, ...props }: IconProps) {
+function ChromeIconBase({ children, className, ...props }: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -34,6 +34,7 @@ function ChromeIconBase({ children, ...props }: IconProps) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
+      className={`app-ui-icon app-ui-icon--chrome ${className ?? ""}`.trim()}
       {...props}
     >
       {children}
@@ -93,7 +94,7 @@ function paintDetailChildren(children: ReactNode, paint: string): ReactNode {
 }
 
 /** 侧栏导航项：渐变描边/填充 */
-function NavIconBase({ children, style, ...props }: IconProps) {
+function NavIconBase({ children, style, className, ...props }: IconProps) {
   const rawId = useId();
   const gradId = `nav-icon-grad-${rawId.replace(/:/g, "")}`;
   const paint = `url(#${gradId})`;
@@ -107,6 +108,7 @@ function NavIconBase({ children, style, ...props }: IconProps) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
+      className={`app-ui-icon app-ui-icon--nav ${className ?? ""}`.trim()}
       {...props}
       style={
         { ["--nav-grad-paint" as string]: paint, ...style } as CSSProperties

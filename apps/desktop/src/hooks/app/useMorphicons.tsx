@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -32,6 +33,25 @@ export function MorphiconProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     writeMorphiconPrefs(prefs);
   }, [prefs]);
+
+  useLayoutEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    root.dataset.iconMotion = prefs.spring;
+    root.style.setProperty(
+      "--app-icon-stroke-width",
+      String(prefs.strokeWidth),
+    );
+  }, [prefs]);
+
+  useEffect(
+    () => () => {
+      if (typeof document === "undefined") return;
+      delete document.documentElement.dataset.iconMotion;
+      document.documentElement.style.removeProperty("--app-icon-stroke-width");
+    },
+    [],
+  );
 
   const setSpring = useCallback((spring: MorphiconSpring) => {
     setPrefs((current) => ({ ...current, spring }));

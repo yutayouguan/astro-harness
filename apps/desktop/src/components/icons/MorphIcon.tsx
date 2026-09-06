@@ -19,7 +19,10 @@ export type AppMorphIconProps = Omit<
 };
 
 export const AppMorphIcon = forwardRef<MorphHandle, AppMorphIconProps>(
-  function AppMorphIcon({ icon, spring, strokeWidth, ...props }, ref) {
+  function AppMorphIcon(
+    { icon, spring, strokeWidth, className, ...props },
+    ref,
+  ) {
     const prefs = useMorphicons();
     return (
       <BaseMorphIcon
@@ -28,6 +31,7 @@ export const AppMorphIcon = forwardRef<MorphHandle, AppMorphIconProps>(
         spring={spring ?? prefs.spring}
         strokeWidth={strokeWidth ?? prefs.strokeWidth}
         reducedMotion="user"
+        className={`app-ui-icon app-ui-icon--morph ${className ?? ""}`.trim()}
         {...props}
       />
     );

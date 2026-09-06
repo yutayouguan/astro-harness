@@ -30,6 +30,7 @@
 @import "./tokens/tone-context.css" layer(overrides);
 @import "./tokens/unified-color.css" layer(overrides);
 @import "./tokens/glass-intensity.css" layer(overrides);
+@import "./tokens/icon-preferences.css" layer(overrides);
 @import "./tokens/a11y.css" layer(overrides);
 
 /* Foundation behavior and element rules. Deprecated theme barrels are not imported. */

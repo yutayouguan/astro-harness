@@ -3,7 +3,7 @@ import type { SVGProps } from "react";
 
 type IconProps = SVGProps<SVGSVGElement>;
 
-function IconBase({ children, ...props }: IconProps) {
+function IconBase({ children, className, ...props }: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -16,6 +16,7 @@ function IconBase({ children, ...props }: IconProps) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
+      className={`app-ui-icon app-ui-icon--tool ${className ?? ""}`.trim()}
       {...props}
     >
       {children}

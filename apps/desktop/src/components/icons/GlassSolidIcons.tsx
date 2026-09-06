@@ -4,7 +4,7 @@ import type { SVGProps } from "react";
 type IconProps = SVGProps<SVGSVGElement>;
 
 /** 实心图标底座：用于玻璃圆井内的 3D 质感 glyph */
-function SolidBase({ children, ...props }: IconProps) {
+function SolidBase({ children, className, ...props }: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -13,6 +13,7 @@ function SolidBase({ children, ...props }: IconProps) {
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden
+      className={`app-ui-icon app-ui-icon--solid ${className ?? ""}`.trim()}
       {...props}
     >
       {children}
