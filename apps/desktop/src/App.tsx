@@ -1216,6 +1216,8 @@ export default function App() {
     reviewOpen: reviewState != null,
   });
   const hasChatRightDock = activeChatRightDock !== null;
+  const browserOwnsTitlebar =
+    nav === "chat" && activeChatRightDock === "browser";
   const browserDockPresence = useDeferredPresence(
     activeChatRightDock === "browser",
   );
@@ -1235,7 +1237,7 @@ export default function App() {
   return (
     <div
       ref={shellRef}
-      className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}${activeChatRightDock === "browser" ? " has-browser-surface" : ""}${wallpaperEnabled ? " has-wallpaper" : ""}`}
+      className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}${browserOwnsTitlebar ? " has-browser-surface" : ""}${wallpaperEnabled ? " has-wallpaper" : ""}`}
       data-tone={shellTone}
       data-color-style={colorStyle}
       data-sidebar-state={sidebar.sidebarVisible ? "visible" : "collapsed"}

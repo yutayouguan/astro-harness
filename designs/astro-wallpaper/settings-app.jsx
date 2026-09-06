@@ -122,6 +122,10 @@ function App() {
   const [toast, setToast] = useState("");
   const [generateOpen, setGenerateOpen] = useState(false);
   const [homeSessionKey, setHomeSessionKey] = useState(0);
+  const [windowOffset, setWindowOffset] = useState({ x: 0, y: 0 });
+  const [windowDragging, setWindowDragging] = useState(false);
+  const windowDragRef = useRef(null);
+  const appWindowRef = useRef(null);
   const searchRef = useRef(null);
   const contentRef = useRef(null);
   const tab = ALL_TABS.find((item) => item.id === activeTab) ?? ALL_TABS[0];
@@ -147,6 +151,51 @@ function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  function beginWindowDrag(event) {
+    if (event.button !== 0 || !appWindowRef.current) return;
+    const rect = appWindowRef.current.getBoundingClientRect();
+    windowDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+      originX: windowOffset.x,
+      originY: windowOffset.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    setWindowDragging(true);
+  }
+
+  function moveWindow(event) {
+    const drag = windowDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || !appWindowRef.current) return;
+    const rect = appWindowRef.current.getBoundingClientRect();
+    const nextLeft = Math.min(
+      window.innerWidth - 140,
+      Math.max(140 - rect.width, drag.left + event.clientX - drag.startX),
+    );
+    const nextTop = Math.min(
+      window.innerHeight - 44,
+      Math.max(0, drag.top + event.clientY - drag.startY),
+    );
+    setWindowOffset({
+      x: drag.originX + nextLeft - drag.left,
+      y: drag.originY + nextTop - drag.top,
+    });
+  }
+
+  function endWindowDrag(event) {
+    const drag = windowDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    windowDragRef.current = null;
+    setWindowDragging(false);
+  }
 
   useEffect(() => {
     const syncHash = () => {
@@ -232,11 +281,28 @@ function App() {
 
   return (
     <main className="stage" lang="zh" data-screen-label="Astro 桌面应用">
-      <section className="app-window" data-preview-theme={settings.theme} data-surface={surface} aria-label="Astro 桌面应用原型">
+      <section
+        ref={appWindowRef}
+        className={`app-window ${windowDragging ? "is-dragging" : ""}`}
+        data-preview-theme={settings.theme}
+        data-surface={surface}
+        aria-label="Astro 桌面应用原型"
+        style={{
+          "--window-offset-x": `${windowOffset.x}px`,
+          "--window-offset-y": `${windowOffset.y}px`,
+        }}
+      >
         <div className="wallpaper-layer" style={wallpaperStyle}></div>
         <div className="wallpaper-shade" style={{ "--shade": settings.shade / 100 }}></div>
         <div className="shell">
-          <header className="titlebar">
+          <header
+            className="titlebar"
+            onPointerDown={beginWindowDrag}
+            onPointerMove={moveWindow}
+            onPointerUp={endWindowDrag}
+            onPointerCancel={endWindowDrag}
+            onDoubleClick={() => setWindowOffset({ x: 0, y: 0 })}
+          >
             <span className="traffic"><i></i><i></i><i></i></span>
             <span className="window-title">Astro · {surface === "home" ? "主页" : "设置"}</span>
             <span className="titlebar-status" data-dirty={dirty}>{dirty ? "设置草稿未保存" : surface === "home" ? "本地运行" : "已保存"}</span>

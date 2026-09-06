@@ -51,6 +51,16 @@ body { overflow: hidden; color: var(--ink); background: #dfe5f2; }
   border-radius: 20px;
   background: #e9e7f3;
   box-shadow: var(--window-shadow);
+  transform: translate3d(
+    var(--window-offset-x, 0),
+    var(--window-offset-y, 0),
+    0
+  );
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-window.is-dragging {
+  transition: none;
 }
 
 .app-window[data-preview-theme="dark"] {
@@ -150,6 +160,13 @@ body { overflow: hidden; color: var(--ink); background: #dfe5f2; }
   border-bottom: 1px solid rgba(255, 255, 255, 0.36);
   background: rgba(246, 247, 252, 0.34);
   backdrop-filter: blur(28px) saturate(1.28);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.app-window.is-dragging .titlebar {
+  cursor: grabbing;
 }
 
 .traffic { display: flex; gap: 8px; }

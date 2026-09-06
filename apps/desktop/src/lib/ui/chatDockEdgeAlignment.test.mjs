@@ -14,6 +14,10 @@ const shellStyles = await readFile(
   new URL("../../styles/features/shell/shell.css", import.meta.url),
   "utf8",
 );
+const appSource = await readFile(
+  new URL("../../App.tsx", import.meta.url),
+  "utf8",
+);
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -56,6 +60,14 @@ test("browser titlebar controls receive pointer input above the drag surface", (
   assert.match(
     shellStyles,
     /\.app-shell\.has-browser-surface > \.native-drag-region\s*\{\s*pointer-events:\s*none;/,
+  );
+  assert.match(
+    appSource,
+    /const browserOwnsTitlebar =\s*nav === "chat" && activeChatRightDock === "browser";/,
+  );
+  assert.match(
+    appSource,
+    /\$\{browserOwnsTitlebar \? " has-browser-surface" : ""\}/,
   );
 });
 
