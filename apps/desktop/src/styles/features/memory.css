@@ -1849,6 +1849,221 @@ html[data-theme="dark"]
   color: var(--tone-green);
 }
 
+.mem-timeline {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 4px 6px 0;
+}
+
+.mem-timeline-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 8px;
+}
+
+.mem-timeline-header h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+}
+
+.mem-timeline-header > span {
+  overflow: hidden;
+  color: var(--ink-mute);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mem-timeline-list {
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.mem-timeline-item {
+  position: relative;
+  padding-left: 2px;
+}
+
+.mem-timeline-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 25px;
+  bottom: -9px;
+  left: 11px;
+  width: 1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink-mute) 22%, transparent);
+  pointer-events: none;
+}
+
+.mem-timeline-item button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 8px 6px 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    transform 120ms ease;
+}
+
+.mem-timeline-item button:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.mem-timeline-item button:active {
+  transform: scale(0.985);
+}
+
+.mem-timeline-item button.is-selected {
+  background: color-mix(in srgb, var(--tone-green) 12%, transparent);
+}
+
+.mem-timeline-item button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone-green) 72%, transparent);
+  outline-offset: -2px;
+}
+
+.mem-timeline-node {
+  position: relative;
+  z-index: 1;
+  align-self: start;
+  justify-self: center;
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  border: 2px solid color-mix(in srgb, var(--glass-fill) 85%, transparent);
+  border-radius: 50%;
+  background: var(--ink-mute);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink-mute) 24%, transparent);
+}
+
+.mem-timeline-node[data-diary="true"] {
+  background: color-mix(in srgb, var(--accent-2) 80%, white);
+}
+
+.mem-timeline-node[data-dream="true"] {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tone-purple, #a78bfa) 32%, transparent),
+    0 0 10px color-mix(in srgb, var(--tone-purple, #a78bfa) 18%, transparent);
+}
+
+.mem-timeline-node[data-diary="true"][data-dream="true"] {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-2) 80%, white) 0 48%,
+    color-mix(in srgb, var(--tone-purple, #a78bfa) 85%, white) 52% 100%
+  );
+}
+
+.mem-timeline-content {
+  min-width: 0;
+}
+
+.mem-timeline-date {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1.35;
+}
+
+.mem-timeline-date small {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone-green) 12%, transparent);
+  color: var(--tone-green);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.mem-timeline-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0;
+  margin-top: 2px;
+  color: var(--ink-mute);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.mem-timeline-meta span {
+  white-space: nowrap;
+}
+
+.mem-timeline-meta span + span::before {
+  content: "·";
+  margin: 0 4px;
+  opacity: 0.65;
+}
+
+.mem-timeline-empty {
+  margin: 10px 4px 0 30px;
+  color: var(--ink-mute);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mem-timeline-item button {
+    transition: none;
+  }
+
+  .mem-timeline-item button:active {
+    transform: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .mem-timeline-item:not(:last-child)::before {
+    background: var(--ink-mute);
+  }
+
+  .mem-timeline-item button.is-selected {
+    box-shadow: inset 0 0 0 1px var(--tone-green);
+  }
+}
+
+@media (min-width: 901px) {
+  .mem-sidebar {
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 900px) {
+  .mem-timeline {
+    flex: none;
+  }
+
+  .mem-timeline-list {
+    max-height: 320px;
+  }
+}
+
 .mem-agent-avatar {
   width: 28px;
   height: 28px;

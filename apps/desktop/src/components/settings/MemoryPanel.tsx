@@ -33,6 +33,7 @@ import MotionSwitch from "../ui/MotionSwitch";
 import AgentAvatar from "../agents/AgentAvatar";
 import { EmptyIllustration } from "../../illustrations";
 import type { AgentInfo } from "../../types/agent";
+import { buildMonthTimeline, countMonthEntries } from "./memoryTimeline";
 
 /** 记忆面板入参 */
 type Props = {
@@ -142,6 +143,18 @@ function weekdayLabel(ymd: string, locale: string): string {
   });
 }
 
+/** 时间线中的紧凑日期标签 */
+function compactDateLabel(ymd: string, locale: string): string {
+  const { y, m, d } = parseYmd(ymd);
+  return new Date(y, m - 1, d).toLocaleDateString(
+    locale === "zh" ? "zh-CN" : "en-US",
+    {
+      month: "short",
+      day: "numeric",
+    },
+  );
+}
+
 /** 日记视图 */
 function IconBook(props: { width?: number; height?: number }) {
   return <Book size={props.width ?? 16} strokeWidth={1.8} aria-hidden />;
@@ -248,12 +261,6 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
           : memoryDirty
         : false;
 
-  const diaryCount = useMemo(() => {
-    if (filterAgentId === ALL_AGENTS) return allDiaryDates.size;
-    const cached = diaryDatesByAgent[filterAgentId];
-    return cached ? cached.length : dailyDates.length;
-  }, [filterAgentId, allDiaryDates, diaryDatesByAgent, dailyDates]);
-
   const markedDates = useMemo(() => {
     if (filterAgentId === ALL_AGENTS) return allDiaryDates;
     const cached = diaryDatesByAgent[filterAgentId];
@@ -273,6 +280,46 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     const mine = agentsStatus.find((a) => a.agent_id === filterAgentId);
     return new Set(mine?.dreamed_dates ?? []);
   }, [dreamStatus, filterAgentId]);
+
+  const monthPrefix = `${calYear}-${String(calMonth).padStart(2, "0")}-`;
+
+  const monthDiaryCount = useMemo(() => {
+    if (filterAgentId === ALL_AGENTS) {
+      return countMonthEntries(Object.values(diaryDatesByAgent), monthPrefix);
+    }
+    const dates = diaryDatesByAgent[filterAgentId] ?? dailyDates;
+    return countMonthEntries([dates], monthPrefix);
+  }, [diaryDatesByAgent, dailyDates, filterAgentId, monthPrefix]);
+
+  const monthDreamCount = useMemo(() => {
+    const agentsStatus = dreamStatus?.agents ?? [];
+    if (filterAgentId === ALL_AGENTS) {
+      return countMonthEntries(
+        agentsStatus.map((agent) => agent.dreamed_dates ?? []),
+        monthPrefix,
+      );
+    }
+    const mine = agentsStatus.find((agent) => agent.agent_id === filterAgentId);
+    return countMonthEntries([mine?.dreamed_dates ?? []], monthPrefix);
+  }, [dreamStatus, filterAgentId, monthPrefix]);
+
+  const monthTimeline = useMemo(
+    () =>
+      buildMonthTimeline({
+        monthPrefix,
+        diaryDates: markedDates,
+        dreamDates: dreamMarkedDates,
+        diaryDatesByAgent,
+        includeAgentCount: filterAgentId === ALL_AGENTS,
+      }),
+    [
+      diaryDatesByAgent,
+      dreamMarkedDates,
+      filterAgentId,
+      markedDates,
+      monthPrefix,
+    ],
+  );
 
   const readText = async (path: string) => {
     try {
@@ -915,14 +962,14 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
         <div className="mem-top-stats">
           {view === "diary" && (
             <>
-              <div className="mem-stat" title={t("memory.diaryTotal")}>
+              <div className="mem-stat" title={t("memory.diaryThisMonth")}>
                 <span className="mem-stat-icon" aria-hidden>
                   <IconBook width={14} height={14} />
                 </span>
                 <span className="mem-stat-body">
-                  <strong>{diaryCount}</strong>
+                  <strong>{monthDiaryCount}</strong>
                   <span className="mem-stat-label">
-                    {t("memory.diaryTotal")}
+                    {t("memory.diaryThisMonth")}
                   </span>
                 </span>
               </div>
@@ -1034,6 +1081,75 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                     ),
                   )}
                 </div>
+              </section>
+
+              <section
+                className="mem-timeline"
+                aria-labelledby="mem-timeline-title"
+              >
+                <div className="mem-timeline-header">
+                  <h3 id="mem-timeline-title">{t("memory.timeline.title")}</h3>
+                  <span>
+                    {t("memory.timeline.summary", {
+                      diaries: String(monthDiaryCount),
+                      dreams: String(monthDreamCount),
+                    })}
+                  </span>
+                </div>
+
+                {monthTimeline.length > 0 ? (
+                  <ol className="mem-timeline-list">
+                    {monthTimeline.map((item) => {
+                      const selected = item.date === dailyDate;
+                      const isToday = item.date === todayLocal();
+                      return (
+                        <li key={item.date} className="mem-timeline-item">
+                          <button
+                            type="button"
+                            className={selected ? "is-selected" : undefined}
+                            aria-current={selected ? "date" : undefined}
+                            onClick={() => void switchDailyDate(item.date)}
+                          >
+                            <span
+                              className="mem-timeline-node"
+                              data-diary={item.hasDiary || undefined}
+                              data-dream={item.hasDream || undefined}
+                              aria-hidden
+                            />
+                            <span className="mem-timeline-content">
+                              <span className="mem-timeline-date">
+                                {compactDateLabel(item.date, locale)}
+                                {isToday && (
+                                  <small>{t("memory.timeline.today")}</small>
+                                )}
+                              </span>
+                              <span className="mem-timeline-meta">
+                                {item.hasDiary && (
+                                  <span>{t("memory.timeline.diary")}</span>
+                                )}
+                                {item.hasDream && (
+                                  <span>{t("memory.timeline.dream")}</span>
+                                )}
+                                {filterAgentId === ALL_AGENTS &&
+                                  item.diaryAgentCount > 0 && (
+                                    <span>
+                                      {t("memory.timeline.expertCount", {
+                                        count: String(item.diaryAgentCount),
+                                      })}
+                                    </span>
+                                  )}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : (
+                  <p className="mem-timeline-empty">
+                    {t("memory.timeline.empty")}
+                  </p>
+                )}
               </section>
             </aside>
 
